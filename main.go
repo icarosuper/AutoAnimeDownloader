@@ -3,125 +3,86 @@ package main
 import (
 	"AutoAnimeDownloader/modules"
 	"fmt"
-
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/driver/desktop"
-	"fyne.io/fyne/v2/widget"
 )
 
+// TODO:
+// implementar lista de episódios baixados e colocar na ui
+// implementar lista de episódios falhados e colocar na ui
+
 func main() {
-	// Uncomment the line below to test AniList functionality without GUI
-	testAniListSearch()
+	fmt.Println("Starting Auto Anime Downloader...")
+
+	loop()
 	return
 
-	a := app.New()
-	w := a.NewWindow("Auto Anime Downloader")
+	// go func() {
+	// 	for {
+	// 		loop()
+	// 		// time.Sleep(10 * time.Minute)
+	// 		time.Sleep(5 * time.Second)
+	// 		break
+	// 	}
+	// }()
 
-	w.Resize(fyne.NewSize(500, 300))
-	w.SetCloseIntercept(func() {
-		w.Hide()
-	})
-
-	if desk, ok := a.(desktop.App); ok {
-		m := fyne.NewMenu("MyApp",
-			fyne.NewMenuItem("Abrir", func() {
-				w.Show()
-			}))
-		desk.SetSystemTrayMenu(m)
-	}
-
-	setWindowContent(w)
-
-	w.ShowAndRun()
+	modules.CreateUi()
 }
 
-// testAniListSearch demonstrates the AniList search functionality
-func testAniListSearch() {
-	fmt.Println("Testing AniList GraphQL Search...")
+func loop() {
+	configs := modules.LoadConfigs()
 
-	response, err := modules.SearchAnimes("JediahSk")
+	anilistResponse, err := modules.SearchAnimes(configs.AnilistUsername)
 	if err != nil {
 		fmt.Printf("Error searching AniList: %v\n", err)
 		return
 	}
 
-	modules.PrintAnimeResults(response)
-}
+	downloadedIDs := modules.LoadIdsFromFile()
 
-func setWindowContent(w fyne.Window) {
-	textBox := widget.NewEntry()
-	textBox.SetPlaceHolder("Enter anime name...")
+	for _, anime := range anilistResponse.Data.Page.MediaList {
+		progress := anime.Progress
+		titles := anime.Media.Title
+		episodes := anime.Media.AiringSchedule.Nodes
 
-	btn := widget.NewButton("Download Anime", func() {
-		animeName := textBox.Text
+		for _, ep := range episodes {
+			if ep.Episode < progress {
+				fmt.Printf("Skipping %s episode %d (already watched)\n", *titles.Romaji, ep.Episode)
+				continue
+			}
 
-		fmt.Println("Iniciando download para:", animeName)
+			if idIsInList(ep.ID, downloadedIDs) {
+				fmt.Printf("Skipping %s episode %d (already downloaded)\n", *titles.Romaji, ep.Episode)
+				continue
+			}
 
-		// if animeName != "" {
-		// 	downloadAnime(animeName)
-		// }
-	})
+			nyaaResponse, err := modules.ScrapNyaa(*titles.Romaji, ep.Episode)
+			if err != nil {
+				fmt.Printf("Error searching Nyaa: %v\n", err)
+				continue
+			}
 
-	// Add AniList search button
-	anilistBtn := widget.NewButton("Search AniList", func() {
-		// Example: Search for user ID 1 with 10 results per page
-		// You can change the userID to any valid AniList user ID
-		userID := 1
-		// perPage := 10
+			if nyaaResponse == nil {
+				fmt.Printf("No magnet link found for %s episode %d\n", *titles.Romaji, ep.Episode)
+				continue
+			}
 
-		fmt.Printf("Searching AniList for user ID: %d\n", userID)
+			fmt.Printf("Downloading %s episode %d\n", *titles.Romaji, ep.Episode)
+			modules.DownloadAnime(nyaaResponse.MagnetLink, configs.SavePath, configs.SkipDialog)
 
-		// response, err := modules.SearchAnimes(userID, perPage)
-		// if err != nil {
-		// 	fmt.Printf("Error searching AniList: %v\n", err)
-		// 	return
-		// }
+			modules.SaveIdToFile(ep.ID)
+			fmt.Printf("Downloaded %s episode %d\n", *titles.Romaji, ep.Episode)
 
-		// modules.PrintAnimeResults(response)
-	})
-
-	c := container.NewGridWithRows(3, textBox, btn, anilistBtn)
-
-	w.SetContent(c)
-}
-
-func downloadAnime(animeName string, episode int) {
-	// Exemplo de uso do novo scraper do Nyaa
-	fmt.Printf("Buscando torrents para: %s\n", animeName)
-
-	// Buscar torrents (sem especificar episódio)
-	results, err := modules.ScrapNyaa(animeName, "", episode)
-	if err != nil {
-		fmt.Printf("Erro ao buscar torrents: %v\n", err)
-		return
+			// close program
+			return
+		}
 	}
+}
 
-	// // Imprimir resultados
-	modules.PrintTorrentResults(results)
-
-	// Exemplo: buscar episódio específico
-	// if len(results) > 0 && results[0].Episode != nil {
-	// 	episode := *results[0].Episode
-	// 	fmt.Printf("\nBuscando especificamente o episódio %d...\n", episode)
-
-	// 	episodeResults, err := modules.ScrapNyaa(animeName, "", episode)
-	// 	if err != nil {
-	// 		fmt.Printf("Erro ao buscar episódio específico: %v\n", err)
-	// 		return
-	// 	}
-
-	// 	modules.PrintTorrentResults(episodeResults)
-
-	// 	// Se encontrou resultados, baixar o primeiro
-	// 	if len(episodeResults) > 0 {
-	// 		magnet := episodeResults[0].MagnetLink
-	// 		if magnet != "" {
-	// 			fmt.Printf("\nIniciando download do magnet: %s\n", magnet)
-	// 			magnets := []string{magnet}
-	// 			modules.DownloadAnimes(magnets)
-	// 		}
-	// 	}
-	// }
+func idIsInList(id int, ids []string) bool {
+	idStr := fmt.Sprintf("%d", id)
+	for _, existingID := range ids {
+		if existingID == idStr {
+			return true
+		}
+	}
+	return false
 }

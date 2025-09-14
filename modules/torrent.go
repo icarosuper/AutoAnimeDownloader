@@ -5,16 +5,7 @@ import (
 	"os/exec"
 )
 
-func DownloadAnimes(magnets []string) {
-	configs := LoadConfigs()
-
-	for _, magnet := range magnets {
-		fmt.Printf("Downloading: %s\n", magnet)
-		downloadAnime(magnet, configs.SavePath, configs.SkipDialog)
-	}
-}
-
-func downloadAnime(magnet string, savePath string, skipDialog bool) {
+func DownloadAnime(magnet string, savePath string, skipDialog bool) {
 	skipDialogArg := fmt.Sprintf("--skip-dialog=%t", skipDialog)
 	savePathArg := ""
 

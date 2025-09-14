@@ -24,7 +24,7 @@ type TorrentResult struct {
 }
 
 // ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio
-func ScrapNyaa(romajiName, englishName string, episode int) ([]TorrentResult, error) {
+func ScrapNyaa(romajiName string, episode int) (*TorrentResult, error) {
 	// Sanitizar o nome romaji removendo informações de temporada
 	sanitizedRomajiName := regexp.MustCompile(`(?i)\s+(Season|S)\s*\d+`).ReplaceAllString(romajiName, "")
 
@@ -121,7 +121,13 @@ func ScrapNyaa(romajiName, englishName string, episode int) ([]TorrentResult, er
 	}
 
 	fmt.Printf("Found %d torrents\n", len(results))
-	return results, nil
+
+	if len(results) == 0 {
+		return nil, nil // Nenhum resultado encontrado
+	}
+
+	// Retornar o primeiro resultado (mais seeders)
+	return &results[0], nil
 }
 
 // extractEpisodeNumber extrai o número do episódio do nome do torrent
@@ -220,21 +226,6 @@ func parseNyaaDate(dateString string) (time.Time, error) {
 func isWithinThreeMonths(date time.Time) bool {
 	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
 	return date.After(threeMonthsAgo)
-}
-
-// GetMagnetFromNyaa é uma função de conveniência que busca um magnet link específico
-func GetMagnetFromNyaa(romajiName, englishName string, episode int) (string, error) {
-	results, err := ScrapNyaa(romajiName, englishName, episode)
-	if err != nil {
-		return "", err
-	}
-
-	if len(results) == 0 {
-		return "", fmt.Errorf("nenhum torrent encontrado para %s episódio %d", romajiName, episode)
-	}
-
-	// Retornar o magnet link do primeiro resultado (mais seeders)
-	return results[0].MagnetLink, nil
 }
 
 // PrintTorrentResults imprime os resultados de forma formatada

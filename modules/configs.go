@@ -2,10 +2,12 @@ package modules
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
 const configFilePath = "config.json"
+const idsFilePath = ".downloaded_ids"
 
 type Config struct {
 	SavePath        string `json:"save_path"`
@@ -49,4 +51,62 @@ func SaveConfigs(config Config) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func LoadIdsFromFile() []string {
+	if _, err := os.Stat(idsFilePath); os.IsNotExist(err) {
+		file, err := os.Create(idsFilePath)
+		if err != nil {
+			panic(err)
+		}
+		file.Close()
+		return []string{}
+	}
+
+	file, err := os.ReadFile(idsFilePath)
+	if err != nil {
+		panic(err)
+	}
+
+	ids := string(file)
+	if ids == "" {
+		return []string{}
+	}
+
+	return splitLines(ids)
+}
+
+func SaveIdToFile(id int) {
+	if _, err := os.Stat(idsFilePath); os.IsNotExist(err) {
+		file, err := os.Create(idsFilePath)
+		if err != nil {
+			panic(err)
+		}
+		file.Close()
+	}
+
+	file, err := os.OpenFile(idsFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(fmt.Sprintf("%d\n", id)); err != nil {
+		panic(err)
+	}
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
 }
