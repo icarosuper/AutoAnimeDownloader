@@ -14,6 +14,7 @@ type Config struct {
 	SkipDialog      bool   `json:"skip_dialog"`
 	MaxEpisodes     int    `json:"max_episodes"`
 	AnilistUsername string `json:"anilist_username"`
+	CheckInterval   int    `json:"check_interval"`
 }
 
 func LoadConfigs() Config {
@@ -22,6 +23,7 @@ func LoadConfigs() Config {
 		SkipDialog:      true,
 		MaxEpisodes:     10,
 		AnilistUsername: "",
+		CheckInterval:   10,
 	}
 
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
@@ -36,6 +38,8 @@ func LoadConfigs() Config {
 		if err != nil {
 			panic(err)
 		}
+
+		SaveConfigs(config)
 	}
 
 	return config

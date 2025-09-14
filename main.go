@@ -1,26 +1,83 @@
 package main
 
 import (
-	"AutoAnimeDownloader/modules"
+	"context"
 	"fmt"
+	"sync"
 	"time"
+
+	"AutoAnimeDownloader/modules"
 )
 
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	go func() {
-		for {
-			loop()
-			time.Sleep(10 * time.Minute)
-			break
-		}
-	}()
+	// interval := time.Duration(modules.LoadConfigs().CheckInterval) * time.Minute
+	interval := 5 * time.Second
 
-	modules.CreateUi()
+	restart := startLoop(interval)
+	_ = restart // keep restart available for use (prevents unused variable compile error)
+
+	modules.CreateUi(restart)
+}
+
+func loopNow(restart func(newDur time.Duration)) {
+	loop()
+
+	dur := time.Duration(modules.LoadConfigs().CheckInterval) * time.Minute
+
+	restart(dur)
 }
 
 func loop() {
+	fmt.Println("Checking for new episodes...")
+	// executeLogic()
+}
+
+func startLoop(interval time.Duration) func(newInterval time.Duration) {
+	var mu sync.Mutex
+	ctx, cancel := context.WithCancel(context.Background())
+
+	start := func(d time.Duration, c context.Context) {
+		fmt.Println("Starting loop with interval:", d)
+
+		go func() {
+			for {
+				// verifica cancelamento antes de executar
+				select {
+				case <-c.Done():
+					return
+				default:
+				}
+
+				loop()
+				// executeLogic()
+
+				// aguarda duração ou cancelamento
+				select {
+				case <-time.After(d):
+					continue
+				case <-c.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	start(interval, ctx)
+
+	return func(newDur time.Duration) {
+		mu.Lock()
+		// para o loop atual
+		cancel()
+		// cria novo contexto/cancel para o próximo loop
+		ctx, cancel = context.WithCancel(context.Background())
+		start(newDur, ctx)
+		mu.Unlock()
+	}
+}
+
+func checkAnimes() {
 	configs := modules.LoadConfigs()
 
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
