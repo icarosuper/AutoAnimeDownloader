@@ -3,26 +3,30 @@ package main
 import (
 	"AutoAnimeDownloader/modules"
 	"fmt"
+	"time"
 )
 
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	loop()
-	// go func() {
-	// 	for {
-	// 		loop()
-	// 		// time.Sleep(10 * time.Minute)
-	// 		time.Sleep(5 * time.Second)
-	// 		break
-	// 	}
-	// }()
+	go func() {
+		for {
+			loop()
+			time.Sleep(10 * time.Minute)
+			break
+		}
+	}()
 
-	// modules.CreateUi()
+	modules.CreateUi()
 }
 
 func loop() {
 	configs := modules.LoadConfigs()
+
+	if configs.AnilistUsername == "" || configs.SavePath == "" {
+		fmt.Println("Please set your AniList username and save path in the settings.")
+		return
+	}
 
 	anilistResponse, err := modules.SearchAnimes(configs.AnilistUsername)
 	if err != nil {
@@ -31,8 +35,6 @@ func loop() {
 	}
 
 	downloadedIDs := modules.LoadIdsFromFile()
-
-	downloaded := 0
 
 	for _, anime := range anilistResponse.Data.Page.MediaList {
 		progress := anime.Progress
@@ -67,16 +69,10 @@ func loop() {
 			}
 
 			fmt.Printf("Downloading %s episode %d\n", *titles.Romaji, ep.Episode)
-			modules.DownloadAnime(nyaaResponse.MagnetLink, configs.SavePath, configs.SkipDialog)
+			modules.DownloadAnime(nyaaResponse.MagnetLink, configs.SavePath, *titles.English, configs.SkipDialog)
 
 			modules.SaveIdToFile(ep.ID)
 			fmt.Printf("Downloaded %s episode %d\n", *titles.Romaji, ep.Episode)
-
-			downloaded++
-
-			if downloaded >= 3 {
-				return
-			}
 		}
 	}
 }

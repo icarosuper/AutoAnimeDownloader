@@ -13,6 +13,6 @@ dist/
 *.spec
 
 .downloaded_ids
-config.json
+.config.json
 
 go.sum

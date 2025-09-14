@@ -4,6 +4,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 )
@@ -34,7 +35,7 @@ func setWindowContent(w fyne.Window) {
 	tabs := container.NewAppTabs()
 
 	tabs.Append(container.NewTabItem("Notificações", notificationsBox()))
-	tabs.Append(container.NewTabItem("Configurações", settingsBox()))
+	tabs.Append(container.NewTabItem("Configurações", settingsBox(w)))
 
 	tabs.SelectIndex(0)
 
@@ -53,10 +54,42 @@ func notificationsBox() *fyne.Container {
 	return box
 }
 
-func settingsBox() *fyne.Container {
+func settingsBox(w fyne.Window) *fyne.Container {
+	configs := LoadConfigs()
+
 	box := container.NewVBox(
 		widget.NewLabel("Configurações"),
 	)
+
+	selectFolderButton := widget.NewButton("Selecionar pasta para salvar", func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				dialog.ShowError(err, nil)
+				return
+			}
+			if uri == nil {
+				return
+			}
+
+			configs := LoadConfigs()
+			configs.SavePath = uri.Path()
+			SaveConfigs(configs)
+		}, w)
+	})
+
+	userNameEntry := widget.NewEntry()
+	userNameEntry.SetPlaceHolder("Usuário do AniList")
+	userNameEntry.SetText(configs.AnilistUsername)
+
+	saveBtn := widget.NewButton("Salvar", func() {
+		configs := LoadConfigs()
+		configs.AnilistUsername = userNameEntry.Text
+		SaveConfigs(configs)
+	})
+
+	box.Add(selectFolderButton)
+	box.Add(userNameEntry)
+	box.Add(saveBtn)
 
 	// TODO: Anilist Username
 	// TODO: Save Path

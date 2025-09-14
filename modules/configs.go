@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-const configFilePath = "config.json"
+const configFilePath = ".config.json"
 const idsFilePath = ".downloaded_ids"
 
 type Config struct {
