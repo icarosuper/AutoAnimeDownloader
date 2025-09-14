@@ -37,8 +37,9 @@ type AiringSchedule struct {
 }
 
 type AiringNode struct {
-	ID      int `json:"id"`
-	Episode int `json:"episode"`
+	ID              int `json:"id"`
+	Episode         int `json:"episode"`
+	TimeUntilAiring int `json:"timeUntilAiring"`
 }
 
 type GraphQLRequest struct {
@@ -60,6 +61,7 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 							nodes {
 								id
 								episode
+								timeUntilAiring
 							}
 						}
 					}

@@ -8,6 +8,7 @@ import (
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
+	loop()
 	// go func() {
 	// 	for {
 	// 		loop()
@@ -17,7 +18,7 @@ func main() {
 	// 	}
 	// }()
 
-	modules.CreateUi()
+	// modules.CreateUi()
 }
 
 func loop() {
@@ -31,14 +32,21 @@ func loop() {
 
 	downloadedIDs := modules.LoadIdsFromFile()
 
+	downloaded := 0
+
 	for _, anime := range anilistResponse.Data.Page.MediaList {
 		progress := anime.Progress
 		titles := anime.Media.Title
 		episodes := anime.Media.AiringSchedule.Nodes
 
 		for _, ep := range episodes {
-			if ep.Episode < progress {
+			if ep.Episode <= progress {
 				fmt.Printf("Skipping %s episode %d (already watched)\n", *titles.Romaji, ep.Episode)
+				continue
+			}
+
+			if ep.TimeUntilAiring > 0 {
+				fmt.Printf("Skipping %s episode %d (not aired yet)\n", *titles.Romaji, ep.Episode)
 				continue
 			}
 
@@ -64,8 +72,11 @@ func loop() {
 			modules.SaveIdToFile(ep.ID)
 			fmt.Printf("Downloaded %s episode %d\n", *titles.Romaji, ep.Episode)
 
-			// close program
-			return
+			downloaded++
+
+			if downloaded >= 3 {
+				return
+			}
 		}
 	}
 }
