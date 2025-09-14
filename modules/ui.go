@@ -14,7 +14,7 @@ func CreateUi() {
 	a := app.New()
 	w := a.NewWindow("Auto Anime Downloader")
 
-	w.Resize(fyne.NewSize(500, 300))
+	w.Resize(fyne.NewSize(800, 600))
 	w.SetCloseIntercept(func() {
 		w.Hide()
 	})

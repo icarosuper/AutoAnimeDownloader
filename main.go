@@ -12,9 +12,6 @@ import (
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	loop()
-	return
-
 	// go func() {
 	// 	for {
 	// 		loop()
