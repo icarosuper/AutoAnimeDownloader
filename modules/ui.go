@@ -87,6 +87,8 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 	changeIntervalEntry := changeIntervalEntry(configs)
 
 	saveBtn := widget.NewButton("Salvar", func() {
+		configs := LoadConfigs()
+
 		if err := userNameEntry.Validate(); err != nil {
 			dialog.ShowError(err, w)
 			return
@@ -95,19 +97,31 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 			dialog.ShowError(err, w)
 			return
 		}
+		if configs.SavePath == "" {
+			dialog.ShowError(fmt.Errorf("caminho de salvamento não pode estar vazio"), w)
+			return
+		}
 
-		configs := LoadConfigs()
-		configs.AnilistUsername = userNameEntry.Text
+		newUsername := userNameEntry.Text
 
 		var newInterval int
 		_, err := fmt.Sscanf(changeIntervalEntry.Text, "%d", &newInterval)
-		if err == nil && newInterval > 0 {
-			configs.CheckInterval = newInterval
-			interval := time.Duration(configs.CheckInterval) * time.Minute
-			restartLoop(interval)
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("o intervalo de checagem deve ser um número inteiro positivo"), w)
+			return
 		}
 
+		if configs.AnilistUsername == newUsername && configs.CheckInterval == newInterval {
+			return
+		}
+
+		configs.AnilistUsername = newUsername
+		configs.CheckInterval = newInterval
 		SaveConfigs(configs)
+
+		dialog.ShowInformation("Configurações salvas", "As configurações foram salvas com sucesso.", w)
+
+		restartLoop(time.Duration(newInterval) * time.Minute)
 	})
 
 	box.Add(selectFolderButton)
