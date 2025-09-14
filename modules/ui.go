@@ -1,8 +1,6 @@
 package modules
 
 import (
-	"fmt"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
@@ -33,38 +31,39 @@ func CreateUi() {
 }
 
 func setWindowContent(w fyne.Window) {
-	textBox := widget.NewEntry()
-	textBox.SetPlaceHolder("Enter anime name...")
+	tabs := container.NewAppTabs()
 
-	btn := widget.NewButton("Download Anime", func() {
-		animeName := textBox.Text
+	tabs.Append(container.NewTabItem("Notificações", notificationsBox()))
+	tabs.Append(container.NewTabItem("Configurações", settingsBox()))
 
-		fmt.Println("Iniciando download para:", animeName)
+	tabs.SelectIndex(0)
 
-		// if animeName != "" {
-		// 	downloadAnime(animeName)
-		// }
-	})
+	w.SetContent(tabs)
+}
 
-	// Add AniList search button
-	anilistBtn := widget.NewButton("Search AniList", func() {
-		// Example: Search for user ID 1 with 10 results per page
-		// You can change the userID to any valid AniList user ID
-		userID := 1
-		// perPage := 10
+func notificationsBox() *fyne.Container {
+	box := container.NewVBox(
+		widget.NewLabel("Notificações"),
+	)
 
-		fmt.Printf("Searching AniList for user ID: %d\n", userID)
+	// TODO: Últimos episódios baixados
+	// TODO: Últimos episódios que falharam
+	// TODO: Próximos episódios que vão sair
 
-		// response, err := modules.SearchAnimes(userID, perPage)
-		// if err != nil {
-		// 	fmt.Printf("Error searching AniList: %v\n", err)
-		// 	return
-		// }
+	return box
+}
 
-		// modules.PrintAnimeResults(response)
-	})
+func settingsBox() *fyne.Container {
+	box := container.NewVBox(
+		widget.NewLabel("Configurações"),
+	)
 
-	c := container.NewGridWithRows(3, textBox, btn, anilistBtn)
+	// TODO: Anilist Username
+	// TODO: Save Path
+	// TODO: Skip Dialog
+	// TODO: Check Interval
+	// TODO: Retry limit
+	// TODO: Max episodes per check
 
-	w.SetContent(c)
+	return box
 }

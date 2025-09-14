@@ -5,10 +5,6 @@ import (
 	"fmt"
 )
 
-// TODO:
-// implementar lista de episódios baixados e colocar na ui
-// implementar lista de episódios falhados e colocar na ui
-
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
