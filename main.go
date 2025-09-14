@@ -12,7 +12,8 @@ import (
 )
 
 func main() {
-	downloadAnime("New PANTY & STOCKING with GARTERBELT", 1)
+	// Uncomment the line below to test AniList functionality without GUI
+	testAniListSearch()
 	return
 
 	a := app.New()
@@ -36,6 +37,19 @@ func main() {
 	w.ShowAndRun()
 }
 
+// testAniListSearch demonstrates the AniList search functionality
+func testAniListSearch() {
+	fmt.Println("Testing AniList GraphQL Search...")
+
+	response, err := modules.SearchAnimes("JediahSk")
+	if err != nil {
+		fmt.Printf("Error searching AniList: %v\n", err)
+		return
+	}
+
+	modules.PrintAnimeResults(response)
+}
+
 func setWindowContent(w fyne.Window) {
 	textBox := widget.NewEntry()
 	textBox.SetPlaceHolder("Enter anime name...")
@@ -50,7 +64,25 @@ func setWindowContent(w fyne.Window) {
 		// }
 	})
 
-	c := container.NewGridWithRows(2, textBox, btn)
+	// Add AniList search button
+	anilistBtn := widget.NewButton("Search AniList", func() {
+		// Example: Search for user ID 1 with 10 results per page
+		// You can change the userID to any valid AniList user ID
+		userID := 1
+		// perPage := 10
+
+		fmt.Printf("Searching AniList for user ID: %d\n", userID)
+
+		// response, err := modules.SearchAnimes(userID, perPage)
+		// if err != nil {
+		// 	fmt.Printf("Error searching AniList: %v\n", err)
+		// 	return
+		// }
+
+		// modules.PrintAnimeResults(response)
+	})
+
+	c := container.NewGridWithRows(3, textBox, btn, anilistBtn)
 
 	w.SetContent(c)
 }
