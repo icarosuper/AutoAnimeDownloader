@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// AniList data structures
 type AniListResponse struct {
 	Data struct {
 		Page struct {
@@ -42,7 +41,6 @@ type AiringNode struct {
 	Episode int `json:"episode"`
 }
 
-// GraphQL request structure
 type GraphQLRequest struct {
 	Query     string                 `json:"query"`
 	Variables map[string]interface{} `json:"variables"`
@@ -123,7 +121,6 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 	return &response, nil
 }
 
-// PrintAnimeResults prints the anime search results in a formatted way
 func PrintAnimeResults(response *AniListResponse) {
 	if response == nil || len(response.Data.Page.MediaList) == 0 {
 		fmt.Println("No anime found.")
@@ -147,7 +144,6 @@ func PrintAnimeResults(response *AniListResponse) {
 		if len(media.AiringSchedule.Nodes) > 0 {
 			fmt.Println("Aired episodes:")
 
-			// loop media.AiringSchedule.Nodes
 			for _, node := range media.AiringSchedule.Nodes {
 				fmt.Printf("   - Episode %d (ID: %d)\n", node.Episode, node.ID)
 			}
