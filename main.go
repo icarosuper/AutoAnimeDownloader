@@ -12,26 +12,11 @@ import (
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	// interval := time.Duration(modules.LoadConfigs().CheckInterval) * time.Minute
-	interval := 5 * time.Second
+	interval := time.Duration(modules.LoadConfigs().CheckInterval) * time.Minute
 
 	restart := startLoop(interval)
-	_ = restart // keep restart available for use (prevents unused variable compile error)
 
 	modules.CreateUi(restart)
-}
-
-func loopNow(restart func(newDur time.Duration)) {
-	loop()
-
-	dur := time.Duration(modules.LoadConfigs().CheckInterval) * time.Minute
-
-	restart(dur)
-}
-
-func loop() {
-	fmt.Println("Checking for new episodes...")
-	// executeLogic()
 }
 
 func startLoop(interval time.Duration) func(newInterval time.Duration) {
@@ -39,8 +24,6 @@ func startLoop(interval time.Duration) func(newInterval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	start := func(d time.Duration, c context.Context) {
-		fmt.Println("Starting loop with interval:", d)
-
 		go func() {
 			for {
 				// verifica cancelamento antes de executar
@@ -50,8 +33,7 @@ func startLoop(interval time.Duration) func(newInterval time.Duration) {
 				default:
 				}
 
-				loop()
-				// executeLogic()
+				checkAnimes()
 
 				// aguarda duração ou cancelamento
 				select {
@@ -99,6 +81,9 @@ func checkAnimes() {
 		episodes := anime.Media.AiringSchedule.Nodes
 
 		for _, ep := range episodes {
+			// TODO: Se der erro salvar na lista de episódios falhados
+			// TODO: Tentar pegar erro do qbittorrent também
+
 			if ep.Episode <= progress {
 				fmt.Printf("Skipping %s episode %d (already watched)\n", *titles.Romaji, ep.Episode)
 				continue
@@ -130,6 +115,8 @@ func checkAnimes() {
 
 			modules.SaveIdToFile(ep.ID)
 			fmt.Printf("Downloaded %s episode %d\n", *titles.Romaji, ep.Episode)
+
+			// Salvar nome na lista de episódios baixados recentemente
 		}
 	}
 }

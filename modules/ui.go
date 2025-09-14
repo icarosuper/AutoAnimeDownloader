@@ -31,6 +31,11 @@ func CreateUi(restartLoop func(newDur time.Duration)) {
 
 	setWindowContent(w, restartLoop)
 
+	configs := LoadConfigs()
+	if configs.AnilistUsername == "" || configs.SavePath == "" {
+		dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
+	}
+
 	w.ShowAndRun()
 }
 
@@ -52,10 +57,12 @@ func notificationsBox(restartLoop func(newDur time.Duration)) *fyne.Container {
 
 	// TODO: Últimos episódios baixados
 	// TODO: Últimos episódios que falharam
+
 	// TODO: Próximos episódios que vão sair
+	// ^ Coloca o tempo que falta pra sair na tela atualizando constantemente, se chegar a 0 trigga o reset de checagem
 
 	checkNowBtn := widget.NewButton("Checar atualizações agora", func() {
-		interval := time.Duration(LoadConfigs().CheckInterval) * time.Second // TODO: Mudar para Minutes depois de testar
+		interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
 		restartLoop(interval)
 	})
 	box.Add(checkNowBtn)
@@ -84,7 +91,7 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 		_, err := fmt.Sscanf(changeIntervalEntry.Text, "%d", &newInterval)
 		if err == nil && newInterval > 0 {
 			configs.CheckInterval = newInterval
-			interval := time.Duration(configs.CheckInterval) * time.Second // TODO: Mudar para Minutes depois de testar
+			interval := time.Duration(configs.CheckInterval) * time.Minute
 			restartLoop(interval)
 		}
 
@@ -96,12 +103,11 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 	box.Add(changeIntervalEntry)
 	box.Add(saveBtn)
 
-	// TODO: Anilist Username
-	// TODO: Save Path
 	// TODO: Skip Dialog
-	// TODO: Check Interval
 	// TODO: Retry limit
 	// TODO: Max episodes per check
+	// TODO: Max episodes in download folder
+	// TODO: Cleanup watched episodes
 
 	return box
 }
