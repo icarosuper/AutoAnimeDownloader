@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -60,11 +61,13 @@ func notificationsBox(restartLoop func(newDur time.Duration)) *fyne.Container {
 
 	// TODO: Próximos episódios que vão sair
 	// ^ Coloca o tempo que falta pra sair na tela atualizando constantemente, se chegar a 0 trigga o reset de checagem
+	// incluir nas configs se deve checar automaticamente nesse caso ou não
 
 	checkNowBtn := widget.NewButton("Checar atualizações agora", func() {
 		interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
 		restartLoop(interval)
 	})
+
 	box.Add(checkNowBtn)
 
 	return box
@@ -84,6 +87,15 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 	changeIntervalEntry := changeIntervalEntry(configs)
 
 	saveBtn := widget.NewButton("Salvar", func() {
+		if err := userNameEntry.Validate(); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		if err := changeIntervalEntry.Validate(); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+
 		configs := LoadConfigs()
 		configs.AnilistUsername = userNameEntry.Text
 
@@ -99,7 +111,9 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 	})
 
 	box.Add(selectFolderButton)
+	box.Add(widget.NewLabel("Seu UserName no AniList"))
 	box.Add(userNameEntry)
+	box.Add(widget.NewLabel("Intervalo de checagem (em minutos)"))
 	box.Add(changeIntervalEntry)
 	box.Add(saveBtn)
 
@@ -113,7 +127,7 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 }
 
 func changePathBtn(w fyne.Window) *widget.Button {
-	return widget.NewButton("Change Save Path", func() {
+	return widget.NewButton("Alterar caminho de salvamento", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
 				dialog.ShowError(err, nil)
@@ -134,12 +148,34 @@ func changeUserNameEntry(configs Config) *widget.Entry {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("AniList Username")
 	entry.SetText(configs.AnilistUsername)
+
+	entry.OnChanged = func(s string) {
+		entry.SetText(strings.TrimSpace(s))
+	}
+
+	entry.Validator = func(s string) error {
+		if len(s) == 0 {
+			return fmt.Errorf("username do AniList não pode estar vazio")
+		}
+		return nil
+	}
+
 	return entry
 }
 
 func changeIntervalEntry(configs Config) *widget.Entry {
 	entry := widget.NewEntry()
-	entry.SetPlaceHolder("Check Interval (minutes)")
+	entry.SetPlaceHolder("Intervalo de checagem (em minutos)")
 	entry.SetText(fmt.Sprintf("%d", configs.CheckInterval))
+
+	entry.Validator = func(s string) error {
+		var v int
+		_, err := fmt.Sscanf(s, "%d", &v)
+		if err != nil || v <= 0 {
+			return fmt.Errorf("o intervalo de checagem deve ser um número inteiro positivo")
+		}
+		return nil
+	}
+
 	return entry
 }

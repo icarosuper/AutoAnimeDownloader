@@ -49,7 +49,7 @@ type GraphQLRequest struct {
 
 func SearchAnimes(userName string) (*AniListResponse, error) {
 	query := `
-		query ExampleQuery($userName: String, $type: MediaType, $status: MediaListStatus, $notYetAired: Boolean) {
+		query ExampleQuery($userName: String, $type: MediaType, $status: MediaListStatus) {
 			Page {
 				mediaList(userName: $userName, type: $type, status: $status) {
 					media {
@@ -57,7 +57,7 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 							english
 							romaji
 						}
-						airingSchedule(notYetAired: $notYetAired) {
+						airingSchedule {
 							nodes {
 								id
 								episode
@@ -72,10 +72,9 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 	`
 
 	variables := map[string]interface{}{
-		"userName":    userName,
-		"type":        "ANIME",
-		"status":      "CURRENT",
-		"notYetAired": false,
+		"userName": userName,
+		"type":     "ANIME",
+		"status":   "CURRENT",
 	}
 
 	requestBody := GraphQLRequest{
