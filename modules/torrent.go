@@ -16,7 +16,11 @@ func DownloadAnimes(magnets []string) {
 
 func downloadAnime(magnet string, savePath string, skipDialog bool) {
 	skipDialogArg := fmt.Sprintf("--skip-dialog=%t", skipDialog)
-	savePathArg := "--save-path=" + savePath
+	savePathArg := ""
+
+	if savePath != "" {
+		savePathArg = "--save-path=" + savePath
+	}
 
 	exec.Command("qbittorrent", magnet, savePathArg, skipDialogArg).Start()
 }

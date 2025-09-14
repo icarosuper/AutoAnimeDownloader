@@ -16,7 +16,7 @@ type Config struct {
 
 func LoadConfigs() Config {
 	config := Config{
-		SavePath:        "~/Downloads/Animes",
+		SavePath:        "",
 		SkipDialog:      true,
 		MaxEpisodes:     10,
 		AnilistUsername: "",
