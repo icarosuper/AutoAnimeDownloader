@@ -1,0 +1,16 @@
+# IDEs
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Build
+build/
+dist/
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+
+.downloaded_ids
+config.json
