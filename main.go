@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -63,7 +64,12 @@ func checkAnimes() {
 	configs := modules.LoadConfigs()
 
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
-		fmt.Println("Please set your AniList username and save path in the settings.")
+		fmt.Println("Por favor, configure o caminho de salvamento e o nome de usuário do AniList nas configurações.")
+		return
+	}
+
+	if runtime.GOOS == "windows" && configs.QBittorrentPath == "" {
+		fmt.Println("Por favor, configure o caminho do qBittorrent nas configurações.")
 		return
 	}
 
@@ -111,7 +117,7 @@ func checkAnimes() {
 			}
 
 			fmt.Printf("Downloading %s episode %d\n", *titles.Romaji, ep.Episode)
-			modules.DownloadAnime(nyaaResponse.MagnetLink, configs.SavePath, *titles.English, configs.SkipDialog)
+			modules.DownloadAnime(nyaaResponse.MagnetLink, *titles.English, configs)
 
 			modules.SaveIdToFile(ep.ID)
 			fmt.Printf("Downloaded %s episode %d\n", *titles.Romaji, ep.Episode)

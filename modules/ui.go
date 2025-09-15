@@ -2,6 +2,7 @@ package modules
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -30,21 +31,26 @@ func CreateUi(restartLoop func(newDur time.Duration)) {
 		desk.SetSystemTrayMenu(m)
 	}
 
-	setWindowContent(w, restartLoop)
-
 	configs := LoadConfigs()
+
+	setWindowContent(w, restartLoop, configs)
+
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
 		dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
+	}
+
+	if runtime.GOOS == "windows" && configs.QBittorrentPath == "" {
+		dialog.ShowInformation("Configuração necessária", "Por favor, configure o caminho do qBittorrent nas configurações.", w)
 	}
 
 	w.ShowAndRun()
 }
 
-func setWindowContent(w fyne.Window, restartLoop func(newDur time.Duration)) {
+func setWindowContent(w fyne.Window, restartLoop func(newDur time.Duration), configs Config) {
 	tabs := container.NewAppTabs()
 
 	tabs.Append(container.NewTabItem("Notificações", notificationsBox(restartLoop)))
-	tabs.Append(container.NewTabItem("Configurações", settingsBox(w, restartLoop)))
+	tabs.Append(container.NewTabItem("Configurações", settingsBox(w, restartLoop, configs)))
 
 	tabs.SelectIndex(0)
 
@@ -73,14 +79,14 @@ func notificationsBox(restartLoop func(newDur time.Duration)) *fyne.Container {
 	return box
 }
 
-func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Container {
-	configs := LoadConfigs()
-
+func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs Config) *fyne.Container {
 	box := container.NewVBox(
 		widget.NewLabel("Configurações"),
 	)
 
-	selectFolderButton := changePathBtn(w)
+	changePathBtn := changePathBtn(w)
+
+	qBittorrentPathBtn := changeQBittorrentPathBtn(w)
 
 	userNameEntry := changeUserNameEntry(configs)
 
@@ -99,6 +105,10 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 		}
 		if configs.SavePath == "" {
 			dialog.ShowError(fmt.Errorf("caminho de salvamento não pode estar vazio"), w)
+			return
+		}
+		if runtime.GOOS == "windows" && configs.QBittorrentPath == "" {
+			dialog.ShowError(fmt.Errorf("caminho do qBittorrent não pode estar vazio"), w)
 			return
 		}
 
@@ -124,7 +134,10 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration)) *fyne.Co
 		restartLoop(time.Duration(newInterval) * time.Minute)
 	})
 
-	box.Add(selectFolderButton)
+	box.Add(changePathBtn)
+	if runtime.GOOS == "windows" {
+		box.Add(qBittorrentPathBtn)
+	}
 	box.Add(widget.NewLabel("Seu UserName no AniList"))
 	box.Add(userNameEntry)
 	box.Add(widget.NewLabel("Intervalo de checagem (em minutos)"))
@@ -192,4 +205,22 @@ func changeIntervalEntry(configs Config) *widget.Entry {
 	}
 
 	return entry
+}
+
+func changeQBittorrentPathBtn(w fyne.Window) *widget.Button {
+	return widget.NewButton("Alterar caminho do qBittorrent", func() {
+		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, nil)
+				return
+			}
+			if uri == nil {
+				return
+			}
+
+			configs := LoadConfigs()
+			configs.QBittorrentPath = uri.URI().Path()
+			SaveConfigs(configs)
+		}, w)
+	})
 }

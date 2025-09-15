@@ -15,6 +15,7 @@ type Config struct {
 	MaxEpisodes     int    `json:"max_episodes"`
 	AnilistUsername string `json:"anilist_username"`
 	CheckInterval   int    `json:"check_interval"`
+	QBittorrentPath string `json:"qbittorrent_path"`
 }
 
 func LoadConfigs() Config {
@@ -24,6 +25,7 @@ func LoadConfigs() Config {
 		MaxEpisodes:     10,
 		AnilistUsername: "",
 		CheckInterval:   10,
+		QBittorrentPath: "",
 	}
 
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {

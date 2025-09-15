@@ -2,12 +2,19 @@ package modules
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"runtime"
 )
 
-func DownloadAnime(magnet string, savePath string, animeName string, skipDialog bool) {
-	skipDialogArg := fmt.Sprintf("--skip-dialog=%t", skipDialog)
-	savePathArg := "--save-path=" + savePath + "/" + animeName
+func DownloadAnime(magnet string, animeName string, config Config) {
+	qBittorrent := "qbittorrent"
+	skipDialogArg := fmt.Sprintf("--skip-dialog=%t", config.SkipDialog)
+	savePathArg := fmt.Sprintf("--save-path=%s%s%s", config.SavePath, string(os.PathSeparator), animeName)
 
-	exec.Command("qbittorrent", magnet, savePathArg, skipDialogArg).Start()
+	if runtime.GOOS == "windows" {
+		qBittorrent = config.QBittorrentPath
+	}
+
+	exec.Command(qBittorrent, magnet, savePathArg, skipDialogArg).Start()
 }
