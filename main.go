@@ -20,7 +20,7 @@ func main() {
 	modules.CreateUi(startLoop)
 }
 
-func startLoop(interval time.Duration, w fyne.Window) func(newInterval time.Duration) {
+func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesList func()) func(newInterval time.Duration) {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -34,7 +34,7 @@ func startLoop(interval time.Duration, w fyne.Window) func(newInterval time.Dura
 				default:
 				}
 
-				animeVerification(w)
+				animeVerification(w, updateDownloadedEpisodesList)
 
 				// aguarda duração ou cancelamento
 				select {
@@ -60,7 +60,7 @@ func startLoop(interval time.Duration, w fyne.Window) func(newInterval time.Dura
 	}
 }
 
-func animeVerification(w fyne.Window) {
+func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
 	configs := modules.LoadConfigs()
 
 	qBittorrentConnection := modules.TestQBittorrentConnection(configs)
@@ -105,6 +105,7 @@ func animeVerification(w fyne.Window) {
 					newEpisodes = append(newEpisodes, modules.EpisodeStruct{
 						EpisodeID:   ep.ID,
 						EpisodeHash: hash,
+						EpisodeName: fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode),
 					})
 				}
 			} else if shouldDelete {
@@ -138,6 +139,8 @@ func animeVerification(w fyne.Window) {
 		modules.DeleteEpisodesFromFile(idsToDelete)
 		modules.DeleteTorrents(configs, hashesToDelete)
 	}
+
+	updateDownloadedEpisodesList()
 }
 
 func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs modules.Config) string {
@@ -153,7 +156,7 @@ func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs mod
 
 	var hash string
 	for i := 0; i < RETRY_LIMIT; i++ {
-		fmt.Printf("Attempting to download %s episode %d (attempt %d/%d)\n. Magnet: %s", *titles.Romaji, ep.Episode, i+1, RETRY_LIMIT, nyaaResponse[i].MagnetLink)
+		fmt.Printf("Attempting to download %s episode %d (attempt %d/%d)\n", *titles.Romaji, ep.Episode, i+1, RETRY_LIMIT)
 		hash = modules.DownloadAnime(configs, nyaaResponse[i].MagnetLink, *titles.English, ep.Episode)
 		if hash != "" {
 			break
@@ -170,9 +173,7 @@ func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs mod
 }
 
 func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpisodes []modules.EpisodeStruct) (bool, bool) {
-	// TODO: Salvar episódios que baixaram na lista de episódios que baixaram
 	// TODO: Se der erro salvar na lista de episódios que falharam
-	// TODO: Exibir ambas as listas na aba de notificações
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 	progress := anime.Progress
 	titles := anime.Media.Title

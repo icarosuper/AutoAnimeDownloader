@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 type EpisodeStruct struct {
 	EpisodeID   int    `json:"episode_id"`
 	EpisodeHash string `json:"episode_hash"`
+	EpisodeName string `json:"episode_name"`
 }
 
 const configsFolder = ".autoanimedownloader"
@@ -77,23 +80,41 @@ func LoadSavedEpisodes() []EpisodeStruct {
 		return []EpisodeStruct{}
 	}
 
-	file, err := os.ReadFile(downloadedEpsFilePath)
+	b, err := os.ReadFile(downloadedEpsFilePath)
 	if err != nil {
 		panic(err)
 	}
 
-	lines := string(file)
-	if lines == "" {
+	content := string(b)
+	content = strings.TrimRight(content, "\n")
+	if content == "" {
 		return []EpisodeStruct{}
 	}
 
 	var savedEpisodes []EpisodeStruct
-	for _, line := range splitLines(lines) {
-		var episode EpisodeStruct
-		_, err := fmt.Sscanf(line, "%d:%s", &episode.EpisodeID, &episode.EpisodeHash)
-		if err == nil {
-			savedEpisodes = append(savedEpisodes, episode)
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		id, err := strconv.Atoi(parts[0])
+		if err != nil {
+			continue
+		}
+		hash := parts[1]
+		name := ""
+		if len(parts) == 3 {
+			name = parts[2]
+		}
+		savedEpisodes = append(savedEpisodes, EpisodeStruct{
+			EpisodeID:   id,
+			EpisodeHash: hash,
+			EpisodeName: name,
+		})
 	}
 
 	return savedEpisodes
@@ -103,21 +124,27 @@ func SaveEpisodesToFile(episodes []EpisodeStruct) {
 	downloadedEpsFilePath := getDownloadedEpsFilePath()
 
 	if _, err := os.Stat(downloadedEpsFilePath); os.IsNotExist(err) {
-		file, err := os.Create(downloadedEpsFilePath)
+		f, err := os.Create(downloadedEpsFilePath)
 		if err != nil {
 			panic(err)
 		}
-		file.Close()
+		_ = f.Close()
 	}
 
-	file, err := os.OpenFile(downloadedEpsFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(downloadedEpsFilePath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
-	defer file.Close()
+	defer func() { _ = f.Close() }()
 
 	for _, episode := range episodes {
-		if _, err := file.WriteString(fmt.Sprintf("%d:%s\n", episode.EpisodeID, episode.EpisodeHash)); err != nil {
+		var line string
+		if episode.EpisodeName == "" {
+			line = fmt.Sprintf("%d:%s\n", episode.EpisodeID, episode.EpisodeHash)
+		} else {
+			line = fmt.Sprintf("%d:%s:%s\n", episode.EpisodeID, episode.EpisodeHash, episode.EpisodeName)
+		}
+		if _, err := f.WriteString(line); err != nil {
 			panic(err)
 		}
 	}
@@ -125,38 +152,40 @@ func SaveEpisodesToFile(episodes []EpisodeStruct) {
 
 func DeleteEpisodesFromFile(episodeIds []int) {
 	savedEpisodes := LoadSavedEpisodes()
-
 	if len(episodeIds) == 0 || len(savedEpisodes) == 0 {
 		return
 	}
 
-	var newSavedEpisodes []EpisodeStruct
+	ids := make(map[int]struct{}, len(episodeIds))
+	for _, id := range episodeIds {
+		ids[id] = struct{}{}
+	}
 
-	for _, episode := range savedEpisodes {
-		shouldDelete := false
-		for _, id := range episodeIds {
-			if episode.EpisodeID == id {
-				shouldDelete = true
-				break
-			}
-		}
-		if !shouldDelete {
-			newSavedEpisodes = append(newSavedEpisodes, episode)
+	var newSaved []EpisodeStruct
+	for _, ep := range savedEpisodes {
+		if _, found := ids[ep.EpisodeID]; !found {
+			newSaved = append(newSaved, ep)
 		}
 	}
 
-	if len(newSavedEpisodes) == len(savedEpisodes) {
+	if len(newSaved) == len(savedEpisodes) {
 		return
 	}
 
-	file, err := os.Create(getDownloadedEpsFilePath())
+	f, err := os.Create(getDownloadedEpsFilePath())
 	if err != nil {
 		panic(err)
 	}
-	defer file.Close()
+	defer func() { _ = f.Close() }()
 
-	for _, episode := range newSavedEpisodes {
-		if _, err := file.WriteString(fmt.Sprintf("%d:%s\n", episode.EpisodeID, episode.EpisodeHash)); err != nil {
+	for _, episode := range newSaved {
+		var line string
+		if episode.EpisodeName == "" {
+			line = fmt.Sprintf("%d:%s\n", episode.EpisodeID, episode.EpisodeHash)
+		} else {
+			line = fmt.Sprintf("%d:%s:%s\n", episode.EpisodeID, episode.EpisodeHash, episode.EpisodeName)
+		}
+		if _, err := f.WriteString(line); err != nil {
 			panic(err)
 		}
 	}
@@ -175,26 +204,10 @@ func getConfigsFolderPath() string {
 	configsFolderPath := filepath.Join(os.Getenv("HOME"), configsFolder)
 
 	if _, err := os.Stat(configsFolderPath); os.IsNotExist(err) {
-		err := os.Mkdir(configsFolderPath, 0755)
-		if err != nil {
+		if err := os.Mkdir(configsFolderPath, 0755); err != nil {
 			panic(err)
 		}
 	}
 
 	return configsFolderPath
-}
-
-func splitLines(s string) []string {
-	var lines []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-	return lines
 }
