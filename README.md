@@ -4,7 +4,7 @@
 
 ## Requirements
 - An Anilist account (no need to login, just input your username)
-- Have [qBittorrent](https://www.qbittorrent.org/) downloaded
+- Have [qBittorrent](https://www.qbittorrent.org/) installed
 - Turn on WebUi on qBittorrent
 ![qBittorrent WebUi tutorial](https://i.imgur.com/vYgUdyy.png)
 
