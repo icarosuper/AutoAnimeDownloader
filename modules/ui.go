@@ -53,10 +53,6 @@ func setWindowContent(w fyne.Window, restartLoop func(newDur time.Duration), con
 }
 
 func notificationsBox(restartLoop func(newDur time.Duration)) *fyne.Container {
-	box := container.NewVBox(
-		widget.NewLabel("Notificações"),
-	)
-
 	// TODO: Últimos episódios baixados
 	// TODO: Últimos episódios que falharam
 
@@ -69,16 +65,13 @@ func notificationsBox(restartLoop func(newDur time.Duration)) *fyne.Container {
 		restartLoop(interval)
 	})
 
+	box := container.NewVBox()
 	box.Add(checkNowBtn)
 
 	return box
 }
 
 func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs Config) *fyne.Container {
-	box := container.NewVBox(
-		widget.NewLabel("Configurações"),
-	)
-
 	changeSavePathBtn := changeSavePathBtn(w)
 
 	qBittorrentEntry := changeQBittorrentBaseUrlEntry(configs)
@@ -93,14 +86,15 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs 
 		saveConfigs(w, restartLoop, userNameEntry, changeIntervalEntry, qBittorrentEntry)
 	})
 
+	box := container.NewVBox()
 	box.Add(changeSavePathBtn)
-	box.Add(widget.NewLabel("URL base do qBittorrent"))
-	box.Add(qBittorrentEntry)
-	box.Add(widget.NewLabel("Seu UserName no AniList"))
+	box.Add(widget.NewLabel("Seu nome de usuário no AniList"))
 	box.Add(userNameEntry)
-	box.Add(widget.NewLabel("Intervalo de checagem (em minutos)"))
+	box.Add(widget.NewLabel("Intervalo de checagem de animes (em minutos)"))
 	box.Add(changeIntervalEntry)
 	box.Add(deleteAfterWatched)
+	box.Add(widget.NewLabel("URL base do qBittorrent (não altere isso se não souber o que significa)"))
+	box.Add(qBittorrentEntry)
 	box.Add(saveBtn)
 
 	// TODO: Retry limit
@@ -170,7 +164,7 @@ func deleteWatchedEpisodesCheck(configs Config) *widget.Check {
 }
 
 func changeSavePathBtn(w fyne.Window) *widget.Button {
-	return widget.NewButton("Alterar caminho de salvamento", func() {
+	return widget.NewButton("Alterar caminho de salvamento dos animes", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
 				dialog.ShowError(err, nil)
@@ -189,7 +183,7 @@ func changeSavePathBtn(w fyne.Window) *widget.Button {
 
 func changeUserNameEntry(configs Config) *widget.Entry {
 	entry := widget.NewEntry()
-	entry.SetPlaceHolder("AniList Username")
+	entry.SetPlaceHolder("Insira seu nome de usuário do AniList")
 	entry.SetText(configs.AnilistUsername)
 
 	entry.OnChanged = func(s string) {
@@ -225,12 +219,12 @@ func changeIntervalEntry(configs Config) *widget.Entry {
 
 func changeQBittorrentBaseUrlEntry(configs Config) *widget.Entry {
 	entry := widget.NewEntry()
-	entry.SetPlaceHolder("qBittorrent Base URL")
+	entry.SetPlaceHolder("Insira a URL do qBittorrent")
 	entry.SetText(configs.QBittorrentUrl)
 
 	entry.Validator = func(s string) error {
 		if len(s) == 0 {
-			return fmt.Errorf("o URL base do qBittorrent não pode estar vazio")
+			return fmt.Errorf("a URL base do qBittorrent não pode estar vazio")
 		}
 		return nil
 	}
