@@ -121,35 +121,3 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 
 	return &response, nil
 }
-
-func PrintAnimeResults(response *AniListResponse) {
-	if response == nil || len(response.Data.Page.MediaList) == 0 {
-		fmt.Println("No anime found.")
-		return
-	}
-
-	fmt.Printf("Found %d anime:\n\n", len(response.Data.Page.MediaList))
-
-	for i, entry := range response.Data.Page.MediaList {
-		media := entry.Media
-		title := ""
-		if media.Title.English != nil {
-			title = *media.Title.English
-		} else if media.Title.Romaji != nil {
-			title = *media.Title.Romaji
-		}
-
-		fmt.Printf("%d. %s\n", i+1, title)
-		fmt.Printf("   Progress: %d episodes\n", entry.Progress)
-
-		if len(media.AiringSchedule.Nodes) > 0 {
-			fmt.Println("Aired episodes:")
-
-			for _, node := range media.AiringSchedule.Nodes {
-				fmt.Printf("   - Episode %d (ID: %d)\n", node.Episode, node.ID)
-			}
-		}
-
-		fmt.Println()
-	}
-}

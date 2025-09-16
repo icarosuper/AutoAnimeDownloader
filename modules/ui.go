@@ -2,18 +2,21 @@ package modules
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/widget"
 )
 
-func CreateUi(startLoop func(dur time.Duration, w fyne.Window) func(newDur time.Duration)) {
+func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateDownloadedEpisodesList func()) func(newDur time.Duration)) {
 	a := app.New()
 
 	w := a.NewWindow("Auto Anime Downloader")
@@ -31,20 +34,26 @@ func CreateUi(startLoop func(dur time.Duration, w fyne.Window) func(newDur time.
 		desk.SetSystemTrayMenu(m)
 	}
 
+	downloadedEpisodesList, downloadedEpisodesData := downloadedEpisodesList()
+
+	updateDownloadedEpisodes := func() {
+		updateDownloadedEpisodesList(downloadedEpisodesData)
+	}
+
 	configs := LoadConfigs()
 
 	interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
-	restartLoop := startLoop(interval, w)
+	restartLoop := startLoop(interval, w, updateDownloadedEpisodes)
 
-	setWindowContent(w, restartLoop, configs)
+	setWindowContent(w, restartLoop, downloadedEpisodesList, configs)
 
 	w.ShowAndRun()
 }
 
-func setWindowContent(w fyne.Window, restartLoop func(newDur time.Duration), configs Config) {
+func setWindowContent(w fyne.Window, restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, configs Config) {
 	tabs := container.NewAppTabs()
 
-	tabs.Append(container.NewTabItem("Notificações", notificationsBox(restartLoop)))
+	tabs.Append(container.NewTabItem("Notificações", notificationsBox(restartLoop, downloadedEpisodesList)))
 	tabs.Append(container.NewTabItem("Configurações", settingsBox(w, restartLoop, configs)))
 
 	tabs.SelectIndex(0)
@@ -52,7 +61,7 @@ func setWindowContent(w fyne.Window, restartLoop func(newDur time.Duration), con
 	w.SetContent(tabs)
 }
 
-func notificationsBox(restartLoop func(newDur time.Duration)) *fyne.Container {
+func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List) *fyne.Container {
 	// TODO: Últimos episódios baixados
 	// TODO: Últimos episódios que falharam
 
@@ -60,15 +69,46 @@ func notificationsBox(restartLoop func(newDur time.Duration)) *fyne.Container {
 	// ^ Coloca o tempo que falta pra sair na tela atualizando constantemente, se chegar a 0 trigga o reset de checagem
 	// incluir nas configs se deve checar automaticamente nesse caso ou não
 
+	title := canvas.NewText("Últimos episódios baixados", color.White)
+	title.Alignment = fyne.TextAlignCenter
+	title.TextSize = 18
+
 	checkNowBtn := widget.NewButton("Checar atualizações agora", func() {
 		interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
 		restartLoop(interval)
 	})
 
-	box := container.NewVBox()
-	box.Add(checkNowBtn)
+	box := container.NewBorder(title, checkNowBtn, nil, nil, downloadedEpisodesList)
 
 	return box
+}
+
+func downloadedEpisodesList() (*widget.List, binding.ExternalStringList) {
+	data := binding.BindStringList(&[]string{})
+
+	updateDownloadedEpisodesList(data)
+
+	list := widget.NewListWithData(
+		data,
+		func() fyne.CanvasObject {
+			return widget.NewLabel("template")
+		},
+		func(i binding.DataItem, o fyne.CanvasObject) {
+			o.(*widget.Label).Bind(i.(binding.String))
+		})
+
+	return list, data
+}
+
+func updateDownloadedEpisodesList(data binding.ExternalStringList) {
+	downloadedEpisodes := LoadSavedEpisodes()
+
+	episodes := make([]string, 0, len(downloadedEpisodes))
+	for i := len(downloadedEpisodes) - 1; i >= 0; i-- {
+		episodes = append(episodes, downloadedEpisodes[i].EpisodeName)
+	}
+
+	data.Set(episodes)
 }
 
 func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs Config) *fyne.Container {

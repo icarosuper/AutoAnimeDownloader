@@ -221,28 +221,3 @@ func isWithinThreeMonths(date time.Time) bool {
 	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
 	return date.After(threeMonthsAgo)
 }
-
-// PrintTorrentResults imprime os resultados de forma formatada
-func PrintTorrentResults(results []TorrentResult) {
-	if len(results) == 0 {
-		fmt.Println("Nenhum torrent encontrado.")
-		return
-	}
-
-	fmt.Printf("\n=== %d Torrents Encontrados ===\n", len(results))
-	for i, result := range results {
-		fmt.Printf("\n%d. %s\n", i+1, result.Name)
-		fmt.Printf("   Data: %s\n", result.Date.Format("2006-01-02 15:04"))
-		fmt.Printf("   Seeders: %s\n", result.Seeders)
-		if result.Episode != nil {
-			fmt.Printf("   Episódio: %d\n", *result.Episode)
-		}
-		if result.Season != nil {
-			fmt.Printf("   Temporada: %d\n", *result.Season)
-		}
-		if result.Resolution != nil && *result.Resolution != "" {
-			fmt.Printf("   Resolução: %s\n", *result.Resolution)
-		}
-		fmt.Printf("   Magnet: %s\n", result.MagnetLink)
-	}
-}
