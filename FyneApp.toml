@@ -1,6 +1,6 @@
 [Details]
   Icon = "illya.png"
   Name = "AutoAnimeDownloader"
-  ID = "com.example.app"
+  ID = "io.github.icarosuper.autoanimedownloader"
   Version = "0.0.2"
-  Build = 21
+  Build = 23
