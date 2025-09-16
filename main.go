@@ -33,7 +33,9 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 				default:
 				}
 
-				animeVerification(w, updateDownloadedEpisodesList, isLoading)
+				isLoading.Set(true)
+				animeVerification(w, updateDownloadedEpisodesList)
+				isLoading.Set(false)
 
 				// aguarda duração ou cancelamento
 				select {
@@ -59,14 +61,11 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 	}
 }
 
-func animeVerification(w fyne.Window, updateDownloadedEpisodesList func(), isLoading binding.ExternalBool) {
-	isLoading.Set(true)
-
+func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
 	configs := modules.LoadConfigs()
 
 	anilistResponse := searchAnilist(w, configs)
 	if anilistResponse == nil {
-		isLoading.Set(false)
 		return
 	}
 
@@ -75,7 +74,12 @@ func animeVerification(w fyne.Window, updateDownloadedEpisodesList func(), isLoa
 	var checkedEpisodes []int
 	var idsToDelete []int
 
+	// TODO: Checar episódios que não estão mais no qBittorrent e remover do arquivo
+
 	for _, anime := range anilistResponse.Data.Page.MediaList {
+		title := anime.Media.Title.Romaji
+		fmt.Println(title)
+
 		downloadedEpisodesOfAnime := 0
 		episodes := anime.Media.AiringSchedule.Nodes
 
@@ -108,8 +112,6 @@ func animeVerification(w fyne.Window, updateDownloadedEpisodesList func(), isLoa
 	})
 
 	updateDownloadedEpisodesList()
-
-	isLoading.Set(false)
 }
 
 type handleEpisodesData struct {
@@ -232,6 +234,11 @@ func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.M
 
 	if ep.TimeUntilAiring > 0 {
 		fmt.Printf("Skipping %s episode %d (not aired yet)\n", *titles.Romaji, ep.Episode)
+		return false, false
+	}
+
+	if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
+		fmt.Printf("Skipping %s episode %d (max episodes per anime reached)\n", *titles.Romaji, ep.Episode)
 		return false, false
 	}
 
