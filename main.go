@@ -12,6 +12,8 @@ import (
 	"fyne.io/fyne/v2/dialog"
 )
 
+const RETRY_LIMIT = 3
+
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
@@ -94,16 +96,18 @@ func animeVerification(w fyne.Window) {
 
 		for _, ep := range episodes {
 			checkedEpisodes = append(checkedEpisodes, ep.ID)
-			hash, shouldDelete := checkEpisode(ep, anime, savedEpisodes, configs)
+			shouldDownload, shouldDelete := checkEpisode(ep, anime, savedEpisodes)
 
-			if hash != "" {
-				newEpisodes = append(newEpisodes, modules.EpisodeStruct{
-					EpisodeID:   ep.ID,
-					EpisodeHash: hash,
-				})
-			}
+			if shouldDownload {
+				hash := tryDownloadEpisode(ep, anime.Media.Title, configs)
 
-			if shouldDelete {
+				if hash != "" {
+					newEpisodes = append(newEpisodes, modules.EpisodeStruct{
+						EpisodeID:   ep.ID,
+						EpisodeHash: hash,
+					})
+				}
+			} else if shouldDelete {
 				idsToDelete = append(idsToDelete, ep.ID)
 			}
 		}
@@ -136,7 +140,36 @@ func animeVerification(w fyne.Window) {
 	}
 }
 
-func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpisodes []modules.EpisodeStruct, configs modules.Config) (string, bool) {
+func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs modules.Config) string {
+	nyaaResponse, err := modules.ScrapNyaa(*titles.Romaji, ep.Episode)
+	if err != nil {
+		fmt.Printf("Error searching Nyaa: %v\n", err)
+		return ""
+	}
+	if nyaaResponse == nil {
+		fmt.Printf("No magnet link found for %s episode %d\n", *titles.Romaji, ep.Episode)
+		return ""
+	}
+
+	var hash string
+	for i := 0; i < RETRY_LIMIT; i++ {
+		fmt.Printf("Attempting to download %s episode %d (attempt %d/%d)\n. Magnet: %s", *titles.Romaji, ep.Episode, i+1, RETRY_LIMIT, nyaaResponse[i].MagnetLink)
+		hash = modules.DownloadAnime(configs, nyaaResponse[i].MagnetLink, *titles.English, ep.Episode)
+		if hash != "" {
+			break
+		}
+	}
+
+	if hash == "" {
+		fmt.Printf("Failed to download %s episode %d after %d attempts\n", *titles.Romaji, ep.Episode, RETRY_LIMIT)
+		return ""
+	}
+
+	fmt.Printf("Successfully added %s episode %d to qBittorrent\n", *titles.Romaji, ep.Episode)
+	return hash
+}
+
+func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpisodes []modules.EpisodeStruct) (bool, bool) {
 	// TODO: Salvar episódios que baixaram na lista de episódios que baixaram
 	// TODO: Se der erro salvar na lista de episódios que falharam
 	// TODO: Exibir ambas as listas na aba de notificações
@@ -148,33 +181,20 @@ func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpis
 
 	if ep.Episode <= progress {
 		fmt.Printf("Skipping %s episode %d (already watched)\n", *titles.Romaji, ep.Episode)
-		return "", alreadySaved
+		return false, alreadySaved
 	}
 
 	if alreadySaved {
 		fmt.Printf("Skipping %s episode %d (already downloaded)\n", *titles.Romaji, ep.Episode)
-		return "", false
+		return false, false
 	}
 
 	if ep.TimeUntilAiring > 0 {
 		fmt.Printf("Skipping %s episode %d (not aired yet)\n", *titles.Romaji, ep.Episode)
-		return "", false
+		return false, false
 	}
 
-	nyaaResponse, err := modules.ScrapNyaa(*titles.Romaji, ep.Episode)
-	if err != nil {
-		fmt.Printf("Error searching Nyaa: %v\n", err)
-		return "", false
-	}
-	if nyaaResponse == nil {
-		fmt.Printf("No magnet link found for %s episode %d\n", *titles.Romaji, ep.Episode)
-		return "", false
-	}
-
-	fmt.Printf("Downloading %s episode %d\n", *titles.Romaji, ep.Episode)
-	hash := modules.DownloadAnime(configs, nyaaResponse.MagnetLink, *titles.English, ep.Episode)
-
-	return hash, false
+	return true, false
 }
 
 func idIsInIntList(id int, episodes []int) bool {
