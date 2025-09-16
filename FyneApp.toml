@@ -2,5 +2,5 @@
   Icon = "illya.png"
   Name = "AutoAnimeDownloader"
   ID = "com.example.app"
-  Version = "0.0.1"
-  Build = 8
+  Version = "0.0.2"
+  Build = 10

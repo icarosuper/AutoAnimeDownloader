@@ -52,6 +52,7 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 		query ExampleQuery($userName: String, $type: MediaType, $status: MediaListStatus) {
 			Page {
 				mediaList(userName: $userName, type: $type, status: $status) {
+					progress
 					media {
 						title {
 							english
@@ -65,7 +66,6 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 							}
 						}
 					}
-					progress
 				}
 			}
 		}

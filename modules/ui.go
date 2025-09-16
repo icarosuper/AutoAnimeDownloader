@@ -2,7 +2,6 @@ package modules
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 	"time"
 
@@ -14,8 +13,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func CreateUi(restartLoop func(newDur time.Duration)) {
+func CreateUi(startLoop func(dur time.Duration, w fyne.Window) func(newDur time.Duration)) {
 	a := app.New()
+
 	w := a.NewWindow("Auto Anime Downloader")
 
 	w.Resize(fyne.NewSize(800, 600))
@@ -33,15 +33,10 @@ func CreateUi(restartLoop func(newDur time.Duration)) {
 
 	configs := LoadConfigs()
 
+	interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
+	restartLoop := startLoop(interval, w)
+
 	setWindowContent(w, restartLoop, configs)
-
-	if configs.AnilistUsername == "" || configs.SavePath == "" {
-		dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
-	}
-
-	if runtime.GOOS == "windows" && configs.QBittorrentPath == "" {
-		dialog.ShowInformation("Configuração necessária", "Por favor, configure o caminho do qBittorrent nas configurações.", w)
-	}
 
 	w.ShowAndRun()
 }
@@ -84,67 +79,30 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs 
 		widget.NewLabel("Configurações"),
 	)
 
-	changePathBtn := changePathBtn(w)
+	changeSavePathBtn := changeSavePathBtn(w)
 
-	qBittorrentPathBtn := changeQBittorrentPathBtn(w)
+	qBittorrentEntry := changeQBittorrentBaseUrlEntry(configs)
 
 	userNameEntry := changeUserNameEntry(configs)
 
 	changeIntervalEntry := changeIntervalEntry(configs)
 
-	saveBtn := widget.NewButton("Salvar", func() {
-		configs := LoadConfigs()
+	deleteAfterWatched := deleteWatchedEpisodesCheck(configs)
 
-		if err := userNameEntry.Validate(); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		if err := changeIntervalEntry.Validate(); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		if configs.SavePath == "" {
-			dialog.ShowError(fmt.Errorf("caminho de salvamento não pode estar vazio"), w)
-			return
-		}
-		if runtime.GOOS == "windows" && configs.QBittorrentPath == "" {
-			dialog.ShowError(fmt.Errorf("caminho do qBittorrent não pode estar vazio"), w)
-			return
-		}
-
-		newUsername := userNameEntry.Text
-
-		var newInterval int
-		_, err := fmt.Sscanf(changeIntervalEntry.Text, "%d", &newInterval)
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("o intervalo de checagem deve ser um número inteiro positivo"), w)
-			return
-		}
-
-		if configs.AnilistUsername == newUsername && configs.CheckInterval == newInterval {
-			return
-		}
-
-		configs.AnilistUsername = newUsername
-		configs.CheckInterval = newInterval
-		SaveConfigs(configs)
-
-		dialog.ShowInformation("Configurações salvas", "As configurações foram salvas com sucesso.", w)
-
-		restartLoop(time.Duration(newInterval) * time.Minute)
+	saveBtn := saveBtn(func() {
+		saveConfigs(w, restartLoop, userNameEntry, changeIntervalEntry, qBittorrentEntry)
 	})
 
-	box.Add(changePathBtn)
-	if runtime.GOOS == "windows" {
-		box.Add(qBittorrentPathBtn)
-	}
+	box.Add(changeSavePathBtn)
+	box.Add(widget.NewLabel("URL base do qBittorrent"))
+	box.Add(qBittorrentEntry)
 	box.Add(widget.NewLabel("Seu UserName no AniList"))
 	box.Add(userNameEntry)
 	box.Add(widget.NewLabel("Intervalo de checagem (em minutos)"))
 	box.Add(changeIntervalEntry)
+	box.Add(deleteAfterWatched)
 	box.Add(saveBtn)
 
-	// TODO: Skip Dialog
 	// TODO: Retry limit
 	// TODO: Max episodes per check
 	// TODO: Max episodes in download folder
@@ -153,7 +111,65 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs 
 	return box
 }
 
-func changePathBtn(w fyne.Window) *widget.Button {
+func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), userNameEntry, changeIntervalEntry, qBittorrentEntry *widget.Entry) {
+	configs := LoadConfigs()
+
+	if err := userNameEntry.Validate(); err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	if err := changeIntervalEntry.Validate(); err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	if err := qBittorrentEntry.Validate(); err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	if configs.SavePath == "" {
+		dialog.ShowError(fmt.Errorf("caminho de salvamento não pode estar vazio"), w)
+		return
+	}
+
+	newUsername := userNameEntry.Text
+	newQBittorrentUrl := qBittorrentEntry.Text
+
+	var newInterval int
+	_, err := fmt.Sscanf(changeIntervalEntry.Text, "%d", &newInterval)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("o intervalo de checagem deve ser um número inteiro positivo"), w)
+		return
+	}
+
+	if configs.AnilistUsername == newUsername && configs.CheckInterval == newInterval && configs.QBittorrentUrl == newQBittorrentUrl {
+		return
+	}
+
+	configs.AnilistUsername = newUsername
+	configs.CheckInterval = newInterval
+	configs.QBittorrentUrl = newQBittorrentUrl
+	SaveConfigs(configs)
+
+	dialog.ShowInformation("Configurações salvas", "As configurações foram salvas com sucesso.", w)
+
+	restartLoop(time.Duration(newInterval) * time.Minute)
+}
+
+func saveBtn(saveFunc func()) *widget.Button {
+	return widget.NewButton("Salvar", saveFunc)
+}
+
+func deleteWatchedEpisodesCheck(configs Config) *widget.Check {
+	check := widget.NewCheck("Deletar episódios assistidos", func(isChecked bool) {
+		configs := LoadConfigs()
+		configs.DeleteWatchedEpisodes = isChecked
+		SaveConfigs(configs)
+	})
+	check.SetChecked(configs.DeleteWatchedEpisodes)
+	return check
+}
+
+func changeSavePathBtn(w fyne.Window) *widget.Button {
 	return widget.NewButton("Alterar caminho de salvamento", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
@@ -207,20 +223,17 @@ func changeIntervalEntry(configs Config) *widget.Entry {
 	return entry
 }
 
-func changeQBittorrentPathBtn(w fyne.Window) *widget.Button {
-	return widget.NewButton("Alterar caminho do qBittorrent", func() {
-		dialog.ShowFileOpen(func(uri fyne.URIReadCloser, err error) {
-			if err != nil {
-				dialog.ShowError(err, nil)
-				return
-			}
-			if uri == nil {
-				return
-			}
+func changeQBittorrentBaseUrlEntry(configs Config) *widget.Entry {
+	entry := widget.NewEntry()
+	entry.SetPlaceHolder("qBittorrent Base URL")
+	entry.SetText(configs.QBittorrentUrl)
 
-			configs := LoadConfigs()
-			configs.QBittorrentPath = uri.URI().Path()
-			SaveConfigs(configs)
-		}, w)
-	})
+	entry.Validator = func(s string) error {
+		if len(s) == 0 {
+			return fmt.Errorf("o URL base do qBittorrent não pode estar vazio")
+		}
+		return nil
+	}
+
+	return entry
 }

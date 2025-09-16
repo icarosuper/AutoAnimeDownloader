@@ -12,7 +12,7 @@ dist/
 *.manifest
 *.spec
 
-.downloaded_ids
+.downloaded_episodes
 .config.json
 
 go.sum
