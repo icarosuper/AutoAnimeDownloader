@@ -28,7 +28,7 @@ func LoadConfigs() Config {
 		SavePath:              "",
 		AnilistUsername:       "",
 		CheckInterval:         10,
-		QBittorrentUrl:        "localhost:8080",
+		QBittorrentUrl:        "http://127.0.0.1:8080",
 		MaxEpisodesPerAnime:   10,
 		DeleteWatchedEpisodes: true,
 	}
