@@ -9,6 +9,7 @@ import (
 	"AutoAnimeDownloader/modules"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 )
 
@@ -18,7 +19,7 @@ func main() {
 	modules.CreateUi(startLoop)
 }
 
-func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesList func()) func(newInterval time.Duration) {
+func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesList func(), isLoading binding.ExternalBool) func(newInterval time.Duration) {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -32,7 +33,7 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 				default:
 				}
 
-				animeVerification(w, updateDownloadedEpisodesList)
+				animeVerification(w, updateDownloadedEpisodesList, isLoading)
 
 				// aguarda duração ou cancelamento
 				select {
@@ -58,35 +59,21 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 	}
 }
 
-func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
+func animeVerification(w fyne.Window, updateDownloadedEpisodesList func(), isLoading binding.ExternalBool) {
+	isLoading.Set(true)
+
 	configs := modules.LoadConfigs()
 
-	qBittorrentConnection := modules.TestQBittorrentConnection(configs)
-	if !qBittorrentConnection {
-		fmt.Errorf("não foi possível conectar ao qBittorrent")
-		dialog.ShowInformation("Erro de conexão", "Não foi possível conectar ao qBittorrent. Por favor, verifique a URL nas configurações.", w)
-		return
-	}
-
-	if configs.AnilistUsername == "" || configs.SavePath == "" {
-		fmt.Errorf("por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações")
-		dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
-		return
-	}
-
-	anilistResponse, err := modules.SearchAnimes(configs.AnilistUsername)
-	if err != nil {
-		fmt.Errorf("erro ao buscar animes no AniList: %v", err)
-		dialog.ShowInformation("Erro de conexão", "Erro ao buscar animes no AniList. Por favor, verifique seu nome de usuário nas configurações.", w)
+	anilistResponse := searchAnilist(w, configs)
+	if anilistResponse == nil {
+		isLoading.Set(false)
 		return
 	}
 
 	savedEpisodes := modules.LoadSavedEpisodes()
-	var checkedEpisodes []int
-
 	var newEpisodes []modules.EpisodeStruct
+	var checkedEpisodes []int
 	var idsToDelete []int
-	var hashesToDelete []string
 
 	for _, anime := range anilistResponse.Data.Page.MediaList {
 		// TODO: Máximo de episódios por anime
@@ -112,18 +99,39 @@ func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
 		}
 	}
 
+	handleSavedEpisodes(configs, handleEpisodesData{
+		savedEpisodes:   savedEpisodes,
+		idsToDelete:     idsToDelete,
+		checkedEpisodes: checkedEpisodes,
+		newEpisodes:     newEpisodes,
+	})
+
+	updateDownloadedEpisodesList()
+
+	isLoading.Set(false)
+}
+
+type handleEpisodesData struct {
+	savedEpisodes   []modules.EpisodeStruct
+	idsToDelete     []int
+	checkedEpisodes []int
+	newEpisodes     []modules.EpisodeStruct
+}
+
+func handleSavedEpisodes(configs modules.Config, data handleEpisodesData) {
 	// TODO: Refatorar essa parte que ficou difícil de entender
+	var hashesToDelete []string
 
 	// Se anime não está mais no watching, é marcado pra remoção
-	for _, savedEp := range savedEpisodes {
-		if !idIsInIntList(savedEp.EpisodeID, checkedEpisodes) {
-			idsToDelete = append(idsToDelete, savedEp.EpisodeID)
+	for _, savedEp := range data.savedEpisodes {
+		if !idIsInIntList(savedEp.EpisodeID, data.checkedEpisodes) {
+			data.idsToDelete = append(data.idsToDelete, savedEp.EpisodeID)
 		}
 	}
 
 	// Obtém os hashes dos episódios que serão removidos
-	for _, epID := range idsToDelete {
-		for _, savedEp := range savedEpisodes {
+	for _, epID := range data.idsToDelete {
+		for _, savedEp := range data.savedEpisodes {
 			if savedEp.EpisodeID == epID {
 				hashesToDelete = append(hashesToDelete, savedEp.EpisodeHash)
 				break
@@ -131,14 +139,36 @@ func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
 		}
 	}
 
-	modules.SaveEpisodesToFile(newEpisodes)
+	modules.SaveEpisodesToFile(data.newEpisodes)
 
 	if configs.DeleteWatchedEpisodes {
-		modules.DeleteEpisodesFromFile(idsToDelete)
+		modules.DeleteEpisodesFromFile(data.idsToDelete)
 		modules.DeleteTorrents(configs, hashesToDelete)
 	}
+}
 
-	updateDownloadedEpisodesList()
+func searchAnilist(w fyne.Window, configs modules.Config) *modules.AniListResponse {
+	qBittorrentConnection := modules.TestQBittorrentConnection(configs)
+	if !qBittorrentConnection {
+		fmt.Println("Não foi possível conectar ao qBittorrent.")
+		dialog.ShowInformation("Erro de conexão", "Não foi possível conectar ao qBittorrent. Por favor, verifique a URL nas configurações.", w)
+		return nil
+	}
+
+	if configs.AnilistUsername == "" || configs.SavePath == "" {
+		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
+		dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
+		return nil
+	}
+
+	anilistResponse, err := modules.SearchAnimes(configs.AnilistUsername)
+	if err != nil {
+		fmt.Printf("Erro ao buscar animes no AniList: %v\n", err)
+		dialog.ShowInformation("Erro de conexão", "Erro ao buscar animes no AniList. Por favor, verifique seu nome de usuário nas configurações.", w)
+		return nil
+	}
+
+	return anilistResponse
 }
 
 func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs modules.Config) string {
