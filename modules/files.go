@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -15,7 +16,7 @@ type EpisodeStruct struct {
 	EpisodeName string `json:"episode_name"`
 }
 
-const configsFolder = ".autoanimedownloader"
+const configsFolder = ".autoAnimeDownloader"
 const configFileName = ".config.json"
 const downloadedEpsFileName = ".downloaded_episodes"
 
@@ -35,8 +36,8 @@ func LoadConfigs() Config {
 		AnilistUsername:       "",
 		CheckInterval:         10,
 		QBittorrentUrl:        "http://127.0.0.1:8080",
-		MaxEpisodesPerAnime:   10,
-		EpisodeRetryLimit:     3,
+		MaxEpisodesPerAnime:   12,
+		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: true,
 	}
 
@@ -202,8 +203,15 @@ func getDownloadedEpsFilePath() string {
 }
 
 func getConfigsFolderPath() string {
-	// TODO: Testar essa solucao no Windows
-	configsFolderPath := filepath.Join(os.Getenv("HOME"), configsFolder)
+	var baseFolder string
+
+	if runtime.GOOS == "windows" {
+		baseFolder = os.Getenv("APPDATA")
+	} else {
+		baseFolder = os.Getenv("HOME")
+	}
+
+	configsFolderPath := filepath.Join(baseFolder, configsFolder)
 
 	if _, err := os.Stat(configsFolderPath); os.IsNotExist(err) {
 		if err := os.Mkdir(configsFolderPath, 0755); err != nil {
