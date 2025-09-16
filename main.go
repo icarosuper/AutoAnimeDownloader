@@ -32,7 +32,7 @@ func startLoop(interval time.Duration, w fyne.Window) func(newInterval time.Dura
 				default:
 				}
 
-				checkAnime(w)
+				animeVerification(w)
 
 				// aguarda duração ou cancelamento
 				select {
@@ -58,7 +58,7 @@ func startLoop(interval time.Duration, w fyne.Window) func(newInterval time.Dura
 	}
 }
 
-func checkAnime(w fyne.Window) {
+func animeVerification(w fyne.Window) {
 	configs := modules.LoadConfigs()
 
 	qBittorrentConnection := modules.TestQBittorrentConnection(configs)
@@ -82,6 +82,7 @@ func checkAnime(w fyne.Window) {
 	}
 
 	savedEpisodes := modules.LoadSavedEpisodes()
+	var checkedEpisodes []int
 
 	var newEpisodes []modules.EpisodeStruct
 	var idsToDelete []int
@@ -92,6 +93,7 @@ func checkAnime(w fyne.Window) {
 		episodes := anime.Media.AiringSchedule.Nodes
 
 		for _, ep := range episodes {
+			checkedEpisodes = append(checkedEpisodes, ep.ID)
 			hash, shouldDelete := checkEpisode(ep, anime, savedEpisodes, configs)
 
 			if hash != "" {
@@ -107,6 +109,16 @@ func checkAnime(w fyne.Window) {
 		}
 	}
 
+	// TODO: Refatorar essa parte que ficou difícil de entender
+
+	// Se anime não está mais no watching, é marcado pra remoção
+	for _, savedEp := range savedEpisodes {
+		if !idIsInIntList(savedEp.EpisodeID, checkedEpisodes) {
+			idsToDelete = append(idsToDelete, savedEp.EpisodeID)
+		}
+	}
+
+	// Obtém os hashes dos episódios que serão removidos
 	for _, epID := range idsToDelete {
 		for _, savedEp := range savedEpisodes {
 			if savedEp.EpisodeID == epID {
@@ -125,12 +137,14 @@ func checkAnime(w fyne.Window) {
 }
 
 func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpisodes []modules.EpisodeStruct, configs modules.Config) (string, bool) {
-	// TODO: Se der erro salvar na lista de episódios falhados
-	// TODO: Tentar pegar erro do qbittorrent também
+	// TODO: Salvar episódios que baixaram na lista de episódios que baixaram
+	// TODO: Se der erro salvar na lista de episódios que falharam
+	// TODO: Exibir ambas as listas na aba de notificações
+	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 	progress := anime.Progress
 	titles := anime.Media.Title
 
-	alreadySaved := idIsInList(ep.ID, savedEpisodes)
+	alreadySaved := idIsInStructList(ep.ID, savedEpisodes)
 
 	if ep.Episode <= progress {
 		fmt.Printf("Skipping %s episode %d (already watched)\n", *titles.Romaji, ep.Episode)
@@ -163,7 +177,16 @@ func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpis
 	return hash, false
 }
 
-func idIsInList(id int, episodes []modules.EpisodeStruct) bool {
+func idIsInIntList(id int, episodes []int) bool {
+	for _, episodeID := range episodes {
+		if episodeID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func idIsInStructList(id int, episodes []modules.EpisodeStruct) bool {
 	for _, episode := range episodes {
 		if episode.EpisodeID == id {
 			return true
