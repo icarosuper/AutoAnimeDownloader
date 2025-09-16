@@ -6,26 +6,31 @@ import (
 	"os"
 )
 
+type EpisodeStruct struct {
+	EpisodeID   int    `json:"episode_id"`
+	EpisodeHash string `json:"episode_hash"`
+}
+
 const configFilePath = ".config.json"
-const idsFilePath = ".downloaded_ids"
+const idsFilePath = ".downloaded_episodes"
 
 type Config struct {
-	SavePath        string `json:"save_path"`
-	SkipDialog      bool   `json:"skip_dialog"`
-	MaxEpisodes     int    `json:"max_episodes"`
-	AnilistUsername string `json:"anilist_username"`
-	CheckInterval   int    `json:"check_interval"`
-	QBittorrentPath string `json:"qbittorrent_path"`
+	SavePath              string `json:"save_path"`
+	AnilistUsername       string `json:"anilist_username"`
+	CheckInterval         int    `json:"check_interval"`
+	QBittorrentUrl        string `json:"qbittorrent_url"`
+	MaxEpisodesPerAnime   int    `json:"max_episodes_per_anime"`
+	DeleteWatchedEpisodes bool   `json:"delete_watched_episodes"`
 }
 
 func LoadConfigs() Config {
 	config := Config{
-		SavePath:        "",
-		SkipDialog:      true,
-		MaxEpisodes:     10,
-		AnilistUsername: "",
-		CheckInterval:   10,
-		QBittorrentPath: "",
+		SavePath:              "",
+		AnilistUsername:       "",
+		CheckInterval:         10,
+		QBittorrentUrl:        "localhost:8080",
+		MaxEpisodesPerAnime:   10,
+		DeleteWatchedEpisodes: true,
 	}
 
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
@@ -59,14 +64,9 @@ func SaveConfigs(config Config) {
 	}
 }
 
-func LoadIdsFromFile() []string {
+func LoadSavedEpisodes() []EpisodeStruct {
 	if _, err := os.Stat(idsFilePath); os.IsNotExist(err) {
-		file, err := os.Create(idsFilePath)
-		if err != nil {
-			panic(err)
-		}
-		file.Close()
-		return []string{}
+		return []EpisodeStruct{}
 	}
 
 	file, err := os.ReadFile(idsFilePath)
@@ -74,15 +74,24 @@ func LoadIdsFromFile() []string {
 		panic(err)
 	}
 
-	ids := string(file)
-	if ids == "" {
-		return []string{}
+	lines := string(file)
+	if lines == "" {
+		return []EpisodeStruct{}
 	}
 
-	return splitLines(ids)
+	var savedEpisodes []EpisodeStruct
+	for _, line := range splitLines(lines) {
+		var episode EpisodeStruct
+		_, err := fmt.Sscanf(line, "%d:%s", &episode.EpisodeID, &episode.EpisodeHash)
+		if err == nil {
+			savedEpisodes = append(savedEpisodes, episode)
+		}
+	}
+
+	return savedEpisodes
 }
 
-func SaveIdToFile(id int) {
+func SaveEpisodesToFile(episodes []EpisodeStruct) {
 	if _, err := os.Stat(idsFilePath); os.IsNotExist(err) {
 		file, err := os.Create(idsFilePath)
 		if err != nil {
@@ -97,8 +106,49 @@ func SaveIdToFile(id int) {
 	}
 	defer file.Close()
 
-	if _, err := file.WriteString(fmt.Sprintf("%d\n", id)); err != nil {
+	for _, episode := range episodes {
+		if _, err := file.WriteString(fmt.Sprintf("%d:%s\n", episode.EpisodeID, episode.EpisodeHash)); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func DeleteEpisodesFromFile(episodeIds []int) {
+	savedEpisodes := LoadSavedEpisodes()
+
+	if len(episodeIds) == 0 || len(savedEpisodes) == 0 {
+		return
+	}
+
+	var newSavedEpisodes []EpisodeStruct
+
+	for _, episode := range savedEpisodes {
+		shouldDelete := false
+		for _, id := range episodeIds {
+			if episode.EpisodeID == id {
+				shouldDelete = true
+				break
+			}
+		}
+		if !shouldDelete {
+			newSavedEpisodes = append(newSavedEpisodes, episode)
+		}
+	}
+
+	if len(newSavedEpisodes) == len(savedEpisodes) {
+		return
+	}
+
+	file, err := os.Create(idsFilePath)
+	if err != nil {
 		panic(err)
+	}
+	defer file.Close()
+
+	for _, episode := range newSavedEpisodes {
+		if _, err := file.WriteString(fmt.Sprintf("%d:%s\n", episode.EpisodeID, episode.EpisodeHash)); err != nil {
+			panic(err)
+		}
 	}
 }
 
