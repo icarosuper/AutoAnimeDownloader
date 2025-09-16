@@ -16,11 +16,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateDownloadedEpisodesList func()) func(newDur time.Duration)) {
+func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateEpisodesList func(), isLoading binding.ExternalBool) func(newDur time.Duration)) {
 	a := app.New()
-
 	w := a.NewWindow("Auto Anime Downloader")
-
 	w.Resize(fyne.NewSize(800, 600))
 	w.SetCloseIntercept(func() {
 		w.Hide()
@@ -34,40 +32,43 @@ func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateDownloadedE
 		desk.SetSystemTrayMenu(m)
 	}
 
-	downloadedEpisodesList, downloadedEpisodesData := downloadedEpisodesList()
+	downloadedEpisodesBoundData := binding.BindStringList(&[]string{})
+	isLoading := false
+	isLoadingBoundData := binding.BindBool(&isLoading)
+
+	downloadedEpisodesList := downloadedEpisodesWidget(downloadedEpisodesBoundData)
 
 	updateDownloadedEpisodes := func() {
-		updateDownloadedEpisodesList(downloadedEpisodesData)
+		updateDownloadedEpisodesList(downloadedEpisodesBoundData)
 	}
 
 	configs := LoadConfigs()
 
 	interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
-	restartLoop := startLoop(interval, w, updateDownloadedEpisodes)
+	restartLoop := startLoop(interval, w, updateDownloadedEpisodes, isLoadingBoundData)
 
-	setWindowContent(w, restartLoop, downloadedEpisodesList, configs)
+	notifications := notificationsBox(restartLoop, downloadedEpisodesList, isLoadingBoundData)
+	settings := settingsBox(w, restartLoop, configs)
+	setWindowContent(w, notifications, settings)
 
 	w.ShowAndRun()
 }
 
-func setWindowContent(w fyne.Window, restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, configs Config) {
+func setWindowContent(w fyne.Window, notifications fyne.CanvasObject, settings fyne.CanvasObject) {
 	tabs := container.NewAppTabs()
 
-	tabs.Append(container.NewTabItem("Notificações", notificationsBox(restartLoop, downloadedEpisodesList)))
-	tabs.Append(container.NewTabItem("Configurações", settingsBox(w, restartLoop, configs)))
+	tabs.Append(container.NewTabItem("Notificações", notifications))
+	tabs.Append(container.NewTabItem("Configurações", settings))
 
 	tabs.SelectIndex(0)
 
 	w.SetContent(tabs)
 }
 
-func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List) *fyne.Container {
-	// TODO: Últimos episódios baixados
+func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, isLoading binding.ExternalBool) *fyne.Container {
 	// TODO: Últimos episódios que falharam
-
 	// TODO: Próximos episódios que vão sair
 	// ^ Coloca o tempo que falta pra sair na tela atualizando constantemente, se chegar a 0 trigga o reset de checagem
-	// incluir nas configs se deve checar automaticamente nesse caso ou não
 
 	title := canvas.NewText("Últimos episódios baixados", color.White)
 	title.Alignment = fyne.TextAlignCenter
@@ -77,19 +78,35 @@ func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodes
 		interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
 		restartLoop(interval)
 	})
+	loadingBar := widget.NewProgressBarInfinite()
 
-	box := container.NewBorder(title, checkNowBtn, nil, nil, downloadedEpisodesList)
+	bottom := container.NewVBox(checkNowBtn, loadingBar)
+
+	box := container.NewBorder(title, bottom, nil, nil, downloadedEpisodesList)
+
+	isLoading.AddListener(binding.NewDataListener(func() {
+		loading, err := isLoading.Get()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		if loading {
+			checkNowBtn.Hide()
+			loadingBar.Show()
+		} else {
+			checkNowBtn.Show()
+			loadingBar.Hide()
+		}
+	}))
 
 	return box
 }
 
-func downloadedEpisodesList() (*widget.List, binding.ExternalStringList) {
-	data := binding.BindStringList(&[]string{})
-
-	updateDownloadedEpisodesList(data)
+func downloadedEpisodesWidget(boundedList binding.ExternalStringList) *widget.List {
+	updateDownloadedEpisodesList(boundedList)
 
 	list := widget.NewListWithData(
-		data,
+		boundedList,
 		func() fyne.CanvasObject {
 			return widget.NewLabel("template")
 		},
@@ -97,7 +114,7 @@ func downloadedEpisodesList() (*widget.List, binding.ExternalStringList) {
 			o.(*widget.Label).Bind(i.(binding.String))
 		})
 
-	return list, data
+	return list
 }
 
 func updateDownloadedEpisodesList(data binding.ExternalStringList) {
