@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 type EpisodeStruct struct {
@@ -11,8 +12,9 @@ type EpisodeStruct struct {
 	EpisodeHash string `json:"episode_hash"`
 }
 
-const configFilePath = ".config.json"
-const idsFilePath = ".downloaded_episodes"
+const configsFolder = ".autoanimedownloader"
+const configFileName = ".config.json"
+const downloadedEpsFileName = ".downloaded_episodes"
 
 type Config struct {
 	SavePath              string `json:"save_path"`
@@ -33,10 +35,12 @@ func LoadConfigs() Config {
 		DeleteWatchedEpisodes: true,
 	}
 
-	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
+	configPath := getConfigsFilePath()
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		SaveConfigs(config)
 	} else {
-		file, err := os.ReadFile(configFilePath)
+		file, err := os.ReadFile(configPath)
 		if err != nil {
 			panic(err)
 		}
@@ -58,18 +62,22 @@ func SaveConfigs(config Config) {
 		panic(err)
 	}
 
-	err = os.WriteFile(configFilePath, file, 0644)
+	configsPath := getConfigsFilePath()
+
+	err = os.WriteFile(configsPath, file, 0644)
 	if err != nil {
 		panic(err)
 	}
 }
 
 func LoadSavedEpisodes() []EpisodeStruct {
-	if _, err := os.Stat(idsFilePath); os.IsNotExist(err) {
+	downloadedEpsFilePath := getDownloadedEpsFilePath()
+
+	if _, err := os.Stat(downloadedEpsFilePath); os.IsNotExist(err) {
 		return []EpisodeStruct{}
 	}
 
-	file, err := os.ReadFile(idsFilePath)
+	file, err := os.ReadFile(downloadedEpsFilePath)
 	if err != nil {
 		panic(err)
 	}
@@ -92,15 +100,17 @@ func LoadSavedEpisodes() []EpisodeStruct {
 }
 
 func SaveEpisodesToFile(episodes []EpisodeStruct) {
-	if _, err := os.Stat(idsFilePath); os.IsNotExist(err) {
-		file, err := os.Create(idsFilePath)
+	downloadedEpsFilePath := getDownloadedEpsFilePath()
+
+	if _, err := os.Stat(downloadedEpsFilePath); os.IsNotExist(err) {
+		file, err := os.Create(downloadedEpsFilePath)
 		if err != nil {
 			panic(err)
 		}
 		file.Close()
 	}
 
-	file, err := os.OpenFile(idsFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(downloadedEpsFilePath, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -139,7 +149,7 @@ func DeleteEpisodesFromFile(episodeIds []int) {
 		return
 	}
 
-	file, err := os.Create(idsFilePath)
+	file, err := os.Create(getDownloadedEpsFilePath())
 	if err != nil {
 		panic(err)
 	}
@@ -150,6 +160,28 @@ func DeleteEpisodesFromFile(episodeIds []int) {
 			panic(err)
 		}
 	}
+}
+
+func getConfigsFilePath() string {
+	return filepath.Join(getConfigsFolderPath(), configFileName)
+}
+
+func getDownloadedEpsFilePath() string {
+	return filepath.Join(getConfigsFolderPath(), downloadedEpsFileName)
+}
+
+func getConfigsFolderPath() string {
+	// TODO: Testar essa solucao no Windows
+	configsFolderPath := filepath.Join(os.Getenv("HOME"), configsFolder)
+
+	if _, err := os.Stat(configsFolderPath); os.IsNotExist(err) {
+		err := os.Mkdir(configsFolderPath, 0755)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	return configsFolderPath
 }
 
 func splitLines(s string) []string {

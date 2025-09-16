@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -73,7 +73,7 @@ func TestQBittorrentConnection(config Config) bool {
 func addTorrent(qBittorrentUrl string, magnet string, savePath string, animeName string, episode int) string {
 	values := url.Values{}
 
-	path := savePath + string(os.PathSeparator) + animeName
+	path := filepath.Join(savePath, animeName)
 	episodeName := fmt.Sprintf("%s EP %02d", animeName, episode)
 
 	values.Add("urls", magnet)
