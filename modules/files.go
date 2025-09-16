@@ -25,6 +25,7 @@ type Config struct {
 	CheckInterval         int    `json:"check_interval"`
 	QBittorrentUrl        string `json:"qbittorrent_url"`
 	MaxEpisodesPerAnime   int    `json:"max_episodes_per_anime"`
+	EpisodeRetryLimit     int    `json:"episode_retry_limit"`
 	DeleteWatchedEpisodes bool   `json:"delete_watched_episodes"`
 }
 
@@ -35,6 +36,7 @@ func LoadConfigs() Config {
 		CheckInterval:         10,
 		QBittorrentUrl:        "http://127.0.0.1:8080",
 		MaxEpisodesPerAnime:   10,
+		EpisodeRetryLimit:     3,
 		DeleteWatchedEpisodes: true,
 	}
 

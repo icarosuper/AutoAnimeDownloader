@@ -12,8 +12,6 @@ import (
 	"fyne.io/fyne/v2/dialog"
 )
 
-const RETRY_LIMIT = 3
-
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
@@ -154,9 +152,14 @@ func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs mod
 		return ""
 	}
 
+	maxLoops := len(nyaaResponse)
+	if configs.EpisodeRetryLimit < maxLoops {
+		maxLoops = configs.EpisodeRetryLimit
+	}
+
 	var hash string
-	for i := 0; i < RETRY_LIMIT; i++ {
-		fmt.Printf("Attempting to download %s episode %d (attempt %d/%d)\n", *titles.Romaji, ep.Episode, i+1, RETRY_LIMIT)
+	for i := 0; i < maxLoops; i++ {
+		fmt.Printf("Attempting to download %s episode %d (attempt %d/%d)\n", *titles.Romaji, ep.Episode, i+1, configs.EpisodeRetryLimit)
 		hash = modules.DownloadAnime(configs, nyaaResponse[i].MagnetLink, *titles.English, ep.Episode)
 		if hash != "" {
 			break
@@ -164,7 +167,7 @@ func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs mod
 	}
 
 	if hash == "" {
-		fmt.Printf("Failed to download %s episode %d after %d attempts\n", *titles.Romaji, ep.Episode, RETRY_LIMIT)
+		fmt.Printf("Failed to download %s episode %d after %d attempts\n", *titles.Romaji, ep.Episode, configs.EpisodeRetryLimit)
 		return ""
 	}
 

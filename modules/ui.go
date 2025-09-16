@@ -113,17 +113,23 @@ func updateDownloadedEpisodesList(data binding.ExternalStringList) {
 
 func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs Config) *fyne.Container {
 	changeSavePathBtn := changeSavePathBtn(w)
-
 	qBittorrentEntry := changeQBittorrentBaseUrlEntry(configs)
-
 	userNameEntry := changeUserNameEntry(configs)
-
 	changeIntervalEntry := changeIntervalEntry(configs)
-
 	deleteAfterWatched := deleteWatchedEpisodesCheck(configs)
+	episodeRetryLimitEntry := changeEpisodeRetryLimitEntry(configs)
+	maxEpisodesPerAnimeEntry := changeMaxEpisodesPerAnimeEntry(configs)
+
+	inputs := configInputs{
+		userNameEntry:            userNameEntry,
+		changeIntervalEntry:      changeIntervalEntry,
+		qBittorrentUrlEntry:      qBittorrentEntry,
+		episodeRetryLimitEntry:   episodeRetryLimitEntry,
+		maxEpisodesPerAnimeEntry: maxEpisodesPerAnimeEntry,
+	}
 
 	saveBtn := saveBtn(func() {
-		saveConfigs(w, restartLoop, userNameEntry, changeIntervalEntry, qBittorrentEntry)
+		saveConfigs(w, restartLoop, inputs)
 	})
 
 	box := container.NewVBox()
@@ -132,31 +138,48 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs 
 	box.Add(userNameEntry)
 	box.Add(widget.NewLabel("Intervalo de checagem de animes (em minutos)"))
 	box.Add(changeIntervalEntry)
+	box.Add(widget.NewLabel("Limite de tentativas de download por episódio"))
+	box.Add(episodeRetryLimitEntry)
+	box.Add(widget.NewLabel("Máximo de episódios baixados por anime"))
+	box.Add(maxEpisodesPerAnimeEntry)
 	box.Add(deleteAfterWatched)
 	box.Add(widget.NewLabel("URL base do qBittorrent (não altere isso se não souber o que significa)"))
 	box.Add(qBittorrentEntry)
 	box.Add(saveBtn)
 
-	// TODO: Retry limit
-	// TODO: Max episodes per check
-	// TODO: Max episodes in download folder
-	// TODO: Cleanup watched episodes
+	container := container.NewBorder(nil, saveBtn, nil, nil, box)
 
-	return box
+	return container
 }
 
-func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), userNameEntry, changeIntervalEntry, qBittorrentEntry *widget.Entry) {
+type configInputs struct {
+	userNameEntry            *widget.Entry
+	changeIntervalEntry      *widget.Entry
+	qBittorrentUrlEntry      *widget.Entry
+	episodeRetryLimitEntry   *widget.Entry
+	maxEpisodesPerAnimeEntry *widget.Entry
+}
+
+func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs configInputs) {
 	configs := LoadConfigs()
 
-	if err := userNameEntry.Validate(); err != nil {
+	if err := inputs.userNameEntry.Validate(); err != nil {
 		dialog.ShowError(err, w)
 		return
 	}
-	if err := changeIntervalEntry.Validate(); err != nil {
+	if err := inputs.changeIntervalEntry.Validate(); err != nil {
 		dialog.ShowError(err, w)
 		return
 	}
-	if err := qBittorrentEntry.Validate(); err != nil {
+	if err := inputs.qBittorrentUrlEntry.Validate(); err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	if err := inputs.episodeRetryLimitEntry.Validate(); err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	if err := inputs.maxEpisodesPerAnimeEntry.Validate(); err != nil {
 		dialog.ShowError(err, w)
 		return
 	}
@@ -165,32 +188,41 @@ func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), userName
 		return
 	}
 
-	newUsername := userNameEntry.Text
-	newQBittorrentUrl := qBittorrentEntry.Text
-
-	var newInterval int
-	_, err := fmt.Sscanf(changeIntervalEntry.Text, "%d", &newInterval)
+	var newCheckInterval int
+	_, err := fmt.Sscanf(inputs.changeIntervalEntry.Text, "%d", &newCheckInterval)
 	if err != nil {
 		dialog.ShowError(fmt.Errorf("o intervalo de checagem deve ser um número inteiro positivo"), w)
 		return
 	}
 
-	if configs.AnilistUsername == newUsername && configs.CheckInterval == newInterval && configs.QBittorrentUrl == newQBittorrentUrl {
+	var newEpisodeRetryLimit int
+	_, err = fmt.Sscanf(inputs.episodeRetryLimitEntry.Text, "%d", &newEpisodeRetryLimit)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("o limite de tentativas por episódio deve ser um número inteiro positivo"), w)
 		return
 	}
 
-	configs.AnilistUsername = newUsername
-	configs.CheckInterval = newInterval
-	configs.QBittorrentUrl = newQBittorrentUrl
+	var newMaxEpisodesPerAnime int
+	_, err = fmt.Sscanf(inputs.maxEpisodesPerAnimeEntry.Text, "%d", &newMaxEpisodesPerAnime)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("o máximo de episódios por anime deve ser um número inteiro positivo"), w)
+		return
+	}
+
+	configs.AnilistUsername = inputs.userNameEntry.Text
+	configs.CheckInterval = newCheckInterval
+	configs.QBittorrentUrl = inputs.qBittorrentUrlEntry.Text
+	configs.EpisodeRetryLimit = newEpisodeRetryLimit
+	configs.MaxEpisodesPerAnime = newMaxEpisodesPerAnime
 	SaveConfigs(configs)
 
 	dialog.ShowInformation("Configurações salvas", "As configurações foram salvas com sucesso.", w)
 
-	restartLoop(time.Duration(newInterval) * time.Minute)
+	restartLoop(time.Duration(newCheckInterval) * time.Minute)
 }
 
 func saveBtn(saveFunc func()) *widget.Button {
-	return widget.NewButton("Salvar", saveFunc)
+	return widget.NewButton("Salvar configurações", saveFunc)
 }
 
 func deleteWatchedEpisodesCheck(configs Config) *widget.Check {
@@ -233,6 +265,40 @@ func changeUserNameEntry(configs Config) *widget.Entry {
 	entry.Validator = func(s string) error {
 		if len(s) == 0 {
 			return fmt.Errorf("username do AniList não pode estar vazio")
+		}
+		return nil
+	}
+
+	return entry
+}
+
+func changeEpisodeRetryLimitEntry(configs Config) *widget.Entry {
+	entry := widget.NewEntry()
+	entry.SetPlaceHolder("Limite de tentativas de download por episódio")
+	entry.SetText(fmt.Sprintf("%d", configs.EpisodeRetryLimit))
+
+	entry.Validator = func(s string) error {
+		var v int
+		_, err := fmt.Sscanf(s, "%d", &v)
+		if err != nil || v <= 0 {
+			return fmt.Errorf("o limite de tentativas por episódio deve ser um número inteiro positivo")
+		}
+		return nil
+	}
+
+	return entry
+}
+
+func changeMaxEpisodesPerAnimeEntry(configs Config) *widget.Entry {
+	entry := widget.NewEntry()
+	entry.SetPlaceHolder("Máximo de episódios baixados por anime")
+	entry.SetText(fmt.Sprintf("%d", configs.MaxEpisodesPerAnime))
+
+	entry.Validator = func(s string) error {
+		var v int
+		_, err := fmt.Sscanf(s, "%d", &v)
+		if err != nil || v <= 0 {
+			return fmt.Errorf("o máximo de episódios por anime deve ser um número inteiro positivo")
 		}
 		return nil
 	}
