@@ -24,7 +24,7 @@ type TorrentResult struct {
 }
 
 // ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio
-func ScrapNyaa(romajiName string, episode int) (*TorrentResult, error) {
+func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
 	// Sanitizar o nome romaji removendo informações de temporada
 	sanitizedRomajiName := regexp.MustCompile(`(?i)\s+(Season|S)\s*\d+`).ReplaceAllString(romajiName, "")
 
@@ -115,19 +115,13 @@ func ScrapNyaa(romajiName string, episode int) (*TorrentResult, error) {
 	// 	results = filteredResults
 	// }
 
-	// Limitar a 5 resultados
-	if len(results) > 5 {
-		results = results[:5]
-	}
-
 	fmt.Printf("Found %d torrents\n", len(results))
 
 	if len(results) == 0 {
 		return nil, nil // Nenhum resultado encontrado
 	}
 
-	// Retornar o primeiro resultado (mais seeders)
-	return &results[0], nil
+	return results, nil
 }
 
 // extractEpisodeNumber extrai o número do episódio do nome do torrent
