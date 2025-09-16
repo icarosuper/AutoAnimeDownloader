@@ -76,17 +76,18 @@ func animeVerification(w fyne.Window, updateDownloadedEpisodesList func(), isLoa
 	var idsToDelete []int
 
 	for _, anime := range anilistResponse.Data.Page.MediaList {
-		// TODO: Máximo de episódios por anime
+		downloadedEpisodesOfAnime := 0
 		episodes := anime.Media.AiringSchedule.Nodes
 
 		for _, ep := range episodes {
 			checkedEpisodes = append(checkedEpisodes, ep.ID)
-			shouldDownload, shouldDelete := checkEpisode(ep, anime, savedEpisodes)
+			shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, savedEpisodes, &downloadedEpisodesOfAnime)
 
 			if shouldDownload {
 				hash := tryDownloadEpisode(ep, anime.Media.Title, configs)
 
 				if hash != "" {
+					downloadedEpisodesOfAnime++
 					newEpisodes = append(newEpisodes, modules.EpisodeStruct{
 						EpisodeID:   ep.ID,
 						EpisodeHash: hash,
@@ -205,7 +206,7 @@ func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs mod
 	return hash
 }
 
-func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpisodes []modules.EpisodeStruct) (bool, bool) {
+func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.MediaListEntry, savedEpisodes []modules.EpisodeStruct, downloadedEpisodes *int) (bool, bool) {
 	// TODO: Se der erro salvar na lista de episódios que falharam
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 	progress := anime.Progress
@@ -220,6 +221,12 @@ func checkEpisode(ep modules.AiringNode, anime modules.MediaListEntry, savedEpis
 
 	if alreadySaved {
 		fmt.Printf("Skipping %s episode %d (already downloaded)\n", *titles.Romaji, ep.Episode)
+
+		if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
+			return false, true
+		}
+
+		*downloadedEpisodes++
 		return false, false
 	}
 
