@@ -19,10 +19,10 @@ type Torrent struct {
 
 const CATEGORY = "autoAnimeDownloader"
 
-func DownloadTorrent(config Config, magnet string, epName string) string {
+func DownloadTorrent(config Config, magnet string, animeName string, epName string) string {
 	baseUrl := getBaseUrl(config.QBittorrentUrl)
 
-	err := addTorrent(baseUrl, magnet, config.SavePath, epName)
+	err := addTorrent(baseUrl, magnet, config.SavePath, animeName, epName)
 	if err != nil {
 		fmt.Println("Failed to add torrent for:", epName)
 		return ""
@@ -62,10 +62,10 @@ func GetDownloadedTorrents(config Config) ([]Torrent, error) {
 	return getDownloadedTorrents(baseUrl)
 }
 
-func addTorrent(qBittorrentUrl string, magnet string, savePath string, epName string) error {
+func addTorrent(qBittorrentUrl string, magnet string, savePath string, animeName string, epName string) error {
 	values := url.Values{}
 
-	path := filepath.Join(savePath, epName)
+	path := filepath.Join(savePath, animeName)
 
 	values.Add("urls", magnet)
 	values.Add("savepath", path)
@@ -74,7 +74,7 @@ func addTorrent(qBittorrentUrl string, magnet string, savePath string, epName st
 
 	resp, err := http.PostForm(qBittorrentUrl+"/add", values)
 	if err != nil {
-		fmt.Printf("Error adding %s do torrent: %v\n", epName, err)
+		fmt.Printf("Error adding %s to torrent: %v\n", epName, err)
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
