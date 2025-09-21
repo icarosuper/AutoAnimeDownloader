@@ -51,7 +51,7 @@ func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateEpisodesLis
 
 	configs := LoadConfigs()
 
-	interval := time.Duration(LoadConfigs().CheckInterval) * time.Minute
+	interval := time.Duration(configs.CheckInterval) * time.Minute
 	restartLoop := startLoop(interval, w, updateDownloadedEpisodes, isLoadingBoundData)
 
 	notifications := notificationsBox(restartLoop, downloadedEpisodesList, isLoadingBoundData)
@@ -69,7 +69,7 @@ func setWindowContent(w fyne.Window, notifications fyne.CanvasObject, settings f
 	tabs.Append(container.NewTabItem("Notificações", container.New(customLayout, notifications)))
 	tabs.Append(container.NewTabItem("Configurações", container.New(customLayout, settings)))
 
-	tabs.SelectIndex(1)
+	tabs.SelectIndex(0)
 
 	w.SetContent(tabs)
 }
