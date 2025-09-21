@@ -120,6 +120,10 @@ func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
 	})
 
 	updateDownloadedEpisodesList()
+
+	time.Sleep(300 * time.Millisecond)
+
+	modules.DeleteEmptyFolders(configs)
 }
 
 type handleEpisodesData struct {
@@ -295,15 +299,6 @@ func idIsInIntList(id int, episodes []int) bool {
 func idIsInStructList(id int, episodes []modules.EpisodeStruct) bool {
 	for _, episode := range episodes {
 		if episode.EpisodeID == id {
-			return true
-		}
-	}
-	return false
-}
-
-func isInList(name string, list []string) bool {
-	for _, item := range list {
-		if item == name {
 			return true
 		}
 	}
