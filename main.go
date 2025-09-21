@@ -8,10 +8,6 @@ import (
 	"time"
 
 	"AutoAnimeDownloader/modules"
-
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/data/binding"
-	"fyne.io/fyne/v2/dialog"
 )
 
 var headless = flag.Bool("headless", false, "Run in headless mode")
@@ -25,14 +21,14 @@ func main() {
 		configs := modules.LoadConfigs()
 		interval := time.Duration(configs.CheckInterval) * time.Minute
 
-		startLoop(interval, nil, func() {}, nil)
+		startLoop(interval, func(string, string) {}, func() {}, func(bool) {})
 		select {}
 	} else {
 		modules.CreateUi(startLoop)
 	}
 }
 
-func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesList func(), isLoading binding.ExternalBool) func(newInterval time.Duration) {
+func startLoop(interval time.Duration, showDialog func(string, string), updateDownloadedEpisodesList func(), setLoading func(bool)) func(newInterval time.Duration) {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -46,15 +42,9 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 				default:
 				}
 
-				if isLoading != nil {
-					isLoading.Set(true)
-				}
-
-				animeVerification(w, updateDownloadedEpisodesList)
-
-				if isLoading != nil {
-					isLoading.Set(false)
-				}
+				setLoading(false)
+				animeVerification(showDialog, updateDownloadedEpisodesList)
+				setLoading(true)
 
 				// aguarda duração ou cancelamento
 				select {
@@ -80,15 +70,15 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 	}
 }
 
-func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
+func animeVerification(showDialog func(string, string), updateDownloadedEpisodesList func()) {
 	configs := modules.LoadConfigs()
 
-	downloadedTorrents := getDownloadedTorrents(configs, w)
+	downloadedTorrents := getDownloadedTorrents(configs, showDialog)
 	if downloadedTorrents == nil {
 		return
 	}
 
-	anilistResponse := searchAnilist(configs, w)
+	anilistResponse := searchAnilist(configs, showDialog)
 	if anilistResponse == nil {
 		return
 	}
@@ -199,34 +189,28 @@ func handleSavedEpisodes(configs modules.Config, data handleEpisodesData) {
 	}
 }
 
-func getDownloadedTorrents(configs modules.Config, w fyne.Window) []modules.Torrent {
+func getDownloadedTorrents(configs modules.Config, showDialog func(string, string)) []modules.Torrent {
 	torrents, err := modules.GetDownloadedTorrents(configs)
 	if err != nil {
 		fmt.Println("Ocorreu um problema ao tentar .")
-		if w != nil {
-			dialog.ShowInformation("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.", w)
-		}
+		showDialog("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.")
 		return nil
 	}
 
 	return torrents
 }
 
-func searchAnilist(configs modules.Config, w fyne.Window) *modules.AniListResponse {
+func searchAnilist(configs modules.Config, showDialog func(string, string)) *modules.AniListResponse {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
 		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
-		if w != nil {
-			dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
-		}
+		showDialog("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.")
 		return nil
 	}
 
 	anilistResponse, err := modules.SearchAnimes(configs.AnilistUsername)
 	if err != nil {
 		fmt.Printf("Erro ao buscar animes no AniList: %v\n", err)
-		if w != nil {
-			dialog.ShowInformation("Erro de conexão", "Houve um problema ao tentar conectar ao AniList. Por favor, verifique seu nome de usuário nas configurações.", w)
-		}
+		showDialog("Erro de conexão", "Houve um problema ao tentar conectar ao AniList. Por favor, verifique seu nome de usuário nas configurações.")
 		return nil
 	}
 

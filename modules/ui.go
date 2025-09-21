@@ -19,14 +19,15 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateEpisodesList func(), isLoading binding.ExternalBool) func(newDur time.Duration)) {
+type startLoopFuncType func(dur time.Duration, showDialog func(string, string), updateEpisodesList func(), setLoading func(bool)) func(newDur time.Duration)
+
+func CreateUi(startLoop startLoopFuncType) {
 	a := app.New()
 
-	// Configurar tema explicitamente
 	a.Settings().SetTheme(theme.DefaultTheme())
 
 	w := a.NewWindow("Auto Anime Downloader")
-	w.Resize(fyne.NewSize(1000, 700)) // Aumentar tamanho da janela
+	w.Resize(fyne.NewSize(1000, 700))
 	w.SetCloseIntercept(func() {
 		w.Hide()
 	})
@@ -52,7 +53,13 @@ func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateEpisodesLis
 	configs := LoadConfigs()
 
 	interval := time.Duration(configs.CheckInterval) * time.Minute
-	restartLoop := startLoop(interval, w, updateDownloadedEpisodes, isLoadingBoundData)
+	showDialog := func(title string, message string) {
+		dialog.ShowInformation(title, message, w)
+	}
+	setLoading := func(loading bool) {
+		isLoadingBoundData.Set(loading)
+	}
+	restartLoop := startLoop(interval, showDialog, updateDownloadedEpisodes, setLoading)
 
 	notifications := notificationsBox(restartLoop, downloadedEpisodesList, isLoadingBoundData)
 	settings := settingsBox(w, restartLoop, configs)
