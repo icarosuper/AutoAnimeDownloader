@@ -19,14 +19,18 @@ type Torrent struct {
 
 const CATEGORY = "autoAnimeDownloader"
 
-func DownloadAnime(config Config, magnet string, animeName string, episode int) string {
+func DownloadTorrent(config Config, magnet string, epName string) string {
 	baseUrl := getBaseUrl(config.QBittorrentUrl)
 
-	episodeName := addTorrent(baseUrl, magnet, config.SavePath, animeName, episode)
+	err := addTorrent(baseUrl, magnet, config.SavePath, epName)
+	if err != nil {
+		fmt.Println("Failed to add torrent for:", epName)
+		return ""
+	}
 
-	hash := getTorrentsHash(baseUrl, episodeName)
+	hash := getTorrentsHash(baseUrl, epName)
 	if hash == "" {
-		fmt.Println("Failed to retrieve torrent hash for:", episodeName)
+		fmt.Println("Failed to retrieve torrent hash for:", epName)
 		return ""
 	}
 
@@ -52,57 +56,35 @@ func DeleteTorrents(config Config, hashes []string) {
 	defer func() { _ = resp.Body.Close() }()
 }
 
-func TestQBittorrentConnection(config Config) bool {
+func GetDownloadedTorrents(config Config) ([]Torrent, error) {
 	baseUrl := getBaseUrl(config.QBittorrentUrl)
 
-	response, err := http.Get(baseUrl + "/info")
-	if err != nil {
-		fmt.Println("Error connecting to qBittorrent:", err)
-		return false
-	}
-	defer func() { _ = response.Body.Close() }()
-
-	if response.StatusCode != http.StatusOK {
-		fmt.Println("qBittorrent returned status code:", response.StatusCode)
-		return false
-	}
-
-	return true
+	return getDownloadedTorrents(baseUrl)
 }
 
-func addTorrent(qBittorrentUrl string, magnet string, savePath string, animeName string, episode int) string {
+func addTorrent(qBittorrentUrl string, magnet string, savePath string, epName string) error {
 	values := url.Values{}
 
-	path := filepath.Join(savePath, animeName)
-	episodeName := fmt.Sprintf("%s EP %02d", animeName, episode)
+	path := filepath.Join(savePath, epName)
 
 	values.Add("urls", magnet)
 	values.Add("savepath", path)
 	values.Add("category", CATEGORY)
-	values.Add("rename", episodeName)
+	values.Add("rename", epName)
 
 	resp, err := http.PostForm(qBittorrentUrl+"/add", values)
 	if err != nil {
-		fmt.Println("Error adding torrent:", err)
-		return episodeName
+		fmt.Printf("Error adding %s do torrent: %v\n", epName, err)
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	return episodeName
+	return nil
 }
 
 func getTorrentsHash(qBittorrentUrl string, torrentName string) string {
-	response, err := http.Get(qBittorrentUrl + "/info" + "?category=" + CATEGORY)
+	torrents, err := getDownloadedTorrents(qBittorrentUrl)
 	if err != nil {
-		fmt.Println("Error fetching torrents:", err)
-		return ""
-	}
-	defer func() { _ = response.Body.Close() }()
-
-	var torrents []Torrent
-	err = json.NewDecoder(response.Body).Decode(&torrents)
-	if err != nil {
-		fmt.Println("Error decoding response:", err)
 		return ""
 	}
 
@@ -115,13 +97,25 @@ func getTorrentsHash(qBittorrentUrl string, torrentName string) string {
 	return ""
 }
 
+func getDownloadedTorrents(qBittorrentUrl string) ([]Torrent, error) {
+	response, err := http.Get(qBittorrentUrl + "/info" + "?category=" + CATEGORY)
+	if err != nil {
+		fmt.Println("Error fetching torrents:", err)
+		return nil, err
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	var torrents []Torrent
+	err = json.NewDecoder(response.Body).Decode(&torrents)
+	if err != nil {
+		fmt.Println("Error decoding response:", err)
+		return nil, err
+	}
+
+	return torrents, nil
+}
+
 func getBaseUrl(qBittorrentUrl string) string {
 	fullUrl := qBittorrentUrl + "/api/v2/torrents"
 	return fullUrl
-
-	//parsedUrl, err := url.Parse(fullUrl)
-	//if err != nil {
-	//	return fullUrl
-	//}
-	//return fmt.Sprintf("%s://%s", parsedUrl.Scheme, parsedUrl.Host)
 }

@@ -64,38 +64,53 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
 	configs := modules.LoadConfigs()
 
-	anilistResponse := searchAnilist(w, configs)
+	downloadedTorrents := getDownloadedTorrents(configs, w)
+	if downloadedTorrents == nil {
+		return
+	}
+
+	anilistResponse := searchAnilist(configs, w)
 	if anilistResponse == nil {
 		return
 	}
 
 	savedEpisodes := modules.LoadSavedEpisodes()
+
 	var newEpisodes []modules.EpisodeStruct
 	var checkedEpisodes []int
 	var idsToDelete []int
 
-	// TODO: Checar episódios que não estão mais no qBittorrent e remover do arquivo
-
 	for _, anime := range anilistResponse.Data.Page.MediaList {
 		title := anime.Media.Title.Romaji
-		fmt.Println(title)
+		fmt.Println(*title)
 
 		downloadedEpisodesOfAnime := 0
 		episodes := anime.Media.AiringSchedule.Nodes
 
 		for _, ep := range episodes {
 			checkedEpisodes = append(checkedEpisodes, ep.ID)
-			shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, savedEpisodes, &downloadedEpisodesOfAnime)
+			epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
+
+			isInTorrents := false
+			for _, torrent := range downloadedTorrents {
+				if torrent.Name == epName {
+					isInTorrents = true
+					break
+				}
+			}
+
+			alreadySaved := idIsInStructList(ep.ID, savedEpisodes)
+
+			shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents)
 
 			if shouldDownload {
-				hash := tryDownloadEpisode(ep, anime.Media.Title, configs)
+				hash := tryDownloadEpisode(configs, ep, anime.Media.Title, epName)
 
-				if hash != "" {
-					downloadedEpisodesOfAnime++
+				if hash != "" && !alreadySaved {
 					newEpisodes = append(newEpisodes, modules.EpisodeStruct{
 						EpisodeID:   ep.ID,
 						EpisodeHash: hash,
-						EpisodeName: fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode),
+						EpisodeName: epName,
 					})
 				}
 			} else if shouldDelete {
@@ -125,7 +140,7 @@ func handleSavedEpisodes(configs modules.Config, data handleEpisodesData) {
 	// TODO: Refatorar essa parte que ficou difícil de entender
 	var hashesToDelete []string
 
-	// Se anime não está mais no watching, é marcado pra remoção
+	// Se anime salvo não está mais no watching, é marcado pra remoção
 	for _, savedEp := range data.savedEpisodes {
 		if !idIsInIntList(savedEp.EpisodeID, data.checkedEpisodes) {
 			data.idsToDelete = append(data.idsToDelete, savedEp.EpisodeID)
@@ -150,14 +165,18 @@ func handleSavedEpisodes(configs modules.Config, data handleEpisodesData) {
 	}
 }
 
-func searchAnilist(w fyne.Window, configs modules.Config) *modules.AniListResponse {
-	qBittorrentConnection := modules.TestQBittorrentConnection(configs)
-	if !qBittorrentConnection {
-		fmt.Println("Não foi possível conectar ao qBittorrent.")
-		dialog.ShowInformation("Erro de conexão", "Não foi possível conectar ao qBittorrent. Por favor, verifique a URL nas configurações.", w)
+func getDownloadedTorrents(configs modules.Config, w fyne.Window) []modules.Torrent {
+	torrents, err := modules.GetDownloadedTorrents(configs)
+	if err != nil {
+		fmt.Println("Ocorreu um problema ao tentar .")
+		dialog.ShowInformation("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.", w)
 		return nil
 	}
 
+	return torrents
+}
+
+func searchAnilist(configs modules.Config, w fyne.Window) *modules.AniListResponse {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
 		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
 		dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
@@ -174,14 +193,14 @@ func searchAnilist(w fyne.Window, configs modules.Config) *modules.AniListRespon
 	return anilistResponse
 }
 
-func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs modules.Config) string {
+func tryDownloadEpisode(configs modules.Config, ep modules.AiringNode, titles modules.Title, epName string) string {
 	nyaaResponse, err := modules.ScrapNyaa(*titles.Romaji, ep.Episode)
 	if err != nil {
 		fmt.Printf("Error searching Nyaa: %v\n", err)
 		return ""
 	}
 	if nyaaResponse == nil {
-		fmt.Printf("No magnet link found for %s episode %d\n", *titles.Romaji, ep.Episode)
+		fmt.Printf("No magnet link found for %s\n", epName)
 		return ""
 	}
 
@@ -192,29 +211,27 @@ func tryDownloadEpisode(ep modules.AiringNode, titles modules.Title, configs mod
 
 	var hash string
 	for i := 0; i < maxLoops; i++ {
-		fmt.Printf("Attempting to download %s episode %d (attempt %d/%d)\n", *titles.Romaji, ep.Episode, i+1, configs.EpisodeRetryLimit)
-		hash = modules.DownloadAnime(configs, nyaaResponse[i].MagnetLink, *titles.English, ep.Episode)
+		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", epName, i+1, configs.EpisodeRetryLimit)
+		hash = modules.DownloadTorrent(configs, nyaaResponse[i].MagnetLink, epName)
 		if hash != "" {
 			break
 		}
 	}
 
 	if hash == "" {
-		fmt.Printf("Failed to download %s episode %d after %d attempts\n", *titles.Romaji, ep.Episode, configs.EpisodeRetryLimit)
+		fmt.Printf("Failed to download %s after %d attempts\n", epName, configs.EpisodeRetryLimit)
 		return ""
 	}
 
-	fmt.Printf("Successfully added %s episode %d to qBittorrent\n", *titles.Romaji, ep.Episode)
+	fmt.Printf("Successfully added %s to qBittorrent\n", epName)
 	return hash
 }
 
-func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.MediaListEntry, savedEpisodes []modules.EpisodeStruct, downloadedEpisodes *int) (bool, bool) {
+func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.MediaListEntry, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
 	// TODO: Se der erro salvar na lista de episódios que falharam
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 	progress := anime.Progress
 	titles := anime.Media.Title
-
-	alreadySaved := idIsInStructList(ep.ID, savedEpisodes)
 
 	if ep.Episode <= progress {
 		fmt.Printf("Skipping %s episode %d (already watched)\n", *titles.Romaji, ep.Episode)
@@ -225,11 +242,12 @@ func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.M
 		fmt.Printf("Skipping %s episode %d (already downloaded)\n", *titles.Romaji, ep.Episode)
 
 		if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
+			fmt.Printf("Deleting %s episode %d (max episodes exceeded)\n", *titles.Romaji, ep.Episode)
 			return false, true
 		}
 
 		*downloadedEpisodes++
-		return false, false
+		return !isInTorrents, false
 	}
 
 	if ep.TimeUntilAiring > 0 {
@@ -242,6 +260,7 @@ func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.M
 		return false, false
 	}
 
+	*downloadedEpisodes++
 	return true, false
 }
 
@@ -257,6 +276,15 @@ func idIsInIntList(id int, episodes []int) bool {
 func idIsInStructList(id int, episodes []modules.EpisodeStruct) bool {
 	for _, episode := range episodes {
 		if episode.EpisodeID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func isInList(name string, list []string) bool {
+	for _, item := range list {
+		if item == name {
 			return true
 		}
 	}
