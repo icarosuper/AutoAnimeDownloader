@@ -3,6 +3,7 @@ package modules
 import (
 	"fmt"
 	"image/color"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,13 +14,19 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
 func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateEpisodesList func(), isLoading binding.ExternalBool) func(newDur time.Duration)) {
 	a := app.New()
+
+	// Configurar tema explicitamente
+	a.Settings().SetTheme(theme.DefaultTheme())
+
 	w := a.NewWindow("Auto Anime Downloader")
-	w.Resize(fyne.NewSize(800, 600))
+	w.Resize(fyne.NewSize(1000, 700)) // Aumentar tamanho da janela
 	w.SetCloseIntercept(func() {
 		w.Hide()
 	})
@@ -57,19 +64,17 @@ func CreateUi(startLoop func(dur time.Duration, w fyne.Window, updateEpisodesLis
 func setWindowContent(w fyne.Window, notifications fyne.CanvasObject, settings fyne.CanvasObject) {
 	tabs := container.NewAppTabs()
 
-	tabs.Append(container.NewTabItem("Notificações", notifications))
-	tabs.Append(container.NewTabItem("Configurações", settings))
+	customLayout := layout.NewCustomPaddedLayout(10, 10, 15, 15)
 
-	tabs.SelectIndex(0)
+	tabs.Append(container.NewTabItem("Notificações", container.New(customLayout, notifications)))
+	tabs.Append(container.NewTabItem("Configurações", container.New(customLayout, settings)))
+
+	tabs.SelectIndex(1)
 
 	w.SetContent(tabs)
 }
 
 func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, isLoading binding.ExternalBool) *fyne.Container {
-	// TODO: Últimos episódios que falharam
-	// TODO: Próximos episódios que vão sair
-	// ^ Coloca o tempo que falta pra sair na tela atualizando constantemente, se chegar a 0 trigga o reset de checagem
-
 	title := canvas.NewText("Últimos episódios baixados", color.White)
 	title.Alignment = fyne.TextAlignCenter
 	title.TextSize = 18
@@ -80,9 +85,17 @@ func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodes
 	})
 	loadingBar := widget.NewProgressBarInfinite()
 
-	bottom := container.NewVBox(checkNowBtn, loadingBar)
+	// Adicionar espaçamento ao botão
+	buttonContainer := container.NewPadded(checkNowBtn)
+	bottom := container.NewVBox(buttonContainer, loadingBar)
 
-	box := container.NewBorder(title, bottom, nil, nil, downloadedEpisodesList)
+	// Adicionar padding geral
+	box := container.NewBorder(
+		container.NewPadded(title),
+		container.NewPadded(bottom),
+		nil, nil,
+		container.NewPadded(downloadedEpisodesList),
+	)
 
 	isLoading.AddListener(binding.NewDataListener(func() {
 		loading, err := isLoading.Get()
@@ -125,7 +138,10 @@ func updateDownloadedEpisodesList(data binding.ExternalStringList) {
 		episodes = append(episodes, downloadedEpisodes[i].EpisodeName)
 	}
 
-	data.Set(episodes)
+	err := data.Set(episodes)
+	if err != nil {
+		return
+	}
 }
 
 func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs Config) *fyne.Container {
@@ -136,6 +152,7 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs 
 	deleteAfterWatched := deleteWatchedEpisodesCheck(configs)
 	episodeRetryLimitEntry := changeEpisodeRetryLimitEntry(configs)
 	maxEpisodesPerAnimeEntry := changeMaxEpisodesPerAnimeEntry(configs)
+	excludedListEntry := changeExcludedListEntry(configs)
 
 	inputs := configInputs{
 		userNameEntry:            userNameEntry,
@@ -143,30 +160,121 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs 
 		qBittorrentUrlEntry:      qBittorrentEntry,
 		episodeRetryLimitEntry:   episodeRetryLimitEntry,
 		maxEpisodesPerAnimeEntry: maxEpisodesPerAnimeEntry,
+		excludedListEntry:        excludedListEntry,
 	}
 
 	saveBtn := saveBtn(func() {
 		saveConfigs(w, restartLoop, inputs)
 	})
 
+	anilistCustomListsUrl, _ := url.Parse("https://anilist.co/settings/lists")
+	anilistConfigsBox := sectionBox(
+		"Configurações do AniList",
+		entryBox(
+			userNameEntry,
+			"Nome de usuário no AniList",
+		),
+		entryBox(
+			excludedListEntry,
+			"Lista personalizada excluída",
+			"Animes nessa lista não serão baixados",
+		),
+		widget.NewHyperlink("Clique aqui para gerenciar suas listas personalizadas.", anilistCustomListsUrl),
+	)
+
+	downloadConfigsBox := sectionBox(
+		"Configurações de Download",
+		changeSavePathBtn,
+		container.New(layout.NewCenterLayout(), deleteAfterWatched),
+	)
+
+	checkingConfigsBox := sectionBox(
+		"Configurações de Checagem",
+		entryBox(
+			changeIntervalEntry,
+			"Intervalo de checagem de animes (em minutos)",
+		),
+		entryBox(
+			episodeRetryLimitEntry,
+			"Limite de tentativas de download por episódio",
+		),
+		entryBox(
+			maxEpisodesPerAnimeEntry,
+			"Máximo de episódios baixados por anime",
+		),
+	)
+
+	adittionalConfigsBox := sectionBox(
+		"Opções Avançadas",
+		entryBox(
+			qBittorrentEntry,
+			"URL base do qBittorrent",
+			"Não altere isso se não souber o que significa",
+		),
+	)
+
+	box := paddedBox(
+		anilistConfigsBox,
+		downloadConfigsBox,
+		checkingConfigsBox,
+		adittionalConfigsBox,
+	)
+
+	scrollContainer := container.NewScroll(box)
+	scrollContainer.SetMinSize(fyne.NewSize(400, 500))
+
+	saveBtnBox := container.NewHBox(saveBtn)
+	saveBtnBox.Layout = layout.NewCustomPaddedLayout(15, 0, 0, 0)
+
+	return container.NewBorder(nil, saveBtnBox, nil, nil, scrollContainer)
+}
+
+func entryBox(entry *widget.Entry, labels ...string) *fyne.Container {
 	box := container.NewVBox()
-	box.Add(changeSavePathBtn)
-	box.Add(widget.NewLabel("Seu nome de usuário no AniList"))
-	box.Add(userNameEntry)
-	box.Add(widget.NewLabel("Intervalo de checagem de animes (em minutos)"))
-	box.Add(changeIntervalEntry)
-	box.Add(widget.NewLabel("Limite de tentativas de download por episódio"))
-	box.Add(episodeRetryLimitEntry)
-	box.Add(widget.NewLabel("Máximo de episódios baixados por anime"))
-	box.Add(maxEpisodesPerAnimeEntry)
-	box.Add(deleteAfterWatched)
-	box.Add(widget.NewLabel("URL base do qBittorrent (não altere isso se não souber o que significa)"))
-	box.Add(qBittorrentEntry)
-	box.Add(saveBtn)
 
-	container := container.NewBorder(nil, saveBtn, nil, nil, box)
+	for i, label := range labels {
+		txt := canvas.NewText(label, color.White)
 
-	return container
+		if i == 0 {
+			txt.TextSize = 15
+			txt.TextStyle = fyne.TextStyle{Bold: true}
+		}
+
+		box.Add(txt)
+	}
+
+	box.Add(entry)
+
+	return box
+}
+
+func sectionBox(title string, objects ...fyne.CanvasObject) *fyne.Container {
+	box := container.New(layout.NewCustomPaddedVBoxLayout(15))
+
+	t := canvas.NewText(title, color.White)
+	t.TextSize = 20
+	t.TextStyle = fyne.TextStyle{Bold: true}
+	t.Alignment = fyne.TextAlignCenter
+
+	box.Add(t)
+	for _, obj := range objects {
+		box.Add(obj)
+	}
+
+	return box
+}
+
+func paddedBox(objects ...fyne.CanvasObject) *fyne.Container {
+	box := container.New(layout.NewCustomPaddedVBoxLayout(25))
+
+	for i, obj := range objects {
+		box.Add(obj)
+		if i < len(objects)-1 {
+			box.Add(canvas.NewLine(color.White))
+		}
+	}
+
+	return box
 }
 
 type configInputs struct {
@@ -175,6 +283,7 @@ type configInputs struct {
 	qBittorrentUrlEntry      *widget.Entry
 	episodeRetryLimitEntry   *widget.Entry
 	maxEpisodesPerAnimeEntry *widget.Entry
+	excludedListEntry        *widget.Entry
 }
 
 func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs configInputs) {
@@ -197,6 +306,10 @@ func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs c
 		return
 	}
 	if err := inputs.maxEpisodesPerAnimeEntry.Validate(); err != nil {
+		dialog.ShowError(err, w)
+		return
+	}
+	if err := inputs.excludedListEntry.Validate(); err != nil {
 		dialog.ShowError(err, w)
 		return
 	}
@@ -227,8 +340,9 @@ func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs c
 	}
 
 	configs.AnilistUsername = inputs.userNameEntry.Text
-	configs.CheckInterval = newCheckInterval
 	configs.QBittorrentUrl = inputs.qBittorrentUrlEntry.Text
+	configs.ExcludedList = inputs.excludedListEntry.Text
+	configs.CheckInterval = newCheckInterval
 	configs.EpisodeRetryLimit = newEpisodeRetryLimit
 	configs.MaxEpisodesPerAnime = newMaxEpisodesPerAnime
 	SaveConfigs(configs)
@@ -239,7 +353,9 @@ func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs c
 }
 
 func saveBtn(saveFunc func()) *widget.Button {
-	return widget.NewButton("Salvar configurações", saveFunc)
+	btn := widget.NewButton("Salvar configurações", saveFunc)
+	btn.Importance = widget.HighImportance
+	return btn
 }
 
 func deleteWatchedEpisodesCheck(configs Config) *widget.Check {
@@ -351,6 +467,14 @@ func changeQBittorrentBaseUrlEntry(configs Config) *widget.Entry {
 		}
 		return nil
 	}
+
+	return entry
+}
+
+func changeExcludedListEntry(configs Config) *widget.Entry {
+	entry := widget.NewEntry()
+	entry.SetPlaceHolder("Lista personalizada excluída")
+	entry.SetText(configs.ExcludedList)
 
 	return entry
 }

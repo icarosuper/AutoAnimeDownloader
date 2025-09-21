@@ -91,14 +91,7 @@ func animeVerification(w fyne.Window, updateDownloadedEpisodesList func()) {
 			checkedEpisodes = append(checkedEpisodes, ep.ID)
 			epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
 
-			isInTorrents := false
-			for _, torrent := range downloadedTorrents {
-				if torrent.Name == epName {
-					isInTorrents = true
-					break
-				}
-			}
-
+			isInTorrents := episodeIsInTorrents(epName, downloadedTorrents)
 			alreadySaved := idIsInStructList(ep.ID, savedEpisodes)
 
 			shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents)
@@ -134,6 +127,24 @@ type handleEpisodesData struct {
 	idsToDelete     []int
 	checkedEpisodes []int
 	newEpisodes     []modules.EpisodeStruct
+}
+
+func episodeIsInTorrents(epName string, torrents []modules.Torrent) bool {
+	for _, torrent := range torrents {
+		if torrent.Name == epName {
+			return true
+		}
+	}
+	return false
+}
+
+func animeIsInExcludedList(anime modules.MediaListEntry, excludedList string) bool {
+	for listName, isInList := range anime.CustomLists {
+		if listName == excludedList && isInList {
+			return true
+		}
+	}
+	return false
 }
 
 func handleSavedEpisodes(configs modules.Config, data handleEpisodesData) {
@@ -232,31 +243,39 @@ func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.M
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 	progress := anime.Progress
 	titles := anime.Media.Title
+	epName := fmt.Sprintf("%s - Episode %d", *titles.English, ep.Episode)
+
+	isInExcludedList := animeIsInExcludedList(anime, configs.ExcludedList)
+
+	if isInExcludedList {
+		fmt.Printf("Skipping %s (in excluded list)\n", epName)
+		return false, alreadySaved
+	}
 
 	if ep.Episode <= progress {
-		fmt.Printf("Skipping %s episode %d (already watched)\n", *titles.Romaji, ep.Episode)
+		fmt.Printf("Skipping %s (already watched)\n", epName)
 		return false, alreadySaved
 	}
 
 	if alreadySaved {
-		fmt.Printf("Skipping %s episode %d (already downloaded)\n", *titles.Romaji, ep.Episode)
-
 		if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
-			fmt.Printf("Deleting %s episode %d (max episodes exceeded)\n", *titles.Romaji, ep.Episode)
+			fmt.Printf("Deleting %s (max episodes exceeded)\n", epName)
 			return false, true
 		}
+
+		fmt.Printf("Skipping %s (already downloaded)\n", epName)
 
 		*downloadedEpisodes++
 		return !isInTorrents, false
 	}
 
 	if ep.TimeUntilAiring > 0 {
-		fmt.Printf("Skipping %s episode %d (not aired yet)\n", *titles.Romaji, ep.Episode)
+		fmt.Printf("Skipping %s (not aired yet)\n", epName)
 		return false, false
 	}
 
 	if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
-		fmt.Printf("Skipping %s episode %d (max episodes per anime reached)\n", *titles.Romaji, ep.Episode)
+		fmt.Printf("Skipping %s (max episodes per anime reached)\n", epName)
 		return false, false
 	}
 
