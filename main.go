@@ -223,7 +223,7 @@ func tryDownloadEpisode(configs modules.Config, ep modules.AiringNode, titles mo
 	var hash string
 	for i := 0; i < maxLoops; i++ {
 		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", epName, i+1, configs.EpisodeRetryLimit)
-		hash = modules.DownloadTorrent(configs, nyaaResponse[i].MagnetLink, epName)
+		hash = modules.DownloadTorrent(configs, nyaaResponse[i].MagnetLink, *titles.English, epName)
 		if hash != "" {
 			break
 		}
