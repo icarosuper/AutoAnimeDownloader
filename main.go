@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"sync"
 	"time"
@@ -13,10 +14,22 @@ import (
 	"fyne.io/fyne/v2/dialog"
 )
 
+var headless = flag.Bool("headless", false, "Run in headless mode")
+
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	modules.CreateUi(startLoop)
+	flag.Parse()
+
+	if *headless {
+		configs := modules.LoadConfigs()
+		interval := time.Duration(configs.CheckInterval) * time.Minute
+
+		startLoop(interval, nil, func() {}, nil)
+		select {}
+	} else {
+		modules.CreateUi(startLoop)
+	}
 }
 
 func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesList func(), isLoading binding.ExternalBool) func(newInterval time.Duration) {
@@ -33,9 +46,15 @@ func startLoop(interval time.Duration, w fyne.Window, updateDownloadedEpisodesLi
 				default:
 				}
 
-				isLoading.Set(true)
+				if isLoading != nil {
+					isLoading.Set(true)
+				}
+
 				animeVerification(w, updateDownloadedEpisodesList)
-				isLoading.Set(false)
+
+				if isLoading != nil {
+					isLoading.Set(false)
+				}
 
 				// aguarda duração ou cancelamento
 				select {
@@ -184,7 +203,9 @@ func getDownloadedTorrents(configs modules.Config, w fyne.Window) []modules.Torr
 	torrents, err := modules.GetDownloadedTorrents(configs)
 	if err != nil {
 		fmt.Println("Ocorreu um problema ao tentar .")
-		dialog.ShowInformation("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.", w)
+		if w != nil {
+			dialog.ShowInformation("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.", w)
+		}
 		return nil
 	}
 
@@ -194,14 +215,18 @@ func getDownloadedTorrents(configs modules.Config, w fyne.Window) []modules.Torr
 func searchAnilist(configs modules.Config, w fyne.Window) *modules.AniListResponse {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
 		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
-		dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
+		if w != nil {
+			dialog.ShowInformation("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.", w)
+		}
 		return nil
 	}
 
 	anilistResponse, err := modules.SearchAnimes(configs.AnilistUsername)
 	if err != nil {
 		fmt.Printf("Erro ao buscar animes no AniList: %v\n", err)
-		dialog.ShowInformation("Erro de conexão", "Erro ao buscar animes no AniList. Por favor, verifique seu nome de usuário nas configurações.", w)
+		if w != nil {
+			dialog.ShowInformation("Erro de conexão", "Houve um problema ao tentar conectar ao AniList. Por favor, verifique seu nome de usuário nas configurações.", w)
+		}
 		return nil
 	}
 
