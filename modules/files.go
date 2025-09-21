@@ -196,6 +196,35 @@ func DeleteEpisodesFromFile(episodeIds []int) {
 	}
 }
 
+func DeleteEmptyFolders(config Config) {
+	entries, err := os.ReadDir(config.SavePath)
+	if err != nil {
+		fmt.Println("Error reading save path:", err)
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		folderPath := filepath.Join(config.SavePath, entry.Name())
+		subEntries, err := os.ReadDir(folderPath)
+		if err != nil {
+			fmt.Println("Error reading folder:", folderPath, err)
+			continue
+		}
+		if len(subEntries) == 0 {
+			err := os.Remove(folderPath)
+			if err != nil {
+				fmt.Println("Error deleting empty folder:", folderPath, err)
+			} else {
+				fmt.Println("Deleted empty folder:", folderPath)
+			}
+		}
+	}
+}
+
 func getConfigsFilePath() string {
 	return filepath.Join(getConfigsFolderPath(), configFileName)
 }
