@@ -18,8 +18,9 @@ type AniListResponse struct {
 }
 
 type MediaListEntry struct {
-	Progress int   `json:"progress"`
-	Media    Media `json:"media"`
+	Progress    int         `json:"progress"`
+	CustomLists CustomLists `json:"customLists"`
+	Media       Media       `json:"media"`
 }
 
 type Media struct {
@@ -47,12 +48,15 @@ type GraphQLRequest struct {
 	Variables map[string]interface{} `json:"variables"`
 }
 
+type CustomLists map[string]bool
+
 func SearchAnimes(userName string) (*AniListResponse, error) {
 	query := `
 		query ExampleQuery($userName: String, $type: MediaType, $status: MediaListStatus) {
 			Page {
 				mediaList(userName: $userName, type: $type, status: $status) {
 					progress
+					customLists
 					media {
 						title {
 							english

@@ -28,6 +28,7 @@ type Config struct {
 	MaxEpisodesPerAnime   int    `json:"max_episodes_per_anime"`
 	EpisodeRetryLimit     int    `json:"episode_retry_limit"`
 	DeleteWatchedEpisodes bool   `json:"delete_watched_episodes"`
+	ExcludedList          string `json:"excluded_list"`
 }
 
 func LoadConfigs() Config {
@@ -39,6 +40,7 @@ func LoadConfigs() Config {
 		MaxEpisodesPerAnime:   12,
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: true,
+		ExcludedList:          "",
 	}
 
 	configPath := getConfigsFilePath()
