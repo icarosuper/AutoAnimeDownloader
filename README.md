@@ -1,10 +1,12 @@
 # *AutoAnimeDownloader*
 
-**An app that automatically downloads your anime from Anilist**
+**An app that automatically downloads your anime from Anilist!**
+
+It searches [Anilist](https://anilist.co) for the anime your watching, scrapes [Nyaa](https://nyaa.si) for torrents and downloads them through [qBittorrent](https://www.qbittorrent.org).
 
 ## Requirements
 - An Anilist account (no need to login, just input your username)
-- Have [qBittorrent](https://www.qbittorrent.org/) installed
+- Have [qBittorrent](https://www.qbittorrent.org/download) installed
 - Turn on WebUi on qBittorrent
 ![qBittorrent WebUi tutorial](https://i.imgur.com/vYgUdyy.png)
 
