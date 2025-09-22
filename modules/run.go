@@ -1,34 +1,13 @@
-package main
+package modules
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"sync"
 	"time"
-
-	"AutoAnimeDownloader/modules"
 )
 
-var headless = flag.Bool("headless", false, "Run in headless mode")
-
-func main() {
-	fmt.Println("Starting Auto Anime Downloader...")
-
-	flag.Parse()
-
-	if *headless {
-		configs := modules.LoadConfigs()
-		interval := time.Duration(configs.CheckInterval) * time.Minute
-
-		startLoop(interval, func(string, string) {}, func() {}, func(bool) {})
-		select {}
-	} else {
-		modules.CreateUi(startLoop)
-	}
-}
-
-func startLoop(interval time.Duration, showDialog func(string, string), updateDownloadedEpisodesList func(), setLoading func(bool)) func(newInterval time.Duration) {
+func StartLoop(interval time.Duration, showDialog func(string, string), updateDownloadedEpisodesList func(), setLoading func(bool)) func(newInterval time.Duration) {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -71,9 +50,9 @@ func startLoop(interval time.Duration, showDialog func(string, string), updateDo
 }
 
 func animeVerification(showDialog func(string, string), updateDownloadedEpisodesList func()) {
-	configs := modules.LoadConfigs()
+	configs := LoadConfigs()
 
-	downloadedTorrents := getDownloadedTorrents(configs, showDialog)
+	downloadedTorrents := fetchDownloadedTorrents(configs, showDialog)
 	if downloadedTorrents == nil {
 		return
 	}
@@ -83,9 +62,9 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 		return
 	}
 
-	savedEpisodes := modules.LoadSavedEpisodes()
+	savedEpisodes := LoadSavedEpisodes()
 
-	var newEpisodes []modules.EpisodeStruct
+	var newEpisodes []EpisodeStruct
 	var checkedEpisodes []int
 	var idsToDelete []int
 
@@ -109,7 +88,7 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 				hash := tryDownloadEpisode(configs, ep, anime.Media.Title, epName)
 
 				if hash != "" && !alreadySaved {
-					newEpisodes = append(newEpisodes, modules.EpisodeStruct{
+					newEpisodes = append(newEpisodes, EpisodeStruct{
 						EpisodeID:   ep.ID,
 						EpisodeHash: hash,
 						EpisodeName: epName,
@@ -132,17 +111,17 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 
 	time.Sleep(300 * time.Millisecond)
 
-	modules.DeleteEmptyFolders(configs)
+	DeleteEmptyFolders(configs)
 }
 
 type handleEpisodesData struct {
-	savedEpisodes   []modules.EpisodeStruct
+	savedEpisodes   []EpisodeStruct
 	idsToDelete     []int
 	checkedEpisodes []int
-	newEpisodes     []modules.EpisodeStruct
+	newEpisodes     []EpisodeStruct
 }
 
-func episodeIsInTorrents(epName string, torrents []modules.Torrent) bool {
+func episodeIsInTorrents(epName string, torrents []Torrent) bool {
 	for _, torrent := range torrents {
 		if torrent.Name == epName {
 			return true
@@ -151,7 +130,7 @@ func episodeIsInTorrents(epName string, torrents []modules.Torrent) bool {
 	return false
 }
 
-func animeIsInExcludedList(anime modules.MediaListEntry, excludedList string) bool {
+func animeIsInExcludedList(anime MediaListEntry, excludedList string) bool {
 	for listName, isInList := range anime.CustomLists {
 		if listName == excludedList && isInList {
 			return true
@@ -160,7 +139,7 @@ func animeIsInExcludedList(anime modules.MediaListEntry, excludedList string) bo
 	return false
 }
 
-func handleSavedEpisodes(configs modules.Config, data handleEpisodesData) {
+func handleSavedEpisodes(configs Config, data handleEpisodesData) {
 	// TODO: Refatorar essa parte que ficou difícil de entender
 	var hashesToDelete []string
 
@@ -181,18 +160,17 @@ func handleSavedEpisodes(configs modules.Config, data handleEpisodesData) {
 		}
 	}
 
-	modules.SaveEpisodesToFile(data.newEpisodes)
+	SaveEpisodesToFile(data.newEpisodes)
 
 	if configs.DeleteWatchedEpisodes {
-		modules.DeleteEpisodesFromFile(data.idsToDelete)
-		modules.DeleteTorrents(configs, hashesToDelete)
+		DeleteEpisodesFromFile(data.idsToDelete)
+		DeleteTorrents(configs, hashesToDelete)
 	}
 }
 
-func getDownloadedTorrents(configs modules.Config, showDialog func(string, string)) []modules.Torrent {
-	torrents, err := modules.GetDownloadedTorrents(configs)
+func fetchDownloadedTorrents(configs Config, showDialog func(string, string)) []Torrent {
+	torrents, err := GetDownloadedTorrents(configs)
 	if err != nil {
-		fmt.Println("Ocorreu um problema ao tentar .")
 		showDialog("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.")
 		return nil
 	}
@@ -200,14 +178,14 @@ func getDownloadedTorrents(configs modules.Config, showDialog func(string, strin
 	return torrents
 }
 
-func searchAnilist(configs modules.Config, showDialog func(string, string)) *modules.AniListResponse {
+func searchAnilist(configs Config, showDialog func(string, string)) *AniListResponse {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
 		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
 		showDialog("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.")
 		return nil
 	}
 
-	anilistResponse, err := modules.SearchAnimes(configs.AnilistUsername)
+	anilistResponse, err := SearchAnimes(configs.AnilistUsername)
 	if err != nil {
 		fmt.Printf("Erro ao buscar animes no AniList: %v\n", err)
 		showDialog("Erro de conexão", "Houve um problema ao tentar conectar ao AniList. Por favor, verifique seu nome de usuário nas configurações.")
@@ -217,8 +195,8 @@ func searchAnilist(configs modules.Config, showDialog func(string, string)) *mod
 	return anilistResponse
 }
 
-func tryDownloadEpisode(configs modules.Config, ep modules.AiringNode, titles modules.Title, epName string) string {
-	nyaaResponse, err := modules.ScrapNyaa(*titles.Romaji, ep.Episode)
+func tryDownloadEpisode(configs Config, ep AiringNode, titles Title, epName string) string {
+	nyaaResponse, err := ScrapNyaa(*titles.Romaji, ep.Episode)
 	if err != nil {
 		fmt.Printf("Error searching Nyaa: %v\n", err)
 		return ""
@@ -236,7 +214,7 @@ func tryDownloadEpisode(configs modules.Config, ep modules.AiringNode, titles mo
 	var hash string
 	for i := 0; i < maxLoops; i++ {
 		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", epName, i+1, configs.EpisodeRetryLimit)
-		hash = modules.DownloadTorrent(configs, nyaaResponse[i].MagnetLink, *titles.English, epName)
+		hash = DownloadTorrent(configs, nyaaResponse[i].MagnetLink, *titles.English, epName)
 		if hash != "" {
 			break
 		}
@@ -251,7 +229,7 @@ func tryDownloadEpisode(configs modules.Config, ep modules.AiringNode, titles mo
 	return hash
 }
 
-func checkEpisode(configs modules.Config, ep modules.AiringNode, anime modules.MediaListEntry, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
+func checkEpisode(configs Config, ep AiringNode, anime MediaListEntry, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
 	// TODO: Se der erro salvar na lista de episódios que falharam
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 	progress := anime.Progress
@@ -305,7 +283,7 @@ func idIsInIntList(id int, episodes []int) bool {
 	return false
 }
 
-func idIsInStructList(id int, episodes []modules.EpisodeStruct) bool {
+func idIsInStructList(id int, episodes []EpisodeStruct) bool {
 	for _, episode := range episodes {
 		if episode.EpisodeID == id {
 			return true
