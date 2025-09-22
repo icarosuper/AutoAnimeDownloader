@@ -10,5 +10,5 @@ import (
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	modules.CreateUi(modules.StartLoop)
+	modules.CreateGui()
 }

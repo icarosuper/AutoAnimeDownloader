@@ -7,7 +7,16 @@ import (
 	"time"
 )
 
-func StartLoop(interval time.Duration, showDialog func(string, string), updateDownloadedEpisodesList func(), setLoading func(bool)) func(newInterval time.Duration) {
+type StartLoopPayload struct {
+	Interval                     time.Duration
+	ShowDialog                   func(string, string)
+	UpdateDownloadedEpisodesList func()
+	SetLoading                   func(bool)
+}
+
+type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
+
+func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -21,9 +30,9 @@ func StartLoop(interval time.Duration, showDialog func(string, string), updateDo
 				default:
 				}
 
-				setLoading(false)
-				animeVerification(showDialog, updateDownloadedEpisodesList)
-				setLoading(true)
+				payload.SetLoading(true)
+				animeVerification(payload.ShowDialog, payload.UpdateDownloadedEpisodesList)
+				payload.SetLoading(false)
 
 				// aguarda duração ou cancelamento
 				select {
@@ -36,7 +45,7 @@ func StartLoop(interval time.Duration, showDialog func(string, string), updateDo
 		}()
 	}
 
-	start(interval, ctx)
+	start(payload.Interval, ctx)
 
 	return func(newDur time.Duration) {
 		mu.Lock()
