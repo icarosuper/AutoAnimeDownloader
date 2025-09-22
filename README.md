@@ -13,3 +13,4 @@ It searches [Anilist](https://anilist.co) for the anime your watching, scrapes [
 ## Downloads
 - [Download for Windows](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader.exe)
 - [Download for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader.tar.xz)
+- [Download headless (no UI) version for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloaderHeadless.tar.xz)
