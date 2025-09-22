@@ -19,9 +19,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-type startLoopFuncType func(dur time.Duration, showDialog func(string, string), updateEpisodesList func(), setLoading func(bool)) func(newDur time.Duration)
-
-func CreateUi(startLoop startLoopFuncType) {
+func CreateGui() {
 	a := app.New()
 
 	a.Settings().SetTheme(theme.DefaultTheme())
@@ -46,26 +44,38 @@ func CreateUi(startLoop startLoopFuncType) {
 
 	downloadedEpisodesList := downloadedEpisodesWidget(downloadedEpisodesBoundData)
 
-	updateDownloadedEpisodes := func() {
-		updateDownloadedEpisodesList(downloadedEpisodesBoundData)
-	}
-
 	configs := LoadConfigs()
 
-	interval := time.Duration(configs.CheckInterval) * time.Minute
-	showDialog := func(title string, message string) {
-		dialog.ShowInformation(title, message, w)
-	}
-	setLoading := func(loading bool) {
-		isLoadingBoundData.Set(loading)
-	}
-	restartLoop := startLoop(interval, showDialog, updateDownloadedEpisodes, setLoading)
+	restartLoop := setupLoop(configs, downloadedEpisodesBoundData, isLoadingBoundData, w)
 
 	notifications := notificationsBox(restartLoop, downloadedEpisodesList, isLoadingBoundData)
 	settings := settingsBox(w, restartLoop, configs)
 	setWindowContent(w, notifications, settings)
 
 	w.ShowAndRun()
+}
+
+func setupLoop(configs Config, episodesData binding.ExternalStringList, loadingData binding.ExternalBool, w fyne.Window) func(newDur time.Duration) {
+	interval := time.Duration(configs.CheckInterval) * time.Minute
+
+	showDialog := func(title string, message string) {
+		dialog.ShowInformation(title, message, w)
+	}
+
+	updateDownloadedList := func() {
+		updateDownloadedEpisodesList(episodesData)
+	}
+
+	setLoading := func(l bool) {
+		loadingData.Set(l)
+	}
+
+	return StartLoop(StartLoopPayload{
+		Interval:                     interval,
+		ShowDialog:                   showDialog,
+		UpdateDownloadedEpisodesList: updateDownloadedList,
+		SetLoading:                   setLoading,
+	})
 }
 
 func setWindowContent(w fyne.Window, notifications fyne.CanvasObject, settings fyne.CanvasObject) {

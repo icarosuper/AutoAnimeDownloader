@@ -15,7 +15,12 @@ func main() {
 	configs := modules.LoadConfigs()
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
-	modules.StartLoop(interval, func(string, string) {}, func() {}, func(bool) {})
+	modules.StartLoop(modules.StartLoopPayload{
+		Interval:                     interval,
+		ShowDialog:                   func(string, string) {},
+		UpdateDownloadedEpisodesList: func() {},
+		SetLoading:                   func(bool) {},
+	})
 
 	select {}
 }
