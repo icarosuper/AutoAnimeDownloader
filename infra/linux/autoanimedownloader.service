@@ -1,0 +1,12 @@
+[Unit]
+Description=Auto Anime Downloader
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/AutoAnimeDownloader
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
