@@ -14,3 +14,8 @@ It searches [Anilist](https://anilist.co) for the anime your watching, scrapes [
 - [Download for Windows](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader.exe)
 - [Download for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader.tar.xz)
 - [Download headless (no UI) version for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloaderHeadless.tar.xz)
+
+## Installation instructions for Linux
+1. Download the [compacted installation file](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader.tar.xz)
+2. Extract the file
+3. Run 'make install' on the folder with the Makefile
