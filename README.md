@@ -23,8 +23,8 @@ It searches [Anilist](https://anilist.co) for the anime your watching, scrapes [
   - [Download for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_x86.tar.xz)
   - [Download headless (no UI) version for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_x86_Headless.tar.xz)
 - ARM64
-  - [Download for Linux ARM64](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloaderHeadless_Linux_Arm64.tar.xz)
-  - [Download headless (no UI) version for Linux ARM64](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloaderHeadless_Linux_Arm64_Headless.tar.xz)
+  - [Download for Linux ARM64](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_Arm64.tar.xz)
+  - [Download headless (no UI) version for Linux ARM64](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_Arm64_Headless.tar.xz)
 
 ## Installation instructions for Linux
 1. Download the compacted installation file in the Downloads section above
