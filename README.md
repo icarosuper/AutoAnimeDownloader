@@ -16,11 +16,17 @@ It searches [Anilist](https://anilist.co) for the anime your watching, scrapes [
 ![qBittorrent WebUi tutorial](https://i.imgur.com/vYgUdyy.png)
 
 ## Downloads
-- [Download for Windows](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader.exe)
-- [Download for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader.tar.xz)
-- [Download headless (no UI) version for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloaderHeadless.tar.xz)
+### Windows
+- [Download for Windows](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Windows.exe)
+### Linux
+- x86_64
+  - [Download for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_x86.tar.xz)
+  - [Download headless (no UI) version for Linux](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_x86_Headless.tar.xz)
+- ARM64
+  - [Download for Linux ARM64](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloaderHeadless_Linux_Arm64.tar.xz)
+  - [Download headless (no UI) version for Linux ARM64](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloaderHeadless_Linux_Arm64_Headless.tar.xz)
 
 ## Installation instructions for Linux
-1. Download the compacted installation file in the [Downloads](#downloads) section above
+1. Download the compacted installation file in the Downloads section above
 2. Extract the file
 3. Run 'make install' on the folder with the Makefile

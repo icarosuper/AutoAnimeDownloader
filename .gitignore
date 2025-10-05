@@ -11,6 +11,7 @@ dist/
 .eggs/
 *.manifest
 *.spec
+fyne-cross/
 
 .downloaded_episodes
 .config.json
