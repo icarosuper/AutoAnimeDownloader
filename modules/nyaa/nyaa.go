@@ -1,4 +1,4 @@
-package modules
+package nyaa
 
 import (
 	"fmt"
@@ -11,6 +11,22 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+// httpGet is an indirection for http.Get so tests can replace it.
+var httpGet = http.Get
+
+// MockNyaaHttpGet allows tests or callers to replace the httpGet function used by
+// this package. It returns a function that when called will restore the
+// previous httpGet implementation.
+func MockNyaaHttpGet(fn func(string) (*http.Response, error)) (restore func()) {
+	prev := httpGet
+	if fn == nil {
+		// If caller passes nil, do nothing and return a no-op restore
+		return func() { httpGet = prev }
+	}
+	httpGet = fn
+	return func() { httpGet = prev }
+}
 
 // TorrentResult representa um resultado de torrent do Nyaa
 type TorrentResult struct {
@@ -43,8 +59,8 @@ func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
 
 	fmt.Printf("Searching Nyaa: %s (Episode: %v)\n", nyaaURL, episode)
 
-	// Fazer requisição HTTP
-	resp, err := http.Get(nyaaURL)
+	// Fazer requisição HTTP (usando httpGet para permitir mock em testes)
+	resp, err := httpGet(nyaaURL)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao fazer requisição: %v", err)
 	}
