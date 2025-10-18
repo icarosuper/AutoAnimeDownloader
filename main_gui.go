@@ -3,12 +3,12 @@
 package main
 
 import (
-	"AutoAnimeDownloader/modules"
+	"AutoAnimeDownloader/modules/gui"
 	"fmt"
 )
 
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	modules.CreateGui()
+	gui.CreateGui()
 }

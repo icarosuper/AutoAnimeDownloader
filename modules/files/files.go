@@ -1,4 +1,4 @@
-package modules
+package files
 
 import (
 	"encoding/json"

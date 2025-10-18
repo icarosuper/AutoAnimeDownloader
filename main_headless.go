@@ -4,7 +4,8 @@
 package main
 
 import (
-	"AutoAnimeDownloader/modules"
+	"AutoAnimeDownloader/modules/files"
+	"AutoAnimeDownloader/modules/program"
 	"fmt"
 	"time"
 )
@@ -12,10 +13,10 @@ import (
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	configs := modules.LoadConfigs()
+	configs := files.LoadConfigs()
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
-	modules.StartLoop(modules.StartLoopPayload{
+	program.StartLoop(program.StartLoopPayload{
 		Interval:                     interval,
 		ShowDialog:                   func(string, string) {},
 		UpdateDownloadedEpisodesList: func() {},

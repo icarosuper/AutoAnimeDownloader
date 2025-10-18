@@ -1,6 +1,7 @@
-package modules
+package torrents
 
 import (
+	"AutoAnimeDownloader/modules/files"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -19,7 +20,7 @@ type Torrent struct {
 
 const CATEGORY = "autoAnimeDownloader"
 
-func DownloadTorrent(config Config, magnet string, animeName string, epName string) string {
+func DownloadTorrent(config files.Config, magnet string, animeName string, epName string) string {
 	baseUrl := getBaseUrl(config.QBittorrentUrl)
 
 	err := addTorrent(baseUrl, magnet, config.SavePath, animeName, epName)
@@ -37,7 +38,7 @@ func DownloadTorrent(config Config, magnet string, animeName string, epName stri
 	return hash
 }
 
-func DeleteTorrents(config Config, hashes []string) {
+func DeleteTorrents(config files.Config, hashes []string) {
 	if len(hashes) == 0 {
 		return
 	}
@@ -56,7 +57,7 @@ func DeleteTorrents(config Config, hashes []string) {
 	defer func() { _ = resp.Body.Close() }()
 }
 
-func GetDownloadedTorrents(config Config) ([]Torrent, error) {
+func GetDownloadedTorrents(config files.Config) ([]Torrent, error) {
 	baseUrl := getBaseUrl(config.QBittorrentUrl)
 
 	return getDownloadedTorrents(baseUrl)
