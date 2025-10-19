@@ -12,16 +12,16 @@ import (
 )
 
 type StartLoopPayload struct {
-	Manager                      *files.FileManager
+	Manager                      *files.FileManager~
 	Interval                     time.Duration
-	ShowDialog                   func(string, string)
+	ShowError                    func(string, string)
 	UpdateDownloadedEpisodesList func()
 	SetLoading                   func(bool)
 }
 
 type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
 
-func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
+func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -35,9 +35,9 @@ func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
 				default:
 				}
 
-				payload.SetLoading(true)
-				animeVerification(payload.Manager, payload.ShowDialog, payload.UpdateDownloadedEpisodesList)
-				payload.SetLoading(false)
+				p.SetLoading(true)
+				animeVerification(p.Manager, p.ShowError, p.UpdateDownloadedEpisodesList)
+				p.SetLoading(false)
 
 				// aguarda duração ou cancelamento
 				select {
@@ -50,7 +50,7 @@ func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
 		}()
 	}
 
-	start(payload.Interval, ctx)
+	start(p.Interval, ctx)
 
 	return func(newDur time.Duration) {
 		mu.Lock()
@@ -63,21 +63,21 @@ func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
 	}
 }
 
-func animeVerification(manager *files.FileManager, showDialog func(string, string), updateDownloadedEpisodesList func()) {
+func animeVerification(manager *files.FileManager, showError func(string, string), updateDownloadedEpisodesList func()) {
 	configs, err := manager.LoadConfigs()
 	if err != nil {
 		fmt.Printf("Failed to load configs: %v\n", err)
-		showDialog("Erro de configuração", "Não foi possível carregar as configurações.")
+		showError("Erro de configuração", "Não foi possível carregar as configurações.")
 		return
 	}
 	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath)
 
-	downloadedTorrents := fetchDownloadedTorrents(torrentsService, showDialog)
+	downloadedTorrents := fetchDownloadedTorrents(torrentsService, showError)
 	if downloadedTorrents == nil {
 		return
 	}
 
-	anilistResponse := searchAnilist(configs, showDialog)
+	anilistResponse := searchAnilist(configs, showError)
 	if anilistResponse == nil {
 		return
 	}
@@ -85,7 +85,7 @@ func animeVerification(manager *files.FileManager, showDialog func(string, strin
 	savedEpisodes, err := manager.LoadSavedEpisodes()
 	if err != nil {
 		fmt.Printf("Failed to load saved episodes: %v\n", err)
-		showDialog("Erro", "Não foi possível carregar os episódios salvos.")
+		showError("Erro", "Não foi possível carregar os episódios salvos.")
 		return
 	}
 
@@ -201,27 +201,27 @@ func handleSavedEpisodes(manager *files.FileManager, configs *files.Config, torr
 	}
 }
 
-func fetchDownloadedTorrents(torrentsService *torrents.TorrentService, showDialog func(string, string)) []torrents.Torrent {
+func fetchDownloadedTorrents(torrentsService *torrents.TorrentService, showError func(string, string)) []torrents.Torrent {
 	torrents, err := torrentsService.GetDownloadedTorrents()
 	if err != nil {
-		showDialog("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.")
+		showError("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.")
 		return nil
 	}
 
 	return torrents
 }
 
-func searchAnilist(configs *files.Config, showDialog func(string, string)) *anilist.AniListResponse {
+func searchAnilist(configs *files.Config, showError func(string, string)) *anilist.AniListResponse {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
 		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
-		showDialog("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.")
+		showError("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.")
 		return nil
 	}
 
 	anilistResponse, err := anilist.SearchAnimes(configs.AnilistUsername)
 	if err != nil {
 		fmt.Printf("Erro ao buscar animes no AniList: %v\n", err)
-		showDialog("Erro de conexão", "Houve um problema ao tentar conectar ao AniList. Por favor, verifique seu nome de usuário nas configurações.")
+		showError("Erro de conexão", "Houve um problema ao tentar conectar ao AniList. Por favor, verifique seu nome de usuário nas configurações.")
 		return nil
 	}
 
