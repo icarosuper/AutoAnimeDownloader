@@ -41,10 +41,14 @@ type TorrentResult struct {
 
 // ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio
 func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
-	// Sanitizar o nome romaji removendo informações de temporada
-	sanitizedRomajiName := regexp.MustCompile(`(?i)\s+(Season|S)\s*\d+`).ReplaceAllString(romajiName, "")
+	// Extrair temporada solicitada (se houver) e sanitizar o nome base
+	requestedSeason := extractSeason(romajiName)
 
-	query := sanitizedRomajiName
+	// Remover informações de temporada do nome para formar a query base
+	seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season)`)
+	sanitizedRomajiName := seasonPattern.ReplaceAllString(romajiName, "")
+
+	query := strings.TrimSpace(sanitizedRomajiName)
 
 	// Construir URL com parâmetros
 	params := url.Values{}
@@ -84,7 +88,9 @@ func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
 		cells := s.Find("td")
 
 		// Extrair dados de cada célula baseado na posição
-		name := cells.Eq(1).Find("a").Not(".comments").AttrOr("title", "")
+		// Preferir o texto visível do link (nome com espaços). Alguns sites
+		// preenchem o atributo title com pontos em vez de espaços (tests do projeto)
+		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
 		torrentLink := cells.Eq(2).Find("a").Eq(1).AttrOr("href", "")
 
 		dateString := strings.TrimSpace(cells.Eq(4).Text())
@@ -106,6 +112,30 @@ func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
 			season = extractSeason(name)
 			res := extractResolution(name)
 			resolution = &res
+		}
+
+		// Filtrar por título base (garantir que o torrent pertence ao anime)
+		baseTitle := strings.ToLower(query)
+		if baseTitle != "" && !strings.Contains(strings.ToLower(name), baseTitle) {
+			return
+		}
+
+	// Filtrar por temporada
+	if requestedSeason != nil {
+		// Se uma temporada específica foi solicitada, o torrent deve ter essa temporada
+		if season == nil || *season != *requestedSeason {
+			return
+		}
+	} else {
+		// Se nenhuma temporada foi especificada, aceitar apenas torrents sem temporada ou da primeira temporada
+		if season != nil && *season != 1 {
+			return
+		}
+	}
+
+		// Requer correspondência exata do episódio
+		if animeEpisode == nil || *animeEpisode != episode {
+			return
 		}
 
 		// Adicionar resultado ao array
@@ -150,6 +180,7 @@ func extractEpisodeNumber(name string) *int {
 		`(?i)episode\s*(\d+)`,       // episode 03, Episode 3
 		`(?i)\bE(\d+)\b`,            // E01, e1 (standalone)
 		`(?i)\[(\d+)\]`,             // [01], [1] - para episódios entre colchetes
+		`(?i)\s(\d+)$`,              // 5 (número no final do nome)
 	}
 
 	for _, pattern := range patterns {
@@ -171,8 +202,9 @@ func extractEpisodeNumber(name string) *int {
 func extractSeason(name string) *int {
 	// Padrões de temporada para corresponder
 	patterns := []string{
-		`(?i)S(\d+)`,         // S1, S2, S01, S02
-		`(?i)Season\s*(\d+)`, // Season 1, Season 2
+		`(?i)S(\d+)`,                        // S1, S2, S01, S02
+		`(?i)Season\s*(\d+)`,                // Season 1, Season 2
+		`(?i)(\d+)(?:st|nd|rd|th)\s+Season`, // 3rd Season, 2nd Season
 	}
 
 	for _, pattern := range patterns {
