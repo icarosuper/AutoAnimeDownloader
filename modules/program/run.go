@@ -12,7 +12,7 @@ import (
 )
 
 type StartLoopPayload struct {
-	Manager                      *files.FileManager~
+	Manager                      *files.FileManager
 	Interval                     time.Duration
 	ShowError                    func(string, string)
 	UpdateDownloadedEpisodesList func()
