@@ -96,8 +96,8 @@ func animeVerification(manager *files.FileManager, showDialog func(string, strin
 	for _, anime := range anilistResponse.Data.Page.MediaList {
 		title := anime.Media.Title.Romaji
 
+		fmt.Println("----------------------------------------")
 		fmt.Println(*title)
-		fmt.Println(*anime.Media.Title.English)
 
 		downloadedEpisodesOfAnime := 0
 		episodes := anime.Media.AiringSchedule.Nodes
@@ -235,8 +235,17 @@ func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.Torrent
 		return ""
 	}
 	if nyaaResponse == nil {
-		fmt.Printf("No magnet link found for %s\n", epName)
-		return ""
+		fmt.Println("No torrents found for", *titles.Romaji, ep.Episode)
+
+		nyaaResponse, err := nyaa.ScrapNyaa(*titles.English, ep.Episode)
+		if err != nil {
+			fmt.Printf("Error searching Nyaa: %v\n", err)
+			return ""
+		}
+		if nyaaResponse == nil {
+			fmt.Println("No torrents found for", *titles.English, ep.Episode)
+			return ""
+		}
 	}
 
 	maxLoops := len(nyaaResponse)
