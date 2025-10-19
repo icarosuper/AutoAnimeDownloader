@@ -29,10 +29,9 @@ func main() {
 	program.StartLoop(program.StartLoopPayload{
 		Manager:                      manager,
 		Interval:                     interval,
-		ShowDialog:                   func(string, string) {},
+		ShowError:                    func(string, string) {},
 		UpdateDownloadedEpisodesList: func() {},
 		SetLoading:                   func(bool) {},
 	})
-
 	select {}
 }

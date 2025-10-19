@@ -22,6 +22,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+type DialogFunc func(string, string)
+
 func CreateGui() {
 	a := app.New()
 
@@ -54,12 +56,14 @@ func CreateGui() {
 
 	configs, err := manager.LoadConfigs()
 	if err != nil {
-		log.Fatalf("Failed to load configs: %v", err)
+		log.Printf("Failed to load configs: %v", err)
+		dialog.ShowError(fmt.Errorf("falha ao carregar configurações: %v", err), w)
+		return
 	}
 
 	restartLoop := setupLoop(manager, configs, downloadedEpisodesBoundData, isLoadingBoundData, w)
 
-	notifications := notificationsBox(manager, restartLoop, downloadedEpisodesList, isLoadingBoundData)
+	notifications := notificationsBox(manager, restartLoop, downloadedEpisodesList, isLoadingBoundData, w)
 	settings := settingsBox(manager, w, restartLoop, configs)
 	setWindowContent(w, notifications, settings)
 
@@ -69,8 +73,8 @@ func CreateGui() {
 func setupLoop(manager *files.FileManager, configs *files.Config, episodesData binding.ExternalStringList, loadingData binding.ExternalBool, w fyne.Window) func(newDur time.Duration) {
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
-	showDialog := func(title string, message string) {
-		dialog.ShowInformation(title, message, w)
+	showError := func(title string, message string) {
+		dialog.ShowError(fmt.Errorf("%s", message), w)
 	}
 
 	updateDownloadedList := func() {
@@ -84,7 +88,7 @@ func setupLoop(manager *files.FileManager, configs *files.Config, episodesData b
 	return program.StartLoop(program.StartLoopPayload{
 		Manager:                      manager,
 		Interval:                     interval,
-		ShowDialog:                   showDialog,
+		ShowError:                    showError,
 		UpdateDownloadedEpisodesList: updateDownloadedList,
 		SetLoading:                   setLoading,
 	})
@@ -103,7 +107,7 @@ func setWindowContent(w fyne.Window, notifications fyne.CanvasObject, settings f
 	w.SetContent(tabs)
 }
 
-func notificationsBox(manager *files.FileManager, restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, isLoading binding.ExternalBool) *fyne.Container {
+func notificationsBox(manager *files.FileManager, restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, isLoading binding.ExternalBool, w fyne.Window) *fyne.Container {
 	title := canvas.NewText("Últimos episódios baixados", color.White)
 	title.Alignment = fyne.TextAlignCenter
 	title.TextSize = 18
@@ -111,7 +115,8 @@ func notificationsBox(manager *files.FileManager, restartLoop func(newDur time.D
 	checkNowBtn := widget.NewButton("Checar atualizações agora", func() {
 		configs, err := manager.LoadConfigs()
 		if err != nil {
-			fmt.Printf("Error loading configs: %v\n", err)
+			log.Printf("Error loading configs: %v\n", err)
+			dialog.ShowError(fmt.Errorf("erro ao carregar configurações: %v", err), w)
 			return
 		}
 		interval := time.Duration(configs.CheckInterval) * time.Minute
@@ -134,7 +139,7 @@ func notificationsBox(manager *files.FileManager, restartLoop func(newDur time.D
 	isLoading.AddListener(binding.NewDataListener(func() {
 		loading, err := isLoading.Get()
 		if err != nil {
-			fmt.Println(err)
+			log.Printf("binding error: %v", err)
 		}
 
 		if loading {
@@ -408,12 +413,13 @@ func deleteWatchedEpisodesCheck(manager *files.FileManager, configs *files.Confi
 	check := widget.NewCheck("Deletar episódios assistidos", func(isChecked bool) {
 		configs, err := manager.LoadConfigs()
 		if err != nil {
-			fmt.Printf("Error loading configs: %v\n", err)
+			log.Printf("Error loading configs: %v\n", err)
+			// no window context here; this is invoked within settings, so dialogs handled by caller
 			return
 		}
 		configs.DeleteWatchedEpisodes = isChecked
 		if err := manager.SaveConfigs(configs); err != nil {
-			fmt.Printf("Error saving configs: %v\n", err)
+			log.Printf("Error saving configs: %v\n", err)
 		}
 	})
 	check.SetChecked(configs.DeleteWatchedEpisodes)
