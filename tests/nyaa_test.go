@@ -58,7 +58,7 @@ func mockHttpGet(sampleHTML string) func() {
 	})
 }
 
-func TestGetMagnetWithoutError(t *testing.T) {
+func TestNyaaModule_CanGetMagnet(t *testing.T) {
 	html := mockHtml([]string{"My.Show.S01E02.1080p"})
 	restore := mockHttpGet(html)
 	defer restore()
@@ -89,7 +89,7 @@ func TestGetMagnetWithoutError(t *testing.T) {
 // 	// module must pick full series torrent
 // }
 
-func TestGetCorrectAnime(t *testing.T) {
+func TestNyaaModule_CanGetCorrectAnime_WithSpecificEpisode(t *testing.T) {
 	options := testOptions{
 		animeName: "Kemono Friends",
 		episode:   5,
@@ -105,7 +105,7 @@ func TestGetCorrectAnime(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
-func TestGetEpisodeOfCompleteAnime(t *testing.T) {
+func TestNyaaModule_CanGetEpisode_OfCompleteAnime(t *testing.T) {
 	options := testOptions{
 		animeName: "Lucky Star",
 		episode:   15,
@@ -133,7 +133,7 @@ func TestGetEpisodeOfCompleteAnime(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
-func TestGetCorrectMagnetsOfSeason1Anime(t *testing.T) {
+func TestNyaaModule_CanGetCorrectMagnets_OfSeason1Anime(t *testing.T) {
 	options := testOptions{
 		animeName: "Kemono Friends",
 		episode:   5,
@@ -160,7 +160,7 @@ func TestGetCorrectMagnetsOfSeason1Anime(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
-func TestGetCorrectMagnetsOfSeason2Anime(t *testing.T) {
+func TestNyaaModule_CanGetCorrectMagnets_OfSeason2Anime(t *testing.T) {
 	options := testOptions{
 		animeName: "Machikado Mazoku Season 2",
 		episode:   7,
@@ -189,7 +189,7 @@ func TestGetCorrectMagnetsOfSeason2Anime(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
-func TestGetCorrectMagnetsOfSeason3Anime(t *testing.T) {
+func TestNyaaModule_CanGetCorrectMagnets_OfSeason3Anime(t *testing.T) {
 	options := testOptions{
 		animeName: "SPY x FAMILY Season 3",
 		episode:   3,
