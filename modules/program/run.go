@@ -12,6 +12,7 @@ import (
 )
 
 type StartLoopPayload struct {
+	Manager                      *files.FileManager
 	Interval                     time.Duration
 	ShowDialog                   func(string, string)
 	UpdateDownloadedEpisodesList func()
@@ -35,7 +36,7 @@ func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
 				}
 
 				payload.SetLoading(true)
-				animeVerification(payload.ShowDialog, payload.UpdateDownloadedEpisodesList)
+				animeVerification(payload.Manager, payload.ShowDialog, payload.UpdateDownloadedEpisodesList)
 				payload.SetLoading(false)
 
 				// aguarda duração ou cancelamento
@@ -62,8 +63,13 @@ func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
 	}
 }
 
-func animeVerification(showDialog func(string, string), updateDownloadedEpisodesList func()) {
-	configs := files.LoadConfigs()
+func animeVerification(manager *files.FileManager, showDialog func(string, string), updateDownloadedEpisodesList func()) {
+	configs, err := manager.LoadConfigs()
+	if err != nil {
+		fmt.Printf("Failed to load configs: %v\n", err)
+		showDialog("Erro de configuração", "Não foi possível carregar as configurações.")
+		return
+	}
 	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath)
 
 	downloadedTorrents := fetchDownloadedTorrents(torrentsService, showDialog)
@@ -76,7 +82,12 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 		return
 	}
 
-	savedEpisodes := files.LoadSavedEpisodes()
+	savedEpisodes, err := manager.LoadSavedEpisodes()
+	if err != nil {
+		fmt.Printf("Failed to load saved episodes: %v\n", err)
+		showDialog("Erro", "Não foi possível carregar os episódios salvos.")
+		return
+	}
 
 	var newEpisodes []files.EpisodeStruct
 	var checkedEpisodes []int
@@ -116,7 +127,7 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 		}
 	}
 
-	handleSavedEpisodes(configs, torrentsService, handleEpisodesData{
+	handleSavedEpisodes(manager, configs, torrentsService, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
 		idsToDelete:     idsToDelete,
 		checkedEpisodes: checkedEpisodes,
@@ -127,7 +138,9 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 
 	time.Sleep(300 * time.Millisecond)
 
-	files.DeleteEmptyFolders(configs)
+	if err := manager.DeleteEmptyFolders(configs.SavePath); err != nil {
+		fmt.Printf("Warning: failed to delete empty folders: %v\n", err)
+	}
 }
 
 type handleEpisodesData struct {
@@ -155,7 +168,7 @@ func animeIsInExcludedList(anime anilist.MediaListEntry, excludedList string) bo
 	return false
 }
 
-func handleSavedEpisodes(configs files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
+func handleSavedEpisodes(manager *files.FileManager, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
 	// TODO: Refatorar essa parte que ficou difícil de entender
 	var hashesToDelete []string
 
@@ -176,10 +189,14 @@ func handleSavedEpisodes(configs files.Config, torrentsService *torrents.Torrent
 		}
 	}
 
-	files.SaveEpisodesToFile(data.newEpisodes)
+	if err := manager.SaveEpisodesToFile(data.newEpisodes); err != nil {
+		fmt.Printf("Warning: failed to save episodes: %v\n", err)
+	}
 
 	if configs.DeleteWatchedEpisodes {
-		files.DeleteEpisodesFromFile(data.idsToDelete)
+		if err := manager.DeleteEpisodesFromFile(data.idsToDelete); err != nil {
+			fmt.Printf("Warning: failed to delete episodes: %v\n", err)
+		}
 		torrentsService.DeleteTorrents(hashesToDelete)
 	}
 }
@@ -194,7 +211,7 @@ func fetchDownloadedTorrents(torrentsService *torrents.TorrentService, showDialo
 	return torrents
 }
 
-func searchAnilist(configs files.Config, showDialog func(string, string)) *anilist.AniListResponse {
+func searchAnilist(configs *files.Config, showDialog func(string, string)) *anilist.AniListResponse {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
 		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
 		showDialog("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.")
@@ -211,7 +228,7 @@ func searchAnilist(configs files.Config, showDialog func(string, string)) *anili
 	return anilistResponse
 }
 
-func tryDownloadEpisode(configs files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode, titles anilist.Title, epName string) string {
+func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode, titles anilist.Title, epName string) string {
 	nyaaResponse, err := nyaa.ScrapNyaa(*titles.Romaji, ep.Episode)
 	if err != nil {
 		fmt.Printf("Error searching Nyaa: %v\n", err)
@@ -245,7 +262,7 @@ func tryDownloadEpisode(configs files.Config, torrentsService *torrents.TorrentS
 	return hash
 }
 
-func checkEpisode(configs files.Config, ep anilist.AiringNode, anime anilist.MediaListEntry, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
+func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaListEntry, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
 	// TODO: Se der erro salvar na lista de episódios que falharam
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 	progress := anime.Progress
