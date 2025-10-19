@@ -7,16 +7,27 @@ import (
 	"AutoAnimeDownloader/modules/files"
 	"AutoAnimeDownloader/modules/program"
 	"fmt"
+	"log"
 	"time"
 )
 
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	configs := files.LoadConfigs()
+	manager, err := files.NewDefaultManager()
+	if err != nil {
+		log.Fatalf("Failed to initialize files manager: %v", err)
+	}
+
+	configs, err := manager.LoadConfigs()
+	if err != nil {
+		log.Fatalf("Failed to load configs: %v", err)
+	}
+
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
 	program.StartLoop(program.StartLoopPayload{
+		Manager:                      manager,
 		Interval:                     interval,
 		ShowDialog:                   func(string, string) {},
 		UpdateDownloadedEpisodesList: func() {},

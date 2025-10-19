@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/modules/program"
 	"fmt"
 	"image/color"
+	"log"
 	"net/url"
 	"strings"
 	"time"
@@ -40,24 +41,32 @@ func CreateGui() {
 		desk.SetSystemTrayMenu(m)
 	}
 
+	manager, err := files.NewDefaultFileManager()
+	if err != nil {
+		log.Fatalf("Failed to initialize files manager: %v", err)
+	}
+
 	downloadedEpisodesBoundData := binding.BindStringList(&[]string{})
 	isLoading := false
 	isLoadingBoundData := binding.BindBool(&isLoading)
 
-	downloadedEpisodesList := downloadedEpisodesWidget(downloadedEpisodesBoundData)
+	downloadedEpisodesList := downloadedEpisodesWidget(manager, downloadedEpisodesBoundData)
 
-	configs := files.LoadConfigs()
+	configs, err := manager.LoadConfigs()
+	if err != nil {
+		log.Fatalf("Failed to load configs: %v", err)
+	}
 
-	restartLoop := setupLoop(configs, downloadedEpisodesBoundData, isLoadingBoundData, w)
+	restartLoop := setupLoop(manager, configs, downloadedEpisodesBoundData, isLoadingBoundData, w)
 
-	notifications := notificationsBox(restartLoop, downloadedEpisodesList, isLoadingBoundData)
-	settings := settingsBox(w, restartLoop, configs)
+	notifications := notificationsBox(manager, restartLoop, downloadedEpisodesList, isLoadingBoundData)
+	settings := settingsBox(manager, w, restartLoop, configs)
 	setWindowContent(w, notifications, settings)
 
 	w.ShowAndRun()
 }
 
-func setupLoop(configs files.Config, episodesData binding.ExternalStringList, loadingData binding.ExternalBool, w fyne.Window) func(newDur time.Duration) {
+func setupLoop(manager *files.FileManager, configs *files.Config, episodesData binding.ExternalStringList, loadingData binding.ExternalBool, w fyne.Window) func(newDur time.Duration) {
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
 	showDialog := func(title string, message string) {
@@ -65,7 +74,7 @@ func setupLoop(configs files.Config, episodesData binding.ExternalStringList, lo
 	}
 
 	updateDownloadedList := func() {
-		updateDownloadedEpisodesList(episodesData)
+		updateDownloadedEpisodesList(manager, episodesData)
 	}
 
 	setLoading := func(l bool) {
@@ -73,6 +82,7 @@ func setupLoop(configs files.Config, episodesData binding.ExternalStringList, lo
 	}
 
 	return program.StartLoop(program.StartLoopPayload{
+		Manager:                      manager,
 		Interval:                     interval,
 		ShowDialog:                   showDialog,
 		UpdateDownloadedEpisodesList: updateDownloadedList,
@@ -93,13 +103,18 @@ func setWindowContent(w fyne.Window, notifications fyne.CanvasObject, settings f
 	w.SetContent(tabs)
 }
 
-func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, isLoading binding.ExternalBool) *fyne.Container {
+func notificationsBox(manager *files.FileManager, restartLoop func(newDur time.Duration), downloadedEpisodesList *widget.List, isLoading binding.ExternalBool) *fyne.Container {
 	title := canvas.NewText("Últimos episódios baixados", color.White)
 	title.Alignment = fyne.TextAlignCenter
 	title.TextSize = 18
 
 	checkNowBtn := widget.NewButton("Checar atualizações agora", func() {
-		interval := time.Duration(files.LoadConfigs().CheckInterval) * time.Minute
+		configs, err := manager.LoadConfigs()
+		if err != nil {
+			fmt.Printf("Error loading configs: %v\n", err)
+			return
+		}
+		interval := time.Duration(configs.CheckInterval) * time.Minute
 		restartLoop(interval)
 	})
 	loadingBar := widget.NewProgressBarInfinite()
@@ -134,8 +149,8 @@ func notificationsBox(restartLoop func(newDur time.Duration), downloadedEpisodes
 	return box
 }
 
-func downloadedEpisodesWidget(boundedList binding.ExternalStringList) *widget.List {
-	updateDownloadedEpisodesList(boundedList)
+func downloadedEpisodesWidget(manager *files.FileManager, boundedList binding.ExternalStringList) *widget.List {
+	updateDownloadedEpisodesList(manager, boundedList)
 
 	list := widget.NewListWithData(
 		boundedList,
@@ -149,26 +164,30 @@ func downloadedEpisodesWidget(boundedList binding.ExternalStringList) *widget.Li
 	return list
 }
 
-func updateDownloadedEpisodesList(data binding.ExternalStringList) {
-	downloadedEpisodes := files.LoadSavedEpisodes()
+func updateDownloadedEpisodesList(manager *files.FileManager, data binding.ExternalStringList) {
+	downloadedEpisodes, err := manager.LoadSavedEpisodes()
+	if err != nil {
+		fmt.Printf("Error loading episodes: %v\n", err)
+		return
+	}
 
 	episodes := make([]string, 0, len(downloadedEpisodes))
 	for i := len(downloadedEpisodes) - 1; i >= 0; i-- {
 		episodes = append(episodes, downloadedEpisodes[i].EpisodeName)
 	}
 
-	err := data.Set(episodes)
+	err = data.Set(episodes)
 	if err != nil {
 		return
 	}
 }
 
-func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs files.Config) *fyne.Container {
-	changeSavePathBtn := changeSavePathBtn(w)
+func settingsBox(manager *files.FileManager, w fyne.Window, restartLoop func(newDur time.Duration), configs *files.Config) *fyne.Container {
+	changeSavePathBtn := changeSavePathBtn(manager, w)
 	qBittorrentEntry := changeQBittorrentBaseUrlEntry(configs)
 	userNameEntry := changeUserNameEntry(configs)
 	changeIntervalEntry := changeIntervalEntry(configs)
-	deleteAfterWatched := deleteWatchedEpisodesCheck(configs)
+	deleteAfterWatched := deleteWatchedEpisodesCheck(manager, configs)
 	episodeRetryLimitEntry := changeEpisodeRetryLimitEntry(configs)
 	maxEpisodesPerAnimeEntry := changeMaxEpisodesPerAnimeEntry(configs)
 	excludedListEntry := changeExcludedListEntry(configs)
@@ -183,7 +202,7 @@ func settingsBox(w fyne.Window, restartLoop func(newDur time.Duration), configs 
 	}
 
 	saveBtn := saveBtn(func() {
-		saveConfigs(w, restartLoop, inputs)
+		saveConfigs(manager, w, restartLoop, inputs)
 	})
 
 	anilistCustomListsUrl, _ := url.Parse("https://anilist.co/settings/lists")
@@ -305,8 +324,12 @@ type configInputs struct {
 	excludedListEntry        *widget.Entry
 }
 
-func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs configInputs) {
-	configs := files.LoadConfigs()
+func saveConfigs(manager *files.FileManager, w fyne.Window, restartLoop func(newDur time.Duration), inputs configInputs) {
+	configs, err := manager.LoadConfigs()
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("erro ao carregar configurações: %v", err), w)
+		return
+	}
 
 	if err := inputs.userNameEntry.Validate(); err != nil {
 		dialog.ShowError(err, w)
@@ -338,7 +361,7 @@ func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs c
 	}
 
 	var newCheckInterval int
-	_, err := fmt.Sscanf(inputs.changeIntervalEntry.Text, "%d", &newCheckInterval)
+	_, err = fmt.Sscanf(inputs.changeIntervalEntry.Text, "%d", &newCheckInterval)
 	if err != nil {
 		dialog.ShowError(fmt.Errorf("o intervalo de checagem deve ser um número inteiro positivo"), w)
 		return
@@ -364,7 +387,11 @@ func saveConfigs(w fyne.Window, restartLoop func(newDur time.Duration), inputs c
 	configs.CheckInterval = newCheckInterval
 	configs.EpisodeRetryLimit = newEpisodeRetryLimit
 	configs.MaxEpisodesPerAnime = newMaxEpisodesPerAnime
-	files.SaveConfigs(configs)
+
+	if err := manager.SaveConfigs(configs); err != nil {
+		dialog.ShowError(fmt.Errorf("erro ao salvar configurações: %v", err), w)
+		return
+	}
 
 	dialog.ShowInformation("Configurações salvas", "As configurações foram salvas com sucesso.", w)
 
@@ -377,17 +404,23 @@ func saveBtn(saveFunc func()) *widget.Button {
 	return btn
 }
 
-func deleteWatchedEpisodesCheck(configs files.Config) *widget.Check {
+func deleteWatchedEpisodesCheck(manager *files.FileManager, configs *files.Config) *widget.Check {
 	check := widget.NewCheck("Deletar episódios assistidos", func(isChecked bool) {
-		configs := files.LoadConfigs()
+		configs, err := manager.LoadConfigs()
+		if err != nil {
+			fmt.Printf("Error loading configs: %v\n", err)
+			return
+		}
 		configs.DeleteWatchedEpisodes = isChecked
-		files.SaveConfigs(configs)
+		if err := manager.SaveConfigs(configs); err != nil {
+			fmt.Printf("Error saving configs: %v\n", err)
+		}
 	})
 	check.SetChecked(configs.DeleteWatchedEpisodes)
 	return check
 }
 
-func changeSavePathBtn(w fyne.Window) *widget.Button {
+func changeSavePathBtn(manager *files.FileManager, w fyne.Window) *widget.Button {
 	return widget.NewButton("Alterar caminho de salvamento dos animes", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
@@ -398,14 +431,20 @@ func changeSavePathBtn(w fyne.Window) *widget.Button {
 				return
 			}
 
-			configs := files.LoadConfigs()
+			configs, err := manager.LoadConfigs()
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("erro ao carregar configurações: %v", err), w)
+				return
+			}
 			configs.SavePath = uri.Path()
-			files.SaveConfigs(configs)
+			if err := manager.SaveConfigs(configs); err != nil {
+				dialog.ShowError(fmt.Errorf("erro ao salvar configurações: %v", err), w)
+			}
 		}, w)
 	})
 }
 
-func changeUserNameEntry(configs files.Config) *widget.Entry {
+func changeUserNameEntry(configs *files.Config) *widget.Entry {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("Insira seu nome de usuário do AniList")
 	entry.SetText(configs.AnilistUsername)
@@ -424,7 +463,7 @@ func changeUserNameEntry(configs files.Config) *widget.Entry {
 	return entry
 }
 
-func changeEpisodeRetryLimitEntry(configs files.Config) *widget.Entry {
+func changeEpisodeRetryLimitEntry(configs *files.Config) *widget.Entry {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("Limite de tentativas de download por episódio")
 	entry.SetText(fmt.Sprintf("%d", configs.EpisodeRetryLimit))
@@ -441,7 +480,7 @@ func changeEpisodeRetryLimitEntry(configs files.Config) *widget.Entry {
 	return entry
 }
 
-func changeMaxEpisodesPerAnimeEntry(configs files.Config) *widget.Entry {
+func changeMaxEpisodesPerAnimeEntry(configs *files.Config) *widget.Entry {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("Máximo de episódios baixados por anime")
 	entry.SetText(fmt.Sprintf("%d", configs.MaxEpisodesPerAnime))
@@ -458,7 +497,7 @@ func changeMaxEpisodesPerAnimeEntry(configs files.Config) *widget.Entry {
 	return entry
 }
 
-func changeIntervalEntry(configs files.Config) *widget.Entry {
+func changeIntervalEntry(configs *files.Config) *widget.Entry {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("Intervalo de checagem (em minutos)")
 	entry.SetText(fmt.Sprintf("%d", configs.CheckInterval))
@@ -475,7 +514,7 @@ func changeIntervalEntry(configs files.Config) *widget.Entry {
 	return entry
 }
 
-func changeQBittorrentBaseUrlEntry(configs files.Config) *widget.Entry {
+func changeQBittorrentBaseUrlEntry(configs *files.Config) *widget.Entry {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("Insira a URL do qBittorrent")
 	entry.SetText(configs.QBittorrentUrl)
@@ -490,7 +529,7 @@ func changeQBittorrentBaseUrlEntry(configs files.Config) *widget.Entry {
 	return entry
 }
 
-func changeExcludedListEntry(configs files.Config) *widget.Entry {
+func changeExcludedListEntry(configs *files.Config) *widget.Entry {
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder("Lista personalizada excluída")
 	entry.SetText(configs.ExcludedList)
