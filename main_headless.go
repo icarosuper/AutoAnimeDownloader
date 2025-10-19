@@ -14,7 +14,7 @@ import (
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	manager, err := files.NewDefaultManager()
+	manager, err := files.NewDefaultFileManager()
 	if err != nil {
 		log.Fatalf("Failed to initialize files manager: %v", err)
 	}
