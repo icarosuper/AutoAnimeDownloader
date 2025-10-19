@@ -64,8 +64,9 @@ func StartLoop(payload StartLoopPayload) func(newInterval time.Duration) {
 
 func animeVerification(showDialog func(string, string), updateDownloadedEpisodesList func()) {
 	configs := files.LoadConfigs()
+	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath)
 
-	downloadedTorrents := fetchDownloadedTorrents(configs, showDialog)
+	downloadedTorrents := fetchDownloadedTorrents(torrentsService, showDialog)
 	if downloadedTorrents == nil {
 		return
 	}
@@ -100,7 +101,7 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 			shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents)
 
 			if shouldDownload {
-				hash := tryDownloadEpisode(configs, ep, anime.Media.Title, epName)
+				hash := tryDownloadEpisode(configs, torrentsService, ep, anime.Media.Title, epName)
 
 				if hash != "" && !alreadySaved {
 					newEpisodes = append(newEpisodes, files.EpisodeStruct{
@@ -115,7 +116,7 @@ func animeVerification(showDialog func(string, string), updateDownloadedEpisodes
 		}
 	}
 
-	handleSavedEpisodes(configs, handleEpisodesData{
+	handleSavedEpisodes(configs, torrentsService, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
 		idsToDelete:     idsToDelete,
 		checkedEpisodes: checkedEpisodes,
@@ -154,7 +155,7 @@ func animeIsInExcludedList(anime anilist.MediaListEntry, excludedList string) bo
 	return false
 }
 
-func handleSavedEpisodes(configs files.Config, data handleEpisodesData) {
+func handleSavedEpisodes(configs files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
 	// TODO: Refatorar essa parte que ficou difícil de entender
 	var hashesToDelete []string
 
@@ -179,12 +180,12 @@ func handleSavedEpisodes(configs files.Config, data handleEpisodesData) {
 
 	if configs.DeleteWatchedEpisodes {
 		files.DeleteEpisodesFromFile(data.idsToDelete)
-		torrents.DeleteTorrents(configs, hashesToDelete)
+		torrentsService.DeleteTorrents(hashesToDelete)
 	}
 }
 
-func fetchDownloadedTorrents(configs files.Config, showDialog func(string, string)) []torrents.Torrent {
-	torrents, err := torrents.GetDownloadedTorrents(configs)
+func fetchDownloadedTorrents(torrentsService *torrents.TorrentService, showDialog func(string, string)) []torrents.Torrent {
+	torrents, err := torrentsService.GetDownloadedTorrents()
 	if err != nil {
 		showDialog("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.")
 		return nil
@@ -210,7 +211,7 @@ func searchAnilist(configs files.Config, showDialog func(string, string)) *anili
 	return anilistResponse
 }
 
-func tryDownloadEpisode(configs files.Config, ep anilist.AiringNode, titles anilist.Title, epName string) string {
+func tryDownloadEpisode(configs files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode, titles anilist.Title, epName string) string {
 	nyaaResponse, err := nyaa.ScrapNyaa(*titles.Romaji, ep.Episode)
 	if err != nil {
 		fmt.Printf("Error searching Nyaa: %v\n", err)
@@ -229,7 +230,7 @@ func tryDownloadEpisode(configs files.Config, ep anilist.AiringNode, titles anil
 	var hash string
 	for i := 0; i < maxLoops; i++ {
 		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", epName, i+1, configs.EpisodeRetryLimit)
-		hash = torrents.DownloadTorrent(configs, nyaaResponse[i].MagnetLink, *titles.English, epName)
+		hash = torrentsService.DownloadTorrent(nyaaResponse[i].MagnetLink, *titles.English, epName)
 		if hash != "" {
 			break
 		}

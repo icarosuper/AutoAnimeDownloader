@@ -1,7 +1,6 @@
 package torrents
 
 import (
-	"AutoAnimeDownloader/modules/files"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +8,34 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+type HTTPClient interface {
+	Get(url string) (*http.Response, error)
+	PostForm(url string, data url.Values) (*http.Response, error)
+}
+
+type DefaultHTTPClient struct{}
+
+func (c *DefaultHTTPClient) Get(url string) (*http.Response, error) {
+	return http.Get(url)
+}
+func (c *DefaultHTTPClient) PostForm(url string, data url.Values) (*http.Response, error) {
+	return http.PostForm(url, data)
+}
+
+type TorrentService struct {
+	httpClient HTTPClient
+	baseURL    string
+	savePath   string
+}
+
+func NewTorrentService(httpClient HTTPClient, qBittorrentURL string, savePath string) *TorrentService {
+	return &TorrentService{
+		httpClient: httpClient,
+		baseURL:    getBaseUrl(qBittorrentURL),
+		savePath:   savePath,
+	}
+}
 
 type Torrent struct {
 	Hash        string `json:"hash"`
@@ -20,16 +47,14 @@ type Torrent struct {
 
 const CATEGORY = "autoAnimeDownloader"
 
-func DownloadTorrent(config files.Config, magnet string, animeName string, epName string) string {
-	baseUrl := getBaseUrl(config.QBittorrentUrl)
-
-	err := addTorrent(baseUrl, magnet, config.SavePath, animeName, epName)
+func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string) string {
+	err := ts.addTorrent(magnet, ts.savePath, animeName, epName)
 	if err != nil {
 		fmt.Println("Failed to add torrent for:", epName)
 		return ""
 	}
 
-	hash := getTorrentsHash(baseUrl, epName)
+	hash := ts.getTorrentsHash(epName)
 	if hash == "" {
 		fmt.Println("Failed to retrieve torrent hash for:", epName)
 		return ""
@@ -38,42 +63,55 @@ func DownloadTorrent(config files.Config, magnet string, animeName string, epNam
 	return hash
 }
 
-func DeleteTorrents(config files.Config, hashes []string) {
+func (ts *TorrentService) DeleteTorrents(hashes []string) error {
 	if len(hashes) == 0 {
-		return
+		return nil
 	}
 
-	baseUrl := getBaseUrl(config.QBittorrentUrl)
 	values := url.Values{}
-
 	values.Add("hashes", strings.Join(hashes, "|"))
 	values.Add("deleteFiles", "true")
 
-	resp, err := http.PostForm(baseUrl+"/delete", values)
+	resp, err := ts.httpClient.PostForm(ts.baseURL+"/delete", values)
 	if err != nil {
 		fmt.Println("Error deleting torrents:", err)
-		return
+		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	return nil
 }
 
-func GetDownloadedTorrents(config files.Config) ([]Torrent, error) {
-	baseUrl := getBaseUrl(config.QBittorrentUrl)
-
-	return getDownloadedTorrents(baseUrl)
+func (ts *TorrentService) GetDownloadedTorrents() ([]Torrent, error) {
+	return ts.getDownloadedTorrents()
 }
 
-func addTorrent(qBittorrentUrl string, magnet string, savePath string, animeName string, epName string) error {
+func sanitizeFolderName(name string) string {
+	invalidChars := []string{":", "<", ">", "|", "?", "*", "\"", "\\", "/"}
+
+	sanitized := name
+	for _, char := range invalidChars {
+		sanitized = strings.ReplaceAll(sanitized, char, "")
+	}
+
+	sanitized = strings.TrimSpace(sanitized)
+	sanitized = strings.ReplaceAll(sanitized, "  ", " ")
+
+	return sanitized
+}
+
+func (ts *TorrentService) addTorrent(magnet string, savePath string, animeName string, epName string) error {
 	values := url.Values{}
 
-	path := filepath.Join(savePath, animeName)
+	sanitizedAnimeName := sanitizeFolderName(animeName)
+	path := filepath.Join(savePath, sanitizedAnimeName)
 
 	values.Add("urls", magnet)
 	values.Add("savepath", path)
 	values.Add("category", CATEGORY)
 	values.Add("rename", epName)
 
-	resp, err := http.PostForm(qBittorrentUrl+"/add", values)
+	resp, err := ts.httpClient.PostForm(ts.baseURL+"/add", values)
 	if err != nil {
 		fmt.Printf("Error adding %s to torrent: %v\n", epName, err)
 		return err
@@ -83,8 +121,8 @@ func addTorrent(qBittorrentUrl string, magnet string, savePath string, animeName
 	return nil
 }
 
-func getTorrentsHash(qBittorrentUrl string, torrentName string) string {
-	torrents, err := getDownloadedTorrents(qBittorrentUrl)
+func (ts *TorrentService) getTorrentsHash(torrentName string) string {
+	torrents, err := ts.getDownloadedTorrents()
 	if err != nil {
 		return ""
 	}
@@ -98,8 +136,8 @@ func getTorrentsHash(qBittorrentUrl string, torrentName string) string {
 	return ""
 }
 
-func getDownloadedTorrents(qBittorrentUrl string) ([]Torrent, error) {
-	response, err := http.Get(qBittorrentUrl + "/info" + "?category=" + CATEGORY)
+func (ts *TorrentService) getDownloadedTorrents() ([]Torrent, error) {
+	response, err := ts.httpClient.Get(ts.baseURL + "/info" + "?category=" + CATEGORY)
 	if err != nil {
 		fmt.Println("Error fetching torrents:", err)
 		return nil, err
