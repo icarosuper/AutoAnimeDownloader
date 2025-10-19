@@ -173,6 +173,8 @@ func TestGetCorrectMagnetsOfSeason2Anime(t *testing.T) {
 			"Machikado Mazoku S2 - 7",
 			"Machikado Mazoku S02E07",
 			"Machikado Mazoku 2nd Season - 07",
+			"Machikado Mazoku 2 - 07",
+			"Machikado Mazoku 2 EP07",
 		},
 		incorrect: []string{
 			"Machikado Mazoku Episode 07",

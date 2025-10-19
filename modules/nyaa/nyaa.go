@@ -205,6 +205,8 @@ func extractSeason(name string) *int {
 		`(?i)S(\d+)`,                        // S1, S2, S01, S02
 		`(?i)Season\s*(\d+)`,                // Season 1, Season 2
 		`(?i)(\d+)(?:st|nd|rd|th)\s+Season`, // 3rd Season, 2nd Season
+		`(?i)\b(\d+)\s+-\s+\d+`,             // 2 - 07 (número seguido de hífen e outro número)
+		`(?i)\b(\d+)\s+EP\d+`,               // 2 EP07 (número seguido de EP e outro número)
 	}
 
 	for _, pattern := range patterns {
