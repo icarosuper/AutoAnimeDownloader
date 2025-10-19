@@ -9,6 +9,31 @@ import (
 	"time"
 )
 
+var httpDo = func(req *http.Request) (*http.Response, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	return client.Do(req)
+}
+
+var aniListAPIURL = "https://graphql.anilist.co"
+
+func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func()) {
+	prev := httpDo
+	if fn == nil {
+		return func() { httpDo = prev }
+	}
+	httpDo = fn
+	return func() { httpDo = prev }
+}
+
+func MockAniListAPIURL(url string) (restore func()) {
+	prev := aniListAPIURL
+	if url == "" {
+		return func() { aniListAPIURL = prev }
+	}
+	aniListAPIURL = url
+	return func() { aniListAPIURL = prev }
+}
+
 type AniListResponse struct {
 	Data struct {
 		Page struct {
@@ -91,18 +116,14 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 		return nil, fmt.Errorf("error marshaling request: %v", err)
 	}
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	req, err := http.NewRequest("POST", "https://graphql.anilist.co", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", aniListAPIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := client.Do(req)
+	resp, err := httpDo(req)
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %v", err)
 	}
