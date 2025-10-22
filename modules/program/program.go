@@ -169,35 +169,56 @@ func animeIsInExcludedList(anime anilist.MediaListEntry, excludedList string) bo
 }
 
 func handleSavedEpisodes(fileManager *files.FileManager, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
-	// TODO: Refatorar essa parte que ficou difícil de entender
-	var hashesToDelete []string
+	episodesNotInWatching := identifyEpisodesNotInWatching(data.savedEpisodes, data.checkedEpisodes)
+	episodeIdsToDelete := append(data.idsToDelete, episodesNotInWatching...)
 
-	// Se anime salvo não está mais no watching, é marcado pra remoção
-	for _, savedEp := range data.savedEpisodes {
-		if !idIsInIntList(savedEp.EpisodeID, data.checkedEpisodes) {
-			data.idsToDelete = append(data.idsToDelete, savedEp.EpisodeID)
-		}
-	}
-
-	// Obtém os hashes dos episódios que serão removidos
-	for _, epID := range data.idsToDelete {
-		for _, savedEp := range data.savedEpisodes {
-			if savedEp.EpisodeID == epID {
-				hashesToDelete = append(hashesToDelete, savedEp.EpisodeHash)
-				break
-			}
-		}
-	}
-
-	if err := fileManager.SaveEpisodesToFile(data.newEpisodes); err != nil {
-		fmt.Printf("Warning: failed to save episodes: %v\n", err)
-	}
+	saveEpisodesToFile(fileManager, data.newEpisodes)
 
 	if configs.DeleteWatchedEpisodes {
-		if err := fileManager.DeleteEpisodesFromFile(data.idsToDelete); err != nil {
+		if err := fileManager.DeleteEpisodesFromFile(episodeIdsToDelete); err != nil {
 			fmt.Printf("Warning: failed to delete episodes: %v\n", err)
 		}
+
+		hashesToDelete := extractEpisodesHashes(data.savedEpisodes, episodeIdsToDelete)
 		torrentsService.DeleteTorrents(hashesToDelete)
+	}
+}
+
+func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedEpisodes []int) []int {
+	checkedMap := make(map[int]bool)
+	for _, id := range checkedEpisodes {
+		checkedMap[id] = true
+	}
+
+	var episodesToDelete []int
+	for _, savedEp := range savedEpisodes {
+		if !checkedMap[savedEp.EpisodeID] {
+			episodesToDelete = append(episodesToDelete, savedEp.EpisodeID)
+		}
+	}
+
+	return episodesToDelete
+}
+
+func extractEpisodesHashes(savedEpisodes []files.EpisodeStruct, episodeIDs []int) []string {
+	hashMap := make(map[int]string)
+	for _, savedEp := range savedEpisodes {
+		hashMap[savedEp.EpisodeID] = savedEp.EpisodeHash
+	}
+
+	var hashes []string
+	for _, id := range episodeIDs {
+		if hash, exists := hashMap[id]; exists {
+			hashes = append(hashes, hash)
+		}
+	}
+
+	return hashes
+}
+
+func saveEpisodesToFile(fileManager *files.FileManager, newEpisodes []files.EpisodeStruct) {
+	if err := fileManager.SaveEpisodesToFile(newEpisodes); err != nil {
+		fmt.Printf("Warning: failed to save episodes: %v\n", err)
 	}
 }
 
@@ -314,15 +335,6 @@ func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.Me
 
 	*downloadedEpisodes++
 	return true, false
-}
-
-func idIsInIntList(id int, episodes []int) bool {
-	for _, episodeID := range episodes {
-		if episodeID == id {
-			return true
-		}
-	}
-	return false
 }
 
 func idIsInStructList(id int, episodes []files.EpisodeStruct) bool {
