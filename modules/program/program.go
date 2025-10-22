@@ -70,6 +70,7 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		showError("Erro de configuração", "Não foi possível carregar as configurações.")
 		return
 	}
+
 	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath)
 
 	downloadedTorrents := fetchDownloadedTorrents(torrentsService, showError)
@@ -240,7 +241,10 @@ func searchAnilist(configs *files.Config, showError func(string, string)) *anili
 
 func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode, titles anilist.Title, epName string) string {
 	// Tenta buscar com Romaji primeiro, depois com English
-	titleVariants := []string{*titles.Romaji, *titles.English}
+	titleVariants := []string{*titles.Romaji}
+	if *titles.Romaji != *titles.English {
+		titleVariants = append(titleVariants, *titles.English)
+	}
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -254,11 +258,11 @@ func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.Torrent
 		if nyaaResponse != nil {
 			break
 		}
-		fmt.Println("No torrents found for", titleVariant, ep.Episode)
+
+		fmt.Printf("Found %d torrents for %s episode %02d\n", len(nyaaResponse), titleVariant, ep.Episode)
 	}
 
 	if nyaaResponse == nil {
-		fmt.Printf("No torrents found for episode %d after trying all title variants\n", ep.Episode)
 		return ""
 	}
 
@@ -299,8 +303,8 @@ func processAnimeEpisodes(
 	idsToDelete *[]int,
 ) {
 	title := anime.Media.Title.Romaji
-	fmt.Println("----------------------------------------")
-	fmt.Println(*title)
+	fmt.Printf("\n----------------------------------------\n\n")
+	fmt.Printf("%s\n\n", *title)
 
 	downloadedEpisodesOfAnime := 0
 	episodes := anime.Media.AiringSchedule.Nodes
@@ -365,7 +369,7 @@ func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anili
 	}
 
 	if ep.TimeUntilAiring > 0 {
-		fmt.Printf("Skipping %s (not aired yet)\n", epName)
+		fmt.Printf("Skipping %s (not yet aired)\n", epName)
 		return true
 	}
 
