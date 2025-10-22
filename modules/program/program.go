@@ -12,11 +12,11 @@ import (
 )
 
 type StartLoopPayload struct {
-	FileManager        *files.FileManager
-	Interval           time.Duration
-	ShowError          func(string, string)
-	UpdateEpisodesList func()
-	SetLoading         func(bool)
+	FileManager            *files.FileManager
+	Interval               time.Duration
+	ShowError              func(string, string)
+	UpdateEpisodesListView func()
+	SetLoading             func(bool)
 }
 
 type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
@@ -36,7 +36,7 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 				}
 
 				p.SetLoading(true)
-				animeVerification(p.FileManager, p.ShowError, p.UpdateEpisodesList)
+				animeVerification(p.FileManager, p.ShowError, p.UpdateEpisodesListView)
 				p.SetLoading(false)
 
 				// aguarda duração ou cancelamento
@@ -63,7 +63,7 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 	}
 }
 
-func animeVerification(fileManager *files.FileManager, showError func(string, string), updateEpisodesList func()) {
+func animeVerification(fileManager *files.FileManager, showError func(string, string), updateEpisodesListView func()) {
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		fmt.Printf("Failed to load configs: %v\n", err)
@@ -89,42 +89,24 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		return
 	}
 
+	torrentsMap := buildTorrentsMap(downloadedTorrents)
+	savedEpisodesMap := buildSavedEpisodesMap(savedEpisodes)
+
 	var newEpisodes []files.EpisodeStruct
 	var checkedEpisodes []int
 	var idsToDelete []int
 
 	for _, anime := range anilistResponse.Data.Page.MediaList {
-		title := anime.Media.Title.Romaji
-
-		fmt.Println("----------------------------------------")
-		fmt.Println(*title)
-
-		downloadedEpisodesOfAnime := 0
-		episodes := anime.Media.AiringSchedule.Nodes
-
-		for _, ep := range episodes {
-			checkedEpisodes = append(checkedEpisodes, ep.ID)
-			epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
-
-			isInTorrents := episodeIsInTorrents(epName, downloadedTorrents)
-			alreadySaved := idIsInStructList(ep.ID, savedEpisodes)
-
-			shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents)
-
-			if shouldDownload {
-				hash := tryDownloadEpisode(configs, torrentsService, ep, anime.Media.Title, epName)
-
-				if hash != "" && !alreadySaved {
-					newEpisodes = append(newEpisodes, files.EpisodeStruct{
-						EpisodeID:   ep.ID,
-						EpisodeHash: hash,
-						EpisodeName: epName,
-					})
-				}
-			} else if shouldDelete {
-				idsToDelete = append(idsToDelete, ep.ID)
-			}
-		}
+		processAnimeEpisodes(
+			configs,
+			torrentsService,
+			anime,
+			torrentsMap,
+			savedEpisodesMap,
+			&newEpisodes,
+			&checkedEpisodes,
+			&idsToDelete,
+		)
 	}
 
 	handleSavedEpisodes(fileManager, configs, torrentsService, handleEpisodesData{
@@ -134,9 +116,9 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		newEpisodes:     newEpisodes,
 	})
 
-	updateEpisodesList()
+	updateEpisodesListView()
 
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond) // Pra que serve esse sleep? Não lembro por que coloquei isso
 
 	if err := fileManager.DeleteEmptyFolders(configs.SavePath); err != nil {
 		fmt.Printf("Warning: failed to delete empty folders: %v\n", err)
@@ -150,13 +132,20 @@ type handleEpisodesData struct {
 	newEpisodes     []files.EpisodeStruct
 }
 
-func episodeIsInTorrents(epName string, torrents []torrents.Torrent) bool {
+func buildTorrentsMap(torrents []torrents.Torrent) map[string]bool {
+	torrentsMap := make(map[string]bool, len(torrents))
 	for _, torrent := range torrents {
-		if torrent.Name == epName {
-			return true
-		}
+		torrentsMap[torrent.Name] = true
 	}
-	return false
+	return torrentsMap
+}
+
+func buildSavedEpisodesMap(episodes []files.EpisodeStruct) map[int]bool {
+	episodesMap := make(map[int]bool, len(episodes))
+	for _, episode := range episodes {
+		episodesMap[episode.EpisodeID] = true
+	}
+	return episodesMap
 }
 
 func animeIsInExcludedList(anime anilist.MediaListEntry, excludedList string) bool {
@@ -250,82 +239,109 @@ func searchAnilist(configs *files.Config, showError func(string, string)) *anili
 }
 
 func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode, titles anilist.Title, epName string) string {
-	nyaaResponse, err := nyaa.ScrapNyaa(*titles.Romaji, ep.Episode)
-	if err != nil {
-		fmt.Printf("Error searching Nyaa: %v\n", err)
-		return ""
-	}
-	if nyaaResponse == nil {
-		fmt.Println("No torrents found for", *titles.Romaji, ep.Episode)
+	// Tenta buscar com Romaji primeiro, depois com English
+	titleVariants := []string{*titles.Romaji, *titles.English}
 
-		nyaaResponse, err := nyaa.ScrapNyaa(*titles.English, ep.Episode)
+	var nyaaResponse []nyaa.TorrentResult
+	var err error
+
+	for _, titleVariant := range titleVariants {
+		nyaaResponse, err = nyaa.ScrapNyaa(titleVariant, ep.Episode)
 		if err != nil {
-			fmt.Printf("Error searching Nyaa: %v\n", err)
-			return ""
+			fmt.Printf("Error searching Nyaa with title '%s': %v\n", titleVariant, err)
+			continue
 		}
-		if nyaaResponse == nil {
-			fmt.Println("No torrents found for", *titles.English, ep.Episode)
-			return ""
-		}
-	}
-
-	maxLoops := len(nyaaResponse)
-	if configs.EpisodeRetryLimit < maxLoops {
-		maxLoops = configs.EpisodeRetryLimit
-	}
-
-	var hash string
-	for i := 0; i < maxLoops; i++ {
-		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", epName, i+1, configs.EpisodeRetryLimit)
-		hash = torrentsService.DownloadTorrent(nyaaResponse[i].MagnetLink, *titles.English, epName)
-		if hash != "" {
+		if nyaaResponse != nil {
 			break
 		}
+		fmt.Println("No torrents found for", titleVariant, ep.Episode)
 	}
 
-	if hash == "" {
-		fmt.Printf("Failed to download %s after %d attempts\n", epName, configs.EpisodeRetryLimit)
+	if nyaaResponse == nil {
+		fmt.Printf("No torrents found for episode %d after trying all title variants\n", ep.Episode)
 		return ""
 	}
 
-	fmt.Printf("Successfully added %s to qBittorrent\n", epName)
-	return hash
+	return attemptDownloadWithRetries(configs, torrentsService, nyaaResponse, titles.English, epName)
+}
+
+func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, nyaaResponse []nyaa.TorrentResult, titleEnglish *string, epName string) string {
+	maxAttempts := min(configs.EpisodeRetryLimit, len(nyaaResponse))
+
+	for i := 0; i < maxAttempts; i++ {
+		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", epName, i+1, configs.EpisodeRetryLimit)
+		hash := torrentsService.DownloadTorrent(nyaaResponse[i].MagnetLink, *titleEnglish, epName)
+		if hash != "" {
+			fmt.Printf("Successfully added %s to qBittorrent\n", epName)
+			return hash
+		}
+	}
+
+	fmt.Printf("Failed to download %s after %d attempts\n", epName, configs.EpisodeRetryLimit)
+	return ""
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func processAnimeEpisodes(
+	configs *files.Config,
+	torrentsService *torrents.TorrentService,
+	anime anilist.MediaListEntry,
+	torrentsMap map[string]bool,
+	savedEpisodesMap map[int]bool,
+	newEpisodes *[]files.EpisodeStruct,
+	checkedEpisodes *[]int,
+	idsToDelete *[]int,
+) {
+	title := anime.Media.Title.Romaji
+	fmt.Println("----------------------------------------")
+	fmt.Println(*title)
+
+	downloadedEpisodesOfAnime := 0
+	episodes := anime.Media.AiringSchedule.Nodes
+
+	for _, ep := range episodes {
+		*checkedEpisodes = append(*checkedEpisodes, ep.ID)
+		epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
+
+		isInTorrents := torrentsMap[epName]
+		alreadySaved := savedEpisodesMap[ep.ID]
+
+		shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents)
+
+		if shouldDownload {
+			hash := tryDownloadEpisode(configs, torrentsService, ep, anime.Media.Title, epName)
+
+			if hash != "" && !alreadySaved {
+				*newEpisodes = append(*newEpisodes, files.EpisodeStruct{
+					EpisodeID:   ep.ID,
+					EpisodeHash: hash,
+					EpisodeName: epName,
+				})
+			}
+		} else if shouldDelete {
+			*idsToDelete = append(*idsToDelete, ep.ID)
+		}
+	}
 }
 
 func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaListEntry, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
 	// TODO: Se der erro salvar na lista de episódios que falharam
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
-	progress := anime.Progress
-	titles := anime.Media.Title
-	epName := fmt.Sprintf("%s - Episode %d", *titles.English, ep.Episode)
 
-	isInExcludedList := animeIsInExcludedList(anime, configs.ExcludedList)
+	epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
 
-	if isInExcludedList {
-		fmt.Printf("Skipping %s (in excluded list)\n", epName)
-		return false, alreadySaved
-	}
-
-	if ep.Episode <= progress {
-		fmt.Printf("Skipping %s (already watched)\n", epName)
+	if shouldSkipEpisode(configs, ep, anime, epName) {
 		return false, alreadySaved
 	}
 
 	if alreadySaved {
-		if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
-			fmt.Printf("Deleting %s (max episodes exceeded)\n", epName)
-			return false, true
-		}
-
-		fmt.Printf("Skipping %s (already downloaded)\n", epName)
-
-		*downloadedEpisodes++
-		return !isInTorrents, false
-	}
-
-	if ep.TimeUntilAiring > 0 {
-		fmt.Printf("Skipping %s (not aired yet)\n", epName)
-		return false, false
+		return handleAlreadySavedEpisode(configs, downloadedEpisodes, isInTorrents, epName)
 	}
 
 	if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
@@ -337,11 +353,34 @@ func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.Me
 	return true, false
 }
 
-func idIsInStructList(id int, episodes []files.EpisodeStruct) bool {
-	for _, episode := range episodes {
-		if episode.EpisodeID == id {
-			return true
-		}
+func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaListEntry, epName string) bool {
+	if animeIsInExcludedList(anime, configs.ExcludedList) {
+		fmt.Printf("Skipping %s (in excluded list)\n", epName)
+		return true
 	}
+
+	if ep.Episode <= anime.Progress {
+		fmt.Printf("Skipping %s (already watched)\n", epName)
+		return true
+	}
+
+	if ep.TimeUntilAiring > 0 {
+		fmt.Printf("Skipping %s (not aired yet)\n", epName)
+		return true
+	}
+
 	return false
+}
+
+// Retorna: (shouldDownload, shouldDelete)
+func handleAlreadySavedEpisode(configs *files.Config, downloadedEpisodes *int, isInTorrents bool, epName string) (bool, bool) {
+	if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
+		fmt.Printf("Deleting %s (max episodes exceeded)\n", epName)
+		return false, true
+	}
+
+	fmt.Printf("Skipping %s (already downloaded)\n", epName)
+	*downloadedEpisodes++
+
+	return !isInTorrents, false
 }

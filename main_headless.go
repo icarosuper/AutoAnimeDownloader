@@ -14,12 +14,12 @@ import (
 func main() {
 	fmt.Println("Starting Auto Anime Downloader...")
 
-	manager, err := files.NewDefaultFileManager()
+	fileManager, err := files.NewDefaultFileManager()
 	if err != nil {
 		log.Fatalf("Failed to initialize files manager: %v", err)
 	}
 
-	configs, err := manager.LoadConfigs()
+	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		log.Fatalf("Failed to load configs: %v", err)
 	}
@@ -27,11 +27,11 @@ func main() {
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
 	program.StartLoop(program.StartLoopPayload{
-		Manager:                      manager,
-		Interval:                     interval,
-		ShowError:                    func(string, string) {},
-		UpdateDownloadedEpisodesList: func() {},
-		SetLoading:                   func(bool) {},
+		FileManager:            fileManager,
+		Interval:               interval,
+		ShowError:              func(string, string) {},
+		UpdateEpisodesListView: func() {},
+		SetLoading:             func(bool) {},
 	})
 	select {}
 }

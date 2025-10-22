@@ -77,7 +77,7 @@ func setupLoop(fileManager *files.FileManager, configs *files.Config, episodesDa
 		dialog.ShowError(fmt.Errorf("%s", message), w)
 	}
 
-	updateDownloadedList := func() {
+	updateDownloadedListView := func() {
 		updateDownloadedEpisodesList(fileManager, episodesData)
 	}
 
@@ -86,11 +86,11 @@ func setupLoop(fileManager *files.FileManager, configs *files.Config, episodesDa
 	}
 
 	return program.StartLoop(program.StartLoopPayload{
-		FileManager:        fileManager,
-		Interval:           interval,
-		ShowError:          showError,
-		UpdateEpisodesList: updateDownloadedList,
-		SetLoading:         setLoading,
+		FileManager:            fileManager,
+		Interval:               interval,
+		ShowError:              showError,
+		UpdateEpisodesListView: updateDownloadedListView,
+		SetLoading:             setLoading,
 	})
 }
 
