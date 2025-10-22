@@ -18,7 +18,7 @@ func mockAniListResponse(body string, status int) func() {
 	})
 }
 
-func TestAniList_SearchAnimes_Success(t *testing.T) {
+func TestAniListModule_SearchAnimes_Success(t *testing.T) {
 	json := `{"data": {"Page": {"mediaList": [{"progress": 3, "customLists": {"AutoAnimeDownloader": true}, "media": {"title": {"english": "My Anime", "romaji": "Boku no Anime"}, "airingSchedule": {"nodes": [{"id": 1, "episode": 4, "timeUntilAiring": 3600}]}}}]}}}`
 	restore := mockAniListResponse(json, 200)
 	defer restore()
@@ -54,7 +54,7 @@ func TestAniList_SearchAnimes_Success(t *testing.T) {
 	}
 }
 
-func TestAniList_SearchAnimes_HTTPErrorStatus(t *testing.T) {
+func TestAniListModule_SearchAnimes_HTTPErrorStatus(t *testing.T) {
 	restore := mockAniListResponse("error", 500)
 	defer restore()
 
@@ -67,7 +67,7 @@ func TestAniList_SearchAnimes_HTTPErrorStatus(t *testing.T) {
 	}
 }
 
-func TestAniList_SearchAnimes_InvalidJSON(t *testing.T) {
+func TestAniListModule_SearchAnimes_InvalidJSON(t *testing.T) {
 	restore := mockAniListResponse("{invalid", 200)
 	defer restore()
 

@@ -92,9 +92,11 @@ func (m *MockHTTPClient) ClearHistory() {
 	m.RequestHistory = make([]MockRequest, 0)
 }
 
+const savePath = "/save/path/"
+
 func setupMockService() (*MockHTTPClient, *torrents.TorrentService) {
 	mockClient := NewMockHTTPClient()
-	service := torrents.NewTorrentService(mockClient, "http://localhost:8080", "/save/path")
+	service := torrents.NewTorrentService(mockClient, "http://localhost:8080", savePath)
 	return mockClient, service
 }
 
@@ -288,6 +290,7 @@ func TestTorrentService_SanitizesFolderName(t *testing.T) {
 		{"Anime/Test", "AnimeTest"},
 		{"  Anime  Test  ", "Anime Test"},
 		{"Anime:::Test", "AnimeTest"},
+		{"Ranma 1/2", "Ranma 12"}, // Real bug case
 	}
 
 	for _, tc := range testCases {
@@ -305,7 +308,7 @@ func TestTorrentService_SanitizesFolderName(t *testing.T) {
 			}
 
 			postReq := history[0]
-			expectedSavePath := "/save/path/" + tc.expected
+			expectedSavePath := savePath + tc.expected
 			if postReq.Data.Get("savepath") != expectedSavePath {
 				t.Errorf("Expected savepath '%s', got '%s'", expectedSavePath, postReq.Data.Get("savepath"))
 			}
