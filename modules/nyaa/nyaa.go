@@ -40,13 +40,13 @@ type TorrentResult struct {
 }
 
 // ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio
-func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
+func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 	// Extrair temporada solicitada (se houver) e sanitizar o nome base
-	requestedSeason := extractSeason(romajiName)
+	requestedSeason := extractSeason(animeName)
 
 	// Remover informações de temporada do nome para formar a query base
 	seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season)`)
-	sanitizedRomajiName := seasonPattern.ReplaceAllString(romajiName, "")
+	sanitizedRomajiName := seasonPattern.ReplaceAllString(animeName, "")
 
 	query := strings.TrimSpace(sanitizedRomajiName)
 
@@ -61,7 +61,7 @@ func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
 
 	nyaaURL := fmt.Sprintf("https://nyaa.si/?%s", params.Encode())
 
-	fmt.Printf("Searching Nyaa: %s (Episode: %v)\n", nyaaURL, episode)
+	fmt.Printf("Searching Nyaa: %s\n", nyaaURL)
 
 	// Fazer requisição HTTP (usando httpGet para permitir mock em testes)
 	resp, err := httpGet(nyaaURL)
@@ -120,18 +120,18 @@ func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
 			return
 		}
 
-	// Filtrar por temporada
-	if requestedSeason != nil {
-		// Se uma temporada específica foi solicitada, o torrent deve ter essa temporada
-		if season == nil || *season != *requestedSeason {
-			return
+		// Filtrar por temporada
+		if requestedSeason != nil {
+			// Se uma temporada específica foi solicitada, o torrent deve ter essa temporada
+			if season == nil || *season != *requestedSeason {
+				return
+			}
+		} else {
+			// Se nenhuma temporada foi especificada, aceitar apenas torrents sem temporada ou da primeira temporada
+			if season != nil && *season != 1 {
+				return
+			}
 		}
-	} else {
-		// Se nenhuma temporada foi especificada, aceitar apenas torrents sem temporada ou da primeira temporada
-		if season != nil && *season != 1 {
-			return
-		}
-	}
 
 		// Requer correspondência exata do episódio
 		if animeEpisode == nil || *animeEpisode != episode {
@@ -149,19 +149,6 @@ func ScrapNyaa(romajiName string, episode int) ([]TorrentResult, error) {
 			Resolution: resolution,
 		})
 	})
-
-	// Filtrar por episódio se especificado e retornar apenas os 5 primeiros
-	// if episode != nil {
-	// 	var filteredResults []TorrentResult
-	// 	for _, result := range results {
-	// 		if result.Episode != nil && *result.Episode == *episode {
-	// 			filteredResults = append(filteredResults, result)
-	// 		}
-	// 	}
-	// 	results = filteredResults
-	// }
-
-	fmt.Printf("Found %d torrents\n", len(results))
 
 	if len(results) == 0 {
 		return nil, nil // Nenhum resultado encontrado
