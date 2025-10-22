@@ -12,11 +12,11 @@ import (
 )
 
 type StartLoopPayload struct {
-	Manager                      *files.FileManager
-	Interval                     time.Duration
-	ShowError                    func(string, string)
-	UpdateDownloadedEpisodesList func()
-	SetLoading                   func(bool)
+	FileManager        *files.FileManager
+	Interval           time.Duration
+	ShowError          func(string, string)
+	UpdateEpisodesList func()
+	SetLoading         func(bool)
 }
 
 type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
@@ -36,7 +36,7 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 				}
 
 				p.SetLoading(true)
-				animeVerification(p.Manager, p.ShowError, p.UpdateDownloadedEpisodesList)
+				animeVerification(p.FileManager, p.ShowError, p.UpdateEpisodesList)
 				p.SetLoading(false)
 
 				// aguarda duração ou cancelamento
@@ -63,8 +63,8 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 	}
 }
 
-func animeVerification(manager *files.FileManager, showError func(string, string), updateDownloadedEpisodesList func()) {
-	configs, err := manager.LoadConfigs()
+func animeVerification(fileManager *files.FileManager, showError func(string, string), updateEpisodesList func()) {
+	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		fmt.Printf("Failed to load configs: %v\n", err)
 		showError("Erro de configuração", "Não foi possível carregar as configurações.")
@@ -82,7 +82,7 @@ func animeVerification(manager *files.FileManager, showError func(string, string
 		return
 	}
 
-	savedEpisodes, err := manager.LoadSavedEpisodes()
+	savedEpisodes, err := fileManager.LoadSavedEpisodes()
 	if err != nil {
 		fmt.Printf("Failed to load saved episodes: %v\n", err)
 		showError("Erro", "Não foi possível carregar os episódios salvos.")
@@ -127,18 +127,18 @@ func animeVerification(manager *files.FileManager, showError func(string, string
 		}
 	}
 
-	handleSavedEpisodes(manager, configs, torrentsService, handleEpisodesData{
+	handleSavedEpisodes(fileManager, configs, torrentsService, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
 		idsToDelete:     idsToDelete,
 		checkedEpisodes: checkedEpisodes,
 		newEpisodes:     newEpisodes,
 	})
 
-	updateDownloadedEpisodesList()
+	updateEpisodesList()
 
 	time.Sleep(300 * time.Millisecond)
 
-	if err := manager.DeleteEmptyFolders(configs.SavePath); err != nil {
+	if err := fileManager.DeleteEmptyFolders(configs.SavePath); err != nil {
 		fmt.Printf("Warning: failed to delete empty folders: %v\n", err)
 	}
 }
@@ -168,7 +168,7 @@ func animeIsInExcludedList(anime anilist.MediaListEntry, excludedList string) bo
 	return false
 }
 
-func handleSavedEpisodes(manager *files.FileManager, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
+func handleSavedEpisodes(fileManager *files.FileManager, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
 	// TODO: Refatorar essa parte que ficou difícil de entender
 	var hashesToDelete []string
 
@@ -189,12 +189,12 @@ func handleSavedEpisodes(manager *files.FileManager, configs *files.Config, torr
 		}
 	}
 
-	if err := manager.SaveEpisodesToFile(data.newEpisodes); err != nil {
+	if err := fileManager.SaveEpisodesToFile(data.newEpisodes); err != nil {
 		fmt.Printf("Warning: failed to save episodes: %v\n", err)
 	}
 
 	if configs.DeleteWatchedEpisodes {
-		if err := manager.DeleteEpisodesFromFile(data.idsToDelete); err != nil {
+		if err := fileManager.DeleteEpisodesFromFile(data.idsToDelete); err != nil {
 			fmt.Printf("Warning: failed to delete episodes: %v\n", err)
 		}
 		torrentsService.DeleteTorrents(hashesToDelete)

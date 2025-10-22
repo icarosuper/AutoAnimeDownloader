@@ -43,7 +43,7 @@ func CreateGui() {
 		desk.SetSystemTrayMenu(m)
 	}
 
-	manager, err := files.NewDefaultFileManager()
+	fileManager, err := files.NewDefaultFileManager()
 	if err != nil {
 		log.Fatalf("Failed to initialize files manager: %v", err)
 	}
@@ -52,25 +52,25 @@ func CreateGui() {
 	isLoading := false
 	isLoadingBoundData := binding.BindBool(&isLoading)
 
-	downloadedEpisodesList := downloadedEpisodesWidget(manager, downloadedEpisodesBoundData)
+	downloadedEpisodesList := downloadedEpisodesWidget(fileManager, downloadedEpisodesBoundData)
 
-	configs, err := manager.LoadConfigs()
+	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		log.Printf("Failed to load configs: %v", err)
 		dialog.ShowError(fmt.Errorf("falha ao carregar configurações: %v", err), w)
 		return
 	}
 
-	restartLoop := setupLoop(manager, configs, downloadedEpisodesBoundData, isLoadingBoundData, w)
+	restartLoop := setupLoop(fileManager, configs, downloadedEpisodesBoundData, isLoadingBoundData, w)
 
-	notifications := notificationsBox(manager, restartLoop, downloadedEpisodesList, isLoadingBoundData, w)
-	settings := settingsBox(manager, w, restartLoop, configs)
+	notifications := notificationsBox(fileManager, restartLoop, downloadedEpisodesList, isLoadingBoundData, w)
+	settings := settingsBox(fileManager, w, restartLoop, configs)
 	setWindowContent(w, notifications, settings)
 
 	w.ShowAndRun()
 }
 
-func setupLoop(manager *files.FileManager, configs *files.Config, episodesData binding.ExternalStringList, loadingData binding.ExternalBool, w fyne.Window) func(newDur time.Duration) {
+func setupLoop(fileManager *files.FileManager, configs *files.Config, episodesData binding.ExternalStringList, loadingData binding.ExternalBool, w fyne.Window) func(newDur time.Duration) {
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
 	showError := func(title string, message string) {
@@ -78,7 +78,7 @@ func setupLoop(manager *files.FileManager, configs *files.Config, episodesData b
 	}
 
 	updateDownloadedList := func() {
-		updateDownloadedEpisodesList(manager, episodesData)
+		updateDownloadedEpisodesList(fileManager, episodesData)
 	}
 
 	setLoading := func(l bool) {
@@ -86,11 +86,11 @@ func setupLoop(manager *files.FileManager, configs *files.Config, episodesData b
 	}
 
 	return program.StartLoop(program.StartLoopPayload{
-		Manager:                      manager,
-		Interval:                     interval,
-		ShowError:                    showError,
-		UpdateDownloadedEpisodesList: updateDownloadedList,
-		SetLoading:                   setLoading,
+		FileManager:        fileManager,
+		Interval:           interval,
+		ShowError:          showError,
+		UpdateEpisodesList: updateDownloadedList,
+		SetLoading:         setLoading,
 	})
 }
 
