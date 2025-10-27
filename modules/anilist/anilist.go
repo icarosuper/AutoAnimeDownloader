@@ -37,18 +37,41 @@ func MockAniListAPIURL(url string) (restore func()) {
 type AniListResponse struct {
 	Data struct {
 		Page struct {
-			MediaList []MediaListEntry `json:"mediaList"`
+			MediaList []MediaList `json:"mediaList"`
 		} `json:"Page"`
 	} `json:"data"`
 }
 
-type MediaListEntry struct {
-	Progress    int         `json:"progress"`
-	CustomLists CustomLists `json:"customLists"`
-	Media       Media       `json:"media"`
+type MediaListStatus string
+
+const (
+	MediaListStatusCompleted MediaListStatus = "COMPLETED"
+	MediaListStatusDropped   MediaListStatus = "DROPPED"
+	MediaListStatusPaused    MediaListStatus = "PAUSED"
+	MediaListStatusPlanning  MediaListStatus = "PLANNING"
+	MediaListStatusRepeating MediaListStatus = "REPEATING"
+	MediaListStatusCurrent   MediaListStatus = "CURRENT"
+)
+
+type MediaList struct {
+	Status      MediaListStatus `json:"status"`
+	Progress    int             `json:"progress"`
+	CustomLists CustomLists     `json:"customLists"`
+	Media       Media           `json:"media"`
 }
 
+type MediaStatus string
+
+const (
+	MediaStatusFinished       MediaStatus = "FINISHED"
+	MediaStatusReleasing      MediaStatus = "RELEASING"
+	MediaStatusNotYetReleased MediaStatus = "NOT_YET_RELEASED"
+	MediaStatusCancelled      MediaStatus = "CANCELLED"
+	MediaStatusHiatus         MediaStatus = "HIATUS"
+)
+
 type Media struct {
+	Status         MediaStatus    `json:"status"`
 	Title          Title          `json:"title"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 }
@@ -69,20 +92,22 @@ type AiringNode struct {
 }
 
 type GraphQLRequest struct {
-	Query     string                 `json:"query"`
-	Variables map[string]interface{} `json:"variables"`
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables"`
 }
 
 type CustomLists map[string]bool
 
 func SearchAnimes(userName string) (*AniListResponse, error) {
 	query := `
-		query ExampleQuery($userName: String, $type: MediaType, $status: MediaListStatus) {
+		query ExampleQuery($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
 			Page {
-				mediaList(userName: $userName, type: $type, status: $status) {
+				mediaList(userName: $userName, type: $type, status_in: $statuses) {
+					status
 					progress
 					customLists
 					media {
+						status
 						title {
 							english
 							romaji
@@ -100,10 +125,10 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 		}
 	`
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"userName": userName,
 		"type":     "ANIME",
-		"status":   "CURRENT",
+		"statuses": []string{string(MediaListStatusCurrent), string(MediaListStatusRepeating)},
 	}
 
 	requestBody := GraphQLRequest{
