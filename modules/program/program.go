@@ -21,11 +21,8 @@ type StartLoopPayload struct {
 
 type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
 
-func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
-	var mu sync.Mutex
-	ctx, cancel := context.WithCancel(context.Background())
-
-	start := func(d time.Duration, c context.Context) {
+func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context) {
+	return func(d time.Duration, c context.Context) {
 		go func() {
 			for {
 				// verifica cancelamento antes de executar
@@ -49,6 +46,13 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 			}
 		}()
 	}
+}
+
+func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
+	var mu sync.Mutex
+	ctx, cancel := context.WithCancel(context.Background())
+
+	start := createStartFunc(p)
 
 	start(p.Interval, ctx)
 
@@ -149,7 +153,7 @@ func buildSavedEpisodesMap(episodes []files.EpisodeStruct) map[int]bool {
 	return episodesMap
 }
 
-func animeIsInExcludedList(anime anilist.MediaListEntry, excludedList string) bool {
+func animeIsInExcludedList(anime anilist.MediaList, excludedList string) bool {
 	for listName, isInList := range anime.CustomLists {
 		if listName == excludedList && isInList {
 			return true
@@ -239,7 +243,8 @@ func searchAnilist(configs *files.Config, showError func(string, string)) *anili
 	return anilistResponse
 }
 
-func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode, titles anilist.Title, epName string) string {
+func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode,
+	titles anilist.Title, fileName string) string {
 	// Tenta buscar com Romaji primeiro, depois com English
 	titleVariants := []string{*titles.Romaji}
 	if *titles.Romaji != *titles.English {
@@ -266,36 +271,32 @@ func tryDownloadEpisode(configs *files.Config, torrentsService *torrents.Torrent
 		return ""
 	}
 
-	return attemptDownloadWithRetries(configs, torrentsService, nyaaResponse, titles.English, epName)
+	return attemptDownloadWithRetries(configs, torrentsService, nyaaResponse, titles.English, fileName)
 }
 
-func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, nyaaResponse []nyaa.TorrentResult, titleEnglish *string, epName string) string {
+func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService,
+	nyaaResponse []nyaa.TorrentResult, titleEnglish *string, fileName string) string {
 	maxAttempts := min(configs.EpisodeRetryLimit, len(nyaaResponse))
 
-	for i := 0; i < maxAttempts; i++ {
-		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", epName, i+1, configs.EpisodeRetryLimit)
-		hash := torrentsService.DownloadTorrent(nyaaResponse[i].MagnetLink, *titleEnglish, epName)
+	for i := range maxAttempts {
+		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", fileName, i+1, configs.EpisodeRetryLimit)
+		hash := torrentsService.DownloadTorrent(nyaaResponse[i].MagnetLink, *titleEnglish, fileName)
 		if hash != "" {
-			fmt.Printf("Successfully added %s to qBittorrent\n", epName)
+			// TODO: Aqui salva o hash que baixou com sucesso no cache
+
+			fmt.Printf("Successfully added %s to qBittorrent\n", fileName)
 			return hash
 		}
 	}
 
-	fmt.Printf("Failed to download %s after %d attempts\n", epName, configs.EpisodeRetryLimit)
+	fmt.Printf("Failed to download %s after %d attempts\n", fileName, configs.EpisodeRetryLimit)
 	return ""
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func processAnimeEpisodes(
 	configs *files.Config,
 	torrentsService *torrents.TorrentService,
-	anime anilist.MediaListEntry,
+	anime anilist.MediaList,
 	torrentsMap map[string]bool,
 	savedEpisodesMap map[int]bool,
 	newEpisodes *[]files.EpisodeStruct,
@@ -334,7 +335,7 @@ func processAnimeEpisodes(
 	}
 }
 
-func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaListEntry, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
+func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (bool, bool) {
 	// TODO: Se der erro salvar na lista de episódios que falharam
 	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
 
@@ -357,7 +358,7 @@ func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.Me
 	return true, false
 }
 
-func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaListEntry, epName string) bool {
+func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, epName string) bool {
 	if animeIsInExcludedList(anime, configs.ExcludedList) {
 		fmt.Printf("Skipping %s (in excluded list)\n", epName)
 		return true
@@ -383,8 +384,13 @@ func handleAlreadySavedEpisode(configs *files.Config, downloadedEpisodes *int, i
 		return false, true
 	}
 
-	fmt.Printf("Skipping %s (already downloaded)\n", epName)
 	*downloadedEpisodes++
 
-	return !isInTorrents, false
+	if isInTorrents {
+		fmt.Printf("Skipping %s (already downloaded)\n", epName)
+		return false, false
+	}
+
+	fmt.Printf("Redownloading %s (was missing from torrents)\n", epName)
+	return true, false
 }

@@ -93,14 +93,14 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
 		torrentLink := cells.Eq(2).Find("a").Eq(1).AttrOr("href", "")
 
-		dateString := strings.TrimSpace(cells.Eq(4).Text())
+		//dateString := strings.TrimSpace(cells.Eq(4).Text())
 		seeders := strings.TrimSpace(cells.Eq(5).Text())
 
 		// Parsear a data
-		parsedDate, err := parseNyaaDate(dateString)
-		if err != nil || !isWithinThreeMonths(parsedDate) {
-			return // Pular se a data não puder ser parseada ou for muito antiga
-		}
+		//parsedDate, err := parseNyaaDate(dateString)
+		//if err != nil || !isWithinThreeMonths(parsedDate) {
+		//	return // Pular se a data não puder ser parseada ou for muito antiga
+		//}
 
 		// Extrair número do episódio, temporada e resolução do nome
 		var animeEpisode *int
@@ -140,8 +140,8 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 
 		// Adicionar resultado ao array
 		results = append(results, TorrentResult{
-			Name:       name,
-			Date:       parsedDate,
+			Name: name,
+			//Date:       parsedDate,
 			Seeders:    seeders,
 			MagnetLink: torrentLink,
 			Episode:    animeEpisode,
@@ -149,6 +149,8 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 			Resolution: resolution,
 		})
 	})
+
+	fmt.Printf("Found %v result for %s ep %v\n", len(results), animeName, episode)
 
 	if len(results) == 0 {
 		return nil, nil // Nenhum resultado encontrado
