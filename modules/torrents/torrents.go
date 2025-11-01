@@ -56,8 +56,9 @@ func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epNam
 		return ""
 	}
 
-	// TODO: Brincar com esse tempo pra melhorar a precisão
-	time.Sleep(100 * time.Millisecond)
+	// Tijolo pra esperar o torrent ser adicionado completamente
+	// TODO: Remover quando imbutir torrent no projeto
+	time.Sleep(50 * time.Millisecond)
 
 	hash := ts.getTorrentsHash(epName)
 	if hash == "" {
