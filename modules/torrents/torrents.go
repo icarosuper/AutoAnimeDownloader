@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type HTTPClient interface {
@@ -53,6 +54,9 @@ func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epNam
 		fmt.Println("Failed to add torrent for:", epName)
 		return ""
 	}
+
+	// TODO: Brincar com esse tempo pra melhorar a precisão
+	time.Sleep(100 * time.Millisecond)
 
 	hash := ts.getTorrentsHash(epName)
 	if hash == "" {
