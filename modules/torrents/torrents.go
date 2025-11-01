@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -104,6 +105,18 @@ func sanitizeFolderName(name string) string {
 	return sanitized
 }
 
+func removeSpecialCharacters(s string) string {
+	// Converte para minúsculas
+	s = strings.ToLower(s)
+	// Remove tudo exceto letras, números e espaços
+	re := regexp.MustCompile(`[^a-z0-9\s]`)
+	s = re.ReplaceAllString(s, "")
+	// Remove espaços múltiplos e trim
+	s = strings.Join(strings.Fields(s), " ")
+	s = strings.TrimSpace(s)
+	return s
+}
+
 func (ts *TorrentService) addTorrent(magnet string, savePath string, animeName string, epName string) error {
 	values := url.Values{}
 
@@ -132,7 +145,14 @@ func (ts *TorrentService) getTorrentsHash(torrentName string) string {
 	}
 
 	for _, torrent := range torrents {
+		// Tenta match exato primeiro (mais rápido)
 		if strings.Contains(torrent.Name, torrentName) {
+			return torrent.Hash
+		}
+		// Se não encontrar, tenta removendo caracteres especiais
+		cleanName := removeSpecialCharacters(torrent.Name)
+		cleanTorrentName := removeSpecialCharacters(torrentName)
+		if cleanTorrentName != "" && strings.Contains(cleanName, cleanTorrentName) {
 			return torrent.Hash
 		}
 	}
