@@ -102,6 +102,7 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 	var idsToDelete []int
 
 	// TODO: Otimizar essa parte
+	start := time.Now()
 	for _, anime := range anilistResponse.Data.Page.MediaList {
 		processAnimeEpisodes(
 			configs,
@@ -114,6 +115,7 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 			&idsToDelete,
 		)
 	}
+	elapsed := time.Since(start)
 
 	handleSavedEpisodes(fileManager, configs, torrentsService, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
@@ -127,6 +129,12 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 	if err := fileManager.DeleteEmptyFolders(configs.SavePath); err != nil {
 		fmt.Printf("Warning: failed to delete empty folders: %v\n", err)
 	}
+
+	fmt.Printf("Animes checados: %d\n", len(anilistResponse.Data.Page.MediaList))
+	fmt.Printf("Episódios checados: %d\n", len(checkedEpisodes))
+	fmt.Printf("Novos episódios: %d\n", len(newEpisodes))
+	fmt.Printf("Tempo decorrido: %s\n", elapsed)
+	fmt.Printf("Média de %s por episódio\n", elapsed/time.Duration(len(checkedEpisodes)))
 }
 
 type handleEpisodesData struct {
