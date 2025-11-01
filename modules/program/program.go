@@ -7,6 +7,7 @@ import (
 	"AutoAnimeDownloader/modules/torrents"
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -94,22 +95,18 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		return
 	}
 
-	torrentsMap := buildTorrentsMap(downloadedTorrents)
-	savedEpisodesMap := buildSavedEpisodesMap(savedEpisodes)
-
 	var newEpisodes []files.EpisodeStruct
 	var checkedEpisodes []int
 	var idsToDelete []int
 
-	// TODO: Otimizar essa parte
 	start := time.Now()
 	for _, anime := range anilistResponse.Data.Page.MediaList {
 		processAnimeEpisodes(
 			configs,
 			torrentsService,
 			anime,
-			torrentsMap,
-			savedEpisodesMap,
+			downloadedTorrents,
+			savedEpisodes,
 			&newEpisodes,
 			&checkedEpisodes,
 			&idsToDelete,
@@ -250,8 +247,7 @@ func searchAnilist(configs *files.Config, showError func(string, string)) *anili
 	return anilistResponse
 }
 
-func searchNyaaForSingleEpisode(configs *files.Config, torrentsService *torrents.TorrentService, ep anilist.AiringNode,
-	titles anilist.Title, fileName string) (result []nyaa.TorrentResult) {
+func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (result []nyaa.TorrentResult) {
 	// Tenta buscar com Romaji primeiro, depois com English
 	titleVariants := []string{*titles.Romaji}
 	if *titles.Romaji != *titles.English {
@@ -277,15 +273,13 @@ func searchNyaaForSingleEpisode(configs *files.Config, torrentsService *torrents
 	return nyaaResponse
 }
 
-func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService,
-	magnets []string, titleEnglish *string, fileName string) (hash string) {
+func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, magnets []string, titleEnglish *string, fileName string) (hash string) {
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 
 	for i := range maxAttempts {
 		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", fileName, i+1, configs.EpisodeRetryLimit)
 		hash := torrentsService.DownloadTorrent(magnets[i], *titleEnglish, fileName)
 		if hash != "" {
-			// TODO: Aqui salva o hash que baixou com sucesso no cache
 			fmt.Printf("Successfully added %s to qBittorrent\n", fileName)
 			return hash
 		}
@@ -299,8 +293,8 @@ func processAnimeEpisodes(
 	configs *files.Config,
 	torrentsService *torrents.TorrentService,
 	anime anilist.MediaList,
-	torrentsMap map[string]bool,
-	savedEpisodesMap map[int]bool,
+	torrents []torrents.Torrent,
+	savedEpisodes []files.EpisodeStruct,
 	newEpisodes *[]files.EpisodeStruct,
 	checkedEpisodes *[]int,
 	idsToDelete *[]int,
@@ -308,6 +302,9 @@ func processAnimeEpisodes(
 	title := anime.Media.Title.Romaji
 	fmt.Printf("\n----------------------------------------\n\n")
 	fmt.Printf("%s\n\n", *title)
+
+	torrentsMap := buildTorrentsMap(torrents)
+	savedEpisodesMap := buildSavedEpisodesMap(savedEpisodes)
 
 	downloadedEpisodesOfAnime := 0
 	episodes := anime.Media.AiringSchedule.Nodes
@@ -361,7 +358,7 @@ func processAnimeEpisodes(
 		}
 
 		if len(magnets) == 0 {
-			results := searchNyaaForSingleEpisode(configs, torrentsService, ep, anime.Media.Title, epName)
+			results := searchNyaaForSingleEpisode(ep, anime.Media.Title)
 			for _, result := range results {
 				magnets = append(magnets, result.MagnetLink)
 			}
@@ -377,12 +374,13 @@ func processAnimeEpisodes(
 			})
 		}
 	}
+
+	if anime.Media.Status == anilist.MediaStatusFinished && configs.CompletedAnimePath != "" && configs.CompletedAnimePath != configs.SavePath {
+		moveCompletedAnime(torrentsService, anime, configs, savedEpisodes)
+	}
 }
 
 func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (shouldDownload bool, shouldDelete bool) {
-	// TODO: Se der erro salvar na lista de episódios que falharam
-	// TODO: Opção pra colocar episódios na blacklist pra não tentar baixar de novo
-
 	epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
 
 	if shouldSkipEpisode(configs, ep, anime, epName) {
@@ -436,4 +434,31 @@ func handleAlreadySavedEpisode(configs *files.Config, downloadedEpisodes *int, i
 
 	fmt.Printf("Redownloading %s (was missing from torrents)\n", epName)
 	return true, false
+}
+
+func moveCompletedAnime(torrentsService *torrents.TorrentService, anime anilist.MediaList, configs *files.Config, allSavedEpisodes []files.EpisodeStruct) {
+	savedEpisodesMap := make(map[int]string)
+	for _, ep := range allSavedEpisodes {
+		savedEpisodesMap[ep.EpisodeID] = ep.EpisodeHash
+	}
+
+	var animeHashes []string
+	for _, ep := range anime.Media.AiringSchedule.Nodes {
+		if hash, exists := savedEpisodesMap[ep.ID]; exists {
+			animeHashes = append(animeHashes, hash)
+		}
+	}
+
+	animeName := *anime.Media.Title.Romaji
+	completedPath := filepath.Join(configs.CompletedAnimePath, animeName)
+	fmt.Printf("Moving completed anime: %s\n", animeName)
+
+	// Move all torrents of this anime to the completed folder
+	for _, ep := range anime.Media.AiringSchedule.Nodes {
+		if err := torrentsService.SetTorrentSavePath(animeHashes, completedPath); err == nil {
+			fmt.Printf("Moved torrent for %s - Episode %d to completed folder\n", animeName, ep.Episode)
+		} else {
+			fmt.Printf("Warning: failed to move torrent for episode %d of '%s': %v\n", ep.Episode, animeName, err)
+		}
+	}
 }

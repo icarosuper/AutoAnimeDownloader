@@ -88,6 +88,21 @@ func (ts *TorrentService) DeleteTorrents(hashes []string) error {
 	return nil
 }
 
+func (ts *TorrentService) SetTorrentSavePath(hashes []string, newSavePath string) error {
+	values := url.Values{}
+	values.Add("hashes", strings.Join(hashes, "|"))
+	values.Add("location", sanitizeFolderName(newSavePath))
+
+	resp, err := ts.httpClient.PostForm(ts.baseURL+"/setLocation", values)
+	if err != nil {
+		fmt.Printf("Error setting save path for torrent: %v\n", err)
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return nil
+}
+
 func (ts *TorrentService) GetDownloadedTorrents() ([]Torrent, error) {
 	return ts.getDownloadedTorrents()
 }
