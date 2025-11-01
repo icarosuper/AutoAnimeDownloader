@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -156,7 +158,135 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 		return nil, nil // Nenhum resultado encontrado
 	}
 
-	return results, nil
+	// Ordenar resultados por qualidade e fansub
+	sortedResults := SortTorrentResults(results)
+	return sortedResults, nil
+}
+
+func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentResult, error) {
+	// Extrair temporada solicitada (se houver) e sanitizar o nome base
+	requestedSeason := extractSeason(animeName)
+
+	// Remover informações de temporada do nome para formar a query base
+	// seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season)`)
+	// sanitizedRomajiName := seasonPattern.ReplaceAllString(animeName, "")
+
+	query := strings.TrimSpace(animeName)
+
+	// Construir URL com parâmetros
+	params := url.Values{}
+	params.Set("f", "0")   // Filtro: sem filtro
+	params.Set("c", "1_2") // Categoria: anime (english)
+	// params.Set("q", fmt.Sprintf())     // Query de busca
+	params.Set("q", fmt.Sprintf("%s", query)) // Query de busca com episódio
+	params.Set("s", "seeders")                // Ordenar por seeders
+	params.Set("o", "desc")                   // Ordem decrescente
+
+	nyaaURL := fmt.Sprintf("https://nyaa.si/?%s", params.Encode())
+
+	fmt.Printf("Searching Nyaa: %s\n", nyaaURL)
+
+	resp, err := httpGet(nyaaURL)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao fazer requisição: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("erro HTTP: status %d", resp.StatusCode)
+	}
+
+	// Parsear HTML
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao parsear HTML: %v", err)
+	}
+
+	var results []TorrentResult
+
+	// Parsear linhas da tabela de torrents
+	doc.Find(".torrent-list tbody tr").Each(func(_ int, s *goquery.Selection) {
+		// Encontrar todas as células (td) na linha atual
+		cells := s.Find("td")
+
+		// Extrair dados de cada célula baseado na posição
+		// Preferir o texto visível do link (nome com espaços). Alguns sites
+		// preenchem o atributo title com pontos em vez de espaços (tests do projeto)
+		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
+		torrentLink := cells.Eq(2).Find("a").Eq(1).AttrOr("href", "")
+
+		//dateString := strings.TrimSpace(cells.Eq(4).Text())
+		seeders := strings.TrimSpace(cells.Eq(5).Text())
+
+		// Parsear a data
+		//parsedDate, err := parseNyaaDate(dateString)
+		//if err != nil || !isWithinThreeMonths(parsedDate) {
+		//	return // Pular se a data não puder ser parseada ou for muito antiga
+		//}
+
+		// Extrair número do episódio, temporada e resolução do nome
+		var animeEpisode *int
+		var season *int
+		var resolution *string
+
+		if name == "" {
+			return
+		}
+
+		animeEpisode = extractEpisodeNumber(name)
+		season = extractSeason(name)
+		res := extractResolution(name)
+		resolution = &res
+
+		// Filtrar por título base (garantir que o torrent pertence ao anime)
+		baseTitle := strings.ToLower(query)
+		if baseTitle != "" && !strings.Contains(strings.ToLower(name), baseTitle) {
+			return
+		}
+
+		// Filtrar por temporada
+		if requestedSeason != nil {
+			// Se uma temporada específica foi solicitada, o torrent deve ter essa temporada
+			if season == nil || *season != *requestedSeason {
+				return
+			}
+		} else {
+			// Se nenhuma temporada foi especificada, aceitar apenas torrents sem temporada ou da primeira temporada
+			if season != nil && *season != 1 {
+				return
+			}
+		}
+
+		if animeEpisode == nil {
+			return
+		}
+
+		epIsInWantedEpisodes := slices.Contains(episodes, *animeEpisode)
+		if !epIsInWantedEpisodes {
+			return
+		}
+
+		// Adicionar resultado ao array
+		results = append(results, TorrentResult{
+			Name: name,
+			//Date:       parsedDate,
+			Seeders:    seeders,
+			MagnetLink: torrentLink,
+			Episode:    animeEpisode,
+			Season:     season,
+			Resolution: resolution,
+		})
+	})
+
+	fmt.Printf("Found %v result for %s\n", len(results), animeName)
+
+	if len(results) == 0 {
+		return nil, nil // Nenhum resultado encontrado
+	}
+
+	// Ordenar resultados por qualidade e fansub
+	sortedResults := SortTorrentResults(results)
+	return sortedResults, nil
 }
 
 // extractEpisodeNumber extrai o número do episódio do nome do torrent
@@ -259,4 +389,96 @@ func parseNyaaDate(dateString string) (time.Time, error) {
 func isWithinThreeMonths(date time.Time) bool {
 	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
 	return date.After(threeMonthsAgo)
+}
+
+// resolutionPriority retorna um valor de prioridade para a resolução (menor = melhor)
+func resolutionPriority(resolution string) int {
+	priorityMap := map[string]int{
+		"1080p": 0,
+		"720p":  1,
+		"480p":  2,
+		"4k":    3,
+		"8k":    4,
+		"fhd":   5,
+		"hd":    6,
+		"uhd":   7,
+	}
+
+	normalized := strings.ToLower(resolution)
+	if priority, exists := priorityMap[normalized]; exists {
+		return priority
+	}
+
+	return 999 // Resolução desconhecida tem menor prioridade
+}
+
+// fansubPriority retorna um valor de prioridade para o fansub (menor = melhor)
+func fansubPriority(torrentName string) int {
+	fansubPriorities := map[string]int{
+		"subsplease": 0,
+		"erai-raws":  1,
+		"judas":      2,
+		"toonshub":   3,
+		"asw":        4,
+		"ember":      5,
+		"dub":        6,
+		"hd-zone":    7,
+		"kamig":      8,
+		"remix":      9,
+		"aniverse":   10,
+	}
+
+	nameLower := strings.ToLower(torrentName)
+
+	// Encontrar o fansub com maior prioridade (menor número)
+	bestPriority := 999
+	for fansub, priority := range fansubPriorities {
+		if strings.Contains(nameLower, fansub) {
+			if priority < bestPriority {
+				bestPriority = priority
+			}
+		}
+	}
+
+	return bestPriority
+}
+
+// SortTorrentResults ordena os torrents por qualidade (primeiro) e fansub (segundo)
+// A ordenação é feita por qualidade em ordem decrescente (1080p > 720p > ...)
+// e depois por fansub na ordem especificada
+func SortTorrentResults(results []TorrentResult) []TorrentResult {
+	sorted := make([]TorrentResult, len(results))
+	copy(sorted, results)
+
+	sort.Slice(sorted, func(i, j int) bool {
+		// Se ambos têm resolução, comparar por prioridade de resolução
+		if sorted[i].Resolution != nil && sorted[j].Resolution != nil {
+			priorityI := resolutionPriority(*sorted[i].Resolution)
+			priorityJ := resolutionPriority(*sorted[j].Resolution)
+
+			if priorityI != priorityJ {
+				return priorityI < priorityJ // Menor prioridade = melhor
+			}
+
+			// Se resoluções são iguais, comparar por fansub
+			fansubI := fansubPriority(sorted[i].Name)
+			fansubJ := fansubPriority(sorted[j].Name)
+			return fansubI < fansubJ
+		}
+
+		// Se apenas um tem resolução, prefere o que tem
+		if sorted[i].Resolution != nil {
+			return true
+		}
+		if sorted[j].Resolution != nil {
+			return false
+		}
+
+		// Se nenhum tem resolução, comparar por fansub
+		fansubI := fansubPriority(sorted[i].Name)
+		fansubJ := fansubPriority(sorted[j].Name)
+		return fansubI < fansubJ
+	})
+
+	return sorted
 }
