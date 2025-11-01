@@ -20,6 +20,7 @@ type EpisodeStruct struct {
 
 type Config struct {
 	SavePath              string `json:"save_path"`
+	CompletedAnimePath    string `json:"completed_anime_path"`
 	AnilistUsername       string `json:"anilist_username"`
 	CheckInterval         int    `json:"check_interval"`
 	QBittorrentUrl        string `json:"qbittorrent_url"`

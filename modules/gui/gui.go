@@ -189,6 +189,7 @@ func updateDownloadedEpisodesList(manager *files.FileManager, data binding.Exter
 
 func settingsBox(manager *files.FileManager, w fyne.Window, restartLoop func(newDur time.Duration), configs *files.Config) *fyne.Container {
 	changeSavePathBtn := changeSavePathBtn(manager, w)
+	changeCompletedAnimePath := changeCompletedAnimePathBtn(manager, w)
 	qBittorrentEntry := changeQBittorrentBaseUrlEntry(configs)
 	userNameEntry := changeUserNameEntry(configs)
 	changeIntervalEntry := changeIntervalEntry(configs)
@@ -228,6 +229,7 @@ func settingsBox(manager *files.FileManager, w fyne.Window, restartLoop func(new
 	downloadConfigsBox := sectionBox(
 		"Configurações de Download",
 		changeSavePathBtn,
+		changeCompletedAnimePath,
 		container.New(layout.NewCenterLayout(), deleteAfterWatched),
 	)
 
@@ -427,7 +429,7 @@ func deleteWatchedEpisodesCheck(manager *files.FileManager, configs *files.Confi
 }
 
 func changeSavePathBtn(manager *files.FileManager, w fyne.Window) *widget.Button {
-	return widget.NewButton("Alterar caminho de salvamento dos animes", func() {
+	return widget.NewButton("Alterar caminho de salvamento dos animes em andamento", func() {
 		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 			if err != nil {
 				dialog.ShowError(err, nil)
@@ -541,4 +543,28 @@ func changeExcludedListEntry(configs *files.Config) *widget.Entry {
 	entry.SetText(configs.ExcludedList)
 
 	return entry
+}
+
+func changeCompletedAnimePathBtn(manager *files.FileManager, w fyne.Window) *widget.Button {
+	return widget.NewButton("Alterar caminho de salvamento dos animes completos", func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				dialog.ShowError(err, nil)
+				return
+			}
+			if uri == nil {
+				return
+			}
+
+			configs, err := manager.LoadConfigs()
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("erro ao carregar configurações: %v", err), w)
+				return
+			}
+			configs.CompletedAnimePath = uri.Path()
+			if err := manager.SaveConfigs(configs); err != nil {
+				dialog.ShowError(fmt.Errorf("erro ao salvar configurações: %v", err), w)
+			}
+		}, w)
+	})
 }
