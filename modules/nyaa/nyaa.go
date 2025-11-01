@@ -30,6 +30,20 @@ func MockNyaaHttpGet(fn func(string) (*http.Response, error)) (restore func()) {
 	return func() { httpGet = prev }
 }
 
+// removeSpecialCharacters remove caracteres especiais de um título
+// Mantém apenas letras, números e espaços
+func removeSpecialCharacters(s string) string {
+	// Converte para minúsculas
+	s = strings.ToLower(s)
+	// Remove tudo exceto letras, números e espaços
+	re := regexp.MustCompile(`[^a-z0-9\s]`)
+	s = re.ReplaceAllString(s, "")
+	// Remove espaços múltiplos e trim
+	s = strings.Join(strings.Fields(s), " ")
+	s = strings.TrimSpace(s)
+	return s
+}
+
 // TorrentResult representa um resultado de torrent do Nyaa
 type TorrentResult struct {
 	Name       string    `json:"name"`
@@ -118,8 +132,16 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 
 		// Filtrar por título base (garantir que o torrent pertence ao anime)
 		baseTitle := strings.ToLower(query)
-		if baseTitle != "" && !strings.Contains(strings.ToLower(name), baseTitle) {
-			return
+		if baseTitle != "" {
+			// Tenta match exato primeiro (mais rápido)
+			if !strings.Contains(strings.ToLower(name), baseTitle) {
+				// Se não encontrar, tenta removendo caracteres especiais
+				cleanName := removeSpecialCharacters(name)
+				cleanQuery := removeSpecialCharacters(query)
+				if cleanQuery == "" || !strings.Contains(cleanName, cleanQuery) {
+					return
+				}
+			}
 		}
 
 		// Filtrar por temporada
@@ -240,8 +262,16 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 
 		// Filtrar por título base (garantir que o torrent pertence ao anime)
 		baseTitle := strings.ToLower(query)
-		if baseTitle != "" && !strings.Contains(strings.ToLower(name), baseTitle) {
-			return
+		if baseTitle != "" {
+			// Tenta match exato primeiro (mais rápido)
+			if !strings.Contains(strings.ToLower(name), baseTitle) {
+				// Se não encontrar, tenta removendo caracteres especiais
+				cleanName := removeSpecialCharacters(name)
+				cleanQuery := removeSpecialCharacters(query)
+				if cleanQuery == "" || !strings.Contains(cleanName, cleanQuery) {
+					return
+				}
+			}
 		}
 
 		// Filtrar por temporada
@@ -293,13 +323,13 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 func extractEpisodeNumber(name string) *int {
 	// Padrões de episódio para corresponder - ordenados do mais específico ao menos específico
 	patterns := []string{
-		`(?i)S\d+E(\d+)`,            // S01E01, S1E1
-		`(?i)\s-\s(\d+)(?:\s|$|\[)`, // - 03 (seguido por espaço, fim, ou colchete)
-		`(?i)EP(\d+)`,               // EP03, ep3
-		`(?i)episode\s*(\d+)`,       // episode 03, Episode 3
-		`(?i)\bE(\d+)\b`,            // E01, e1 (standalone)
-		`(?i)\[(\d+)\]`,             // [01], [1] - para episódios entre colchetes
-		`(?i)\s(\d+)$`,              // 5 (número no final do nome)
+		`(?i)S\d+E(\d+)`,               // S01E01, S1E1
+		`(?i)\s-\s(\d+)(?:[v\s]|$|\[)`, // - 03 ou - 03v2 (seguido por v, espaço, fim, ou colchete)
+		`(?i)EP(\d+)`,                  // EP03, ep3
+		`(?i)episode\s*(\d+)`,          // episode 03, Episode 3
+		`(?i)\bE(\d+)\b`,               // E01, e1 (standalone)
+		`(?i)\[(\d+)\]`,                // [01], [1] - para episódios entre colchetes
+		`(?i)\s(\d+)$`,                 // 5 (número no final do nome)
 	}
 
 	for _, pattern := range patterns {

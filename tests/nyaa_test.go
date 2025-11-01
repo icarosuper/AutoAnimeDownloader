@@ -99,6 +99,26 @@ func TestNyaaModule_CanGetCorrectAnime_WithSpecificEpisode(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
+func TestNyaaModule_CanGetCorrectAnime_WithSpecialCharactersDifferences(t *testing.T) {
+	options := testOptions{
+		animeName: "Silent Witch: Chinmoku no Majo no Kakushigoto",
+		episode:   3,
+		correct: []string{
+			"[SubsPlease] Silent Witch - Chinmoku no Majo no Kakushigoto - 03v2 (1080p)",
+			"Silent Witch - Chinmoku no Majo no Kakushigoto Episode 3",
+			"Silent Witch - Chinmoku no Majo no Kakushigoto - 03",
+		},
+		incorrect: []string{
+			"Silent Witch - Chinmoku no Majo no Kakushigoto - 02",
+			"Silent Witch - Chinmoku no Majo no Kakushigoto - 04",
+			"Silent Witch Episode 3",
+			"Chinmoku no Majo no Kakushigoto Episode 3",
+		},
+	}
+
+	runEpisodeNameTest(options, t)
+}
+
 func TestNyaaModule_CanGetEpisode_OfCompleteAnime(t *testing.T) {
 	options := testOptions{
 		animeName: "Lucky Star",
