@@ -52,12 +52,7 @@ type Torrent struct {
 const CATEGORY = "autoAnimeDownloader"
 
 func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string, animeIsCompleted bool) string {
-	savePath := ts.savePath
-	if animeIsCompleted {
-		savePath = ts.completedPath
-	}
-
-	err := ts.addTorrent(magnet, savePath, animeName, epName)
+	err := ts.addTorrent(magnet, animeName, animeIsCompleted, epName)
 	if err != nil {
 		fmt.Println("Failed to add torrent for:", epName)
 		return ""
@@ -95,10 +90,12 @@ func (ts *TorrentService) DeleteTorrents(hashes []string) error {
 	return nil
 }
 
-func (ts *TorrentService) SetTorrentSavePath(hashes []string, newSavePath string) error {
+func (ts *TorrentService) SendAnimeToCompletedFolder(hashes []string, animeName string) error {
+	newSavePath := ts.getFolderName(animeName, true)
+
 	values := url.Values{}
 	values.Add("hashes", strings.Join(hashes, "|"))
-	values.Add("location", sanitizeFolderName(newSavePath))
+	values.Add("location", newSavePath)
 
 	resp, err := ts.httpClient.PostForm(ts.baseURL+"/setLocation", values)
 	if err != nil {
@@ -140,11 +137,10 @@ func removeSpecialCharacters(s string) string {
 	return s
 }
 
-func (ts *TorrentService) addTorrent(magnet string, savePath string, animeName string, epName string) error {
+func (ts *TorrentService) addTorrent(magnet string, animeName string, animeIsCompleted bool, epName string) error {
 	values := url.Values{}
 
-	sanitizedAnimeName := sanitizeFolderName(animeName)
-	path := filepath.Join(savePath, sanitizedAnimeName)
+	path := ts.getFolderName(animeName, animeIsCompleted)
 
 	values.Add("urls", magnet)
 	values.Add("savepath", path)
@@ -181,6 +177,16 @@ func (ts *TorrentService) getTorrentsHash(torrentName string) string {
 	}
 
 	return ""
+}
+
+func (ts *TorrentService) getFolderName(animeName string, animeIsCompleted bool) string {
+	savePath := ts.savePath
+	if animeIsCompleted {
+		savePath = ts.completedPath
+	}
+
+	sanitizedAnimeName := sanitizeFolderName(animeName)
+	return filepath.Join(savePath, sanitizedAnimeName)
 }
 
 func (ts *TorrentService) getDownloadedTorrents() ([]Torrent, error) {

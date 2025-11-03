@@ -224,12 +224,26 @@ func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
 	return nil
 }
 
-func (m *FileManager) DeleteEmptyFolders(savePath string) error {
+func (m *FileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error {
 	if savePath == "" {
 		return fmt.Errorf("save path cannot be empty")
 	}
 
-	entries, err := m.fs.ReadDir(savePath)
+	if err := m.deleteEmptyFolders(savePath); err != nil {
+		return fmt.Errorf("failed to delete empty folders in save path: %w", err)
+	}
+
+	if completedAnimeSaveFolder != "" {
+		if err := m.deleteEmptyFolders(completedAnimeSaveFolder); err != nil {
+			return fmt.Errorf("failed to delete empty folders in completed anime save folder: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (m *FileManager) deleteEmptyFolders(path string) error {
+	entries, err := m.fs.ReadDir(path)
 	if err != nil {
 		return fmt.Errorf("failed to read save path: %w", err)
 	}
@@ -239,7 +253,7 @@ func (m *FileManager) DeleteEmptyFolders(savePath string) error {
 			continue
 		}
 
-		folderPath := filepath.Join(savePath, entry.Name())
+		folderPath := filepath.Join(path, entry.Name())
 		subEntries, err := m.fs.ReadDir(folderPath)
 		if err != nil {
 			fmt.Printf("Warning: failed to read folder %s: %v\n", folderPath, err)
