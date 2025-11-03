@@ -26,16 +26,18 @@ func (c *DefaultHTTPClient) PostForm(url string, data url.Values) (*http.Respons
 }
 
 type TorrentService struct {
-	httpClient HTTPClient
-	baseURL    string
-	savePath   string
+	httpClient    HTTPClient
+	baseURL       string
+	savePath      string
+	completedPath string
 }
 
-func NewTorrentService(httpClient HTTPClient, qBittorrentURL string, savePath string) *TorrentService {
+func NewTorrentService(httpClient HTTPClient, qBittorrentURL string, savePath string, completedPath string) *TorrentService {
 	return &TorrentService{
-		httpClient: httpClient,
-		baseURL:    getBaseUrl(qBittorrentURL),
-		savePath:   savePath,
+		httpClient:    httpClient,
+		baseURL:       getBaseUrl(qBittorrentURL),
+		savePath:      savePath,
+		completedPath: completedPath,
 	}
 }
 
@@ -49,8 +51,13 @@ type Torrent struct {
 
 const CATEGORY = "autoAnimeDownloader"
 
-func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string) string {
-	err := ts.addTorrent(magnet, ts.savePath, animeName, epName)
+func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string, animeIsCompleted bool) string {
+	savePath := ts.savePath
+	if animeIsCompleted {
+		savePath = ts.completedPath
+	}
+
+	err := ts.addTorrent(magnet, savePath, animeName, epName)
 	if err != nil {
 		fmt.Println("Failed to add torrent for:", epName)
 		return ""

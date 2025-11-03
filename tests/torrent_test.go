@@ -93,10 +93,11 @@ func (m *MockHTTPClient) ClearHistory() {
 }
 
 const savePath = "/save/path/"
+const completedPath = "/completed/path/"
 
 func setupMockService() (*MockHTTPClient, *torrents.TorrentService) {
 	mockClient := NewMockHTTPClient()
-	service := torrents.NewTorrentService(mockClient, "http://localhost:8080", savePath)
+	service := torrents.NewTorrentService(mockClient, "http://localhost:8080", savePath, completedPath)
 	return mockClient, service
 }
 
@@ -161,7 +162,7 @@ func TestTorrentService_CanDownloadTorrent_WithValidMagnet(t *testing.T) {
 	mockSuccessfulTorrentAdd(mockClient)
 	mockSuccessfulTorrentList(mockClient, getStandardTorrentsJSON())
 
-	hash := service.DownloadTorrent("magnet:test", "Anime", "Episode 01")
+	hash := service.DownloadTorrent("magnet:test", "Anime", "Episode 01", false)
 
 	if hash != "abc123" {
 		t.Errorf("Expected hash 'abc123', got '%s'", hash)
@@ -176,7 +177,7 @@ func TestTorrentService_CannotDownloadTorrent_WithInvalidMagnet(t *testing.T) {
 
 	mockFailedTorrentAdd(mockClient, fmt.Errorf("connection failed"))
 
-	hash := service.DownloadTorrent("magnet:test", "Anime", "Episode 01")
+	hash := service.DownloadTorrent("magnet:test", "Anime", "Episode 01", false)
 
 	if hash != "" {
 		t.Errorf("Expected empty hash on failure, got '%s'", hash)
@@ -189,7 +190,7 @@ func TestTorrentService_CannotDownloadTorrent_WithInvalidEpisodeName(t *testing.
 	mockSuccessfulTorrentAdd(mockClient)
 	mockFailedTorrentList(mockClient, fmt.Errorf("connection failed"))
 
-	hash := service.DownloadTorrent("magnet:test", "Anime", "Episode 01")
+	hash := service.DownloadTorrent("magnet:test", "Anime", "Episode 01", false)
 
 	if hash != "" {
 		t.Errorf("Expected empty hash on failure, got '%s'", hash)
@@ -300,7 +301,7 @@ func TestTorrentService_SanitizesFolderName(t *testing.T) {
 			mockSuccessfulTorrentAdd(mockClient)
 			mockSuccessfulTorrentList(mockClient, getStandardTorrentsJSON())
 
-			service.DownloadTorrent("magnet:test", tc.input, "Episode 01")
+			service.DownloadTorrent("magnet:test", tc.input, "Episode 01", false)
 
 			history := mockClient.GetRequestHistory()
 			if len(history) < 1 {

@@ -76,7 +76,7 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		return
 	}
 
-	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath)
+	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath, configs.CompletedAnimePath)
 
 	downloadedTorrents := fetchDownloadedTorrents(torrentsService, showError)
 	if downloadedTorrents == nil {
@@ -95,12 +95,13 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		return
 	}
 
+	animes := anilistResponse.Data.Page.MediaList
 	var newEpisodes []files.EpisodeStruct
 	var checkedEpisodes []int
 	var idsToDelete []int
 
 	start := time.Now()
-	for _, anime := range anilistResponse.Data.Page.MediaList {
+	for _, anime := range animes {
 		processAnimeEpisodes(
 			configs,
 			torrentsService,
@@ -273,12 +274,12 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (re
 	return nyaaResponse
 }
 
-func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, magnets []string, titleEnglish *string, fileName string) (hash string) {
+func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, magnets []string, anime anilist.MediaList, fileName string) (hash string) {
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 
 	for i := range maxAttempts {
 		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", fileName, i+1, configs.EpisodeRetryLimit)
-		hash := torrentsService.DownloadTorrent(magnets[i], *titleEnglish, fileName)
+		hash := torrentsService.DownloadTorrent(magnets[i], *anime.Media.Title.English, fileName, anime.Media.Status == anilist.MediaStatusFinished)
 		if hash != "" {
 			fmt.Printf("Successfully added %s to qBittorrent\n", fileName)
 			return hash
@@ -346,7 +347,6 @@ func processAnimeEpisodes(
 
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
-
 		var magnets []string
 
 		if len(multipleResult) > 0 {
@@ -364,7 +364,7 @@ func processAnimeEpisodes(
 			}
 		}
 
-		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime.Media.Title.English, epName)
+		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName)
 
 		if hash != "" {
 			*newEpisodes = append(*newEpisodes, files.EpisodeStruct{
@@ -375,9 +375,6 @@ func processAnimeEpisodes(
 		}
 	}
 
-	if anime.Media.Status == anilist.MediaStatusFinished && configs.CompletedAnimePath != "" && configs.CompletedAnimePath != configs.SavePath {
-		moveCompletedAnime(torrentsService, anime, configs, savedEpisodes)
-	}
 }
 
 func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (shouldDownload bool, shouldDelete bool) {
@@ -436,9 +433,16 @@ func handleAlreadySavedEpisode(configs *files.Config, downloadedEpisodes *int, i
 	return true, false
 }
 
-func moveCompletedAnime(torrentsService *torrents.TorrentService, anime anilist.MediaList, configs *files.Config, allSavedEpisodes []files.EpisodeStruct) {
+func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, anime anilist.MediaList, configs *files.Config, savedEpisodes []files.EpisodeStruct) {
+	completeAnimePathIsSet := configs.CompletedAnimePath != "" && configs.CompletedAnimePath != configs.SavePath
+	animeIsFinished := anime.Media.Status == anilist.MediaStatusFinished
+
+	if !animeIsFinished || !completeAnimePathIsSet {
+		return
+	}
+
 	savedEpisodesMap := make(map[int]string)
-	for _, ep := range allSavedEpisodes {
+	for _, ep := range savedEpisodes {
 		savedEpisodesMap[ep.EpisodeID] = ep.EpisodeHash
 	}
 
