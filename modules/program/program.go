@@ -7,7 +7,6 @@ import (
 	"AutoAnimeDownloader/modules/torrents"
 	"context"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -124,7 +123,7 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 
 	updateEpisodesListView()
 
-	if err := fileManager.DeleteEmptyFolders(configs.SavePath); err != nil {
+	if err := fileManager.DeleteEmptyFolders(configs.SavePath, configs.CompletedAnimePath); err != nil {
 		fmt.Printf("Warning: failed to delete empty folders: %v\n", err)
 	}
 
@@ -375,6 +374,7 @@ func processAnimeEpisodes(
 		}
 	}
 
+	ensureAnimeIsInCompletedFolder(torrentsService, anime, configs, savedEpisodes)
 }
 
 func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (shouldDownload bool, shouldDelete bool) {
@@ -441,6 +441,10 @@ func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, an
 		return
 	}
 
+	// Só vai chegar aqui pra animes completos com episódios novos
+	// Também só chega aqui após baixar todos os episódios do anime
+	// Não precisa preocupar com checagens redundantes
+
 	savedEpisodesMap := make(map[int]string)
 	for _, ep := range savedEpisodes {
 		savedEpisodesMap[ep.EpisodeID] = ep.EpisodeHash
@@ -453,16 +457,13 @@ func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, an
 		}
 	}
 
-	animeName := *anime.Media.Title.Romaji
-	completedPath := filepath.Join(configs.CompletedAnimePath, animeName)
+	animeName := *anime.Media.Title.English
 	fmt.Printf("Moving completed anime: %s\n", animeName)
 
 	// Move all torrents of this anime to the completed folder
-	for _, ep := range anime.Media.AiringSchedule.Nodes {
-		if err := torrentsService.SetTorrentSavePath(animeHashes, completedPath); err == nil {
-			fmt.Printf("Moved torrent for %s - Episode %d to completed folder\n", animeName, ep.Episode)
-		} else {
-			fmt.Printf("Warning: failed to move torrent for episode %d of '%s': %v\n", ep.Episode, animeName, err)
-		}
+	if err := torrentsService.SendAnimeToCompletedFolder(animeHashes, animeName); err == nil {
+		fmt.Printf("Moved torrents for %s to completed folder\n", animeName)
+	} else {
+		fmt.Errorf("failed to move torrents of '%s': %v\n", animeName, err)
 	}
 }
