@@ -124,7 +124,7 @@ func TestFilesModule_CanDeleteEmptyFolders_WithMixedFolders(t *testing.T) {
 		}
 		_ = f.Close()
 
-		if err := manager.DeleteEmptyFolders(saveRoot); err != nil {
+		if err := manager.DeleteEmptyFolders(saveRoot, ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -437,7 +437,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 
 	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt")
 
-	err := manager.DeleteEmptyFolders("/save")
+	err := manager.DeleteEmptyFolders("/save", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestManager_DeleteEmptyFolders_WithEmptySavePath(t *testing.T) {
 	mockFS := NewMockFileSystem()
 	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt")
 
-	err := manager.DeleteEmptyFolders("")
+	err := manager.DeleteEmptyFolders("", "")
 	if err == nil {
 		t.Fatal("expected error with empty save path")
 	}
