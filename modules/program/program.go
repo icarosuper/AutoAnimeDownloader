@@ -127,11 +127,12 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		fmt.Printf("Warning: failed to delete empty folders: %v\n", err)
 	}
 
-	fmt.Printf("Animes checados: %d\n", len(anilistResponse.Data.Page.MediaList))
-	fmt.Printf("Episódios checados: %d\n", len(checkedEpisodes))
-	fmt.Printf("Novos episódios: %d\n", len(newEpisodes))
-	fmt.Printf("Tempo decorrido: %s\n", elapsed)
-	fmt.Printf("Média de %s por episódio\n", elapsed/time.Duration(len(checkedEpisodes)))
+	fmt.Printf("\n----------------------------------------\n\n")
+	fmt.Println("Animes checked: ", len(anilistResponse.Data.Page.MediaList))
+	fmt.Println("Episodes Checked: ", len(checkedEpisodes))
+	fmt.Println("New Episodes downloaded: ", len(newEpisodes))
+	fmt.Println("Total time elapsed in check: ", elapsed)
+	fmt.Println("Avg time per episode: ", elapsed/time.Duration(len(checkedEpisodes)))
 }
 
 type handleEpisodesData struct {
