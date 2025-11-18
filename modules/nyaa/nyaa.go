@@ -71,9 +71,9 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 	params.Set("f", "0")   // Filtro: sem filtro
 	params.Set("c", "1_2") // Categoria: anime (english)
 	// params.Set("q", fmt.Sprintf())     // Query de busca
-	params.Set("q", fmt.Sprintf("%s %02d", query, episode)) // Query de busca com episódio
-	params.Set("s", "seeders")                              // Ordenar por seeders
-	params.Set("o", "desc")                                 // Ordem decrescente
+	params.Set("q", fmt.Sprintf("%s %d", query, episode)) // Query de busca com episódio
+	params.Set("s", "seeders")                            // Ordenar por seeders
+	params.Set("o", "desc")                               // Ordem decrescente
 
 	nyaaURL := fmt.Sprintf("https://nyaa.si/?%s", params.Encode())
 
@@ -442,6 +442,11 @@ func resolutionPriority(resolution string) int {
 	return 999 // Resolução desconhecida tem menor prioridade
 }
 
+// isUncensored verifica se o torrent contém "Uncensored" no título
+func isUncensored(torrentName string) bool {
+	return strings.Contains(strings.ToLower(torrentName), "uncensored")
+}
+
 // fansubPriority retorna um valor de prioridade para o fansub (menor = melhor)
 func fansubPriority(torrentName string) int {
 	fansubPriorities := map[string]int{
@@ -473,14 +478,22 @@ func fansubPriority(torrentName string) int {
 	return bestPriority
 }
 
-// SortTorrentResults ordena os torrents por qualidade (primeiro) e fansub (segundo)
-// A ordenação é feita por qualidade em ordem decrescente (1080p > 720p > ...)
+// SortTorrentResults ordena os torrents por Uncensored (primeiro), qualidade (segundo) e fansub (terceiro)
+// A ordenação é feita por Uncensored primeiro, depois por qualidade em ordem decrescente (1080p > 720p > ...)
 // e depois por fansub na ordem especificada
 func SortTorrentResults(results []TorrentResult) []TorrentResult {
 	sorted := make([]TorrentResult, len(results))
 	copy(sorted, results)
 
 	sort.Slice(sorted, func(i, j int) bool {
+		// Priorizar torrents com "Uncensored" no título
+		uncensoredI := isUncensored(sorted[i].Name)
+		uncensoredJ := isUncensored(sorted[j].Name)
+
+		if uncensoredI != uncensoredJ {
+			return uncensoredI // Se i é Uncensored e j não, i vem primeiro
+		}
+
 		// Se ambos têm resolução, comparar por prioridade de resolução
 		if sorted[i].Resolution != nil && sorted[j].Resolution != nil {
 			priorityI := resolutionPriority(*sorted[i].Resolution)
