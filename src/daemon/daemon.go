@@ -1,10 +1,10 @@
 package program
 
 import (
-	"AutoAnimeDownloader/modules/anilist"
-	"AutoAnimeDownloader/modules/files"
-	"AutoAnimeDownloader/modules/nyaa"
-	"AutoAnimeDownloader/modules/torrents"
+	"AutoAnimeDownloader/src/internal/anilist"
+	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/nyaa"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
 	"fmt"
 	"sync"

@@ -3,6 +3,7 @@
 .idea/
 *.sublime-workspace
 *.sublime-project
+.claude/
 
 # Build
 build/
@@ -11,9 +12,5 @@ dist/
 .eggs/
 *.manifest
 *.spec
-fyne-cross/
-
-.downloaded_episodes
-.config.json
 
 go.sum

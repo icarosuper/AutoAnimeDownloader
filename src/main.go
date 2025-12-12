@@ -1,17 +1,18 @@
-//go:build headless
-// +build headless
-
 package main
 
 import (
-	"AutoAnimeDownloader/modules/files"
-	"AutoAnimeDownloader/modules/program"
+	program "AutoAnimeDownloader/src/daemon"
+	"AutoAnimeDownloader/src/internal/files"
 	"fmt"
 	"log"
 	"time"
 )
 
 func main() {
+	// run daemon
+	// run webui
+	// prepare cli
+
 	fmt.Println("Starting Auto Anime Downloader...")
 
 	fileManager, err := files.NewDefaultFileManager()
