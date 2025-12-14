@@ -13,37 +13,55 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 **Objetivo:** Substituir logging básico por zerolog e remover dependências de UI do código existente.
 
 ### 1.1 Configurar Zerolog
-- [ ] Criar `src/internal/logger/logger.go` com configuração do zerolog
-- [ ] Configurar caller information (arquivo:linha)
-- [ ] Configurar níveis de log (DEBUG, INFO, WARN, ERROR)
-- [ ] Configurar output (JSON em produção, console formatado em dev)
-- [ ] Adicionar função helper para stack traces em erros
+- [x] Criar `src/internal/logger/logger.go` com configuração do zerolog
+- [x] Configurar caller information (arquivo:linha)
+- [x] Configurar níveis de log (DEBUG, INFO, WARN, ERROR)
+- [x] Configurar output (JSON em produção, console formatado em dev)
+- [x] Adicionar função helper para stack traces em erros
 
 ### 1.2 Refatorar `src/daemon/daemon.go`
-- [ ] Remover parâmetros de UI: `ShowError`, `UpdateEpisodesListView`, `SetLoading`
-- [ ] Substituir `fmt.Printf` e `log.*` por chamadas ao zerolog
-- [ ] Adicionar contexto (`context.Context`) para cancelamento
-- [ ] Adicionar campos estruturados aos logs (anime, episode, etc.)
-- [ ] Usar `.Stack()` em logs de erro
-- [ ] Testar que a lógica de download ainda funciona
+- [x] Remover parâmetros de UI: `ShowError`, `UpdateEpisodesListView`, `SetLoading`
+- [x] Substituir `fmt.Printf` e `log.*` por chamadas ao zerolog
+- [x] Adicionar contexto (`context.Context`) para cancelamento
+- [x] Adicionar campos estruturados aos logs (anime, episode, etc.)
+- [x] Usar `.Stack()` em logs de erro
+- [x] Garantir que todos os erros sejam registrados no state (`SetLastCheckError()`)
+- [x] Testar que a lógica de download ainda funciona
 
 ### 1.3 Criar Estrutura de Estado do Daemon
-- [ ] Criar `src/daemon/state.go` com estrutura de estado mínima
-- [ ] Definir interface `StateNotifier` para notificações de mudanças
-- [ ] Definir struct `State` com:
+- [x] Criar `src/daemon/state.go` com estrutura de estado mínima
+- [x] Definir interface `StateNotifier` para notificações de mudanças
+- [x] Definir struct `State` com:
   - Status (running, stopped, checking)
   - Timestamp da última verificação
   - Erro da última verificação (se houver)
   - Mutex para thread-safety
   - Campo opcional `notifier StateNotifier` (injeção de dependência)
-- [ ] Criar funções para atualizar estado de forma thread-safe
-- [ ] Implementar `SetNotifier()` para injetar notificador
-- [ ] Implementar `notifyChange()` que chama o notificador quando estado muda
-- [ ] Chamar `notifyChange()` automaticamente em `SetStatus()`, `SetLastCheck()`, `SetLastCheckError()`
-- [ ] Estado será usado para:
+- [x] Criar funções para atualizar estado de forma thread-safe
+- [x] Implementar `SetNotifier()` para injetar notificador
+- [x] Implementar `notifyChange()` que chama o notificador quando estado muda
+- [x] Chamar `notifyChange()` automaticamente em `SetStatus()`, `SetLastCheck()`, `SetLastCheckError()`
+- [x] Estado será usado para:
   - Endpoint `GET /api/v1/status` (retorna estado completo)
   - WebSocket (notifica mudanças de estado automaticamente via notifier)
-- [ ] Não incluir estatísticas ou operação atual (podem ser obtidas dos dados ou logs)
+- [x] Não incluir estatísticas ou operação atual (podem ser obtidas dos dados ou logs)
+
+### 1.4 Testes da Etapa 1
+- [ ] Criar testes para logger (`src/internal/logger/logger_test.go`):
+  - Testar inicialização em modo desenvolvimento e produção
+  - Testar diferentes níveis de log
+  - Testar formatação de output (console vs JSON)
+  - Testar caller information
+- [ ] Criar testes para state (`src/daemon/state_test.go`):
+  - Testar thread-safety (múltiplas goroutines acessando simultaneamente)
+  - Testar notificações quando estado muda
+  - Testar métodos Get/Set de todos os campos
+  - Testar `GetAll()` retorna snapshot consistente
+  - Testar que notificações não são chamadas quando não há mudança real
+- [ ] Criar testes para refatoração do daemon:
+  - Testar que erros são registrados corretamente no state
+  - Testar que contexto de cancelamento funciona
+  - Testar que logs são gerados corretamente
 
 ---
 
@@ -113,10 +131,23 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [ ] Implementar tratamento de erros consistente
 
 ### 2.6 Testes da API
-- [ ] Criar testes unitários para handlers
-- [ ] Criar testes de integração para rotas principais
-- [ ] Testar validação de entrada
-- [ ] Testar tratamento de erros
+- [ ] Criar testes unitários para handlers (`src/internal/api/handlers_test.go`):
+  - Testar cada handler isoladamente
+  - Testar validação de entrada (campos obrigatórios, tipos, formatos)
+  - Testar tratamento de erros (retornar códigos HTTP corretos)
+  - Testar serialização de respostas JSON
+  - Testar casos de sucesso e falha
+- [ ] Criar testes de integração para rotas principais (`src/internal/api/integration_test.go`):
+  - Testar fluxo completo de requisições HTTP
+  - Testar middlewares (logging, CORS, Content-Type)
+  - Testar roteamento correto de todas as rotas
+  - Testar graceful shutdown
+- [ ] Testar handlers específicos:
+  - `GET /api/v1/status`: retorna estado correto do daemon
+  - `GET /api/v1/config`: retorna configurações
+  - `PUT /api/v1/config`: valida e salva configurações
+  - `POST /api/v1/check`: executa verificação assíncrona
+  - `POST /api/v1/daemon/start` e `stop`: controlam daemon corretamente
 
 ---
 
@@ -160,6 +191,20 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [ ] Tratar desconexões gracefully
 - [ ] Limpar conexões mortas
 - [ ] Adicionar timeout para conexões inativas
+
+### 3.4 Testes do WebSocket
+- [ ] Criar testes para WebSocket manager (`src/internal/api/websocket_test.go`):
+  - Testar conexão de clientes
+  - Testar desconexão de clientes
+  - Testar broadcast de mensagens para todos os clientes
+  - Testar que `NotifyStateChange()` envia mensagens corretas
+  - Testar formato JSON das mensagens
+- [ ] Testes de integração:
+  - Testar conexão WebSocket end-to-end
+  - Testar que mudanças de estado são propagadas via WebSocket
+  - Testar ping/pong
+  - Testar reconexão automática
+  - Testar múltiplos clientes conectados simultaneamente
 
 ---
 
@@ -460,6 +505,22 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 ---
 
+## Progresso Atual
+
+### Etapa 1: ✅ Concluída
+- **1.1 Configurar Zerolog**: ✅ Implementado com suporte a desenvolvimento e produção
+- **1.2 Refatorar daemon.go**: ✅ Removidas dependências de UI, integrado zerolog, adicionado contexto
+- **1.3 Estrutura de Estado**: ✅ Implementado com StateNotifier para notificações automáticas
+
+**Correções realizadas:**
+- Corrigido tracking de erros: `fetchDownloadedTorrents()` e `searchAnilist()` agora retornam erros e são registrados no state
+- Corrigido código comentado corrompido em `src/tests/anilist_test.go`
+
+**Próximos passos:**
+- Etapa 2: API REST do Daemon
+
+---
+
 ## Notas de Implementação
 
 ### Dependências Entre Etapas
@@ -470,9 +531,17 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - Etapa 7 pode ser feita parcialmente antes da Etapa 8 (componentes isolados)
 
 ### Testes Contínuos
+- **Todas as novas features devem ter testes correspondentes**
 - Testar cada etapa antes de prosseguir
 - Manter testes passando durante refatoração
 - Não quebrar funcionalidade existente durante migração
+- **Estratégia de testes**:
+  - Testes unitários para funções e métodos isolados
+  - Testes de integração para componentes que interagem
+  - Testes de comportamento para lógica complexa
+  - Usar mocks para dependências externas (Anilist, Nyaa, qBittorrent)
+  - Executar `go test -race` para detectar race conditions
+  - Manter cobertura de código > 70%
 
 ### Commits
 - Commits pequenos e frequentes

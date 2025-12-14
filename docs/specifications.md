@@ -254,9 +254,27 @@ AutoAnimeDownloader/
    - Migração de configurações antigas
 
 4. **Testes**
-   - Testes unitários para lógica de negócio
-   - Testes de integração para API
-   - Mocks para serviços externos (Anilist, Nyaa, qBittorrent)
+   - **Testes unitários** para lógica de negócio:
+     - Estado do daemon (`state.go`)
+     - Handlers da API REST
+     - Lógica de verificação de animes
+     - Parsers e validadores
+   - **Testes de integração** para:
+     - API REST completa (endpoints e middlewares)
+     - WebSocket (conexão, mensagens, reconexão)
+     - Integração CLI-Daemon
+     - Fluxo completo de verificação e download
+   - **Mocks** para serviços externos:
+     - Anilist API (já existe `MockAniListDo`)
+     - Nyaa scraping
+     - qBittorrent API
+     - FileManager (já existe `mock_filesystem.go`)
+   - **Testes de componentes novos**:
+     - Logger (configuração, níveis, output)
+     - State management (thread-safety, notificações)
+     - API handlers (validação, respostas, erros)
+     - WebSocket manager (broadcast, reconexão)
+     - CLI commands (parsing, formatação)
 
 5. **Documentação**
    - Documentação da API (OpenAPI/Swagger)
@@ -307,6 +325,19 @@ AutoAnimeDownloader/
    - Use table-driven tests quando apropriado
    - Mock dependências externas
    - Cobertura de código > 70%
+   - **Todas as novas features devem ter testes**:
+     - Testes unitários para funções e métodos novos
+     - Testes de integração para componentes que interagem
+     - Testes de comportamento para lógica complexa
+   - **Estratégia de testes por componente**:
+     - **Logger**: Testar configuração, níveis, formatação, output
+     - **State**: Testar thread-safety, notificações, serialização
+     - **API Handlers**: Testar validação, respostas HTTP, tratamento de erros
+     - **WebSocket**: Testar conexão, mensagens, broadcast, reconexão
+     - **CLI**: Testar parsing de comandos, formatação de saída, tratamento de erros
+     - **Daemon**: Testar loop de verificação, cancelamento, integração com state
+   - Use `go test -race` para detectar race conditions
+   - Use `go test -cover` para verificar cobertura
 
 8. **Documentação**
    - Documente exported functions, types, constants
