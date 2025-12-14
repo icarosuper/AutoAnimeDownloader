@@ -1,6 +1,7 @@
-package daemon
+package tests
 
 import (
+	"AutoAnimeDownloader/src/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"bytes"
@@ -33,12 +34,12 @@ func TestAnimeVerification_ErrorHandling_ConfigLoadError(t *testing.T) {
 	}
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json")
 
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
 	ctx := context.Background()
-	animeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state)
 
 	// Verify error was set in state
 	if !state.HasLastCheckError() {
@@ -83,12 +84,12 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 	}
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json")
 
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
 	ctx := context.Background()
-	animeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state)
 
 	// Verify error was set in state
 	if !state.HasLastCheckError() {
@@ -133,7 +134,7 @@ func TestAnimeVerification_ContextCancellation(t *testing.T) {
 	}
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json")
 
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
@@ -156,7 +157,7 @@ func TestAnimeVerification_ContextCancellation(t *testing.T) {
 	// The function will likely fail earlier due to missing services,
 	// but we can verify that if cancellation happens, error is cleared.
 	// For a more complete test, we'd need to mock the external services.
-	animeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state)
 
 	// Note: Since we can't easily mock external services (anilist, qbittorrent),
 	// the cancellation might not be reached. This test verifies that:
@@ -186,10 +187,10 @@ func TestAnimeVerification_LogsGenerated(t *testing.T) {
 	}
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json")
 
-	state := NewState()
+	state := daemon.NewState()
 	ctx := context.Background()
 
-	animeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state)
 
 	// Verify that logs were generated (error log should be present)
 	logOutput := logBuf.String()
@@ -211,8 +212,8 @@ func TestAnimeVerification_StatusResetOnError(t *testing.T) {
 	// The actual status reset happens in the loop function, but we can verify
 	// that errors are properly handled
 
-	state := NewState()
-	state.SetStatus(StatusChecking)
+	state := daemon.NewState()
+	state.SetStatus(daemon.StatusChecking)
 
 	// Create a mock FileManager that returns error
 	mockFS := &mockFileSystemForDaemon{
@@ -221,7 +222,7 @@ func TestAnimeVerification_StatusResetOnError(t *testing.T) {
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json")
 
 	ctx := context.Background()
-	animeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state)
 
 	// Verify error was set
 	if !state.HasLastCheckError() {

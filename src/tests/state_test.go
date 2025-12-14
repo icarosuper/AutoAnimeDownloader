@@ -1,6 +1,7 @@
-package daemon
+package tests
 
 import (
+	"AutoAnimeDownloader/src/daemon"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,7 @@ type mockNotifier struct {
 }
 
 type notificationCall struct {
-	status    Status
+	status    daemon.Status
 	lastCheck time.Time
 	hasError  bool
 }
@@ -25,7 +26,7 @@ func newMockNotifier() *mockNotifier {
 	}
 }
 
-func (m *mockNotifier) NotifyStateChange(status Status, lastCheck time.Time, hasError bool) {
+func (m *mockNotifier) NotifyStateChange(status daemon.Status, lastCheck time.Time, hasError bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.notifications = append(m.notifications, notificationCall{
@@ -58,12 +59,12 @@ func (m *mockNotifier) Reset() {
 }
 
 func TestNewState(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	if state == nil {
 		t.Fatal("NewState() returned nil")
 	}
-	if state.GetStatus() != StatusStopped {
-		t.Errorf("Expected initial status to be %s, got %s", StatusStopped, state.GetStatus())
+	if state.GetStatus() != daemon.StatusStopped {
+		t.Errorf("Expected initial status to be %s, got %s", daemon.StatusStopped, state.GetStatus())
 	}
 	if !state.GetLastCheck().IsZero() {
 		t.Error("Expected initial lastCheck to be zero time")
@@ -74,21 +75,21 @@ func TestNewState(t *testing.T) {
 }
 
 func TestState_GetStatus(t *testing.T) {
-	state := NewState()
-	if state.GetStatus() != StatusStopped {
-		t.Errorf("Expected status %s, got %s", StatusStopped, state.GetStatus())
+	state := daemon.NewState()
+	if state.GetStatus() != daemon.StatusStopped {
+		t.Errorf("Expected status %s, got %s", daemon.StatusStopped, state.GetStatus())
 	}
 }
 
 func TestState_SetStatus(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
 	// Test setting status
-	state.SetStatus(StatusRunning)
-	if state.GetStatus() != StatusRunning {
-		t.Errorf("Expected status %s, got %s", StatusRunning, state.GetStatus())
+	state.SetStatus(daemon.StatusRunning)
+	if state.GetStatus() != daemon.StatusRunning {
+		t.Errorf("Expected status %s, got %s", daemon.StatusRunning, state.GetStatus())
 	}
 
 	// Test that notification was called
@@ -100,20 +101,20 @@ func TestState_SetStatus(t *testing.T) {
 	if len(notifications) != 1 {
 		t.Fatalf("Expected 1 notification, got %d", len(notifications))
 	}
-	if notifications[0].status != StatusRunning {
-		t.Errorf("Expected notification status %s, got %s", StatusRunning, notifications[0].status)
+	if notifications[0].status != daemon.StatusRunning {
+		t.Errorf("Expected notification status %s, got %s", daemon.StatusRunning, notifications[0].status)
 	}
 
 	// Test that setting same status doesn't trigger notification
-	state.SetStatus(StatusRunning)
+	state.SetStatus(daemon.StatusRunning)
 	if notifier.GetCallCount() != 1 {
 		t.Errorf("Expected 1 notification after setting same status, got %d", notifier.GetCallCount())
 	}
 
 	// Test setting different status
-	state.SetStatus(StatusChecking)
-	if state.GetStatus() != StatusChecking {
-		t.Errorf("Expected status %s, got %s", StatusChecking, state.GetStatus())
+	state.SetStatus(daemon.StatusChecking)
+	if state.GetStatus() != daemon.StatusChecking {
+		t.Errorf("Expected status %s, got %s", daemon.StatusChecking, state.GetStatus())
 	}
 	if notifier.GetCallCount() != 2 {
 		t.Errorf("Expected 2 notifications, got %d", notifier.GetCallCount())
@@ -121,14 +122,14 @@ func TestState_SetStatus(t *testing.T) {
 }
 
 func TestState_GetLastCheck(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	if !state.GetLastCheck().IsZero() {
 		t.Error("Expected initial lastCheck to be zero time")
 	}
 }
 
 func TestState_SetLastCheck(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
@@ -147,14 +148,14 @@ func TestState_SetLastCheck(t *testing.T) {
 }
 
 func TestState_GetLastCheckError(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	if state.GetLastCheckError() != nil {
 		t.Error("Expected initial error to be nil")
 	}
 }
 
 func TestState_SetLastCheckError(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
@@ -194,7 +195,7 @@ func TestState_SetLastCheckError(t *testing.T) {
 }
 
 func TestState_HasLastCheckError(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	if state.HasLastCheckError() {
 		t.Error("Expected initial HasLastCheckError to be false")
 	}
@@ -206,18 +207,18 @@ func TestState_HasLastCheckError(t *testing.T) {
 }
 
 func TestState_GetAll(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	now := time.Now()
 	err := &testError{msg: "test error"}
 
-	state.SetStatus(StatusRunning)
+	state.SetStatus(daemon.StatusRunning)
 	state.SetLastCheck(now)
 	state.SetLastCheckError(err)
 
 	status, lastCheck, hasError := state.GetAll()
 
-	if status != StatusRunning {
-		t.Errorf("Expected status %s, got %s", StatusRunning, status)
+	if status != daemon.StatusRunning {
+		t.Errorf("Expected status %s, got %s", daemon.StatusRunning, status)
 	}
 	if !lastCheck.Equal(now) {
 		t.Errorf("Expected lastCheck %v, got %v", now, lastCheck)
@@ -228,13 +229,13 @@ func TestState_GetAll(t *testing.T) {
 }
 
 func TestState_SetNotifier(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	notifier1 := newMockNotifier()
 	notifier2 := newMockNotifier()
 
 	// Set first notifier
 	state.SetNotifier(notifier1)
-	state.SetStatus(StatusRunning)
+	state.SetStatus(daemon.StatusRunning)
 	if notifier1.GetCallCount() != 1 {
 		t.Errorf("Expected notifier1 to be called 1 time, got %d", notifier1.GetCallCount())
 	}
@@ -244,7 +245,7 @@ func TestState_SetNotifier(t *testing.T) {
 
 	// Replace with second notifier
 	state.SetNotifier(notifier2)
-	state.SetStatus(StatusChecking)
+	state.SetStatus(daemon.StatusChecking)
 	if notifier1.GetCallCount() != 1 {
 		t.Errorf("Expected notifier1 to still be called 1 time, got %d", notifier1.GetCallCount())
 	}
@@ -254,7 +255,7 @@ func TestState_SetNotifier(t *testing.T) {
 }
 
 func TestState_ThreadSafety(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
@@ -276,10 +277,10 @@ func TestState_ThreadSafety(t *testing.T) {
 				_, _, _ = state.GetAll()
 
 				// Write operations
-				state.SetStatus(StatusRunning)
+				state.SetStatus(daemon.StatusRunning)
 				state.SetLastCheck(time.Now())
 				state.SetLastCheckError(nil)
-				state.SetStatus(StatusChecking)
+				state.SetStatus(daemon.StatusChecking)
 			}
 		}(i)
 	}
@@ -288,7 +289,7 @@ func TestState_ThreadSafety(t *testing.T) {
 
 	// Verify final state is consistent
 	status, lastCheck, _ := state.GetAll()
-	if status != StatusChecking && status != StatusRunning {
+	if status != daemon.StatusChecking && status != daemon.StatusRunning {
 		t.Errorf("Unexpected final status: %s", status)
 	}
 	if lastCheck.IsZero() {
@@ -300,32 +301,32 @@ func TestState_ThreadSafety(t *testing.T) {
 }
 
 func TestState_NotificationWithoutNotifier(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	// No notifier set
 
 	// These should not panic
-	state.SetStatus(StatusRunning)
+	state.SetStatus(daemon.StatusRunning)
 	state.SetLastCheck(time.Now())
 	state.SetLastCheckError(&testError{msg: "test"})
 
 	// Verify state was updated
-	if state.GetStatus() != StatusRunning {
+	if state.GetStatus() != daemon.StatusRunning {
 		t.Error("Expected status to be updated")
 	}
 }
 
 func TestState_NotificationContent(t *testing.T) {
-	state := NewState()
+	state := daemon.NewState()
 	notifier := newMockNotifier()
 	state.SetNotifier(notifier)
 
 	now := time.Now()
-	state.SetStatus(StatusRunning)
+	state.SetStatus(daemon.StatusRunning)
 	state.SetLastCheck(now)
 	state.SetLastCheckError(&testError{msg: "test error"})
 
 	// Trigger another notification by setting status again
-	state.SetStatus(StatusChecking)
+	state.SetStatus(daemon.StatusChecking)
 
 	notifications := notifier.GetNotifications()
 	if len(notifications) < 2 {
@@ -334,8 +335,8 @@ func TestState_NotificationContent(t *testing.T) {
 
 	// Check last notification
 	lastNotif := notifications[len(notifications)-1]
-	if lastNotif.status != StatusChecking {
-		t.Errorf("Expected notification status %s, got %s", StatusChecking, lastNotif.status)
+	if lastNotif.status != daemon.StatusChecking {
+		t.Errorf("Expected notification status %s, got %s", daemon.StatusChecking, lastNotif.status)
 	}
 	if !lastNotif.lastCheck.Equal(now) {
 		t.Errorf("Expected notification lastCheck %v, got %v", now, lastNotif.lastCheck)
