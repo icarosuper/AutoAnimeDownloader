@@ -32,9 +32,13 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 				default:
 				}
 
-				p.State.SetStatus(StatusChecking)
-				animeVerification(c, p.FileManager, p.State)
-				p.State.SetStatus(StatusRunning)
+				func() {
+					p.State.SetStatus(StatusChecking)
+					defer func() {
+						p.State.SetStatus(StatusRunning)
+					}()
+					animeVerification(c, p.FileManager, p.State)
+				}()
 
 				// aguarda duração ou cancelamento
 				select {

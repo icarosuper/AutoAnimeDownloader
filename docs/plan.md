@@ -50,21 +50,28 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [x] Não incluir estatísticas ou operação atual (podem ser obtidas dos dados ou logs)
 
 ### 1.4 Testes da Etapa 1
-- [ ] Criar testes para logger (`src/internal/logger/logger_test.go`):
-  - Testar inicialização em modo desenvolvimento e produção
-  - Testar diferentes níveis de log
-  - Testar formatação de output (console vs JSON)
-  - Testar caller information
-- [ ] Criar testes para state (`src/daemon/state_test.go`):
-  - Testar thread-safety (múltiplas goroutines acessando simultaneamente)
-  - Testar notificações quando estado muda
-  - Testar métodos Get/Set de todos os campos
-  - Testar `GetAll()` retorna snapshot consistente
-  - Testar que notificações não são chamadas quando não há mudança real
-- [ ] Criar testes para refatoração do daemon:
-  - Testar que erros são registrados corretamente no state
-  - Testar que contexto de cancelamento funciona
-  - Testar que logs são gerados corretamente
+- [x] Criar testes para logger (`src/internal/logger/logger_test.go`):
+  - [x] Testar inicialização em modo desenvolvimento e produção
+  - [x] Testar diferentes níveis de log
+  - [x] Testar formatação de output (console vs JSON)
+  - [x] Testar caller information
+  - [x] Testar funções helper (Debug, Info, Warn, Error)
+  - [x] Testar logging estruturado com campos
+  - [x] Testar filtragem por nível
+- [x] Criar testes para state (`src/daemon/state_test.go`):
+  - [x] Testar thread-safety (múltiplas goroutines acessando simultaneamente)
+  - [x] Testar notificações quando estado muda
+  - [x] Testar métodos Get/Set de todos os campos
+  - [x] Testar `GetAll()` retorna snapshot consistente
+  - [x] Testar que notificações não são chamadas quando não há mudança real
+  - [x] Testar comportamento sem notifier
+  - [x] Testar conteúdo das notificações
+- [x] Criar testes para refatoração do daemon (`src/daemon/daemon_test.go`):
+  - [x] Testar que erros são registrados corretamente no state (config load error)
+  - [x] Testar que erros são registrados corretamente no state (episodes load error)
+  - [x] Testar que contexto de cancelamento funciona
+  - [x] Testar que logs são gerados corretamente
+  - [x] Testar que erros são tratados corretamente
 
 ---
 
@@ -509,7 +516,7 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 ## Progresso Atual
 
-### Etapa 1: ✅ Concluída
+### Etapa 1: ✅ Concluída (incluindo testes)
 - **1.1 Configurar Zerolog**: ✅ Implementado com suporte a desenvolvimento e produção
   - ✅ Gravação de logs em arquivo com rotação (lumberjack)
   - ✅ Multi-writer: console e arquivo simultaneamente
@@ -517,7 +524,10 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
   - ✅ Rotação automática: 10MB por arquivo, 5 backups, 30 dias, compressão
 - **1.2 Refatorar daemon.go**: ✅ Removidas dependências de UI, integrado zerolog, adicionado contexto
 - **1.3 Estrutura de Estado**: ✅ Implementado com StateNotifier para notificações automáticas
-- **1.4 Testes**: ✅ Testes completos para logger e state
+- **1.4 Testes**: ✅ Testes completos para logger, state e refatoração do daemon
+  - ✅ 12 testes para logger (inicialização, níveis, formatação, caller info, helpers, campos estruturados)
+  - ✅ 13 testes para state (thread-safety, notificações, Get/Set, GetAll, sem notifier)
+  - ✅ 5 testes para refatoração do daemon (erros registrados, cancelamento, logs gerados)
 
 **Correções realizadas:**
 - Corrigido tracking de erros: `fetchDownloadedTorrents()` e `searchAnilist()` agora retornam erros e são registrados no state

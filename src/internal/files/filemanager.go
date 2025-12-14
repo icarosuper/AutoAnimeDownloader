@@ -9,8 +9,8 @@ import (
 )
 
 const configsFolder = ".autoAnimeDownloader"
-const configFileName = ".config.json"
-const downloadedEpsFileName = ".downloaded_episodes"
+const configFileName = "config.json"
+const downloadedEpsFileName = "downloaded_episodes"
 
 type EpisodeStruct struct {
 	EpisodeID   int    `json:"episode_id"`
