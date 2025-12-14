@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-// handleDaemonStart retorna o handler para POST /api/v1/daemon/start
 // @Summary      Start daemon
 // @Description  Starts the daemon loop for automatic anime checking
 // @Tags         daemon
@@ -24,14 +23,12 @@ func handleDaemonStart(server *Server) http.HandlerFunc {
 			return
 		}
 		
-		// Verificar se já está rodando
 		currentStatus := server.State.GetStatus()
 		if currentStatus == daemon.StatusRunning || currentStatus == daemon.StatusChecking {
 			JSONError(w, http.StatusBadRequest, "ALREADY_RUNNING", "Daemon is already running")
 			return
 		}
 		
-		// Iniciar loop do daemon
 		if err := server.StartDaemonLoop(); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to start daemon loop")
 			JSONInternalError(w, err)

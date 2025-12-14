@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-// handleDaemonStop retorna o handler para POST /api/v1/daemon/stop
 // @Summary      Stop daemon
 // @Description  Stops the daemon loop
 // @Tags         daemon
@@ -23,14 +22,12 @@ func handleDaemonStop(server *Server) http.HandlerFunc {
 			return
 		}
 		
-		// Verificar se está rodando
 		currentStatus := server.State.GetStatus()
 		if currentStatus == daemon.StatusStopped {
 			JSONError(w, http.StatusBadRequest, "ALREADY_STOPPED", "Daemon is already stopped")
 			return
 		}
 		
-		// Parar loop do daemon
 		server.StopDaemonLoop()
 		
 		logger.Logger.Info().Msg("Daemon stop requested via API")

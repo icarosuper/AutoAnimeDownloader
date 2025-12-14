@@ -45,7 +45,6 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("/api/v1/config", handleConfig(s))
 	mux.HandleFunc("/api/v1/animes", handleAnimes(s))
 	mux.HandleFunc("/api/v1/episodes", handleEpisodes(s))
-	mux.HandleFunc("/api/v1/logs", handleLogs(s))
 	mux.HandleFunc("/api/v1/check", handleCheck(s))
 	mux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	mux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))

@@ -273,55 +273,6 @@ paths:
       summary: Get episodes list
       tags:
       - episodes
-  /logs:
-    get:
-      consumes:
-      - application/json
-      description: Returns the last N lines from the daemon log file, optionally filtered
-        by level
-      parameters:
-      - description: 'Number of lines to return (default: 100)'
-        in: query
-        name: lines
-        type: integer
-      - description: Filter by log level (debug, info, warn, error)
-        in: query
-        name: level
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/api.SuccessResponse'
-            - properties:
-                data:
-                  properties:
-                    lines:
-                      items:
-                        type: string
-                      type: array
-                    total:
-                      type: integer
-                  type: object
-              type: object
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.SuccessResponse'
-        "405":
-          description: Method Not Allowed
-          schema:
-            $ref: '#/definitions/api.SuccessResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.SuccessResponse'
-      summary: Get logs
-      tags:
-      - logs
   /status:
     get:
       consumes:

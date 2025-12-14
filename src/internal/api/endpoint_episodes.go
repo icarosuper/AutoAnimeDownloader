@@ -5,7 +5,6 @@ import (
 	"net/http"
 )
 
-// handleEpisodes retorna o handler para GET /api/v1/episodes
 // @Summary      Get episodes list
 // @Description  Returns a list of all downloaded episodes
 // @Tags         episodes

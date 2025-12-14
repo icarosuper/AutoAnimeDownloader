@@ -5,14 +5,12 @@ import (
 	"time"
 )
 
-// StatusResponse representa a resposta do endpoint de status
 type StatusResponse struct {
 	Status    string    `json:"status" example:"running"`
 	LastCheck time.Time `json:"last_check" example:"2024-01-01T00:00:00Z"`
 	HasError  bool      `json:"has_error" example:"false"`
 }
 
-// handleStatus retorna o handler para GET /api/v1/status
 // @Summary      Get daemon status
 // @Description  Returns the current status of the daemon, including last check time and error state
 // @Tags         status

@@ -7,7 +7,16 @@ import (
 	"net/http"
 )
 
-// handleConfig retorna o handler para GET e PUT /api/v1/config
+// @Summary      Get and update configuration
+// @Description  Returns the current daemon configuration and allows updates
+// @Tags         config
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  SuccessResponse
+// @Failure      400  {object}  SuccessResponse
+// @Failure      405  {object}  SuccessResponse
+// @Failure      500  {object}  SuccessResponse
+// @Router       /config [get]
 func handleConfig(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -21,7 +30,6 @@ func handleConfig(server *Server) http.HandlerFunc {
 	}
 }
 
-// handleGetConfig implementa GET /api/v1/config
 // @Summary      Get configuration
 // @Description  Returns the current daemon configuration
 // @Tags         config
@@ -44,7 +52,6 @@ func handleGetConfig(server *Server) http.HandlerFunc {
 	}
 }
 
-// handleUpdateConfig implementa PUT /api/v1/config
 // @Summary      Update configuration
 // @Description  Updates the daemon configuration with the provided values
 // @Tags         config
@@ -65,7 +72,7 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Validar campos obrigatórios
+		// Validate required fields
 		if config.AnilistUsername == "" {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Anilist username is required")
 			return
@@ -81,7 +88,7 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Validar valores numéricos
+		// Validate numeric values
 		if config.CheckInterval <= 0 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Check interval must be greater than 0")
 			return
@@ -97,7 +104,7 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Salvar configurações
+		// Save configurations
 		if err := server.FileManager.SaveConfigs(&config); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save configs")
 			JSONInternalError(w, err)

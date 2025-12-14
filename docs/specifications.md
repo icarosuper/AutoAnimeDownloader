@@ -1,4 +1,6 @@
-# AutoAnimeDownloader - Plano de Refatoração
+# AutoAnimeDownloader - Especificações do Projeto
+
+**Última atualização:** API REST completa implementada com Swagger/OpenAPI
 
 ## Visão Geral do Projeto
 
@@ -76,26 +78,18 @@ Interface web moderna para gerenciar o daemon.
 ```
 AutoAnimeDownloader/
 ├── src/
-│   ├── cmd/
-│   │   ├── daemon/          # Executável do daemon
-│   │   │   └── main.go
-│   │   └── cli/             # Executável da CLI
-│   │       └── main.go
-│   ├── daemon/              # Lógica do daemon (já existe, refatorar)
-│   │   └── daemon.go
+│   ├── main.go              # Ponto de entrada do daemon
+│   ├── daemon/              # Lógica do daemon
+│   ├── cli/                 # Lógica da CLI
 │   ├── internal/
-│   │   ├── api/             # API REST do daemon (NOVO)
-│   │   │   ├── handlers.go
-│   │   │   ├── routes.go
-│   │   │   └── middleware.go
+│   │   ├── api/             # API REST do daemon
 │   │   ├── anilist/         # Cliente Anilist (já existe)
 │   │   ├── nyaa/            # Scraper Nyaa (já existe)
 │   │   ├── torrents/        # Cliente qBittorrent (já existe)
-│   │   └── files/           # Gerenciamento de arquivos (já existe)
-│   └── frontend/            # WebUI (NOVO)
-│       ├── public/
-│       ├── src/
-│       └── package.json
+│   │   ├── files/           # Gerenciamento de arquivos (já existe)
+│   │   └── logger/          # Sistema de logging com zerolog
+│   └── frontend/            # WebUI (FUTURO)
+├── docs/
 ├── go.mod
 └── README.md
 ```
@@ -104,27 +98,31 @@ AutoAnimeDownloader/
 
 ### Fase 1: Refatoração do Daemon
 
-1. **Criar `src/cmd/daemon/main.go`**
+1. **Criar `src/main.go`** ✅ **CONCLUÍDO**
    - Ponto de entrada do daemon
    - Inicializar servidor HTTP para API REST
-   - Inicializar loop de verificação
+   - Inicializar loop de verificação automaticamente
    - Gerenciar graceful shutdown
+   - Gerenciamento de estado: daemon controla seu próprio status internamente
 
-2. **Criar API REST (`src/internal/api/`)**
-   - `GET /api/v1/status` - Status do daemon
+2. **Criar API REST (`src/internal/api/`)** ✅ **CONCLUÍDO**
+   - `GET /api/v1/status` - Status do daemon ✅
      - Retorna: status atual (stopped/running/checking), última verificação (timestamp), se houve erro na última checagem (boolean)
      - Usado pela WebUI para exibir informações do daemon
-   - `GET /api/v1/config` - Obter configurações
-   - `PUT /api/v1/config` - Atualizar configurações
-   - `POST /api/v1/check` - Forçar verificação manual
+   - `GET /api/v1/config` - Obter configurações ✅
+   - `PUT /api/v1/config` - Atualizar configurações ✅
+   - `GET /api/v1/animes` - Listar animes monitorados com agregação ✅
+   - `GET /api/v1/episodes` - Listar episódios baixados ✅
+   - `POST /api/v1/check` - Forçar verificação manual ✅
      - Retorna apenas confirmação de que a verificação foi iniciada (não retorna estado)
-   - `GET /api/v1/animes` - Listar animes monitorados
-   - `GET /api/v1/episodes` - Listar episódios baixados
-   - `POST /api/v1/daemon/start` - Iniciar daemon
+   - `POST /api/v1/daemon/start` - Iniciar daemon ✅
      - Retorna apenas confirmação (não retorna estado)
-   - `POST /api/v1/daemon/stop` - Parar daemon
-   - `GET /api/v1/logs` - Obter logs
-   - `WS /api/v1/ws` ou `/ws` - WebSocket para atualizações em tempo real
+     - Estado é atualizado internamente pelo daemon
+   - `POST /api/v1/daemon/stop` - Parar daemon ✅
+     - Retorna apenas confirmação (não retorna estado)
+     - Estado é atualizado internamente pelo daemon (com atualização imediata)
+   - `GET /swagger/` - Documentação Swagger/OpenAPI ✅
+   - `WS /api/v1/ws` ou `/ws` - WebSocket para atualizações em tempo real (FUTURO)
      - Envia atualizações quando o estado do daemon muda:
        - Mudanças de status (stopped → running → checking)
        - Após cada verificação (atualiza última verificação e erro)
@@ -277,10 +275,10 @@ AutoAnimeDownloader/
      - CLI commands (parsing, formatação)
 
 5. **Documentação**
-   - Documentação da API (OpenAPI/Swagger)
-   - Guia de instalação
-   - Guia de uso da CLI
-   - Guia de uso da WebUI
+   - ✅ Documentação da API (OpenAPI/Swagger) - Implementada com Swaggo/swag
+   - [ ] Guia de instalação
+   - [ ] Guia de uso da CLI
+   - [ ] Guia de uso da WebUI
 
 ## Boas Práticas e Convenções
 

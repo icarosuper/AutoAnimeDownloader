@@ -7,15 +7,12 @@ import (
 	"strings"
 )
 
-// AnimeInfo representa informações agregadas sobre um anime
 type AnimeInfo struct {
 	Name            string `json:"name" example:"Naruto"`
 	EpisodesCount   int    `json:"episodes_count" example:"12"`
 	LatestEpisodeID int    `json:"latest_episode_id" example:"12"`
 }
 
-// extractAnimeName tenta extrair o nome do anime do nome do episódio
-// Formato esperado: "Anime Name - Episode 01" ou "Anime Name 01" ou similar
 func extractAnimeName(episodeName string) string {
 	if episodeName == "" {
 		return "Unknown"
@@ -43,7 +40,6 @@ func extractAnimeName(episodeName string) string {
 	return result
 }
 
-// handleAnimes retorna o handler para GET /api/v1/animes
 // @Summary      Get animes list
 // @Description  Returns a list of animes with aggregated episode information
 // @Tags         animes
@@ -67,7 +63,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			return
 		}
 		
-		// Agrupar episódios por anime
+		// Group episodes by anime
 		animeMap := make(map[string]*AnimeInfo)
 		
 		for _, episode := range episodes {
@@ -87,7 +83,6 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			}
 		}
 		
-		// Converter map para slice
 		animes := make([]AnimeInfo, 0, len(animeMap))
 		for _, animeInfo := range animeMap {
 			animes = append(animes, *animeInfo)

@@ -6,7 +6,6 @@ import (
 	"net/http"
 )
 
-// handleCheck retorna o handler para POST /api/v1/check
 // @Summary      Trigger manual check
 // @Description  Triggers a manual anime verification check
 // @Tags         daemon
@@ -22,7 +21,7 @@ func handleCheck(server *Server) http.HandlerFunc {
 			return
 		}
 		
-		// Executar verificação manual em goroutine separada
+		// Execute verification in separate goroutine
 		go func() {
 			ctx := context.Background()
 			daemon.AnimeVerification(ctx, server.FileManager, server.State)

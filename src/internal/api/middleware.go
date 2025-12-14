@@ -6,12 +6,10 @@ import (
 	"time"
 )
 
-// loggingMiddleware registra informações sobre cada requisição HTTP
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Criar um ResponseWriter wrapper para capturar o status code
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
 		next.ServeHTTP(wrapped, r)
@@ -28,7 +26,6 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// responseWriter é um wrapper para http.ResponseWriter que captura o status code
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -39,7 +36,6 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// jsonMiddleware define o Content-Type como application/json
 func jsonMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -47,14 +43,13 @@ func jsonMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// corsMiddleware adiciona headers CORS
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-		// Responder a requisições OPTIONS (preflight)
+		// Respond to OPTIONS requests (preflight)
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -64,8 +59,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// ApplyMiddlewares aplica todos os middlewares na ordem especificada
-// Ordem: CORS → JSON → Logging
+// Order: CORS → JSON → Logging
 func ApplyMiddlewares(handler http.Handler) http.Handler {
 	return corsMiddleware(jsonMiddleware(loggingMiddleware(handler)))
 }

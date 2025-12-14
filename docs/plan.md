@@ -79,69 +79,97 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Criar API REST completa para comunicação com CLI e WebUI.
 
+**Status:** ✅ **CONCLUÍDA**
+
 ### 2.1 Estrutura Base da API
-- [ ] Criar `src/internal/api/server.go` com servidor HTTP básico
-- [ ] Configurar roteamento com `net/http`
-- [ ] Criar middleware para:
-  - Logging de requisições
-  - CORS (se necessário)
-  - Content-Type JSON
-- [ ] Implementar graceful shutdown
+- [x] Criar `src/internal/api/server.go` com servidor HTTP básico
+- [x] Configurar roteamento com `net/http`
+- [x] Criar middleware para:
+  - Logging de requisições (`middleware.go`)
+  - CORS (`corsMiddleware`)
+  - Content-Type JSON (`jsonMiddleware`)
+- [x] Implementar graceful shutdown
+- [x] Estrutura vertical slice: cada endpoint em arquivo separado com prefixo `endpoint_`
+- [x] Todos os arquivos no mesmo pacote `api` (sem subpastas)
 
 ### 2.2 Handlers Básicos
-- [ ] Criar `src/internal/api/handlers.go`
-- [ ] Implementar handler de status: `GET /api/v1/status`
+- [x] Criar handlers em arquivos separados (`endpoint_*.go`)
+- [x] Implementar handler de status: `GET /api/v1/status` (`endpoint_status.go`)
   - Retornar estado completo do daemon:
     - Status atual (stopped/running/checking)
     - Timestamp da última verificação
     - Se houve erro na última checagem (boolean)
   - Formato JSON padronizado
   - Usado pela WebUI para exibir informações do daemon
-- [ ] Implementar handler de configuração: `GET /api/v1/config`
+- [x] Implementar handler de configuração: `GET /api/v1/config` (`endpoint_config.go`)
   - Retornar configurações atuais
-- [ ] Implementar handler de atualização: `PUT /api/v1/config`
-  - Validar entrada
+- [x] Implementar handler de atualização: `PUT /api/v1/config` (`endpoint_config.go`)
+  - Validar entrada (campos obrigatórios, valores numéricos)
   - Salvar configurações
   - Retornar erro se inválido
 
 ### 2.3 Handlers de Dados
-- [ ] Implementar `GET /api/v1/animes`
-  - Listar animes monitorados
-  - Incluir informações de progresso
-- [ ] Implementar `GET /api/v1/episodes`
+- [x] Implementar `GET /api/v1/animes` (`endpoint_animes.go`)
+  - Listar animes monitorados com agregação de episódios
+  - Incluir informações de progresso (episódios count, latest episode ID)
+  - Extração automática de nome do anime a partir do nome do episódio
+- [x] Implementar `GET /api/v1/episodes` (`endpoint_episodes.go`)
   - Listar episódios baixados
   - Incluir hash e nome do episódio
-- [ ] Implementar `GET /api/v1/logs`
-  - Retornar logs recentes (últimas N linhas)
-  - Suportar filtro por nível
 
 ### 2.4 Handlers de Controle
-- [ ] Implementar `POST /api/v1/check`
+- [x] Implementar `POST /api/v1/check` (`endpoint_check.go`)
   - Forçar verificação manual
   - Executar em goroutine separada
   - Retornar imediatamente (async)
-  - Retornar apenas confirmação (não retornar estado)
-- [ ] Implementar `POST /api/v1/daemon/start`
+  - Retornar apenas confirmação
+- [x] Implementar `POST /api/v1/daemon/start` (`endpoint_daemon_start.go`)
   - Iniciar loop de verificação
-  - Atualizar estado internamente
-  - Retornar apenas confirmação (não retornar estado)
-  - Estado será atualizado via WebSocket
-- [ ] Implementar `POST /api/v1/daemon/stop`
+  - Estado é atualizado internamente pelo daemon
+  - Retornar apenas confirmação
+  - Verificar se já está rodando antes de iniciar
+- [x] Implementar `POST /api/v1/daemon/stop` (`endpoint_daemon_stop.go`)
   - Parar loop de verificação
-  - Atualizar estado internamente
-  - Retornar apenas confirmação (não retornar estado)
-  - Estado será atualizado via WebSocket
-  - Graceful shutdown
+  - Estado é atualizado internamente pelo daemon (com atualização imediata no `StopDaemonLoop()`)
+  - Retornar apenas confirmação
+  - Verificar se já está parado antes de parar
 
 ### 2.5 Estrutura de Resposta Padrão
-- [ ] Criar tipos de resposta padronizados:
+- [x] Criar tipos de resposta padronizados (`responses.go`):
   - `SuccessResponse` com `success`, `data`, `error`
-  - `ErrorResponse` com código e mensagem
-- [ ] Criar helpers para serializar respostas
-- [ ] Implementar tratamento de erros consistente
+  - `ErrorInfo` com código e mensagem
+- [x] Criar helpers para serializar respostas:
+  - `JSONSuccess()` - resposta de sucesso
+  - `JSONError()` - resposta de erro
+  - `JSONInternalError()` - erro interno (500)
+- [x] Implementar tratamento de erros consistente
 
-### 2.6 Testes da API
-- [ ] Criar testes unitários para handlers (`src/internal/api/handlers_test.go`):
+### 2.6 Documentação Swagger/OpenAPI
+- [x] Instalar e configurar Swaggo/swag
+- [x] Adicionar comentários Swagger em todos os endpoints
+- [x] Gerar documentação OpenAPI (`docs/swagger.json`, `docs/swagger.yaml`)
+- [x] Adicionar rota `/swagger/` para servir UI do Swagger
+- [x] Documentar todos os endpoints com descrições, parâmetros e respostas
+
+### 2.6 Documentação Swagger/OpenAPI
+- [x] Instalar e configurar Swaggo/swag
+- [x] Adicionar comentários Swagger em todos os endpoints
+- [x] Gerar documentação OpenAPI (`docs/swagger.json`, `docs/swagger.yaml`)
+- [x] Adicionar rota `/swagger/` para servir UI do Swagger
+- [x] Documentar todos os endpoints com descrições, parâmetros e respostas
+
+### 2.7 Gerenciamento de Estado do Daemon
+- [x] Daemon gerencia seu próprio status internamente
+- [x] Status é atualizado automaticamente quando:
+  - Loop inicia: `StatusRunning`
+  - Verificação começa: `StatusChecking`
+  - Verificação termina: `StatusRunning`
+  - Loop para: `StatusStopped`
+- [x] `StopDaemonLoop()` atualiza status imediatamente para resposta rápida
+- [x] API apenas lê o status, não modifica diretamente
+
+### 2.8 Testes da API
+- [ ] Criar testes unitários para handlers (`src/internal/api/*_test.go`):
   - Testar cada handler isoladamente
   - Testar validação de entrada (campos obrigatórios, tipos, formatos)
   - Testar tratamento de erros (retornar códigos HTTP corretos)
@@ -222,16 +250,17 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Criar `main.go` do daemon que integra tudo.
 
-### 4.1 Criar `src/cmd/daemon/main.go`
-- [ ] Inicializar logger zerolog
-- [ ] Carregar configurações
-- [ ] Inicializar FileManager
-- [ ] Criar instância do daemon state
-- [ ] Inicializar servidor HTTP com API REST
-- [ ] Inicializar servidor WebSocket
-- [ ] **Injetar WebSocket manager no state:** `state.SetNotifier(wsManager)`
-- [ ] Configurar graceful shutdown (SIGINT, SIGTERM)
-- [ ] Iniciar loop de verificação (se configurado para auto-start)
+### 4.1 Criar `src/main.go`
+- [x] Inicializar logger zerolog
+- [x] Inicializar FileManager
+- [x] Criar instância do daemon state
+- [x] Inicializar servidor HTTP com API REST
+- [x] Configurar graceful shutdown (SIGINT, SIGTERM)
+- [x] Iniciar loop de verificação automaticamente ao iniciar
+- [x] Gerenciamento de status: daemon gerencia seu próprio status internamente
+- [x] Estado inicial: `StatusStopped` (será atualizado para `StatusRunning` quando loop iniciar)
+- [ ] Inicializar servidor WebSocket (FUTURO)
+- [ ] **Injetar WebSocket manager no state:** `state.SetNotifier(wsManager)` (FUTURO)
 
 ### 4.2 Servir Arquivos Estáticos (Frontend)
 - [ ] Adicionar handler para servir arquivos estáticos em `/`
