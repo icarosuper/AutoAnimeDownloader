@@ -1,8 +1,9 @@
-package program
+package daemon
 
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
@@ -12,11 +13,9 @@ import (
 )
 
 type StartLoopPayload struct {
-	FileManager            *files.FileManager
-	Interval               time.Duration
-	ShowError              func(string, string)
-	UpdateEpisodesListView func()
-	SetLoading             func(bool)
+	FileManager *files.FileManager
+	Interval    time.Duration
+	State       *State
 }
 
 type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
@@ -28,19 +27,21 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 				// verifica cancelamento antes de executar
 				select {
 				case <-c.Done():
+					logger.Logger.Info().Msg("Verification loop stopped")
 					return
 				default:
 				}
 
-				p.SetLoading(true)
-				animeVerification(p.FileManager, p.ShowError, p.UpdateEpisodesListView)
-				p.SetLoading(false)
+				p.State.SetStatus(StatusChecking)
+				animeVerification(c, p.FileManager, p.State)
+				p.State.SetStatus(StatusRunning)
 
 				// aguarda duração ou cancelamento
 				select {
 				case <-time.After(d):
 					continue
 				case <-c.Done():
+					logger.Logger.Info().Msg("Verification loop stopped")
 					return
 				}
 			}
@@ -67,30 +68,30 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 	}
 }
 
-func animeVerification(fileManager *files.FileManager, showError func(string, string), updateEpisodesListView func()) {
+func animeVerification(ctx context.Context, fileManager *files.FileManager, state *State) {
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
-		fmt.Printf("Failed to load configs: %v\n", err)
-		showError("Erro de configuração", "Não foi possível carregar as configurações.")
+		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
+		state.SetLastCheckError(err)
 		return
 	}
 
 	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath, configs.CompletedAnimePath)
 
-	downloadedTorrents := fetchDownloadedTorrents(torrentsService, showError)
+	downloadedTorrents := fetchDownloadedTorrents(torrentsService)
 	if downloadedTorrents == nil {
 		return
 	}
 
-	anilistResponse := searchAnilist(configs, showError)
+	anilistResponse := searchAnilist(configs)
 	if anilistResponse == nil {
 		return
 	}
 
 	savedEpisodes, err := fileManager.LoadSavedEpisodes()
 	if err != nil {
-		fmt.Printf("Failed to load saved episodes: %v\n", err)
-		showError("Erro", "Não foi possível carregar os episódios salvos.")
+		logger.Logger.Error().Err(err).Stack().Msg("Failed to load saved episodes")
+		state.SetLastCheckError(err)
 		return
 	}
 
@@ -101,6 +102,14 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 
 	start := time.Now()
 	for _, anime := range animes {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			logger.Logger.Info().Msg("Verification cancelled")
+			return
+		default:
+		}
+
 		processAnimeEpisodes(
 			configs,
 			torrentsService,
@@ -121,18 +130,25 @@ func animeVerification(fileManager *files.FileManager, showError func(string, st
 		newEpisodes:     newEpisodes,
 	})
 
-	updateEpisodesListView()
+	state.SetLastCheck(time.Now())
+	state.SetLastCheckError(nil)
 
 	if err := fileManager.DeleteEmptyFolders(configs.SavePath, configs.CompletedAnimePath); err != nil {
-		fmt.Printf("Warning: failed to delete empty folders: %v\n", err)
+		logger.Logger.Warn().Err(err).Msg("Failed to delete empty folders")
 	}
 
-	fmt.Printf("\n----------------------------------------\n\n")
-	fmt.Println("Animes checked: ", len(anilistResponse.Data.Page.MediaList))
-	fmt.Println("Episodes Checked: ", len(checkedEpisodes))
-	fmt.Println("New Episodes downloaded: ", len(newEpisodes))
-	fmt.Println("Total time elapsed in check: ", elapsed)
-	fmt.Println("Avg time per episode: ", elapsed/time.Duration(len(checkedEpisodes)))
+	avgTime := time.Duration(0)
+	if len(checkedEpisodes) > 0 {
+		avgTime = elapsed / time.Duration(len(checkedEpisodes))
+	}
+
+	logger.Logger.Info().
+		Int("animes_checked", len(anilistResponse.Data.Page.MediaList)).
+		Int("episodes_checked", len(checkedEpisodes)).
+		Int("episodes_downloaded", len(newEpisodes)).
+		Dur("total_time", elapsed).
+		Dur("avg_time_per_episode", avgTime).
+		Msg("Verification completed")
 }
 
 type handleEpisodesData struct {
@@ -175,11 +191,17 @@ func handleSavedEpisodes(fileManager *files.FileManager, configs *files.Config, 
 
 	if configs.DeleteWatchedEpisodes {
 		if err := fileManager.DeleteEpisodesFromFile(episodeIdsToDelete); err != nil {
-			fmt.Printf("Warning: failed to delete episodes: %v\n", err)
+			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
 		}
 
 		hashesToDelete := extractEpisodesHashes(data.savedEpisodes, episodeIdsToDelete)
-		torrentsService.DeleteTorrents(hashesToDelete)
+		if len(hashesToDelete) > 0 {
+			if err := torrentsService.DeleteTorrents(hashesToDelete); err != nil {
+				logger.Logger.Warn().Err(err).Int("count", len(hashesToDelete)).Msg("Failed to delete torrents")
+			} else {
+				logger.Logger.Info().Int("count", len(hashesToDelete)).Msg("Deleted torrents")
+			}
+		}
 	}
 }
 
@@ -217,33 +239,44 @@ func extractEpisodesHashes(savedEpisodes []files.EpisodeStruct, episodeIDs []int
 
 func saveEpisodesToFile(fileManager *files.FileManager, newEpisodes []files.EpisodeStruct) {
 	if err := fileManager.SaveEpisodesToFile(newEpisodes); err != nil {
-		fmt.Printf("Warning: failed to save episodes: %v\n", err)
+		logger.Logger.Warn().Err(err).Int("count", len(newEpisodes)).Msg("Failed to save episodes to file")
+	} else if len(newEpisodes) > 0 {
+		logger.Logger.Info().Int("count", len(newEpisodes)).Msg("Saved episodes to file")
 	}
 }
 
-func fetchDownloadedTorrents(torrentsService *torrents.TorrentService, showError func(string, string)) []torrents.Torrent {
+func fetchDownloadedTorrents(torrentsService *torrents.TorrentService) []torrents.Torrent {
 	torrents, err := torrentsService.GetDownloadedTorrents()
 	if err != nil {
-		showError("Erro de conexão", "Houve um problema ao tentar conectar ao qBittorrent. Por favor, verifique a URL nas configurações.")
+		logger.Logger.Error().Err(err).Stack().Msg("Failed to connect to qBittorrent")
 		return nil
 	}
 
+	logger.Logger.Debug().Int("count", len(torrents)).Msg("Fetched downloaded torrents")
 	return torrents
 }
 
-func searchAnilist(configs *files.Config, showError func(string, string)) *anilist.AniListResponse {
+func searchAnilist(configs *files.Config) *anilist.AniListResponse {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
-		fmt.Println("Nome de usuário ou caminho de salvamento faltando.")
-		showError("Configuração necessária", "Por favor, configure seu nome de usuário do AniList e o caminho de salvamento nas configurações.")
+		logger.Logger.Error().
+			Str("anilist_username", configs.AnilistUsername).
+			Str("save_path", configs.SavePath).
+			Msg("Missing required configuration: Anilist username or save path")
 		return nil
 	}
 
 	anilistResponse, err := anilist.SearchAnimes(configs.AnilistUsername)
 	if err != nil {
-		fmt.Printf("Erro ao buscar animes no AniList: %v\n", err)
-		showError("Erro de conexão", "Houve um problema ao tentar conectar ao AniList. Por favor, verifique seu nome de usuário nas configurações.")
+		logger.Logger.Error().Err(err).Stack().
+			Str("username", configs.AnilistUsername).
+			Msg("Failed to search animes on Anilist")
 		return nil
 	}
+
+	logger.Logger.Info().
+		Str("username", configs.AnilistUsername).
+		Int("animes_found", len(anilistResponse.Data.Page.MediaList)).
+		Msg("Successfully fetched animes from Anilist")
 
 	return anilistResponse
 }
@@ -261,14 +294,21 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (re
 	for _, titleVariant := range titleVariants {
 		nyaaResponse, err = nyaa.ScrapNyaa(titleVariant, ep.Episode)
 		if err != nil {
-			fmt.Printf("Error searching Nyaa with title '%s': %v\n", titleVariant, err)
+			logger.Logger.Debug().
+				Err(err).
+				Str("title", titleVariant).
+				Int("episode", ep.Episode).
+				Msg("Error searching Nyaa")
 			continue
 		}
 		if nyaaResponse != nil {
+			logger.Logger.Debug().
+				Str("title", titleVariant).
+				Int("episode", ep.Episode).
+				Int("torrents_found", len(nyaaResponse)).
+				Msg("Found torrents on Nyaa")
 			break
 		}
-
-		fmt.Printf("Found %d torrents for %s episode %02d\n", len(nyaaResponse), titleVariant, ep.Episode)
 	}
 
 	return nyaaResponse
@@ -278,15 +318,26 @@ func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 
 	for i := range maxAttempts {
-		fmt.Printf("Attempting to download %s (attempt %d/%d)\n", fileName, i+1, configs.EpisodeRetryLimit)
+		logger.Logger.Debug().
+			Str("episode", fileName).
+			Int("attempt", i+1).
+			Int("max_attempts", configs.EpisodeRetryLimit).
+			Msg("Attempting to download episode")
+
 		hash := torrentsService.DownloadTorrent(magnets[i], *anime.Media.Title.English, fileName, anime.Media.Status == anilist.MediaStatusFinished)
 		if hash != "" {
-			fmt.Printf("Successfully added %s to qBittorrent\n", fileName)
+			logger.Logger.Info().
+				Str("episode", fileName).
+				Str("hash", hash).
+				Msg("Successfully added episode to qBittorrent")
 			return hash
 		}
 	}
 
-	fmt.Printf("Failed to download %s after %d attempts\n", fileName, configs.EpisodeRetryLimit)
+	logger.Logger.Warn().
+		Str("episode", fileName).
+		Int("attempts", maxAttempts).
+		Msg("Failed to download episode after all attempts")
 	return ""
 }
 
@@ -301,8 +352,10 @@ func processAnimeEpisodes(
 	idsToDelete *[]int,
 ) {
 	title := anime.Media.Title.Romaji
-	fmt.Printf("\n----------------------------------------\n\n")
-	fmt.Printf("%s\n\n", *title)
+	logger.Logger.Info().
+		Str("anime", *title).
+		Str("english_title", *anime.Media.Title.English).
+		Msg("Processing anime episodes")
 
 	torrentsMap := buildTorrentsMap(torrents)
 	savedEpisodesMap := buildSavedEpisodesMap(savedEpisodes)
@@ -390,7 +443,11 @@ func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.Me
 	}
 
 	if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
-		fmt.Printf("Skipping %s (max episodes per anime reached)\n", epName)
+		logger.Logger.Debug().
+			Str("episode", epName).
+			Int("downloaded_episodes", *downloadedEpisodes).
+			Int("max_episodes", configs.MaxEpisodesPerAnime).
+			Msg("Skipping episode: max episodes per anime reached")
 		return false, false
 	}
 
@@ -400,17 +457,27 @@ func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.Me
 
 func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, epName string) bool {
 	if animeIsInExcludedList(anime, configs.ExcludedList) {
-		fmt.Printf("Skipping %s (in excluded list)\n", epName)
+		logger.Logger.Debug().
+			Str("episode", epName).
+			Str("excluded_list", configs.ExcludedList).
+			Msg("Skipping episode: in excluded list")
 		return true
 	}
 
 	if ep.Episode <= anime.Progress {
-		fmt.Printf("Skipping %s (already watched)\n", epName)
+		logger.Logger.Debug().
+			Str("episode", epName).
+			Int("episode_number", ep.Episode).
+			Int("progress", anime.Progress).
+			Msg("Skipping episode: already watched")
 		return true
 	}
 
 	if ep.TimeUntilAiring > 0 {
-		fmt.Printf("Skipping %s (not yet aired)\n", epName)
+		logger.Logger.Debug().
+			Str("episode", epName).
+			Int("time_until_airing", ep.TimeUntilAiring).
+			Msg("Skipping episode: not yet aired")
 		return true
 	}
 
@@ -419,18 +486,26 @@ func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anili
 
 func handleAlreadySavedEpisode(configs *files.Config, downloadedEpisodes *int, isInTorrents bool, epName string) (shouldDownload bool, shouldDelete bool) {
 	if *downloadedEpisodes >= configs.MaxEpisodesPerAnime {
-		fmt.Printf("Deleting %s (max episodes exceeded)\n", epName)
+		logger.Logger.Info().
+			Str("episode", epName).
+			Int("downloaded_episodes", *downloadedEpisodes).
+			Int("max_episodes", configs.MaxEpisodesPerAnime).
+			Msg("Deleting episode: max episodes exceeded")
 		return false, true
 	}
 
 	*downloadedEpisodes++
 
 	if isInTorrents {
-		fmt.Printf("Skipping %s (already downloaded)\n", epName)
+		logger.Logger.Debug().
+			Str("episode", epName).
+			Msg("Skipping episode: already downloaded")
 		return false, false
 	}
 
-	fmt.Printf("Redownloading %s (was missing from torrents)\n", epName)
+	logger.Logger.Info().
+		Str("episode", epName).
+		Msg("Redownloading episode: was missing from torrents")
 	return true, false
 }
 
@@ -459,12 +534,20 @@ func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, an
 	}
 
 	animeName := *anime.Media.Title.English
-	fmt.Printf("Moving completed anime: %s\n", animeName)
+	logger.Logger.Info().
+		Str("anime", animeName).
+		Int("torrents_count", len(animeHashes)).
+		Msg("Moving completed anime to completed folder")
 
-	// Move all torrents of this anime to the completed folder
-	if err := torrentsService.SendAnimeToCompletedFolder(animeHashes, animeName); err == nil {
-		fmt.Printf("Moved torrents for %s to completed folder\n", animeName)
+	if err := torrentsService.SendAnimeToCompletedFolder(animeHashes, animeName); err != nil {
+		logger.Logger.Error().Err(err).Stack().
+			Str("anime", animeName).
+			Int("torrents_count", len(animeHashes)).
+			Msg("Failed to move torrents to completed folder")
 	} else {
-		fmt.Errorf("failed to move torrents of '%s': %v\n", animeName, err)
+		logger.Logger.Info().
+			Str("anime", animeName).
+			Int("torrents_count", len(animeHashes)).
+			Msg("Successfully moved torrents to completed folder")
 	}
 }

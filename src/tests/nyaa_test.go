@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"AutoAnimeDownloader/modules/nyaa"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"io"
 	"net/http"
 	"strings"

@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"AutoAnimeDownloader/modules/torrents"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"fmt"
 	"io"
 	"net/http"

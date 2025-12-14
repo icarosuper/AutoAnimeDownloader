@@ -112,15 +112,23 @@ AutoAnimeDownloader/
 
 2. **Criar API REST (`src/internal/api/`)**
    - `GET /api/v1/status` - Status do daemon
+     - Retorna: status atual (stopped/running/checking), última verificação (timestamp), se houve erro na última checagem (boolean)
+     - Usado pela WebUI para exibir informações do daemon
    - `GET /api/v1/config` - Obter configurações
    - `PUT /api/v1/config` - Atualizar configurações
    - `POST /api/v1/check` - Forçar verificação manual
+     - Retorna apenas confirmação de que a verificação foi iniciada (não retorna estado)
    - `GET /api/v1/animes` - Listar animes monitorados
    - `GET /api/v1/episodes` - Listar episódios baixados
    - `POST /api/v1/daemon/start` - Iniciar daemon
+     - Retorna apenas confirmação (não retorna estado)
    - `POST /api/v1/daemon/stop` - Parar daemon
    - `GET /api/v1/logs` - Obter logs
    - `WS /api/v1/ws` ou `/ws` - WebSocket para atualizações em tempo real
+     - Envia atualizações quando o estado do daemon muda:
+       - Mudanças de status (stopped → running → checking)
+       - Após cada verificação (atualiza última verificação e erro)
+     - Formato: JSON com tipo de evento e dados do estado
 
 3. **Refatorar `src/daemon/daemon.go`**
    - Remover dependências de UI (funções `ShowError`, `UpdateEpisodesListView`, `SetLoading`)
@@ -130,9 +138,20 @@ AutoAnimeDownloader/
    - Adicionar contexto para cancelamento
 
 4. **Gerenciamento de Estado**
-   - Criar estrutura para manter estado do daemon
+   - Criar estrutura para manter estado mínimo do daemon:
+     - Status atual (stopped/running/checking)
+     - Timestamp da última verificação
+     - Erro da última verificação (se houver)
    - Gerenciar mutex para acesso thread-safe
-   - Implementar fila de tarefas se necessário
+   - **Notificações automáticas via injeção de dependência:**
+     - State implementa interface `StateNotifier` para notificar mudanças
+     - WebSocket manager implementa `StateNotifier` e é injetado no state
+     - Sempre que o estado muda (SetStatus, SetLastCheck, SetLastCheckError), notifica automaticamente via WebSocket
+     - Mantém desacoplamento: state não conhece WebSocket diretamente, apenas a interface
+   - Estado é usado para:
+     - Endpoint `GET /api/v1/status` (retorna estado completo)
+     - WebSocket (notifica mudanças de estado automaticamente)
+   - Não incluir estatísticas ou operação atual (informações podem ser obtidas dos dados ou logs)
 
 ### Fase 2: Implementação da CLI
 
@@ -189,19 +208,45 @@ AutoAnimeDownloader/
    - Configurar caller information (arquivo:linha) para facilitar debug
    - Usar `.Stack()` para stack traces em erros
    - Níveis de log (DEBUG, INFO, WARN, ERROR)
-   - Logs em JSON para fácil processamento e busca
-   - Rotação de logs
+   - **Logging em arquivo:**
+     - Salvar logs em arquivo: `~/.autoAnimeDownloader/daemon.log` (Linux/Mac) ou `%APPDATA%/.autoAnimeDownloader/daemon.log` (Windows)
+     - Formato no arquivo: JSON estruturado (uma linha por evento) para fácil processamento
+     - Formato no console: formatado em desenvolvimento, JSON em produção
+     - Multi-writer: escrever simultaneamente no console e no arquivo
+   - **Rotação de logs com `lumberjack`:**
+     - Usar `gopkg.in/natefinch/lumberjack.v2` para rotação automática
+     - Configuração recomendada:
+       - MaxSize: 10 MB (tamanho máximo por arquivo)
+       - MaxBackups: 5 (manter 5 arquivos antigos)
+       - MaxAge: 30 dias (remover arquivos mais antigos)
+       - Compress: true (comprimir arquivos antigos com gzip)
+     - Benefícios: thread-safe, testado em produção, fácil integração com zerolog
+     - Resultado: mantém ~50MB de logs no total (5 arquivos de 10MB), economiza espaço com compressão
 
 2. **WebSocket**
    - Implementar servidor WebSocket no daemon usando `nhooyr.io/websocket` ou `github.com/gorilla/websocket`
    - Endpoint WebSocket: `/ws` ou `/api/v1/ws`
-   - Usar para atualizações em tempo real:
-     - Logs em tempo real
-     - Status do daemon
-     - Notificações de novos downloads
-     - Atualizações de progresso
+   - **Integração com State:**
+     - WebSocket manager implementa interface `StateNotifier`
+     - É injetado no state via `state.SetNotifier(wsManager)`
+     - State notifica automaticamente quando muda (sem necessidade de chamadas manuais)
+   - Usar para atualizações em tempo real do estado do daemon:
+     - Mudanças de status (stopped → running → checking)
+     - Após cada verificação: envia timestamp da última verificação e se houve erro
+   - Formato de mensagens JSON padronizado:
+     ```json
+     {
+       "type": "status_update",
+       "data": {
+         "status": "checking",
+         "last_check": "2024-01-15T10:30:45Z",
+         "has_error": false
+       }
+     }
+     ```
    - Cliente WebSocket nativo do browser no frontend
    - Reconexão automática em caso de desconexão
+   - Nota: Logs em tempo real podem ser implementados futuramente se necessário
 
 3. **Configuração**
    - Validação de configurações
@@ -267,6 +312,18 @@ AutoAnimeDownloader/
    - Documente exported functions, types, constants
    - Use comentários para explicar "por quê", não "o quê"
    - Exemplos em `Example*` functions
+
+9. **Logging**
+   - Use zerolog para todos os logs (não `fmt.Printf` ou `log.*`)
+   - Adicione contexto estruturado aos logs (campos como `anime`, `episode`, `error`)
+   - Use níveis apropriados:
+     - `DEBUG`: informações detalhadas para desenvolvimento
+     - `INFO`: eventos normais de operação
+     - `WARN`: situações que podem ser problemáticas
+     - `ERROR`: erros que precisam atenção (sempre com `.Stack()`)
+   - Logs em arquivo são sempre JSON (estruturado)
+   - Logs no console podem ser formatados (dev) ou JSON (produção)
+   - Não logue informações sensíveis (senhas, tokens, etc.)
 
 ### API REST
 
@@ -371,7 +428,9 @@ AutoAnimeDownloader/
 
 ### Backend (Go)
 - **API Framework**: `net/http` (stdlib) - sem dependências externas
-- **Logging**: `zerolog` (`github.com/rs/zerolog`) - logging estruturado com caller e stack traces para debug
+- **Logging**: 
+  - `zerolog` (`github.com/rs/zerolog`) - logging estruturado com caller e stack traces para debug
+  - `lumberjack` (`gopkg.in/natefinch/lumberjack.v2`) - rotação automática de logs (tamanho, backups, compressão)
 - **CLI**: `urfave/cli` (`github.com/urfave/cli/v2`) - biblioteca CLI organizada
 - **WebSocket**: `nhooyr.io/websocket` ou `github.com/gorilla/websocket` - servidor WebSocket
 - **Config**: Viper (`github.com/spf13/viper`) para configuração flexível (opcional)

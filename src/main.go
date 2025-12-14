@@ -1,38 +1,41 @@
 package main
 
 import (
-	program "AutoAnimeDownloader/src/daemon"
+	"AutoAnimeDownloader/src/daemon"
 	"AutoAnimeDownloader/src/internal/files"
-	"fmt"
-	"log"
+	"AutoAnimeDownloader/src/internal/logger"
 	"time"
 )
 
 func main() {
-	// run daemon
-	// run webui
-	// prepare cli
-
-	fmt.Println("Starting Auto Anime Downloader...")
+	logger.Init(true) // TODO: Passar esse bool pra env?
+	logger.Logger.Info().Msg("Starting Auto Anime Downloader...")
 
 	fileManager, err := files.NewDefaultFileManager()
 	if err != nil {
-		log.Fatalf("Failed to initialize files manager: %v", err)
+		logger.Logger.Fatal().Err(err).Msg("Failed to initialize files manager")
 	}
 
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
-		log.Fatalf("Failed to load configs: %v", err)
+		logger.Logger.Fatal().Err(err).Msg("Failed to load configs")
 	}
+
+	state := daemon.NewState()
+	state.SetStatus(daemon.StatusRunning)
 
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
-	program.StartLoop(program.StartLoopPayload{
-		FileManager:            fileManager,
-		Interval:               interval,
-		ShowError:              func(string, string) {},
-		UpdateEpisodesListView: func() {},
-		SetLoading:             func(bool) {},
+	_ = daemon.StartLoop(daemon.StartLoopPayload{
+		FileManager: fileManager,
+		Interval:    interval,
+		State:       state,
 	})
+
+	logger.Logger.Info().
+		Dur("interval", interval).
+		Msg("Daemon started successfully")
+
+	// TODO: Isso será trocado por um servidor HTTP em breve
 	select {}
 }

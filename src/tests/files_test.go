@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"AutoAnimeDownloader/modules/files"
+	"AutoAnimeDownloader/src/internal/files"
 	"os"
 	"path/filepath"
 	"strings"
