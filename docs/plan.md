@@ -183,6 +183,10 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
   - Testar middlewares (logging, CORS, Content-Type)
   - Testar roteamento correto de todas as rotas
   - Testar graceful shutdown
+  - **Incluir testes de integração CLI → API → Daemon:**
+    - Testar todos os comandos da CLI end-to-end
+    - Testar gerenciamento de processo (start/stop)
+    - Validar comunicação completa entre componentes
 - [ ] Testar handlers específicos:
   - `GET /api/v1/status`: retorna estado correto do daemon
   - `GET /api/v1/config`: retorna configurações
@@ -325,6 +329,16 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 ### 5.6 Melhorias na CLI
 - [x] Help do comando `config set` lista todas as keys disponíveis com tipos
 - [x] Mensagem de erro quando `config set` é chamado sem argumentos também lista keys disponíveis
+
+### 5.7 Testes da CLI
+- [ ] **Nota sobre testes:** A CLI é principalmente um wrapper que envia comandos HTTP e executa processos do sistema. Testes unitários não são prioritários aqui, pois a CLI apenas:
+  - Faz parsing de argumentos (já testado indiretamente pelo uso)
+  - Chama funções do cliente HTTP (que podem ser testadas isoladamente se necessário)
+  - Executa comandos do sistema (difícil de testar unitariamente)
+- [ ] Testes de integração serão implementados posteriormente para validar o fluxo completo:
+  - CLI → API → Daemon
+  - Gerenciamento de processo (start/stop)
+  - Todos os comandos end-to-end
 
 ---
 

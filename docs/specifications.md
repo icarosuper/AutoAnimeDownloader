@@ -269,7 +269,11 @@ AutoAnimeDownloader/
    - **Testes de integração** para:
      - API REST completa (endpoints e middlewares)
      - WebSocket (conexão, mensagens, reconexão)
-     - Integração CLI-Daemon
+     - **Integração CLI-Daemon** (testes end-to-end):
+       - Todos os comandos da CLI funcionando com o daemon
+       - Gerenciamento de processo (start/stop via CLI)
+       - Comunicação completa CLI → API → Daemon
+       - Nota: Testes unitários da CLI não são prioritários, pois ela é principalmente um wrapper que faz chamadas HTTP e executa processos do sistema
      - Fluxo completo de verificação e download
    - **Mocks** para serviços externos:
      - Anilist API (já existe `MockAniListDo`)
@@ -281,7 +285,7 @@ AutoAnimeDownloader/
      - State management (thread-safety, notificações)
      - API handlers (validação, respostas, erros)
      - WebSocket manager (broadcast, reconexão)
-     - CLI commands (parsing, formatação)
+     - CLI: Testes de integração (não unitários) - A CLI é principalmente um wrapper que envia comandos HTTP e executa processos do sistema. Testes unitários não são prioritários, mas testes de integração serão implementados para validar o fluxo completo CLI → API → Daemon
 
 5. **Documentação**
    - ✅ Documentação da API (OpenAPI/Swagger) - Implementada com Swaggo/swag
