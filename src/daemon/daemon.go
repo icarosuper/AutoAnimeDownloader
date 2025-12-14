@@ -78,13 +78,15 @@ func animeVerification(ctx context.Context, fileManager *files.FileManager, stat
 
 	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath, configs.CompletedAnimePath)
 
-	downloadedTorrents := fetchDownloadedTorrents(torrentsService)
-	if downloadedTorrents == nil {
+	downloadedTorrents, err := fetchDownloadedTorrents(torrentsService)
+	if err != nil {
+		state.SetLastCheckError(err)
 		return
 	}
 
-	anilistResponse := searchAnilist(configs)
-	if anilistResponse == nil {
+	anilistResponse, err := searchAnilist(configs)
+	if err != nil {
+		state.SetLastCheckError(err)
 		return
 	}
 
@@ -245,24 +247,26 @@ func saveEpisodesToFile(fileManager *files.FileManager, newEpisodes []files.Epis
 	}
 }
 
-func fetchDownloadedTorrents(torrentsService *torrents.TorrentService) []torrents.Torrent {
+func fetchDownloadedTorrents(torrentsService *torrents.TorrentService) ([]torrents.Torrent, error) {
 	torrents, err := torrentsService.GetDownloadedTorrents()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to connect to qBittorrent")
-		return nil
+		return nil, fmt.Errorf("failed to connect to qBittorrent: %w", err)
 	}
 
 	logger.Logger.Debug().Int("count", len(torrents)).Msg("Fetched downloaded torrents")
-	return torrents
+	return torrents, nil
 }
 
-func searchAnilist(configs *files.Config) *anilist.AniListResponse {
+func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 	if configs.AnilistUsername == "" || configs.SavePath == "" {
+		err := fmt.Errorf("missing required configuration: Anilist username or save path")
 		logger.Logger.Error().
+			Err(err).
 			Str("anilist_username", configs.AnilistUsername).
 			Str("save_path", configs.SavePath).
 			Msg("Missing required configuration: Anilist username or save path")
-		return nil
+		return nil, err
 	}
 
 	anilistResponse, err := anilist.SearchAnimes(configs.AnilistUsername)
@@ -270,7 +274,7 @@ func searchAnilist(configs *files.Config) *anilist.AniListResponse {
 		logger.Logger.Error().Err(err).Stack().
 			Str("username", configs.AnilistUsername).
 			Msg("Failed to search animes on Anilist")
-		return nil
+		return nil, fmt.Errorf("failed to search animes on Anilist: %w", err)
 	}
 
 	logger.Logger.Info().
@@ -278,7 +282,7 @@ func searchAnilist(configs *files.Config) *anilist.AniListResponse {
 		Int("animes_found", len(anilistResponse.Data.Page.MediaList)).
 		Msg("Successfully fetched animes from Anilist")
 
-	return anilistResponse
+	return anilistResponse, nil
 }
 
 func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (result []nyaa.TorrentResult) {
