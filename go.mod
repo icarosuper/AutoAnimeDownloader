@@ -5,6 +5,7 @@ go 1.24.6
 require (
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/rs/zerolog v1.34.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (

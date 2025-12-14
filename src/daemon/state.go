@@ -40,11 +40,10 @@ func (s *State) SetNotifier(notifier StateNotifier) {
 	s.notifier = notifier
 }
 
+// Should always return the current state values
+// The notifier null-check should be done by caller
 func (s *State) notifyChange() (Status, time.Time, bool) {
-	if s.notifier != nil {
-		return s.status, s.lastCheck, s.lastCheckError != nil
-	}
-	return "", time.Time{}, false
+	return s.status, s.lastCheck, s.lastCheckError != nil
 }
 
 func (s *State) GetStatus() Status {

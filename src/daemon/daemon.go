@@ -108,6 +108,7 @@ func animeVerification(ctx context.Context, fileManager *files.FileManager, stat
 		select {
 		case <-ctx.Done():
 			logger.Logger.Info().Msg("Verification cancelled")
+			state.SetLastCheckError(nil) // Avoids stale error reports
 			return
 		default:
 		}

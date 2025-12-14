@@ -18,6 +18,9 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [x] Configurar níveis de log (DEBUG, INFO, WARN, ERROR)
 - [x] Configurar output (JSON em produção, console formatado em dev)
 - [x] Adicionar função helper para stack traces em erros
+- [x] Implementar gravação de logs em arquivo com rotação (lumberjack)
+- [x] Multi-writer: escrever simultaneamente no console e arquivo
+- [x] Formato JSON no arquivo, console formatado em dev
 
 ### 1.2 Refatorar `src/daemon/daemon.go`
 - [x] Remover parâmetros de UI: `ShowError`, `UpdateEpisodesListView`, `SetLoading`
@@ -419,7 +422,6 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 **Objetivo:** Adicionar features extras e melhorar qualidade.
 
 ### 9.1 Melhorias no Logging
-- [ ] Implementar rotação de logs
 - [ ] Configurar níveis de log por ambiente
 - [ ] Adicionar mais contexto aos logs
 - [ ] Melhorar formatação de logs em desenvolvimento
@@ -509,12 +511,19 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 ### Etapa 1: ✅ Concluída
 - **1.1 Configurar Zerolog**: ✅ Implementado com suporte a desenvolvimento e produção
+  - ✅ Gravação de logs em arquivo com rotação (lumberjack)
+  - ✅ Multi-writer: console e arquivo simultaneamente
+  - ✅ Formato JSON no arquivo, console formatado em dev
+  - ✅ Rotação automática: 10MB por arquivo, 5 backups, 30 dias, compressão
 - **1.2 Refatorar daemon.go**: ✅ Removidas dependências de UI, integrado zerolog, adicionado contexto
 - **1.3 Estrutura de Estado**: ✅ Implementado com StateNotifier para notificações automáticas
+- **1.4 Testes**: ✅ Testes completos para logger e state
 
 **Correções realizadas:**
 - Corrigido tracking de erros: `fetchDownloadedTorrents()` e `searchAnilist()` agora retornam erros e são registrados no state
 - Corrigido código comentado corrompido em `src/tests/anilist_test.go`
+- Corrigido `notifyChange()` para sempre retornar snapshot válido
+- Corrigido limpeza de erro em caso de cancelamento
 
 **Próximos passos:**
 - Etapa 2: API REST do Daemon
