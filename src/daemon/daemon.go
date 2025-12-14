@@ -23,11 +23,22 @@ type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
 func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context) {
 	return func(d time.Duration, c context.Context) {
 		go func() {
+			// Check if context is already cancelled before starting
+			select {
+			case <-c.Done():
+				logger.Logger.Info().Msg("Verification loop cancelled before start")
+				p.State.SetStatus(StatusStopped)
+				return
+			default:
+				p.State.SetStatus(StatusRunning)
+			}
+
 			for {
-				// verifica cancelamento antes de executar
+				// check cancellation before executing
 				select {
 				case <-c.Done():
 					logger.Logger.Info().Msg("Verification loop stopped")
+					p.State.SetStatus(StatusStopped)
 					return
 				default:
 				}
@@ -37,15 +48,15 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 					defer func() {
 						p.State.SetStatus(StatusRunning)
 					}()
-					animeVerification(c, p.FileManager, p.State)
+					AnimeVerification(c, p.FileManager, p.State)
 				}()
 
-				// aguarda duração ou cancelamento
 				select {
 				case <-time.After(d):
 					continue
 				case <-c.Done():
 					logger.Logger.Info().Msg("Verification loop stopped")
+					p.State.SetStatus(StatusStopped)
 					return
 				}
 			}
@@ -63,16 +74,16 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 
 	return func(newDur time.Duration) {
 		mu.Lock()
-		// para o loop atual
+		// stop current loop
 		cancel()
-		// cria novo contexto/cancel para o próximo loop
+		// create new context/cancel for next loop
 		ctx, cancel = context.WithCancel(context.Background())
 		start(newDur, ctx)
 		mu.Unlock()
 	}
 }
 
-func animeVerification(ctx context.Context, fileManager *files.FileManager, state *State) {
+func AnimeVerification(ctx context.Context, fileManager *files.FileManager, state *State) {
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
