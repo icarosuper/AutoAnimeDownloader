@@ -135,6 +135,16 @@ func GetLogFilePath() string {
 	return logFilePath
 }
 
+// GetExpectedLogFilePath returns the expected log file path without initializing the logger
+// This is useful for CLI tools that need to read logs without initializing the logger
+func GetExpectedLogFilePath() (string, error) {
+	logDir, err := getLogDirectory()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(logDir, "daemon.log"), nil
+}
+
 func Close() error {
 	if logFile != nil {
 		// lumberjack doesn't have a Close method, but we can set it to nil

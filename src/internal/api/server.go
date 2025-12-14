@@ -1,7 +1,7 @@
 package api
 
 import (
-	"AutoAnimeDownloader/src/daemon"
+	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"context"

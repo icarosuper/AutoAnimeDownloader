@@ -1,7 +1,7 @@
 package api
 
 import (
-	"AutoAnimeDownloader/src/daemon"
+	"AutoAnimeDownloader/src/internal/daemon"
 	"context"
 	"net/http"
 )

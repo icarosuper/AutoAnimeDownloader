@@ -72,6 +72,8 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
   - [x] Testar que contexto de cancelamento funciona
   - [x] Testar que logs são gerados corretamente
   - [x] Testar que erros são tratados corretamente
+  - [x] Testar transições de status no StartLoop (`TestStartLoop_StatusTransitions`)
+  - [x] Testar que status muda para "checking" durante verificação (`TestStartLoop_StatusCheckingDuringVerification`)
 
 ---
 
@@ -162,11 +164,12 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [x] Daemon gerencia seu próprio status internamente
 - [x] Status é atualizado automaticamente quando:
   - Loop inicia: `StatusRunning`
-  - Verificação começa: `StatusChecking`
-  - Verificação termina: `StatusRunning`
+  - Verificação começa: `StatusChecking` (definido diretamente antes de `AnimeVerification`)
+  - Verificação termina: `StatusRunning` (ou `StatusStopped` se contexto foi cancelado)
   - Loop para: `StatusStopped`
 - [x] `StopDaemonLoop()` atualiza status imediatamente para resposta rápida
 - [x] API apenas lê o status, não modifica diretamente
+- [x] Corrigido: Status "checking" agora é visível durante toda a execução de `AnimeVerification` (removida função anônima com defer que causava problemas de timing)
 
 ### 2.8 Testes da API
 - [ ] Criar testes unitários para handlers (`src/internal/api/*_test.go`):
@@ -280,44 +283,48 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Criar CLI para gerenciar o daemon.
 
+**Status:** ✅ **CONCLUÍDA**
+
 ### 5.1 Estrutura Base da CLI
-- [ ] Criar `src/cmd/cli/main.go`
-- [ ] Configurar `urfave/cli` com app básico
-- [ ] Definir flags globais (endpoint do daemon, formato de saída)
+- [x] Criar `src/cmd/cli/main.go`
+- [x] Configurar `urfave/cli` com app básico
+- [x] Definir flags globais (endpoint do daemon, formato de saída, verbose)
 
 ### 5.2 Cliente HTTP
-- [ ] Criar `src/internal/api/client.go` (ou similar)
-- [ ] Implementar cliente HTTP para comunicação com daemon
-- [ ] Tratar erros de conexão
-- [ ] Implementar timeout
-- [ ] Criar funções helper para cada endpoint
+- [x] Criar `src/internal/api/client.go`
+- [x] Implementar cliente HTTP para comunicação com daemon
+- [x] Tratar erros de conexão
+- [x] Implementar timeout
+- [x] Criar funções helper para cada endpoint
 
 ### 5.3 Comandos Básicos
-- [ ] Implementar `status` - mostrar status do daemon
-- [ ] Implementar `config get` - mostrar configurações
-- [ ] Implementar `config set <key> <value>` - atualizar configuração
-- [ ] Implementar `check` - forçar verificação manual
-- [ ] Implementar `list animes` - listar animes monitorados
-- [ ] Implementar `list episodes` - listar episódios baixados
-- [ ] Implementar `logs` - mostrar logs recentes
+- [x] Implementar `start` - iniciar processo do daemon
+- [x] Implementar `stop` - parar processo do daemon
+- [x] Implementar `loop start` - iniciar loop de verificação
+- [x] Implementar `loop stop` - parar loop de verificação
+- [x] Implementar `status` - mostrar status do daemon
+- [x] Implementar `config get` - mostrar configurações
+- [x] Implementar `config set <key> <value>` - atualizar configuração (com lista de keys no help)
+- [x] Implementar `check` - forçar verificação manual
+- [x] Implementar `animes` - listar animes monitorados
+- [x] Implementar `episodes` - listar episódios baixados
+- [x] Implementar `logs` - mostrar logs recentes
 
 ### 5.4 Gerenciamento de Processo
-- [ ] Criar `src/internal/daemon/process.go`
-- [ ] Implementar detecção se daemon está rodando (verificar PID file ou conexão)
-- [ ] Implementar `start` - iniciar daemon como processo separado
-- [ ] Implementar `stop` - parar daemon (enviar sinal ou chamar API)
-- [ ] Implementar `restart` - parar e iniciar
-- [ ] Gerenciar PID file
+- [x] Criar `src/internal/cli/process.go`
+- [x] Implementar detecção se daemon está rodando (verificar PID file)
+- [x] Implementar `start` - iniciar daemon como processo separado em background
+- [x] Implementar `stop` - parar daemon (enviar SIGTERM)
+- [x] Gerenciar PID file (`~/.autoAnimeDownloader/daemon.pid`)
 
 ### 5.5 Formatação de Saída
-- [ ] Implementar formatação em tabela (padrão)
-- [ ] Implementar formatação JSON (`--json` flag)
-- [ ] Implementar cores para terminal (opcional)
+- [x] Implementar formatação em tabela (padrão) usando `go-pretty`
+- [x] Implementar formatação JSON (`--json` flag)
+- [x] Suporte a cores para terminal
 
-### 5.6 Testes da CLI
-- [ ] Testar cada comando isoladamente
-- [ ] Testar tratamento de erros
-- [ ] Testar formatação de saída
+### 5.6 Melhorias na CLI
+- [x] Help do comando `config set` lista todas as keys disponíveis com tipos
+- [x] Mensagem de erro quando `config set` é chamado sem argumentos também lista keys disponíveis
 
 ---
 

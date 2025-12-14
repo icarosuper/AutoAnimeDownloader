@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"AutoAnimeDownloader/src/daemon"
+	"AutoAnimeDownloader/src/internal/daemon"
 	"sync"
 	"testing"
 	"time"

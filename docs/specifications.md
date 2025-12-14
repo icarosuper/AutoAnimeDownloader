@@ -1,6 +1,6 @@
 # AutoAnimeDownloader - Especificações do Projeto
 
-**Última atualização:** API REST completa implementada com Swagger/OpenAPI
+**Última atualização:** API REST completa, CLI implementada, correção do status "checking", testes adicionados
 
 ## Visão Geral do Projeto
 
@@ -135,44 +135,53 @@ AutoAnimeDownloader/
    - Tornar a lógica mais modular e testável
    - Adicionar contexto para cancelamento
 
-4. **Gerenciamento de Estado**
+4. **Gerenciamento de Estado** ✅
    - Criar estrutura para manter estado mínimo do daemon:
-     - Status atual (stopped/running/checking)
-     - Timestamp da última verificação
-     - Erro da última verificação (se houver)
-   - Gerenciar mutex para acesso thread-safe
+     - Status atual (stopped/running/checking) ✅
+     - Timestamp da última verificação ✅
+     - Erro da última verificação (se houver) ✅
+   - Gerenciar mutex para acesso thread-safe ✅
    - **Notificações automáticas via injeção de dependência:**
-     - State implementa interface `StateNotifier` para notificar mudanças
-     - WebSocket manager implementa `StateNotifier` e é injetado no state
-     - Sempre que o estado muda (SetStatus, SetLastCheck, SetLastCheckError), notifica automaticamente via WebSocket
-     - Mantém desacoplamento: state não conhece WebSocket diretamente, apenas a interface
+     - State implementa interface `StateNotifier` para notificar mudanças ✅
+     - WebSocket manager implementa `StateNotifier` e é injetado no state (FUTURO)
+     - Sempre que o estado muda (SetStatus, SetLastCheck, SetLastCheckError), notifica automaticamente via WebSocket ✅
+     - Mantém desacoplamento: state não conhece WebSocket diretamente, apenas a interface ✅
    - Estado é usado para:
-     - Endpoint `GET /api/v1/status` (retorna estado completo)
-     - WebSocket (notifica mudanças de estado automaticamente)
-   - Não incluir estatísticas ou operação atual (informações podem ser obtidas dos dados ou logs)
+     - Endpoint `GET /api/v1/status` (retorna estado completo) ✅
+     - WebSocket (notifica mudanças de estado automaticamente) (FUTURO)
+   - Não incluir estatísticas ou operação atual (informações podem ser obtidas dos dados ou logs) ✅
+   - **Correção do status "checking":**
+     - Status é definido diretamente antes de `AnimeVerification` (não dentro de função anônima com defer)
+     - Garante que status "checking" seja visível durante toda a execução da verificação
+     - Testes adicionados para verificar transições de status (`TestStartLoop_StatusTransitions`, `TestStartLoop_StatusCheckingDuringVerification`)
 
-### Fase 2: Implementação da CLI
+### Fase 2: Implementação da CLI ✅ **CONCLUÍDA**
 
-1. **Criar `src/cmd/cli/main.go`**
+1. **Criar `src/cmd/cli/main.go`** ✅
    - Definir comandos principais:
-     - `start` - Iniciar daemon
-     - `stop` - Parar daemon
-     - `restart` - Reiniciar daemon
-     - `status` - Ver status
-     - `config` - Gerenciar configurações
-     - `check` - Forçar verificação
-     - `list` - Listar animes/episódios
-     - `logs` - Ver logs
+     - `start` - Iniciar processo do daemon ✅
+     - `stop` - Parar processo do daemon ✅
+     - `loop start` - Iniciar loop de verificação ✅
+     - `loop stop` - Parar loop de verificação ✅
+     - `status` - Ver status ✅
+     - `config get` - Obter configurações ✅
+     - `config set <key> <value>` - Atualizar configuração (com help listando keys) ✅
+     - `check` - Forçar verificação ✅
+     - `animes` - Listar animes monitorados ✅
+     - `episodes` - Listar episódios baixados ✅
+     - `logs` - Ver logs recentes ✅
 
-2. **Cliente HTTP para API**
-   - Criar cliente para comunicação com daemon
-   - Tratar erros de conexão
-   - Formatação de saída (tabelas, JSON, etc.)
+2. **Cliente HTTP para API** ✅
+   - Criado `src/internal/api/client.go` para comunicação com daemon ✅
+   - Tratamento de erros de conexão ✅
+   - Formatação de saída (tabelas com `go-pretty`, JSON com flag `--json`) ✅
 
-3. **Gerenciamento de Processo**
-   - Detectar se daemon está rodando
-   - Iniciar daemon como processo separado
-   - Gerenciar PID file
+3. **Gerenciamento de Processo** ✅
+   - Criado `src/internal/cli/process.go` ✅
+   - Detecção se daemon está rodando via PID file ✅
+   - Iniciar daemon como processo separado em background ✅
+   - Parar daemon enviando SIGTERM ✅
+   - Gerenciamento de PID file em `~/.autoAnimeDownloader/daemon.pid` ✅
 
 ### Fase 3: Implementação da WebUI
 

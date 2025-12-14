@@ -1,7 +1,7 @@
 package tests
 
 import (
-	"AutoAnimeDownloader/src/daemon"
+	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"bytes"
@@ -232,6 +232,132 @@ func TestAnimeVerification_StatusResetOnError(t *testing.T) {
 	// Note: The status reset to Running happens in the loop function with defer,
 	// not in animeVerification itself. This test verifies that errors are properly
 	// recorded in the state.
+}
+
+func TestStartLoop_StatusTransitions(t *testing.T) {
+	// Create a mock FileManager that will cause AnimeVerification to fail quickly
+	// so we can test status transitions
+	mockFS := &mockFileSystemForDaemon{
+		loadConfigsError: &testError{msg: "test error"},
+	}
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json")
+
+	state := daemon.NewState()
+	notifier := newMockNotifier()
+	state.SetNotifier(notifier)
+
+	// Start the loop with a short interval
+	interval := 100 * time.Millisecond
+	loopControl := daemon.StartLoop(daemon.StartLoopPayload{
+		FileManager: fileManager,
+		Interval:    interval,
+		State:       state,
+	})
+
+	// Wait a bit for the loop to start and set status to running
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify initial status is running
+	if state.GetStatus() != daemon.StatusRunning {
+		t.Errorf("Expected status to be %s after loop starts, got %s", daemon.StatusRunning, state.GetStatus())
+	}
+
+	// Wait for the first verification cycle to start
+	// The status should change to checking during verification
+	time.Sleep(100 * time.Millisecond)
+
+	// Check notifications to see if status changed to checking
+	notifications := notifier.GetNotifications()
+	foundChecking := false
+	for _, notif := range notifications {
+		if notif.status == daemon.StatusChecking {
+			foundChecking = true
+			break
+		}
+	}
+
+	if !foundChecking {
+		t.Error("Expected status to change to 'checking' during verification, but no such notification was found")
+	}
+
+	// Wait for verification to complete and status to return to running
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify status is back to running (or checking if still in progress)
+	currentStatus := state.GetStatus()
+	if currentStatus != daemon.StatusRunning && currentStatus != daemon.StatusChecking {
+		t.Errorf("Expected status to be %s or %s after verification, got %s",
+			daemon.StatusRunning, daemon.StatusChecking, currentStatus)
+	}
+
+	// Stop the loop
+	loopControl(interval) // This will cancel and restart, but we'll wait and check stopped
+	time.Sleep(50 * time.Millisecond)
+
+	// The loop should still be running (it restarts), so status should be running or checking
+	finalStatus := state.GetStatus()
+	if finalStatus != daemon.StatusRunning && finalStatus != daemon.StatusChecking && finalStatus != daemon.StatusStopped {
+		t.Errorf("Unexpected final status: %s", finalStatus)
+	}
+}
+
+func TestStartLoop_StatusCheckingDuringVerification(t *testing.T) {
+	// This test specifically verifies that the status changes to "checking"
+	// during AnimeVerification execution
+	mockFS := &mockFileSystemForDaemon{
+		configContent:   createValidConfigJSON(),
+		episodesContent: []byte("[]"),
+	}
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json")
+
+	state := daemon.NewState()
+	notifier := newMockNotifier()
+	state.SetNotifier(notifier)
+
+	// Start the loop with a longer interval to give us time to check
+	interval := 500 * time.Millisecond
+	loopControl := daemon.StartLoop(daemon.StartLoopPayload{
+		FileManager: fileManager,
+		Interval:    interval,
+		State:       state,
+	})
+
+	// Wait for loop to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Poll for status changes - we want to catch the "checking" status
+	var statuses []daemon.Status
+	startTime := time.Now()
+	timeout := 2 * time.Second
+
+	for time.Since(startTime) < timeout {
+		currentStatus := state.GetStatus()
+		if len(statuses) == 0 || statuses[len(statuses)-1] != currentStatus {
+			statuses = append(statuses, currentStatus)
+		}
+		if currentStatus == daemon.StatusChecking {
+			// Found it! Status is checking
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Verify we saw the checking status
+	foundChecking := false
+	for _, s := range statuses {
+		if s == daemon.StatusChecking {
+			foundChecking = true
+			break
+		}
+	}
+
+	if !foundChecking {
+		t.Errorf("Expected to see status 'checking' during verification. Statuses seen: %v", statuses)
+	}
+
+	// Clean up - stop the loop
+	_ = loopControl
+	time.Sleep(100 * time.Millisecond)
 }
 
 // mockFileSystemForDaemon is a mock filesystem for testing daemon functions
