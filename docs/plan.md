@@ -542,25 +542,62 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 ## Ordem de Prioridade
 
-### Crítico (MVP)
-1. Etapa 0: Preparação
-2. Etapa 1: Logging e Refatoração Base
-3. Etapa 2: API REST Básica (status, config, check)
-4. Etapa 4: Ponto de Entrada do Daemon
-5. Etapa 5: CLI Básica (status, config, check)
-6. Etapa 6: Setup Frontend
-7. Etapa 7: Páginas Básicas (lista animes, configurações)
-8. Etapa 8: Integração Básica
+### Ordem de Implementação
 
-### Importante (Funcionalidade Completa)
-9. Etapa 2: Handlers de Dados (animes, episodes)
-10. Etapa 3: WebSocket
-11. Etapa 7: Dashboard e Logs
-12. Etapa 8: WebSocket no Frontend
+A implementação segue esta ordem sequencial:
+
+1. **Etapa 1: Logging e Refatoração Base do Daemon** ✅
+   - Configurar zerolog
+   - Refatorar daemon.go
+   - Criar estrutura de estado
+   - Testes
+
+2. **Etapa 2: API REST do Daemon** ✅
+   - Estrutura base da API
+   - Handlers básicos (status, config)
+   - Handlers de dados (animes, episodes)
+   - Handlers de controle (check, daemon start/stop)
+   - Documentação Swagger/OpenAPI
+   - Gerenciamento de estado do daemon
+
+3. **Etapa 4: Ponto de Entrada do Daemon** ✅
+   - Criar main.go do daemon
+   - Integrar tudo
+   - Graceful shutdown
+
+4. **Etapa 5: CLI Básica** ✅
+   - Estrutura base da CLI
+   - Cliente HTTP
+   - Comandos básicos
+   - Gerenciamento de processo
+   - Formatação de saída
+
+5. **Etapa 6: Setup Inicial do Frontend** (PRÓXIMO)
+   - Criar projeto Svelte
+   - Configurar Tailwind CSS
+   - Estrutura de rotas
+   - Cliente API
+
+6. **Etapa 7: Páginas do Frontend** (PRÓXIMO)
+   - Página de lista de animes
+   - Página de episódios
+   - Página de configurações
+   - Dashboard/Status
+
+7. **Etapa 8: Integração Frontend-Backend** (PRÓXIMO)
+   - Build do frontend
+   - Integração com daemon
+   - Servir arquivos estáticos
+
+8. **Etapa 3: WebSocket para Tempo Real** (FUTURO)
+   - Servidor WebSocket
+   - Integração com daemon
+   - Reconexão e robustez
+   - WebSocket no frontend
 
 ### Desejável (Polimento)
-13. Etapa 9: Melhorias e Polimento
-14. Etapa 10: Migração e Cleanup
+- Etapa 9: Melhorias e Polimento
+- Etapa 10: Migração e Cleanup
 
 ---
 
@@ -577,27 +614,59 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - **1.4 Testes**: ✅ Testes completos para logger, state e refatoração do daemon
   - ✅ 12 testes para logger (inicialização, níveis, formatação, caller info, helpers, campos estruturados)
   - ✅ 13 testes para state (thread-safety, notificações, Get/Set, GetAll, sem notifier)
-  - ✅ 5 testes para refatoração do daemon (erros registrados, cancelamento, logs gerados)
+  - ✅ 7 testes para refatoração do daemon (erros registrados, cancelamento, logs gerados, transições de status)
 
 **Correções realizadas:**
 - Corrigido tracking de erros: `fetchDownloadedTorrents()` e `searchAnilist()` agora retornam erros e são registrados no state
 - Corrigido código comentado corrompido em `src/tests/anilist_test.go`
 - Corrigido `notifyChange()` para sempre retornar snapshot válido
 - Corrigido limpeza de erro em caso de cancelamento
+- Corrigido status "checking" para ser visível durante toda a execução de `AnimeVerification`
+
+### Etapa 2: ✅ Concluída
+- **2.1-2.7**: ✅ API REST completa implementada com todos os endpoints
+- ✅ Documentação Swagger/OpenAPI
+- ✅ Gerenciamento de estado do daemon (status interno)
+- ✅ Correção do status "checking" para ser visível durante verificação
+
+### Etapa 4: ✅ Concluída
+- ✅ Ponto de entrada do daemon (`src/cmd/daemon/main.go`)
+- ✅ Integração completa com API REST
+- ✅ Graceful shutdown
+- ✅ Inicialização automática do loop
+
+### Etapa 5: ✅ Concluída
+- ✅ CLI completa com todos os comandos
+- ✅ Gerenciamento de processo (start/stop)
+- ✅ Cliente HTTP para comunicação com daemon
+- ✅ Formatação de saída (tabelas e JSON)
+- ✅ Help melhorado para `config set` com lista de keys
+- ✅ Correção do comando `logs` para encontrar arquivo de log
 
 **Próximos passos:**
-- Etapa 2: API REST do Daemon
+- Etapa 6: Setup Inicial do Frontend
 
 ---
 
 ## Notas de Implementação
 
 ### Dependências Entre Etapas
-- Etapa 1 deve ser completada antes da Etapa 2 (logging necessário)
-- Etapa 2 deve ser completada antes da Etapa 4 (API necessária)
-- Etapa 4 deve ser completada antes da Etapa 5 (daemon precisa estar rodando)
-- Etapa 6 deve ser completada antes da Etapa 7 (estrutura necessária)
-- Etapa 7 pode ser feita parcialmente antes da Etapa 8 (componentes isolados)
+- **Ordem de implementação:**
+  1. Etapa 1: Logging e Refatoração Base (base do daemon)
+  2. Etapa 2: API REST (comunicação)
+  3. Etapa 4: Ponto de Entrada do Daemon (integração)
+  4. Etapa 5: CLI (interface de linha de comando)
+  5. Etapa 6: Setup Frontend (estrutura)
+  6. Etapa 7: Páginas Frontend (componentes)
+  7. Etapa 8: Integração Frontend-Backend (servir arquivos estáticos)
+  8. Etapa 3: WebSocket (tempo real - pode ser feito após frontend básico)
+- **Dependências específicas:**
+  - Etapa 1 deve ser completada antes da Etapa 2 (logging necessário)
+  - Etapa 2 deve ser completada antes da Etapa 4 (API necessária)
+  - Etapa 4 deve ser completada antes da Etapa 5 (daemon precisa estar rodando)
+  - Etapa 6 deve ser completada antes da Etapa 7 (estrutura necessária)
+  - Etapa 7 pode ser feita parcialmente antes da Etapa 8 (componentes isolados)
+  - Etapa 3 (WebSocket) pode ser implementada após Etapa 8 ou em paralelo
 
 ### Testes Contínuos
 - **Todas as novas features devem ter testes correspondentes**

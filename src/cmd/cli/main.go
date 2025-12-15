@@ -131,7 +131,7 @@ func main() {
 			},
 			{
 				Name:  "animes",
-				Usage: "List monitored animes",
+				Usage: "List downloaded animes",
 				Action: func(c *cli.Context) error {
 					return handleAnimes()
 				},

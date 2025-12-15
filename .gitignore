@@ -12,5 +12,6 @@ dist/
 .eggs/
 *.manifest
 *.spec
+node_modules/
 
 go.sum
