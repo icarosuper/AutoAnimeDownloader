@@ -8,12 +8,23 @@ import (
 	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
 
+// FileManagerInterface defines the interface for file management operations
+type FileManagerInterface interface {
+	LoadConfigs() (*files.Config, error)
+	SaveConfigs(config *files.Config) error
+	LoadSavedEpisodes() ([]files.EpisodeStruct, error)
+	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
+	DeleteEpisodesFromFile(episodeIds []int) error
+	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+}
+
 type StartLoopPayload struct {
-	FileManager *files.FileManager
+	FileManager FileManagerInterface
 	Interval    time.Duration
 	State       *State
 }
@@ -92,7 +103,14 @@ func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
 	}
 }
 
-func AnimeVerification(ctx context.Context, fileManager *files.FileManager, state *State) {
+func getQBittorrentURL(configURL string) string {
+	if envURL := os.Getenv("QBITTORRENT_URL"); envURL != "" {
+		return envURL
+	}
+	return configURL
+}
+
+func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State) {
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
@@ -100,7 +118,8 @@ func AnimeVerification(ctx context.Context, fileManager *files.FileManager, stat
 		return
 	}
 
-	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, configs.QBittorrentUrl, configs.SavePath, configs.CompletedAnimePath)
+	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
+	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
 
 	downloadedTorrents, err := fetchDownloadedTorrents(torrentsService)
 	if err != nil {
@@ -210,7 +229,7 @@ func animeIsInExcludedList(anime anilist.MediaList, excludedList string) bool {
 	return false
 }
 
-func handleSavedEpisodes(fileManager *files.FileManager, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
+func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
 	episodesNotInWatching := identifyEpisodesNotInWatching(data.savedEpisodes, data.checkedEpisodes)
 	episodeIdsToDelete := append(data.idsToDelete, episodesNotInWatching...)
 
@@ -264,7 +283,7 @@ func extractEpisodesHashes(savedEpisodes []files.EpisodeStruct, episodeIDs []int
 	return hashes
 }
 
-func saveEpisodesToFile(fileManager *files.FileManager, newEpisodes []files.EpisodeStruct) {
+func saveEpisodesToFile(fileManager FileManagerInterface, newEpisodes []files.EpisodeStruct) {
 	if err := fileManager.SaveEpisodesToFile(newEpisodes); err != nil {
 		logger.Logger.Warn().Err(err).Int("count", len(newEpisodes)).Msg("Failed to save episodes to file")
 	} else if len(newEpisodes) > 0 {

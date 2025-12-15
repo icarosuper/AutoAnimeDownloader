@@ -1,4 +1,4 @@
-package tests
+package unit
 
 import (
 	"AutoAnimeDownloader/src/internal/files"

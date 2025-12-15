@@ -87,6 +87,13 @@ func (ts *TorrentService) DeleteTorrents(hashes []string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes := make([]byte, 512)
+		resp.Body.Read(bodyBytes)
+		return fmt.Errorf("qBittorrent API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	return nil
 }
 
@@ -103,6 +110,13 @@ func (ts *TorrentService) SendAnimeToCompletedFolder(hashes []string, animeName 
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	// Check HTTP status code
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes := make([]byte, 512)
+		resp.Body.Read(bodyBytes)
+		return fmt.Errorf("qBittorrent API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
 
 	return nil
 }
@@ -197,11 +211,34 @@ func (ts *TorrentService) getDownloadedTorrents() ([]Torrent, error) {
 	}
 	defer func() { _ = response.Body.Close() }()
 
+	// Check HTTP status code
+	if response.StatusCode != http.StatusOK {
+		bodyBytes := make([]byte, 1024)
+		n, _ := response.Body.Read(bodyBytes)
+		responseBody := strings.TrimSpace(string(bodyBytes[:n]))
+		if responseBody == "" {
+			responseBody = "(empty response)"
+		}
+		return nil, fmt.Errorf("qBittorrent API returned status %d: %s", response.StatusCode, responseBody)
+	}
+
+	// Check Content-Type to ensure we're getting JSON
+	contentType := response.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		bodyBytes := make([]byte, 1024)
+		n, _ := response.Body.Read(bodyBytes)
+		responseBody := strings.TrimSpace(string(bodyBytes[:n]))
+		if responseBody == "" {
+			responseBody = "(empty response)"
+		}
+		return nil, fmt.Errorf("qBittorrent API returned non-JSON response (Content-Type: %s): %s", contentType, responseBody)
+	}
+
 	var torrents []Torrent
 	err = json.NewDecoder(response.Body).Decode(&torrents)
 	if err != nil {
 		fmt.Println("Error decoding response:", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to decode qBittorrent response: %w", err)
 	}
 
 	return torrents, nil

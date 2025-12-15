@@ -15,3 +15,11 @@ dist/
 node_modules/
 
 go.sum
+
+# Runtime data (Docker volumes)
+runtime/
+!runtime/.gitkeep
+!runtime/qbittorrent-config/qBittorrent/qBittorrent.conf
+
+# Environment variables
+.env

@@ -1,0 +1,61 @@
+services:
+  mock-anilist:
+    build:
+      context: ./src/tests/mocks/anilist
+      dockerfile: Dockerfile
+    # Ports não são mapeados para o host, apenas expostos na rede Docker
+    expose:
+      - "8080"
+    environment:
+      - PORT=8080
+      - SCENARIO=default
+    networks:
+      - test-network
+
+  mock-nyaa:
+    build:
+      context: ./src/tests/mocks/nyaa
+      dockerfile: Dockerfile
+    expose:
+      - "8081"
+    environment:
+      - PORT=8081
+      - SCENARIO=default
+    networks:
+      - test-network
+
+  mock-qbittorrent:
+    build:
+      context: ./src/tests/mocks/qbittorrent
+      dockerfile: Dockerfile
+    expose:
+      - "8082"
+    environment:
+      - PORT=8082
+    networks:
+      - test-network
+
+  daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./runtime/test-data:/app/data
+    environment:
+      - ENVIRONMENT=prod
+      - PORT=:8091
+      - ANILIST_API_URL=http://mock-anilist:8080
+      - NYAA_URL=http://mock-nyaa:8081
+      - QBITTORRENT_URL=http://mock-qbittorrent:8082
+    depends_on:
+      - mock-anilist
+      - mock-nyaa
+      - mock-qbittorrent
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge

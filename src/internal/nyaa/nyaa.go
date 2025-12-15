@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -16,6 +17,13 @@ import (
 
 // httpGet is an indirection for http.Get so tests can replace it.
 var httpGet = http.Get
+
+func getNyaaBaseURL() string {
+	if url := os.Getenv("NYAA_URL"); url != "" {
+		return url
+	}
+	return "https://nyaa.si"
+}
 
 // MockNyaaHttpGet allows tests or callers to replace the httpGet function used by
 // this package. It returns a function that when called will restore the
@@ -75,7 +83,8 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 	params.Set("s", "seeders")                            // Ordenar por seeders
 	params.Set("o", "desc")                               // Ordem decrescente
 
-	nyaaURL := fmt.Sprintf("https://nyaa.si/?%s", params.Encode())
+	baseURL := getNyaaBaseURL()
+	nyaaURL := fmt.Sprintf("%s/?%s", baseURL, params.Encode())
 
 	fmt.Printf("Searching Nyaa: %s\n", nyaaURL)
 
@@ -204,7 +213,8 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 	params.Set("s", "seeders")                // Ordenar por seeders
 	params.Set("o", "desc")                   // Ordem decrescente
 
-	nyaaURL := fmt.Sprintf("https://nyaa.si/?%s", params.Encode())
+	baseURL := getNyaaBaseURL()
+	nyaaURL := fmt.Sprintf("%s/?%s", baseURL, params.Encode())
 
 	fmt.Printf("Searching Nyaa: %s\n", nyaaURL)
 

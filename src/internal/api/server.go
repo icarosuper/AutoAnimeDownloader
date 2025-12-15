@@ -15,10 +15,21 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
+// FileManagerInterface defines the interface for file management operations
+// This interface matches daemon.FileManagerInterface
+type FileManagerInterface interface {
+	LoadConfigs() (*files.Config, error)
+	SaveConfigs(config *files.Config) error
+	LoadSavedEpisodes() ([]files.EpisodeStruct, error)
+	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
+	DeleteEpisodesFromFile(episodeIds []int) error
+	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+}
+
 type Server struct {
 	http.Server
 	State         *daemon.State
-	FileManager   *files.FileManager
+	FileManager   FileManagerInterface
 	StartLoopFunc func(daemon.StartLoopPayload) func(time.Duration)
 	WSManager     *WebSocketManager
 
@@ -27,7 +38,7 @@ type Server struct {
 	cancelLoop         context.CancelFunc
 }
 
-func NewServer(port string, state *daemon.State, fileManager *files.FileManager, startLoopFunc func(daemon.StartLoopPayload) func(time.Duration)) *Server {
+func NewServer(port string, state *daemon.State, fileManager FileManagerInterface, startLoopFunc func(daemon.StartLoopPayload) func(time.Duration)) *Server {
 	wsManager := NewWebSocketManager()
 	
 	// Set state getter for WebSocket manager

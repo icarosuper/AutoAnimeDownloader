@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -15,6 +16,12 @@ var httpDo = func(req *http.Request) (*http.Response, error) {
 }
 
 var aniListAPIURL = "https://graphql.anilist.co"
+
+func init() {
+	if url := os.Getenv("ANILIST_API_URL"); url != "" {
+		aniListAPIURL = url
+	}
+}
 
 func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func()) {
 	prev := httpDo
