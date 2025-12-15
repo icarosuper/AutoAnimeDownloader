@@ -1,11 +1,13 @@
 package files
 
 import (
+	"AutoAnimeDownloader/src/internal/logger"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -117,8 +119,26 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
+	// Check if file is empty or contains only whitespace
+	trimmed := strings.TrimSpace(string(file))
+	if len(trimmed) == 0 {
+		// File exists but is empty, recreate with default config
+		logger.Logger.Warn().Msg("Config file is empty, recreating with default values")
+		if err := m.SaveConfigs(config); err != nil {
+			return nil, fmt.Errorf("failed to save default config: %w", err)
+		}
+		return config, nil
+	}
+
+	// Try to parse the JSON
 	if err := json.Unmarshal(file, config); err != nil {
-		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
+		// If parsing fails, recreate with default config
+		logger.Logger.Warn().Err(err).Msg("Failed to parse config JSON, recreating with default values")
+		config = getDefaultConfig()
+		if err := m.SaveConfigs(config); err != nil {
+			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
+		}
+		return config, nil
 	}
 
 	if err := m.SaveConfigs(config); err != nil {
