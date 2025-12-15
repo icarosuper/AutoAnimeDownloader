@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<service>
+    <id>AutoAnimeDownloader</id>
+    <name>AutoAnimeDownloader</name>
+    <description>Auto Anime Downloader - Automatically downloads anime from Anilist via qBittorrent</description>
+    <executable>%BASE%\AutoAnimeDownloader-daemon.exe</executable>
+    <logpath>%BASE%\logs</logpath>
+    <logmode>rotate</logmode>
+    <depend></depend>
+    <startmode>Automatic</startmode>
+    <delayedAutoStart>true</delayedAutoStart>
+    <serviceaccount>LocalSystem</serviceaccount>
+    <allowserviceinteraction>true</allowserviceinteraction>
+    <onfailure action="restart" delay="10 sec"/>
+    <onfailure action="restart" delay="20 sec"/>
+    <onfailure action="restart" delay="30 sec"/>
+    <resetfailure>1 hour</resetfailure>
+    <env name="ENVIRONMENT" value="prod"/>
+    <env name="PORT" value=":8091"/>
+</service>
+
