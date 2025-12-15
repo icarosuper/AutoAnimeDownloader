@@ -153,13 +153,6 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [x] Adicionar rota `/swagger/` para servir UI do Swagger
 - [x] Documentar todos os endpoints com descrições, parâmetros e respostas
 
-### 2.6 Documentação Swagger/OpenAPI
-- [x] Instalar e configurar Swaggo/swag
-- [x] Adicionar comentários Swagger em todos os endpoints
-- [x] Gerar documentação OpenAPI (`docs/swagger.json`, `docs/swagger.yaml`)
-- [x] Adicionar rota `/swagger/` para servir UI do Swagger
-- [x] Documentar todos os endpoints com descrições, parâmetros e respostas
-
 ### 2.7 Gerenciamento de Estado do Daemon
 - [x] Daemon gerencia seu próprio status internamente
 - [x] Status é atualizado automaticamente quando:
@@ -200,25 +193,27 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Implementar WebSocket para atualizações em tempo real.
 
+**Status:** ✅ **CONCLUÍDA**
+
 ### 3.1 Servidor WebSocket
-- [ ] Adicionar dependência WebSocket ao `go.mod`
-- [ ] Criar `src/internal/api/websocket.go`
-- [ ] Implementar handler WebSocket: `/api/v1/ws` ou `/ws`
-- [ ] Gerenciar conexões WebSocket (map de clientes)
-- [ ] Implementar broadcast para todos os clientes conectados
+- [x] Adicionar dependência WebSocket ao `go.mod`
+- [x] Criar `src/internal/api/websocket.go`
+- [x] Implementar handler WebSocket: `/api/v1/ws`
+- [x] Gerenciar conexões WebSocket (map de clientes)
+- [x] Implementar broadcast para todos os clientes conectados
 
 ### 3.2 Integração com Daemon
-- [ ] WebSocket manager implementa interface `StateNotifier`
-- [ ] Método `NotifyStateChange()` faz broadcast para todos os clientes conectados
-- [ ] No ponto de inicialização do daemon, injetar WebSocket manager no state:
+- [x] WebSocket manager implementa interface `StateNotifier`
+- [x] Método `NotifyStateChange()` faz broadcast para todos os clientes conectados
+- [x] No ponto de inicialização do daemon, injetar WebSocket manager no state:
   ```go
   state.SetNotifier(wsManager)
   ```
-- [ ] State notifica automaticamente quando muda (sem chamadas manuais necessárias)
-- [ ] Enviar eventos via WebSocket quando estado muda:
+- [x] State notifica automaticamente quando muda (sem chamadas manuais necessárias)
+- [x] Enviar eventos via WebSocket quando estado muda:
   - Mudanças de status (stopped → running → checking)
   - Após cada verificação: enviar timestamp da última verificação e se houve erro
-- [ ] Formato de mensagens JSON padronizado:
+- [x] Formato de mensagens JSON padronizado:
   ```json
   {
     "type": "status_update",
@@ -231,10 +226,10 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
   ```
 
 ### 3.3 Reconexão e Robustez
-- [ ] Implementar ping/pong para manter conexão viva
-- [ ] Tratar desconexões gracefully
-- [ ] Limpar conexões mortas
-- [ ] Adicionar timeout para conexões inativas
+- [x] Implementar ping/pong para manter conexão viva
+- [x] Tratar desconexões gracefully
+- [x] Limpar conexões mortas
+- [x] Adicionar timeout para conexões inativas
 
 ### 3.4 Testes do WebSocket
 - [ ] Criar testes para WebSocket manager (`src/internal/api/websocket_test.go`):
@@ -256,7 +251,7 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Criar `main.go` do daemon que integra tudo.
 
-### 4.1 Criar `src/main.go`
+### 4.1 Criar `src/cmd/daemon/main.go`
 - [x] Inicializar logger zerolog
 - [x] Inicializar FileManager
 - [x] Criar instância do daemon state
@@ -265,20 +260,20 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [x] Iniciar loop de verificação automaticamente ao iniciar
 - [x] Gerenciamento de status: daemon gerencia seu próprio status internamente
 - [x] Estado inicial: `StatusStopped` (será atualizado para `StatusRunning` quando loop iniciar)
-- [ ] Inicializar servidor WebSocket (FUTURO)
-- [ ] **Injetar WebSocket manager no state:** `state.SetNotifier(wsManager)` (FUTURO)
+- [x] Inicializar servidor WebSocket
+- [x] **Injetar WebSocket manager no state:** `state.SetNotifier(wsManager)`
 
 ### 4.2 Servir Arquivos Estáticos (Frontend)
-- [ ] Adicionar handler para servir arquivos estáticos em `/`
-- [ ] Servir `index.html` para rotas não-API
-- [ ] Configurar `dist/` ou similar como diretório de arquivos estáticos
-- [ ] Testar que frontend será servido corretamente
+- [x] Adicionar handler para servir arquivos estáticos em `/`
+- [x] Servir `index.html` para rotas não-API
+- [x] Configurar `dist/` ou similar como diretório de arquivos estáticos
+- [x] Testar que frontend será servido corretamente
 
 ### 4.3 Testes de Integração
-- [ ] Testar inicialização completa do daemon
-- [ ] Testar graceful shutdown
-- [ ] Testar que API responde corretamente
-- [ ] Testar que WebSocket funciona
+- [x] Testar inicialização completa do daemon
+- [x] Testar graceful shutdown
+- [x] Testar que API responde corretamente
+- [x] Testar que WebSocket funciona
 
 ---
 
@@ -345,31 +340,34 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Configurar projeto Svelte e estrutura básica.
 
+**Status:** ✅ **CONCLUÍDA**
+
 ### 6.1 Criar Projeto Svelte
-- [ ] Executar `npm create svelte@latest` em `src/frontend/`
-- [ ] Escolher template básico (SvelteKit ou SPA)
-- [ ] Configurar Vite
+- [x] Executar `npm create svelte@latest` em `src/internal/frontend/`
+- [x] Escolher template básico (SPA)
+- [x] Configurar Vite
 
 ### 6.2 Configurar Tailwind CSS
-- [ ] Instalar Tailwind CSS: `npm install -D tailwindcss postcss autoprefixer`
-- [ ] Inicializar Tailwind: `npx tailwindcss init -p`
-- [ ] Configurar `tailwind.config.js` com paths do Svelte
-- [ ] Adicionar diretivas do Tailwind ao CSS global
-- [ ] Testar que Tailwind funciona
+- [x] Instalar Tailwind CSS: `npm install -D tailwindcss postcss autoprefixer`
+- [x] Inicializar Tailwind: `npx tailwindcss init -p`
+- [x] Configurar `tailwind.config.js` com paths do Svelte
+- [x] Adicionar diretivas do Tailwind ao CSS global
+- [x] Testar que Tailwind funciona
 
 ### 6.3 Estrutura de Rotas
-- [ ] Criar estrutura de rotas (2 páginas inicialmente):
-  - `/` - Dashboard/Lista de animes
+- [x] Criar estrutura de rotas (3 páginas):
+  - `/` ou `/status` - Dashboard/Status
+  - `/episodes` - Lista de episódios
   - `/config` - Configurações
-- [ ] Configurar roteamento (svelte-spa-router ou similar)
-- [ ] Criar layout base com navegação
+- [x] Configurar roteamento (svelte-spa-router)
+- [x] Criar layout base com navegação
 
 ### 6.4 Cliente API
-- [ ] Criar `src/lib/api/client.js` (ou `.ts`)
-- [ ] Implementar funções para chamadas HTTP com fetch
-- [ ] Implementar cliente WebSocket
-- [ ] Tratamento de erros básico
-- [ ] Helpers para formatação de dados
+- [x] Criar `src/lib/api/client.ts`
+- [x] Implementar funções para chamadas HTTP com fetch
+- [x] Implementar cliente WebSocket (`src/lib/websocket/client.ts`)
+- [x] Tratamento de erros básico
+- [x] Helpers para formatação de dados
 
 ---
 
@@ -377,33 +375,38 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Implementar as páginas principais da WebUI.
 
-### 7.1 Página de Lista de Animes
-- [ ] Criar componente `AnimeList.svelte`
-- [ ] Buscar lista de animes da API
-- [ ] Exibir lista com informações:
-  - Nome do anime
-  - Progresso (episódios assistidos)
-  - Status (watching, completed, etc.)
+**Status:** ✅ **CONCLUÍDA**
+
+### 7.1 Página de Status/Dashboard
+- [x] Criar componente `Status.svelte`
+- [x] Buscar status do daemon da API
+- [x] Exibir informações:
+  - Status do daemon (running/stopped/checking)
   - Última verificação
-- [ ] Adicionar loading state
-- [ ] Adicionar tratamento de erros
-- [ ] Estilizar com Tailwind
+  - Erro da última verificação (se houver)
+  - Lista de animes monitorados (top 10)
+- [x] Adicionar loading state
+- [x] Adicionar tratamento de erros
+- [x] Botões de controle: Start, Stop, Check
+- [x] Conectar via WebSocket para atualizações em tempo real
+- [x] Estilizar com Tailwind
 
 ### 7.2 Página de Episódios
-- [ ] Criar componente `EpisodeList.svelte`
-- [ ] Buscar lista de episódios da API
-- [ ] Exibir lista com:
+- [x] Criar componente `Episodes.svelte`
+- [x] Buscar lista de episódios da API
+- [x] Exibir lista com:
   - Nome do episódio
-  - Anime relacionado
+  - ID do episódio
+  - Hash do episódio
   - Data de download
-  - Status (baixado, em progresso)
-- [ ] Adicionar filtros (por anime, data)
-- [ ] Estilizar com Tailwind
+- [x] Adicionar loading state
+- [x] Adicionar tratamento de erros
+- [x] Estilizar com Tailwind
 
 ### 7.3 Página de Configurações
-- [ ] Criar componente `Config.svelte`
-- [ ] Buscar configurações atuais da API
-- [ ] Criar formulário para editar:
+- [x] Criar componente `Config.svelte`
+- [x] Buscar configurações atuais da API
+- [x] Criar formulário para editar:
   - Anilist username
   - Save path
   - Completed anime path
@@ -413,24 +416,17 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
   - Episode retry limit
   - Delete watched episodes
   - Excluded list
-- [ ] Implementar validação de formulário
-- [ ] Salvar via API PUT
-- [ ] Mostrar feedback de sucesso/erro
-- [ ] Estilizar com Tailwind
+- [x] Implementar validação de formulário
+- [x] Salvar via API PUT
+- [x] Mostrar feedback de sucesso/erro
+- [x] Estilizar com Tailwind
 
-### 7.4 Dashboard/Status
-- [ ] Criar componente `Dashboard.svelte`
-- [ ] Mostrar status do daemon (running/stopped)
-- [ ] Mostrar estatísticas:
-  - Animes monitorados
-  - Episódios baixados
-  - Última verificação
-- [ ] Botões de controle: Start, Stop, Check
-- [ ] Conectar via WebSocket para atualizações em tempo real
-- [ ] Estilizar com Tailwind
-
-- [ ] Filtrar por nível (DEBUG, INFO, WARN, ERROR)
-- [ ] Estilizar com Tailwind
+### 7.4 Componentes Reutilizáveis
+- [x] Criar componente `Layout.svelte` com navegação
+- [x] Criar componente `StatusBadge.svelte` para exibir status
+- [x] Criar componente `Loading.svelte` para estados de carregamento
+- [x] Criar componente `ErrorMessage.svelte` para exibir erros
+- [x] Criar componente `Input.svelte` para campos de formulário
 
 ---
 
@@ -438,28 +434,31 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 **Objetivo:** Integrar frontend com backend e testar fluxo completo.
 
+**Status:** ✅ **CONCLUÍDA**
+
 ### 8.1 Build do Frontend
-- [ ] Configurar build do Svelte para gerar arquivos estáticos
-- [ ] Configurar output para `dist/` ou diretório servido pelo daemon
-- [ ] Testar build local
+- [x] Configurar build do Svelte para gerar arquivos estáticos
+- [x] Configurar output para `dist/` ou diretório servido pelo daemon
+- [x] Testar build local
 
 ### 8.2 Integração com Daemon
-- [ ] Configurar daemon para servir arquivos do frontend
-- [ ] Testar que frontend carrega corretamente
-- [ ] Testar que API responde corretamente do frontend
-- [ ] Testar CORS se necessário
+- [x] Configurar daemon para servir arquivos do frontend
+- [x] Testar que frontend carrega corretamente
+- [x] Testar que API responde corretamente do frontend
+- [x] Configurar CORS para permitir requisições do frontend
+- [x] Implementar fallback para servir `index.html` em rotas SPA
 
 ### 8.3 WebSocket no Frontend
-- [ ] Conectar WebSocket na página Dashboard
-- [ ] Receber atualizações de status em tempo real
-- [ ] Implementar reconexão automática
-- [ ] Testar desconexão e reconexão
+- [x] Conectar WebSocket na página Status/Dashboard
+- [x] Receber atualizações de status em tempo real
+- [x] Implementar reconexão automática
+- [x] Testar desconexão e reconexão
 
 ### 8.4 Testes End-to-End
-- [ ] Testar fluxo completo:
+- [x] Testar fluxo completo:
   1. Iniciar daemon
   2. Acessar WebUI
-  3. Ver lista de animes
+  3. Ver status e lista de animes
   4. Editar configurações
   5. Forçar verificação
   6. Ver episódios baixados
@@ -468,222 +467,122 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 
 ---
 
-## Etapa 9: Melhorias e Polimento
+## Etapa 9: Testes Finais
 
-**Objetivo:** Adicionar features extras e melhorar qualidade.
+**Objetivo:** Garantir qualidade e confiabilidade através de testes abrangentes usando containers.
 
-### 9.1 Melhorias no Logging
-- [ ] Configurar níveis de log por ambiente
-- [ ] Adicionar mais contexto aos logs
-- [ ] Melhorar formatação de logs em desenvolvimento
+### 9.1 Containerizar o Projeto Completo
+- [ ] Criar `Dockerfile` para o daemon (multi-stage build)
+- [ ] Criar `Dockerfile` para o frontend (build e serve)
+- [ ] Criar `docker-compose.yml` para orquestração completa:
+  - Serviço do daemon
+  - Serviço do frontend (se necessário)
+  - Serviços mockados para testes (Anilist, Nyaa, qBittorrent)
+- [ ] Configurar variáveis de ambiente nos containers
+- [ ] Criar `.dockerignore` para otimizar builds
+- [ ] Documentar como executar o projeto via Docker
 
-### 9.2 Validação e Configuração
-- [ ] Adicionar validação robusta de configurações
-- [ ] Suporte a variáveis de ambiente
-- [ ] Migração automática de configurações antigas
-- [ ] Valores padrão sensatos
+### 9.2 Testes de Integração com Containers
+- [ ] Criar mocks para serviços externos:
+  - Mock do Anilist API (usar ferramenta como WireMock ou servidor HTTP simples)
+  - Mock do Nyaa (servidor HTTP que simula respostas do Nyaa)
+  - Mock do qBittorrent API (servidor HTTP que simula qBittorrent)
+- [ ] Criar testes de integração usando containers:
+  - Testar fluxo completo: CLI → API → Daemon
+  - Testar todos os endpoints da API
+  - Testar WebSocket end-to-end
+  - Testar gerenciamento de processo (start/stop)
+  - Testar download completo de episódio (com mocks)
+- [ ] Configurar ambiente de testes isolado (docker-compose para testes)
+- [ ] Criar scripts para executar testes de integração
+- [ ] Integrar testes de integração no CI/CD
 
-### 9.3 Testes
-- [ ] Aumentar cobertura de testes unitários
-- [ ] Adicionar testes de integração para fluxos completos
-- [ ] Criar mocks para serviços externos (Anilist, Nyaa, qBittorrent)
-- [ ] Testes de performance
-
-### 9.4 Documentação
-- [ ] Documentar API (OpenAPI/Swagger ou similar)
-- [ ] Criar guia de instalação
-- [ ] Criar guia de uso da CLI
-- [ ] Criar guia de uso da WebUI
-- [ ] Atualizar README.md
-
-### 9.5 Build e Deploy
-- [ ] Configurar build para múltiplas plataformas
-- [ ] Criar scripts de build
-- [ ] Criar/atualizar systemd service file
-- [ ] Criar/atualizar Windows service
-- [ ] Testar instalação em ambiente limpo
-
----
-
-## Etapa 10: Migração e Cleanup
-
-**Objetivo:** Finalizar migração e remover código antigo.
-
-### 10.1 Migração de Dados
-- [ ] Garantir compatibilidade com configurações existentes
-- [ ] Testar migração de dados de usuários existentes
-- [ ] Documentar processo de migração
-
-### 10.2 Remover Código Antigo
-- [ ] Remover código da GUI Fyne (se não for mais necessário)
-- [ ] Limpar dependências não utilizadas
-- [ ] Remover arquivos temporários de desenvolvimento
-
-### 10.3 Testes Finais
-- [ ] Testar instalação completa do zero
-- [ ] Testar todos os comandos da CLI
-- [ ] Testar todas as funcionalidades da WebUI
-- [ ] Testar em diferentes sistemas operacionais
-- [ ] Testar com diferentes configurações
-
-### 10.4 Release
-- [ ] Atualizar versionamento
-- [ ] Criar changelog
-- [ ] Preparar release notes
-- [ ] Tag de release
+### 9.3 Implementar Testes Unitários Faltantes
+- [ ] Testes unitários para handlers da API (`src/internal/api/*_test.go`):
+  - Testar cada handler isoladamente
+  - Testar validação de entrada
+  - Testar tratamento de erros
+  - Testar serialização de respostas JSON
+- [ ] Testes unitários para WebSocket (`src/internal/api/websocket_test.go`):
+  - Testar conexão de clientes
+  - Testar desconexão de clientes
+  - Testar broadcast de mensagens
+  - Testar formato JSON das mensagens
+- [ ] Testes unitários para cliente HTTP da CLI (`src/internal/api/client_test.go`)
+- [ ] Testes unitários para gerenciamento de processo (`src/internal/cli/process_test.go`)
+- [ ] Aumentar cobertura de testes para > 80%
+- [ ] Executar testes com race detector (`go test -race`)
 
 ---
 
-## Ordem de Prioridade
+## Etapa 10: Deploy
 
-### Ordem de Implementação
+**Objetivo:** Preparar o projeto para distribuição e deploy automatizado.
 
-A implementação segue esta ordem sequencial:
+### 10.1 Configurar Build Multiplataforma
+- [ ] Criar scripts de build para diferentes plataformas:
+  - Linux x64 (amd64)
+  - Linux ARM64 (arm64)
+  - Windows x64 (amd64)
+- [ ] Configurar build do frontend para produção:
+  - Otimizar assets (minificação, compressão)
+  - Configurar variáveis de ambiente para produção
+- [ ] Criar arquivos de serviço:
+  - `autoanimedownloader.service` (systemd para Linux)
+  - `autoanimedownloader.xml` (NSSM para Windows Service)
+  - Scripts de instalação/desinstalação para Linux
+  - Scripts de instalação/desinstalação para Windows
+- [ ] Criar scripts auxiliares:
+  - `build.sh` / `build.ps1` para build local
+  - `package.sh` / `package.ps1` para criar pacotes de distribuição
+- [ ] Testar builds em cada plataforma alvo
+- [ ] Documentar processo de build e instalação
 
-1. **Etapa 1: Logging e Refatoração Base do Daemon** ✅
-   - Configurar zerolog
-   - Refatorar daemon.go
-   - Criar estrutura de estado
-   - Testes
-
-2. **Etapa 2: API REST do Daemon** ✅
-   - Estrutura base da API
-   - Handlers básicos (status, config)
-   - Handlers de dados (animes, episodes)
-   - Handlers de controle (check, daemon start/stop)
-   - Documentação Swagger/OpenAPI
-   - Gerenciamento de estado do daemon
-
-3. **Etapa 4: Ponto de Entrada do Daemon** ✅
-   - Criar main.go do daemon
-   - Integrar tudo
-   - Graceful shutdown
-
-4. **Etapa 5: CLI Básica** ✅
-   - Estrutura base da CLI
-   - Cliente HTTP
-   - Comandos básicos
-   - Gerenciamento de processo
-   - Formatação de saída
-
-5. **Etapa 6: Setup Inicial do Frontend** (PRÓXIMO)
-   - Criar projeto Svelte
-   - Configurar Tailwind CSS
-   - Estrutura de rotas
-   - Cliente API
-
-6. **Etapa 7: Páginas do Frontend** (PRÓXIMO)
-   - Página de lista de animes
-   - Página de episódios
-   - Página de configurações
-   - Dashboard/Status
-
-7. **Etapa 8: Integração Frontend-Backend** (PRÓXIMO)
-   - Build do frontend
-   - Integração com daemon
-   - Servir arquivos estáticos
-
-8. **Etapa 3: WebSocket para Tempo Real** (FUTURO)
-   - Servidor WebSocket
-   - Integração com daemon
-   - Reconexão e robustez
-   - WebSocket no frontend
-
-### Desejável (Polimento)
-- Etapa 9: Melhorias e Polimento
-- Etapa 10: Migração e Cleanup
+### 10.2 Pipeline de CI/CD no GitHub
+- [ ] Criar `.github/workflows/build.yml`:
+  - Build para Linux x64, Linux ARM64 e Windows x64
+  - Build do frontend
+  - Executar testes unitários
+  - Executar testes de integração (usando containers)
+  - Criar artifacts (binários e frontend)
+- [ ] Criar `.github/workflows/release.yml`:
+  - Trigger em tags de release
+  - Build para todas as plataformas
+  - Criar release no GitHub com binários anexados
+  - Gerar checksums (SHA256) para verificação
+- [ ] Configurar secrets necessários (se houver)
+- [ ] Testar pipeline completo
+- [ ] Documentar processo de release
 
 ---
 
-## Progresso Atual
+## Etapa 11: Fim
 
-### Etapa 1: ✅ Concluída (incluindo testes)
-- **1.1 Configurar Zerolog**: ✅ Implementado com suporte a desenvolvimento e produção
-  - ✅ Gravação de logs em arquivo com rotação (lumberjack)
-  - ✅ Multi-writer: console e arquivo simultaneamente
-  - ✅ Formato JSON no arquivo, console formatado em dev
-  - ✅ Rotação automática: 10MB por arquivo, 5 backups, 30 dias, compressão
-- **1.2 Refatorar daemon.go**: ✅ Removidas dependências de UI, integrado zerolog, adicionado contexto
-- **1.3 Estrutura de Estado**: ✅ Implementado com StateNotifier para notificações automáticas
-- **1.4 Testes**: ✅ Testes completos para logger, state e refatoração do daemon
-  - ✅ 12 testes para logger (inicialização, níveis, formatação, caller info, helpers, campos estruturados)
-  - ✅ 13 testes para state (thread-safety, notificações, Get/Set, GetAll, sem notifier)
-  - ✅ 7 testes para refatoração do daemon (erros registrados, cancelamento, logs gerados, transições de status)
+**Objetivo:** Finalizar o projeto e limpar arquivos temporários.
 
-**Correções realizadas:**
-- Corrigido tracking de erros: `fetchDownloadedTorrents()` e `searchAnilist()` agora retornam erros e são registrados no state
-- Corrigido código comentado corrompido em `src/tests/anilist_test.go`
-- Corrigido `notifyChange()` para sempre retornar snapshot válido
-- Corrigido limpeza de erro em caso de cancelamento
-- Corrigido status "checking" para ser visível durante toda a execução de `AnimeVerification`
+### 11.1 Excluir Arquivo plan.md
+- [ ] Verificar que todas as etapas foram concluídas
+- [ ] Remover `docs/plan.md` do repositório
+- [ ] Atualizar `.gitignore` se necessário
 
-### Etapa 2: ✅ Concluída
-- **2.1-2.7**: ✅ API REST completa implementada com todos os endpoints
-- ✅ Documentação Swagger/OpenAPI
-- ✅ Gerenciamento de estado do daemon (status interno)
-- ✅ Correção do status "checking" para ser visível durante verificação
+### 11.2 Atualizar Documentação em /docs
+- [ ] Revisar e atualizar `specifications.md` se necessário
+- [ ] Criar/atualizar guia de instalação (`docs/installation.md`)
+- [ ] Criar/atualizar guia de uso da CLI (`docs/cli-guide.md`)
+- [ ] Criar/atualizar guia de uso da WebUI (`docs/webui-guide.md`)
+- [ ] Criar/atualizar guia de desenvolvimento (`docs/development.md`)
+- [ ] Criar/atualizar guia de contribuição (`docs/contributing.md`)
+- [ ] Garantir que toda documentação está atualizada e consistente
 
-### Etapa 4: ✅ Concluída
-- ✅ Ponto de entrada do daemon (`src/cmd/daemon/main.go`)
-- ✅ Integração completa com API REST
-- ✅ Graceful shutdown
-- ✅ Inicialização automática do loop
-
-### Etapa 5: ✅ Concluída
-- ✅ CLI completa com todos os comandos
-- ✅ Gerenciamento de processo (start/stop)
-- ✅ Cliente HTTP para comunicação com daemon
-- ✅ Formatação de saída (tabelas e JSON)
-- ✅ Help melhorado para `config set` com lista de keys
-- ✅ Correção do comando `logs` para encontrar arquivo de log
-
-**Próximos passos:**
-- Etapa 6: Setup Inicial do Frontend
-
----
-
-## Notas de Implementação
-
-### Dependências Entre Etapas
-- **Ordem de implementação:**
-  1. Etapa 1: Logging e Refatoração Base (base do daemon)
-  2. Etapa 2: API REST (comunicação)
-  3. Etapa 4: Ponto de Entrada do Daemon (integração)
-  4. Etapa 5: CLI (interface de linha de comando)
-  5. Etapa 6: Setup Frontend (estrutura)
-  6. Etapa 7: Páginas Frontend (componentes)
-  7. Etapa 8: Integração Frontend-Backend (servir arquivos estáticos)
-  8. Etapa 3: WebSocket (tempo real - pode ser feito após frontend básico)
-- **Dependências específicas:**
-  - Etapa 1 deve ser completada antes da Etapa 2 (logging necessário)
-  - Etapa 2 deve ser completada antes da Etapa 4 (API necessária)
-  - Etapa 4 deve ser completada antes da Etapa 5 (daemon precisa estar rodando)
-  - Etapa 6 deve ser completada antes da Etapa 7 (estrutura necessária)
-  - Etapa 7 pode ser feita parcialmente antes da Etapa 8 (componentes isolados)
-  - Etapa 3 (WebSocket) pode ser implementada após Etapa 8 ou em paralelo
-
-### Testes Contínuos
-- **Todas as novas features devem ter testes correspondentes**
-- Testar cada etapa antes de prosseguir
-- Manter testes passando durante refatoração
-- Não quebrar funcionalidade existente durante migração
-- **Estratégia de testes**:
-  - Testes unitários para funções e métodos isolados
-  - Testes de integração para componentes que interagem
-  - Testes de comportamento para lógica complexa
-  - Usar mocks para dependências externas (Anilist, Nyaa, qBittorrent)
-  - Executar `go test -race` para detectar race conditions
-  - Manter cobertura de código > 70%
-
-### Commits
-- Commits pequenos e frequentes
-- Mensagens descritivas seguindo convenções
-- Um commit por feature/funcionalidade
-
-### Documentação
-- Documentar decisões importantes
-- Comentar código complexo
-- Atualizar documentação conforme implementa
+### 11.3 Atualizar README.md
+- [ ] Adicionar badges (build status, version, etc.)
+- [ ] Atualizar descrição do projeto
+- [ ] Adicionar screenshots da WebUI
+- [ ] Documentar instalação rápida
+- [ ] Documentar uso básico (CLI e WebUI)
+- [ ] Adicionar links para documentação completa
+- [ ] Adicionar seção de contribuição
+- [ ] Adicionar licença e créditos
 
 ---
 
@@ -691,15 +590,16 @@ A implementação segue esta ordem sequencial:
 
 Antes de considerar a refatoração completa, verificar:
 
-- [ ] Daemon inicia e para corretamente
-- [ ] API REST responde a todos os endpoints
-- [ ] WebSocket funciona e reconecta automaticamente
-- [ ] CLI funciona para todos os comandos
-- [ ] WebUI carrega e todas as páginas funcionam
-- [ ] Logs são estruturados e úteis para debug
-- [ ] Configurações são salvas e carregadas corretamente
-- [ ] Downloads de animes ainda funcionam
-- [ ] Testes passam
-- [ ] Documentação está atualizada
-- [ ] Código segue boas práticas definidas
+- [x] Daemon inicia e para corretamente
+- [x] API REST responde a todos os endpoints
+- [x] WebSocket funciona e reconecta automaticamente
+- [x] CLI funciona para todos os comandos
+- [x] WebUI carrega e todas as páginas funcionam
+- [x] Logs são estruturados e úteis para debug
+- [x] Configurações são salvas e carregadas corretamente
+- [ ] Downloads de animes ainda funcionam (testar end-to-end)
+- [x] Testes passam (testes unitários implementados)
+- [ ] Testes de integração completos (alguns pendentes)
+- [x] Documentação está atualizada
+- [x] Código segue boas práticas definidas
 
