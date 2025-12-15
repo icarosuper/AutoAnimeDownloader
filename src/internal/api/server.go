@@ -3,11 +3,12 @@ package api
 import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/frontend"
 	"AutoAnimeDownloader/src/internal/logger"
 	"context"
+	"io"
+	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -91,70 +92,19 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 }
 
 func (s *Server) handleStaticFiles() http.HandlerFunc {
-	// Get the frontend dist directory
-	// Try multiple possible paths
-	var frontendDir string
-	
-	// Get current working directory first
-	cwd, err := os.Getwd()
+	// Use embedded frontend filesystem
+	// The embed includes dist/*, so we need to use fs.Sub to get the dist directory
+	distFS, err := fs.Sub(frontend.DistFS, "dist")
 	if err != nil {
-		cwd = "."
-	}
-	
-	// Try paths relative to current working directory
-	possiblePaths := []string{
-		filepath.Join(cwd, "src", "internal", "frontend", "dist"),
-		"src/internal/frontend/dist",
-		"./src/internal/frontend/dist",
-		filepath.Join(filepath.Dir(os.Args[0]), "..", "src", "internal", "frontend", "dist"),
-		filepath.Join(filepath.Dir(os.Args[0]), "src", "internal", "frontend", "dist"),
-	}
-	
-	for _, path := range possiblePaths {
-		if absPath, err := filepath.Abs(path); err == nil {
-			if info, err := os.Stat(absPath); err == nil && info.IsDir() {
-				// Verify it contains index.html
-				indexPath := filepath.Join(absPath, "index.html")
-				if _, err := os.Stat(indexPath); err == nil {
-					frontendDir = absPath
-					break
-				}
-			}
-		}
-	}
-	
-	// Check if dist directory exists
-	if frontendDir == "" {
-		logger.Logger.Warn().
-			Msg("Frontend dist directory not found, serving placeholder")
-		
-		return func(w http.ResponseWriter, r *http.Request) {
-			// Don't serve static files for API routes
-			if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/swagger/") {
-				http.NotFound(w, r)
-				return
-			}
-			
-			w.Header().Set("Content-Type", "text/html")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`
-				<!DOCTYPE html>
-				<html>
-				<head><title>Auto Anime Downloader</title></head>
-				<body>
-					<h1>Frontend not built</h1>
-					<p>Please run <code>npm run build</code> in <code>src/internal/frontend/</code> directory.</p>
-				</body>
-				</html>
-			`))
-		}
+		logger.Logger.Fatal().
+			Err(err).
+			Msg("Failed to create sub filesystem for frontend dist")
 	}
 
 	logger.Logger.Info().
-		Str("dir", frontendDir).
-		Msg("Serving frontend from directory")
+		Msg("Serving frontend from embedded filesystem")
 
-	fileServer := http.FileServer(http.Dir(frontendDir))
+	fileServer := http.FileServer(http.FS(distFS))
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Don't serve static files for API routes
@@ -165,25 +115,39 @@ func (s *Server) handleStaticFiles() http.HandlerFunc {
 
 		path := r.URL.Path
 		
-		// Check if the requested file exists
-		fullPath := filepath.Join(frontendDir, path)
-		if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
-			// File exists, serve it
-			fileServer.ServeHTTP(w, r)
+		// For SPA routing: serve index.html for paths without file extensions
+		if path == "/" || (!strings.Contains(path, ".") && path != "/") {
+			// Check if the requested path exists as a file
+			if path != "/" {
+				file, err := distFS.Open(strings.TrimPrefix(path, "/"))
+				if err == nil {
+					// File exists, serve it normally
+					file.Close()
+					fileServer.ServeHTTP(w, r)
+					return
+				}
+			}
+			// File doesn't exist or it's root path, serve index.html for SPA routing
+			// Read and serve the file directly to avoid redirect loops
+			file, err := distFS.Open("index.html")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			defer file.Close()
+			
+			// Set content type
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			
+			// Copy file content to response
+			_, err = io.Copy(w, file)
+			if err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to serve index.html")
+			}
 			return
 		}
 
-		// For SPA routing: if the path doesn't exist and doesn't have an extension,
-		// serve index.html
-		if !strings.Contains(path, ".") {
-			indexPath := filepath.Join(frontendDir, "index.html")
-			if _, err := os.Stat(indexPath); err == nil {
-				http.ServeFile(w, r, indexPath)
-				return
-			}
-		}
-
-		// Fallback to file server
+		// Serve the file normally for paths with extensions
 		fileServer.ServeHTTP(w, r)
 	}
 }
