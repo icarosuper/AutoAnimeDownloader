@@ -1,48 +1,54 @@
-# If PREFIX isn't provided, we check for $(DESTDIR)/usr/local and use that if it exists.
-# Otherwise we fall back to using /usr.
-LOCAL != test -d $(DESTDIR)/usr/local && echo -n "/local" || echo -n ""
-LOCAL ?= $(shell test -d $(DESTDIR)/usr/local && echo "/local" || echo "")
-PREFIX ?= /usr$(LOCAL)
-AppID := "io.github.icarosuper.autoanimedownloader"
-Exec := "AutoAnimeDownloader"
-Icon := "io.github.icarosuper.autoanimedownloader.png"
-ServiceName := "autoanimedownloader.service"
+# Makefile for AutoAnimeDownloader installation
+# Run 'make install' to install daemon, CLI and systemd service
+
+DAEMON_BINARY := AutoAnimeDownloader-daemon
+CLI_BINARY := AutoAnimeDownloader-cli
+SERVICE_NAME := autoanimedownloader.service
+INSTALL_DIR := $(HOME)/.local/bin
+SERVICE_DIR := $(HOME)/.config/systemd/user
 
 default:
-	@echo "Run 'make install' to install app"
-	@echo "Run 'make uninstall' to uninstall app"
+	@echo "Run 'make install' to install AutoAnimeDownloader"
+	@echo "Run 'make uninstall' to uninstall AutoAnimeDownloader"
 
-install: install-app install-service
+install: install-binaries install-service
 	@echo ""
 	@echo "Installation complete!"
-	@echo "Application installed in ~/.local/bin/$(Exec)"
+	@echo "Daemon installed in $(INSTALL_DIR)/$(DAEMON_BINARY)"
+	@echo "CLI installed in $(INSTALL_DIR)/$(CLI_BINARY)"
 	@echo "Systemd service installed and enabled."
 
-install-app:
-	install -Dm00644 usr/local/share/applications/$(AppID).desktop $(DESTDIR)$(HOME)/.local/share/applications/$(AppID).desktop
-	install -Dm00755 usr/local/bin/$(Exec) $(DESTDIR)$(HOME)/.local/bin/$(Exec)
-	install -Dm00644 usr/local/share/pixmaps/$(Icon) $(DESTDIR)$(HOME)/.local/share/icons/$(Icon)
-	sed -i -e "s,Exec=$(Exec),Exec=$(DESTDIR)$(HOME)/.local/bin/$(Exec),g" $(DESTDIR)$(HOME)/.local/share/applications/$(AppID).desktop
-
-uninstall: uninstall-service uninstall-app
-	@echo "Uninstallation complete!"
-
-uninstall-app:
-	-rm $(DESTDIR)$(HOME)/.local/share/applications/$(AppID).desktop
-	-rm $(DESTDIR)$(HOME)/.local/bin/$(Exec)
-	-rm $(DESTDIR)$(HOME)/.local/share/icons/$(Icon)
+install-binaries:
+	@echo "Installing binaries..."
+	@mkdir -p $(INSTALL_DIR)
+	install -Dm00755 $(DAEMON_BINARY) $(INSTALL_DIR)/$(DAEMON_BINARY)
+	install -Dm00755 $(CLI_BINARY) $(INSTALL_DIR)/$(CLI_BINARY)
+	@echo "Binaries installed successfully."
 
 install-service:
 	@echo "Installing systemd user service..."
-	@mkdir -p $(HOME)/.config/systemd/user
-	install -Dm00644 $(ServiceName) $(HOME)/.config/systemd/user/$(ServiceName)
+	@mkdir -p $(SERVICE_DIR)
+	install -Dm00644 $(SERVICE_NAME) $(SERVICE_DIR)/$(SERVICE_NAME)
 	@systemctl --user daemon-reload
-	@systemctl --user enable $(ServiceName)
-	@systemctl --user start $(ServiceName)
+	@echo "Stopping service if already running..."
+	-@systemctl --user stop $(SERVICE_NAME) 2>/dev/null || true
+	@systemctl --user enable $(SERVICE_NAME)
+	@systemctl --user start $(SERVICE_NAME)
+	@echo "Service installed and started."
+
+uninstall: uninstall-service uninstall-binaries
+	@echo "Uninstallation complete!"
+
+uninstall-binaries:
+	@echo "Removing binaries..."
+	-rm -f $(INSTALL_DIR)/$(DAEMON_BINARY)
+	-rm -f $(INSTALL_DIR)/$(CLI_BINARY)
+	@echo "Binaries removed."
 
 uninstall-service:
 	@echo "Stopping and disabling service..."
-	-@systemctl --user stop $(ServiceName) 2>/dev/null
-	-@systemctl --user disable $(ServiceName) 2>/dev/null
-	-@rm $(HOME)/.config/systemd/user/$(ServiceName)
+	-@systemctl --user stop $(SERVICE_NAME) 2>/dev/null || true
+	-@systemctl --user disable $(SERVICE_NAME) 2>/dev/null || true
+	-@rm -f $(SERVICE_DIR)/$(SERVICE_NAME)
 	@systemctl --user daemon-reload
+	@echo "Service removed."
