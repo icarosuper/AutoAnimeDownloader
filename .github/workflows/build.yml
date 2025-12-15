@@ -1,0 +1,155 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Build frontend
+        run: |
+          cd src/internal/frontend
+          npm ci
+          npm run build
+      
+      - name: Build daemon and CLI
+        run: |
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-daemon ./src/cmd/daemon
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-cli ./src/cmd/cli
+      
+      - name: Run unit tests
+        run: go test -v ./...
+      
+      - name: Generate checksums
+        run: |
+          cd build/linux-amd64
+          sha256sum AutoAnimeDownloader-daemon > AutoAnimeDownloader-daemon.sha256
+          sha256sum AutoAnimeDownloader-cli > AutoAnimeDownloader-cli.sha256
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64-binaries
+          path: build/linux-amd64/*
+          retention-days: 7
+
+  build-linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Build frontend
+        run: |
+          cd src/internal/frontend
+          npm ci
+          npm run build
+      
+      - name: Build daemon and CLI
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-arm64/AutoAnimeDownloader-daemon ./src/cmd/daemon
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-arm64/AutoAnimeDownloader-cli ./src/cmd/cli
+      
+      - name: Run unit tests
+        run: go test -v ./...
+      
+      - name: Generate checksums
+        run: |
+          cd build/linux-arm64
+          sha256sum AutoAnimeDownloader-daemon > AutoAnimeDownloader-daemon.sha256
+          sha256sum AutoAnimeDownloader-cli > AutoAnimeDownloader-cli.sha256
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-binaries
+          path: build/linux-arm64/*
+          retention-days: 7
+
+  build-windows-amd64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Build frontend
+        run: |
+          cd src\internal\frontend
+          npm ci
+          npm run build
+      
+      - name: Build daemon and CLI
+        run: |
+          $env:GOOS = "windows"
+          $env:GOARCH = "amd64"
+          $env:CGO_ENABLED = "0"
+          go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\AutoAnimeDownloader-daemon.exe .\src\cmd\daemon
+          go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\AutoAnimeDownloader-cli.exe .\src\cmd\cli
+      
+      - name: Run unit tests
+        run: go test -v ./...
+      
+      - name: Generate checksums
+        run: |
+          cd build\windows-amd64
+          Get-FileHash -Algorithm SHA256 AutoAnimeDownloader-daemon.exe | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 AutoAnimeDownloader-daemon.exe.sha256
+          Get-FileHash -Algorithm SHA256 AutoAnimeDownloader-cli.exe | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 AutoAnimeDownloader-cli.exe.sha256
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64-binaries
+          path: build\windows-amd64\*
+          retention-days: 7
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Run integration tests
+        run: |
+          docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f docker-compose.test.yml down -v
+
