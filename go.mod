@@ -10,6 +10,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/urfave/cli/v2 v2.27.7
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	nhooyr.io/websocket v1.8.17
 )
 
 require (

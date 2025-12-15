@@ -20,6 +20,7 @@ type Server struct {
 	State         *daemon.State
 	FileManager   *files.FileManager
 	StartLoopFunc func(daemon.StartLoopPayload) func(time.Duration)
+	WSManager     *WebSocketManager
 
 	mu                 sync.Mutex
 	currentLoopControl func(time.Duration)
@@ -27,10 +28,18 @@ type Server struct {
 }
 
 func NewServer(port string, state *daemon.State, fileManager *files.FileManager, startLoopFunc func(daemon.StartLoopPayload) func(time.Duration)) *Server {
+	wsManager := NewWebSocketManager()
+	
+	// Set state getter for WebSocket manager
+	wsManager.SetStateGetter(func() (daemon.Status, time.Time, bool) {
+		return state.GetAll()
+	})
+	
 	server := &Server{
 		State:         state,
 		FileManager:   fileManager,
 		StartLoopFunc: startLoopFunc,
+		WSManager:     wsManager,
 	}
 
 	server.Server = http.Server{
@@ -53,6 +62,9 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/check", handleCheck(s))
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))
+	
+	// WebSocket route (no JSON middleware)
+	mux.HandleFunc("/api/v1/ws", s.handleWebSocket())
 	
 	// Apply middlewares to API routes
 	mux.Handle("/api/", ApplyMiddlewares(apiMux))
@@ -220,7 +232,19 @@ func (s *Server) StopDaemonLoop() {
 	}
 }
 
+func (s *Server) handleWebSocket() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.WSManager.HandleWebSocket(w, r)
+	}
+}
+
 func (s *Server) Stop(ctx context.Context) error {
 	logger.Logger.Info().Msg("Stopping API server")
+	
+	// Close WebSocket connections
+	if s.WSManager != nil {
+		s.WSManager.Close()
+	}
+	
 	return s.Shutdown(ctx)
 }

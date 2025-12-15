@@ -2,10 +2,12 @@ package tests
 
 import (
 	"AutoAnimeDownloader/src/internal/files"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func withTempManager(t *testing.T, fn func(*files.FileManager)) {
@@ -42,9 +44,10 @@ func TestFilesModule_CanSaveLoadAndDeleteEpisodes(t *testing.T) {
 		}
 
 		// save some episodes
+		now := time.Now()
 		toSave := []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: "h1", EpisodeName: "Name1"},
-			{EpisodeID: 2, EpisodeHash: "h2", EpisodeName: ""},
+			{EpisodeID: 1, EpisodeHash: "h1", EpisodeName: "Name1", DownloadDate: now},
+			{EpisodeID: 2, EpisodeHash: "h2", EpisodeName: "", DownloadDate: now},
 		}
 		if err := manager.SaveEpisodesToFile(toSave); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -78,7 +81,7 @@ func TestFilesModule_CanSaveLoadAndDeleteEpisodes(t *testing.T) {
 func TestFilesModule_CanHandleDeleteEpisodes_WithNonExistentIDs(t *testing.T) {
 	withTempManager(t, func(manager *files.FileManager) {
 		// create file with one episode
-		if err := manager.SaveEpisodesToFile([]files.EpisodeStruct{{EpisodeID: 10, EpisodeHash: "hh"}}); err != nil {
+		if err := manager.SaveEpisodesToFile([]files.EpisodeStruct{{EpisodeID: 10, EpisodeHash: "hh", DownloadDate: time.Now()}}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		// delete non-existing id -> should be noop and not panic
@@ -471,8 +474,16 @@ func TestManager_DeleteEmptyFolders_WithEmptySavePath(t *testing.T) {
 // TESTES PARA FUNÇÕES DE PARSING
 // ============================================================================
 
-func TestParseEpisodes_WithValidContent(t *testing.T) {
-	content := "1:hash1:Episode 1\n2:hash2:Episode 2\n3:hash3\n"
+func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
+	now := time.Now()
+	ep1 := files.EpisodeStruct{EpisodeID: 1, EpisodeHash: "hash1", EpisodeName: "Episode 1", DownloadDate: now}
+	ep2 := files.EpisodeStruct{EpisodeID: 2, EpisodeHash: "hash2", EpisodeName: "Episode 2", DownloadDate: now}
+	ep3 := files.EpisodeStruct{EpisodeID: 3, EpisodeHash: "hash3", EpisodeName: "", DownloadDate: now}
+
+	json1, _ := json.Marshal(ep1)
+	json2, _ := json.Marshal(ep2)
+	json3, _ := json.Marshal(ep3)
+	content := string(json1) + "\n" + string(json2) + "\n" + string(json3) + "\n"
 
 	episodes, err := files.ParseEpisodes(content)
 	if err != nil {
@@ -503,6 +514,35 @@ func TestParseEpisodes_WithValidContent(t *testing.T) {
 	}
 }
 
+func TestParseEpisodes_WithValidTextContent(t *testing.T) {
+	// Test backward compatibility with old text format
+	content := "1:hash1:Episode 1\n2:hash2:Episode 2\n3:hash3\n"
+
+	episodes, err := files.ParseEpisodes(content)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(episodes) != 3 {
+		t.Fatalf("expected 3 episodes, got %d", len(episodes))
+	}
+
+	// Verificar primeiro episódio
+	if episodes[0].EpisodeID != 1 {
+		t.Errorf("expected episode ID 1, got %d", episodes[0].EpisodeID)
+	}
+	if episodes[0].EpisodeHash != "hash1" {
+		t.Errorf("expected hash 'hash1', got '%s'", episodes[0].EpisodeHash)
+	}
+	if episodes[0].EpisodeName != "Episode 1" {
+		t.Errorf("expected name 'Episode 1', got '%s'", episodes[0].EpisodeName)
+	}
+	// Episodes from old format should have DownloadDate set (migration)
+	if episodes[0].DownloadDate.IsZero() {
+		t.Errorf("expected DownloadDate to be set for migrated episode")
+	}
+}
+
 func TestParseEpisodes_WithEmptyContent(t *testing.T) {
 	episodes, err := files.ParseEpisodes("")
 	if err != nil {
@@ -515,7 +555,16 @@ func TestParseEpisodes_WithEmptyContent(t *testing.T) {
 }
 
 func TestParseEpisodes_WithBlankLines(t *testing.T) {
-	content := "1:hash1:Ep1\n\n2:hash2:Ep2\n   \n3:hash3\n"
+	// Test with JSON format
+	now := time.Now()
+	ep1 := files.EpisodeStruct{EpisodeID: 1, EpisodeHash: "hash1", EpisodeName: "Ep1", DownloadDate: now}
+	ep2 := files.EpisodeStruct{EpisodeID: 2, EpisodeHash: "hash2", EpisodeName: "Ep2", DownloadDate: now}
+	ep3 := files.EpisodeStruct{EpisodeID: 3, EpisodeHash: "hash3", EpisodeName: "", DownloadDate: now}
+
+	json1, _ := json.Marshal(ep1)
+	json2, _ := json.Marshal(ep2)
+	json3, _ := json.Marshal(ep3)
+	content := string(json1) + "\n\n" + string(json2) + "\n   \n" + string(json3) + "\n"
 
 	episodes, err := files.ParseEpisodes(content)
 	if err != nil {
@@ -532,10 +581,11 @@ func TestParseEpisodes_WithInvalidFormat(t *testing.T) {
 		name    string
 		content string
 	}{
-		{"missing hash", "1\n"},
-		{"missing colon", "1hash1\n"},
-		{"invalid id", "abc:hash1\n"},
-		{"empty hash", "1::name\n"},
+		{"invalid JSON", "not json\n"},
+		{"missing hash (text)", "1\n"},
+		{"missing colon (text)", "1hash1\n"},
+		{"invalid id (text)", "abc:hash1\n"},
+		{"empty hash (text)", "1::name\n"},
 	}
 
 	for _, tc := range testCases {
@@ -549,69 +599,144 @@ func TestParseEpisodes_WithInvalidFormat(t *testing.T) {
 }
 
 func TestSerializeEpisode_WithName(t *testing.T) {
+	now := time.Now()
 	episode := files.EpisodeStruct{
-		EpisodeID:   42,
-		EpisodeHash: "testhash",
-		EpisodeName: "Test Name",
+		EpisodeID:    42,
+		EpisodeHash:  "testhash",
+		EpisodeName:  "Test Name",
+		DownloadDate: now,
 	}
 
-	result := files.SerializeEpisode(episode)
-	expected := "42:testhash:Test Name\n"
+	result, err := files.SerializeEpisode(episode)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if result != expected {
-		t.Errorf("expected '%s', got '%s'", expected, result)
+	// Parse back to verify it's valid JSON
+	var parsed files.EpisodeStruct
+	if err := json.Unmarshal([]byte(strings.TrimSpace(result)), &parsed); err != nil {
+		t.Fatalf("failed to parse serialized episode: %v", err)
+	}
+
+	if parsed.EpisodeID != 42 {
+		t.Errorf("expected episode ID 42, got %d", parsed.EpisodeID)
+	}
+	if parsed.EpisodeHash != "testhash" {
+		t.Errorf("expected hash 'testhash', got '%s'", parsed.EpisodeHash)
+	}
+	if parsed.EpisodeName != "Test Name" {
+		t.Errorf("expected name 'Test Name', got '%s'", parsed.EpisodeName)
 	}
 }
 
 func TestSerializeEpisode_WithoutName(t *testing.T) {
+	now := time.Now()
 	episode := files.EpisodeStruct{
-		EpisodeID:   42,
-		EpisodeHash: "testhash",
-		EpisodeName: "",
+		EpisodeID:    42,
+		EpisodeHash:  "testhash",
+		EpisodeName:  "",
+		DownloadDate: now,
 	}
 
-	result := files.SerializeEpisode(episode)
-	expected := "42:testhash\n"
+	result, err := files.SerializeEpisode(episode)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if result != expected {
-		t.Errorf("expected '%s', got '%s'", expected, result)
+	// Parse back to verify it's valid JSON
+	var parsed files.EpisodeStruct
+	if err := json.Unmarshal([]byte(strings.TrimSpace(result)), &parsed); err != nil {
+		t.Fatalf("failed to parse serialized episode: %v", err)
+	}
+
+	if parsed.EpisodeID != 42 {
+		t.Errorf("expected episode ID 42, got %d", parsed.EpisodeID)
+	}
+	if parsed.EpisodeName != "" {
+		t.Errorf("expected empty name, got '%s'", parsed.EpisodeName)
 	}
 }
 
 func TestSerializeEpisodes_WithMultipleEpisodes(t *testing.T) {
+	now := time.Now()
 	episodes := []files.EpisodeStruct{
-		{EpisodeID: 1, EpisodeHash: "h1", EpisodeName: "Name1"},
-		{EpisodeID: 2, EpisodeHash: "h2", EpisodeName: ""},
-		{EpisodeID: 3, EpisodeHash: "h3", EpisodeName: "Name3"},
+		{EpisodeID: 1, EpisodeHash: "h1", EpisodeName: "Name1", DownloadDate: now},
+		{EpisodeID: 2, EpisodeHash: "h2", EpisodeName: "", DownloadDate: now},
+		{EpisodeID: 3, EpisodeHash: "h3", EpisodeName: "Name3", DownloadDate: now},
 	}
 
-	result := files.SerializeEpisodes(episodes)
-	expected := "1:h1:Name1\n2:h2\n3:h3:Name3\n"
+	result, err := files.SerializeEpisodes(episodes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
-	if result != expected {
-		t.Errorf("expected '%s', got '%s'", expected, result)
+	// Parse back to verify
+	parsed, err := files.ParseEpisodes(result)
+	if err != nil {
+		t.Fatalf("failed to parse serialized episodes: %v", err)
+	}
+
+	if len(parsed) != 3 {
+		t.Errorf("expected 3 episodes, got %d", len(parsed))
+	}
+	if parsed[0].EpisodeID != 1 || parsed[0].EpisodeName != "Name1" {
+		t.Errorf("first episode mismatch")
+	}
+	if parsed[1].EpisodeID != 2 || parsed[1].EpisodeName != "" {
+		t.Errorf("second episode mismatch")
+	}
+	if parsed[2].EpisodeID != 3 || parsed[2].EpisodeName != "Name3" {
+		t.Errorf("third episode mismatch")
 	}
 }
 
 func TestSerializeEpisodes_WithEmptyList(t *testing.T) {
-	result := files.SerializeEpisodes([]files.EpisodeStruct{})
+	result, err := files.SerializeEpisodes([]files.EpisodeStruct{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result != "" {
 		t.Errorf("expected empty string, got '%s'", result)
 	}
 }
 
-// Test round-trip: parse then serialize should give same result
-func TestParseSerialize_RoundTrip(t *testing.T) {
-	original := "1:hash1:Episode 1\n2:hash2\n3:hash3:Episode 3\n"
+// Test round-trip: parse then serialize should give same result (JSON format)
+func TestParseSerialize_RoundTrip_JSON(t *testing.T) {
+	now := time.Now()
+	originalEpisodes := []files.EpisodeStruct{
+		{EpisodeID: 1, EpisodeHash: "hash1", EpisodeName: "Episode 1", DownloadDate: now},
+		{EpisodeID: 2, EpisodeHash: "hash2", EpisodeName: "", DownloadDate: now},
+		{EpisodeID: 3, EpisodeHash: "hash3", EpisodeName: "Episode 3", DownloadDate: now},
+	}
+
+	original, err := files.SerializeEpisodes(originalEpisodes)
+	if err != nil {
+		t.Fatalf("serialize error: %v", err)
+	}
 
 	episodes, err := files.ParseEpisodes(original)
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	serialized := files.SerializeEpisodes(episodes)
+	serialized, err := files.SerializeEpisodes(episodes)
+	if err != nil {
+		t.Fatalf("serialize error: %v", err)
+	}
 
-	if serialized != original {
-		t.Errorf("round-trip failed:\noriginal:   '%s'\nserialized: '%s'", original, serialized)
+	// Parse both and compare
+	originalParsed, _ := files.ParseEpisodes(original)
+	serializedParsed, _ := files.ParseEpisodes(serialized)
+
+	if len(originalParsed) != len(serializedParsed) {
+		t.Fatalf("round-trip failed: different lengths")
+	}
+
+	for i := range originalParsed {
+		if originalParsed[i].EpisodeID != serializedParsed[i].EpisodeID ||
+			originalParsed[i].EpisodeHash != serializedParsed[i].EpisodeHash ||
+			originalParsed[i].EpisodeName != serializedParsed[i].EpisodeName {
+			t.Errorf("round-trip failed at index %d", i)
+		}
 	}
 }

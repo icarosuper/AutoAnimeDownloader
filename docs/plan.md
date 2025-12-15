@@ -229,7 +229,6 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
     }
   }
   ```
-- [ ] Nota: Logs em tempo real podem ser implementados futuramente se necessário
 
 ### 3.3 Reconexão e Robustez
 - [ ] Implementar ping/pong para manter conexão viva
@@ -430,10 +429,6 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 - [ ] Conectar via WebSocket para atualizações em tempo real
 - [ ] Estilizar com Tailwind
 
-### 7.5 Página de Logs (Opcional)
-- [ ] Criar componente `Logs.svelte`
-- [ ] Conectar via WebSocket para logs em tempo real
-- [ ] Exibir logs com scroll automático
 - [ ] Filtrar por nível (DEBUG, INFO, WARN, ERROR)
 - [ ] Estilizar com Tailwind
 
@@ -457,7 +452,6 @@ A implementação será feita em etapas sequenciais, priorizando a base (daemon)
 ### 8.3 WebSocket no Frontend
 - [ ] Conectar WebSocket na página Dashboard
 - [ ] Receber atualizações de status em tempo real
-- [ ] Receber logs em tempo real (se implementado)
 - [ ] Implementar reconexão automática
 - [ ] Testar desconexão e reconexão
 

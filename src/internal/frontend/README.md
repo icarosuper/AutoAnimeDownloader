@@ -29,7 +29,10 @@ Crie um arquivo `.env` baseado em `.env.example`:
 cp .env.example .env
 ```
 
+Variáveis disponíveis:
+
 - `VITE_API_BASE_URL`: URL base da API do daemon (padrão: `http://localhost:8091/api/v1`)
+- `VITE_PORT`: Porta do servidor de desenvolvimento Vite (padrão: `5173`)
 
 ## Estrutura
 

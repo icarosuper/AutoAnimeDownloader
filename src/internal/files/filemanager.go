@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 )
 
 const configsFolder = ".autoAnimeDownloader"
@@ -13,9 +14,10 @@ const configFileName = "config.json"
 const downloadedEpsFileName = "downloaded_episodes"
 
 type EpisodeStruct struct {
-	EpisodeID   int    `json:"episode_id"`
-	EpisodeHash string `json:"episode_hash"`
-	EpisodeName string `json:"episode_name"`
+	EpisodeID    int       `json:"episode_id"`
+	EpisodeHash  string    `json:"episode_hash"`
+	EpisodeName  string    `json:"episode_name"`
+	DownloadDate time.Time `json:"download_date"`
 }
 
 type Config struct {
@@ -161,6 +163,30 @@ func (m *FileManager) LoadSavedEpisodes() ([]EpisodeStruct, error) {
 		return nil, fmt.Errorf("failed to parse episodes: %w", err)
 	}
 
+	// If we loaded episodes from old format, migrate to JSON format
+	if len(episodes) > 0 && episodes[0].DownloadDate.IsZero() {
+		// Check if any episode has zero date (indicating old format)
+		needsMigration := false
+		for _, ep := range episodes {
+			if ep.DownloadDate.IsZero() {
+				needsMigration = true
+				break
+			}
+		}
+		if needsMigration {
+			// Migrate: set download date to current time for episodes without date
+			for i := range episodes {
+				if episodes[i].DownloadDate.IsZero() {
+					episodes[i].DownloadDate = time.Now()
+				}
+			}
+			// Save in new format
+			if err := m.saveEpisodesToFileJSON(episodes); err != nil {
+				return nil, fmt.Errorf("failed to migrate episodes to JSON format: %w", err)
+			}
+		}
+	}
+
 	return episodes, nil
 }
 
@@ -169,17 +195,45 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 		return nil
 	}
 
-	var existingContent []byte
-	existingContent, err := m.fs.ReadFile(m.episodesPath)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to read existing episodes file: %w", err)
+	// Load existing episodes
+	existingEpisodes, err := m.LoadSavedEpisodes()
+	if err != nil {
+		return fmt.Errorf("failed to load existing episodes: %w", err)
 	}
 
-	newContent := SerializeEpisodes(episodes)
+	// Create map of existing episodes by ID to avoid duplicates
+	existingMap := make(map[int]bool)
+	for _, ep := range existingEpisodes {
+		existingMap[ep.EpisodeID] = true
+	}
 
-	finalContent := append(existingContent, []byte(newContent)...)
+	// Append only new episodes
+	var newEpisodes []EpisodeStruct
+	for _, ep := range episodes {
+		if !existingMap[ep.EpisodeID] {
+			newEpisodes = append(newEpisodes, ep)
+		}
+	}
 
-	if err := m.fs.WriteFile(m.episodesPath, finalContent, 0644); err != nil {
+	if len(newEpisodes) == 0 {
+		return nil
+	}
+
+	// Append new episodes to existing ones
+	allEpisodes := append(existingEpisodes, newEpisodes...)
+
+	// Save all episodes in JSON format
+	return m.saveEpisodesToFileJSON(allEpisodes)
+}
+
+// saveEpisodesToFileJSON saves episodes in JSONL format
+func (m *FileManager) saveEpisodesToFileJSON(episodes []EpisodeStruct) error {
+	content, err := SerializeEpisodes(episodes)
+	if err != nil {
+		return fmt.Errorf("failed to serialize episodes: %w", err)
+	}
+
+	if err := m.fs.WriteFile(m.episodesPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write episodes to file: %w", err)
 	}
 
@@ -216,7 +270,11 @@ func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
 		return nil
 	}
 
-	content := SerializeEpisodes(newSaved)
+	content, err := SerializeEpisodes(newSaved)
+	if err != nil {
+		return fmt.Errorf("failed to serialize episodes: %w", err)
+	}
+
 	if err := m.fs.WriteFile(m.episodesPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write filtered episodes: %w", err)
 	}

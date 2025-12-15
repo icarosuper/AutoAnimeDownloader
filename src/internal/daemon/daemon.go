@@ -450,9 +450,10 @@ func processAnimeEpisodes(
 
 		if hash != "" {
 			*newEpisodes = append(*newEpisodes, files.EpisodeStruct{
-				EpisodeID:   ep.ID,
-				EpisodeHash: hash,
-				EpisodeName: epName,
+				EpisodeID:    ep.ID,
+				EpisodeHash:  hash,
+				EpisodeName:  epName,
+				DownloadDate: time.Now(),
 			})
 		}
 	}

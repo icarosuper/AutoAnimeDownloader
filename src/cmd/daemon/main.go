@@ -17,24 +17,47 @@
 package main
 
 import (
-	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/api"
+	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	_ "AutoAnimeDownloader/docs"
 )
 
-const API_PORT = ":8091"
+func getEnvironment() string {
+	env := os.Getenv("ENVIRONMENT")
+	if env == "" {
+		return "dev"
+	}
+	return env
+}
+
+func getPort() string {
+	port := os.Getenv("PORT")
+	if port == "" {
+		return ":8091"
+	}
+	// Ensure port starts with : if not already present
+	if !strings.HasPrefix(port, ":") {
+		return ":" + port
+	}
+	return port
+}
 
 func main() {
-	logger.Init(true) // TODO: Passar esse bool pra env?
-	logger.Logger.Info().Msg("Starting Auto Anime Downloader...")
+	environment := getEnvironment()
+	isDevelopment := environment == "dev"
+	logger.Init(isDevelopment)
+	logger.Logger.Info().
+		Str("environment", environment).
+		Msg("Starting Auto Anime Downloader...")
 
 	fileManager, err := files.NewDefaultFileManager()
 	if err != nil {
@@ -43,9 +66,13 @@ func main() {
 
 	state := daemon.NewState()
 
-	apiServer := api.NewServer(API_PORT, state, fileManager, func(p daemon.StartLoopPayload) func(time.Duration) {
+	apiPort := getPort()
+	apiServer := api.NewServer(apiPort, state, fileManager, func(p daemon.StartLoopPayload) func(time.Duration) {
 		return daemon.StartLoop(p)
 	})
+
+	// Set WebSocket manager as state notifier
+	state.SetNotifier(apiServer.WSManager)
 
 	go func() {
 		if err := apiServer.Start(); err != nil && err != context.Canceled {
@@ -54,7 +81,7 @@ func main() {
 	}()
 
 	logger.Logger.Info().
-		Str("port", API_PORT).
+		Str("port", apiPort).
 		Msg("API server started successfully")
 
 	if err := apiServer.StartDaemonLoop(); err != nil {
