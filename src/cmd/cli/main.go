@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -155,6 +156,13 @@ func main() {
 				},
 				Action: func(c *cli.Context) error {
 					return handleLogs(c.Int("lines"))
+				},
+			},
+			{
+				Name:  "open",
+				Usage: "Open the web UI in the browser",
+				Action: func(c *cli.Context) error {
+					return handleOpen()
 				},
 			},
 		},
@@ -422,6 +430,47 @@ func handleLogs(lines int) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func handleOpen() error {
+	// Construir a URL da web UI a partir do endpoint da API
+	webUIURL := apiEndpoint
+	
+	// Remover /api/v1 se presente, já que a web UI está na raiz
+	webUIURL = strings.TrimSuffix(webUIURL, "/api/v1")
+	webUIURL = strings.TrimSuffix(webUIURL, "/")
+	
+	// Garantir que tenha http:// ou https://
+	if !strings.HasPrefix(webUIURL, "http://") && !strings.HasPrefix(webUIURL, "https://") {
+		webUIURL = "http://" + webUIURL
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "linux":
+		cmd = exec.Command("xdg-open", webUIURL)
+	case "darwin":
+		cmd = exec.Command("open", webUIURL)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", webUIURL)
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to open browser: %w", err)
+	}
+
+	if !outputJSON {
+		fmt.Printf("Opening web UI at %s\n", webUIURL)
+	} else {
+		outputJSONResponse(map[string]string{
+			"message": "Browser opened",
+			"url":     webUIURL,
+		})
+	}
+
+	return nil
 }
 
 func outputJSONResponse(data interface{}) {
