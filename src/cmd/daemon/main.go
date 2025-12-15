@@ -22,8 +22,11 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -51,6 +54,56 @@ func getPort() string {
 	return port
 }
 
+const pidFileName = "daemon.pid"
+
+func getPIDFilePath() (string, error) {
+	var baseFolder string
+
+	if runtime.GOOS == "windows" {
+		baseFolder = os.Getenv("APPDATA")
+	} else {
+		baseFolder = os.Getenv("HOME")
+	}
+
+	if baseFolder == "" {
+		return "", fmt.Errorf("unable to determine home directory")
+	}
+
+	pidDir := filepath.Join(baseFolder, ".autoAnimeDownloader")
+	if err := os.MkdirAll(pidDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create PID directory: %w", err)
+	}
+
+	return filepath.Join(pidDir, pidFileName), nil
+}
+
+func createPIDFile() error {
+	pidPath, err := getPIDFilePath()
+	if err != nil {
+		return err
+	}
+
+	pid := os.Getpid()
+	if err := os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", pid)), 0644); err != nil {
+		return fmt.Errorf("failed to write PID file: %w", err)
+	}
+
+	return nil
+}
+
+func removePIDFile() error {
+	pidPath, err := getPIDFilePath()
+	if err != nil {
+		return err
+	}
+
+	if err := os.Remove(pidPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove PID file: %w", err)
+	}
+
+	return nil
+}
+
 func main() {
 	environment := getEnvironment()
 	isDevelopment := environment == "dev"
@@ -58,6 +111,18 @@ func main() {
 	logger.Logger.Info().
 		Str("environment", environment).
 		Msg("Starting Auto Anime Downloader...")
+
+	// Create PID file when daemon starts
+	if err := createPIDFile(); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to create PID file, continuing anyway")
+	}
+
+	// Ensure PID file is removed on exit
+	defer func() {
+		if err := removePIDFile(); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to remove PID file")
+		}
+	}()
 
 	fileManager, err := files.NewDefaultFileManager()
 	if err != nil {
