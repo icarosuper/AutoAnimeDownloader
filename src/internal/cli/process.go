@@ -61,8 +61,8 @@ func IsRunning() (bool, error) {
 	// Try to send signal 0 to verify if the process is alive
 	err = process.Signal(syscall.Signal(0))
 	if err != nil {
-		// Process is not alive, remove PID file
-		os.Remove(pidPath)
+		// Process is not alive, but don't remove PID file here
+		// The daemon will handle cleanup
 		return false, nil
 	}
 
@@ -88,20 +88,9 @@ func Start(daemonBinary string) error {
 		return fmt.Errorf("failed to start daemon: %w", err)
 	}
 
-	pidPath, err := getPIDFilePath()
-	if err != nil {
-		cmd.Process.Kill()
-		return err
-	}
-
-	if err := os.WriteFile(pidPath, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0644); err != nil {
-		cmd.Process.Kill()
-		return fmt.Errorf("failed to write PID file: %w", err)
-	}
-
+	// Wait a bit for daemon to create its own PID file
 	time.Sleep(2 * time.Second)
 	if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
-		os.Remove(pidPath)
 		return fmt.Errorf("daemon process died immediately after start")
 	}
 
@@ -129,7 +118,6 @@ func Stop() error {
 
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		os.Remove(pidPath)
 		return fmt.Errorf("daemon process not found")
 	}
 
@@ -147,7 +135,7 @@ func Stop() error {
 		elapsed += checkInterval
 
 		if err := process.Signal(syscall.Signal(0)); err != nil {
-			os.Remove(pidPath)
+			// Process terminated, daemon will clean up PID file
 			return nil
 		}
 	}
@@ -158,11 +146,10 @@ func Stop() error {
 
 	time.Sleep(1 * time.Second)
 	if err := process.Signal(syscall.Signal(0)); err != nil {
-		os.Remove(pidPath)
+		// Process terminated, daemon will clean up PID file
 		return nil
 	}
 
-	os.Remove(pidPath)
 	return fmt.Errorf("daemon did not stop even after SIGKILL")
 }
 
@@ -187,4 +174,3 @@ func GetPID() (int, error) {
 
 	return pid, nil
 }
-
