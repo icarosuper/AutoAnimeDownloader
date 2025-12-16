@@ -9,6 +9,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -41,8 +44,31 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 				p.State.SetStatus(StatusStopped)
 				return
 			default:
-				p.State.SetStatus(StatusRunning)
 			}
+
+			// Verificar configurações obrigatórias antes de iniciar o loop
+			configs, err := p.FileManager.LoadConfigs()
+			if err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to load configs, stopping loop")
+				p.State.SetStatus(StatusStopped)
+				return
+			}
+
+			if !isConfigComplete(configs) {
+				logger.Logger.Warn().Msg("Missing required configuration, opening browser to config page")
+				// Abrir navegador na página de configs
+				go func() {
+					time.Sleep(500 * time.Millisecond) // Pequeno delay para garantir que o servidor está pronto
+					webUIURL := getWebUIURL()
+					if err := openBrowserToConfig(webUIURL); err != nil {
+						logger.Logger.Warn().Err(err).Msg("Failed to open browser to configuration page")
+			}
+				}()
+				p.State.SetStatus(StatusStopped)
+				return
+			}
+
+			p.State.SetStatus(StatusRunning)
 
 			for {
 				// check cancellation before executing
@@ -82,6 +108,47 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 			}
 		}()
 	}
+}
+
+func getWebUIURL() string {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8091"
+	} else {
+		// Remove o : se presente
+		port = strings.TrimPrefix(port, ":")
+	}
+	// Colocar o query parameter antes do hash para funcionar corretamente
+	return fmt.Sprintf("http://localhost:%s/config?missingConfig=true#/config", port)
+}
+
+func isConfigComplete(config *files.Config) bool {
+	// Verifica se todas as configurações obrigatórias estão preenchidas
+	return config.AnilistUsername != "" && config.SavePath != "" && config.QBittorrentUrl != ""
+}
+
+func openBrowserToConfig(webUIURL string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "linux":
+		cmd = exec.Command("xdg-open", webUIURL)
+	case "darwin":
+		cmd = exec.Command("open", webUIURL)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", webUIURL)
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to open browser: %w", err)
+	}
+
+	logger.Logger.Info().
+		Str("url", webUIURL).
+		Msg("Opened browser to configuration page (missing required configuration)")
+
+	return nil
 }
 
 func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
