@@ -14,8 +14,6 @@ dist/
 *.spec
 node_modules/
 
-go.sum
-
 # Runtime data (Docker volumes)
 runtime/
 !runtime/.gitkeep
