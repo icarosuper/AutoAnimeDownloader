@@ -201,7 +201,20 @@ Contributions are welcome! Please see [Contributing Guide](docs/contributing.md)
 
 ## License
 
-[Add your license here]
+This project is licensed under the GNU General Public License v3.0 (GPL v3) - see the [LICENSE](LICENSE) file for details.
+
+**GPL v3** allows you to:
+- ✅ Use, modify, and distribute
+- ✅ Use commercially
+- ✅ Patent use (with protections)
+
+**You must:**
+- ❗ Include copyright notice
+- ❗ Include license notice
+- ❗ State changes (if any)
+- ❗ Make source code available when distributing
+
+For more information, see [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html).
 
 ## Credits
 
