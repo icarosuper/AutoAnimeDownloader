@@ -1,6 +1,7 @@
 package torrents
 
 import (
+	"AutoAnimeDownloader/src/internal/logger"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -133,6 +134,10 @@ func sanitizeFolderName(name string) string {
 		sanitized = strings.ReplaceAll(sanitized, char, "")
 	}
 
+	// Remover informações de temporada/cour do nome da pasta
+	seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season|cour\s*\d+)`)
+	sanitized = seasonPattern.ReplaceAllString(sanitized, "")
+
 	sanitized = strings.TrimSpace(sanitized)
 	sanitized = strings.ReplaceAll(sanitized, "  ", " ")
 
@@ -156,6 +161,13 @@ func (ts *TorrentService) addTorrent(magnet string, animeName string, animeIsCom
 
 	path := ts.getFolderName(animeName, animeIsCompleted)
 
+	logger.Logger.Debug().
+		Str("episode", epName).
+		Str("anime_name", animeName).
+		Str("savepath", path).
+		Bool("anime_completed", animeIsCompleted).
+		Msg("Adding torrent to qBittorrent")
+
 	values.Add("urls", magnet)
 	values.Add("savepath", path)
 	values.Add("category", CATEGORY)
@@ -163,10 +175,33 @@ func (ts *TorrentService) addTorrent(magnet string, animeName string, animeIsCom
 
 	resp, err := ts.httpClient.PostForm(ts.baseURL+"/add", values)
 	if err != nil {
-		fmt.Printf("Error adding %s to torrent: %v\n", epName, err)
+		logger.Logger.Error().
+			Err(err).
+			Str("episode", epName).
+			Str("savepath", path).
+			Msg("Error adding torrent to qBittorrent")
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	// Verificar status code da resposta
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes := make([]byte, 512)
+		resp.Body.Read(bodyBytes)
+		err := fmt.Errorf("qBittorrent API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		logger.Logger.Error().
+			Err(err).
+			Str("episode", epName).
+			Str("savepath", path).
+			Int("status_code", resp.StatusCode).
+			Msg("qBittorrent API returned error")
+		return err
+	}
+
+	logger.Logger.Debug().
+		Str("episode", epName).
+		Str("savepath", path).
+		Msg("Successfully sent savepath to qBittorrent")
 
 	return nil
 }
@@ -195,7 +230,7 @@ func (ts *TorrentService) getTorrentsHash(torrentName string) string {
 
 func (ts *TorrentService) getFolderName(animeName string, animeIsCompleted bool) string {
 	savePath := ts.savePath
-	if animeIsCompleted {
+	if animeIsCompleted && ts.completedPath != "" && ts.completedPath != ts.savePath {
 		savePath = ts.completedPath
 	}
 
