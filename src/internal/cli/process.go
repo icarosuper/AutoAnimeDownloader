@@ -286,9 +286,7 @@ func Start(daemonBinary string) error {
 	// the child process from the parent. Setsid is not needed and can cause
 	// "operation not permitted" errors in some contexts.
 	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true,
-		}
+		cmd.SysProcAttr = getSysProcAttr()
 	}
 
 	if err := cmd.Start(); err != nil {
