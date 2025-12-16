@@ -119,12 +119,20 @@
   function formatDate(dateString: string) {
     if (!dateString) return "Never";
     const date = new Date(dateString);
+    // Check if date is invalid or before 2010
+    if (isNaN(date.getTime()) || date.getFullYear() < 2010) {
+      return "Never";
+    }
     return date.toLocaleString();
   }
 
   function formatTimeAgo(dateString: string): string {
     if (!dateString) return "";
     const date = new Date(dateString);
+    // Check if date is invalid or before 2010
+    if (isNaN(date.getTime()) || date.getFullYear() < 2010) {
+      return "";
+    }
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffSeconds = Math.floor(diffMs / 1000);
@@ -203,7 +211,7 @@
             >
               {formatDate(status.last_check)}
             </dd>
-            {#if status.last_check}
+            {#if status.last_check && formatTimeAgo(status.last_check)}
               <dd class="mt-1 text-xs text-gray-400 dark:text-gray-500">
                 {formatTimeAgo(status.last_check)}
               </dd>
