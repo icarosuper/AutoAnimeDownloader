@@ -69,7 +69,8 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 	requestedSeason := extractSeason(animeName)
 
 	// Remover informações de temporada do nome para formar a query base
-	seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season)`)
+	// Adicionar suporte para "Cour" além de "Season"
+	seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season|cour\s*\d+)`)
 	sanitizedRomajiName := seasonPattern.ReplaceAllString(animeName, "")
 
 	query := strings.TrimSpace(sanitizedRomajiName)
@@ -199,10 +200,11 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 	requestedSeason := extractSeason(animeName)
 
 	// Remover informações de temporada do nome para formar a query base
-	// seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season)`)
-	// sanitizedRomajiName := seasonPattern.ReplaceAllString(animeName, "")
+	// Adicionar suporte para "Cour" além de "Season"
+	seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season|cour\s*\d+)`)
+	sanitizedRomajiName := seasonPattern.ReplaceAllString(animeName, "")
 
-	query := strings.TrimSpace(animeName)
+	query := strings.TrimSpace(sanitizedRomajiName)
 
 	// Construir URL com parâmetros
 	params := url.Values{}
@@ -364,6 +366,7 @@ func extractSeason(name string) *int {
 		`(?i)S(\d+)`,                        // S1, S2, S01, S02
 		`(?i)Season\s*(\d+)`,                // Season 1, Season 2
 		`(?i)(\d+)(?:st|nd|rd|th)\s+Season`, // 3rd Season, 2nd Season
+		`(?i)Cour\s*(\d+)`,                  // Cour 1, Cour 2, Cour 01, Cour 02
 		`(?i)\b(\d+)\s+-\s+\d+`,             // 2 - 07 (número seguido de hífen e outro número)
 		`(?i)\b(\d+)\s+EP\d+`,               // 2 EP07 (número seguido de EP e outro número)
 	}
