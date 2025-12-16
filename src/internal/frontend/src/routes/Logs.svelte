@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from "svelte";
   import { getLogs, type LogsResponse } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import ErrorMessage from "../components/ErrorMessage.svelte";
@@ -8,26 +8,54 @@
   let loading = true;
   let error: string | null = null;
   let linesToLoad = 1000;
-  let refreshInterval: ReturnType<typeof setInterval> | null = null;
-  let logContainer: HTMLDivElement;
   let filterLevel = "all"; // all, debug, info, warn, error
   let searchQuery = "";
+  let filteredLogs: string[] = [];
+  let parsedLogs: ParsedLogLine[] = [];
+  let initialized = false;
 
-  function parseLogLine(line: string): {
+  type ParsedLogLine = {
     level: string;
     timestamp: string;
     message: string;
     raw: string;
-  } {
+    extras?: string;
+  };
+
+  function parseLogLine(line: string): ParsedLogLine {
     // Try to parse zerolog format: {"level":"info","time":"2024-01-01T00:00:00Z","message":"..."}
     if (line.startsWith("{")) {
       try {
         const json = JSON.parse(line);
+
+        const { level, time, message, ...rest } = json;
+
+        const extras: Record<string, string> = {};
+        for (const [key, value] of Object.entries(rest)) {
+          try {
+            if (typeof value === "object") {
+              extras[key] = JSON.stringify(value);
+            } else {
+              extras[key] = String(value);
+            }
+          } catch {
+            extras[key] = String(value);
+          }
+        }
+
+        const extrasString =
+          Object.keys(extras).length > 0
+            ? Object.entries(extras)
+                .map(([k, v]) => `${k}=${v}`)
+                .join(" ")
+            : undefined;
+
         return {
-          level: json.level || "info",
-          timestamp: json.time || "",
-          message: json.message || line,
+          level: level || "info",
+          timestamp: time || "",
+          message: message || line,
           raw: line,
+          extras: extrasString,
         };
       } catch {
         // Not valid JSON, fall through
@@ -99,8 +127,13 @@
     }
   }
 
-  function filterLogs(logs: string[], query: string): string[] {
-    let filtered = [...logs].reverse();
+  function filterLogs(
+    logs: string[],
+    linesToLoad: number,
+    filterLevel: string,
+    searchQuery: string,
+  ): string[] {
+    let filtered = [...logs].slice(0, linesToLoad).reverse();
 
     if (filterLevel !== "all") {
       filtered = filtered.filter((line) => {
@@ -109,17 +142,57 @@
       });
     }
 
-    if (!query.trim()) return filtered;
+    if (!searchQuery.trim()) return filtered;
 
     return filtered.filter((line) =>
-      line.toLowerCase().includes(query.toLowerCase().trim()),
+      line.toLowerCase().includes(searchQuery.toLowerCase().trim()),
     );
   }
 
-  $: filteredLogs = filterLogs(logs, searchQuery);
+  $: filteredLogs = filterLogs(logs, linesToLoad, filterLevel, searchQuery);
+  $: parsedLogs = filteredLogs.map((line) => parseLogLine(line));
+  $: updateUrlQuery(linesToLoad, filterLevel, searchQuery);
 
-  function handleFilterChange() { 
-    loadLogs();
+  function updateUrlQuery(
+    linesToLoad: number,
+    filterLevel: string,
+    searchQuery: string,
+  ) {
+    if (typeof window === "undefined" || !initialized) return;
+
+    const params = new URLSearchParams();
+    const currentHash = window.location.hash || "#/logs";
+
+    // Extract the route path from hash (everything before ?)
+    // Ensure we're always using /logs as the base path
+    let hashPath = currentHash.split("?")[0];
+    if (!hashPath || hashPath === "#" || !hashPath.includes("/logs")) {
+      hashPath = "#/logs";
+    }
+
+    if (linesToLoad && linesToLoad !== 1000) {
+      params.set("lines", String(linesToLoad));
+    }
+
+    if (filterLevel && filterLevel !== "all") {
+      params.set("level", filterLevel);
+    }
+
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery) {
+      params.set("q", trimmedQuery);
+    }
+
+    const queryString = params.toString();
+
+    // Build new hash with query params
+    const newHash = queryString ? `${hashPath}?${queryString}` : hashPath;
+
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + window.location.search + newHash,
+    );
   }
 
   async function loadLogs() {
@@ -128,13 +201,6 @@
       error = null;
       const response: LogsResponse = await getLogs(linesToLoad);
       logs = response.lines;
-
-      // Auto-scroll to top (most recent logs)
-      if (logContainer) {
-        setTimeout(() => {
-          logContainer.scrollTop = 0;
-        }, 100);
-      }
     } catch (err) {
       error = err instanceof Error ? err.message : "Unknown error";
       console.error("Failed to load logs:", err);
@@ -143,19 +209,49 @@
     }
   }
 
-  onMount(() => {
-    loadLogs();
+  function initFromUrl() {
+    if (typeof window === "undefined") return;
 
-    // Auto-refresh every 5 seconds
-    refreshInterval = setInterval(() => {
-      loadLogs();
-    }, 3000);
-  });
+    // Try to get params from hash first (for hash routing)
+    let params: URLSearchParams | null = null;
+    const hash = window.location.hash;
 
-  onDestroy(() => {
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
+    if (hash) {
+      const hashParts = hash.split("?");
+      if (hashParts.length > 1) {
+        params = new URLSearchParams(hashParts[1]);
+      }
     }
+
+    // Fallback to search params if not in hash
+    if (!params || params.toString() === "") {
+      params = new URLSearchParams(window.location.search);
+    }
+
+    const linesParam = params.get("lines");
+    if (linesParam) {
+      const parsed = parseInt(linesParam, 10);
+      if (!Number.isNaN(parsed)) {
+        linesToLoad = parsed;
+      }
+    }
+
+    const levelParam = params.get("level");
+    const validLevels = ["all", "debug", "info", "warn", "error"];
+    if (levelParam && validLevels.includes(levelParam)) {
+      filterLevel = levelParam;
+    }
+
+    const qParam = params.get("q") ?? params.get("search");
+    if (qParam !== null) {
+      searchQuery = qParam;
+    }
+  }
+
+  onMount(() => {
+    initFromUrl();
+    loadLogs();
+    initialized = true;
   });
 </script>
 
@@ -204,7 +300,6 @@
         <select
           id="filter-level"
           bind:value={filterLevel}
-          on:change={handleFilterChange}
           class="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:border-blue-500 focus:ring-blue-500 py-1 px-2"
         >
           <option value="all">All</option>
@@ -246,11 +341,9 @@
   {:else}
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
       <div
-        bind:this={logContainer}
         class="h-[600px] overflow-y-auto p-4 font-mono text-sm bg-gray-900 dark:bg-black"
       >
-        {#each filteredLogs as line}
-          {@const parsed = parseLogLine(line)}
+        {#each parsedLogs as parsed}
           <div
             class="mb-2 px-3 py-1.5 rounded {getLevelBgColor(
               parsed.level,
@@ -267,6 +360,11 @@
             <span class="text-gray-300 dark:text-gray-400 ml-2">
               {parsed.message}
             </span>
+            {#if parsed.extras}
+              <span class="text-gray-400 dark:text-gray-500 ml-2">
+                {parsed.extras}
+              </span>
+            {/if}
           </div>
         {/each}
       </div>

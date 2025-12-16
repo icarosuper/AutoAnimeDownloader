@@ -334,15 +334,23 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 		folderPath := filepath.Join(path, entry.Name())
 		subEntries, err := m.fs.ReadDir(folderPath)
 		if err != nil {
-			fmt.Printf("Warning: failed to read folder %s: %v\n", folderPath, err)
+			logger.Logger.Warn().
+				Err(err).
+				Str("folder_path", folderPath).
+				Msg("Failed to read folder while deleting empty folders")
 			continue
 		}
 
 		if len(subEntries) == 0 {
 			if err := m.fs.Remove(folderPath); err != nil {
-				fmt.Printf("Warning: failed to delete empty folder %s: %v\n", folderPath, err)
+				logger.Logger.Warn().
+					Err(err).
+					Str("folder_path", folderPath).
+					Msg("Failed to delete empty folder")
 			} else {
-				fmt.Printf("Deleted empty folder: %s\n", folderPath)
+				logger.Logger.Info().
+					Str("folder_path", folderPath).
+					Msg("Deleted empty folder")
 			}
 		}
 	}

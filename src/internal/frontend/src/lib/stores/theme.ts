@@ -52,7 +52,7 @@ function createThemeStore(): ThemeStore {
   // Listen for system theme changes
   if (isBrowser) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+    const handleSystemThemeChange = () => {
       const currentTheme = (localStorage.getItem(THEME_KEY) as Theme) || THEMES.SYSTEM
       if (currentTheme === THEMES.SYSTEM) {
         applyTheme(THEMES.SYSTEM)

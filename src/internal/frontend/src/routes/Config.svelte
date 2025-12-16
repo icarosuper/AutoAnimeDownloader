@@ -28,18 +28,19 @@
       // Verificar query params na URL (pode estar no search ou no hash)
       const search = window.location.search;
       const hash = window.location.hash;
-      const fullUrl = window.location.href;
-      
+
       // Tentar pegar do search primeiro (query params antes do hash)
       if (search) {
         const urlParams = new URLSearchParams(search);
         showMissingConfigBanner = urlParams.has("missingConfig");
         if (showMissingConfigBanner) {
-          console.log("Missing config banner will be shown (from search params)");
+          console.log(
+            "Missing config banner will be shown (from search params)",
+          );
         }
         return;
       }
-      
+
       // Se não tiver no search, verificar no hash (para hash routing)
       if (hash) {
         const hashParts = hash.split("?");
@@ -47,7 +48,9 @@
           const urlParams = new URLSearchParams(hashParts[1]);
           showMissingConfigBanner = urlParams.has("missingConfig");
           if (showMissingConfigBanner) {
-            console.log("Missing config banner will be shown (from hash params)");
+            console.log(
+              "Missing config banner will be shown (from hash params)",
+            );
           }
           return;
         }
@@ -116,7 +119,9 @@
 
 <div>
   {#if showMissingConfigBanner}
-    <div class="mb-6 rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800">
+    <div
+      class="mb-6 rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800"
+    >
       <div class="flex">
         <div class="flex-shrink-0">
           <svg
