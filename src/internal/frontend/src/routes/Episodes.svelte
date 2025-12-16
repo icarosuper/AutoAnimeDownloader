@@ -86,9 +86,7 @@
 
   $: filteredEpisodes = filterEpisodes(episodes, searchQuery);
 
-  function handleWebSocketStatus(
-    statusValue: string,
-  ) {
+  function handleWebSocketStatus(statusValue: string) {
     const previousStatus = currentStatus;
     currentStatus = statusValue;
 

@@ -55,7 +55,11 @@ const CATEGORY = "autoAnimeDownloader"
 func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string, animeIsCompleted bool) string {
 	err := ts.addTorrent(magnet, animeName, animeIsCompleted, epName)
 	if err != nil {
-		fmt.Println("Failed to add torrent for:", epName)
+		logger.Logger.Error().
+			Err(err).
+			Str("episode", epName).
+			Str("anime_name", animeName).
+			Msg("Failed to add torrent")
 		return ""
 	}
 
@@ -65,7 +69,10 @@ func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epNam
 
 	hash := ts.getTorrentsHash(epName)
 	if hash == "" {
-		fmt.Println("Failed to retrieve torrent hash for:", epName)
+		logger.Logger.Warn().
+			Str("episode", epName).
+			Str("anime_name", animeName).
+			Msg("Failed to retrieve torrent hash")
 		return ""
 	}
 
@@ -83,7 +90,10 @@ func (ts *TorrentService) DeleteTorrents(hashes []string) error {
 
 	resp, err := ts.httpClient.PostForm(ts.baseURL+"/delete", values)
 	if err != nil {
-		fmt.Println("Error deleting torrents:", err)
+		logger.Logger.Error().
+			Err(err).
+			Int("count", len(hashes)).
+			Msg("Failed to delete torrents via qBittorrent API")
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -107,7 +117,12 @@ func (ts *TorrentService) SendAnimeToCompletedFolder(hashes []string, animeName 
 
 	resp, err := ts.httpClient.PostForm(ts.baseURL+"/setLocation", values)
 	if err != nil {
-		fmt.Printf("Error setting save path for torrent: %v\n", err)
+		logger.Logger.Error().
+			Err(err).
+			Str("anime_name", animeName).
+			Int("count", len(hashes)).
+			Str("destination", newSavePath).
+			Msg("Failed to set save path for torrents")
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -241,7 +256,9 @@ func (ts *TorrentService) getFolderName(animeName string, animeIsCompleted bool)
 func (ts *TorrentService) getDownloadedTorrents() ([]Torrent, error) {
 	response, err := ts.httpClient.Get(ts.baseURL + "/info" + "?category=" + CATEGORY)
 	if err != nil {
-		fmt.Println("Error fetching torrents:", err)
+		logger.Logger.Error().
+			Err(err).
+			Msg("Failed to fetch downloaded torrents from qBittorrent API")
 		return nil, err
 	}
 	defer func() { _ = response.Body.Close() }()
@@ -272,7 +289,9 @@ func (ts *TorrentService) getDownloadedTorrents() ([]Torrent, error) {
 	var torrents []Torrent
 	err = json.NewDecoder(response.Body).Decode(&torrents)
 	if err != nil {
-		fmt.Println("Error decoding response:", err)
+		logger.Logger.Error().
+			Err(err).
+			Msg("Failed to decode qBittorrent torrents response")
 		return nil, fmt.Errorf("failed to decode qBittorrent response: %w", err)
 	}
 

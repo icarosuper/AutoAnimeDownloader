@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"AutoAnimeDownloader/src/internal/logger"
+
 	"github.com/PuerkitoBio/goquery"
 )
 
@@ -87,7 +89,11 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 	baseURL := getNyaaBaseURL()
 	nyaaURL := fmt.Sprintf("%s/?%s", baseURL, params.Encode())
 
-	fmt.Printf("Searching Nyaa: %s\n", nyaaURL)
+	logger.Logger.Debug().
+		Str("url", nyaaURL).
+		Str("anime_name", animeName).
+		Int("episode", episode).
+		Msg("Searching Nyaa for single episode")
 
 	// Fazer requisição HTTP (usando httpGet para permitir mock em testes)
 	resp, err := httpGet(nyaaURL)
@@ -184,7 +190,11 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 		})
 	})
 
-	fmt.Printf("Found %v result for %s ep %v\n", len(results), animeName, episode)
+	logger.Logger.Debug().
+		Str("anime_name", animeName).
+		Int("episode", episode).
+		Int("results", len(results)).
+		Msg("Found Nyaa results for single episode")
 
 	if len(results) == 0 {
 		return nil, nil // Nenhum resultado encontrado
@@ -218,7 +228,11 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 	baseURL := getNyaaBaseURL()
 	nyaaURL := fmt.Sprintf("%s/?%s", baseURL, params.Encode())
 
-	fmt.Printf("Searching Nyaa: %s\n", nyaaURL)
+	logger.Logger.Debug().
+		Str("url", nyaaURL).
+		Str("anime_name", animeName).
+		Int("episodes_count", len(episodes)).
+		Msg("Searching Nyaa for multiple episodes")
 
 	resp, err := httpGet(nyaaURL)
 	if err != nil {
@@ -320,7 +334,10 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 		})
 	})
 
-	fmt.Printf("Found %v result for %s\n", len(results), animeName)
+	logger.Logger.Debug().
+		Str("anime_name", animeName).
+		Int("results", len(results)).
+		Msg("Found Nyaa results for multiple episodes")
 
 	if len(results) == 0 {
 		return nil, nil // Nenhum resultado encontrado
