@@ -68,6 +68,10 @@ export interface Episode {
   download_date: string
 }
 
+export interface LogsResponse {
+  lines: string[]
+}
+
 export async function getStatus(): Promise<StatusResponse> {
   return apiRequest<StatusResponse>('GET', '/status')
 }
@@ -98,5 +102,10 @@ export async function startDaemon(): Promise<void> {
 
 export async function stopDaemon(): Promise<void> {
   return apiRequest<void>('POST', '/daemon/stop')
+}
+
+export async function getLogs(lines?: number): Promise<LogsResponse> {
+  const endpoint = lines ? `/logs?lines=${lines}` : '/logs'
+  return apiRequest<LogsResponse>('GET', endpoint)
 }
 

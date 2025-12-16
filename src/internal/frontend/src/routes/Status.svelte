@@ -122,6 +122,27 @@
     return date.toLocaleString();
   }
 
+  function formatTimeAgo(dateString: string): string {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSeconds < 60) {
+      return "há menos de um minuto";
+    } else if (diffMinutes < 60) {
+      return `há ${diffMinutes} ${diffMinutes === 1 ? "minuto" : "minutos"}`;
+    } else if (diffHours < 24) {
+      return `há ${diffHours} ${diffHours === 1 ? "hora" : "horas"}`;
+    } else {
+      return `há ${diffDays} ${diffDays === 1 ? "dia" : "dias"}`;
+    }
+  }
+
   onMount(() => {
     // Load initial data
     loadInitialData();
@@ -182,6 +203,11 @@
             >
               {formatDate(status.last_check)}
             </dd>
+            {#if status.last_check}
+              <dd class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                {formatTimeAgo(status.last_check)}
+              </dd>
+            {/if}
           </div>
           <div class="px-4 py-5 bg-gray-50 dark:bg-gray-700 rounded-lg">
             <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">
