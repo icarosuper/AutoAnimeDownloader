@@ -46,7 +46,7 @@
         const extrasString =
           Object.keys(extras).length > 0
             ? Object.entries(extras)
-                .map(([k, v]) => `${k}=${v}`)
+                .map(([k, v]) => `"${k}"="${v}"`)
                 .join(" ")
             : undefined;
 
