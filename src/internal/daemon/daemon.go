@@ -32,7 +32,13 @@ type StartLoopPayload struct {
 	State       *State
 }
 
-type StartLoopFuncType func(StartLoopPayload) func(newInterval time.Duration)
+// LoopControl contains functions to control the daemon loop
+type LoopControl struct {
+	UpdateInterval func(time.Duration)
+	Cancel         context.CancelFunc
+}
+
+type StartLoopFuncType func(StartLoopPayload) *LoopControl
 
 func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context) {
 	return func(d time.Duration, c context.Context) {
@@ -127,22 +133,33 @@ func openBrowserToConfig(webUIURL string) error {
 	return nil
 }
 
-func StartLoop(p StartLoopPayload) func(newInterval time.Duration) {
+func StartLoop(p StartLoopPayload) *LoopControl {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
+	
+	// Use pointers to share the cancel function between closures
+	cancelPtr := &cancel
 
 	start := createStartFunc(p)
 
 	start(p.Interval, ctx)
 
-	return func(newDur time.Duration) {
-		mu.Lock()
-		// stop current loop
-		cancel()
-		// create new context/cancel for next loop
-		ctx, cancel = context.WithCancel(context.Background())
-		start(newDur, ctx)
-		mu.Unlock()
+	return &LoopControl{
+		UpdateInterval: func(newDur time.Duration) {
+			mu.Lock()
+			defer mu.Unlock()
+			// stop current loop
+			(*cancelPtr)()
+			// create new context/cancel for next loop
+			ctx, cancel = context.WithCancel(context.Background())
+			cancelPtr = &cancel
+			start(newDur, ctx)
+		},
+		Cancel: func() {
+			mu.Lock()
+			defer mu.Unlock()
+			(*cancelPtr)()
+		},
 	}
 }
 

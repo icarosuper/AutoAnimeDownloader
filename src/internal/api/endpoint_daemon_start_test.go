@@ -21,8 +21,11 @@ func TestHandleDaemonStart(t *testing.T) {
 	server := &Server{
 		State:         state,
 		FileManager:   mockFM,
-		StartLoopFunc: func(p daemon.StartLoopPayload) func(time.Duration) {
-			return func(d time.Duration) {}
+		StartLoopFunc: func(p daemon.StartLoopPayload) *daemon.LoopControl {
+			return &daemon.LoopControl{
+				UpdateInterval: func(d time.Duration) {},
+				Cancel:         func() {},
+			}
 		},
 	}
 

@@ -31,15 +31,14 @@ type Server struct {
 	http.Server
 	State         *daemon.State
 	FileManager   FileManagerInterface
-	StartLoopFunc func(daemon.StartLoopPayload) func(time.Duration)
+	StartLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl
 	WSManager     *WebSocketManager
 
 	mu                 sync.Mutex
-	currentLoopControl func(time.Duration)
-	cancelLoop         context.CancelFunc
+	currentLoopControl *daemon.LoopControl
 }
 
-func NewServer(port string, state *daemon.State, fileManager FileManagerInterface, startLoopFunc func(daemon.StartLoopPayload) func(time.Duration)) *Server {
+func NewServer(port string, state *daemon.State, fileManager FileManagerInterface, startLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl) *Server {
 	wsManager := NewWebSocketManager()
 	
 	// Set state getter for WebSocket manager
@@ -173,12 +172,10 @@ func (s *Server) StartDaemonLoop() error {
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
 	s.mu.Lock()
-	if s.cancelLoop != nil {
-		s.cancelLoop()
+	// Stop current loop if running
+	if s.currentLoopControl != nil {
+		s.currentLoopControl.Cancel()
 	}
-
-	_, cancel := context.WithCancel(context.Background())
-	s.cancelLoop = cancel
 
 	loopControl := s.StartLoopFunc(daemon.StartLoopPayload{
 		FileManager: s.FileManager,
@@ -193,12 +190,11 @@ func (s *Server) StartDaemonLoop() error {
 
 func (s *Server) StopDaemonLoop() {
 	s.mu.Lock()
-	hadLoop := s.cancelLoop != nil
-	if s.cancelLoop != nil {
-		s.cancelLoop()
-		s.cancelLoop = nil
+	hadLoop := s.currentLoopControl != nil
+	if s.currentLoopControl != nil {
+		s.currentLoopControl.Cancel()
+		s.currentLoopControl = nil
 	}
-	s.currentLoopControl = nil
 	s.mu.Unlock()
 
 	// Update status immediately when stopping
