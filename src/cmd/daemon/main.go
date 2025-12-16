@@ -148,7 +148,7 @@ func main() {
 	state := daemon.NewState()
 
 	apiPort := getPort()
-	apiServer := api.NewServer(apiPort, state, fileManager, func(p daemon.StartLoopPayload) func(time.Duration) {
+	apiServer := api.NewServer(apiPort, state, fileManager, func(p daemon.StartLoopPayload) *daemon.LoopControl {
 		return daemon.StartLoop(p)
 	})
 

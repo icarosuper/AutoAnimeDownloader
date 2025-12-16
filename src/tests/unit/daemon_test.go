@@ -291,7 +291,7 @@ func TestStartLoop_StatusTransitions(t *testing.T) {
 	}
 
 	// Stop the loop
-	loopControl(interval) // This will cancel and restart, but we'll wait and check stopped
+	loopControl.UpdateInterval(interval) // This will cancel and restart, but we'll wait and check stopped
 	time.Sleep(50 * time.Millisecond)
 
 	// The loop should still be running (it restarts), so status should be running or checking
