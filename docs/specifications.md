@@ -100,6 +100,7 @@ Interface web moderna para gerenciar o daemon.
   - `GET /config` / `PUT /config` – leitura/atualização de configuração  
   - `GET /animes` – animes monitorados com agregação de episódios  
   - `GET /episodes` – episódios baixados  
+  - `GET /logs` – visualização de logs do daemon (últimas N linhas, parâmetro opcional `lines`)  
   - `POST /check` – força verificação manual  
   - `POST /daemon/start` / `POST /daemon/stop` – controle do loop do daemon  
 - WebSocket:  
