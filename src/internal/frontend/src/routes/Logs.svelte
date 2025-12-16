@@ -11,6 +11,7 @@
   let refreshInterval: ReturnType<typeof setInterval> | null = null;
   let logContainer: HTMLDivElement;
   let filterLevel = "all"; // all, debug, info, warn, error
+  let searchQuery = "";
 
   function parseLogLine(line: string): {
     level: string;
@@ -18,8 +19,6 @@
     message: string;
     raw: string;
   } {
-    const raw = line;
-    
     // Try to parse zerolog format: {"level":"info","time":"2024-01-01T00:00:00Z","message":"..."}
     if (line.startsWith("{")) {
       try {
@@ -34,7 +33,7 @@
         // Not valid JSON, fall through
       }
     }
-    
+
     // Try to parse console format: 2024-01-01T00:00:00Z INF message
     const levelMatch = line.match(/\b(DBG|INF|WRN|ERR|FAT)\b/);
     if (levelMatch) {
@@ -52,7 +51,7 @@
         raw: line,
       };
     }
-    
+
     // Default: try to detect level keywords
     const lowerLine = line.toLowerCase();
     let detectedLevel = "info";
@@ -63,7 +62,7 @@
     } else if (lowerLine.includes("debug") || lowerLine.includes("dbg")) {
       detectedLevel = "debug";
     }
-    
+
     return {
       level: detectedLevel,
       timestamp: "",
@@ -100,23 +99,26 @@
     }
   }
 
-  function filterLogs(logs: string[]): string[] {
-    let filtered: string[];
-    if (filterLevel === "all") {
-      filtered = logs;
-    } else {
-      filtered = logs.filter((line) => {
+  function filterLogs(logs: string[], query: string): string[] {
+    let filtered = [...logs].reverse();
+
+    if (filterLevel !== "all") {
+      filtered = filtered.filter((line) => {
         const parsed = parseLogLine(line);
         return parsed.level === filterLevel;
       });
     }
-    // Reverse to show most recent logs at the top
-    return [...filtered].reverse();
+
+    if (!query.trim()) return filtered;
+
+    return filtered.filter((line) =>
+      line.toLowerCase().includes(query.toLowerCase().trim()),
+    );
   }
 
-  $: filteredLogs = filterLogs(logs);
-  
-  function handleFilterChange() {
+  $: filteredLogs = filterLogs(logs, searchQuery);
+
+  function handleFilterChange() { 
     loadLogs();
   }
 
@@ -126,7 +128,7 @@
       error = null;
       const response: LogsResponse = await getLogs(linesToLoad);
       logs = response.lines;
-      
+
       // Auto-scroll to top (most recent logs)
       if (logContainer) {
         setTimeout(() => {
@@ -143,11 +145,11 @@
 
   onMount(() => {
     loadLogs();
-    
+
     // Auto-refresh every 5 seconds
     refreshInterval = setInterval(() => {
       loadLogs();
-    }, 5000);
+    }, 3000);
   });
 
   onDestroy(() => {
@@ -175,7 +177,10 @@
   <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-6 p-4">
     <div class="flex flex-wrap items-center gap-4">
       <div class="flex items-center gap-2">
-        <label for="lines-input" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label
+          for="lines-input"
+          class="text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
           Lines:
         </label>
         <input
@@ -190,7 +195,10 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <label for="filter-level" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label
+          for="filter-level"
+          class="text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
           Filter:
         </label>
         <select
@@ -206,27 +214,47 @@
           <option value="error">Error</option>
         </select>
       </div>
+
+      <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+        <label
+          for="search-input"
+          class="text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
+          Search:
+        </label>
+        <input
+          id="search-input"
+          type="text"
+          bind:value={searchQuery}
+          placeholder="Search logs..."
+          class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:border-blue-500 focus:ring-blue-500 py-1 px-2"
+        />
+      </div>
     </div>
   </div>
 
-  {#if loading && logs.length === 0}
+  {#if loading}
     <Loading message="Loading logs..." />
   {:else if filteredLogs.length === 0}
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
       <p class="text-sm text-gray-500 dark:text-gray-400">
-        {filterLevel === "all" ? "No logs available." : `No ${filterLevel} logs found.`}
+        {filterLevel === "all"
+          ? "No logs available."
+          : `No ${filterLevel} logs found.`}
       </p>
     </div>
   {:else}
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
       <div
         bind:this={logContainer}
-        class="h-[600px] overflow-y-auto p-4 font-mono text-xs bg-gray-900 dark:bg-black"
+        class="h-[600px] overflow-y-auto p-4 font-mono text-sm bg-gray-900 dark:bg-black"
       >
         {#each filteredLogs as line}
           {@const parsed = parseLogLine(line)}
           <div
-            class="mb-1 px-2 py-1 rounded {getLevelBgColor(parsed.level)} hover:opacity-80"
+            class="mb-2 px-3 py-1.5 rounded {getLevelBgColor(
+              parsed.level,
+            )} hover:opacity-80"
           >
             <span class="{getLevelColor(parsed.level)} font-semibold">
               [{parsed.level.toUpperCase()}]
@@ -242,8 +270,10 @@
           </div>
         {/each}
       </div>
-      
-      <div class="px-4 py-2 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+
+      <div
+        class="px-4 py-2 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600"
+      >
         <p class="text-xs text-gray-500 dark:text-gray-400">
           Showing {filteredLogs.length} of {logs.length} log lines
           {#if filterLevel !== "all"}
@@ -254,4 +284,3 @@
     </div>
   {/if}
 </div>
-
