@@ -77,8 +77,8 @@ info:
     url: http://www.swagger.io/support
   description: REST API for Auto Anime Downloader daemon
   license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
+    name: GPL-3.0
+    url: https://www.gnu.org/licenses/gpl-3.0.html
   termsOfService: http://swagger.io/terms/
   title: Auto Anime Downloader API
   version: "1.0"
