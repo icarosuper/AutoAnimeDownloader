@@ -109,10 +109,14 @@ func mockSuccessfulTorrentAdd(mockClient *MockHTTPClient) {
 }
 
 func mockSuccessfulTorrentList(mockClient *MockHTTPClient, torrentsJSON string) {
-	mockClient.SetGetResponse("http://localhost:8080/api/v2/torrents/info?category=autoAnimeDownloader", &http.Response{
+	resp := &http.Response{
 		StatusCode: 200,
 		Body:       io.NopCloser(strings.NewReader(torrentsJSON)),
-	})
+		Header:     make(http.Header),
+	}
+	resp.Header.Set("Content-Type", "application/json")
+
+	mockClient.SetGetResponse("http://localhost:8080/api/v2/torrents/info?category=autoAnimeDownloader", resp)
 }
 
 func mockFailedTorrentAdd(mockClient *MockHTTPClient, err error) {
