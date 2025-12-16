@@ -41,33 +41,9 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 			select {
 			case <-c.Done():
 				logger.Logger.Info().Msg("Verification loop cancelled before start")
-				p.State.SetStatus(StatusStopped)
 				return
 			default:
 			}
-
-			// Verificar configurações obrigatórias antes de iniciar o loop
-			configs, err := p.FileManager.LoadConfigs()
-			if err != nil {
-				logger.Logger.Error().Err(err).Msg("Failed to load configs, stopping loop")
-				p.State.SetStatus(StatusStopped)
-				return
-			}
-
-			if !isConfigComplete(configs) {
-				logger.Logger.Warn().Msg("Missing required configuration, opening browser to config page")
-				// Abrir navegador na página de configs
-				go func() {
-					time.Sleep(500 * time.Millisecond) // Pequeno delay para garantir que o servidor está pronto
-					webUIURL := getWebUIURL()
-					if err := openBrowserToConfig(webUIURL); err != nil {
-						logger.Logger.Warn().Err(err).Msg("Failed to open browser to configuration page")
-			}
-				}()
-				p.State.SetStatus(StatusStopped)
-				return
-			}
-
 			p.State.SetStatus(StatusRunning)
 
 			for {
@@ -182,6 +158,23 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
 		state.SetLastCheckError(err)
+		return
+	}
+
+	// Verifica se todas as configurações obrigatórias estão preenchidas
+	if !isConfigComplete(configs) {
+		logger.Logger.Warn().Msg("Missing required configuration, opening browser to config page")
+		// Abrir navegador na página de configs sem bloquear o loop
+		go func() {
+			time.Sleep(500 * time.Millisecond) // Pequeno delay para garantir que o servidor está pronto
+			webUIURL := getWebUIURL()
+			if err := openBrowserToConfig(webUIURL); err != nil {
+				logger.Logger.Warn().Err(err).Msg("Failed to open browser to configuration page")
+			}
+		}()
+
+		// Registra um erro de configuração ausente para que o status da checagem reflita o problema
+		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username, save path or qBittorrent URL)"))
 		return
 	}
 
