@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getConfig, updateConfig, type Config } from "../lib/api/client.js";
+  import {
+    getConfig,
+    updateConfig,
+    triggerCheck,
+    type Config,
+  } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import ErrorMessage from "../components/ErrorMessage.svelte";
   import Input from "../components/Input.svelte";
@@ -100,9 +105,6 @@
 
       await updateConfig(config);
       success = true;
-      setTimeout(() => {
-        success = false;
-      }, 3000);
     } catch (err) {
       error = err instanceof Error ? err.message : "Unknown error";
       console.error("Failed to save config:", err);
@@ -161,26 +163,53 @@
   {/if}
 
   {#if success}
-    <div class="mb-6 rounded-md bg-green-50 p-4">
-      <div class="flex">
-        <div class="flex-shrink-0">
+    <div class="mb-6 rounded-md bg-white dark:bg-gray-800 p-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center">
+          <div class="flex-shrink-0">
+            <svg
+              class="h-5 w-5 text-green-400"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </div>
+          <div class="ml-3">
+            <p class="text-sm font-medium text-green-800 dark:text-green-200">
+              Configuration saved successfully!
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm leading-4 font-semibold rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          on:click={() => {
+            triggerCheck().then(() => {
+              window.location.href = "/status";
+            });
+          }}
+          title="Run anime check"
+        >
           <svg
-            class="h-5 w-5 text-green-400"
-            viewBox="0 0 20 20"
-            fill="currentColor"
+            class="h-4 w-4 mr-1 -ml-1"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
           >
             <path
-              fill-rule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clip-rule="evenodd"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M13 5l7 7-7 7M5 5v14"
             />
           </svg>
-        </div>
-        <div class="ml-3">
-          <p class="text-sm font-medium text-green-800 dark:text-green-200">
-            Configuration saved successfully!
-          </p>
-        </div>
+          Run anime check now
+        </button>
       </div>
     </div>
   {/if}
