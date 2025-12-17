@@ -65,7 +65,19 @@ func (m *MockFileSystem) FileExists(path string) bool {
 }
 
 func (m *MockFileSystem) DirExists(path string) bool {
-	return m.dirs[path]
+	// Normalize path for cross-platform compatibility
+	normalizedPath := filepath.ToSlash(filepath.Clean(path))
+	// Check both the normalized path and the original path
+	if m.dirs[normalizedPath] {
+		return true
+	}
+	// Also check if any registered dir matches when normalized
+	for d := range m.dirs {
+		if filepath.ToSlash(filepath.Clean(d)) == normalizedPath {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *MockFileSystem) ReadFile(filename string) ([]byte, error) {
@@ -192,14 +204,34 @@ func (m *MockFileSystem) Remove(filename string) error {
 		return m.writeError
 	}
 
+	// Normalize path for cross-platform compatibility
+	normalizedPath := filepath.ToSlash(filepath.Clean(filename))
+
+	// Try to remove as file first
 	if _, exists := m.files[filename]; exists {
 		delete(m.files, filename)
 		return nil
 	}
+	if _, exists := m.files[normalizedPath]; exists {
+		delete(m.files, normalizedPath)
+		return nil
+	}
 
+	// Try to remove as directory
 	if m.dirs[filename] {
 		delete(m.dirs, filename)
 		return nil
+	}
+	if m.dirs[normalizedPath] {
+		delete(m.dirs, normalizedPath)
+		return nil
+	}
+	// Also check if any registered dir matches when normalized
+	for d := range m.dirs {
+		if filepath.ToSlash(filepath.Clean(d)) == normalizedPath {
+			delete(m.dirs, d)
+			return nil
+		}
 	}
 
 	return &fs.PathError{Op: "remove", Path: filename, Err: fs.ErrNotExist}
