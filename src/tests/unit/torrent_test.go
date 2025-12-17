@@ -317,9 +317,9 @@ func TestTorrentService_SanitizesFolderName(t *testing.T) {
 			// Use filepath.Join to construct expected path (works on both Windows and Unix)
 			expectedSavePath := filepath.Join(savePath, tc.expected)
 			actualSavePath := postReq.Data.Get("savepath")
-			// Normalize paths for comparison (filepath.Join handles this)
-			expectedNormalized := filepath.Clean(expectedSavePath)
-			actualNormalized := filepath.Clean(actualSavePath)
+			// Normalize paths for comparison - use ToSlash to normalize separators
+			expectedNormalized := filepath.ToSlash(filepath.Clean(expectedSavePath))
+			actualNormalized := filepath.ToSlash(filepath.Clean(actualSavePath))
 			if actualNormalized != expectedNormalized {
 				t.Errorf("Expected savepath '%s', got '%s'", expectedNormalized, actualNormalized)
 			}
