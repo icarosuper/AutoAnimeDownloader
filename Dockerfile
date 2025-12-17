@@ -31,7 +31,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/daemon ./src
 # Stage 3: Runtime
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates tzdata bash
+RUN apk --no-cache add ca-certificates tzdata bash wget
 
 WORKDIR /app
 

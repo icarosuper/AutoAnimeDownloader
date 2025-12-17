@@ -5,14 +5,24 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 )
 
-const (
-	daemonURL = "http://localhost:8091"
+var (
+	// daemonURL can be overridden via DAEMON_URL environment variable
+	// Defaults to localhost for local testing, but should be "http://daemon:8091" in Docker
+	daemonURL = getEnvOrDefault("DAEMON_URL", "http://localhost:8091")
 	apiBase   = daemonURL + "/api/v1"
 )
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
 
 func TestAPIEndpoints(t *testing.T) {
 	// Wait for daemon to be ready

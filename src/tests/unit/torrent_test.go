@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -313,9 +314,14 @@ func TestTorrentService_SanitizesFolderName(t *testing.T) {
 			}
 
 			postReq := history[0]
-			expectedSavePath := savePath + tc.expected
-			if postReq.Data.Get("savepath") != expectedSavePath {
-				t.Errorf("Expected savepath '%s', got '%s'", expectedSavePath, postReq.Data.Get("savepath"))
+			// Use filepath.Join to construct expected path (works on both Windows and Unix)
+			expectedSavePath := filepath.Join(savePath, tc.expected)
+			actualSavePath := postReq.Data.Get("savepath")
+			// Normalize paths for comparison (filepath.Join handles this)
+			expectedNormalized := filepath.Clean(expectedSavePath)
+			actualNormalized := filepath.Clean(actualSavePath)
+			if actualNormalized != expectedNormalized {
+				t.Errorf("Expected savepath '%s', got '%s'", expectedNormalized, actualNormalized)
 			}
 		})
 	}
