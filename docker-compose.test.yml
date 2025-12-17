@@ -1,0 +1,94 @@
+services:
+  mock-anilist:
+    build:
+      context: ./src/tests/mocks/anilist
+      dockerfile: Dockerfile
+    # Ports não são mapeados para o host, apenas expostos na rede Docker
+    expose:
+      - "8080"
+    environment:
+      - PORT=8080
+      - SCENARIO=default
+    networks:
+      - test-network
+
+  mock-nyaa:
+    build:
+      context: ./src/tests/mocks/nyaa
+      dockerfile: Dockerfile
+    expose:
+      - "8081"
+    environment:
+      - PORT=8081
+      - SCENARIO=default
+    networks:
+      - test-network
+
+  mock-qbittorrent:
+    build:
+      context: ./src/tests/mocks/qbittorrent
+      dockerfile: Dockerfile
+    expose:
+      - "8082"
+    environment:
+      - PORT=8082
+    networks:
+      - test-network
+
+  daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./runtime/test-data:/app/data
+    environment:
+      - ENVIRONMENT=prod
+      - PORT=:8091
+      - ANILIST_API_URL=http://mock-anilist:8080
+      - NYAA_URL=http://mock-nyaa:8081
+      - QBITTORRENT_URL=http://mock-qbittorrent:8082
+    depends_on:
+      - mock-anilist
+      - mock-nyaa
+      - mock-qbittorrent
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8091/api/v1/status"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  test:
+    image: golang:1.24-alpine
+    volumes:
+      - .:/workspace
+      - go-mod-cache:/go/pkg/mod
+    working_dir: /workspace
+    environment:
+      - CGO_ENABLED=0
+      - DAEMON_URL=http://daemon:8091
+    command: >
+      sh -c "
+        apk add --no-cache wget &&
+        echo 'Waiting for daemon to be ready...' &&
+        timeout 60 sh -c 'until wget --quiet --tries=1 -O /dev/null http://daemon:8091/api/v1/status; do sleep 1; done' &&
+        echo 'Daemon is ready! Running integration tests...' &&
+        cd src/tests/integration &&
+        go test -v ./...
+      "
+    depends_on:
+      daemon:
+        condition: service_healthy
+    networks:
+      - test-network
+
+volumes:
+  go-mod-cache:
+
+networks:
+  test-network:
+    driver: bridge

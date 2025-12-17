@@ -1,0 +1,359 @@
+package files
+
+import (
+	"AutoAnimeDownloader/src/internal/logger"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+)
+
+const configsFolder = ".autoAnimeDownloader"
+const configFileName = "config.json"
+const downloadedEpsFileName = "downloaded_episodes"
+
+type EpisodeStruct struct {
+	EpisodeID    int       `json:"episode_id"`
+	EpisodeHash  string    `json:"episode_hash"`
+	EpisodeName  string    `json:"episode_name"`
+	DownloadDate time.Time `json:"download_date"`
+}
+
+type Config struct {
+	SavePath              string `json:"save_path"`
+	CompletedAnimePath    string `json:"completed_anime_path"`
+	AnilistUsername       string `json:"anilist_username"`
+	CheckInterval         int    `json:"check_interval"`
+	QBittorrentUrl        string `json:"qbittorrent_url"`
+	MaxEpisodesPerAnime   int    `json:"max_episodes_per_anime"`
+	EpisodeRetryLimit     int    `json:"episode_retry_limit"`
+	DeleteWatchedEpisodes bool   `json:"delete_watched_episodes"`
+	ExcludedList          string `json:"excluded_list"`
+}
+
+type FileManager struct {
+	fs           FileSystem
+	configPath   string
+	episodesPath string
+}
+
+func getDefaultConfig() *Config {
+	return &Config{
+		SavePath:              "",
+		AnilistUsername:       "",
+		CheckInterval:         10,
+		QBittorrentUrl:        "http://127.0.0.1:8080",
+		MaxEpisodesPerAnime:   12,
+		EpisodeRetryLimit:     5,
+		DeleteWatchedEpisodes: true,
+		ExcludedList:          "",
+	}
+}
+
+func ensureConfigsFolder(fs FileSystem) (string, error) {
+	var baseFolder string
+
+	if runtime.GOOS == "windows" {
+		baseFolder = os.Getenv("APPDATA")
+	} else {
+		baseFolder = os.Getenv("HOME")
+	}
+
+	if baseFolder == "" {
+		return "", fmt.Errorf("unable to determine home directory")
+	}
+
+	configsFolderPath := filepath.Join(baseFolder, configsFolder)
+
+	_, err := fs.Stat(configsFolderPath)
+	if os.IsNotExist(err) {
+		if err := fs.Mkdir(configsFolderPath, 0755); err != nil {
+			return "", fmt.Errorf("failed to create configs folder: %w", err)
+		}
+	} else if err != nil {
+		return "", fmt.Errorf("failed to stat configs folder: %w", err)
+	}
+
+	return configsFolderPath, nil
+}
+
+func NewManager(fs FileSystem, configPath, episodesPath string) *FileManager {
+	return &FileManager{
+		fs:           fs,
+		configPath:   configPath,
+		episodesPath: episodesPath,
+	}
+}
+
+func NewDefaultFileManager() (*FileManager, error) {
+	fs := NewOSFileSystem()
+	configsFolderPath, err := ensureConfigsFolder(fs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure configs folder: %w", err)
+	}
+
+	configPath := filepath.Join(configsFolderPath, configFileName)
+	episodesPath := filepath.Join(configsFolderPath, downloadedEpsFileName)
+
+	return NewManager(fs, configPath, episodesPath), nil
+}
+
+func (m *FileManager) LoadConfigs() (*Config, error) {
+	config := getDefaultConfig()
+
+	_, err := m.fs.Stat(m.configPath)
+	if os.IsNotExist(err) {
+		if err := m.SaveConfigs(config); err != nil {
+			return nil, fmt.Errorf("failed to save default config: %w", err)
+		}
+		return config, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat config file: %w", err)
+	}
+
+	file, err := m.fs.ReadFile(m.configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	// Check if file is empty or contains only whitespace
+	trimmed := strings.TrimSpace(string(file))
+	if len(trimmed) == 0 {
+		// File exists but is empty, recreate with default config
+		logger.Logger.Warn().Msg("Config file is empty, recreating with default values")
+		if err := m.SaveConfigs(config); err != nil {
+			return nil, fmt.Errorf("failed to save default config: %w", err)
+		}
+		return config, nil
+	}
+
+	// Try to parse the JSON
+	if err := json.Unmarshal(file, config); err != nil {
+		// If parsing fails, recreate with default config
+		logger.Logger.Warn().Err(err).Msg("Failed to parse config JSON, recreating with default values")
+		config = getDefaultConfig()
+		if err := m.SaveConfigs(config); err != nil {
+			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
+		}
+		return config, nil
+	}
+
+	if err := m.SaveConfigs(config); err != nil {
+		return nil, fmt.Errorf("failed to update config file: %w", err)
+	}
+
+	return config, nil
+}
+
+func (m *FileManager) SaveConfigs(config *Config) error {
+	if config == nil {
+		return fmt.Errorf("config cannot be nil")
+	}
+
+	file, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := m.fs.WriteFile(m.configPath, file, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
+}
+
+func (m *FileManager) LoadSavedEpisodes() ([]EpisodeStruct, error) {
+	_, err := m.fs.Stat(m.episodesPath)
+	if os.IsNotExist(err) {
+		return []EpisodeStruct{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat episodes file: %w", err)
+	}
+
+	b, err := m.fs.ReadFile(m.episodesPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read episodes file: %w", err)
+	}
+
+	episodes, err := ParseEpisodes(string(b))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse episodes: %w", err)
+	}
+
+	// If we loaded episodes from old format, migrate to JSON format
+	if len(episodes) > 0 && episodes[0].DownloadDate.IsZero() {
+		// Check if any episode has zero date (indicating old format)
+		needsMigration := false
+		for _, ep := range episodes {
+			if ep.DownloadDate.IsZero() {
+				needsMigration = true
+				break
+			}
+		}
+		if needsMigration {
+			// Migrate: set download date to current time for episodes without date
+			for i := range episodes {
+				if episodes[i].DownloadDate.IsZero() {
+					episodes[i].DownloadDate = time.Now()
+				}
+			}
+			// Save in new format
+			if err := m.saveEpisodesToFileJSON(episodes); err != nil {
+				return nil, fmt.Errorf("failed to migrate episodes to JSON format: %w", err)
+			}
+		}
+	}
+
+	return episodes, nil
+}
+
+func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
+	if len(episodes) == 0 {
+		return nil
+	}
+
+	// Load existing episodes
+	existingEpisodes, err := m.LoadSavedEpisodes()
+	if err != nil {
+		return fmt.Errorf("failed to load existing episodes: %w", err)
+	}
+
+	// Create map of existing episodes by ID to avoid duplicates
+	existingMap := make(map[int]bool)
+	for _, ep := range existingEpisodes {
+		existingMap[ep.EpisodeID] = true
+	}
+
+	// Append only new episodes
+	var newEpisodes []EpisodeStruct
+	for _, ep := range episodes {
+		if !existingMap[ep.EpisodeID] {
+			newEpisodes = append(newEpisodes, ep)
+		}
+	}
+
+	if len(newEpisodes) == 0 {
+		return nil
+	}
+
+	// Append new episodes to existing ones
+	allEpisodes := append(existingEpisodes, newEpisodes...)
+
+	// Save all episodes in JSON format
+	return m.saveEpisodesToFileJSON(allEpisodes)
+}
+
+// saveEpisodesToFileJSON saves episodes in JSONL format
+func (m *FileManager) saveEpisodesToFileJSON(episodes []EpisodeStruct) error {
+	content, err := SerializeEpisodes(episodes)
+	if err != nil {
+		return fmt.Errorf("failed to serialize episodes: %w", err)
+	}
+
+	if err := m.fs.WriteFile(m.episodesPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write episodes to file: %w", err)
+	}
+
+	return nil
+}
+
+func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
+	if len(episodeIds) == 0 {
+		return nil
+	}
+
+	savedEpisodes, err := m.LoadSavedEpisodes()
+	if err != nil {
+		return fmt.Errorf("failed to load saved episodes: %w", err)
+	}
+
+	if len(savedEpisodes) == 0 {
+		return nil
+	}
+
+	idsToDelete := make(map[int]struct{}, len(episodeIds))
+	for _, id := range episodeIds {
+		idsToDelete[id] = struct{}{}
+	}
+
+	var newSaved []EpisodeStruct
+	for _, ep := range savedEpisodes {
+		if _, found := idsToDelete[ep.EpisodeID]; !found {
+			newSaved = append(newSaved, ep)
+		}
+	}
+
+	if len(newSaved) == len(savedEpisodes) {
+		return nil
+	}
+
+	content, err := SerializeEpisodes(newSaved)
+	if err != nil {
+		return fmt.Errorf("failed to serialize episodes: %w", err)
+	}
+
+	if err := m.fs.WriteFile(m.episodesPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write filtered episodes: %w", err)
+	}
+
+	return nil
+}
+
+func (m *FileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error {
+	if savePath == "" {
+		return fmt.Errorf("save path cannot be empty")
+	}
+
+	if err := m.deleteEmptyFolders(savePath); err != nil {
+		return fmt.Errorf("failed to delete empty folders in save path: %w", err)
+	}
+
+	if completedAnimeSaveFolder != "" {
+		if err := m.deleteEmptyFolders(completedAnimeSaveFolder); err != nil {
+			return fmt.Errorf("failed to delete empty folders in completed anime save folder: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (m *FileManager) deleteEmptyFolders(path string) error {
+	entries, err := m.fs.ReadDir(path)
+	if err != nil {
+		return fmt.Errorf("failed to read save path: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		folderPath := filepath.Join(path, entry.Name())
+		subEntries, err := m.fs.ReadDir(folderPath)
+		if err != nil {
+			logger.Logger.Warn().
+				Err(err).
+				Str("folder_path", folderPath).
+				Msg("Failed to read folder while deleting empty folders")
+			continue
+		}
+
+		if len(subEntries) == 0 {
+			if err := m.fs.Remove(folderPath); err != nil {
+				logger.Logger.Warn().
+					Err(err).
+					Str("folder_path", folderPath).
+					Msg("Failed to delete empty folder")
+			} else {
+				logger.Logger.Info().
+					Str("folder_path", folderPath).
+					Msg("Deleted empty folder")
+			}
+		}
+	}
+
+	return nil
+}

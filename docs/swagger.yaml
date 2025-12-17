@@ -1,0 +1,303 @@
+basePath: /api/v1
+definitions:
+  api.AnimeInfo:
+    properties:
+      episodes_count:
+        example: 12
+        type: integer
+      latest_episode_id:
+        example: 12
+        type: integer
+      name:
+        example: Naruto
+        type: string
+    type: object
+  api.ErrorInfo:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  api.StatusResponse:
+    properties:
+      has_error:
+        example: false
+        type: boolean
+      last_check:
+        example: "2024-01-01T00:00:00Z"
+        type: string
+      status:
+        example: running
+        type: string
+    type: object
+  api.SuccessResponse:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/api.ErrorInfo'
+      success:
+        type: boolean
+    type: object
+  files.Config:
+    properties:
+      anilist_username:
+        type: string
+      check_interval:
+        type: integer
+      completed_anime_path:
+        type: string
+      delete_watched_episodes:
+        type: boolean
+      episode_retry_limit:
+        type: integer
+      excluded_list:
+        type: string
+      max_episodes_per_anime:
+        type: integer
+      qbittorrent_url:
+        type: string
+      save_path:
+        type: string
+    type: object
+  files.EpisodeStruct:
+    properties:
+      episode_hash:
+        type: string
+      episode_id:
+        type: integer
+      episode_name:
+        type: string
+    type: object
+host: localhost:8091
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: REST API for Auto Anime Downloader daemon
+  license:
+    name: GPL-3.0
+    url: https://www.gnu.org/licenses/gpl-3.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Auto Anime Downloader API
+  version: "1.0"
+paths:
+  /animes:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of animes with aggregated episode information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/api.AnimeInfo'
+                  type: array
+              type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get animes list
+      tags:
+      - animes
+  /check:
+    post:
+      consumes:
+      - application/json
+      description: Triggers a manual anime verification check
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Trigger manual check
+      tags:
+      - daemon
+  /config:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current daemon configuration
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/files.Config'
+              type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get configuration
+      tags:
+      - config
+    put:
+      consumes:
+      - application/json
+      description: Updates the daemon configuration with the provided values
+      parameters:
+      - description: Configuration object
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/files.Config'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Update configuration
+      tags:
+      - config
+  /daemon/start:
+    post:
+      consumes:
+      - application/json
+      description: Starts the daemon loop for automatic anime checking
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Start daemon
+      tags:
+      - daemon
+  /daemon/stop:
+    post:
+      consumes:
+      - application/json
+      description: Stops the daemon loop
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Stop daemon
+      tags:
+      - daemon
+  /episodes:
+    get:
+      consumes:
+      - application/json
+      description: Returns a list of all downloaded episodes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/files.EpisodeStruct'
+                  type: array
+              type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get episodes list
+      tags:
+      - episodes
+  /status:
+    get:
+      consumes:
+      - application/json
+      description: Returns the current status of the daemon, including last check
+        time and error state
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/api.StatusResponse'
+              type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get daemon status
+      tags:
+      - status
+schemes:
+- http
+swagger: "2.0"

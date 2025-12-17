@@ -3,6 +3,7 @@
 .idea/
 *.sublime-workspace
 *.sublime-project
+.claude/
 
 # Build
 build/
@@ -11,9 +12,12 @@ dist/
 .eggs/
 *.manifest
 *.spec
-fyne-cross/
+node_modules/
 
-.downloaded_episodes
-.config.json
+# Runtime data (Docker volumes)
+runtime/
+!runtime/.gitkeep
+!runtime/qbittorrent-config/qBittorrent/qBittorrent.conf
 
-go.sum
+# Environment variables
+.env
