@@ -1,12 +1,14 @@
 [Unit]
-Description=Auto Anime Downloader
-After=graphical-session.target
+Description=Auto Anime Downloader Daemon
+After=network.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/AutoAnimeDownloader
+ExecStart=%h/.local/bin/AutoAnimeDownloader-daemon
 Restart=on-failure
 RestartSec=10
+Environment="ENVIRONMENT=prod"
+Environment="PORT=:8091"
 
 [Install]
 WantedBy=default.target
