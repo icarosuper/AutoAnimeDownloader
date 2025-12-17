@@ -135,14 +135,28 @@ func (m *MockFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
 		return nil, m.readError
 	}
 
-	if !m.dirs[dirname] {
-		return nil, &fs.PathError{Op: "readdir", Path: dirname, Err: fs.ErrNotExist}
+	// Normalize the directory path for comparison
+	normalizedDir := filepath.Clean(dirname)
+	if !m.dirs[normalizedDir] {
+		// Also check if any of the registered dirs match when normalized
+		found := false
+		for d := range m.dirs {
+			if filepath.Clean(d) == normalizedDir {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, &fs.PathError{Op: "readdir", Path: dirname, Err: fs.ErrNotExist}
+		}
 	}
 
 	var entries []fs.DirEntry
 
 	for path := range m.files {
-		if filepath.Dir(path) == dirname {
+		normalizedPath := filepath.Clean(path)
+		normalizedPathDir := filepath.Clean(filepath.Dir(normalizedPath))
+		if normalizedPathDir == normalizedDir {
 			entries = append(entries, &mockDirEntry{
 				name:  filepath.Base(path),
 				isDir: false,
@@ -151,7 +165,9 @@ func (m *MockFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
 	}
 
 	for path := range m.dirs {
-		if filepath.Dir(path) == dirname && path != dirname {
+		normalizedPath := filepath.Clean(path)
+		normalizedPathDir := filepath.Clean(filepath.Dir(normalizedPath))
+		if normalizedPathDir == normalizedDir && normalizedPath != normalizedDir {
 			entries = append(entries, &mockDirEntry{
 				name:  filepath.Base(path),
 				isDir: true,
