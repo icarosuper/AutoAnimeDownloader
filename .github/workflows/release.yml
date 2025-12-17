@@ -202,8 +202,12 @@ jobs:
   create-release:
     needs: [release-linux-amd64, release-linux-arm64, release-windows-amd64]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -215,7 +219,7 @@ jobs:
         with:
           files: |
             release-artifacts/**/*
-          generate_notes: true
+          generate_release_notes: true
           draft: false
           prerelease: false
         env:
