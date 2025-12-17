@@ -135,26 +135,33 @@ func (m *MockFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
 		return nil, m.readError
 	}
 
-	// Normalize the directory path for comparison
-	normalizedDir := filepath.Clean(dirname)
-	if !m.dirs[normalizedDir] {
-		// Also check if any of the registered dirs match when normalized
-		found := false
-		for d := range m.dirs {
-			if filepath.Clean(d) == normalizedDir {
-				found = true
+	// Normalize the directory path for comparison - use ToSlash for cross-platform compatibility
+	normalizedDir := filepath.ToSlash(filepath.Clean(dirname))
+	dirExists := false
+	for d := range m.dirs {
+		if filepath.ToSlash(filepath.Clean(d)) == normalizedDir {
+			dirExists = true
+			break
+		}
+	}
+	if !dirExists {
+		// Check if any files are in this directory
+		hasFiles := false
+		for f := range m.files {
+			if filepath.ToSlash(filepath.Clean(filepath.Dir(f))) == normalizedDir {
+				hasFiles = true
 				break
 			}
 		}
-		if !found {
+		if !hasFiles {
 			return nil, &fs.PathError{Op: "readdir", Path: dirname, Err: fs.ErrNotExist}
 		}
 	}
 
 	var entries []fs.DirEntry
 
-	// Normalize dirname using ToSlash for cross-platform compatibility
-	normalizedDirSlash := filepath.ToSlash(normalizedDir)
+	// normalizedDir is already normalized with ToSlash
+	normalizedDirSlash := normalizedDir
 
 	for path := range m.files {
 		normalizedPathDir := filepath.ToSlash(filepath.Clean(filepath.Dir(path)))
