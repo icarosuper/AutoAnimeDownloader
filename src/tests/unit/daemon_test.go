@@ -103,19 +103,22 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 	// The code may fail earlier when trying to connect to qBittorrent (which is expected in tests)
 	// If it reaches LoadSavedEpisodes, it should contain our error message
 	errMsg := err.Error()
-	if strings.Contains(errMsg, "qBittorrent") || strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "connect") {
+	if strings.Contains(errMsg, "qBittorrent") || strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "connect") || strings.Contains(errMsg, "connectex") {
 		// qBittorrent connection failed first, which is expected in unit tests
 		// This is acceptable since we're testing the error handling path
 		t.Logf("qBittorrent connection failed first (expected in unit tests): %s", errMsg)
-	} else if !strings.Contains(errMsg, "episodes load error") {
+		// If qBittorrent failed first, the log won't contain "Failed to load saved episodes"
+		// because the function returns early
+	} else {
 		// If we got past qBittorrent, the error should be about episodes
-		t.Errorf("Expected error message to contain 'episodes load error' or qBittorrent connection error, got '%s'", errMsg)
-	}
-
-	// Verify log was generated (only if we got past qBittorrent)
-	logOutput := logBuf.String()
-	if strings.Contains(errMsg, "episodes load error") && !strings.Contains(logOutput, "Failed to load saved episodes") {
-		t.Error("Expected log to contain 'Failed to load saved episodes'")
+		if !strings.Contains(errMsg, "episodes load error") {
+			t.Errorf("Expected error message to contain 'episodes load error' or qBittorrent connection error, got '%s'", errMsg)
+		}
+		// Verify log was generated only if we reached LoadSavedEpisodes
+		logOutput := logBuf.String()
+		if !strings.Contains(logOutput, "Failed to load saved episodes") {
+			t.Error("Expected log to contain 'Failed to load saved episodes'")
+		}
 	}
 
 	// Restore original logger

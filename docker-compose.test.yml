@@ -56,7 +56,7 @@ services:
     networks:
       - test-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8091/api/v1/status"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8091/api/v1/status"]
       interval: 2s
       timeout: 5s
       retries: 30
@@ -75,7 +75,7 @@ services:
       sh -c "
         apk add --no-cache wget &&
         echo 'Waiting for daemon to be ready...' &&
-        timeout 60 sh -c 'until wget --quiet --tries=1 --spider http://daemon:8091/api/v1/status; do sleep 1; done' &&
+        timeout 60 sh -c 'until wget --quiet --tries=1 -O /dev/null http://daemon:8091/api/v1/status; do sleep 1; done' &&
         echo 'Daemon is ready! Running integration tests...' &&
         cd src/tests/integration &&
         go test -v ./...

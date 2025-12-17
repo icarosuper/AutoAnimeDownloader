@@ -153,10 +153,12 @@ func (m *MockFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
 
 	var entries []fs.DirEntry
 
+	// Normalize dirname using ToSlash for cross-platform compatibility
+	normalizedDirSlash := filepath.ToSlash(normalizedDir)
+
 	for path := range m.files {
-		normalizedPath := filepath.Clean(path)
-		normalizedPathDir := filepath.Clean(filepath.Dir(normalizedPath))
-		if normalizedPathDir == normalizedDir {
+		normalizedPathDir := filepath.ToSlash(filepath.Clean(filepath.Dir(path)))
+		if normalizedPathDir == normalizedDirSlash {
 			entries = append(entries, &mockDirEntry{
 				name:  filepath.Base(path),
 				isDir: false,
@@ -165,9 +167,9 @@ func (m *MockFileSystem) ReadDir(dirname string) ([]fs.DirEntry, error) {
 	}
 
 	for path := range m.dirs {
-		normalizedPath := filepath.Clean(path)
-		normalizedPathDir := filepath.Clean(filepath.Dir(normalizedPath))
-		if normalizedPathDir == normalizedDir && normalizedPath != normalizedDir {
+		normalizedPath := filepath.ToSlash(filepath.Clean(path))
+		normalizedPathDir := filepath.ToSlash(filepath.Clean(filepath.Dir(path)))
+		if normalizedPathDir == normalizedDirSlash && normalizedPath != normalizedDirSlash {
 			entries = append(entries, &mockDirEntry{
 				name:  filepath.Base(path),
 				isDir: true,
