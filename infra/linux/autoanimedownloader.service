@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/AutoAnimeDownloader-daemon
+ExecStart=%h/.local/bin/autoanimedownloader-daemon
 Restart=on-failure
 RestartSec=10
 Environment="ENVIRONMENT=prod"

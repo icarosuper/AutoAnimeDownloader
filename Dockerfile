@@ -29,9 +29,15 @@ COPY --from=frontend-builder /build/dist ./src/internal/frontend/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/daemon ./src/cmd/daemon
 
 # Stage 3: Runtime
-FROM alpine:latest
+FROM alpine:3.19
 
-RUN apk --no-cache add ca-certificates tzdata bash wget
+# Update package index and install dependencies with retry logic
+# Retry up to 3 times to handle transient DNS/network issues
+RUN for i in 1 2 3; do \
+        apk update --no-cache && \
+        apk add --no-cache --update-cache ca-certificates tzdata bash wget && \
+        break || sleep 5; \
+    done
 
 WORKDIR /app
 

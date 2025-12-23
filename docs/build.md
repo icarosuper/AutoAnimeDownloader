@@ -53,10 +53,10 @@ npm run build
 cd ../../..
 
 # Step 2: Build daemon for Linux amd64
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-daemon ./src/cmd/daemon
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/autoanimedownloader-daemon ./src/cmd/daemon
 
 # Step 3: Build CLI for Linux amd64
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-cli ./src/cmd/cli
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/autoanimedownloader ./src/cmd/cli
 ```
 
 ## Building for Windows
@@ -89,10 +89,10 @@ cd ..\..\..
 $env:GOOS = "windows"
 $env:GOARCH = "amd64"
 $env:CGO_ENABLED = "0"
-go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\AutoAnimeDownloader-daemon.exe .\src\cmd\daemon
+go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\autoanimedownloader-daemon.exe .\src\cmd\daemon
 
 # Step 3: Build CLI
-go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\AutoAnimeDownloader-cli.exe .\src\cmd\cli
+go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\autoanimedownloader.exe .\src\cmd\cli
 ```
 
 ## Cross-Compilation
@@ -116,10 +116,10 @@ After building, you can test the daemon:
 
 ```bash
 # Linux
-./build/linux-amd64/AutoAnimeDownloader-daemon
+./build/linux-amd64/autoanimedownloader-daemon
 
 # Windows
-.\build\windows-amd64\AutoAnimeDownloader-daemon.exe
+.\build\windows-amd64\autoanimedownloader-daemon.exe
 ```
 
 The daemon will start on port 8091 by default. Access the web UI at http://localhost:8091

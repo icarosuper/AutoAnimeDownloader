@@ -37,9 +37,9 @@ if (-not $nssmPath) {
 }
 
 # Find the daemon executable
-$daemonExe = Join-Path $ProjectRoot "AutoAnimeDownloader-daemon.exe"
+$daemonExe = Join-Path $ProjectRoot "autoanimedownloader-daemon.exe"
 if (-not (Test-Path $daemonExe)) {
-    Write-Host "Error: AutoAnimeDownloader-daemon.exe not found at: $daemonExe" -ForegroundColor Red
+    Write-Host "Error: autoanimedownloader-daemon.exe not found at: $daemonExe" -ForegroundColor Red
     Write-Host "Please build the project first using scripts/build.ps1" -ForegroundColor Yellow
     exit 1
 }

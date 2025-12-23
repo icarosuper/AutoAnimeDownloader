@@ -1,8 +1,8 @@
 # Makefile for AutoAnimeDownloader installation
 # Run 'make install' to install daemon, CLI and systemd service
 
-DAEMON_BINARY := AutoAnimeDownloader-daemon
-CLI_BINARY := AutoAnimeDownloader-cli
+DAEMON_BINARY := autoanimedownloader-daemon
+CLI_BINARY := autoanimedownloader
 SERVICE_NAME := autoanimedownloader.service
 INSTALL_DIR := $(HOME)/.local/bin
 SERVICE_DIR := $(HOME)/.config/systemd/user

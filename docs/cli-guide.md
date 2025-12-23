@@ -4,7 +4,7 @@ This guide covers all available commands in the AutoAnimeDownloader CLI.
 
 ## Overview
 
-The CLI (`AutoAnimeDownloader-cli`) is a command-line interface for managing the AutoAnimeDownloader daemon. It communicates with the daemon via REST API.
+The CLI (`autoanimedownloader`) is a command-line interface for managing the AutoAnimeDownloader daemon. It communicates with the daemon via REST API.
 
 ## Global Flags
 
@@ -23,7 +23,7 @@ All commands support these global flags:
 Start the daemon process in the background.
 
 ```bash
-AutoAnimeDownloader-cli start
+autoanimedownloader start
 ```
 
 **What it does:**
@@ -36,7 +36,7 @@ AutoAnimeDownloader-cli start
 Stop the running daemon process.
 
 ```bash
-AutoAnimeDownloader-cli stop
+autoanimedownloader stop
 ```
 
 **What it does:**
@@ -51,7 +51,7 @@ AutoAnimeDownloader-cli stop
 Start the daemon's verification loop.
 
 ```bash
-AutoAnimeDownloader-cli loop start
+autoanimedownloader loop start
 ```
 
 **What it does:**
@@ -64,7 +64,7 @@ AutoAnimeDownloader-cli loop start
 Stop the daemon's verification loop.
 
 ```bash
-AutoAnimeDownloader-cli loop stop
+autoanimedownloader loop stop
 ```
 
 **What it does:**
@@ -79,7 +79,7 @@ AutoAnimeDownloader-cli loop stop
 Show the current daemon status.
 
 ```bash
-AutoAnimeDownloader-cli status
+autoanimedownloader status
 ```
 
 **Output includes:**
@@ -96,7 +96,7 @@ Has Error: false
 
 **JSON output:**
 ```bash
-AutoAnimeDownloader-cli status --json
+autoanimedownloader status --json
 ```
 
 ### Configuration
@@ -106,7 +106,7 @@ AutoAnimeDownloader-cli status --json
 Display the current configuration.
 
 ```bash
-AutoAnimeDownloader-cli config get
+autoanimedownloader config get
 ```
 
 **Shows all configuration values:**
@@ -125,9 +125,9 @@ AutoAnimeDownloader-cli config get
 Update a configuration value.
 
 ```bash
-AutoAnimeDownloader-cli config set anilist_username myusername
-AutoAnimeDownloader-cli config set check_interval 15
-AutoAnimeDownloader-cli config set delete_watched_episodes true
+autoanimedownloader config set anilist_username myusername
+autoanimedownloader config set check_interval 15
+autoanimedownloader config set delete_watched_episodes true
 ```
 
 **Available keys:**
@@ -144,16 +144,16 @@ AutoAnimeDownloader-cli config set delete_watched_episodes true
 **Examples:**
 ```bash
 # Set Anilist username
-AutoAnimeDownloader-cli config set anilist_username myusername
+autoanimedownloader config set anilist_username myusername
 
 # Set check interval to 15 minutes
-AutoAnimeDownloader-cli config set check_interval 15
+autoanimedownloader config set check_interval 15
 
 # Set save path
-AutoAnimeDownloader-cli config set save_path /path/to/downloads
+autoanimedownloader config set save_path /path/to/downloads
 
 # Enable deletion of watched episodes
-AutoAnimeDownloader-cli config set delete_watched_episodes true
+autoanimedownloader config set delete_watched_episodes true
 ```
 
 ### Manual Operations
@@ -163,7 +163,7 @@ AutoAnimeDownloader-cli config set delete_watched_episodes true
 Trigger a manual verification immediately.
 
 ```bash
-AutoAnimeDownloader-cli check
+autoanimedownloader check
 ```
 
 **What it does:**
@@ -178,7 +178,7 @@ AutoAnimeDownloader-cli check
 List all monitored animes with aggregated information.
 
 ```bash
-AutoAnimeDownloader-cli animes
+autoanimedownloader animes
 ```
 
 **Output includes:**
@@ -199,7 +199,7 @@ Naruto                 50        12346              Naruto - Episode 500
 List all downloaded episodes.
 
 ```bash
-AutoAnimeDownloader-cli episodes
+autoanimedownloader episodes
 ```
 
 **Output includes:**
@@ -223,13 +223,13 @@ View daemon logs.
 
 ```bash
 # Show last 50 lines (default)
-AutoAnimeDownloader-cli logs
+autoanimedownloader logs
 
 # Show last 100 lines
-AutoAnimeDownloader-cli logs --lines 100
+autoanimedownloader logs --lines 100
 
 # Show last 20 lines
-AutoAnimeDownloader-cli logs --lines 20
+autoanimedownloader logs --lines 20
 ```
 
 **What it shows:**
@@ -244,7 +244,7 @@ AutoAnimeDownloader-cli logs --lines 20
 Open the web UI in your default browser.
 
 ```bash
-AutoAnimeDownloader-cli open
+autoanimedownloader open
 ```
 
 **What it does:**
@@ -258,7 +258,7 @@ AutoAnimeDownloader-cli open
 By default, commands output data in a human-readable table format:
 
 ```bash
-AutoAnimeDownloader-cli status
+autoanimedownloader status
 ```
 
 ### JSON Format
@@ -266,7 +266,7 @@ AutoAnimeDownloader-cli status
 Use the `--json` flag for machine-readable JSON output:
 
 ```bash
-AutoAnimeDownloader-cli status --json
+autoanimedownloader status --json
 ```
 
 This is useful for scripting and automation.
@@ -280,8 +280,8 @@ Error: failed to connect to daemon: dial tcp 127.0.0.1:8091: connect: connection
 ```
 
 **Solutions:**
-1. Make sure the daemon is running: `AutoAnimeDownloader-cli start`
-2. Check if the port is correct: `AutoAnimeDownloader-cli --endpoint http://localhost:8091 status`
+1. Make sure the daemon is running: `autoanimedownloader start`
+2. Check if the port is correct: `autoanimedownloader --endpoint http://localhost:8091 status`
 3. Verify the daemon is accessible: check firewall settings
 
 ## Examples
@@ -290,56 +290,56 @@ Error: failed to connect to daemon: dial tcp 127.0.0.1:8091: connect: connection
 
 ```bash
 # 1. Start the daemon
-AutoAnimeDownloader-cli start
+autoanimedownloader start
 
 # 2. Configure Anilist username
-AutoAnimeDownloader-cli config set anilist_username myusername
+autoanimedownloader config set anilist_username myusername
 
 # 3. Configure qBittorrent URL
-AutoAnimeDownloader-cli config set qbittorrent_url http://localhost:8080
+autoanimedownloader config set qbittorrent_url http://localhost:8080
 
 # 4. Set save path
-AutoAnimeDownloader-cli config set save_path /path/to/downloads
+autoanimedownloader config set save_path /path/to/downloads
 
 # 5. Start the verification loop
-AutoAnimeDownloader-cli loop start
+autoanimedownloader loop start
 
 # 6. Check status
-AutoAnimeDownloader-cli status
+autoanimedownloader status
 
 # 7. View monitored animes
-AutoAnimeDownloader-cli animes
+autoanimedownloader animes
 ```
 
 ### Monitoring and Debugging
 
 ```bash
 # Check current status
-AutoAnimeDownloader-cli status
+autoanimedownloader status
 
 # View recent logs
-AutoAnimeDownloader-cli logs --lines 100
+autoanimedownloader logs --lines 100
 
 # Force a manual check
-AutoAnimeDownloader-cli check
+autoanimedownloader check
 
 # View downloaded episodes
-AutoAnimeDownloader-cli episodes
+autoanimedownloader episodes
 ```
 
 ### Configuration Management
 
 ```bash
 # View current configuration
-AutoAnimeDownloader-cli config get
+autoanimedownloader config get
 
 # Update multiple settings
-AutoAnimeDownloader-cli config set check_interval 30
-AutoAnimeDownloader-cli config set max_episodes_per_anime 20
-AutoAnimeDownloader-cli config set delete_watched_episodes false
+autoanimedownloader config set check_interval 30
+autoanimedownloader config set max_episodes_per_anime 20
+autoanimedownloader config set delete_watched_episodes false
 
 # Verify changes
-AutoAnimeDownloader-cli config get
+autoanimedownloader config get
 ```
 
 ## Tips
@@ -353,7 +353,7 @@ AutoAnimeDownloader-cli config get
 
 ### Command not found
 
-If `AutoAnimeDownloader-cli` is not found:
+If `autoanimedownloader` is not found:
 - Make sure it's installed and in your PATH
 - On Linux: Check `~/.local/bin/` or use full path
 - On Windows: Check installation directory
@@ -361,14 +361,14 @@ If `AutoAnimeDownloader-cli` is not found:
 ### Connection refused
 
 If you get connection errors:
-- Verify daemon is running: `AutoAnimeDownloader-cli start`
+- Verify daemon is running: `autoanimedownloader start`
 - Check the endpoint: Use `--endpoint` flag if daemon is on a different host/port
 - Check firewall settings
 
 ### Permission errors
 
 On Linux, you may need to ensure:
-- The CLI binary has execute permissions: `chmod +x AutoAnimeDownloader-cli`
+- The CLI binary has execute permissions: `chmod +x autoanimedownloader`
 - You have permission to access the daemon's API
 
 ## See Also
