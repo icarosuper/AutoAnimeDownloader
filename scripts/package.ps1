@@ -23,7 +23,7 @@ Write-Host "Creating Windows package..." -ForegroundColor Yellow
 # In this case, the daemon.exe is already self-contained
 
 $PackageName = "AutoAnimeDownloader_Windows.exe"
-$DaemonPath = "build\windows-amd64\AutoAnimeDownloader-daemon.exe"
+$DaemonPath = "build\windows-amd64\autoanimedownloader-daemon.exe"
 
 if (-not (Test-Path $DaemonPath)) {
     Write-Host "Error: daemon executable not found at $DaemonPath" -ForegroundColor Red

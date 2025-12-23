@@ -38,8 +38,8 @@ if [ -d "build/linux-amd64" ]; then
     mkdir -p "$PACKAGE_DIR_ARCH"
     
     # Copy binaries
-    cp build/linux-amd64/AutoAnimeDownloader-daemon "$PACKAGE_DIR_ARCH/"
-    cp build/linux-amd64/AutoAnimeDownloader-cli "$PACKAGE_DIR_ARCH/"
+    cp build/linux-amd64/autoanimedownloader-daemon "$PACKAGE_DIR_ARCH/"
+    cp build/linux-amd64/autoanimedownloader "$PACKAGE_DIR_ARCH/"
     
     # Copy service file and Makefile
     cp infra/linux/autoanimedownloader.service "$PACKAGE_DIR_ARCH/"
@@ -55,8 +55,8 @@ if [ -d "build/linux-amd64" ]; then
 2. Run `make install` in the extracted directory
 
 This will install:
-- AutoAnimeDownloader-daemon (with embedded frontend)
-- AutoAnimeDownloader-cli
+- autoanimedownloader-daemon (with embedded frontend)
+- autoanimedownloader
 - systemd user service
 
 ## Usage
@@ -64,7 +64,7 @@ This will install:
 After installation, the daemon will start automatically. You can:
 
 - Access the web UI at http://localhost:8091
-- Use the CLI: `AutoAnimeDownloader-cli status`
+- Use the CLI: `autoanimedownloader status`
 - Manage the service: `systemctl --user status autoanimedownloader`
 
 ## Uninstallation
@@ -94,8 +94,8 @@ if [ -d "build/linux-arm64" ]; then
     mkdir -p "$PACKAGE_DIR_ARCH"
     
     # Copy binaries
-    cp build/linux-arm64/AutoAnimeDownloader-daemon "$PACKAGE_DIR_ARCH/"
-    cp build/linux-arm64/AutoAnimeDownloader-cli "$PACKAGE_DIR_ARCH/"
+    cp build/linux-arm64/autoanimedownloader-daemon "$PACKAGE_DIR_ARCH/"
+    cp build/linux-arm64/autoanimedownloader "$PACKAGE_DIR_ARCH/"
     
     # Copy service file and Makefile
     cp infra/linux/autoanimedownloader.service "$PACKAGE_DIR_ARCH/"
@@ -111,8 +111,8 @@ if [ -d "build/linux-arm64" ]; then
 2. Run `make install` in the extracted directory
 
 This will install:
-- AutoAnimeDownloader-daemon (with embedded frontend)
-- AutoAnimeDownloader-cli
+- autoanimedownloader-daemon (with embedded frontend)
+- autoanimedownloader
 - systemd user service
 
 ## Usage
@@ -120,7 +120,7 @@ This will install:
 After installation, the daemon will start automatically. You can:
 
 - Access the web UI at http://localhost:8091
-- Use the CLI: `AutoAnimeDownloader-cli status`
+- Use the CLI: `autoanimedownloader status`
 - Manage the service: `systemctl --user status autoanimedownloader`
 
 ## Uninstallation

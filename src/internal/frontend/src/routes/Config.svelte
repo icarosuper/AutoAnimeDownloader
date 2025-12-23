@@ -30,11 +30,11 @@
 
   function checkQueryParams() {
     if (typeof window !== "undefined") {
-      // Verificar query params na URL (pode estar no search ou no hash)
+      // Check query params in URL (may be in search or hash)
       const search = window.location.search;
       const hash = window.location.hash;
 
-      // Tentar pegar do search primeiro (query params antes do hash)
+      // Try to get from search first (query params before hash)
       if (search) {
         const urlParams = new URLSearchParams(search);
         showMissingConfigBanner = urlParams.has("missingConfig");
@@ -46,7 +46,7 @@
         return;
       }
 
-      // Se não tiver no search, verificar no hash (para hash routing)
+      // If not in search, check hash (for hash routing)
       if (hash) {
         const hashParts = hash.split("?");
         if (hashParts.length > 1) {
@@ -140,7 +140,7 @@
         </div>
         <div class="ml-3">
           <p class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-            Existem configurações faltantes, por favor insira-as para continuar
+            There are missing configurations, please fill them in to continue
           </p>
         </div>
       </div>

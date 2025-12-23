@@ -23,15 +23,15 @@ Write-Host "Step 2: Building daemon for Windows amd64..." -ForegroundColor Yello
 $env:GOOS = "windows"
 $env:GOARCH = "amd64"
 $env:CGO_ENABLED = "0"
-go build -a -installsuffix cgo -ldflags="-w -s" -o "build\windows-amd64\AutoAnimeDownloader-daemon.exe" .\src\cmd\daemon
+go build -a -installsuffix cgo -ldflags="-w -s" -o "build\windows-amd64\autoanimedownloader-daemon.exe" .\src\cmd\daemon
 
 Write-Host "Step 3: Building CLI for Windows amd64..." -ForegroundColor Yellow
-go build -a -installsuffix cgo -ldflags="-w -s" -o "build\windows-amd64\AutoAnimeDownloader-cli.exe" .\src\cmd\cli
+go build -a -installsuffix cgo -ldflags="-w -s" -o "build\windows-amd64\autoanimedownloader.exe" .\src\cmd\cli
 
 Write-Host "Step 4: Generating checksums..." -ForegroundColor Yellow
 Set-Location "build\windows-amd64"
-Get-FileHash -Algorithm SHA256 AutoAnimeDownloader-daemon.exe | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 AutoAnimeDownloader-daemon.exe.sha256
-Get-FileHash -Algorithm SHA256 AutoAnimeDownloader-cli.exe | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 AutoAnimeDownloader-cli.exe.sha256
+Get-FileHash -Algorithm SHA256 autoanimedownloader-daemon.exe | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 autoanimedownloader-daemon.exe.sha256
+Get-FileHash -Algorithm SHA256 autoanimedownloader.exe | ForEach-Object { "$($_.Hash)  $($_.Path)" } | Out-File -Encoding utf8 autoanimedownloader.exe.sha256
 Set-Location $ProjectRoot
 
 Write-Host "Build complete!" -ForegroundColor Green
