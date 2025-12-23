@@ -3,6 +3,9 @@ services:
     build:
       context: ./src/tests/mocks/anilist
       dockerfile: Dockerfile
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     # Ports não são mapeados para o host, apenas expostos na rede Docker
     expose:
       - "8080"
@@ -16,6 +19,9 @@ services:
     build:
       context: ./src/tests/mocks/nyaa
       dockerfile: Dockerfile
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     expose:
       - "8081"
     environment:
@@ -28,6 +34,9 @@ services:
     build:
       context: ./src/tests/mocks/qbittorrent
       dockerfile: Dockerfile
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     expose:
       - "8082"
     environment:
@@ -39,6 +48,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "8091:8091"
     volumes:
