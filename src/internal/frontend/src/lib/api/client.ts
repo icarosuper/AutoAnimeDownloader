@@ -5,6 +5,12 @@ const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_BASE_URL
   }
 
+  // Check if we're in browser environment before accessing window
+  if (typeof window === 'undefined') {
+    // Fallback for non-browser environments (build time, SSR, etc.)
+    return 'http://localhost:8091/api/v1'
+  }
+
   // Sempre usa o hostname atual e inclui a porta 8091 explicitamente
   // Isso garante que funcione tanto localmente quanto remotamente
   // O daemon sempre roda na porta 8091, então sempre usamos essa porta
