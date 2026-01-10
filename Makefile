@@ -153,14 +153,20 @@ docker-buildx-build:
 		linuxamd64) \
 			DOCKERFILE=$(DOCKERFILE_linuxamd64); \
 			BUILD_DIR=$(BUILD_DIR_linuxamd64); \
+			DOCKER_IMAGE=$(DOCKER_IMAGE_linuxamd64); \
+			CONTAINER=$(CONTAINER_linuxamd64); \
 			;; \
 		linuxarm64) \
 			DOCKERFILE=$(DOCKERFILE_linuxarm64); \
 			BUILD_DIR=$(BUILD_DIR_linuxarm64); \
+			DOCKER_IMAGE=$(DOCKER_IMAGE_linuxarm64); \
+			CONTAINER=$(CONTAINER_linuxarm64); \
 			;; \
 		windows) \
 			DOCKERFILE=$(DOCKERFILE_windows); \
 			BUILD_DIR=$(BUILD_DIR_windows); \
+			DOCKER_IMAGE=$(DOCKER_IMAGE_windows); \
+			CONTAINER=$(CONTAINER_windows); \
 			;; \
 	esac; \
 	echo -e "$(YELLOW)Building Docker image with buildx...$(NC)\n"; \
@@ -170,15 +176,20 @@ docker-buildx-build:
 			--load \
 			-f $$DOCKERFILE \
 			--build-arg VERSION=$(VERSION) \
-			--output type=local,dest=$$BUILD_DIR \
+			-t $$DOCKER_IMAGE \
 			. || exit 1; \
 	else \
 		docker buildx build \
 			-f $$DOCKERFILE \
 			--build-arg VERSION=$(VERSION) \
-			--output type=local,dest=$$BUILD_DIR \
+			-t $$DOCKER_IMAGE \
 			. || exit 1; \
 	fi; \
+	echo -e "$(YELLOW)Extracting binaries...$(NC)\n"; \
+	docker rm -f $$CONTAINER 2>/dev/null || true; \
+	docker create --name $$CONTAINER $$DOCKER_IMAGE; \
+	docker cp $$CONTAINER:/output/. $$BUILD_DIR/; \
+	docker rm $$CONTAINER; \
 	$(MAKE) rename-binaries PLATFORM=$$PLATFORM; \
 	$(MAKE) checksums PLATFORM=$$PLATFORM
 
