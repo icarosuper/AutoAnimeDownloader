@@ -11,193 +11,84 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Build frontend
+      - name: Get version from tag
+        id: get_version
         run: |
-          cd src/internal/frontend
-          npm ci
-          npm run build
+          VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       
-      - name: Build daemon and CLI
-        run: |
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-daemon ./src/cmd/daemon
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-cli ./src/cmd/cli
-      
-      - name: Create package
-        run: |
-          mkdir -p package/linux-amd64
-          cp build/linux-amd64/AutoAnimeDownloader-daemon package/linux-amd64/
-          cp build/linux-amd64/AutoAnimeDownloader-cli package/linux-amd64/
-          cp infra/linux/autoanimedownloader.service package/linux-amd64/
-          cp infra/linux/Makefile package/linux-amd64/
-          cat > package/linux-amd64/README.md << 'EOF'
-          # AutoAnimeDownloader - Linux Installation
-          
-          ## Installation
-          
-          1. Extract this archive
-          2. Run `make install` in the extracted directory
-          
-          This will install:
-          - AutoAnimeDownloader-daemon (with embedded frontend)
-          - AutoAnimeDownloader-cli
-          - systemd user service
-          
-          ## Usage
-          
-          After installation, the daemon will start automatically. You can:
-          
-          - Access the web UI at http://localhost:8091
-          - Use the CLI: `AutoAnimeDownloader-cli status`
-          - Manage the service: `systemctl --user status autoanimedownloader`
-          
-          ## Uninstallation
-          
-          Run `make uninstall` in the installation directory.
-          EOF
-          cd package/linux-amd64
-          zip -r ../../AutoAnimeDownloader_Linux_x86.zip .
-          cd ../..
-      
-      - name: Generate checksum
-        run: |
-          sha256sum AutoAnimeDownloader_Linux_x86.zip > AutoAnimeDownloader_Linux_x86.zip.sha256
+      - name: Build and package for Linux AMD64
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: make release PLATFORM=linuxamd64
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-amd64-package
           path: |
-            AutoAnimeDownloader_Linux_x86.zip
-            AutoAnimeDownloader_Linux_x86.zip.sha256
+            build/packages/AutoAnimeDownloader_Linux_x86.zip
+            build/packages/AutoAnimeDownloader_Linux_x86.zip.sha256
+          retention-days: 30
 
   release-linux-arm64:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Build frontend
+      - name: Get version from tag
+        id: get_version
         run: |
-          cd src/internal/frontend
-          npm ci
-          npm run build
+          VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       
-      - name: Build daemon and CLI
-        run: |
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-arm64/AutoAnimeDownloader-daemon ./src/cmd/daemon
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-arm64/AutoAnimeDownloader-cli ./src/cmd/cli
-      
-      - name: Create package
-        run: |
-          mkdir -p package/linux-arm64
-          cp build/linux-arm64/AutoAnimeDownloader-daemon package/linux-arm64/
-          cp build/linux-arm64/AutoAnimeDownloader-cli package/linux-arm64/
-          cp infra/linux/autoanimedownloader.service package/linux-arm64/
-          cp infra/linux/Makefile package/linux-arm64/
-          cat > package/linux-arm64/README.md << 'EOF'
-          # AutoAnimeDownloader - Linux ARM64 Installation
-          
-          ## Installation
-          
-          1. Extract this archive
-          2. Run `make install` in the extracted directory
-          
-          This will install:
-          - AutoAnimeDownloader-daemon (with embedded frontend)
-          - AutoAnimeDownloader-cli
-          - systemd user service
-          
-          ## Usage
-          
-          After installation, the daemon will start automatically. You can:
-          
-          - Access the web UI at http://localhost:8091
-          - Use the CLI: `AutoAnimeDownloader-cli status`
-          - Manage the service: `systemctl --user status autoanimedownloader`
-          
-          ## Uninstallation
-          
-          Run `make uninstall` in the installation directory.
-          EOF
-          cd package/linux-arm64
-          zip -r ../../AutoAnimeDownloader_Linux_Arm64.zip .
-          cd ../..
-      
-      - name: Generate checksum
-        run: |
-          sha256sum AutoAnimeDownloader_Linux_Arm64.zip > AutoAnimeDownloader_Linux_Arm64.zip.sha256
+      - name: Build and package for Linux ARM64
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: make release PLATFORM=linuxarm64
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-arm64-package
           path: |
-            AutoAnimeDownloader_Linux_Arm64.zip
-            AutoAnimeDownloader_Linux_Arm64.zip.sha256
+            build/packages/AutoAnimeDownloader_Linux_Arm64.zip
+            build/packages/AutoAnimeDownloader_Linux_Arm64.zip.sha256
+          retention-days: 30
 
   release-windows-amd64:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Build frontend
+      - name: Get version from tag
+        id: get_version
         run: |
-          cd src\internal\frontend
-          npm ci
-          npm run build
+          VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       
-      - name: Build daemon
-        run: |
-          $env:GOOS = "windows"
-          $env:GOARCH = "amd64"
-          $env:CGO_ENABLED = "0"
-          go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\AutoAnimeDownloader-daemon.exe .\src\cmd\daemon
-      
-      - name: Create package
-        run: |
-          Copy-Item build\windows-amd64\AutoAnimeDownloader-daemon.exe AutoAnimeDownloader_Windows.exe
-      
-      - name: Generate checksum
-        run: |
-          $Hash = Get-FileHash -Algorithm SHA256 AutoAnimeDownloader_Windows.exe
-          "$($Hash.Hash)  AutoAnimeDownloader_Windows.exe" | Out-File -Encoding utf8 AutoAnimeDownloader_Windows.exe.sha256
+      - name: Build and package for Windows AMD64
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: make release PLATFORM=windows
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-amd64-package
           path: |
-            AutoAnimeDownloader_Windows.exe
-            AutoAnimeDownloader_Windows.exe.sha256
+            build/packages/AutoAnimeDownloader_Windows.exe
+            build/packages/AutoAnimeDownloader_Windows.exe.sha256
+          retention-days: 30
 
   create-release:
     needs: [release-linux-amd64, release-linux-arm64, release-windows-amd64]
@@ -224,4 +115,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

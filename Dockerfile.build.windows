@@ -1,0 +1,57 @@
+# Dockerfile for building AutoAnimeDownloader daemon for Windows AMD64 with tray icon support
+# Uses mingw-w64 for cross-compilation from Linux
+
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /build
+COPY src/internal/frontend/package*.json ./
+RUN npm ci
+COPY src/internal/frontend/ ./
+RUN npm run build
+
+# Stage 2: Build Go daemon
+FROM golang:1.24
+
+# Install mingw-w64 for Windows cross-compilation with CGO
+RUN apt-get update && apt-get install -y \
+    gcc-mingw-w64-x86-64 \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy go mod files for dependency caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Copy frontend dist from frontend-builder
+COPY --from=frontend-builder /build/dist ./src/internal/frontend/dist
+
+# Build daemon with CGO enabled for Windows
+ARG VERSION=dev
+ENV CGO_ENABLED=1
+ENV GOOS=windows
+ENV GOARCH=amd64
+ENV CC=x86_64-w64-mingw32-gcc
+ENV CXX=x86_64-w64-mingw32-g++
+
+RUN go build -installsuffix cgo \
+    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/tray.currentVersion=${VERSION}" \
+    -o /app/autoanimedownloader-daemon.exe \
+    ./src/cmd/daemon
+
+# Build CLI without CGO
+RUN CGO_ENABLED=0 go build -installsuffix cgo \
+    -ldflags="-w -s" \
+    -o /app/autoanimedownloader.exe \
+    ./src/cmd/cli
+
+# Output directory
+WORKDIR /output
+RUN cp /app/autoanimedownloader-daemon.exe . && \
+    cp /app/autoanimedownloader.exe .
+

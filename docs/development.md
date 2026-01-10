@@ -267,7 +267,7 @@ Use Swagger UI:
 
 ```bash
 # Linux
-./scripts/build.sh
+make build
 
 # Windows
 .\scripts\build.ps1
