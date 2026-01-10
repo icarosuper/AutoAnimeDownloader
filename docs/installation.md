@@ -28,8 +28,8 @@ This guide explains how to install AutoAnimeDownloader on Linux and Windows.
    ```
 
 That's it! The installation will:
-- Install the daemon binary to `~/.local/bin/AutoAnimeDownloader-daemon`
-- Install the CLI binary to `~/.local/bin/AutoAnimeDownloader-cli`
+- Install the daemon binary to `~/.local/bin/autoanimedownloader-daemon`
+- Install the CLI binary to `~/.local/bin/autoanimedownloader`
 - Install and start the systemd user service
 
 ### Manual Installation
@@ -39,8 +39,8 @@ If you prefer to install manually:
 ```bash
 # Copy binaries
 mkdir -p ~/.local/bin
-cp AutoAnimeDownloader-daemon ~/.local/bin/
-cp AutoAnimeDownloader-cli ~/.local/bin/
+cp autoanimedownloader-daemon ~/.local/bin/
+cp autoanimedownloader ~/.local/bin/
 
 # Install systemd service
 mkdir -p ~/.config/systemd/user
@@ -75,8 +75,8 @@ Or manually:
 systemctl --user stop autoanimedownloader
 systemctl --user disable autoanimedownloader
 rm ~/.config/systemd/user/autoanimedownloader.service
-rm ~/.local/bin/AutoAnimeDownloader-daemon
-rm ~/.local/bin/AutoAnimeDownloader-cli
+rm ~/.local/bin/autoanimedownloader-daemon
+rm ~/.local/bin/autoanimedownloader
 systemctl --user daemon-reload
 ```
 
@@ -118,7 +118,7 @@ If you prefer to install the service manually:
 
 ```powershell
 # Run PowerShell as Administrator
-nssm install AutoAnimeDownloader "C:\path\to\AutoAnimeDownloader-daemon.exe"
+nssm install AutoAnimeDownloader "C:\path\to\autoanimedownloader-daemon.exe"
 nssm set AutoAnimeDownloader DisplayName "Auto Anime Downloader"
 nssm set AutoAnimeDownloader Description "Automatically downloads anime from Anilist via qBittorrent"
 nssm set AutoAnimeDownloader Start SERVICE_AUTO_START
@@ -202,25 +202,25 @@ Use the CLI to manage the daemon:
 
 ```bash
 # Check status
-AutoAnimeDownloader-cli status
+autoanimedownloader status
 
 # Start the daemon loop
-AutoAnimeDownloader-cli loop start
+autoanimedownloader loop start
 
 # Stop the daemon loop
-AutoAnimeDownloader-cli loop stop
+autoanimedownloader loop stop
 
 # Force a check
-AutoAnimeDownloader-cli check
+autoanimedownloader check
 
 # View configuration
-AutoAnimeDownloader-cli config get
+autoanimedownloader config get
 
 # List animes
-AutoAnimeDownloader-cli animes
+autoanimedownloader animes
 
 # View logs
-AutoAnimeDownloader-cli logs
+autoanimedownloader logs
 ```
 
 ## Troubleshooting

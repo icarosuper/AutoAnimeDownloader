@@ -75,13 +75,13 @@ cd ../../..
 
 ```bash
 # Build daemon
-go build -o AutoAnimeDownloader-daemon ./src/cmd/daemon
+go build -o autoanimedownloader-daemon ./src/cmd/daemon
 
 # Build CLI
-go build -o AutoAnimeDownloader-cli ./src/cmd/cli
+go build -o autoanimedownloader ./src/cmd/cli
 
 # Run daemon
-./AutoAnimeDownloader-daemon
+./autoanimedownloader-daemon
 ```
 
 ## Development Workflow
@@ -91,7 +91,7 @@ go build -o AutoAnimeDownloader-cli ./src/cmd/cli
 Set the `ENVIRONMENT` variable to `dev` for development mode:
 
 ```bash
-ENVIRONMENT=dev ./AutoAnimeDownloader-daemon
+ENVIRONMENT=dev ./autoanimedownloader-daemon
 ```
 
 **Development mode features:**
@@ -241,7 +241,7 @@ In development mode, logs also go to console.
 
 ```bash
 # Run with verbose logging
-ENVIRONMENT=dev ./AutoAnimeDownloader-daemon
+ENVIRONMENT=dev ./autoanimedownloader-daemon
 
 # Check logs
 tail -f ~/.autoAnimeDownloader/daemon.log
@@ -282,8 +282,8 @@ npm run build
 cd ../../..
 
 # 2. Build Go binaries
-go build -ldflags="-w -s" -o AutoAnimeDownloader-daemon ./src/cmd/daemon
-go build -ldflags="-w -s" -o AutoAnimeDownloader-cli ./src/cmd/cli
+go build -ldflags="-w -s" -o autoanimedownloader-daemon ./src/cmd/daemon
+go build -ldflags="-w -s" -o autoanimedownloader ./src/cmd/cli
 ```
 
 ## Testing
@@ -387,7 +387,7 @@ go test -race ./...
 ### Runtime Errors
 
 **Port already in use:**
-- Change port: `PORT=:8092 ./AutoAnimeDownloader-daemon`
+- Change port: `PORT=:8092 ./autoanimedownloader-daemon`
 - Or stop existing daemon
 
 **Permission errors:**
