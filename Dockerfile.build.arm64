@@ -1,0 +1,61 @@
+# Dockerfile for building AutoAnimeDownloader daemon for Linux ARM64 with tray icon support
+# This uses a native ARM64 container to compile with CGO enabled
+
+# Stage 1: Build frontend
+FROM --platform=linux/arm64 node:20-alpine AS frontend-builder
+
+WORKDIR /build
+COPY src/internal/frontend/package*.json ./
+RUN npm ci
+COPY src/internal/frontend/ ./
+RUN npm run build
+
+# Stage 2: Build Go daemon
+FROM --platform=linux/arm64 golang:1.24
+
+# Install dependencies for tray icon (ARM64 native)
+RUN apt-get update && apt-get install -y \
+    libayatana-appindicator3-dev \
+    libgtk-3-dev \
+    libglib2.0-dev \
+    libcairo2-dev \
+    libpango1.0-dev \
+    pkg-config \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Copy go mod files for dependency caching
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Copy frontend dist from frontend-builder
+COPY --from=frontend-builder /build/dist ./src/internal/frontend/dist
+
+# Build daemon with CGO enabled
+ARG VERSION=dev
+ENV CGO_ENABLED=1
+ENV CGO_CFLAGS=-Wno-deprecated-declarations
+ENV GOOS=linux
+ENV GOARCH=arm64
+
+RUN go build -installsuffix cgo \
+    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/tray.currentVersion=${VERSION}" \
+    -o /app/autoanimedownloader-daemon \
+    ./src/cmd/daemon
+
+# Build CLI without CGO
+RUN CGO_ENABLED=0 go build -installsuffix cgo \
+    -ldflags="-w -s" \
+    -o /app/autoanimedownloader \
+    ./src/cmd/cli
+
+# Output directory
+WORKDIR /output
+RUN cp /app/autoanimedownloader-daemon . && \
+    cp /app/autoanimedownloader .
+

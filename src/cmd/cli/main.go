@@ -202,11 +202,25 @@ func handleStart() error {
 	}
 
 	execDir := filepath.Dir(execPath)
-	daemonBinary := filepath.Join(execDir, "AutoAnimeDownloader-daemon")
-
-	// Se não existir, tentar sem extensão (Linux/Mac)
-	if _, err := os.Stat(daemonBinary); os.IsNotExist(err) {
-		daemonBinary = filepath.Join(execDir, "aad-daemon")
+	
+	// Try different possible names for the daemon binary
+	possibleNames := []string{
+		"autoanimedownloader-daemon",
+		"AutoAnimeDownloader-daemon",
+		"aad-daemon",
+	}
+	
+	var daemonBinary string
+	for _, name := range possibleNames {
+		candidate := filepath.Join(execDir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			daemonBinary = candidate
+			break
+		}
+	}
+	
+	if daemonBinary == "" {
+		return fmt.Errorf("daemon binary not found in %s. Tried: %v", execDir, possibleNames)
 	}
 
 	if err := processcli.Start(daemonBinary); err != nil {
