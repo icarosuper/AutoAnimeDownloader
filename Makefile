@@ -265,6 +265,8 @@ package-linuxamd64: $(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon
 		cp $(BUILD_DIR_linuxamd64)/autoanimedownloader $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
 		cp infra/linux/autoanimedownloader.service $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
 		cp infra/linux/Makefile $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
+		cp infra/linux/autoanimedownloader.desktop $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
+		cp src/internal/tray/icon.png $$PACKAGE_DIR/$$PACKAGE_NAME/icon.png || exit 1; \
 		{ \
 			echo "# AutoAnimeDownloader - Linux Installation"; \
 			echo ""; \
@@ -309,6 +311,8 @@ package-linuxarm64: $(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon
 		cp $(BUILD_DIR_linuxarm64)/autoanimedownloader $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
 		cp infra/linux/autoanimedownloader.service $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
 		cp infra/linux/Makefile $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
+		cp infra/linux/autoanimedownloader.desktop $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
+		cp src/internal/tray/icon.png $$PACKAGE_DIR/$$PACKAGE_NAME/icon.png || exit 1; \
 		{ \
 			echo "# AutoAnimeDownloader - Linux ARM64 Installation"; \
 			echo ""; \
