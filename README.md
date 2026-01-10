@@ -136,14 +136,19 @@ See [Build Guide](docs/build.md) for detailed instructions.
 
 **Quick build:**
 ```bash
-# Linux
-./scripts/build.sh
+# Linux/Mac/WSL (recommended)
+make build
 
-# Windows
+# Without make (fallback)
+./scripts/build/build-all.sh
+```
+
+```powershell
+# Windows Native
 .\scripts\build.ps1
 ```
 
-**Important:** The frontend must be built before the Go build, as it's embedded into the binary.
+**Important:** The frontend must be built before the Go build, as it's embedded into the binary. Docker is used for cross-platform builds with tray icon support.
 
 ## Documentation
 
