@@ -22,16 +22,14 @@ package tray
 import (
 	"AutoAnimeDownloader/src/internal/logger"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 )
 
 // TrayManager manages the system tray icon
@@ -68,20 +66,17 @@ func (tm *TrayManager) onReady() {
 	}
 
 	systray.SetTitle("AutoAnimeDownloader")
-	systray.SetTooltip("AutoAnimeDownloader - Clique para abrir Web UI")
+	systray.SetTooltip("AutoAnimeDownloader - Click to open")
 
-	// Menu: Abrir Web UI
-	mOpen := systray.AddMenuItem("Abrir Web UI", "Abre o frontend no navegador")
-
-	systray.AddSeparator()
-
-	// Menu: Checar Atualizações
-	mCheckUpdates := systray.AddMenuItem("Checar Atualizações", "Verifica se há novas versões disponíveis")
+	mOpen := systray.AddMenuItem("Open", "Opens the app page on your browser")
 
 	systray.AddSeparator()
 
-	// Menu: Sair
-	mQuit := systray.AddMenuItem("Sair", "Encerra o daemon")
+	mCheckEpisodes := systray.AddMenuItem("Check for new episodes", "Starts a verification for new anime episodes")
+
+	systray.AddSeparator()
+
+	mQuit := systray.AddMenuItem("Quit", "Shuts the app down")
 
 	// Handle menu events
 	go func() {
@@ -89,8 +84,8 @@ func (tm *TrayManager) onReady() {
 			select {
 			case <-mOpen.ClickedCh:
 				tm.openWebUI()
-			case <-mCheckUpdates.ClickedCh:
-				tm.checkUpdates()
+			case <-mCheckEpisodes.ClickedCh:
+				tm.triggerCheck()
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return
@@ -105,7 +100,7 @@ func (tm *TrayManager) onExit() {
 }
 
 func (tm *TrayManager) openWebUI() {
-	url := tm.getWebUIURL()
+	url := tm.getWebUiURL()
 
 	if err := openBrowser(url); err != nil {
 		logger.Logger.Error().
@@ -119,7 +114,7 @@ func (tm *TrayManager) openWebUI() {
 	}
 }
 
-func (tm *TrayManager) getWebUIURL() string {
+func (tm *TrayManager) getWebUiURL() string {
 	port := tm.apiPort
 	if port == "" {
 		port = ":8091"
@@ -134,30 +129,41 @@ func (tm *TrayManager) getWebUIURL() string {
 	return fmt.Sprintf("http://localhost:%s", port)
 }
 
-func (tm *TrayManager) checkUpdates() {
-	logger.Logger.Info().Msg("Checking for updates...")
+func (tm *TrayManager) triggerCheck() {
+	logger.Logger.Info().Msg("Triggering manual episode check via tray icon")
 
 	go func() {
-		latestVersion, err := getLatestVersion()
+		url := fmt.Sprintf("%s/api/v1/check", tm.getWebUiURL())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 		if err != nil {
 			logger.Logger.Error().
 				Err(err).
-				Msg("Failed to check for updates")
+				Msg("Failed to create check request")
 			return
 		}
 
-		currentVersion := GetCurrentVersion()
-		if latestVersion != "" && latestVersion != currentVersion && currentVersion != "dev" {
-			logger.Logger.Info().
-				Str("current", currentVersion).
-				Str("latest", latestVersion).
-				Msg("Update available")
-			// Open browser to releases page
-			openBrowser(fmt.Sprintf("https://github.com/%s/releases/latest", githubRepo))
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.Logger.Error().
+				Err(err).
+				Msg("Failed to trigger check")
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			logger.Logger.Info().Msg("Manual check triggered successfully")
 		} else {
-			logger.Logger.Info().
-				Str("version", currentVersion).
-				Msg("Already running latest version")
+			logger.Logger.Error().
+				Int("status", resp.StatusCode).
+				Msg("Failed to trigger check")
 		}
 	}()
 }
@@ -175,48 +181,4 @@ func openBrowser(url string) error {
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
 	return cmd.Run()
-}
-
-func getLatestVersion() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var release struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.Unmarshal(body, &release); err != nil {
-		return "", err
-	}
-
-	// Remove the "v" prefix if present
-	tag := release.TagName
-	if len(tag) > 0 && tag[0] == 'v' {
-		tag = tag[1:]
-	}
-
-	return tag, nil
 }
