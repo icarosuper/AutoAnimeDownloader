@@ -1,146 +1,22 @@
-name: Build
+name: CI
 
 on:
-  push:
-    branches: [ master ]
   pull_request:
     branches: [ master ]
 
 jobs:
-  build-frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build frontend
-        run: |
-          cd src/internal/frontend
-          npm ci
-          npm run build
-
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: src/internal/frontend/dist/*
-          retention-days: 1
-
-  build-linux-amd64:
-    runs-on: ubuntu-latest
-    needs: build-frontend
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: src/internal/frontend/dist
-
-      - name: Get version
-        id: get_version
-        run: |
-          VERSION=$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build for Linux AMD64
-        env:
-          VERSION: ${{ steps.get_version.outputs.version }}
-        run: make build PLATFORM=linuxamd64
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-amd64-binaries
-          path: build/linux-amd64/*
-          retention-days: 7
-
-  build-linux-arm64:
-    runs-on: ubuntu-latest
-    needs: build-frontend
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: src/internal/frontend/dist
-
-      - name: Get version
-        id: get_version
-        run: |
-          VERSION=$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build for Linux ARM64
-        env:
-          VERSION: ${{ steps.get_version.outputs.version }}
-        run: make build PLATFORM=linuxarm64
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-arm64-binaries
-          path: build/linux-arm64/*
-          retention-days: 7
-
-  build-windows-amd64:
-    runs-on: ubuntu-latest
-    needs: build-frontend
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: src/internal/frontend/dist
-
-      - name: Get version
-        id: get_version
-        run: |
-          VERSION=$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build for Windows AMD64
-        env:
-          VERSION: ${{ steps.get_version.outputs.version }}
-        run: make build PLATFORM=windows
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-amd64-binaries
-          path: build/windows-amd64/*
-          retention-days: 7
-
   integration-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Run integration tests
         run: |
           docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
-      
+
       - name: Cleanup
         if: always()
         run: |
