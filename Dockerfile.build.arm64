@@ -1,8 +1,8 @@
 # Dockerfile for building AutoAnimeDownloader daemon for Linux ARM64 with tray icon support
 # This uses a native ARM64 container to compile with CGO enabled
 
-# Stage 1: Build frontend
-FROM --platform=linux/arm64 node:20-alpine AS frontend-builder
+# Stage 1: Build frontend (native AMD64 - JS is platform-agnostic)
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /build
 COPY src/internal/frontend/package*.json ./
