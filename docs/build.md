@@ -21,25 +21,66 @@ The build process consists of two critical steps:
 
 The frontend must be built before the Go build because the Go code uses `//go:embed` to embed the frontend files directly into the binary. The embed directive requires the files to exist at compile time.
 
-## Building for Linux
+## Building for All Platforms
 
-### Using the Build Script
+### Using Makefile (Linux, macOS, WSL)
 
-The easiest way to build for Linux is using the provided script:
+The recommended way to build on Linux, macOS, or WSL is using the Makefile:
 
 ```bash
-./scripts/build.sh
+# Build for all platforms
+make build
+
+# Build for specific platform
+make build-linux-amd64
+make build-linux-arm64
+make build-windows
+
+# With custom version
+make build VERSION=1.2.3
+
+# See all available targets
+make help
 ```
 
-This will:
-1. Build the frontend
-2. Build the daemon and CLI for Linux amd64
-3. Build the daemon and CLI for Linux arm64
-4. Generate SHA256 checksums for all binaries
+### Using Build Scripts (Linux, macOS - Fallback)
+
+If `make` is not available, you can use the build scripts directly:
+
+```bash
+# Build for all platforms
+./scripts/build/build-all.sh
+
+# Build for specific platform
+./scripts/build/build-linux-amd64.sh
+./scripts/build/build-linux-arm64.sh
+./scripts/build/build-windows.sh
+```
+
+### Using PowerShell (Windows Native)
+
+On Windows, use PowerShell:
+
+```powershell
+# Build for Windows natively (with tray icon)
+.\scripts\build.ps1
+```
+
+**Note:** The PowerShell script builds natively on Windows. For cross-platform builds (Linux/ARM64), use Docker via Makefile or scripts.
+
+### Build Process
+
+The build process will:
+1. Build the frontend (inside Docker containers for cross-platform builds)
+2. Build the daemon and CLI for Linux amd64 (with tray icon)
+3. Build the daemon and CLI for Linux arm64 (with tray icon)
+4. Build the daemon and CLI for Windows amd64 (with tray icon)
+5. Generate SHA256 checksums for all binaries
 
 Output will be in:
 - `build/linux-amd64/` - Binaries for x86_64
 - `build/linux-arm64/` - Binaries for ARM64
+- `build/windows-amd64/` - Binaries for Windows
 
 ### Manual Build
 
@@ -53,47 +94,41 @@ npm run build
 cd ../../..
 
 # Step 2: Build daemon for Linux amd64
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-daemon ./src/cmd/daemon
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/autoanimedownloader-daemon ./src/cmd/daemon
 
 # Step 3: Build CLI for Linux amd64
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/AutoAnimeDownloader-cli ./src/cmd/cli
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -installsuffix cgo -ldflags="-w -s" -o build/linux-amd64/autoanimedownloader ./src/cmd/cli
 ```
 
-## Building for Windows
+## Platform-Specific Notes
 
-### Using the Build Script
+### Linux / macOS / WSL
 
-On Windows, use PowerShell:
+Use Makefile (recommended) or build scripts. Both methods use Docker for cross-compilation with tray icon support.
+
+**Makefile (Recommended):**
+```bash
+make build                    # Build all platforms
+make build-linux-amd64       # Build specific platform
+make help                    # See all options
+```
+
+**Build Scripts (Fallback if make not available):**
+```bash
+./scripts/build/build-all.sh # Build all platforms
+```
+
+### Windows Native
+
+Use PowerShell script for native Windows builds with tray icon support:
 
 ```powershell
 .\scripts\build.ps1
 ```
 
-This will:
-1. Build the frontend
-2. Build the daemon and CLI for Windows amd64
-3. Generate SHA256 checksums
-
-Output will be in `build/windows-amd64/`
-
-### Manual Build
-
-```powershell
-# Step 1: Build frontend
-cd src\internal\frontend
-npm ci
-npm run build
-cd ..\..\..
-
-# Step 2: Build daemon
-$env:GOOS = "windows"
-$env:GOARCH = "amd64"
-$env:CGO_ENABLED = "0"
-go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\AutoAnimeDownloader-daemon.exe .\src\cmd\daemon
-
-# Step 3: Build CLI
-go build -a -installsuffix cgo -ldflags="-w -s" -o build\windows-amd64\AutoAnimeDownloader-cli.exe .\src\cmd\cli
-```
+This compiles directly on Windows without Docker. For cross-platform builds from Windows:
+- Use WSL: `make build`
+- Use Docker Desktop: `make build` (Docker handles cross-compilation)
 
 ## Cross-Compilation
 
@@ -116,10 +151,10 @@ After building, you can test the daemon:
 
 ```bash
 # Linux
-./build/linux-amd64/AutoAnimeDownloader-daemon
+./build/linux-amd64/autoanimedownloader-daemon
 
 # Windows
-.\build\windows-amd64\AutoAnimeDownloader-daemon.exe
+.\build\windows-amd64\autoanimedownloader-daemon.exe
 ```
 
 The daemon will start on port 8091 by default. Access the web UI at http://localhost:8091

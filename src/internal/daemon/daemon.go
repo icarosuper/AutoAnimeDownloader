@@ -92,7 +92,7 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 	}
 }
 
-func getWebUIURL() string {
+func getWebUiURL() string {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8091"
@@ -101,7 +101,7 @@ func getWebUIURL() string {
 		port = strings.TrimPrefix(port, ":")
 	}
 	// Colocar o query parameter antes do hash para funcionar corretamente
-	return fmt.Sprintf("http://localhost:%s/config?missingConfig=true#/config", port)
+	return fmt.Sprintf("http://localhost:%s/#/config?missingConfig=true#/config", port)
 }
 
 func isConfigComplete(config *files.Config) bool {
@@ -136,7 +136,7 @@ func openBrowserToConfig(webUIURL string) error {
 func StartLoop(p StartLoopPayload) *LoopControl {
 	var mu sync.Mutex
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	// Use pointers to share the cancel function between closures
 	cancelPtr := &cancel
 
@@ -184,7 +184,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		// Abrir navegador na página de configs sem bloquear o loop
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Pequeno delay para garantir que o servidor está pronto
-			webUIURL := getWebUIURL()
+			webUIURL := getWebUiURL()
 			if err := openBrowserToConfig(webUIURL); err != nil {
 				logger.Logger.Warn().Err(err).Msg("Failed to open browser to configuration page")
 			}
@@ -369,14 +369,14 @@ func saveEpisodesToFile(fileManager FileManagerInterface, newEpisodes []files.Ep
 }
 
 func fetchDownloadedTorrents(torrentsService *torrents.TorrentService) ([]torrents.Torrent, error) {
-	torrents, err := torrentsService.GetDownloadedTorrents()
+	downloadedTorrents, err := torrentsService.GetDownloadedTorrents()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to connect to qBittorrent")
 		return nil, fmt.Errorf("failed to connect to qBittorrent: %w", err)
 	}
 
-	logger.Logger.Debug().Int("count", len(torrents)).Msg("Fetched downloaded torrents")
-	return torrents, nil
+	logger.Logger.Debug().Int("count", len(downloadedTorrents)).Msg("Fetched downloaded torrents")
+	return downloadedTorrents, nil
 }
 
 func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {

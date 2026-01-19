@@ -78,8 +78,8 @@ make install
 ```
 
 This installs:
-- `AutoAnimeDownloader-daemon` - Main daemon with embedded web UI
-- `AutoAnimeDownloader-cli` - Command-line interface
+- `autoanimedownloader-daemon` - Main daemon with embedded web UI
+- `autoanimedownloader` - Command-line interface
 - systemd user service (starts automatically)
 
 **Uninstall:**
@@ -109,23 +109,23 @@ After installation, access the web interface at **http://localhost:8091**
 
 ```bash
 # Check daemon status
-AutoAnimeDownloader-cli status
+autoanimedownloader status
 
 # Start/stop daemon loop
-AutoAnimeDownloader-cli loop start
-AutoAnimeDownloader-cli loop stop
+autoanimedownloader loop start
+autoanimedownloader loop stop
 
 # Force a check for new episodes
-AutoAnimeDownloader-cli check
+autoanimedownloader check
 
 # View configuration
-AutoAnimeDownloader-cli config get
+autoanimedownloader config get
 
 # List monitored animes
-AutoAnimeDownloader-cli animes
+autoanimedownloader animes
 
 # View logs
-AutoAnimeDownloader-cli logs --lines 50
+autoanimedownloader logs --lines 50
 ```
 
 See [CLI Guide](docs/cli-guide.md) for more details.
@@ -136,14 +136,19 @@ See [Build Guide](docs/build.md) for detailed instructions.
 
 **Quick build:**
 ```bash
-# Linux
-./scripts/build.sh
+# Linux/Mac/WSL (recommended)
+make build
 
-# Windows
+# Without make (fallback)
+./scripts/build/build-all.sh
+```
+
+```powershell
+# Windows Native
 .\scripts\build.ps1
 ```
 
-**Important:** The frontend must be built before the Go build, as it's embedded into the binary.
+**Important:** The frontend must be built before the Go build, as it's embedded into the binary. Docker is used for cross-platform builds with tray icon support.
 
 ## Documentation
 

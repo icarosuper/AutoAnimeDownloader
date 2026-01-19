@@ -37,6 +37,7 @@ import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/tray"
 	"context"
 	"fmt"
 	"os"
@@ -120,6 +121,16 @@ func removePIDFile() error {
 	return nil
 }
 
+func shouldShowTray() bool {
+	// Check if we're in a graphical environment
+	// On Linux, check for DISPLAY variable
+	if runtime.GOOS == "linux" {
+		return os.Getenv("DISPLAY") != ""
+	}
+	// Windows and macOS always have GUI
+	return runtime.GOOS == "windows" || runtime.GOOS == "darwin"
+}
+
 func main() {
 	environment := getEnvironment()
 	isDevelopment := environment == "dev"
@@ -171,12 +182,33 @@ func main() {
 		logger.Logger.Info().Msg("Daemon loop started automatically")
 	}
 
-	// Graceful shutdown
+	// Initialize tray icon if in graphical environment
+	var trayManager *tray.TrayManager
+	if shouldShowTray() {
+		trayManager = tray.NewTrayManager(apiPort)
+		trayManager.Start()
+		logger.Logger.Info().Msg("System tray icon started")
+	}
+
+	// Graceful shutdown - wait for either signal or tray quit
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	<-sigChan
-	logger.Logger.Info().Msg("Shutdown signal received")
+	var trayShutdownChan <-chan struct{}
+	if trayManager != nil {
+		trayShutdownChan = trayManager.WaitForShutdown()
+	} else {
+		// If no tray, create a channel that never closes
+		c := make(chan struct{})
+		trayShutdownChan = c
+	}
+
+	select {
+	case <-sigChan:
+		logger.Logger.Info().Msg("Shutdown signal received")
+	case <-trayShutdownChan:
+		logger.Logger.Info().Msg("Shutdown requested from tray icon")
+	}
 
 	// Stop daemon loop if running
 	if state.GetStatus() != daemon.StatusStopped {

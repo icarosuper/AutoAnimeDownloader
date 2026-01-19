@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=AutoAnimeDownloader
+Comment=Automatically download your anime
+Exec=autoanimedownloader-daemon
+Icon=autoanimedownloader
+Terminal=false
+Categories=Network;FileTransfer;
+Keywords=anime;download;torrent;anilist;nyaa;
