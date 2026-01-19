@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 )
 
 // TrayManager manages the system tray icon
