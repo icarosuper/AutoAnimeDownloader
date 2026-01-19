@@ -180,6 +180,7 @@ docker-buildx-build:
 			. || exit 1; \
 	else \
 		docker buildx build \
+			--load \
 			-f $$DOCKERFILE \
 			--build-arg VERSION=$(VERSION) \
 			-t $$DOCKER_IMAGE \
