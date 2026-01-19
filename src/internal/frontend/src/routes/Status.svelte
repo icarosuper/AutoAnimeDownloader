@@ -239,7 +239,7 @@
           </div>
         </dl>
 
-        {#if status.has_error}
+        {#if status.has_error && status.status !== "checking"}
           <div
             class="mt-4 rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800"
           >

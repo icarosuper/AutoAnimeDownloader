@@ -5,7 +5,7 @@ WORKDIR /build
 COPY mock_server.go go.mod* ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/mock-server mock_server.go
 
-FROM alpine:latest
+FROM alpine:3.19
 
 WORKDIR /app
 

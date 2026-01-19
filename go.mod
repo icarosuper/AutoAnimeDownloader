@@ -19,6 +19,7 @@ module AutoAnimeDownloader
 go 1.24.6
 
 require (
+	fyne.io/systray v1.12.0
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/jedib0t/go-pretty/v6 v6.7.7
 	github.com/rs/zerolog v1.34.0
@@ -43,6 +44,7 @@ require (
 	github.com/go-openapi/swag/stringutils v0.25.4 // indirect
 	github.com/go-openapi/swag/typeutils v0.25.4 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.4 // indirect
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

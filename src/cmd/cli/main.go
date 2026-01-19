@@ -202,7 +202,7 @@ func handleStart() error {
 	}
 
 	execDir := filepath.Dir(execPath)
-	daemonBinary := filepath.Join(execDir, "AutoAnimeDownloader-daemon")
+	daemonBinary := filepath.Join(execDir, "autoanimedownloader-daemon")
 
 	// Se não existir, tentar sem extensão (Linux/Mac)
 	if _, err := os.Stat(daemonBinary); os.IsNotExist(err) {
