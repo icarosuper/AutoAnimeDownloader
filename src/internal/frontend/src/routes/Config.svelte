@@ -30,7 +30,6 @@
 
   function checkQueryParams() {
     if (typeof window !== "undefined") {
-      // Check query params in URL (may be in search or hash)
       const search = window.location.search;
       const hash = window.location.hash;
 
@@ -222,7 +221,6 @@
         on:submit|preventDefault={saveConfig}
         class="px-4 py-5 sm:p-6 space-y-6"
       >
-        <!-- Anilist Username -->
         <Input
           id="anilist_username"
           label="Anilist Username"
@@ -231,46 +229,44 @@
           required={true}
         />
 
-        <!-- Save Path -->
         <Input
           id="save_path"
-          label="Save Path"
+          label="Save path"
+          subtitle="Where the releasing anime will go"
           type="text"
           bind:value={config.save_path}
           placeholder="/path/to/downloads"
           required={true}
         />
 
-        <!-- Completed Anime Path -->
         <Input
           id="completed_anime_path"
-          label="Completed Anime Path"
+          label="Completed anime save path"
+          subtitle="If empty will use the default path above"
           type="text"
           bind:value={config.completed_anime_path}
           placeholder="/path/to/completed"
         />
 
-        <!-- Check Interval -->
         <Input
           id="check_interval"
-          label="Check Interval (minutes)"
+          label="Check interval in minutes"
           type="number"
           bind:value={config.check_interval}
           min="1"
           required={true}
         />
 
-        <!-- qBittorrent URL -->
         <Input
           id="qbittorrent_url"
           label="qBittorrent URL"
+          subtitle="If you don't know what this is don't change it"
           type="url"
           bind:value={config.qbittorrent_url}
           placeholder="http://127.0.0.1:8080"
           required={true}
         />
 
-        <!-- Max Episodes Per Anime -->
         <Input
           id="max_episodes_per_anime"
           label="Max Episodes Per Anime"
@@ -280,7 +276,6 @@
           required={true}
         />
 
-        <!-- Episode Retry Limit -->
         <Input
           id="episode_retry_limit"
           label="Episode Retry Limit"
@@ -290,7 +285,6 @@
           required={true}
         />
 
-        <!-- Delete Watched Episodes -->
         <div class="flex items-center">
           <input
             type="checkbox"
@@ -306,16 +300,15 @@
           </label>
         </div>
 
-        <!-- Excluded List -->
         <Input
           id="excluded_list"
           label="Excluded List"
+          subtitle="Lists that should not be downloaded"
           type="text"
           bind:value={config.excluded_list}
-          placeholder="One anime name per line"
+          placeholder="Name of excluded list"
         />
 
-        <!-- Buttons -->
         <div
           class="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700"
         >

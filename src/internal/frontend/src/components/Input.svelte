@@ -1,6 +1,7 @@
 <script lang="ts">
     export let id: string = "";
     export let label: string = "";
+    export let subtitle: string = "";
     export let type: string = "text";
     export let value: string | number = "";
     export let placeholder: string = "";
@@ -23,6 +24,15 @@
             {#if required}
                 <span class="text-red-500 dark:text-red-400">*</span>
             {/if}
+        </label>
+    {/if}
+
+    {#if subtitle}
+        <label
+            for={inputId}
+            class="block text-xs font-medium text-gray-500 mb-1"
+        >
+            {subtitle}
         </label>
     {/if}
 

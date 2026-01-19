@@ -4,19 +4,24 @@
 DAEMON_BINARY := autoanimedownloader-daemon
 CLI_BINARY := autoanimedownloader
 SERVICE_NAME := autoanimedownloader.service
+DESKTOP_FILE := autoanimedownloader.desktop
+ICON_FILE := icon.png
 INSTALL_DIR := $(HOME)/.local/bin
 SERVICE_DIR := $(HOME)/.config/systemd/user
+APPLICATIONS_DIR := $(HOME)/.local/share/applications
+ICONS_DIR := $(HOME)/.local/share/icons
 
 default:
 	@echo "Run 'make install' to install AutoAnimeDownloader"
 	@echo "Run 'make uninstall' to uninstall AutoAnimeDownloader"
 
-install: install-binaries install-service
+install: install-binaries install-service install-desktop-entry
 	@echo ""
 	@echo "Installation complete!"
 	@echo "Daemon installed in $(INSTALL_DIR)/$(DAEMON_BINARY)"
 	@echo "CLI installed in $(INSTALL_DIR)/$(CLI_BINARY)"
 	@echo "Systemd service installed and enabled."
+	@echo "Desktop entry installed."
 
 install-binaries:
 	@echo "Installing binaries..."
@@ -36,7 +41,16 @@ install-service:
 	@systemctl --user start $(SERVICE_NAME)
 	@echo "Service installed and started."
 
-uninstall: uninstall-service uninstall-binaries
+install-desktop-entry:
+	@echo "Installing desktop entry..."
+	@mkdir -p $(APPLICATIONS_DIR)
+	@mkdir -p $(ICONS_DIR)
+	install -Dm00644 $(DESKTOP_FILE) $(APPLICATIONS_DIR)/$(DESKTOP_FILE)
+	install -Dm00644 $(ICON_FILE) $(ICONS_DIR)/autoanimedownloader.png
+	@echo "Desktop entry installed successfully."
+
+
+uninstall: uninstall-service uninstall-binaries uninstall-desktop-entry
 	@echo "Uninstallation complete!"
 
 uninstall-binaries:
@@ -52,3 +66,10 @@ uninstall-service:
 	-@rm -f $(SERVICE_DIR)/$(SERVICE_NAME)
 	@systemctl --user daemon-reload
 	@echo "Service removed."
+
+uninstall-desktop-entry:
+	@echo "Removing desktop entry..."
+	-rm -f $(APPLICATIONS_DIR)/$(DESKTOP_FILE)
+	-rm -f $(ICONS_DIR)/autoanimedownloader.png
+	@echo "Desktop entry removed."
+

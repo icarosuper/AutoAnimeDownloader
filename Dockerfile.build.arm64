@@ -13,13 +13,8 @@ RUN npm run build
 # Stage 2: Build Go daemon
 FROM --platform=linux/arm64 golang:1.24
 
-# Install dependencies for tray icon (ARM64 native)
+# Install dependencies
 RUN apt-get update && apt-get install -y \
-    libayatana-appindicator3-dev \
-    libgtk-3-dev \
-    libglib2.0-dev \
-    libcairo2-dev \
-    libpango1.0-dev \
     pkg-config \
     git \
     && rm -rf /var/lib/apt/lists/*
