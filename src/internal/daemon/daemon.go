@@ -10,13 +10,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-// FileManagerInterface defines the interface for file management operations
 type FileManagerInterface interface {
 	LoadConfigs() (*files.Config, error)
 	SaveConfigs(config *files.Config) error
@@ -32,7 +33,6 @@ type StartLoopPayload struct {
 	State       *State
 }
 
-// LoopControl contains functions to control the daemon loop
 type LoopControl struct {
 	UpdateInterval func(time.Duration)
 	Cancel         context.CancelFunc
@@ -62,10 +62,8 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 				default:
 				}
 
-				// Set status to checking before starting verification
 				p.State.SetStatus(StatusChecking)
 
-				// Execute verification
 				AnimeVerification(c, p.FileManager, p.State)
 
 				// Set status back to running after verification completes
@@ -97,15 +95,12 @@ func getWebUiURL() string {
 	if port == "" {
 		port = "8091"
 	} else {
-		// Remove o : se presente
 		port = strings.TrimPrefix(port, ":")
 	}
-	// Colocar o query parameter antes do hash para funcionar corretamente
-	return fmt.Sprintf("http://localhost:%s/#/config?missingConfig=true#/config", port)
+	return fmt.Sprintf("http://localhost:%s/#/config?missingConfig=true", port)
 }
 
 func isConfigComplete(config *files.Config) bool {
-	// Verifica se todas as configurações obrigatórias estão preenchidas
 	return config.AnilistUsername != "" && config.SavePath != "" && config.QBittorrentUrl != ""
 }
 
@@ -178,10 +173,8 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		return
 	}
 
-	// Verifica se todas as configurações obrigatórias estão preenchidas
 	if !isConfigComplete(configs) {
 		logger.Logger.Warn().Msg("Missing required configuration, opening browser to config page")
-		// Abrir navegador na página de configs sem bloquear o loop
 		go func() {
 			time.Sleep(500 * time.Millisecond) // Pequeno delay para garantir que o servidor está pronto
 			webUIURL := getWebUiURL()
@@ -190,7 +183,6 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			}
 		}()
 
-		// Registra um erro de configuração ausente para que o status da checagem reflita o problema
 		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username, save path or qBittorrent URL)"))
 		return
 	}
@@ -304,6 +296,28 @@ func animeIsInExcludedList(anime anilist.MediaList, excludedList string) bool {
 		}
 	}
 	return false
+}
+
+func isAnimeMovie(anime anilist.MediaList) bool {
+	return anime.Media.Format == anilist.MediaFormatMovie
+}
+
+func extractSeasonFromAnime(anime anilist.MediaList) *int {
+	title := *anime.Media.Title.Romaji
+	seasonPattern := regexp.MustCompile(`(?i)Season\s*(\d+)|S(\d{1,2})\b|(\d{1,2})(?:st|nd|rd|th)\s+Season`)
+
+	matches := seasonPattern.FindStringSubmatch(title)
+	if len(matches) > 1 {
+		for i := 1; i < len(matches); i++ {
+			if matches[i] != "" {
+				if seasonNum, err := strconv.Atoi(matches[i]); err == nil {
+					return &seasonNum
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
@@ -439,7 +453,7 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (re
 	return nyaaResponse
 }
 
-func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, magnets []string, anime anilist.MediaList, fileName string) (hash string) {
+func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, magnets []string, anime anilist.MediaList, fileName string, skipSubfolder bool) (hash string) {
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 
 	for i := range maxAttempts {
@@ -447,9 +461,10 @@ func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents
 			Str("episode", fileName).
 			Int("attempt", i+1).
 			Int("max_attempts", configs.EpisodeRetryLimit).
+			Bool("skip_subfolder", skipSubfolder).
 			Msg("Attempting to download episode")
 
-		hash := torrentsService.DownloadTorrent(magnets[i], *anime.Media.Title.English, fileName, anime.Media.Status == anilist.MediaStatusFinished)
+		hash := torrentsService.DownloadTorrentWithOptions(magnets[i], *anime.Media.Title.English, fileName, anime.Media.Status == anilist.MediaStatusFinished, skipSubfolder)
 		if hash != "" {
 			logger.Logger.Info().
 				Str("episode", fileName).
@@ -509,8 +524,47 @@ func processAnimeEpisodes(
 		return
 	}
 
+	animeIsFinished := anime.Media.Status == anilist.MediaStatusFinished
+	animeIsMovie := isAnimeMovie(anime)
+
+	var batchResult []nyaa.TorrentResult
+	var movieResult []nyaa.TorrentResult
 	var multipleResult []nyaa.TorrentResult
-	if len(episodesToDownload) > 1 {
+
+	// ESTRATÉGIA 1: Filmes
+	if animeIsMovie {
+		logger.Logger.Info().
+			Str("anime", *anime.Media.Title.English).
+			Msg("Detected movie - searching for movie torrent")
+
+		result, err := nyaa.ScrapNyaaForMovie(*anime.Media.Title.Romaji)
+		if err == nil && result != nil {
+			movieResult = result
+			logger.Logger.Info().
+				Str("anime", *anime.Media.Title.English).
+				Int("movie_torrents_found", len(movieResult)).
+				Msg("Found movie torrents")
+		}
+	} else if animeIsFinished && len(episodesToDownload) > 1 {
+		logger.Logger.Info().
+			Str("anime", *anime.Media.Title.English).
+			Msg("Detected finished anime - searching for batch torrent")
+
+		// Extrair temporada se houver
+		requestedSeason := extractSeasonFromAnime(anime)
+
+		result, err := nyaa.ScrapNyaaForBatch(*anime.Media.Title.Romaji, requestedSeason)
+		if err == nil && result != nil {
+			batchResult = result
+			logger.Logger.Info().
+				Str("anime", *anime.Media.Title.English).
+				Int("batch_torrents_found", len(batchResult)).
+				Msg("Found batch torrents")
+		}
+	}
+
+	// ESTRATÉGIA 3: Animes em lançamento ou fallback (múltiplos episódios)
+	if len(batchResult) == 0 && len(movieResult) == 0 {
 		var eps []int
 		for _, ep := range episodesToDownload {
 			eps = append(eps, ep.Episode)
@@ -526,8 +580,34 @@ func processAnimeEpisodes(
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
 		var magnets []string
+		var skipSubfolder bool
 
-		if len(multipleResult) > 0 {
+		// Prioridade 1: Movie (para filmes)
+		if animeIsMovie && len(movieResult) > 0 {
+			// Para filmes, usa o nome do filme diretamente (sem "- Episode X")
+			epName = *anime.Media.Title.English
+			magnets = []string{movieResult[0].MagnetLink}
+			skipSubfolder = true // Filmes ficam na pasta raiz, não em subpasta
+			logger.Logger.Info().
+				Str("anime", *anime.Media.Title.English).
+				Str("torrent", movieResult[0].Name).
+				Msg("Using movie torrent")
+		}
+
+		// Prioridade 2: Batch (para animes completos)
+		if len(batchResult) > 0 && len(magnets) == 0 {
+			// Para batches, usa o nome do anime diretamente (sem "- Episode X")
+			epName = *anime.Media.Title.English
+			magnets = []string{batchResult[0].MagnetLink}
+			skipSubfolder = true // Batches já criam sua própria pasta
+			logger.Logger.Info().
+				Str("anime", *anime.Media.Title.English).
+				Str("torrent", batchResult[0].Name).
+				Msg("Using batch torrent for finished anime")
+		}
+
+		// Prioridade 3: Múltiplos episódios (busca otimizada)
+		if len(multipleResult) > 0 && len(magnets) == 0 {
 			for _, result := range multipleResult {
 				if *result.Episode == ep.Episode {
 					magnets = append(magnets, result.MagnetLink)
@@ -535,6 +615,7 @@ func processAnimeEpisodes(
 			}
 		}
 
+		// Prioridade 4: Episódio individual (fallback)
 		if len(magnets) == 0 {
 			results := searchNyaaForSingleEpisode(ep, anime.Media.Title)
 			for _, result := range results {
@@ -542,7 +623,7 @@ func processAnimeEpisodes(
 			}
 		}
 
-		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName)
+		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName, skipSubfolder)
 
 		if hash != "" {
 			*newEpisodes = append(*newEpisodes, files.EpisodeStruct{
