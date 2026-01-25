@@ -674,9 +674,6 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 	sanitizedName := extractSeasonFromName(animeName)
 	query := strings.TrimSpace(sanitizedName)
 
-	// Adicionar "Movie" à query para melhorar resultados
-	query = fmt.Sprintf("%s Movie", query)
-
 	// Construir URL com parâmetros
 	params := url.Values{}
 	params.Set("f", "0")   // Filtro: sem filtro

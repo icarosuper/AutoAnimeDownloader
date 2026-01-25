@@ -302,6 +302,13 @@ func isAnimeMovie(anime anilist.MediaList) bool {
 	return anime.Media.Format == anilist.MediaFormatMovie
 }
 
+func getAnimeTitleSafe(anime anilist.MediaList) string {
+	if anime.Media.Title.English != nil && *anime.Media.Title.English != "" {
+		return *anime.Media.Title.English
+	}
+	return *anime.Media.Title.Romaji
+}
+
 func extractSeasonFromAnime(anime anilist.MediaList) *int {
 	title := *anime.Media.Title.Romaji
 	seasonPattern := regexp.MustCompile(`(?i)Season\s*(\d+)|S(\d{1,2})\b|(\d{1,2})(?:st|nd|rd|th)\s+Season`)
@@ -464,7 +471,7 @@ func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents
 			Bool("skip_subfolder", skipSubfolder).
 			Msg("Attempting to download episode")
 
-		hash := torrentsService.DownloadTorrentWithOptions(magnets[i], *anime.Media.Title.English, fileName, anime.Media.Status == anilist.MediaStatusFinished, skipSubfolder)
+		hash := torrentsService.DownloadTorrentWithOptions(magnets[i], getAnimeTitleSafe(anime), fileName, anime.Media.Status == anilist.MediaStatusFinished, skipSubfolder)
 		if hash != "" {
 			logger.Logger.Info().
 				Str("episode", fileName).
@@ -494,7 +501,7 @@ func processAnimeEpisodes(
 	title := anime.Media.Title.Romaji
 	logger.Logger.Info().
 		Str("anime", *title).
-		Str("english_title", *anime.Media.Title.English).
+		Str("english_title", getAnimeTitleSafe(anime)).
 		Msg("Processing anime episodes")
 
 	torrentsMap := buildTorrentsMap(torrents)
@@ -506,7 +513,7 @@ func processAnimeEpisodes(
 
 	for _, ep := range episodes {
 		*checkedEpisodes = append(*checkedEpisodes, ep.ID)
-		epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
+		epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
 
 		isInTorrents := torrentsMap[epName]
 		alreadySaved := savedEpisodesMap[ep.ID]
@@ -520,10 +527,6 @@ func processAnimeEpisodes(
 		}
 	}
 
-	if len(episodesToDownload) == 0 {
-		return
-	}
-
 	animeIsFinished := anime.Media.Status == anilist.MediaStatusFinished
 	animeIsMovie := isAnimeMovie(anime)
 
@@ -534,20 +537,38 @@ func processAnimeEpisodes(
 	// ESTRATÉGIA 1: Filmes
 	if animeIsMovie {
 		logger.Logger.Info().
-			Str("anime", *anime.Media.Title.English).
+			Str("anime", getAnimeTitleSafe(anime)).
 			Msg("Detected movie - searching for movie torrent")
 
-		result, err := nyaa.ScrapNyaaForMovie(*anime.Media.Title.Romaji)
+		result, err := nyaa.ScrapNyaaForMovie(*anime.Media.Title.Romaji, true)
 		if err == nil && result != nil {
 			movieResult = result
 			logger.Logger.Info().
-				Str("anime", *anime.Media.Title.English).
+				Str("anime", getAnimeTitleSafe(anime)).
 				Int("movie_torrents_found", len(movieResult)).
 				Msg("Found movie torrents")
 		}
-	} else if animeIsFinished && len(episodesToDownload) > 1 {
+
+		// Para filmes sem episódios no AiringSchedule, criar um episódio fake
+		if len(episodesToDownload) == 0 && len(movieResult) > 0 {
+			var fakeEp anilist.AiringNode
+			fakeEp.ID = 0
+			fakeEp.Episode = 1
+			episodesToDownload = append(episodesToDownload, fakeEp)
+			logger.Logger.Info().
+				Str("anime", getAnimeTitleSafe(anime)).
+				Msg("Created fake episode for movie download")
+		}
+	}
+
+	if len(episodesToDownload) == 0 {
+		return
+	}
+
+	// ESTRATÉGIA 2: Animes completos - tentar batch
+	if animeIsFinished && !animeIsMovie && len(episodesToDownload) > 1 {
 		logger.Logger.Info().
-			Str("anime", *anime.Media.Title.English).
+			Str("anime", getAnimeTitleSafe(anime)).
 			Msg("Detected finished anime - searching for batch torrent")
 
 		// Extrair temporada se houver
@@ -557,7 +578,7 @@ func processAnimeEpisodes(
 		if err == nil && result != nil {
 			batchResult = result
 			logger.Logger.Info().
-				Str("anime", *anime.Media.Title.English).
+				Str("anime", getAnimeTitleSafe(anime)).
 				Int("batch_torrents_found", len(batchResult)).
 				Msg("Found batch torrents")
 		}
@@ -578,18 +599,18 @@ func processAnimeEpisodes(
 	}
 
 	for _, ep := range episodesToDownload {
-		epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
+		epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
 		var magnets []string
 		var skipSubfolder bool
 
 		// Prioridade 1: Movie (para filmes)
 		if animeIsMovie && len(movieResult) > 0 {
 			// Para filmes, usa o nome do filme diretamente (sem "- Episode X")
-			epName = *anime.Media.Title.English
+			epName = getAnimeTitleSafe(anime)
 			magnets = []string{movieResult[0].MagnetLink}
 			skipSubfolder = true // Filmes ficam na pasta raiz, não em subpasta
 			logger.Logger.Info().
-				Str("anime", *anime.Media.Title.English).
+				Str("anime", getAnimeTitleSafe(anime)).
 				Str("torrent", movieResult[0].Name).
 				Msg("Using movie torrent")
 		}
@@ -597,11 +618,11 @@ func processAnimeEpisodes(
 		// Prioridade 2: Batch (para animes completos)
 		if len(batchResult) > 0 && len(magnets) == 0 {
 			// Para batches, usa o nome do anime diretamente (sem "- Episode X")
-			epName = *anime.Media.Title.English
+			epName = getAnimeTitleSafe(anime)
 			magnets = []string{batchResult[0].MagnetLink}
 			skipSubfolder = true // Batches já criam sua própria pasta
 			logger.Logger.Info().
-				Str("anime", *anime.Media.Title.English).
+				Str("anime", getAnimeTitleSafe(anime)).
 				Str("torrent", batchResult[0].Name).
 				Msg("Using batch torrent for finished anime")
 		}
@@ -639,7 +660,7 @@ func processAnimeEpisodes(
 }
 
 func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (shouldDownload bool, shouldDelete bool) {
-	epName := fmt.Sprintf("%s - Episode %d", *anime.Media.Title.English, ep.Episode)
+	epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
 
 	if shouldSkipEpisode(configs, ep, anime, epName) {
 		return false, alreadySaved
@@ -740,7 +761,7 @@ func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, an
 		}
 	}
 
-	animeName := *anime.Media.Title.English
+	animeName := getAnimeTitleSafe(anime)
 	logger.Logger.Info().
 		Str("anime", animeName).
 		Int("torrents_count", len(animeHashes)).
