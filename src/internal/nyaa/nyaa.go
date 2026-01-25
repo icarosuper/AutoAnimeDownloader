@@ -29,9 +29,9 @@ type TorrentResult struct {
 	Episode    *int      `json:"episode,omitempty"`
 	Resolution *string   `json:"resolution,omitempty"`
 	Season     *int      `json:"season,omitempty"`
-	Size       int64     `json:"size,omitempty"`   // Tamanho em bytes
-	Fansub     string    `json:"fansub,omitempty"` // Nome do fansub extraído
-	IsBatch    bool      `json:"isBatch,omitempty"` // Indica se é um batch
+	Size       int64     `json:"size,omitempty"`
+	Fansub     string    `json:"fansub,omitempty"`
+	IsBatch    bool      `json:"isBatch,omitempty"`
 }
 
 func getNyaaBaseURL() string {
@@ -93,9 +93,9 @@ func isBatch(name string) bool {
 		`(?i)\(unofficial\s+batch\)`,
 
 		// 2. Faixa de episódios (range)
-		`(?i)\(\d{1,3}\s*[-~]\s*\d{1,3}\)`,     // (01-28), (01 ~ 28)
-		`(?i)\s\d{1,3}\s*[-~]\s*\d{1,3}\s`,     // 01-28, 01 ~ 28
-		`(?i)\s\d{1,3}~\d{1,3}\s`,             // 01~28
+		`(?i)\(\d{1,3}\s*[-~]\s*\d{1,3}\)`, // (01-28), (01 ~ 28)
+		`(?i)\s\d{1,3}\s*[-~]\s*\d{1,3}\s`, // 01-28, 01 ~ 28
+		`(?i)\s\d{1,3}~\d{1,3}\s`,          // 01~28
 
 		// 3. Palavra "Complete"
 		`(?i)\(complete\)|\[complete\]|\s+complete\s+`,
@@ -103,18 +103,18 @@ func isBatch(name string) bool {
 		`(?i)\(season\s+\d+.*complete\)`,
 
 		// 4. Temporada completa (sem episódio específico)
-		`(?i)\(s\d{1,2}\)|\[s\d{1,2}\]`,        // (S01), [S01], (S1), [S1]
+		`(?i)\(s\d{1,2}\)|\[s\d{1,2}\]`,         // (S01), [S01], (S1), [S1]
 		`(?i)\(season\s+\d+\)|\[season\s+\d+\]`, // (Season 1), [Season 1]
 		`(?i)\(\d{1,2}st\s+season\)|\(\d{1,2}nd\s+season\)|\(\d{1,2}rd\s+season\)|\(\d{1,2}th\s+season\)`, // (1st Season), (2nd Season)
-		`(?i)\bseason\s+\d+\s*\([^)]*\)`,      // Season 1 (Complete), Season 1 (1080p)
+		`(?i)\bseason\s+\d+\s*\([^)]*\)`, // Season 1 (Complete), Season 1 (1080p)
 
 		// 5. S01/S02 sem parênteses, mas apenas se seguido de infos técnicas (não episódio)
 		// Estes padrões evitam falsos positivos como "S2 - 7"
-		`(?i)\.s\d{1,2}\.`,                    // .S01. (ponto antes e depois)
-		`(?i)\bs\d{1,2}\s+\(.*bd`,             // S01 (BD... - temporada sem parênteses seguido de BD
+		`(?i)\.s\d{1,2}\.`,        // .S01. (ponto antes e depois)
+		`(?i)\bs\d{1,2}\s+\(.*bd`, // S01 (BD... - temporada sem parênteses seguido de BD
 		`(?i)s\d{1,2}\s+\(1080p\)|s\d{1,2}\s+\(720p\)|s\d{1,2}\s+\(480p\)`, // S01 (1080p)
-		`(?i)s\d{1,2}\s+1080p|s\d{1,2}\s+720p`, // S01 1080p, S01 720p (com espaço)
-		`(?i)s\d{1,2}\.+1080p|s\d{1,2}\.+720p`, // S01.1080p, S01.720p (com ponto)
+		`(?i)s\d{1,2}\s+1080p|s\d{1,2}\s+720p`,                             // S01 1080p, S01 720p (com espaço)
+		`(?i)s\d{1,2}\.+1080p|s\d{1,2}\.+720p`,                             // S01.1080p, S01.720p (com ponto)
 	}
 
 	nameLower := strings.ToLower(name)
@@ -211,7 +211,7 @@ func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 	movieKeywords := []string{
 		`(?i)\(movie\)|\[movie\]|\smovie\s`,
 		`(?i)\(film\)|\[film\]`,
-		`(?i)gekijouban`,                // 劇場版 (movie em japonês)
+		`(?i)gekijouban`, // 劇場版 (movie em japonês)
 		`(?i)theater\s+version`,
 		`(?i)theatrical`,
 	}
