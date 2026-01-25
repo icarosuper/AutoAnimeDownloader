@@ -79,6 +79,7 @@ const (
 
 type Media struct {
 	Status         MediaStatus    `json:"status"`
+	Format         MediaFormat    `json:"format"`
 	Title          Title          `json:"title"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 }
@@ -103,6 +104,20 @@ type GraphQLRequest struct {
 	Variables map[string]any `json:"variables"`
 }
 
+type MediaFormat string
+
+const (
+	MediaFormatTV      MediaFormat = "TV"
+	MediaFormatTVShort MediaFormat = "TV_SHORT"
+	MediaFormatMovie   MediaFormat = "MOVIE"
+	MediaFormatOVA     MediaFormat = "OVA"
+	MediaFormatONA     MediaFormat = "ONA"
+	MediaFormatMusic   MediaFormat = "MUSIC"
+	MediaFormatManga   MediaFormat = "MANGA"
+	MediaFormatNovel   MediaFormat = "NOVEL"
+	MediaFormatOneShot MediaFormat = "ONE_SHOT"
+)
+
 type CustomLists map[string]bool
 
 func SearchAnimes(userName string) (*AniListResponse, error) {
@@ -114,6 +129,7 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 					progress
 					customLists
 					media {
+						format
 						status
 						title {
 							english
@@ -135,7 +151,10 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 	variables := map[string]any{
 		"userName": userName,
 		"type":     "ANIME",
-		"statuses": []string{string(MediaListStatusCurrent), string(MediaListStatusRepeating)},
+		"statuses": []string{
+			string(MediaListStatusCurrent),
+			string(MediaListStatusRepeating),
+		},
 	}
 
 	requestBody := GraphQLRequest{
