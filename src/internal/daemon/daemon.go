@@ -428,31 +428,146 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 }
 
 func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (result []nyaa.TorrentResult) {
-	// Tenta buscar com Romaji primeiro, depois com English
-	titleVariants := []string{*titles.Romaji}
-	if *titles.Romaji != *titles.English {
-		titleVariants = append(titleVariants, *titles.English)
-	}
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
 
-	for _, titleVariant := range titleVariants {
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("episode", ep.Episode).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting search with title variant")
+
 		nyaaResponse, err = nyaa.ScrapNyaa(titleVariant, ep.Episode)
 		if err != nil {
 			logger.Logger.Debug().
 				Err(err).
 				Str("title", titleVariant).
 				Int("episode", ep.Episode).
+				Int("attempt", i+1).
 				Msg("Error searching Nyaa")
 			continue
 		}
 		if nyaaResponse != nil {
-			logger.Logger.Debug().
+			logger.Logger.Info().
 				Str("title", titleVariant).
 				Int("episode", ep.Episode).
 				Int("torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
 				Msg("Found torrents on Nyaa")
+			break
+		}
+	}
+
+	return nyaaResponse
+}
+
+func searchNyaaForBatch(titles anilist.Title, requestedSeason *int) (result []nyaa.TorrentResult) {
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+
+	var nyaaResponse []nyaa.TorrentResult
+	var err error
+
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting batch search with title variant")
+
+		nyaaResponse, err = nyaa.ScrapNyaaForBatch(titleVariant, requestedSeason)
+		if err != nil {
+			logger.Logger.Debug().
+				Err(err).
+				Str("title", titleVariant).
+				Int("attempt", i+1).
+				Msg("Error searching Nyaa for batch")
+			continue
+		}
+		if nyaaResponse != nil {
+			logger.Logger.Info().
+				Str("title", titleVariant).
+				Int("batch_torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
+				Msg("Found batch torrents on Nyaa")
+			break
+		}
+	}
+
+	return nyaaResponse
+}
+
+func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) (result []nyaa.TorrentResult) {
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+
+	var nyaaResponse []nyaa.TorrentResult
+	var err error
+
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting movie search with title variant")
+
+		nyaaResponse, err = nyaa.ScrapNyaaForMovie(titleVariant, isFormatMovie)
+		if err != nil {
+			logger.Logger.Debug().
+				Err(err).
+				Str("title", titleVariant).
+				Int("attempt", i+1).
+				Msg("Error searching Nyaa for movie")
+			continue
+		}
+		if nyaaResponse != nil {
+			logger.Logger.Info().
+				Str("title", titleVariant).
+				Int("movie_torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
+				Msg("Found movie torrents on Nyaa")
+			break
+		}
+	}
+
+	return nyaaResponse
+}
+
+func searchNyaaForMultipleEpisodes(titles anilist.Title, episodes []int) (result []nyaa.TorrentResult) {
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+
+	var nyaaResponse []nyaa.TorrentResult
+	var err error
+
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting multiple episodes search with title variant")
+
+		nyaaResponse, err = nyaa.ScrapNyaaForMultipleEpisodes(titleVariant, episodes)
+		if err != nil {
+			logger.Logger.Debug().
+				Err(err).
+				Str("title", titleVariant).
+				Int("attempt", i+1).
+				Msg("Error searching Nyaa for multiple episodes")
+			continue
+		}
+		if nyaaResponse != nil {
+			logger.Logger.Info().
+				Str("title", titleVariant).
+				Int("episodes_count", len(episodes)).
+				Int("torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
+				Msg("Found torrents for multiple episodes on Nyaa")
 			break
 		}
 	}
@@ -540,13 +655,9 @@ func processAnimeEpisodes(
 			Str("anime", getAnimeTitleSafe(anime)).
 			Msg("Detected movie - searching for movie torrent")
 
-		result, err := nyaa.ScrapNyaaForMovie(*anime.Media.Title.Romaji, true)
-		if err == nil && result != nil {
+		result := searchNyaaForMovie(anime.Media.Title, true)
+		if result != nil {
 			movieResult = result
-			logger.Logger.Info().
-				Str("anime", getAnimeTitleSafe(anime)).
-				Int("movie_torrents_found", len(movieResult)).
-				Msg("Found movie torrents")
 		}
 
 		// Para filmes sem episódios no AiringSchedule, criar um episódio fake
@@ -574,13 +685,9 @@ func processAnimeEpisodes(
 		// Extrair temporada se houver
 		requestedSeason := extractSeasonFromAnime(anime)
 
-		result, err := nyaa.ScrapNyaaForBatch(*anime.Media.Title.Romaji, requestedSeason)
-		if err == nil && result != nil {
+		result := searchNyaaForBatch(anime.Media.Title, requestedSeason)
+		if result != nil {
 			batchResult = result
-			logger.Logger.Info().
-				Str("anime", getAnimeTitleSafe(anime)).
-				Int("batch_torrents_found", len(batchResult)).
-				Msg("Found batch torrents")
 		}
 	}
 
@@ -591,9 +698,8 @@ func processAnimeEpisodes(
 			eps = append(eps, ep.Episode)
 		}
 
-		result, err := nyaa.ScrapNyaaForMultipleEpisodes(*anime.Media.Title.Romaji, eps)
-
-		if err == nil {
+		result := searchNyaaForMultipleEpisodes(anime.Media.Title, eps)
+		if result != nil {
 			multipleResult = result
 		}
 	}
