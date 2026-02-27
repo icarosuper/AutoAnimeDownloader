@@ -81,6 +81,7 @@ export interface AnimeInfo {
   name: string
   episodes_count: number
   latest_episode_id: number
+  last_download_date: string
 }
 
 export interface Episode {

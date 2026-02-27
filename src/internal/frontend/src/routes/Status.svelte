@@ -25,7 +25,14 @@
   async function loadAnimes() {
     try {
       const animesData = await getAnimes();
-      animes = animesData.slice(0, 10);
+      // Sort animes by last download date (most recent first)
+      animes = [...animesData]
+        .sort((a, b) => {
+          const dateA = new Date(a.last_download_date || "1970-01-01T00:00:00Z").getTime();
+          const dateB = new Date(b.last_download_date || "1970-01-01T00:00:00Z").getTime();
+          return dateB - dateA; // Descending order (most recent first)
+        })
+        .slice(0, 10);
     } catch (err) {
       console.error("Failed to load animes:", err);
     }
@@ -329,10 +336,10 @@
                   >
                     Episodes
                   </th>
-                  <th
+                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
                   >
-                    Latest Episode ID
+                    Last Download Date
                   </th>
                 </tr>
               </thead>
@@ -351,10 +358,10 @@
                     >
                       {anime.episodes_count}
                     </td>
-                    <td
+                     <td
                       class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
                     >
-                      {anime.latest_episode_id}
+                      {formatDate(anime.last_download_date)}
                     </td>
                   </tr>
                 {/each}
@@ -384,16 +391,16 @@
                       {anime.episodes_count}
                     </p>
                   </div>
-                  <div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                      Latest Episode ID
-                    </p>
-                    <p
-                      class="text-sm font-medium text-gray-900 dark:text-white"
-                    >
-                      {anime.latest_episode_id}
-                    </p>
-                  </div>
+                   <div>
+                     <p class="text-xs text-gray-500 dark:text-gray-400">
+                       Last Download Date
+                     </p>
+                     <p
+                       class="text-sm font-medium text-gray-900 dark:text-white"
+                     >
+                       {formatDate(anime.last_download_date)}
+                     </p>
+                   </div>
                 </div>
               </div>
             {/each}
