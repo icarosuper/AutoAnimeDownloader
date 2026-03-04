@@ -411,7 +411,7 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 		return nil, err
 	}
 
-	anilistResponse, err := anilist.SearchAnimes(configs.AnilistUsername)
+	anilistResponse, err := anilist.GetAllCurrentAnime(configs.AnilistUsername)
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().
 			Str("username", configs.AnilistUsername).

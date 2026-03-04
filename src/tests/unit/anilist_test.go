@@ -23,7 +23,7 @@ func TestAniListModule_SearchAnimes_Success(t *testing.T) {
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	resp, err := anilist.SearchAnimes("icarosuper")
+	resp, err := anilist.GetAllCurrentAnime("icarosuper")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -58,7 +58,7 @@ func TestAniListModule_SearchAnimes_HTTPErrorStatus(t *testing.T) {
 	restore := mockAniListResponse("error", 500)
 	defer restore()
 
-	resp, err := anilist.SearchAnimes("icarosuper")
+	resp, err := anilist.GetAllCurrentAnime("icarosuper")
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -71,7 +71,7 @@ func TestAniListModule_SearchAnimes_InvalidJSON(t *testing.T) {
 	restore := mockAniListResponse("{invalid", 200)
 	defer restore()
 
-	resp, err := anilist.SearchAnimes("icarosuper")
+	resp, err := anilist.GetAllCurrentAnime("icarosuper")
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}

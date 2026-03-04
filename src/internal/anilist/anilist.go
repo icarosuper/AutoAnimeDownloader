@@ -32,41 +32,6 @@ func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func
 	return func() { httpDo = prev }
 }
 
-func doGraphQLRequest[T any](query string, variables map[string]any) (*T, error) {
-	jsonData, err := json.Marshal(GraphQLRequest{Query: query, Variables: variables})
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", aniListAPIURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpDo(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response: %v", err)
-	}
-
-	var response T
-	if err = json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("error unmarshaling response: %v", err)
-	}
-
-	return &response, nil
-}
-
 type AniListResponse struct {
 	Data struct {
 		Page struct {
@@ -165,7 +130,44 @@ const (
 
 type CustomLists map[string]bool
 
-func SearchAnimes(userName string) (*AniListResponse, error) {
+type RequestVariables map[string]any
+
+func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, error) {
+	jsonData, err := json.Marshal(GraphQLRequest{Query: query, Variables: variables})
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", aniListAPIURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpDo(req)
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response: %v", err)
+	}
+
+	var response T
+	if err = json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("error unmarshaling response: %v", err)
+	}
+
+	return &response, nil
+}
+
+func GetAllCurrentAnime(userName string) (*AniListResponse, error) {
 	query := `
 		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
 			Page {
@@ -195,7 +197,7 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 		}
 	`
 
-	variables := map[string]any{
+	variables := RequestVariables{
 		"userName": userName,
 		"type":     "ANIME",
 		"statuses": []string{
@@ -204,10 +206,10 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 		},
 	}
 
-	return doGraphQLRequest[AniListResponse](query, variables)
+	return sendAnilistRequest[AniListResponse](query, variables)
 }
 
-func GetMediaListDetail(mediaListId int) (*MediaListDetailResponse, error) {
+func GetAnimeInfo(mediaListId int) (*MediaListDetailResponse, error) {
 	query := `
 		query GetAnimeEpisodes($mediaListId: Int) {
 			MediaList(id: $mediaListId) {
@@ -229,9 +231,9 @@ func GetMediaListDetail(mediaListId int) (*MediaListDetailResponse, error) {
 		}
 	`
 
-	variables := map[string]any{
+	variables := RequestVariables{
 		"mediaListId": mediaListId,
 	}
 
-	return doGraphQLRequest[MediaListDetailResponse](query, variables)
+	return sendAnilistRequest[MediaListDetailResponse](query, variables)
 }

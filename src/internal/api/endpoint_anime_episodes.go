@@ -52,7 +52,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			return
 		}
 
-		detail, err := anilist.GetMediaListDetail(id)
+		detail, err := anilist.GetAnimeInfo(id)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", id).Msg("Failed to fetch anime detail from AniList")
 			JSONInternalError(w, err)
