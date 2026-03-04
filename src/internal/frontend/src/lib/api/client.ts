@@ -108,6 +108,7 @@ export async function getAnimes(): Promise<AnimeInfo[]> {
 }
 
 export interface AnimeEpisodeInfo {
+  episode_id: number
   episode_number: number
   airing_at: number
   time_until_airing: number
@@ -116,6 +117,8 @@ export interface AnimeEpisodeInfo {
   is_downloaded: boolean
   download_date?: string
   episode_name?: string
+  is_manually_managed?: boolean
+  is_blocked?: boolean
 }
 
 export interface AnimeDetailResponse {
@@ -128,6 +131,14 @@ export interface AnimeDetailResponse {
 
 export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {
   return apiRequest<AnimeDetailResponse>('GET', `/animes/${animeId}/episodes`)
+}
+
+export async function downloadEpisode(animeId: number, episodeId: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/download`)
+}
+
+export async function deleteEpisode(animeId: number, episodeId: number): Promise<void> {
+  return apiRequest<void>('DELETE', `/animes/${animeId}/episodes/${episodeId}`)
 }
 
 export async function triggerCheck(): Promise<void> {

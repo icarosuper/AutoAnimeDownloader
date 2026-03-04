@@ -3,6 +3,8 @@
   import {
     getAnimeDetail,
     getAnimes,
+    downloadEpisode,
+    deleteEpisode,
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
@@ -18,6 +20,7 @@
   let detail: AnimeDetailResponse | null = null;
   let loading = true;
   let error: string | null = null;
+  let actionLoading: Record<number, boolean> = {};
 
   function formatDate(dateString: string | undefined) {
     if (!dateString) return "N/A";
@@ -79,6 +82,30 @@
       console.error("Failed to load anime detail:", err);
     } finally {
       loading = false;
+    }
+  }
+
+  async function handleDownload(ep: AnimeEpisodeInfo) {
+    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    try {
+      await downloadEpisode(animeId, ep.episode_id);
+      await loadData(animeId);
+    } catch (err) {
+      console.error("Failed to download episode:", err);
+    } finally {
+      actionLoading = { ...actionLoading, [ep.episode_id]: false };
+    }
+  }
+
+  async function handleDelete(ep: AnimeEpisodeInfo) {
+    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    try {
+      await deleteEpisode(animeId, ep.episode_id);
+      await loadData(animeId);
+    } catch (err) {
+      console.error("Failed to delete episode:", err);
+    } finally {
+      actionLoading = { ...actionLoading, [ep.episode_id]: false };
     }
   }
 
@@ -147,19 +174,29 @@
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 Download Date
               </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {#each detail.episodes as ep}
               {@const anilist = getAniListBadge(ep)}
               {@const download = getDownloadBadge(ep)}
+              {@const isLoading = !!actionLoading[ep.episode_id]}
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                   {ep.episode_number}
                   {#if ep.episode_name}
-                    <span class="block text-xs text-gray-400 dark:text-gray-500 font-normal truncate max-w-xs">
+                    <span class="text-xs text-gray-400 dark:text-gray-500 font-normal truncate max-w-xs">
                       {ep.episode_name}
                     </span>
+                  {/if}
+                  {#if ep.is_manually_managed}
+                    <span class="block text-xs text-gray-400 dark:text-gray-500">• won't be deleted automatically</span>
+                  {/if}
+                  {#if ep.is_blocked}
+                    <span class="block text-xs text-gray-400 dark:text-gray-500">• won't be downloaded automatically</span>
                   {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
@@ -181,6 +218,25 @@
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   {ep.is_downloaded ? formatDate(ep.download_date) : "—"}
                 </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                  {#if ep.is_aired && !ep.is_downloaded}
+                    <button
+                      on:click={() => handleDownload(ep)}
+                      disabled={isLoading}
+                      class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLoading ? "..." : "Download"}
+                    </button>
+                  {:else if ep.is_downloaded}
+                    <button
+                      on:click={() => handleDelete(ep)}
+                      disabled={isLoading}
+                      class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLoading ? "..." : "Delete"}
+                    </button>
+                  {/if}
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -192,11 +248,20 @@
         {#each detail.episodes as ep}
           {@const anilist = getAniListBadge(ep)}
           {@const download = getDownloadBadge(ep)}
+          {@const isLoading = !!actionLoading[ep.episode_id]}
           <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
             <div class="flex items-start justify-between mb-2">
-              <p class="text-sm font-medium text-gray-900 dark:text-white">
-                Episode {ep.episode_number}
-              </p>
+              <div>
+                <p class="text-sm font-medium text-gray-900 dark:text-white">
+                  Episode {ep.episode_number}
+                </p>
+                {#if ep.is_manually_managed}
+                  <p class="text-xs text-gray-400 dark:text-gray-500">• won't be deleted</p>
+                {/if}
+                {#if ep.is_blocked}
+                  <p class="text-xs text-gray-400 dark:text-gray-500">• won't be downloaded</p>
+                {/if}
+              </div>
               <div class="flex flex-col items-end gap-1">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {anilist.classes}">
                   {anilist.label}
@@ -225,6 +290,25 @@
                   <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Download Date</p>
                   <p class="text-sm text-gray-900 dark:text-white">{formatDate(ep.download_date)}</p>
                 </div>
+              {/if}
+            </div>
+            <div class="mt-3">
+              {#if ep.is_aired && !ep.is_downloaded}
+                <button
+                  on:click={() => handleDownload(ep)}
+                  disabled={isLoading}
+                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? "Downloading..." : "Download"}
+                </button>
+              {:else if ep.is_downloaded}
+                <button
+                  on:click={() => handleDelete(ep)}
+                  disabled={isLoading}
+                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? "Deleting..." : "Delete"}
+                </button>
               {/if}
             </div>
           </div>

@@ -105,6 +105,9 @@ type MediaListDetail struct {
 	Progress int             `json:"progress"`
 	Media    struct {
 		Episodes       int            `json:"episodes"`
+		Format         MediaFormat    `json:"format"`
+		Status         MediaStatus    `json:"status"`
+		Title          Title          `json:"title"`
 		AiringSchedule AiringSchedule `json:"airingSchedule"`
 	} `json:"media"`
 }
@@ -218,6 +221,12 @@ func GetAnimeInfo(mediaListId int) (*MediaListDetailResponse, error) {
 				progress
 				media {
 					episodes
+					format
+					status
+					title {
+						english
+						romaji
+					}
 					airingSchedule {
 						nodes {
 							airingAt

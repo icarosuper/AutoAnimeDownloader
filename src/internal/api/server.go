@@ -25,6 +25,9 @@ type FileManagerInterface interface {
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
 	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+	LoadBlockedEpisodes() ([]int, error)
+	BlockEpisode(episodeID int) error
+	UnblockEpisode(episodeID int) error
 }
 
 type Server struct {
@@ -70,6 +73,8 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/config", handleConfig(s))
 	apiMux.HandleFunc("/api/v1/animes", handleAnimes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes", handleAnimeEpisodes(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/download", handleDownloadEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}", handleDeleteEpisode(s))
 	apiMux.HandleFunc("/api/v1/check", handleCheck(s))
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))

@@ -9,14 +9,17 @@ import (
 )
 
 type AnimeEpisodeInfo struct {
-	EpisodeNumber   int    `json:"episode_number"`
-	AiringAt        int64  `json:"airing_at"`
-	TimeUntilAiring int    `json:"time_until_airing"`
-	IsAired         bool   `json:"is_aired"`
-	IsWatched       bool   `json:"is_watched"`
-	IsDownloaded    bool   `json:"is_downloaded"`
-	DownloadDate    string `json:"download_date,omitempty"`
-	EpisodeName     string `json:"episode_name,omitempty"`
+	EpisodeID         int    `json:"episode_id"`
+	EpisodeNumber     int    `json:"episode_number"`
+	AiringAt          int64  `json:"airing_at"`
+	TimeUntilAiring   int    `json:"time_until_airing"`
+	IsAired           bool   `json:"is_aired"`
+	IsWatched         bool   `json:"is_watched"`
+	IsDownloaded      bool   `json:"is_downloaded"`
+	DownloadDate      string `json:"download_date,omitempty"`
+	EpisodeName       string `json:"episode_name,omitempty"`
+	IsManuallyManaged bool   `json:"is_manually_managed,omitempty"`
+	IsBlocked         bool   `json:"is_blocked,omitempty"`
 }
 
 type AnimeDetailResponse struct {
@@ -66,19 +69,29 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			return
 		}
 
+		blockedIDs, err := server.FileManager.LoadBlockedEpisodes()
+		if err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to load blocked episodes")
+			blockedIDs = []int{}
+		}
+		blockedSet := make(map[int]bool, len(blockedIDs))
+		for _, bid := range blockedIDs {
+			blockedSet[bid] = true
+		}
+
 		// Map downloaded episodes by their AiringNode ID
-		downloadedByNodeID := make(map[int]struct {
-			date string
-			name string
-		})
+		type downloadedInfo struct {
+			date            string
+			name            string
+			manuallyManaged bool
+		}
+		downloadedByNodeID := make(map[int]downloadedInfo)
 		for _, ep := range allEpisodes {
 			if ep.AnimeID == id {
-				downloadedByNodeID[ep.EpisodeID] = struct {
-					date string
-					name string
-				}{
-					date: ep.DownloadDate.Format(time.RFC3339),
-					name: ep.EpisodeName,
+				downloadedByNodeID[ep.EpisodeID] = downloadedInfo{
+					date:            ep.DownloadDate.Format(time.RFC3339),
+					name:            ep.EpisodeName,
+					manuallyManaged: ep.ManuallyManaged,
 				}
 			}
 		}
@@ -88,17 +101,20 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 
 		for _, node := range mediaList.Media.AiringSchedule.Nodes {
 			info := AnimeEpisodeInfo{
+				EpisodeID:       node.ID,
 				EpisodeNumber:   node.Episode,
 				AiringAt:        node.AiringAt,
 				TimeUntilAiring: node.TimeUntilAiring,
 				IsAired:         node.TimeUntilAiring <= 0,
 				IsWatched:       node.Episode <= mediaList.Progress,
+				IsBlocked:       blockedSet[node.ID],
 			}
 
 			if downloaded, ok := downloadedByNodeID[node.ID]; ok {
 				info.IsDownloaded = true
 				info.DownloadDate = downloaded.date
 				info.EpisodeName = downloaded.name
+				info.IsManuallyManaged = downloaded.manuallyManaged
 			}
 
 			episodes = append(episodes, info)

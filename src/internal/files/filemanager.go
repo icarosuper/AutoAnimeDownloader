@@ -14,6 +14,7 @@ import (
 const configsFolder = ".autoAnimeDownloader"
 const configFileName = "config.json"
 const downloadedEpsFileName = "downloaded_episodes"
+const blockedEpsFileName = "blocked_episodes"
 
 type EpisodeStruct struct {
 	EpisodeID          int       `json:"episode_id"`
@@ -22,6 +23,7 @@ type EpisodeStruct struct {
 	EpisodeHash        string    `json:"episode_hash"`
 	EpisodeName        string    `json:"episode_name"`
 	DownloadDate       time.Time `json:"download_date"`
+	ManuallyManaged    bool      `json:"manually_managed,omitempty"`
 }
 
 type Config struct {
@@ -38,9 +40,10 @@ type Config struct {
 }
 
 type FileManager struct {
-	fs           FileSystem
-	configPath   string
-	episodesPath string
+	fs                  FileSystem
+	configPath          string
+	episodesPath        string
+	blockedEpisodesPath string
 }
 
 func getDefaultConfig() *Config {
@@ -84,11 +87,12 @@ func ensureConfigsFolder(fs FileSystem) (string, error) {
 	return configsFolderPath, nil
 }
 
-func NewManager(fs FileSystem, configPath, episodesPath string) *FileManager {
+func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath string) *FileManager {
 	return &FileManager{
-		fs:           fs,
-		configPath:   configPath,
-		episodesPath: episodesPath,
+		fs:                  fs,
+		configPath:          configPath,
+		episodesPath:        episodesPath,
+		blockedEpisodesPath: blockedEpisodesPath,
 	}
 }
 
@@ -101,8 +105,9 @@ func NewDefaultFileManager() (*FileManager, error) {
 
 	configPath := filepath.Join(configsFolderPath, configFileName)
 	episodesPath := filepath.Join(configsFolderPath, downloadedEpsFileName)
+	blockedEpisodesPath := filepath.Join(configsFolderPath, blockedEpsFileName)
 
-	return NewManager(fs, configPath, episodesPath), nil
+	return NewManager(fs, configPath, episodesPath, blockedEpisodesPath), nil
 }
 
 func (m *FileManager) LoadConfigs() (*Config, error) {
@@ -321,6 +326,77 @@ func (m *FileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFold
 		}
 	}
 
+	return nil
+}
+
+func (m *FileManager) LoadBlockedEpisodes() ([]int, error) {
+	_, err := m.fs.Stat(m.blockedEpisodesPath)
+	if os.IsNotExist(err) {
+		return []int{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat blocked episodes file: %w", err)
+	}
+
+	b, err := m.fs.ReadFile(m.blockedEpisodesPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read blocked episodes file: %w", err)
+	}
+
+	var ids []int
+	if err := json.Unmarshal(b, &ids); err != nil {
+		return nil, fmt.Errorf("failed to parse blocked episodes file: %w", err)
+	}
+
+	return ids, nil
+}
+
+func (m *FileManager) BlockEpisode(episodeID int) error {
+	ids, err := m.LoadBlockedEpisodes()
+	if err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		if id == episodeID {
+			return nil // already blocked
+		}
+	}
+
+	ids = append(ids, episodeID)
+	return m.saveBlockedEpisodes(ids)
+}
+
+func (m *FileManager) UnblockEpisode(episodeID int) error {
+	ids, err := m.LoadBlockedEpisodes()
+	if err != nil {
+		return err
+	}
+
+	var filtered []int
+	for _, id := range ids {
+		if id != episodeID {
+			filtered = append(filtered, id)
+		}
+	}
+
+	if len(filtered) == len(ids) {
+		return nil // not found, nothing to do
+	}
+
+	return m.saveBlockedEpisodes(filtered)
+}
+
+func (m *FileManager) saveBlockedEpisodes(ids []int) error {
+	if ids == nil {
+		ids = []int{}
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal blocked episodes: %w", err)
+	}
+	if err := m.fs.WriteFile(m.blockedEpisodesPath, b, 0644); err != nil {
+		return fmt.Errorf("failed to write blocked episodes file: %w", err)
+	}
 	return nil
 }
 
