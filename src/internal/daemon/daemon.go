@@ -624,6 +624,7 @@ func processAnimeEpisodes(
 
 	downloadedEpisodesOfAnime := 0
 	episodes := anime.Media.AiringSchedule.Nodes
+	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, episodes, savedEpisodesMap, anime.Progress)
 	var episodesToDownload []anilist.AiringNode
 
 	for _, ep := range episodes {
@@ -633,7 +634,7 @@ func processAnimeEpisodes(
 		isInTorrents := torrentsMap[epName]
 		alreadySaved := savedEpisodesMap[ep.ID]
 
-		shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents)
+		shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents, keepSet[ep.ID])
 
 		if shouldDownload {
 			episodesToDownload = append(episodesToDownload, ep)
@@ -765,11 +766,32 @@ func processAnimeEpisodes(
 	ensureAnimeIsInCompletedFolder(torrentsService, anime, configs, savedEpisodes)
 }
 
-func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (shouldDownload bool, shouldDelete bool) {
+func buildWatchedKeepSet(n int, episodes []anilist.AiringNode, savedEpisodesMap map[int]bool, progress int) map[int]bool {
+	if n <= 0 {
+		return nil
+	}
+	var watchedSaved []int
+	for _, ep := range episodes {
+		if ep.Episode <= progress && savedEpisodesMap[ep.ID] {
+			watchedSaved = append(watchedSaved, ep.ID)
+		}
+	}
+	keepSet := make(map[int]bool)
+	start := len(watchedSaved) - n
+	if start < 0 {
+		start = 0
+	}
+	for _, id := range watchedSaved[start:] {
+		keepSet[id] = true
+	}
+	return keepSet
+}
+
+func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool, keepWatched bool) (shouldDownload bool, shouldDelete bool) {
 	epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
 
 	if shouldSkipEpisode(configs, ep, anime, epName) {
-		return false, alreadySaved
+		return false, alreadySaved && !keepWatched
 	}
 
 	if alreadySaved {

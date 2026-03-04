@@ -74,6 +74,7 @@ export interface Config {
   max_episodes_per_anime: number
   episode_retry_limit: number
   delete_watched_episodes: boolean
+  watched_episodes_to_keep: number
   excluded_list: string
 }
 

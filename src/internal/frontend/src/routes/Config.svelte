@@ -19,6 +19,7 @@
     max_episodes_per_anime: 12,
     episode_retry_limit: 5,
     delete_watched_episodes: true,
+    watched_episodes_to_keep: 0,
     excluded_list: "",
   };
 
@@ -100,6 +101,9 @@
       }
       if (config.episode_retry_limit < 0) {
         throw new Error("Episode retry limit must be non-negative");
+      }
+      if (config.delete_watched_episodes && config.watched_episodes_to_keep < 0) {
+        throw new Error("Watched episodes to keep must be non-negative");
       }
 
       await updateConfig(config);
@@ -285,19 +289,32 @@
           required={true}
         />
 
-        <div class="flex items-center">
-          <input
-            type="checkbox"
-            id="delete_watched_episodes"
-            bind:checked={config.delete_watched_episodes}
-            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
-          />
-          <label
-            for="delete_watched_episodes"
-            class="ml-2 block text-sm text-gray-900 dark:text-white"
-          >
-            Delete Watched Episodes
-          </label>
+        <div class="space-y-3">
+          <div class="flex items-center">
+            <input
+              type="checkbox"
+              id="delete_watched_episodes"
+              bind:checked={config.delete_watched_episodes}
+              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
+            />
+            <label
+              for="delete_watched_episodes"
+              class="ml-2 block text-sm text-gray-900 dark:text-white"
+            >
+              Delete Watched Episodes
+            </label>
+          </div>
+
+          {#if config.delete_watched_episodes}
+            <Input
+              id="watched_episodes_to_keep"
+              label="Watched Episodes To Keep"
+              subtitle="Number of watched episodes to keep. Keep at 0 to delete all watched"
+              type="number"
+              bind:value={config.watched_episodes_to_keep}
+              min="0"
+            />
+          {/if}
         </div>
 
         <Input
