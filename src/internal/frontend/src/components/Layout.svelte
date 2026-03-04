@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { link, location } from 'svelte-spa-router'
+  import { location } from 'svelte-spa-router'
   import { theme, THEMES, type Theme } from '../lib/stores/theme.js'
 
   $: currentPath = $location
@@ -12,8 +12,7 @@
       <div class="flex items-center justify-between">
         <div class="flex space-x-8">
           <a
-            href="/status"
-            use:link
+            href="#/status"
             class="inline-flex items-center px-1 pt-4 pb-4 border-b-2 text-sm font-medium transition-colors {currentPath === '/status' || currentPath === '/'
               ? 'border-blue-500 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
@@ -21,8 +20,7 @@
             Status
           </a>
           <a
-            href="/config"
-            use:link
+            href="#/config"
             class="inline-flex items-center px-1 pt-4 pb-4 border-b-2 text-sm font-medium transition-colors {currentPath === '/config'
               ? 'border-blue-500 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
@@ -30,8 +28,7 @@
             Config
           </a>
           <a
-            href="/logs"
-            use:link
+            href="#/logs"
             class="inline-flex items-center px-1 pt-4 pb-4 border-b-2 text-sm font-medium transition-colors {currentPath === '/logs'
               ? 'border-blue-500 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
