@@ -87,13 +87,6 @@ export interface AnimeInfo {
   last_download_date: string
 }
 
-export interface Episode {
-  episode_id: number
-  episode_name: string
-  episode_hash: string
-  download_date: string
-}
-
 export interface LogsResponse {
   lines: string[]
 }
@@ -135,10 +128,6 @@ export interface AnimeDetailResponse {
 
 export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {
   return apiRequest<AnimeDetailResponse>('GET', `/animes/${animeId}/episodes`)
-}
-
-export async function getEpisodes(): Promise<Episode[]> {
-  return apiRequest<Episode[]>('GET', '/episodes')
 }
 
 export async function triggerCheck(): Promise<void> {

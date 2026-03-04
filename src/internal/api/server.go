@@ -70,7 +70,6 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/config", handleConfig(s))
 	apiMux.HandleFunc("/api/v1/animes", handleAnimes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes", handleAnimeEpisodes(s))
-	apiMux.HandleFunc("/api/v1/episodes", handleEpisodes(s))
 	apiMux.HandleFunc("/api/v1/check", handleCheck(s))
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))
