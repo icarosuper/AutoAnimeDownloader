@@ -46,6 +46,16 @@
     return { label: "Not Downloaded", classes: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" };
   }
 
+  function formatTimeUntilAiring(seconds: number, isAired: boolean): string {
+    if (isAired || seconds <= 0) return "Released";
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  }
+
   async function loadData(id: number) {
     if (!id || id <= 0) {
       error = "Invalid anime ID";
@@ -132,6 +142,9 @@
                 Air Date
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                Next Episode In
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 Download Date
               </th>
             </tr>
@@ -161,6 +174,9 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   {formatAiringAt(ep.airing_at)}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                  {formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   {ep.is_downloaded ? formatDate(ep.download_date) : "—"}
@@ -199,6 +215,10 @@
               <div>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Air Date</p>
                 <p class="text-sm text-gray-900 dark:text-white">{formatAiringAt(ep.airing_at)}</p>
+              </div>
+              <div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Next Episode In</p>
+                <p class="text-sm text-gray-900 dark:text-white">{formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}</p>
               </div>
               {#if ep.is_downloaded}
                 <div>
