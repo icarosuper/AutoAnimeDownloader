@@ -16,10 +16,12 @@ const configFileName = "config.json"
 const downloadedEpsFileName = "downloaded_episodes"
 
 type EpisodeStruct struct {
-	EpisodeID    int       `json:"episode_id"`
-	EpisodeHash  string    `json:"episode_hash"`
-	EpisodeName  string    `json:"episode_name"`
-	DownloadDate time.Time `json:"download_date"`
+	EpisodeID          int       `json:"episode_id"`
+	AnimeID            int       `json:"anime_id,omitempty"`
+	AnimeTotalEpisodes int       `json:"anime_total_episodes,omitempty"`
+	EpisodeHash        string    `json:"episode_hash"`
+	EpisodeName        string    `json:"episode_name"`
+	DownloadDate       time.Time `json:"download_date"`
 }
 
 type Config struct {

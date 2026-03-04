@@ -32,13 +32,39 @@ func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func
 	return func() { httpDo = prev }
 }
 
-func MockAniListAPIURL(url string) (restore func()) {
-	prev := aniListAPIURL
-	if url == "" {
-		return func() { aniListAPIURL = prev }
+func doGraphQLRequest[T any](query string, variables map[string]any) (*T, error) {
+	jsonData, err := json.Marshal(GraphQLRequest{Query: query, Variables: variables})
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling request: %v", err)
 	}
-	aniListAPIURL = url
-	return func() { aniListAPIURL = prev }
+
+	req, err := http.NewRequest("POST", aniListAPIURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpDo(req)
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response: %v", err)
+	}
+
+	var response T
+	if err = json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("error unmarshaling response: %v", err)
+	}
+
+	return &response, nil
 }
 
 type AniListResponse struct {
@@ -61,6 +87,7 @@ const (
 )
 
 type MediaList struct {
+	Id          int             `json:"id"`
 	Status      MediaListStatus `json:"status"`
 	Progress    int             `json:"progress"`
 	CustomLists CustomLists     `json:"customLists"`
@@ -81,6 +108,7 @@ type Media struct {
 	Status         MediaStatus    `json:"status"`
 	Format         MediaFormat    `json:"format"`
 	Title          Title          `json:"title"`
+	Episodes       *int           `json:"episodes"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 }
 
@@ -94,9 +122,26 @@ type AiringSchedule struct {
 }
 
 type AiringNode struct {
-	ID              int `json:"id"`
-	Episode         int `json:"episode"`
-	TimeUntilAiring int `json:"timeUntilAiring"`
+	ID              int   `json:"id"`
+	Episode         int   `json:"episode"`
+	TimeUntilAiring int   `json:"timeUntilAiring"`
+	AiringAt        int64 `json:"airingAt"`
+}
+
+type MediaListDetailResponse struct {
+	Data struct {
+		MediaList MediaListDetail `json:"MediaList"`
+	} `json:"data"`
+}
+
+type MediaListDetail struct {
+	Id       int             `json:"id"`
+	Status   MediaListStatus `json:"status"`
+	Progress int             `json:"progress"`
+	Media    struct {
+		Episodes       int            `json:"episodes"`
+		AiringSchedule AiringSchedule `json:"airingSchedule"`
+	} `json:"media"`
 }
 
 type GraphQLRequest struct {
@@ -122,15 +167,17 @@ type CustomLists map[string]bool
 
 func SearchAnimes(userName string) (*AniListResponse, error) {
 	query := `
-		query ExampleQuery($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
+		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
 			Page {
 				mediaList(userName: $userName, type: $type, status_in: $statuses) {
+					id
 					status
 					progress
 					customLists
 					media {
 						format
 						status
+						episodes
 						title {
 							english
 							romaji
@@ -157,43 +204,34 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 		},
 	}
 
-	requestBody := GraphQLRequest{
-		Query:     query,
-		Variables: variables,
+	return doGraphQLRequest[AniListResponse](query, variables)
+}
+
+func GetMediaListDetail(mediaListId int) (*MediaListDetailResponse, error) {
+	query := `
+		query GetAnimeEpisodes($mediaListId: Int) {
+			MediaList(id: $mediaListId) {
+				id
+				status
+				progress
+				media {
+					episodes
+					airingSchedule {
+						nodes {
+							airingAt
+							timeUntilAiring
+							episode
+							id
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]any{
+		"mediaListId": mediaListId,
 	}
 
-	jsonData, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", aniListAPIURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpDo(req)
-	if err != nil {
-		return nil, fmt.Errorf("error making request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response: %v", err)
-	}
-
-	var response AniListResponse
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling response: %v", err)
-	}
-
-	return &response, nil
+	return doGraphQLRequest[MediaListDetailResponse](query, variables)
 }

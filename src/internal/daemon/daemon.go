@@ -754,11 +754,17 @@ func processAnimeEpisodes(
 		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName, skipSubfolder)
 
 		if hash != "" {
+			totalEpisodes := 0
+			if anime.Media.Episodes != nil {
+				totalEpisodes = *anime.Media.Episodes
+			}
 			*newEpisodes = append(*newEpisodes, files.EpisodeStruct{
-				EpisodeID:    ep.ID,
-				EpisodeHash:  hash,
-				EpisodeName:  epName,
-				DownloadDate: time.Now(),
+				EpisodeID:          ep.ID,
+				AnimeID:            anime.Id,
+				AnimeTotalEpisodes: totalEpisodes,
+				EpisodeHash:        hash,
+				EpisodeName:        epName,
+				DownloadDate:       time.Now(),
 			})
 		}
 	}

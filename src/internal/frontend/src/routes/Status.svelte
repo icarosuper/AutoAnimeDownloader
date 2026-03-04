@@ -334,7 +334,7 @@
                   <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
                   >
-                    Episodes
+                    Downloaded Episodes
                   </th>
                    <th
                     class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
@@ -347,16 +347,29 @@
                 class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
               >
                 {#each animes as anime}
-                  <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <tr
+                    class="hover:bg-gray-50 dark:hover:bg-gray-700 {anime.anime_id ? 'cursor-pointer' : ''}"
+                    on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
+                  >
                     <td
                       class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white"
                     >
-                      {anime.name}
+                      {#if anime.anime_id}
+                        <a
+                          href="#/status/{anime.anime_id}"
+                          class="text-blue-600 dark:text-blue-400 hover:underline"
+                          on:click|stopPropagation
+                        >
+                          {anime.name}
+                        </a>
+                      {:else}
+                        {anime.name}
+                      {/if}
                     </td>
                     <td
                       class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
                     >
-                      {anime.episodes_count}
+                      {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : anime.episodes_count}
                     </td>
                      <td
                       class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
@@ -377,18 +390,24 @@
                   <h3
                     class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2"
                   >
-                    {anime.name}
+                    {#if anime.anime_id}
+                      <a href="#/status/{anime.anime_id}" class="text-blue-600 dark:text-blue-400 hover:underline">
+                        {anime.name}
+                      </a>
+                    {:else}
+                      {anime.name}
+                    {/if}
                   </h3>
                 </div>
                 <div class="grid grid-cols-2 gap-4 mt-3">
                   <div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                      Episodes
+                      Downloaded Episodes
                     </p>
                     <p
                       class="text-sm font-medium text-gray-900 dark:text-white"
                     >
-                      {anime.episodes_count}
+                      {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : anime.episodes_count}
                     </p>
                   </div>
                    <div>

@@ -9,8 +9,10 @@ import (
 )
 
 type AnimeInfo struct {
+	AnimeID          int    `json:"anime_id" example:"12345"`
 	Name             string `json:"name" example:"Naruto"`
-	EpisodesCount    int    `json:"episodes_count" example:"12"`
+	EpisodesCount    int    `json:"episodes_count" example:"8"`
+	TotalEpisodes    int    `json:"total_episodes" example:"12"`
 	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
 	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
 }
@@ -80,10 +82,18 @@ func handleAnimes(server *Server) http.HandlerFunc {
 				if episode.DownloadDate.After(lastDownloadedTime) {
 					animeInfo.LastDownloadDate = episode.DownloadDate.Format(time.RFC3339)
 				}
+				if animeInfo.AnimeID == 0 && episode.AnimeID != 0 {
+					animeInfo.AnimeID = episode.AnimeID
+				}
+				if animeInfo.TotalEpisodes == 0 && episode.AnimeTotalEpisodes != 0 {
+					animeInfo.TotalEpisodes = episode.AnimeTotalEpisodes
+				}
 			} else {
 				animeMap[animeName] = &AnimeInfo{
+					AnimeID:          episode.AnimeID,
 					Name:             animeName,
 					EpisodesCount:    1,
+					TotalEpisodes:    episode.AnimeTotalEpisodes,
 					LatestEpisodeID:  episode.EpisodeID,
 					LastDownloadDate: episode.DownloadDate.Format(time.RFC3339),
 				}

@@ -79,8 +79,10 @@ export interface Config {
 }
 
 export interface AnimeInfo {
+  anime_id: number
   name: string
   episodes_count: number
+  total_episodes: number
   latest_episode_id: number
   last_download_date: string
 }
@@ -110,6 +112,29 @@ export async function updateConfig(config: Config): Promise<void> {
 
 export async function getAnimes(): Promise<AnimeInfo[]> {
   return apiRequest<AnimeInfo[]>('GET', '/animes')
+}
+
+export interface AnimeEpisodeInfo {
+  episode_number: number
+  airing_at: number
+  time_until_airing: number
+  is_aired: boolean
+  is_watched: boolean
+  is_downloaded: boolean
+  download_date?: string
+  episode_name?: string
+}
+
+export interface AnimeDetailResponse {
+  anime_id: number
+  total_episodes: number
+  progress: number
+  status: string
+  episodes: AnimeEpisodeInfo[]
+}
+
+export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {
+  return apiRequest<AnimeDetailResponse>('GET', `/animes/${animeId}/episodes`)
 }
 
 export async function getEpisodes(): Promise<Episode[]> {
