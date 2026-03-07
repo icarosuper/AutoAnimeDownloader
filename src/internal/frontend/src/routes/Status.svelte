@@ -19,13 +19,47 @@
   let loading = true;
   let error: string | null = null;
   let actionLoading = false;
+
+  type SortKey = "episodes_count" | "last_download_date";
+  let sortKey: SortKey = "last_download_date";
+  let sortDir: "asc" | "desc" = "desc";
+
+  $: sortedAnimes = (() => {
+    return [...animes].sort((a, b) => {
+      let valA = a[sortKey];
+      let valB = b[sortKey];
+      if (sortKey === "last_download_date") {
+        valA = new Date(valA as string || "1970-01-01").getTime() as any;
+        valB = new Date(valB as string || "1970-01-01").getTime() as any;
+      }
+      if (valA < valB) return sortDir === "asc" ? -1 : 1;
+      if (valA > valB) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  })();
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      sortDir = sortDir === "desc" ? "asc" : "desc";
+    } else {
+      sortKey = key;
+      sortDir = "desc";
+    }
+  }
   let wsClient: WebSocketClient | null = null;
   let animesPollInterval: ReturnType<typeof setInterval> | null = null;
 
   async function loadAnimes() {
     try {
       const animesData = await getAnimes();
-      animes = animesData.slice(0, 10);
+      // Sort animes by last download date (most recent first)
+      animes = [...animesData]
+        .sort((a, b) => {
+          const dateA = new Date(a.last_download_date || "1970-01-01T00:00:00Z").getTime();
+          const dateB = new Date(b.last_download_date || "1970-01-01T00:00:00Z").getTime();
+          return dateB - dateA; // Descending order (most recent first)
+        })
+        .slice(0, 10);
     } catch (err) {
       console.error("Failed to load animes:", err);
     }
@@ -325,36 +359,57 @@
                     Name
                   </th>
                   <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-100"
+                    on:click={() => handleSort("episodes_count")}
                   >
-                    Episodes
+                    <span class="inline-flex items-center gap-1">
+                      Downloaded Episodes
+                      {#if sortKey === "episodes_count"}<span>{sortDir === "asc" ? "▲" : "▼"}</span>{:else}<span class="opacity-30">▲</span>{/if}
+                    </span>
                   </th>
                   <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-100"
+                    on:click={() => handleSort("last_download_date")}
                   >
-                    Latest Episode ID
+                    <span class="inline-flex items-center gap-1">
+                      Last Download Date
+                      {#if sortKey === "last_download_date"}<span>{sortDir === "asc" ? "▲" : "▼"}</span>{:else}<span class="opacity-30">▲</span>{/if}
+                    </span>
                   </th>
                 </tr>
               </thead>
               <tbody
                 class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
               >
-                {#each animes as anime}
-                  <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {#each sortedAnimes as anime}
+                  <tr
+                    class="hover:bg-gray-50 dark:hover:bg-gray-700 {anime.anime_id ? 'cursor-pointer' : ''}"
+                    on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
+                  >
                     <td
                       class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white"
                     >
-                      {anime.name}
+                      {#if anime.anime_id}
+                        <a
+                          href="#/status/{anime.anime_id}"
+                          class="text-blue-600 dark:text-blue-400 hover:underline"
+                          on:click|stopPropagation
+                        >
+                          {anime.name}
+                        </a>
+                      {:else}
+                        {anime.name}
+                      {/if}
                     </td>
                     <td
                       class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
                     >
-                      {anime.episodes_count}
+                      {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : anime.episodes_count}
                     </td>
-                    <td
+                     <td
                       class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400"
                     >
-                      {anime.latest_episode_id}
+                      {formatDate(anime.last_download_date)}
                     </td>
                   </tr>
                 {/each}
@@ -364,36 +419,42 @@
 
           <!-- Mobile Card View -->
           <div class="md:hidden space-y-4">
-            {#each animes as anime}
+            {#each sortedAnimes as anime}
               <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-2">
                   <h3
                     class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2"
                   >
-                    {anime.name}
+                    {#if anime.anime_id}
+                      <a href="#/status/{anime.anime_id}" class="text-blue-600 dark:text-blue-400 hover:underline">
+                        {anime.name}
+                      </a>
+                    {:else}
+                      {anime.name}
+                    {/if}
                   </h3>
                 </div>
                 <div class="grid grid-cols-2 gap-4 mt-3">
                   <div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                      Episodes
+                      Downloaded Episodes
                     </p>
                     <p
                       class="text-sm font-medium text-gray-900 dark:text-white"
                     >
-                      {anime.episodes_count}
+                      {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : anime.episodes_count}
                     </p>
                   </div>
-                  <div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">
-                      Latest Episode ID
-                    </p>
-                    <p
-                      class="text-sm font-medium text-gray-900 dark:text-white"
-                    >
-                      {anime.latest_episode_id}
-                    </p>
-                  </div>
+                   <div>
+                     <p class="text-xs text-gray-500 dark:text-gray-400">
+                       Last Download Date
+                     </p>
+                     <p
+                       class="text-sm font-medium text-gray-900 dark:text-white"
+                     >
+                       {formatDate(anime.last_download_date)}
+                     </p>
+                   </div>
                 </div>
               </div>
             {/each}

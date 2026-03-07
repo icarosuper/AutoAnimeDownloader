@@ -68,6 +68,44 @@ func removeSpecialCharacters(s string) string {
 	return s
 }
 
+// GenerateSearchTitleVariants gera múltiplas variantes de busca para um título
+// priorizando versões limpas (sem caracteres especiais) sobre as originais
+// IMPORTANTE: Esta função deve ser usada APENAS para gerar queries de busca,
+// nunca para modificar títulos de torrents retornados pelo Nyaa
+func GenerateSearchTitleVariants(romaji, english string) []string {
+	variants := []string{}
+	seen := make(map[string]bool)
+
+	// Função auxiliar para adicionar variante se ainda não foi adicionada
+	addVariant := func(title string) {
+		if title == "" || seen[title] {
+			return
+		}
+		seen[title] = true
+		variants = append(variants, title)
+	}
+
+	// Prioridade 1: Romaji limpo (sem caracteres especiais)
+	if romaji != "" {
+		cleanRomaji := removeSpecialCharacters(romaji)
+		addVariant(cleanRomaji)
+
+		// Prioridade 2: Romaji original
+		addVariant(romaji)
+	}
+
+	// Prioridade 3: English limpo (sem caracteres especiais)
+	if english != "" && english != romaji {
+		cleanEnglish := removeSpecialCharacters(english)
+		addVariant(cleanEnglish)
+
+		// Prioridade 4: English original
+		addVariant(english)
+	}
+
+	return variants
+}
+
 // extractFansub extrai o nome do fansub do título do torrent
 // Procura por padrões como [FANSUB] ou (FANSUB)
 func extractFansub(name string) string {

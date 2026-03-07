@@ -74,20 +74,17 @@ export interface Config {
   max_episodes_per_anime: number
   episode_retry_limit: number
   delete_watched_episodes: boolean
+  watched_episodes_to_keep: number
   excluded_list: string
 }
 
 export interface AnimeInfo {
+  anime_id: number
   name: string
   episodes_count: number
+  total_episodes: number
   latest_episode_id: number
-}
-
-export interface Episode {
-  episode_id: number
-  episode_name: string
-  episode_hash: string
-  download_date: string
+  last_download_date: string
 }
 
 export interface LogsResponse {
@@ -110,8 +107,38 @@ export async function getAnimes(): Promise<AnimeInfo[]> {
   return apiRequest<AnimeInfo[]>('GET', '/animes')
 }
 
-export async function getEpisodes(): Promise<Episode[]> {
-  return apiRequest<Episode[]>('GET', '/episodes')
+export interface AnimeEpisodeInfo {
+  episode_id: number
+  episode_number: number
+  airing_at: number
+  time_until_airing: number
+  is_aired: boolean
+  is_watched: boolean
+  is_downloaded: boolean
+  download_date?: string
+  episode_name?: string
+  is_manually_managed?: boolean
+  is_blocked?: boolean
+}
+
+export interface AnimeDetailResponse {
+  anime_id: number
+  total_episodes: number
+  progress: number
+  status: string
+  episodes: AnimeEpisodeInfo[]
+}
+
+export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {
+  return apiRequest<AnimeDetailResponse>('GET', `/animes/${animeId}/episodes`)
+}
+
+export async function downloadEpisode(animeId: number, episodeId: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/download`)
+}
+
+export async function deleteEpisode(animeId: number, episodeId: number): Promise<void> {
+  return apiRequest<void>('DELETE', `/animes/${animeId}/episodes/${episodeId}`)
 }
 
 export async function triggerCheck(): Promise<void> {

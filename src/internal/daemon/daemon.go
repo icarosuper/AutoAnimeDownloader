@@ -25,6 +25,9 @@ type FileManagerInterface interface {
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
 	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+	LoadBlockedEpisodes() ([]int, error)
+	BlockEpisode(episodeID int) error
+	UnblockEpisode(episodeID int) error
 }
 
 type StartLoopPayload struct {
@@ -36,13 +39,16 @@ type StartLoopPayload struct {
 type LoopControl struct {
 	UpdateInterval func(time.Duration)
 	Cancel         context.CancelFunc
+	Done           <-chan struct{}
 }
 
 type StartLoopFuncType func(StartLoopPayload) *LoopControl
 
-func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context) {
-	return func(d time.Duration, c context.Context) {
+func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context) chan struct{} {
+	return func(d time.Duration, c context.Context) chan struct{} {
+		done := make(chan struct{})
 		go func() {
+			defer close(done)
 			// Check if context is already cancelled before starting
 			select {
 			case <-c.Done():
@@ -87,6 +93,7 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 				}
 			}
 		}()
+		return done
 	}
 }
 
@@ -137,7 +144,8 @@ func StartLoop(p StartLoopPayload) *LoopControl {
 
 	start := createStartFunc(p)
 
-	start(p.Interval, ctx)
+	doneCh := start(p.Interval, ctx)
+	donePtr := &doneCh
 
 	return &LoopControl{
 		UpdateInterval: func(newDur time.Duration) {
@@ -148,13 +156,19 @@ func StartLoop(p StartLoopPayload) *LoopControl {
 			// create new context/cancel for next loop
 			ctx, cancel = context.WithCancel(context.Background())
 			cancelPtr = &cancel
-			start(newDur, ctx)
+			newDone := start(newDur, ctx)
+			donePtr = &newDone
 		},
 		Cancel: func() {
 			mu.Lock()
 			defer mu.Unlock()
 			(*cancelPtr)()
 		},
+		Done: func() <-chan struct{} {
+			mu.Lock()
+			defer mu.Unlock()
+			return *donePtr
+		}(),
 	}
 }
 
@@ -209,6 +223,16 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		return
 	}
 
+	blockedEpisodes, err := fileManager.LoadBlockedEpisodes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load blocked episodes, continuing without block list")
+		blockedEpisodes = []int{}
+	}
+	blockedMap := make(map[int]bool, len(blockedEpisodes))
+	for _, id := range blockedEpisodes {
+		blockedMap[id] = true
+	}
+
 	animes := anilistResponse.Data.Page.MediaList
 	var newEpisodes []files.EpisodeStruct
 	var checkedEpisodes []int
@@ -234,6 +258,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			&newEpisodes,
 			&checkedEpisodes,
 			&idsToDelete,
+			blockedMap,
 		)
 	}
 	elapsed := time.Since(start)
@@ -357,7 +382,7 @@ func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedE
 
 	var episodesToDelete []int
 	for _, savedEp := range savedEpisodes {
-		if !checkedMap[savedEp.EpisodeID] {
+		if !checkedMap[savedEp.EpisodeID] && !savedEp.ManuallyManaged {
 			episodesToDelete = append(episodesToDelete, savedEp.EpisodeID)
 		}
 	}
@@ -411,7 +436,7 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 		return nil, err
 	}
 
-	anilistResponse, err := anilist.SearchAnimes(configs.AnilistUsername)
+	anilistResponse, err := anilist.GetAllCurrentAnime(configs.AnilistUsername)
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().
 			Str("username", configs.AnilistUsername).
@@ -428,31 +453,146 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 }
 
 func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (result []nyaa.TorrentResult) {
-	// Tenta buscar com Romaji primeiro, depois com English
-	titleVariants := []string{*titles.Romaji}
-	if *titles.Romaji != *titles.English {
-		titleVariants = append(titleVariants, *titles.English)
-	}
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
 
-	for _, titleVariant := range titleVariants {
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("episode", ep.Episode).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting search with title variant")
+
 		nyaaResponse, err = nyaa.ScrapNyaa(titleVariant, ep.Episode)
 		if err != nil {
 			logger.Logger.Debug().
 				Err(err).
 				Str("title", titleVariant).
 				Int("episode", ep.Episode).
+				Int("attempt", i+1).
 				Msg("Error searching Nyaa")
 			continue
 		}
 		if nyaaResponse != nil {
-			logger.Logger.Debug().
+			logger.Logger.Info().
 				Str("title", titleVariant).
 				Int("episode", ep.Episode).
 				Int("torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
 				Msg("Found torrents on Nyaa")
+			break
+		}
+	}
+
+	return nyaaResponse
+}
+
+func searchNyaaForBatch(titles anilist.Title, requestedSeason *int) (result []nyaa.TorrentResult) {
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+
+	var nyaaResponse []nyaa.TorrentResult
+	var err error
+
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting batch search with title variant")
+
+		nyaaResponse, err = nyaa.ScrapNyaaForBatch(titleVariant, requestedSeason)
+		if err != nil {
+			logger.Logger.Debug().
+				Err(err).
+				Str("title", titleVariant).
+				Int("attempt", i+1).
+				Msg("Error searching Nyaa for batch")
+			continue
+		}
+		if nyaaResponse != nil {
+			logger.Logger.Info().
+				Str("title", titleVariant).
+				Int("batch_torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
+				Msg("Found batch torrents on Nyaa")
+			break
+		}
+	}
+
+	return nyaaResponse
+}
+
+func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) (result []nyaa.TorrentResult) {
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+
+	var nyaaResponse []nyaa.TorrentResult
+	var err error
+
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting movie search with title variant")
+
+		nyaaResponse, err = nyaa.ScrapNyaaForMovie(titleVariant, isFormatMovie)
+		if err != nil {
+			logger.Logger.Debug().
+				Err(err).
+				Str("title", titleVariant).
+				Int("attempt", i+1).
+				Msg("Error searching Nyaa for movie")
+			continue
+		}
+		if nyaaResponse != nil {
+			logger.Logger.Info().
+				Str("title", titleVariant).
+				Int("movie_torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
+				Msg("Found movie torrents on Nyaa")
+			break
+		}
+	}
+
+	return nyaaResponse
+}
+
+func searchNyaaForMultipleEpisodes(titles anilist.Title, episodes []int) (result []nyaa.TorrentResult) {
+	// Gerar variantes de busca com prioridade (limpas antes de originais)
+	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+
+	var nyaaResponse []nyaa.TorrentResult
+	var err error
+
+	for i, titleVariant := range titleVariants {
+		logger.Logger.Debug().
+			Str("title", titleVariant).
+			Int("attempt", i+1).
+			Int("total_attempts", len(titleVariants)).
+			Msg("Attempting multiple episodes search with title variant")
+
+		nyaaResponse, err = nyaa.ScrapNyaaForMultipleEpisodes(titleVariant, episodes)
+		if err != nil {
+			logger.Logger.Debug().
+				Err(err).
+				Str("title", titleVariant).
+				Int("attempt", i+1).
+				Msg("Error searching Nyaa for multiple episodes")
+			continue
+		}
+		if nyaaResponse != nil {
+			logger.Logger.Info().
+				Str("title", titleVariant).
+				Int("episodes_count", len(episodes)).
+				Int("torrents_found", len(nyaaResponse)).
+				Int("attempt", i+1).
+				Msg("Found torrents for multiple episodes on Nyaa")
 			break
 		}
 	}
@@ -488,6 +628,14 @@ func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents
 	return ""
 }
 
+func buildSavedEpisodesFullMap(episodes []files.EpisodeStruct) map[int]files.EpisodeStruct {
+	m := make(map[int]files.EpisodeStruct, len(episodes))
+	for _, ep := range episodes {
+		m[ep.EpisodeID] = ep
+	}
+	return m
+}
+
 func processAnimeEpisodes(
 	configs *files.Config,
 	torrentsService *torrents.TorrentService,
@@ -497,6 +645,7 @@ func processAnimeEpisodes(
 	newEpisodes *[]files.EpisodeStruct,
 	checkedEpisodes *[]int,
 	idsToDelete *[]int,
+	blockedMap map[int]bool,
 ) {
 	title := anime.Media.Title.Romaji
 	logger.Logger.Info().
@@ -506,9 +655,11 @@ func processAnimeEpisodes(
 
 	torrentsMap := buildTorrentsMap(torrents)
 	savedEpisodesMap := buildSavedEpisodesMap(savedEpisodes)
+	savedEpisodesFullMap := buildSavedEpisodesFullMap(savedEpisodes)
 
 	downloadedEpisodesOfAnime := 0
 	episodes := anime.Media.AiringSchedule.Nodes
+	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, episodes, savedEpisodesMap, anime.Progress)
 	var episodesToDownload []anilist.AiringNode
 
 	for _, ep := range episodes {
@@ -518,12 +669,14 @@ func processAnimeEpisodes(
 		isInTorrents := torrentsMap[epName]
 		alreadySaved := savedEpisodesMap[ep.ID]
 
-		shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents)
+		shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents, keepSet[ep.ID])
 
-		if shouldDownload {
+		if shouldDownload && !blockedMap[ep.ID] {
 			episodesToDownload = append(episodesToDownload, ep)
 		} else if shouldDelete {
-			*idsToDelete = append(*idsToDelete, ep.ID)
+			if savedEp, ok := savedEpisodesFullMap[ep.ID]; !ok || !savedEp.ManuallyManaged {
+				*idsToDelete = append(*idsToDelete, ep.ID)
+			}
 		}
 	}
 
@@ -540,13 +693,9 @@ func processAnimeEpisodes(
 			Str("anime", getAnimeTitleSafe(anime)).
 			Msg("Detected movie - searching for movie torrent")
 
-		result, err := nyaa.ScrapNyaaForMovie(*anime.Media.Title.Romaji, true)
-		if err == nil && result != nil {
+		result := searchNyaaForMovie(anime.Media.Title, true)
+		if result != nil {
 			movieResult = result
-			logger.Logger.Info().
-				Str("anime", getAnimeTitleSafe(anime)).
-				Int("movie_torrents_found", len(movieResult)).
-				Msg("Found movie torrents")
 		}
 
 		// Para filmes sem episódios no AiringSchedule, criar um episódio fake
@@ -574,13 +723,9 @@ func processAnimeEpisodes(
 		// Extrair temporada se houver
 		requestedSeason := extractSeasonFromAnime(anime)
 
-		result, err := nyaa.ScrapNyaaForBatch(*anime.Media.Title.Romaji, requestedSeason)
-		if err == nil && result != nil {
+		result := searchNyaaForBatch(anime.Media.Title, requestedSeason)
+		if result != nil {
 			batchResult = result
-			logger.Logger.Info().
-				Str("anime", getAnimeTitleSafe(anime)).
-				Int("batch_torrents_found", len(batchResult)).
-				Msg("Found batch torrents")
 		}
 	}
 
@@ -591,9 +736,8 @@ func processAnimeEpisodes(
 			eps = append(eps, ep.Episode)
 		}
 
-		result, err := nyaa.ScrapNyaaForMultipleEpisodes(*anime.Media.Title.Romaji, eps)
-
-		if err == nil {
+		result := searchNyaaForMultipleEpisodes(anime.Media.Title, eps)
+		if result != nil {
 			multipleResult = result
 		}
 	}
@@ -647,11 +791,17 @@ func processAnimeEpisodes(
 		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName, skipSubfolder)
 
 		if hash != "" {
+			totalEpisodes := 0
+			if anime.Media.Episodes != nil {
+				totalEpisodes = *anime.Media.Episodes
+			}
 			*newEpisodes = append(*newEpisodes, files.EpisodeStruct{
-				EpisodeID:    ep.ID,
-				EpisodeHash:  hash,
-				EpisodeName:  epName,
-				DownloadDate: time.Now(),
+				EpisodeID:          ep.ID,
+				AnimeID:            anime.Id,
+				AnimeTotalEpisodes: totalEpisodes,
+				EpisodeHash:        hash,
+				EpisodeName:        epName,
+				DownloadDate:       time.Now(),
 			})
 		}
 	}
@@ -659,11 +809,32 @@ func processAnimeEpisodes(
 	ensureAnimeIsInCompletedFolder(torrentsService, anime, configs, savedEpisodes)
 }
 
-func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool) (shouldDownload bool, shouldDelete bool) {
+func buildWatchedKeepSet(n int, episodes []anilist.AiringNode, savedEpisodesMap map[int]bool, progress int) map[int]bool {
+	if n <= 0 {
+		return nil
+	}
+	var watchedSaved []int
+	for _, ep := range episodes {
+		if ep.Episode <= progress && savedEpisodesMap[ep.ID] {
+			watchedSaved = append(watchedSaved, ep.ID)
+		}
+	}
+	keepSet := make(map[int]bool)
+	start := len(watchedSaved) - n
+	if start < 0 {
+		start = 0
+	}
+	for _, id := range watchedSaved[start:] {
+		keepSet[id] = true
+	}
+	return keepSet
+}
+
+func checkEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool, keepWatched bool) (shouldDownload bool, shouldDelete bool) {
 	epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
 
 	if shouldSkipEpisode(configs, ep, anime, epName) {
-		return false, alreadySaved
+		return false, alreadySaved && !keepWatched
 	}
 
 	if alreadySaved {
@@ -778,4 +949,76 @@ func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, an
 			Int("torrents_count", len(animeHashes)).
 			Msg("Successfully moved torrents to completed folder")
 	}
+}
+
+// ManualDownloadEpisode downloads a specific episode manually (called from API).
+// Returns the saved EpisodeStruct with ManuallyManaged=true on success.
+func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config) (files.EpisodeStruct, error) {
+	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
+	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
+
+	detail, err := anilist.GetAnimeInfo(animeId)
+	if err != nil {
+		return files.EpisodeStruct{}, fmt.Errorf("failed to get anime info: %w", err)
+	}
+
+	mediaList := detail.Data.MediaList
+
+	var targetNode *anilist.AiringNode
+	for _, node := range mediaList.Media.AiringSchedule.Nodes {
+		if node.ID == episodeId {
+			n := node
+			targetNode = &n
+			break
+		}
+	}
+
+	if targetNode == nil {
+		return files.EpisodeStruct{}, fmt.Errorf("episode %d not found for anime %d", episodeId, animeId)
+	}
+
+	animeTitle := ""
+	if mediaList.Media.Title.English != nil && *mediaList.Media.Title.English != "" {
+		animeTitle = *mediaList.Media.Title.English
+	} else if mediaList.Media.Title.Romaji != nil {
+		animeTitle = *mediaList.Media.Title.Romaji
+	}
+
+	epName := fmt.Sprintf("%s - Episode %d", animeTitle, targetNode.Episode)
+
+	results := searchNyaaForSingleEpisode(*targetNode, mediaList.Media.Title)
+	var magnets []string
+	for _, result := range results {
+		magnets = append(magnets, result.MagnetLink)
+	}
+
+	if len(magnets) == 0 {
+		return files.EpisodeStruct{}, fmt.Errorf("no torrents found for episode %d", targetNode.Episode)
+	}
+
+	isFinished := mediaList.Media.Status == anilist.MediaStatusFinished
+	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
+	var hash string
+	for i := range maxAttempts {
+		h := torrentsService.DownloadTorrentWithOptions(magnets[i], animeTitle, epName, isFinished, false)
+		if h != "" {
+			hash = h
+			break
+		}
+	}
+
+	if hash == "" {
+		return files.EpisodeStruct{}, fmt.Errorf("failed to download episode after %d attempts", maxAttempts)
+	}
+
+	ep := files.EpisodeStruct{
+		EpisodeID:       episodeId,
+		AnimeID:         animeId,
+		EpisodeHash:     hash,
+		EpisodeName:     epName,
+		DownloadDate:    time.Now(),
+		ManuallyManaged: true,
+	}
+
+	return ep, nil
 }
