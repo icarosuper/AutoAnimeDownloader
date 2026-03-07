@@ -177,11 +177,22 @@ func (s *Server) StartDaemonLoop() error {
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
 	s.mu.Lock()
-	// Stop current loop if running
+	var oldDone <-chan struct{}
 	if s.currentLoopControl != nil {
 		s.currentLoopControl.Cancel()
+		oldDone = s.currentLoopControl.Done
+	}
+	s.mu.Unlock()
+
+	// Wait for old goroutine to finish before starting new one to avoid race on status
+	if oldDone != nil {
+		select {
+		case <-oldDone:
+		case <-time.After(5 * time.Second):
+		}
 	}
 
+	s.mu.Lock()
 	loopControl := s.StartLoopFunc(daemon.StartLoopPayload{
 		FileManager: s.FileManager,
 		Interval:    interval,
@@ -196,14 +207,22 @@ func (s *Server) StartDaemonLoop() error {
 func (s *Server) StopDaemonLoop() {
 	s.mu.Lock()
 	hadLoop := s.currentLoopControl != nil
+	var oldDone <-chan struct{}
 	if s.currentLoopControl != nil {
 		s.currentLoopControl.Cancel()
+		oldDone = s.currentLoopControl.Done
 		s.currentLoopControl = nil
 	}
 	s.mu.Unlock()
 
-	// Update status immediately when stopping
-	// The daemon will also update it when it detects cancellation, but this ensures immediate response
+	// Wait for the goroutine to finish so status is correctly set to stopped
+	if oldDone != nil {
+		select {
+		case <-oldDone:
+		case <-time.After(5 * time.Second):
+		}
+	}
+
 	if hadLoop && s.State.GetStatus() != daemon.StatusStopped {
 		s.State.SetStatus(daemon.StatusStopped)
 	}

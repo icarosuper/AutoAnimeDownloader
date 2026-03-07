@@ -39,13 +39,16 @@ type StartLoopPayload struct {
 type LoopControl struct {
 	UpdateInterval func(time.Duration)
 	Cancel         context.CancelFunc
+	Done           <-chan struct{}
 }
 
 type StartLoopFuncType func(StartLoopPayload) *LoopControl
 
-func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context) {
-	return func(d time.Duration, c context.Context) {
+func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context) chan struct{} {
+	return func(d time.Duration, c context.Context) chan struct{} {
+		done := make(chan struct{})
 		go func() {
+			defer close(done)
 			// Check if context is already cancelled before starting
 			select {
 			case <-c.Done():
@@ -90,6 +93,7 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 				}
 			}
 		}()
+		return done
 	}
 }
 
@@ -140,7 +144,8 @@ func StartLoop(p StartLoopPayload) *LoopControl {
 
 	start := createStartFunc(p)
 
-	start(p.Interval, ctx)
+	doneCh := start(p.Interval, ctx)
+	donePtr := &doneCh
 
 	return &LoopControl{
 		UpdateInterval: func(newDur time.Duration) {
@@ -151,13 +156,19 @@ func StartLoop(p StartLoopPayload) *LoopControl {
 			// create new context/cancel for next loop
 			ctx, cancel = context.WithCancel(context.Background())
 			cancelPtr = &cancel
-			start(newDur, ctx)
+			newDone := start(newDur, ctx)
+			donePtr = &newDone
 		},
 		Cancel: func() {
 			mu.Lock()
 			defer mu.Unlock()
 			(*cancelPtr)()
 		},
+		Done: func() <-chan struct{} {
+			mu.Lock()
+			defer mu.Unlock()
+			return *donePtr
+		}(),
 	}
 }
 
