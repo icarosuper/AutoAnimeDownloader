@@ -187,11 +187,6 @@
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                   {ep.episode_number}
-                  {#if ep.episode_name}
-                    <span class="text-xs text-gray-400 dark:text-gray-500 font-normal truncate max-w-xs">
-                      {ep.episode_name}
-                    </span>
-                  {/if}
                   {#if ep.is_manually_managed}
                     <span class="block text-xs text-gray-400 dark:text-gray-500">• won't be deleted automatically</span>
                   {/if}
