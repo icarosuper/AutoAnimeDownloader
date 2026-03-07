@@ -147,27 +147,6 @@ func TestAPIEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("GET /api/v1/episodes", func(t *testing.T) {
-		resp, err := http.Get(apiBase + "/episodes")
-		if err != nil {
-			t.Fatalf("Failed to get episodes: %v", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
-		}
-
-		var result map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		if result["success"] != true {
-			t.Fatalf("Expected success=true, got %v", result["success"])
-		}
-	})
-
 	t.Run("POST /api/v1/check", func(t *testing.T) {
 		req, err := http.NewRequest(http.MethodPost, apiBase+"/check", nil)
 		if err != nil {

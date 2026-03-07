@@ -32,15 +32,6 @@ func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func
 	return func() { httpDo = prev }
 }
 
-func MockAniListAPIURL(url string) (restore func()) {
-	prev := aniListAPIURL
-	if url == "" {
-		return func() { aniListAPIURL = prev }
-	}
-	aniListAPIURL = url
-	return func() { aniListAPIURL = prev }
-}
-
 type AniListResponse struct {
 	Data struct {
 		Page struct {
@@ -61,6 +52,7 @@ const (
 )
 
 type MediaList struct {
+	Id          int             `json:"id"`
 	Status      MediaListStatus `json:"status"`
 	Progress    int             `json:"progress"`
 	CustomLists CustomLists     `json:"customLists"`
@@ -81,6 +73,7 @@ type Media struct {
 	Status         MediaStatus    `json:"status"`
 	Format         MediaFormat    `json:"format"`
 	Title          Title          `json:"title"`
+	Episodes       *int           `json:"episodes"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 }
 
@@ -94,9 +87,29 @@ type AiringSchedule struct {
 }
 
 type AiringNode struct {
-	ID              int `json:"id"`
-	Episode         int `json:"episode"`
-	TimeUntilAiring int `json:"timeUntilAiring"`
+	ID              int   `json:"id"`
+	Episode         int   `json:"episode"`
+	TimeUntilAiring int   `json:"timeUntilAiring"`
+	AiringAt        int64 `json:"airingAt"`
+}
+
+type MediaListDetailResponse struct {
+	Data struct {
+		MediaList MediaListDetail `json:"MediaList"`
+	} `json:"data"`
+}
+
+type MediaListDetail struct {
+	Id       int             `json:"id"`
+	Status   MediaListStatus `json:"status"`
+	Progress int             `json:"progress"`
+	Media    struct {
+		Episodes       int            `json:"episodes"`
+		Format         MediaFormat    `json:"format"`
+		Status         MediaStatus    `json:"status"`
+		Title          Title          `json:"title"`
+		AiringSchedule AiringSchedule `json:"airingSchedule"`
+	} `json:"media"`
 }
 
 type GraphQLRequest struct {
@@ -120,49 +133,10 @@ const (
 
 type CustomLists map[string]bool
 
-func SearchAnimes(userName string) (*AniListResponse, error) {
-	query := `
-		query ExampleQuery($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
-			Page {
-				mediaList(userName: $userName, type: $type, status_in: $statuses) {
-					status
-					progress
-					customLists
-					media {
-						format
-						status
-						title {
-							english
-							romaji
-						}
-						airingSchedule {
-							nodes {
-								id
-								episode
-								timeUntilAiring
-							}
-						}
-					}
-				}
-			}
-		}
-	`
+type RequestVariables map[string]any
 
-	variables := map[string]any{
-		"userName": userName,
-		"type":     "ANIME",
-		"statuses": []string{
-			string(MediaListStatusCurrent),
-			string(MediaListStatusRepeating),
-		},
-	}
-
-	requestBody := GraphQLRequest{
-		Query:     query,
-		Variables: variables,
-	}
-
-	jsonData, err := json.Marshal(requestBody)
+func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, error) {
+	jsonData, err := json.Marshal(GraphQLRequest{Query: query, Variables: variables})
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling request: %v", err)
 	}
@@ -171,7 +145,6 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpDo(req)
@@ -189,11 +162,87 @@ func SearchAnimes(userName string) (*AniListResponse, error) {
 		return nil, fmt.Errorf("error reading response: %v", err)
 	}
 
-	var response AniListResponse
-	err = json.Unmarshal(body, &response)
-	if err != nil {
+	var response T
+	if err = json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("error unmarshaling response: %v", err)
 	}
 
 	return &response, nil
+}
+
+func GetAllCurrentAnime(userName string) (*AniListResponse, error) {
+	query := `
+		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
+			Page {
+				mediaList(userName: $userName, type: $type, status_in: $statuses) {
+					id
+					status
+					progress
+					customLists
+					media {
+						format
+						status
+						episodes
+						title {
+							english
+							romaji
+						}
+						airingSchedule {
+							nodes {
+								id
+								episode
+								timeUntilAiring
+							}
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := RequestVariables{
+		"userName": userName,
+		"type":     "ANIME",
+		"statuses": []string{
+			string(MediaListStatusCurrent),
+			string(MediaListStatusRepeating),
+		},
+	}
+
+	return sendAnilistRequest[AniListResponse](query, variables)
+}
+
+func GetAnimeInfo(mediaListId int) (*MediaListDetailResponse, error) {
+	query := `
+		query GetAnimeEpisodes($mediaListId: Int) {
+			MediaList(id: $mediaListId) {
+				id
+				status
+				progress
+				media {
+					episodes
+					format
+					status
+					title {
+						english
+						romaji
+					}
+					airingSchedule {
+						nodes {
+							airingAt
+							timeUntilAiring
+							episode
+							id
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := RequestVariables{
+		"mediaListId": mediaListId,
+	}
+
+	return sendAnilistRequest[MediaListDetailResponse](query, variables)
 }

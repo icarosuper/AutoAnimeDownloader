@@ -104,6 +104,11 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
+		if config.WatchedEpisodesToKeep < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Watched episodes to keep must be non-negative")
+			return
+		}
+
 		// Save configurations
 		if err := server.FileManager.SaveConfigs(&config); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save configs")

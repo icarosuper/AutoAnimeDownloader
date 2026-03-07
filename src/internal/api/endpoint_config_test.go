@@ -11,12 +11,13 @@ import (
 )
 
 type mockFileManager struct {
-	configs  *files.Config
-	episodes []files.EpisodeStruct
-	loadErr  error
-	saveErr  error
-	loadEpisodesErr error
-	saveEpisodesErr error
+	configs           *files.Config
+	episodes          []files.EpisodeStruct
+	blockedEpisodes   []int
+	loadErr           error
+	saveErr           error
+	loadEpisodesErr   error
+	saveEpisodesErr   error
 	deleteEpisodesErr error
 }
 
@@ -86,6 +87,26 @@ func (m *mockFileManager) DeleteEpisodesFromFile(ids []int) error {
 }
 
 func (m *mockFileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error {
+	return nil
+}
+
+func (m *mockFileManager) LoadBlockedEpisodes() ([]int, error) {
+	return m.blockedEpisodes, nil
+}
+
+func (m *mockFileManager) BlockEpisode(episodeID int) error {
+	m.blockedEpisodes = append(m.blockedEpisodes, episodeID)
+	return nil
+}
+
+func (m *mockFileManager) UnblockEpisode(episodeID int) error {
+	var filtered []int
+	for _, id := range m.blockedEpisodes {
+		if id != episodeID {
+			filtered = append(filtered, id)
+		}
+	}
+	m.blockedEpisodes = filtered
 	return nil
 }
 
@@ -175,9 +196,9 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 	t.Run("PUT with missing anilist_username returns 400", func(t *testing.T) {
 		config := files.Config{
-			SavePath:           "/tmp/test",
-			QBittorrentUrl:     "http://localhost:8080",
-			CheckInterval:      10,
+			SavePath:            "/tmp/test",
+			QBittorrentUrl:      "http://localhost:8080",
+			CheckInterval:       10,
 			MaxEpisodesPerAnime: 12,
 		}
 
@@ -208,11 +229,11 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 	t.Run("PUT with invalid check_interval returns 400", func(t *testing.T) {
 		config := files.Config{
-			AnilistUsername:       "testuser",
-			SavePath:              "/tmp/test",
-			QBittorrentUrl:        "http://localhost:8080",
-			CheckInterval:         0,
-			MaxEpisodesPerAnime:   12,
+			AnilistUsername:     "testuser",
+			SavePath:            "/tmp/test",
+			QBittorrentUrl:      "http://localhost:8080",
+			CheckInterval:       0,
+			MaxEpisodesPerAnime: 12,
 		}
 
 		jsonData, _ := json.Marshal(config)
