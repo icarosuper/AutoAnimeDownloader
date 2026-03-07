@@ -25,6 +25,9 @@ type FileManagerInterface interface {
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
 	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+	LoadBlockedEpisodes() ([]int, error)
+	BlockEpisode(episodeID int) error
+	UnblockEpisode(episodeID int) error
 }
 
 type Server struct {
@@ -40,12 +43,12 @@ type Server struct {
 
 func NewServer(port string, state *daemon.State, fileManager FileManagerInterface, startLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl) *Server {
 	wsManager := NewWebSocketManager()
-	
+
 	// Set state getter for WebSocket manager
 	wsManager.SetStateGetter(func() (daemon.Status, time.Time, bool) {
 		return state.GetAll()
 	})
-	
+
 	server := &Server{
 		State:         state,
 		FileManager:   fileManager,
@@ -69,15 +72,17 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/status", handleStatus(s))
 	apiMux.HandleFunc("/api/v1/config", handleConfig(s))
 	apiMux.HandleFunc("/api/v1/animes", handleAnimes(s))
-	apiMux.HandleFunc("/api/v1/episodes", handleEpisodes(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes", handleAnimeEpisodes(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/download", handleDownloadEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}", handleDeleteEpisode(s))
 	apiMux.HandleFunc("/api/v1/check", handleCheck(s))
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))
 	apiMux.HandleFunc("/api/v1/logs", handleLogs(s))
-	
+
 	// WebSocket route (no JSON middleware)
 	mux.HandleFunc("/api/v1/ws", s.handleWebSocket())
-	
+
 	// Apply middlewares to API routes
 	mux.Handle("/api/", ApplyMiddlewares(apiMux))
 	mux.Handle("/swagger/", ApplyMiddlewares(httpSwagger.Handler(
@@ -114,7 +119,7 @@ func (s *Server) handleStaticFiles() http.HandlerFunc {
 		}
 
 		path := r.URL.Path
-		
+
 		// For SPA routing: serve index.html for paths without file extensions
 		if path == "/" || (!strings.Contains(path, ".") && path != "/") {
 			// Check if the requested path exists as a file
@@ -135,10 +140,10 @@ func (s *Server) handleStaticFiles() http.HandlerFunc {
 				return
 			}
 			defer file.Close()
-			
+
 			// Set content type
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			
+
 			// Copy file content to response
 			_, err = io.Copy(w, file)
 			if err != nil {
@@ -172,11 +177,22 @@ func (s *Server) StartDaemonLoop() error {
 	interval := time.Duration(configs.CheckInterval) * time.Minute
 
 	s.mu.Lock()
-	// Stop current loop if running
+	var oldDone <-chan struct{}
 	if s.currentLoopControl != nil {
 		s.currentLoopControl.Cancel()
+		oldDone = s.currentLoopControl.Done
+	}
+	s.mu.Unlock()
+
+	// Wait for old goroutine to finish before starting new one to avoid race on status
+	if oldDone != nil {
+		select {
+		case <-oldDone:
+		case <-time.After(5 * time.Second):
+		}
 	}
 
+	s.mu.Lock()
 	loopControl := s.StartLoopFunc(daemon.StartLoopPayload{
 		FileManager: s.FileManager,
 		Interval:    interval,
@@ -191,14 +207,22 @@ func (s *Server) StartDaemonLoop() error {
 func (s *Server) StopDaemonLoop() {
 	s.mu.Lock()
 	hadLoop := s.currentLoopControl != nil
+	var oldDone <-chan struct{}
 	if s.currentLoopControl != nil {
 		s.currentLoopControl.Cancel()
+		oldDone = s.currentLoopControl.Done
 		s.currentLoopControl = nil
 	}
 	s.mu.Unlock()
 
-	// Update status immediately when stopping
-	// The daemon will also update it when it detects cancellation, but this ensures immediate response
+	// Wait for the goroutine to finish so status is correctly set to stopped
+	if oldDone != nil {
+		select {
+		case <-oldDone:
+		case <-time.After(5 * time.Second):
+		}
+	}
+
 	if hadLoop && s.State.GetStatus() != daemon.StatusStopped {
 		s.State.SetStatus(daemon.StatusStopped)
 	}
@@ -212,11 +236,11 @@ func (s *Server) handleWebSocket() http.HandlerFunc {
 
 func (s *Server) Stop(ctx context.Context) error {
 	logger.Logger.Info().Msg("Stopping API server")
-	
+
 	// Close WebSocket connections
 	if s.WSManager != nil {
 		s.WSManager.Close()
 	}
-	
+
 	return s.Shutdown(ctx)
 }

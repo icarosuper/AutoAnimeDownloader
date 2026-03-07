@@ -144,9 +144,10 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Download all artifacts
+      - name: Download release packages
         uses: actions/download-artifact@v4
         with:
+          pattern: '*-package'
           path: release-artifacts
       
       - name: Create Release
