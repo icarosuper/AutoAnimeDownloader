@@ -53,7 +53,13 @@ type Torrent struct {
 const CATEGORY = "autoAnimeDownloader"
 
 func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string, animeIsCompleted bool) string {
-	err := ts.addTorrent(magnet, animeName, animeIsCompleted, epName)
+	return ts.DownloadTorrentWithOptions(magnet, animeName, epName, animeIsCompleted, false)
+}
+
+// DownloadTorrentWithOptions baixa um torrent com opções adicionais
+// skipSubfolder: se true, faz download direto em savePath ao invés de savePath/animeName (útil para batches/filmes)
+func (ts *TorrentService) DownloadTorrentWithOptions(magnet string, animeName string, epName string, animeIsCompleted bool, skipSubfolder bool) string {
+	err := ts.addTorrentWithOptions(magnet, animeName, animeIsCompleted, epName, skipSubfolder)
 	if err != nil {
 		logger.Logger.Error().
 			Err(err).
@@ -109,7 +115,7 @@ func (ts *TorrentService) DeleteTorrents(hashes []string) error {
 }
 
 func (ts *TorrentService) SendAnimeToCompletedFolder(hashes []string, animeName string) error {
-	newSavePath := ts.getFolderName(animeName, true)
+	newSavePath := ts.getFolderName(animeName, true, false)
 
 	values := url.Values{}
 	values.Add("hashes", strings.Join(hashes, "|"))
@@ -171,16 +177,17 @@ func removeSpecialCharacters(s string) string {
 	return s
 }
 
-func (ts *TorrentService) addTorrent(magnet string, animeName string, animeIsCompleted bool, epName string) error {
+func (ts *TorrentService) addTorrentWithOptions(magnet string, animeName string, animeIsCompleted bool, epName string, skipSubfolder bool) error {
 	values := url.Values{}
 
-	path := ts.getFolderName(animeName, animeIsCompleted)
+	path := ts.getFolderName(animeName, animeIsCompleted, skipSubfolder)
 
 	logger.Logger.Debug().
 		Str("episode", epName).
 		Str("anime_name", animeName).
 		Str("savepath", path).
 		Bool("anime_completed", animeIsCompleted).
+		Bool("skip_subfolder", skipSubfolder).
 		Msg("Adding torrent to qBittorrent")
 
 	values.Add("urls", magnet)
@@ -243,10 +250,15 @@ func (ts *TorrentService) getTorrentsHash(torrentName string) string {
 	return ""
 }
 
-func (ts *TorrentService) getFolderName(animeName string, animeIsCompleted bool) string {
+func (ts *TorrentService) getFolderName(animeName string, animeIsCompleted bool, skipSubfolder bool) string {
 	savePath := ts.savePath
 	if animeIsCompleted && ts.completedPath != "" && ts.completedPath != ts.savePath {
 		savePath = ts.completedPath
+	}
+
+	// Se skipSubfolder for true, retorna o savePath diretamente (para batches/filmes)
+	if skipSubfolder {
+		return savePath
 	}
 
 	sanitizedAnimeName := sanitizeFolderName(animeName)

@@ -1,23 +1,28 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/logger"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type AnimeInfo struct {
-	Name            string `json:"name" example:"Naruto"`
-	EpisodesCount   int    `json:"episodes_count" example:"12"`
-	LatestEpisodeID int    `json:"latest_episode_id" example:"12"`
+	AnimeID          int    `json:"anime_id" example:"12345"`
+	Name             string `json:"name" example:"Naruto"`
+	EpisodesCount    int    `json:"episodes_count" example:"8"`
+	TotalEpisodes    int    `json:"total_episodes" example:"12"`
+	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
+	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
 }
 
 func extractAnimeName(episodeName string) string {
 	if episodeName == "" {
 		return "Unknown"
 	}
-	
+
 	// Remove padrões comuns de numeração de episódios
 	patterns := []*regexp.Regexp{
 		regexp.MustCompile(`\s*-\s*[Ee]pisode\s*\d+.*$`),
@@ -26,17 +31,17 @@ func extractAnimeName(episodeName string) string {
 		regexp.MustCompile(`\s+\d+.*$`),
 		regexp.MustCompile(`\s*\(.*\)\s*$`),
 	}
-	
+
 	result := episodeName
 	for _, pattern := range patterns {
 		result = pattern.ReplaceAllString(result, "")
 	}
-	
+
 	result = strings.TrimSpace(result)
 	if result == "" {
 		return episodeName
 	}
-	
+
 	return result
 }
 
@@ -55,40 +60,104 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET method is allowed")
 			return
 		}
-		
+
+		config, err := server.FileManager.LoadConfigs()
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to load config")
+			JSONInternalError(w, err)
+			return
+		}
+
 		episodes, err := server.FileManager.LoadSavedEpisodes()
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to load saved episodes")
 			JSONInternalError(w, err)
 			return
 		}
-		
+
 		// Group episodes by anime
 		animeMap := make(map[string]*AnimeInfo)
-		
+
 		for _, episode := range episodes {
 			animeName := extractAnimeName(episode.EpisodeName)
-			
+
 			if animeInfo, exists := animeMap[animeName]; exists {
 				animeInfo.EpisodesCount++
 				if episode.EpisodeID > animeInfo.LatestEpisodeID {
 					animeInfo.LatestEpisodeID = episode.EpisodeID
 				}
+				lastDownloadedTime, _ := time.Parse(time.RFC3339, animeInfo.LastDownloadDate)
+				if episode.DownloadDate.After(lastDownloadedTime) {
+					animeInfo.LastDownloadDate = episode.DownloadDate.Format(time.RFC3339)
+				}
+				if animeInfo.AnimeID == 0 && episode.AnimeID != 0 {
+					animeInfo.AnimeID = episode.AnimeID
+				}
+				if animeInfo.TotalEpisodes == 0 && episode.AnimeTotalEpisodes != 0 {
+					animeInfo.TotalEpisodes = episode.AnimeTotalEpisodes
+				}
 			} else {
 				animeMap[animeName] = &AnimeInfo{
-					Name:            animeName,
-					EpisodesCount:   1,
-					LatestEpisodeID: episode.EpisodeID,
+					AnimeID:          episode.AnimeID,
+					Name:             animeName,
+					EpisodesCount:    1,
+					TotalEpisodes:    episode.AnimeTotalEpisodes,
+					LatestEpisodeID:  episode.EpisodeID,
+					LastDownloadDate: episode.DownloadDate.Format(time.RFC3339),
 				}
 			}
 		}
-		
+
+		// Merge CURRENT animes from AniList so they remain visible even with 0 downloaded episodes
+		if config.AnilistUsername != "" {
+			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername)
+		}
+
 		animes := make([]AnimeInfo, 0, len(animeMap))
 		for _, animeInfo := range animeMap {
 			animes = append(animes, *animeInfo)
 		}
-		
+
 		JSONSuccess(w, http.StatusOK, animes)
 	}
 }
 
+func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string) {
+	resp, err := anilist.GetAllCurrentAnime(username)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
+		return
+	}
+
+	knownIDs := make(map[int]bool)
+	for _, info := range animeMap {
+		if info.AnimeID != 0 {
+			knownIDs[info.AnimeID] = true
+		}
+	}
+
+	for _, ml := range resp.Data.Page.MediaList {
+		if knownIDs[ml.Id] {
+			continue
+		}
+		name := ""
+		if ml.Media.Title.English != nil && *ml.Media.Title.English != "" {
+			name = *ml.Media.Title.English
+		} else if ml.Media.Title.Romaji != nil {
+			name = *ml.Media.Title.Romaji
+		}
+		if name == "" {
+			continue
+		}
+		totalEpisodes := 0
+		if ml.Media.Episodes != nil {
+			totalEpisodes = *ml.Media.Episodes
+		}
+		animeMap[name] = &AnimeInfo{
+			AnimeID:       ml.Id,
+			Name:          name,
+			EpisodesCount: 0,
+			TotalEpisodes: totalEpisodes,
+		}
+	}
+}
