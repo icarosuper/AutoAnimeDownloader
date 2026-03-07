@@ -19,6 +19,33 @@
   let loading = true;
   let error: string | null = null;
   let actionLoading = false;
+
+  type SortKey = "episodes_count" | "last_download_date";
+  let sortKey: SortKey = "last_download_date";
+  let sortDir: "asc" | "desc" = "desc";
+
+  $: sortedAnimes = (() => {
+    return [...animes].sort((a, b) => {
+      let valA = a[sortKey];
+      let valB = b[sortKey];
+      if (sortKey === "last_download_date") {
+        valA = new Date(valA as string || "1970-01-01").getTime() as any;
+        valB = new Date(valB as string || "1970-01-01").getTime() as any;
+      }
+      if (valA < valB) return sortDir === "asc" ? -1 : 1;
+      if (valA > valB) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  })();
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      sortDir = sortDir === "desc" ? "asc" : "desc";
+    } else {
+      sortKey = key;
+      sortDir = "desc";
+    }
+  }
   let wsClient: WebSocketClient | null = null;
   let animesPollInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -332,21 +359,29 @@
                     Name
                   </th>
                   <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-100"
+                    on:click={() => handleSort("episodes_count")}
                   >
-                    Downloaded Episodes
+                    <span class="inline-flex items-center gap-1">
+                      Downloaded Episodes
+                      {#if sortKey === "episodes_count"}<span>{sortDir === "asc" ? "▲" : "▼"}</span>{:else}<span class="opacity-30">▲</span>{/if}
+                    </span>
                   </th>
-                   <th
-                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-100"
+                    on:click={() => handleSort("last_download_date")}
                   >
-                    Last Download Date
+                    <span class="inline-flex items-center gap-1">
+                      Last Download Date
+                      {#if sortKey === "last_download_date"}<span>{sortDir === "asc" ? "▲" : "▼"}</span>{:else}<span class="opacity-30">▲</span>{/if}
+                    </span>
                   </th>
                 </tr>
               </thead>
               <tbody
                 class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
               >
-                {#each animes as anime}
+                {#each sortedAnimes as anime}
                   <tr
                     class="hover:bg-gray-50 dark:hover:bg-gray-700 {anime.anime_id ? 'cursor-pointer' : ''}"
                     on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
@@ -384,7 +419,7 @@
 
           <!-- Mobile Card View -->
           <div class="md:hidden space-y-4">
-            {#each animes as anime}
+            {#each sortedAnimes as anime}
               <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                 <div class="flex items-center justify-between mb-2">
                   <h3
