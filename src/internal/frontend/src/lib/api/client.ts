@@ -11,13 +11,9 @@ const getApiBaseUrl = (): string => {
     return 'http://localhost:8091/api/v1'
   }
 
-  // Sempre usa o hostname atual e inclui a porta 8091 explicitamente
-  // Isso garante que funcione tanto localmente quanto remotamente
-  // O daemon sempre roda na porta 8091, então sempre usamos essa porta
-  const protocol = window.location.protocol
-  const hostname = window.location.hostname
-
-  return `${protocol}//${hostname}:8091/api/v1`
+  // Usa path relativo pois o frontend é servido pelo próprio backend
+  // Isso funciona tanto localmente quanto via Cloudflare Tunnel/proxy reverso
+  return `${window.location.origin}/api/v1`
 }
 
 const API_BASE_URL = getApiBaseUrl()
