@@ -59,6 +59,7 @@ export interface StatusResponse {
   status: string
   last_check: string
   has_error: boolean
+  version: string
 }
 
 export interface Config {

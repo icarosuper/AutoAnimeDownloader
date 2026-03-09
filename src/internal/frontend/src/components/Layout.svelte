@@ -1,8 +1,21 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { location } from 'svelte-spa-router'
   import { theme, THEMES, type Theme } from '../lib/stores/theme.js'
+  import { getStatus } from '../lib/api/client.js'
 
   $: currentPath = $location
+
+  let appVersion = ''
+
+  onMount(async () => {
+    try {
+      const status = await getStatus()
+      appVersion = status.version
+    } catch {
+      // ignore - version just won't show
+    }
+  })
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -37,8 +50,10 @@
           </a>
         </div>
         
-        <!-- Theme Selector -->
-        <div class="flex items-center">
+        <div class="flex items-center gap-3">
+          {#if appVersion}
+            <span class="text-xs text-gray-400 dark:text-gray-500">v{appVersion}</span>
+          {/if}
           <label for="theme-select" class="sr-only">Theme</label>
           <select
             id="theme-select"

@@ -20,6 +20,7 @@ import (
 	"AutoAnimeDownloader/src/internal/api"
 	processcli "AutoAnimeDownloader/src/internal/cli"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/version"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -41,8 +42,9 @@ var (
 
 func main() {
 	app := &cli.App{
-		Name:  "AutoAnimeDownloader",
-		Usage: "CLI for Auto Anime Downloader daemon",
+		Name:    "AutoAnimeDownloader",
+		Usage:   "CLI for Auto Anime Downloader daemon",
+		Version: version.Version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "endpoint",
@@ -270,6 +272,7 @@ func handleStatus() error {
 		t.AppendRow(table.Row{"Status", status.Status})
 		t.AppendRow(table.Row{"Last Check", status.LastCheck.Format(time.RFC3339)})
 		t.AppendRow(table.Row{"Has Error", status.HasError})
+		t.AppendRow(table.Row{"Version", status.Version})
 		t.Render()
 	}
 	return nil
