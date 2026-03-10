@@ -138,6 +138,10 @@ export async function deleteEpisode(animeId: number, episodeId: number): Promise
   return apiRequest<void>('DELETE', `/animes/${animeId}/episodes/${episodeId}`)
 }
 
+export async function releaseEpisode(animeId: number, episodeId: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/release`)
+}
+
 export async function triggerCheck(): Promise<void> {
   return apiRequest<void>('POST', '/check')
 }

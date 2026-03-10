@@ -366,6 +366,28 @@ func (m *FileManager) BlockEpisode(episodeID int) error {
 	return m.saveBlockedEpisodes(ids)
 }
 
+func (m *FileManager) UnmanageEpisode(episodeID int) error {
+	episodes, err := m.LoadSavedEpisodes()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i, ep := range episodes {
+		if ep.EpisodeID == episodeID {
+			episodes[i].ManuallyManaged = false
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil
+	}
+
+	return m.saveEpisodesToFileJSON(episodes)
+}
+
 func (m *FileManager) UnblockEpisode(episodeID int) error {
 	ids, err := m.LoadBlockedEpisodes()
 	if err != nil {
