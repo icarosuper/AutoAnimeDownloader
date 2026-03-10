@@ -16,9 +16,16 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Build frontend
         run: |
           cd src/internal/frontend
+          npm version ${{ steps.get_version.outputs.version }} --no-git-tag-version --allow-same-version
           npm ci
           npm run build
 
