@@ -28,6 +28,7 @@ type FileManagerInterface interface {
 	LoadBlockedEpisodes() ([]int, error)
 	BlockEpisode(episodeID int) error
 	UnblockEpisode(episodeID int) error
+	UnmanageEpisode(episodeID int) error
 }
 
 type StartLoopPayload struct {

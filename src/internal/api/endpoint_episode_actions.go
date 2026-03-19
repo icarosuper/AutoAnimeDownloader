@@ -159,3 +159,49 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode deleted"})
 	}
 }
+
+// @Summary      Release an episode from manual management
+// @Description  Unblocks and unmanages an episode so the daemon can handle it automatically again
+// @Tags         animes
+// @Accept       json
+// @Produce      json
+// @Param        id        path int true "Anime ID (AniList MediaList ID)"
+// @Param        episodeId path int true "Episode ID (AniList AiringNode ID)"
+// @Success      200  {object}  SuccessResponse
+// @Failure      400  {object}  SuccessResponse
+// @Failure      405  {object}  SuccessResponse
+// @Failure      500  {object}  SuccessResponse
+// @Router       /animes/{id}/episodes/{episodeId}/release [post]
+func handleReleaseEpisode(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST method is allowed")
+			return
+		}
+
+		animeId, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil || animeId <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_ID", "Invalid anime ID")
+			return
+		}
+
+		episodeId, err := strconv.Atoi(r.PathValue("episodeId"))
+		if err != nil || episodeId <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "Invalid episode ID")
+			return
+		}
+
+		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
+			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
+		}
+
+		if err := server.FileManager.UnmanageEpisode(episodeId); err != nil {
+			logger.Logger.Error().Err(err).Int("episode_id", episodeId).Msg("Failed to unmanage episode")
+			JSONInternalError(w, err)
+			return
+		}
+
+		logger.Logger.Info().Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Released episode from manual management")
+		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode released"})
+	}
+}

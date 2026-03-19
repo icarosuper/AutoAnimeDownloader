@@ -110,6 +110,16 @@ func (m *mockFileManager) UnblockEpisode(episodeID int) error {
 	return nil
 }
 
+func (m *mockFileManager) UnmanageEpisode(episodeID int) error {
+	for i, ep := range m.episodes {
+		if ep.EpisodeID == episodeID {
+			m.episodes[i].ManuallyManaged = false
+			break
+		}
+	}
+	return nil
+}
+
 func TestHandleGetConfig(t *testing.T) {
 	state := daemon.NewState()
 	mockFM := &mockFileManager{}

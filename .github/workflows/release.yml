@@ -16,9 +16,16 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Build frontend
         run: |
           cd src/internal/frontend
+          npm version ${{ steps.get_version.outputs.version }} --no-git-tag-version --allow-same-version
           npm ci
           npm run build
 
@@ -60,8 +67,8 @@ jobs:
         with:
           name: linux-amd64-package
           path: |
-            build/packages/AutoAnimeDownloader_Linux_x86.zip
-            build/packages/AutoAnimeDownloader_Linux_x86.zip.sha256
+            build/packages/AutoAnimeDownloader_Linux_x86_v${{ steps.get_version.outputs.version }}.zip
+            build/packages/AutoAnimeDownloader_Linux_x86_v${{ steps.get_version.outputs.version }}.zip.sha256
           retention-days: 30
 
   release-linux-arm64:
@@ -95,8 +102,8 @@ jobs:
         with:
           name: linux-arm64-package
           path: |
-            build/packages/AutoAnimeDownloader_Linux_Arm64.zip
-            build/packages/AutoAnimeDownloader_Linux_Arm64.zip.sha256
+            build/packages/AutoAnimeDownloader_Linux_Arm64_v${{ steps.get_version.outputs.version }}.zip
+            build/packages/AutoAnimeDownloader_Linux_Arm64_v${{ steps.get_version.outputs.version }}.zip.sha256
           retention-days: 30
 
   release-windows-amd64:
@@ -130,8 +137,8 @@ jobs:
         with:
           name: windows-amd64-package
           path: |
-            build/packages/AutoAnimeDownloader_Windows.exe
-            build/packages/AutoAnimeDownloader_Windows.exe.sha256
+            build/packages/AutoAnimeDownloader_Windows_v${{ steps.get_version.outputs.version }}.exe
+            build/packages/AutoAnimeDownloader_Windows_v${{ steps.get_version.outputs.version }}.exe.sha256
           retention-days: 30
 
   create-release:

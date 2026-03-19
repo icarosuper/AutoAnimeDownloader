@@ -27,13 +27,13 @@ ENV GOOS=linux
 ENV GOARCH=arm64
 
 RUN go build -installsuffix cgo \
-    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/tray.currentVersion=${VERSION}" \
+    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/version.Version=${VERSION}" \
     -o /app/autoanimedownloader-daemon \
     ./src/cmd/daemon
 
 # Build CLI without CGO
 RUN CGO_ENABLED=0 go build -installsuffix cgo \
-    -ldflags="-w -s" \
+    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/version.Version=${VERSION}" \
     -o /app/autoanimedownloader \
     ./src/cmd/cli
 
