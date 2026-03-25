@@ -11,6 +11,7 @@
   import Loading from "../components/Loading.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import { toast } from "../lib/stores/toast.js";
+  import * as m from "../lib/i18n/messages.js";
 
   export let params: { id?: string } = {};
 
@@ -24,30 +25,30 @@
   let pendingDeleteEp: AnimeEpisodeInfo | null = null;
 
   function formatDate(dateString: string | undefined) {
-    if (!dateString) return "N/A";
+    if (!dateString) return m.common_na();
     return new Date(dateString).toLocaleString();
   }
 
   function formatAiringAt(unixSeconds: number): string {
-    if (!unixSeconds) return "N/A";
+    if (!unixSeconds) return m.common_na();
     return new Date(unixSeconds * 1000).toLocaleString();
   }
 
   function getAniListBadge(ep: AnimeEpisodeInfo): { label: string; classes: string } {
     if (ep.is_watched) {
-      return { label: "Watched", classes: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" };
+      return { label: m.detail_badge_watched(), classes: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" };
     }
     if (ep.is_aired) {
-      return { label: "Not Watched", classes: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300" };
+      return { label: m.detail_badge_not_watched(), classes: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300" };
     }
-    return { label: "Upcoming", classes: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" };
+    return { label: m.detail_badge_upcoming(), classes: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" };
   }
 
   function getDownloadBadge(ep: AnimeEpisodeInfo): { label: string; classes: string } {
     if (ep.is_downloaded) {
-      return { label: "Downloaded", classes: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" };
+      return { label: m.detail_badge_downloaded(), classes: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" };
     }
-    return { label: "Not Downloaded", classes: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" };
+    return { label: m.detail_badge_not_downloaded(), classes: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" };
   }
 
   function formatTimeUntilAiring(seconds: number, isAired: boolean): string {
@@ -77,7 +78,7 @@
       detail = detailData;
       anime = animesData.find((a) => a.anime_id === id) ?? null;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load anime detail");
+      toast.error(err instanceof Error ? err.message : m.detail_toast_load_error());
     } finally {
       loading = false;
     }
@@ -87,10 +88,10 @@
     actionLoading = { ...actionLoading, [ep.episode_id]: true };
     try {
       await downloadEpisode(animeId, ep.episode_id);
-      toast.success(`Episode ${ep.episode_number} queued for download`);
+      toast.success(m.detail_toast_queued({ number: ep.episode_number }));
       await loadData(animeId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to download episode");
+      toast.error(err instanceof Error ? err.message : m.detail_toast_dl_error());
     } finally {
       actionLoading = { ...actionLoading, [ep.episode_id]: false };
     }
@@ -108,10 +109,10 @@
     actionLoading = { ...actionLoading, [ep.episode_id]: true };
     try {
       await deleteEpisode(animeId, ep.episode_id);
-      toast.success(`Episode ${ep.episode_number} deleted`);
+      toast.success(m.detail_toast_deleted({ number: ep.episode_number }));
       await loadData(animeId);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete episode");
+      toast.error(err instanceof Error ? err.message : m.detail_toast_del_error());
     } finally {
       actionLoading = { ...actionLoading, [ep.episode_id]: false };
     }
@@ -122,9 +123,10 @@
 
 <ConfirmDialog
   bind:open={confirmOpen}
-  title="Delete episode?"
-  message={pendingDeleteEp ? `Episode ${pendingDeleteEp.episode_number} will be removed from tracking. This action cannot be undone.` : ""}
-  confirmLabel="Delete"
+  title={m.detail_confirm_title()}
+  message={pendingDeleteEp ? m.detail_confirm_msg({ number: pendingDeleteEp.episode_number }) : ""}
+  confirmLabel={m.detail_confirm_btn()}
+  cancelLabel={m.common_cancel()}
   on:confirm={confirmDelete}
 />
 
@@ -137,23 +139,23 @@
       <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
-      Back to Status
+      {m.detail_back()}
     </a>
     <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-      {anime ? anime.name : "Anime Detail"}
+      {anime ? anime.name : m.detail_title_fallback()}
     </h1>
     {#if detail}
       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        Progress: {detail.progress} / {detail.total_episodes || "?"} episodes &middot; {detail.status}
+        {m.detail_progress({ progress: detail.progress, total: detail.total_episodes || "?", status: detail.status })}
       </p>
     {/if}
   </div>
 
   {#if loading}
-    <Loading message="Loading episodes..." />
+    <Loading message={m.detail_loading()} />
   {:else if !detail || detail.episodes.length === 0}
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-      <p class="text-sm text-gray-500 dark:text-gray-400">No episodes found for this anime.</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">{m.detail_empty()}</p>
     </div>
   {:else}
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
@@ -163,25 +165,25 @@
           <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Episode
+                {m.detail_col_episode()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                AniList
+                {m.detail_col_anilist()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Downloaded
+                {m.detail_col_downloaded()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Air Date
+                {m.detail_col_air_date()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Next Episode In
+                {m.detail_col_next_ep()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Download Date
+                {m.detail_col_download_date()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                Actions
+                {m.detail_col_actions()}
               </th>
             </tr>
           </thead>
@@ -194,10 +196,10 @@
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                   {ep.episode_number}
                   {#if ep.is_manually_managed}
-                    <span class="block text-xs text-gray-400 dark:text-gray-500">• won't be deleted automatically</span>
+                    <span class="block text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_delete()}</span>
                   {/if}
                   {#if ep.is_blocked}
-                    <span class="block text-xs text-gray-400 dark:text-gray-500">• won't be downloaded automatically</span>
+                    <span class="block text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_download()}</span>
                   {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
@@ -226,7 +228,7 @@
                       disabled={isLoading}
                       class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isLoading ? "..." : "Download"}
+                      {isLoading ? "..." : m.detail_btn_download()}
                     </button>
                   {:else if ep.is_downloaded}
                     <button
@@ -234,7 +236,7 @@
                       disabled={isLoading}
                       class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isLoading ? "..." : "Delete"}
+                      {isLoading ? "..." : m.detail_btn_delete()}
                     </button>
                   {/if}
                 </td>
@@ -254,13 +256,13 @@
             <div class="flex items-start justify-between mb-2">
               <div>
                 <p class="text-sm font-medium text-gray-900 dark:text-white">
-                  Episode {ep.episode_number}
+                  {m.detail_col_episode()} {ep.episode_number}
                 </p>
                 {#if ep.is_manually_managed}
-                  <p class="text-xs text-gray-400 dark:text-gray-500">• won't be deleted</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_delete_short()}</p>
                 {/if}
                 {#if ep.is_blocked}
-                  <p class="text-xs text-gray-400 dark:text-gray-500">• won't be downloaded</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_download_short()}</p>
                 {/if}
               </div>
               <div class="flex flex-col items-end gap-1">
@@ -279,16 +281,16 @@
             {/if}
             <div class="grid grid-cols-2 gap-4 mt-2">
               <div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Air Date</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{m.detail_col_air_date()}</p>
                 <p class="text-sm text-gray-900 dark:text-white">{formatAiringAt(ep.airing_at)}</p>
               </div>
               <div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Next Episode In</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{m.detail_col_next_ep()}</p>
                 <p class="text-sm text-gray-900 dark:text-white">{formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}</p>
               </div>
               {#if ep.is_downloaded}
                 <div>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Download Date</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{m.detail_col_download_date()}</p>
                   <p class="text-sm text-gray-900 dark:text-white">{formatDate(ep.download_date)}</p>
                 </div>
               {/if}
@@ -300,7 +302,7 @@
                   disabled={isLoading}
                   class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? "Downloading..." : "Download"}
+                  {isLoading ? m.detail_btn_downloading() : m.detail_btn_download()}
                 </button>
               {:else if ep.is_downloaded}
                 <button
@@ -308,7 +310,7 @@
                   disabled={isLoading}
                   class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? "Deleting..." : "Delete"}
+                  {isLoading ? m.detail_btn_deleting() : m.detail_btn_delete()}
                 </button>
               {/if}
             </div>

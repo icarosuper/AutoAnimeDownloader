@@ -3,6 +3,7 @@
   import { getLogs, type LogsResponse } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import { toast } from "../lib/stores/toast.js";
+  import * as m from "../lib/i18n/messages.js";
 
   let logs: string[] = [];
   let loading = true;
@@ -95,7 +96,7 @@
       const response: LogsResponse = await getLogs(linesToLoad);
       logs = response.lines;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load logs");
+      toast.error(err instanceof Error ? err.message : m.logs_error_load());
     } finally {
       loading = false;
     }
@@ -104,9 +105,9 @@
   async function copyLine(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      toast.success("Copied to clipboard");
+      toast.success(m.logs_copy_success());
     } catch {
-      toast.error("Failed to copy");
+      toast.error(m.logs_copy_error());
     }
   }
 
@@ -137,8 +138,8 @@
 <div class="flex flex-col" style="height: calc(100vh - 8rem)">
   <!-- Header -->
   <div class="mb-4 flex-none">
-    <h1 class="text-2xl font-semibold text-base-content">Logs</h1>
-    <p class="text-sm text-base-content/50 mt-0.5">Daemon logs and system messages</p>
+    <h1 class="text-2xl font-semibold text-base-content">{m.logs_title()}</h1>
+    <p class="text-sm text-base-content/50 mt-0.5">{m.logs_subtitle()}</p>
   </div>
 
   <!-- Controls -->
@@ -146,7 +147,7 @@
     <div class="card-body p-3">
       <div class="flex flex-wrap items-center gap-3">
         <label class="flex items-center gap-2 text-sm text-base-content/70">
-          Lines
+          {m.logs_label_lines()}
           <input
             type="number" min="100" max="10000" step="100"
             bind:value={linesToLoad}
@@ -156,13 +157,13 @@
         </label>
 
         <label class="flex items-center gap-2 text-sm text-base-content/70">
-          Level
+          {m.logs_label_level()}
           <select bind:value={filterLevel} class="select select-xs select-bordered">
-            <option value="all">All</option>
-            <option value="debug">Debug</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
+            <option value="all">{m.logs_level_all()}</option>
+            <option value="debug">{m.logs_level_debug()}</option>
+            <option value="info">{m.logs_level_info()}</option>
+            <option value="warn">{m.logs_level_warn()}</option>
+            <option value="error">{m.logs_level_error()}</option>
           </select>
         </label>
 
@@ -171,7 +172,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
-          <input type="text" placeholder="Search..." bind:value={searchQuery} class="grow" />
+          <input type="text" placeholder={m.logs_search_placeholder()} bind:value={searchQuery} class="grow" />
           {#if searchQuery}
             <button class="opacity-50 hover:opacity-100" on:click={() => searchQuery = ""}>✕</button>
           {/if}
@@ -179,10 +180,10 @@
 
         <label class="flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
           <input type="checkbox" bind:checked={autoScroll} class="checkbox checkbox-xs" />
-          Auto-scroll
+          {m.logs_label_autoscroll()}
         </label>
 
-        <button class="btn btn-xs btn-outline ml-auto" on:click={loadLogs}>Reload</button>
+        <button class="btn btn-xs btn-outline ml-auto" on:click={loadLogs}>{m.logs_btn_reload()}</button>
       </div>
     </div>
   </div>
@@ -190,7 +191,7 @@
   <!-- Log container -->
   {#if loading}
     <div class="flex-1 flex items-center justify-center">
-      <Loading message="Loading logs..." />
+      <Loading message={m.logs_loading()} />
     </div>
   {:else}
     <div class="flex-1 relative min-h-0">
@@ -201,7 +202,7 @@
         {#if parsedLogs.length === 0}
           <div class="flex items-center justify-center h-full">
             <p class="text-base-content/40">
-              {filterLevel !== "all" || searchQuery ? "No logs match the current filters." : "No logs available."}
+              {filterLevel !== "all" || searchQuery ? m.logs_empty_filtered() : m.logs_empty()}
             </p>
           </div>
         {:else}
@@ -248,8 +249,8 @@
 
     <!-- Footer -->
     <div class="flex-none pt-2 text-xs text-base-content/40">
-      {filteredLogs.length} of {logs.length} lines
-      {#if filterLevel !== "all" || searchQuery}· filtered{/if}
+      {m.logs_x_of_y({ shown: filteredLogs.length, total: logs.length })}
+      {#if filterLevel !== "all" || searchQuery}{m.logs_filtered_suffix()}{/if}
     </div>
   {/if}
 </div>

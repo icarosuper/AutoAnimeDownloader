@@ -15,6 +15,7 @@
   import StatusBadge from "../components/StatusBadge.svelte";
   import { toast } from "../lib/stores/toast.js";
   import { wsConnectionState } from "../lib/stores/wsState.js";
+  import * as m from "../lib/i18n/messages.js";
 
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
@@ -102,7 +103,7 @@
     if (status) {
       status = { ...status, status: statusValue, last_check: lastCheck, has_error: hasError };
     } else {
-      status = { status: statusValue, last_check: lastCheck, has_error: hasError };
+      status = { status: statusValue, last_check: lastCheck, has_error: hasError, version: "" };
     }
     if (previousStatus !== "running" && statusValue === "running") {
       loadAnimes();
@@ -137,7 +138,6 @@
     try {
       actionLoading = true;
       await triggerCheck();
-      toast.success("Check triggered");
       await loadAnimes();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to trigger check");
@@ -147,9 +147,9 @@
   }
 
   function formatDate(dateString: string) {
-    if (!dateString) return "Never";
+    if (!dateString) return m.common_never();
     const date = new Date(dateString);
-    if (isNaN(date.getTime()) || date.getFullYear() < 2010) return "Never";
+    if (isNaN(date.getTime()) || date.getFullYear() < 2010) return m.common_never();
     return date.toLocaleString();
   }
 
@@ -162,10 +162,11 @@
     const diffMinutes = Math.floor(diffSeconds / 60);
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
-    if (diffSeconds < 60) return "just now";
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
+    const rtf = new Intl.RelativeTimeFormat(navigator.language, { numeric: "auto" });
+    if (diffSeconds < 60) return rtf.format(-diffSeconds, "second");
+    if (diffMinutes < 60) return rtf.format(-diffMinutes, "minute");
+    if (diffHours < 24) return rtf.format(-diffHours, "hour");
+    return rtf.format(-diffDays, "day");
   }
 
   onMount(() => {
@@ -187,8 +188,8 @@
 <div class="space-y-6">
   <!-- Header -->
   <div>
-    <h1 class="text-2xl font-semibold text-base-content">Status</h1>
-    <p class="text-sm text-base-content/50 mt-0.5">Daemon monitoring and control</p>
+    <h1 class="text-2xl font-semibold text-base-content">{m.status_title()}</h1>
+    <p class="text-sm text-base-content/50 mt-0.5">{m.status_subtitle()}</p>
   </div>
 
   {#if loading}
@@ -199,7 +200,7 @@
       <!-- Daemon status -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">Daemon</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_daemon()}</span>
           <StatusBadge status={status.status} />
         </div>
       </div>
@@ -207,9 +208,9 @@
       <!-- Last check -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">Last Check</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_last_check()}</span>
           <span class="text-base font-medium text-base-content">
-            {formatTimeAgo(status.last_check) || "Never"}
+            {formatTimeAgo(status.last_check) || m.common_never()}
           </span>
           {#if status.last_check && formatTimeAgo(status.last_check)}
             <span class="text-xs text-base-content/40">{formatDate(status.last_check)}</span>
@@ -220,12 +221,12 @@
       <!-- Next check -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">Next Check</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_next_check()}</span>
           <span class="text-base font-medium text-base-content">
             {#if status.status === "stopped"}
               <span class="text-base-content/40">—</span>
             {:else if status.status === "checking"}
-              <span class="text-warning">Checking...</span>
+              <span class="text-warning">{m.status_checking()}</span>
             {:else if nextCheckIn}
               {nextCheckIn}
             {:else}
@@ -238,9 +239,9 @@
       <!-- Totals -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">Library</span>
-          <span class="text-base font-medium text-base-content">{animes.length} animes</span>
-          <span class="text-xs text-base-content/40">{totalEpisodes} episodes</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_library()}</span>
+          <span class="text-base font-medium text-base-content">{m.status_animes_count({ count: animes.length })}</span>
+          <span class="text-xs text-base-content/40">{m.status_episodes_count({ count: totalEpisodes })}</span>
         </div>
       </div>
     </div>
@@ -252,7 +253,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
-        <span class="text-sm">Error detected in last verification. Check the logs for details.</span>
+        <span class="text-sm">{m.status_error_alert()}</span>
       </div>
     {/if}
 
@@ -264,7 +265,7 @@
           on:click={handleStart}
           disabled={actionLoading}
         >
-          {actionLoading ? "Starting..." : "Start Daemon"}
+          {actionLoading ? m.status_starting() : m.status_start()}
         </button>
       {:else}
         <button
@@ -272,7 +273,7 @@
           on:click={handleStop}
           disabled={actionLoading}
         >
-          {actionLoading ? "Stopping..." : "Stop Daemon"}
+          {actionLoading ? m.status_stopping() : m.status_stop()}
         </button>
       {/if}
       <button
@@ -280,7 +281,7 @@
         on:click={handleCheck}
         disabled={status.status === "checking" || actionLoading}
       >
-        {status.status === "checking" ? "Checking..." : "Force Check"}
+        {status.status === "checking" ? m.status_checking() : m.status_force_check()}
       </button>
     </div>
 
@@ -289,7 +290,7 @@
       <div class="card-body p-4 gap-4">
         <!-- List header -->
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-          <h2 class="text-base font-medium text-base-content flex-1">Animes</h2>
+          <h2 class="text-base font-medium text-base-content flex-1">{m.status_animes_header()}</h2>
           <!-- Search -->
           <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64">
             <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -298,7 +299,7 @@
             </svg>
             <input
               type="text"
-              placeholder="Search animes..."
+              placeholder={m.status_search_placeholder()}
               bind:value={search}
               class="grow"
             />
@@ -308,7 +309,7 @@
           </label>
           {#if search}
             <span class="text-xs text-base-content/50 whitespace-nowrap">
-              {filteredAnimes.length} of {animes.length}
+              {m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
             </span>
           {/if}
         </div>
@@ -321,16 +322,14 @@
                 d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
             </svg>
             <div>
-              <p class="font-medium text-base-content/60">No animes found</p>
-              <p class="text-sm text-base-content/40 mt-1">
-                Configure your Anilist username and start a check to begin
-              </p>
+              <p class="font-medium text-base-content/60">{m.status_empty_title()}</p>
+              <p class="text-sm text-base-content/40 mt-1">{m.status_empty_desc()}</p>
             </div>
-            <a href="#/config" class="btn btn-primary btn-sm mt-2">Go to Config</a>
+            <a href="#/config" class="btn btn-primary btn-sm mt-2">{m.status_go_to_config()}</a>
           </div>
         {:else if filteredAnimes.length === 0}
           <div class="py-8 text-center">
-            <p class="text-base-content/50">No animes match "<span class="font-medium">{search}</span>"</p>
+            <p class="text-base-content/50">{m.status_no_results({ search })}</p>
           </div>
         {:else}
           <!-- Desktop Table -->
@@ -338,13 +337,13 @@
             <table class="table table-sm w-full">
               <thead>
                 <tr class="text-base-content/50">
-                  <th>Name</th>
+                  <th>{m.status_col_name()}</th>
                   <th
                     class="cursor-pointer select-none hover:text-base-content"
                     on:click={() => handleSort("episodes_count")}
                   >
                     <span class="inline-flex items-center gap-1">
-                      Episodes
+                      {m.status_col_episodes()}
                       {#if sortKey === "episodes_count"}
                         <span class="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>
                       {:else}
@@ -352,13 +351,13 @@
                       {/if}
                     </span>
                   </th>
-                  <th>Progress</th>
+                  <th>{m.status_col_progress()}</th>
                   <th
                     class="cursor-pointer select-none hover:text-base-content"
                     on:click={() => handleSort("last_download_date")}
                   >
                     <span class="inline-flex items-center gap-1">
-                      Last Download
+                      {m.status_col_last_download()}
                       {#if sortKey === "last_download_date"}
                         <span class="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>
                       {:else}
