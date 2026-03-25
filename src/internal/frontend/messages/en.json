@@ -17,6 +17,10 @@
   "common_cancel": "Cancel",
   "common_na": "N/A",
 
+  "badge_running": "Running",
+  "badge_checking": "Checking",
+  "badge_stopped": "Stopped",
+
   "status_title": "Status",
   "status_subtitle": "Daemon monitoring and control",
   "status_card_daemon": "Daemon",

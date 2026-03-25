@@ -4,6 +4,26 @@
   import Loading from "../components/Loading.svelte";
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
+  import { locale } from "../lib/stores/locale.js";
+
+  $: T = $locale && {
+    title: m.logs_title(),
+    subtitle: m.logs_subtitle(),
+    labelLines: m.logs_label_lines(),
+    labelLevel: m.logs_label_level(),
+    searchPlaceholder: m.logs_search_placeholder(),
+    labelAutoscroll: m.logs_label_autoscroll(),
+    btnReload: m.logs_btn_reload(),
+    levelAll: m.logs_level_all(),
+    levelDebug: m.logs_level_debug(),
+    levelInfo: m.logs_level_info(),
+    levelWarn: m.logs_level_warn(),
+    levelError: m.logs_level_error(),
+    loading: m.logs_loading(),
+    emptyFiltered: m.logs_empty_filtered(),
+    empty: m.logs_empty(),
+    filteredSuffix: m.logs_filtered_suffix(),
+  };
 
   let logs: string[] = [];
   let loading = true;
@@ -138,8 +158,8 @@
 <div class="flex flex-col" style="height: calc(100vh - 8rem)">
   <!-- Header -->
   <div class="mb-4 flex-none">
-    <h1 class="text-2xl font-semibold text-base-content">{m.logs_title()}</h1>
-    <p class="text-sm text-base-content/50 mt-0.5">{m.logs_subtitle()}</p>
+    <h1 class="text-2xl font-semibold text-base-content">{T && T.title}</h1>
+    <p class="text-sm text-base-content/50 mt-0.5">{T && T.subtitle}</p>
   </div>
 
   <!-- Controls -->
@@ -147,7 +167,7 @@
     <div class="card-body p-3">
       <div class="flex flex-wrap items-center gap-3">
         <label class="flex items-center gap-2 text-sm text-base-content/70">
-          {m.logs_label_lines()}
+          {T && T.labelLines}
           <input
             type="number" min="100" max="10000" step="100"
             bind:value={linesToLoad}
@@ -157,13 +177,13 @@
         </label>
 
         <label class="flex items-center gap-2 text-sm text-base-content/70">
-          {m.logs_label_level()}
+          {T && T.labelLevel}
           <select bind:value={filterLevel} class="select select-xs select-bordered">
-            <option value="all">{m.logs_level_all()}</option>
-            <option value="debug">{m.logs_level_debug()}</option>
-            <option value="info">{m.logs_level_info()}</option>
-            <option value="warn">{m.logs_level_warn()}</option>
-            <option value="error">{m.logs_level_error()}</option>
+            <option value="all">{T && T.levelAll}</option>
+            <option value="debug">{T && T.levelDebug}</option>
+            <option value="info">{T && T.levelInfo}</option>
+            <option value="warn">{T && T.levelWarn}</option>
+            <option value="error">{T && T.levelError}</option>
           </select>
         </label>
 
@@ -172,7 +192,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
           </svg>
-          <input type="text" placeholder={m.logs_search_placeholder()} bind:value={searchQuery} class="grow" />
+          <input type="text" placeholder={T && T.searchPlaceholder || ""} bind:value={searchQuery} class="grow" />
           {#if searchQuery}
             <button class="opacity-50 hover:opacity-100" on:click={() => searchQuery = ""}>✕</button>
           {/if}
@@ -180,10 +200,10 @@
 
         <label class="flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
           <input type="checkbox" bind:checked={autoScroll} class="checkbox checkbox-xs" />
-          {m.logs_label_autoscroll()}
+          {T && T.labelAutoscroll}
         </label>
 
-        <button class="btn btn-xs btn-outline ml-auto" on:click={loadLogs}>{m.logs_btn_reload()}</button>
+        <button class="btn btn-xs btn-outline ml-auto" on:click={loadLogs}>{T && T.btnReload}</button>
       </div>
     </div>
   </div>
@@ -191,7 +211,7 @@
   <!-- Log container -->
   {#if loading}
     <div class="flex-1 flex items-center justify-center">
-      <Loading message={m.logs_loading()} />
+      <Loading message={T && T.loading || ""} />
     </div>
   {:else}
     <div class="flex-1 relative min-h-0">
@@ -202,7 +222,7 @@
         {#if parsedLogs.length === 0}
           <div class="flex items-center justify-center h-full">
             <p class="text-base-content/40">
-              {filterLevel !== "all" || searchQuery ? m.logs_empty_filtered() : m.logs_empty()}
+              {filterLevel !== "all" || searchQuery ? (T && T.emptyFiltered) : (T && T.empty)}
             </p>
           </div>
         {:else}
@@ -249,8 +269,8 @@
 
     <!-- Footer -->
     <div class="flex-none pt-2 text-xs text-base-content/40">
-      {m.logs_x_of_y({ shown: filteredLogs.length, total: logs.length })}
-      {#if filterLevel !== "all" || searchQuery}{m.logs_filtered_suffix()}{/if}
+      {$locale && m.logs_x_of_y({ shown: filteredLogs.length, total: logs.length })}
+      {#if filterLevel !== "all" || searchQuery}{T && T.filteredSuffix}{/if}
     </div>
   {/if}
 </div>
