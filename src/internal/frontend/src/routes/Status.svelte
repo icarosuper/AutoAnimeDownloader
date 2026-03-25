@@ -260,7 +260,7 @@
     <div class="flex flex-wrap gap-2">
       {#if status.status === "stopped"}
         <button
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           on:click={handleStart}
           disabled={actionLoading}
         >
@@ -268,7 +268,7 @@
         </button>
       {:else}
         <button
-          class="btn btn-error btn-sm"
+          class="btn btn-error"
           on:click={handleStop}
           disabled={actionLoading}
         >
@@ -276,7 +276,7 @@
         </button>
       {/if}
       <button
-        class="btn btn-sm btn-outline"
+        class="btn btn-secondary"
         on:click={handleCheck}
         disabled={status.status === "checking" || actionLoading}
       >
