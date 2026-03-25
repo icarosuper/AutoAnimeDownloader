@@ -10,6 +10,7 @@
     type AnimeInfo,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
+  import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import { toast } from "../lib/stores/toast.js";
 
   export let params: { id?: string } = {};
@@ -20,6 +21,8 @@
   let detail: AnimeDetailResponse | null = null;
   let loading = true;
   let actionLoading: Record<number, boolean> = {};
+  let confirmOpen = false;
+  let pendingDeleteEp: AnimeEpisodeInfo | null = null;
 
   function formatDate(dateString: string | undefined) {
     if (!dateString) return "N/A";
@@ -96,7 +99,15 @@
     }
   }
 
-  async function handleDelete(ep: AnimeEpisodeInfo) {
+  function handleDelete(ep: AnimeEpisodeInfo) {
+    pendingDeleteEp = ep;
+    confirmOpen = true;
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteEp) return;
+    const ep = pendingDeleteEp;
+    pendingDeleteEp = null;
     actionLoading = { ...actionLoading, [ep.episode_id]: true };
     try {
       await deleteEpisode(animeId, ep.episode_id);
@@ -115,6 +126,14 @@
     loadData(animeId);
   });
 </script>
+
+<ConfirmDialog
+  bind:open={confirmOpen}
+  title="Delete episode?"
+  message={pendingDeleteEp ? `Episode ${pendingDeleteEp.episode_number} will be removed from tracking. This action cannot be undone.` : ""}
+  confirmLabel="Delete"
+  on:confirm={confirmDelete}
+/>
 
 <div>
   <div class="mb-6">
