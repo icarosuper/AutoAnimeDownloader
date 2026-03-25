@@ -47,8 +47,8 @@
 - [x] Suporte a múltiplos toasts empilhados
 - [x] Animação de entrada/saída (slide + fade)
 
-## 2+8. Redesign do Dashboard + Busca de Animes (Status.svelte)
-- [ ] Remover o limite hardcoded de Top 10 animes — exibir todos
+## 2+8. Redesign do Dashboard + Busca de Animes (Status.svelte) ✅
+- [x] Remover o limite hardcoded de Top 10 animes — exibir todos
 - [ ] Separar os stat blocks em cards visuais distintos:
   - Status do daemon (com badge colorido)
   - Última verificação (com timeAgo atualizado dinamicamente)
@@ -60,13 +60,13 @@
 - [ ] Empty state: card com ícone + mensagem orientativa
 - [ ] Todos os textos traduzidos em pt-BR e en
 
-## 3. Barras de Progresso nos Animes
-- [ ] Exibir barra de progresso `episodios_baixados / total_episodios` em cada linha/card de anime
+## 3. Barras de Progresso nos Animes ✅
+- [x] Exibir barra de progresso `episodios_baixados / total_episodios` em cada linha/card de anime
 - [ ] Mostrar o texto "X/Y eps" ao lado da barra
 - [ ] Colorir a barra: verde se completo, azul se em progresso, cinza se total desconhecido
 
-## 4. Indicador de Status do WebSocket
-- [ ] Adicionar dot colorido no header (Layout.svelte):
+## 4. Indicador de Status do WebSocket ✅
+- [x] Adicionar dot colorido no header (Layout.svelte):
   - Verde: conectado
   - Amarelo: reconectando
   - Vermelho: desconectado
@@ -74,8 +74,8 @@
 - [ ] Expor estado da conexão pelo `WebSocketClient` para consumo pelo Layout
 - [ ] Atualizar o dot automaticamente conforme o estado da conexão muda
 
-## 5. Agrupamento das Configurações em Seções (Config.svelte)
-- [ ] Dividir o formulário em seções com títulos e separadores visuais:
+## 5. Agrupamento das Configurações em Seções (Config.svelte) ✅
+- [x] Dividir o formulário em seções com títulos e separadores visuais:
   - **Anilist** — anilist_username
   - **Downloads** — save_path, completed_anime_path, delete_watched_episodes, watched_episodes_to_keep
   - **Automação** — check_interval, max_episodes_per_anime, episode_retry_limit
@@ -85,26 +85,26 @@
 - [ ] Manter a validação e feedback de erro por campo
 - [ ] Todos os labels e mensagens traduzidos em pt-BR e en
 
-## 6. Confirmação em Ações Destrutivas (AnimeDetail.svelte)
-- [ ] Criar componente `ConfirmDialog.svelte` usando modal do DaisyUI
+## 6. Confirmação em Ações Destrutivas (AnimeDetail.svelte) ✅
+- [x] Criar componente `ConfirmDialog.svelte` usando modal do DaisyUI
 - [ ] Exibir o dialog antes de executar DELETE de episódio, com o nome do episódio na mensagem
 - [ ] Botão de confirmação em vermelho (danger)
 - [ ] Textos do dialog traduzidos em pt-BR e en
 
-## 7. Logs — Altura Dinâmica e Auto-scroll (Logs.svelte)
-- [ ] Substituir `height: 600px` fixo por `height: calc(100vh - Xpx)` para ocupar o restante da viewport
+## 7. Logs — Altura Dinâmica e Auto-scroll (Logs.svelte) ✅
+- [x] Substituir `height: 600px` fixo por `height: calc(100vh - Xpx)` para ocupar o restante da viewport
 - [ ] Adicionar toggle "Auto-scroll" (ligado por padrão) — quando ativo, scrolla para o fim ao carregar novos logs
 - [ ] Adicionar botão "Ir para o fim" fixo no canto inferior do container
 - [ ] Adicionar botão "Copiar" em cada linha de log (aparece no hover)
 - [ ] Textos e labels traduzidos em pt-BR e en
 
-## 9. Atualização Dinâmica de Datas Relativas
-- [ ] Criar store com `setInterval` de 60 segundos que atualiza variável `now` via `$state`
+## 9. Atualização Dinâmica de Datas Relativas ✅
+- [x] Criar store com `setInterval` de 60 segundos que atualiza variável `now` via `$state`
 - [ ] Re-renderizar os campos `formatTimeAgo()` em Status.svelte e AnimeDetail.svelte sem re-fetchar dados
 - [ ] Usar reatividade do Svelte 5 para atualizar apenas os componentes de data
 
-## 10. Empty States
-- [ ] Status.svelte — sem animes: card com ícone + texto orientativo
+## 10. Empty States ✅
+- [x] Status.svelte — sem animes: card com ícone + texto orientativo
 - [ ] AnimeDetail.svelte — sem episódios: mensagem traduzida
 - [ ] Logs.svelte — sem logs após filtro: mensagem traduzida
 - [ ] Todos os textos traduzidos em pt-BR e en
