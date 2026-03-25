@@ -7,8 +7,41 @@
     type Config,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
-  import ErrorMessage from "../components/ErrorMessage.svelte";
   import Input from "../components/Input.svelte";
+  import { toast } from "../lib/stores/toast.js";
+  import * as m from "../lib/i18n/messages.js";
+  import { locale } from "../lib/stores/locale.js";
+
+  $: T = $locale && {
+    title: m.config_title(),
+    subtitle: m.config_subtitle(),
+    missingBanner: m.config_missing_banner(),
+    loading: m.config_loading(),
+    sectionAnilist: m.config_section_anilist(),
+    sectionDownloads: m.config_section_downloads(),
+    sectionAutomation: m.config_section_automation(),
+    sectionQbit: m.config_section_qbittorrent(),
+    sectionFilters: m.config_section_filters(),
+    labelUsername: m.config_label_username(),
+    labelSavePath: m.config_label_save_path(),
+    hintSavePath: m.config_hint_save_path(),
+    labelCompletedPath: m.config_label_completed_path(),
+    hintCompletedPath: m.config_hint_completed_path(),
+    labelDeleteWatched: m.config_label_delete_watched(),
+    labelWatchedKeep: m.config_label_watched_keep(),
+    hintWatchedKeep: m.config_hint_watched_keep(),
+    labelCheckInterval: m.config_label_check_interval(),
+    labelMaxEpisodes: m.config_label_max_episodes(),
+    labelRetryLimit: m.config_label_retry_limit(),
+    labelQbitUrl: m.config_label_qbit_url(),
+    hintQbitUrl: m.config_hint_qbit_url(),
+    labelExcludedList: m.config_label_excluded_list(),
+    hintExcludedList: m.config_hint_excluded_list(),
+    btnRunCheck: m.config_btn_run_check(),
+    btnReload: m.config_btn_reload(),
+    btnSave: m.config_btn_save(),
+    btnSaving: m.config_btn_saving(),
+  }
 
   let config: Config = {
     anilist_username: "",
@@ -25,53 +58,29 @@
 
   let loading = true;
   let saving = false;
-  let error: string | null = null;
-  let success = false;
   let showMissingConfigBanner = false;
 
   function checkQueryParams() {
-    if (typeof window !== "undefined") {
-      const search = window.location.search;
-      const hash = window.location.hash;
-
-      // Try to get from search first (query params before hash)
-      if (search) {
-        const urlParams = new URLSearchParams(search);
-        showMissingConfigBanner = urlParams.has("missingConfig");
-        if (showMissingConfigBanner) {
-          console.log(
-            "Missing config banner will be shown (from search params)",
-          );
-        }
-        return;
-      }
-
-      // If not in search, check hash (for hash routing)
-      if (hash) {
-        const hashParts = hash.split("?");
-        if (hashParts.length > 1) {
-          const urlParams = new URLSearchParams(hashParts[1]);
-          showMissingConfigBanner = urlParams.has("missingConfig");
-          if (showMissingConfigBanner) {
-            console.log(
-              "Missing config banner will be shown (from hash params)",
-            );
-          }
-          return;
-        }
-      }
+    if (typeof window === "undefined") return;
+    const search = window.location.search;
+    const hash = window.location.hash;
+    if (search) {
+      showMissingConfigBanner = new URLSearchParams(search).has("missingConfig");
+      return;
+    }
+    const hashParts = hash.split("?");
+    if (hashParts.length > 1) {
+      showMissingConfigBanner = new URLSearchParams(hashParts[1]).has("missingConfig");
     }
   }
 
   async function loadConfig() {
     try {
       loading = true;
-      error = null;
       const data = await getConfig();
       config = { ...data };
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
-      console.error("Failed to load config:", err);
+      toast.error(err instanceof Error ? err.message : m.config_error_load());
     } finally {
       loading = false;
     }
@@ -80,37 +89,20 @@
   async function saveConfig() {
     try {
       saving = true;
-      error = null;
-      success = false;
 
-      // Validation
-      if (!config.anilist_username || config.anilist_username.trim() === "") {
-        throw new Error("Anilist username is required");
-      }
-      if (!config.save_path || config.save_path.trim() === "") {
-        throw new Error("Save path is required");
-      }
-      if (!config.qbittorrent_url || config.qbittorrent_url.trim() === "") {
-        throw new Error("qBittorrent URL is required");
-      }
-      if (config.check_interval <= 0) {
-        throw new Error("Check interval must be greater than 0");
-      }
-      if (config.max_episodes_per_anime <= 0) {
-        throw new Error("Max episodes per anime must be greater than 0");
-      }
-      if (config.episode_retry_limit < 0) {
-        throw new Error("Episode retry limit must be non-negative");
-      }
-      if (config.delete_watched_episodes && config.watched_episodes_to_keep < 0) {
-        throw new Error("Watched episodes to keep must be non-negative");
-      }
+      if (!config.anilist_username?.trim()) throw new Error(m.config_val_username());
+      if (!config.save_path?.trim()) throw new Error(m.config_val_save_path());
+      if (!config.qbittorrent_url?.trim()) throw new Error(m.config_val_qbit_url());
+      if (config.check_interval <= 0) throw new Error(m.config_val_interval());
+      if (config.max_episodes_per_anime <= 0) throw new Error(m.config_val_max_episodes());
+      if (config.episode_retry_limit < 0) throw new Error(m.config_val_retry());
+      if (config.delete_watched_episodes && config.watched_episodes_to_keep < 0)
+        throw new Error(m.config_val_watched_keep());
 
       await updateConfig(config);
-      success = true;
+      toast.success(m.config_saved());
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
-      console.error("Failed to save config:", err);
+      toast.error(err instanceof Error ? err.message : m.config_error_save());
     } finally {
       saving = false;
     }
@@ -122,230 +114,183 @@
   });
 </script>
 
-<div>
-  {#if showMissingConfigBanner}
-    <div
-      class="mb-6 rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4 border border-yellow-200 dark:border-yellow-800"
-    >
-      <div class="flex">
-        <div class="flex-shrink-0">
-          <svg
-            class="h-5 w-5 text-yellow-400 dark:text-yellow-500"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-              clip-rule="evenodd"
-            />
-          </svg>
-        </div>
-        <div class="ml-3">
-          <p class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-            There are missing configurations, please fill them in to continue
-          </p>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <div class="mb-6">
-    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-      Configuration
-    </h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-      Configure daemon behavior
-    </p>
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-base-content">{T && T.title}</h1>
+    <p class="text-sm text-base-content/50 mt-0.5">{T && T.subtitle}</p>
   </div>
 
-  {#if error}
-    <div class="mb-6">
-      <ErrorMessage message={error} />
-    </div>
-  {/if}
-
-  {#if success}
-    <div class="mb-6 rounded-md bg-white dark:bg-gray-800 p-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <svg
-              class="h-5 w-5 text-green-400"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clip-rule="evenodd"
-              />
-            </svg>
-          </div>
-          <div class="ml-3">
-            <p class="text-sm font-medium text-green-800 dark:text-green-200">
-              Configuration saved successfully!
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm leading-4 font-semibold rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          on:click={() => {
-            triggerCheck().then(() => {
-              window.location.href = "/status";
-            });
-          }}
-          title="Run anime check"
-        >
-          <svg
-            class="h-4 w-4 mr-1 -ml-1"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M13 5l7 7-7 7M5 5v14"
-            />
-          </svg>
-          Run anime check now
-        </button>
-      </div>
+  {#if showMissingConfigBanner}
+    <div role="alert" class="alert alert-warning">
+      <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+      </svg>
+      <span class="text-sm">{T && T.missingBanner}</span>
     </div>
   {/if}
 
   {#if loading}
-    <Loading message="Loading configuration..." />
+    <Loading message={T && T.loading || ""} />
   {:else}
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
-      <form
-        on:submit|preventDefault={saveConfig}
-        class="px-4 py-5 sm:p-6 space-y-6"
-      >
-        <Input
-          id="anilist_username"
-          label="Anilist Username"
-          type="text"
-          bind:value={config.anilist_username}
-          required={true}
-        />
+    <form on:submit|preventDefault={saveConfig} class="space-y-4">
 
-        <Input
-          id="save_path"
-          label="Save path"
-          subtitle="Where the releasing anime will go"
-          type="text"
-          bind:value={config.save_path}
-          placeholder="/path/to/downloads"
-          required={true}
-        />
+      <!-- Anilist -->
+      <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 gap-4">
+          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionAnilist}</h2>
+          <Input
+            id="anilist_username"
+            label={T && T.labelUsername || ""}
+            type="text"
+            bind:value={config.anilist_username}
+            required={true}
+          />
+        </div>
+      </div>
 
-        <Input
-          id="completed_anime_path"
-          label="Completed anime save path"
-          subtitle="If empty will use the default path above"
-          type="text"
-          bind:value={config.completed_anime_path}
-          placeholder="/path/to/completed"
-        />
-
-        <Input
-          id="check_interval"
-          label="Check interval in minutes"
-          type="number"
-          bind:value={config.check_interval}
-          min="1"
-          required={true}
-        />
-
-        <Input
-          id="qbittorrent_url"
-          label="qBittorrent URL"
-          subtitle="If you don't know what this is don't change it"
-          type="url"
-          bind:value={config.qbittorrent_url}
-          placeholder="http://127.0.0.1:8080"
-          required={true}
-        />
-
-        <Input
-          id="max_episodes_per_anime"
-          label="Max Episodes Per Anime"
-          type="number"
-          bind:value={config.max_episodes_per_anime}
-          min="1"
-          required={true}
-        />
-
-        <Input
-          id="episode_retry_limit"
-          label="Episode Retry Limit"
-          type="number"
-          bind:value={config.episode_retry_limit}
-          min="0"
-          required={true}
-        />
-
-        <div class="space-y-3">
-          <div class="flex items-center">
-            <input
-              type="checkbox"
-              id="delete_watched_episodes"
-              bind:checked={config.delete_watched_episodes}
-              class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
-            />
-            <label
-              for="delete_watched_episodes"
-              class="ml-2 block text-sm text-gray-900 dark:text-white"
-            >
-              Delete Watched Episodes
-            </label>
+      <!-- Downloads -->
+      <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 gap-4">
+          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionDownloads}</h2>
+          <Input
+            id="save_path"
+            label={T && T.labelSavePath || ""}
+            subtitle={T && T.hintSavePath || ""}
+            type="text"
+            bind:value={config.save_path}
+            placeholder="/path/to/downloads"
+            required={true}
+          />
+          <Input
+            id="completed_anime_path"
+            label={T && T.labelCompletedPath || ""}
+            subtitle={T && T.hintCompletedPath || ""}
+            type="text"
+            bind:value={config.completed_anime_path}
+            placeholder="/path/to/completed"
+          />
+          <div class="space-y-3">
+            <div class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="delete_watched_episodes"
+                bind:checked={config.delete_watched_episodes}
+                class="checkbox checkbox-sm"
+              />
+              <label for="delete_watched_episodes" class="text-sm text-base-content cursor-pointer">
+                {T && T.labelDeleteWatched}
+              </label>
+            </div>
+            {#if config.delete_watched_episodes}
+              <div class="pl-6">
+                <Input
+                  id="watched_episodes_to_keep"
+                  label={T && T.labelWatchedKeep || ""}
+                  subtitle={T && T.hintWatchedKeep || ""}
+                  type="number"
+                  bind:value={config.watched_episodes_to_keep}
+                  min="0"
+                />
+              </div>
+            {/if}
           </div>
+        </div>
+      </div>
 
-          {#if config.delete_watched_episodes}
+      <!-- Automation -->
+      <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 gap-4">
+          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionAutomation}</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input
-              id="watched_episodes_to_keep"
-              label="Watched Episodes To Keep"
-              subtitle="Number of watched episodes to keep. Keep at 0 to delete all watched"
+              id="check_interval"
+              label={T && T.labelCheckInterval || ""}
               type="number"
-              bind:value={config.watched_episodes_to_keep}
-              min="0"
+              bind:value={config.check_interval}
+              min="1"
+              required={true}
             />
-          {/if}
+            <Input
+              id="max_episodes_per_anime"
+              label={T && T.labelMaxEpisodes || ""}
+              type="number"
+              bind:value={config.max_episodes_per_anime}
+              min="1"
+              required={true}
+            />
+            <Input
+              id="episode_retry_limit"
+              label={T && T.labelRetryLimit || ""}
+              type="number"
+              bind:value={config.episode_retry_limit}
+              min="0"
+              required={true}
+            />
+          </div>
         </div>
+      </div>
 
-        <Input
-          id="excluded_list"
-          label="Excluded List"
-          subtitle="Lists that should not be downloaded"
-          type="text"
-          bind:value={config.excluded_list}
-          placeholder="Name of excluded list"
-        />
+      <!-- qBittorrent -->
+      <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 gap-4">
+          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionQbit}</h2>
+          <Input
+            id="qbittorrent_url"
+            label={T && T.labelQbitUrl || ""}
+            subtitle={T && T.hintQbitUrl || ""}
+            type="url"
+            bind:value={config.qbittorrent_url}
+            placeholder="http://127.0.0.1:8080"
+            required={true}
+          />
+        </div>
+      </div>
 
-        <div
-          class="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700"
+      <!-- Filters -->
+      <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 gap-4">
+          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionFilters}</h2>
+          <Input
+            id="excluded_list"
+            label={T && T.labelExcludedList || ""}
+            subtitle={T && T.hintExcludedList || ""}
+            type="text"
+            bind:value={config.excluded_list}
+            placeholder="Name of excluded list"
+          />
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          on:click={async () => {
+            await triggerCheck();
+            window.location.hash = "#/status";
+          }}
+          disabled={saving}
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <button
-            type="button"
-            on:click={loadConfig}
-            disabled={loading || saving}
-            class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Reload
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-        </div>
-      </form>
-    </div>
+          {T && T.btnRunCheck}
+        </button>
+        <button
+          type="button"
+          on:click={loadConfig}
+          disabled={loading || saving}
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {T && T.btnReload}
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? (T && T.btnSaving) : (T && T.btnSave)}
+        </button>
+      </div>
+    </form>
   {/if}
 </div>

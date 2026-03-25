@@ -1,14 +1,14 @@
 # Stage 1: Build frontend (must be first!)
-FROM node:20-alpine AS frontend-builder
+FROM oven/bun:alpine AS frontend-builder
 
 WORKDIR /build
 
 # Copy frontend files
-COPY src/internal/frontend/package*.json ./
-RUN npm ci
+COPY src/internal/frontend/package.json src/internal/frontend/bun.lock* ./
+RUN bun install --frozen-lockfile
 
 COPY src/internal/frontend/ ./
-RUN npm run build
+RUN bun run build
 
 # Stage 2: Build Go daemon (frontend is embedded)
 FROM golang:1.24-alpine AS go-builder

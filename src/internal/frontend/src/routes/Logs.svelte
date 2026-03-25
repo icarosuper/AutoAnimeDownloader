@@ -1,18 +1,38 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { getLogs, type LogsResponse } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
-  import ErrorMessage from "../components/ErrorMessage.svelte";
+  import { toast } from "../lib/stores/toast.js";
+  import * as m from "../lib/i18n/messages.js";
+  import { locale } from "../lib/stores/locale.js";
+
+  $: T = $locale && {
+    title: m.logs_title(),
+    subtitle: m.logs_subtitle(),
+    labelLines: m.logs_label_lines(),
+    labelLevel: m.logs_label_level(),
+    searchPlaceholder: m.logs_search_placeholder(),
+    labelAutoscroll: m.logs_label_autoscroll(),
+    btnReload: m.logs_btn_reload(),
+    levelAll: m.logs_level_all(),
+    levelDebug: m.logs_level_debug(),
+    levelInfo: m.logs_level_info(),
+    levelWarn: m.logs_level_warn(),
+    levelError: m.logs_level_error(),
+    loading: m.logs_loading(),
+    emptyFiltered: m.logs_empty_filtered(),
+    empty: m.logs_empty(),
+    filteredSuffix: m.logs_filtered_suffix(),
+  };
 
   let logs: string[] = [];
   let loading = true;
-  let error: string | null = null;
   let linesToLoad = 1000;
-  let filterLevel = "all"; // all, debug, info, warn, error
+  let filterLevel = "all";
   let searchQuery = "";
-  let filteredLogs: string[] = [];
-  let parsedLogs: ParsedLogLine[] = [];
+  let autoScroll = true;
   let initialized = false;
+  let logContainer: HTMLElement;
 
   type ParsedLogLine = {
     level: string;
@@ -23,229 +43,109 @@
   };
 
   function parseLogLine(line: string): ParsedLogLine {
-    // Try to parse zerolog format: {"level":"info","time":"2024-01-01T00:00:00Z","message":"..."}
     if (line.startsWith("{")) {
       try {
         const json = JSON.parse(line);
-
         const { level, time, message, ...rest } = json;
-
         const extras: Record<string, string> = {};
         for (const [key, value] of Object.entries(rest)) {
-          try {
-            if (typeof value === "object") {
-              extras[key] = JSON.stringify(value);
-            } else {
-              extras[key] = String(value);
-            }
-          } catch {
-            extras[key] = String(value);
-          }
+          extras[key] = typeof value === "object" ? JSON.stringify(value) : String(value);
         }
-
-        const extrasString =
-          Object.keys(extras).length > 0
-            ? Object.entries(extras)
-                .map(([k, v]) => `"${k}"="${v}"`)
-                .join(" ")
-            : undefined;
-
-        return {
-          level: level || "info",
-          timestamp: time || "",
-          message: message || line,
-          raw: line,
-          extras: extrasString,
-        };
-      } catch {
-        // Not valid JSON, fall through
-      }
+        const extrasString = Object.keys(extras).length > 0
+          ? Object.entries(extras).map(([k, v]) => `"${k}"="${v}"`).join(" ")
+          : undefined;
+        return { level: level || "info", timestamp: time || "", message: message || line, raw: line, extras: extrasString };
+      } catch { /* fall through */ }
     }
 
-    // Try to parse console format: 2024-01-01T00:00:00Z INF message
     const levelMatch = line.match(/\b(DBG|INF|WRN|ERR|FAT)\b/);
     if (levelMatch) {
-      const levelMap: Record<string, string> = {
-        DBG: "debug",
-        INF: "info",
-        WRN: "warn",
-        ERR: "error",
-        FAT: "error",
-      };
-      return {
-        level: levelMap[levelMatch[1]] || "info",
-        timestamp: "",
-        message: line,
-        raw: line,
-      };
+      const levelMap: Record<string, string> = { DBG: "debug", INF: "info", WRN: "warn", ERR: "error", FAT: "error" };
+      return { level: levelMap[levelMatch[1]] || "info", timestamp: "", message: line, raw: line };
     }
 
-    // Default: try to detect level keywords
-    const lowerLine = line.toLowerCase();
-    let detectedLevel = "info";
-    if (lowerLine.includes("error") || lowerLine.includes("err")) {
-      detectedLevel = "error";
-    } else if (lowerLine.includes("warn")) {
-      detectedLevel = "warn";
-    } else if (lowerLine.includes("debug") || lowerLine.includes("dbg")) {
-      detectedLevel = "debug";
-    }
-
-    return {
-      level: detectedLevel,
-      timestamp: "",
-      message: line,
-      raw: line,
-    };
+    const lower = line.toLowerCase();
+    const level = lower.includes("error") || lower.includes("err") ? "error"
+      : lower.includes("warn") ? "warn"
+      : lower.includes("debug") || lower.includes("dbg") ? "debug"
+      : "info";
+    return { level, timestamp: "", message: line, raw: line };
   }
 
   function getLevelColor(level: string): string {
     switch (level) {
-      case "error":
-        return "text-red-600 dark:text-red-400";
-      case "warn":
-        return "text-yellow-600 dark:text-yellow-400";
-      case "debug":
-        return "text-gray-500 dark:text-gray-400";
-      case "info":
-      default:
-        return "text-blue-600 dark:text-blue-400";
+      case "error": return "text-error";
+      case "warn":  return "text-warning";
+      case "debug": return "text-base-content/40";
+      default:      return "text-info";
     }
   }
 
-  function getLevelBgColor(level: string): string {
-    switch (level) {
-      case "error":
-        return "bg-red-50 dark:bg-red-900/20";
-      case "warn":
-        return "bg-yellow-50 dark:bg-yellow-900/20";
-      case "debug":
-        return "bg-gray-50 dark:bg-gray-800";
-      case "info":
-      default:
-        return "bg-blue-50 dark:bg-blue-900/20";
-    }
-  }
-
-  function filterLogs(
-    logs: string[],
-    linesToLoad: number,
-    filterLevel: string,
-    searchQuery: string,
-  ): string[] {
+  function filterLogs(logs: string[], linesToLoad: number, filterLevel: string, searchQuery: string): string[] {
     let filtered = [...logs].slice(0, linesToLoad).reverse();
-
-    if (filterLevel !== "all") {
-      filtered = filtered.filter((line) => {
-        const parsed = parseLogLine(line);
-        return parsed.level === filterLevel;
-      });
-    }
-
-    if (!searchQuery.trim()) return filtered;
-
-    return filtered.filter((line) =>
-      line.toLowerCase().includes(searchQuery.toLowerCase().trim()),
-    );
+    if (filterLevel !== "all") filtered = filtered.filter(l => parseLogLine(l).level === filterLevel);
+    if (searchQuery.trim()) filtered = filtered.filter(l => l.toLowerCase().includes(searchQuery.toLowerCase().trim()));
+    return filtered;
   }
 
   $: filteredLogs = filterLogs(logs, linesToLoad, filterLevel, searchQuery);
-  $: parsedLogs = filteredLogs.map((line) => parseLogLine(line));
+  $: parsedLogs = filteredLogs.map(parseLogLine);
   $: updateUrlQuery(linesToLoad, filterLevel, searchQuery);
+  $: if (parsedLogs && autoScroll) scrollToBottom();
 
-  function updateUrlQuery(
-    linesToLoad: number,
-    filterLevel: string,
-    searchQuery: string,
-  ) {
+  async function scrollToBottom() {
+    await tick();
+    if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
+  }
+
+  function updateUrlQuery(linesToLoad: number, filterLevel: string, searchQuery: string) {
     if (typeof window === "undefined" || !initialized) return;
-
     const params = new URLSearchParams();
-    const currentHash = window.location.hash || "#/logs";
-
-    // Extract the route path from hash (everything before ?)
-    // Ensure we're always using /logs as the base path
-    let hashPath = currentHash.split("?")[0];
-    if (!hashPath || hashPath === "#" || !hashPath.includes("/logs")) {
-      hashPath = "#/logs";
-    }
-
-    if (linesToLoad && linesToLoad !== 1000) {
-      params.set("lines", String(linesToLoad));
-    }
-
-    if (filterLevel && filterLevel !== "all") {
-      params.set("level", filterLevel);
-    }
-
-    const trimmedQuery = searchQuery.trim();
-    if (trimmedQuery) {
-      params.set("q", trimmedQuery);
-    }
-
-    const queryString = params.toString();
-
-    // Build new hash with query params
-    const newHash = queryString ? `${hashPath}?${queryString}` : hashPath;
-
-    window.history.replaceState(
-      {},
-      "",
-      window.location.pathname + window.location.search + newHash,
-    );
+    let hashPath = (window.location.hash || "#/logs").split("?")[0];
+    if (!hashPath.includes("/logs")) hashPath = "#/logs";
+    if (linesToLoad !== 1000) params.set("lines", String(linesToLoad));
+    if (filterLevel !== "all") params.set("level", filterLevel);
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + window.location.search + (qs ? `${hashPath}?${qs}` : hashPath));
   }
 
   async function loadLogs() {
     try {
       loading = true;
-      error = null;
       const response: LogsResponse = await getLogs(linesToLoad);
       logs = response.lines;
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
-      console.error("Failed to load logs:", err);
+      toast.error(err instanceof Error ? err.message : m.logs_error_load());
     } finally {
       loading = false;
     }
   }
 
+  async function copyLine(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(m.logs_copy_success());
+    } catch {
+      toast.error(m.logs_copy_error());
+    }
+  }
+
   function initFromUrl() {
     if (typeof window === "undefined") return;
-
-    // Try to get params from hash first (for hash routing)
-    let params: URLSearchParams | null = null;
     const hash = window.location.hash;
-
+    let params: URLSearchParams | null = null;
     if (hash) {
-      const hashParts = hash.split("?");
-      if (hashParts.length > 1) {
-        params = new URLSearchParams(hashParts[1]);
-      }
+      const parts = hash.split("?");
+      if (parts.length > 1) params = new URLSearchParams(parts[1]);
     }
-
-    // Fallback to search params if not in hash
-    if (!params || params.toString() === "") {
-      params = new URLSearchParams(window.location.search);
-    }
-
+    if (!params || params.toString() === "") params = new URLSearchParams(window.location.search);
     const linesParam = params.get("lines");
-    if (linesParam) {
-      const parsed = parseInt(linesParam, 10);
-      if (!Number.isNaN(parsed)) {
-        linesToLoad = parsed;
-      }
-    }
-
+    if (linesParam) { const p = parseInt(linesParam, 10); if (!isNaN(p)) linesToLoad = p; }
     const levelParam = params.get("level");
-    const validLevels = ["all", "debug", "info", "warn", "error"];
-    if (levelParam && validLevels.includes(levelParam)) {
-      filterLevel = levelParam;
-    }
-
-    const qParam = params.get("q") ?? params.get("search");
-    if (qParam !== null) {
-      searchQuery = qParam;
-    }
+    if (levelParam && ["all","debug","info","warn","error"].includes(levelParam)) filterLevel = levelParam;
+    const q = params.get("q") ?? params.get("search");
+    if (q) searchQuery = q;
   }
 
   onMount(() => {
@@ -255,130 +155,122 @@
   });
 </script>
 
-<div>
-  <div class="mb-6">
-    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Logs</h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-      Daemon logs and system messages
-    </p>
+<div class="flex flex-col" style="height: calc(100vh - 8rem)">
+  <!-- Header -->
+  <div class="mb-4 flex-none">
+    <h1 class="text-2xl font-semibold text-base-content">{T && T.title}</h1>
+    <p class="text-sm text-base-content/50 mt-0.5">{T && T.subtitle}</p>
   </div>
-
-  {#if error}
-    <div class="mb-6">
-      <ErrorMessage message={error} />
-    </div>
-  {/if}
 
   <!-- Controls -->
-  <div class="bg-white dark:bg-gray-800 shadow rounded-lg mb-6 p-4">
-    <div class="flex flex-wrap items-center gap-4">
-      <div class="flex items-center gap-2">
-        <label
-          for="lines-input"
-          class="text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Lines:
+  <div class="card bg-base-200 border border-base-300 mb-4 flex-none">
+    <div class="card-body p-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <label class="flex items-center gap-2 text-sm text-base-content/70">
+          {T && T.labelLines}
+          <input
+            type="number" min="100" max="10000" step="100"
+            bind:value={linesToLoad}
+            on:change={loadLogs}
+            class="input input-xs input-bordered w-24"
+          />
         </label>
-        <input
-          id="lines-input"
-          type="number"
-          min="100"
-          max="10000"
-          step="100"
-          bind:value={linesToLoad}
-          class="w-24 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:border-blue-500 focus:ring-blue-500 py-1 px-2"
-        />
-      </div>
 
-      <div class="flex items-center gap-2">
-        <label
-          for="filter-level"
-          class="text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Filter:
+        <label class="flex items-center gap-2 text-sm text-base-content/70">
+          {T && T.labelLevel}
+          <select bind:value={filterLevel} class="select select-xs select-bordered">
+            <option value="all">{T && T.levelAll}</option>
+            <option value="debug">{T && T.levelDebug}</option>
+            <option value="info">{T && T.levelInfo}</option>
+            <option value="warn">{T && T.levelWarn}</option>
+            <option value="error">{T && T.levelError}</option>
+          </select>
         </label>
-        <select
-          id="filter-level"
-          bind:value={filterLevel}
-          class="rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:border-blue-500 focus:ring-blue-500 py-1 px-2"
-        >
-          <option value="all">All</option>
-          <option value="debug">Debug</option>
-          <option value="info">Info</option>
-          <option value="warn">Warn</option>
-          <option value="error">Error</option>
-        </select>
-      </div>
 
-      <div class="flex items-center gap-2 flex-1 min-w-[200px]">
-        <label
-          for="search-input"
-          class="text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Search:
+        <label class="input input-xs input-bordered flex items-center gap-2 flex-1 min-w-40">
+          <svg class="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+          <input type="text" placeholder={T && T.searchPlaceholder || ""} bind:value={searchQuery} class="grow" />
+          {#if searchQuery}
+            <button class="opacity-50 hover:opacity-100" on:click={() => searchQuery = ""}>✕</button>
+          {/if}
         </label>
-        <input
-          id="search-input"
-          type="text"
-          bind:value={searchQuery}
-          placeholder="Search logs..."
-          class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:border-blue-500 focus:ring-blue-500 py-1 px-2"
-        />
+
+        <label class="flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
+          <input type="checkbox" bind:checked={autoScroll} class="checkbox checkbox-xs" />
+          {T && T.labelAutoscroll}
+        </label>
+
+        <button class="btn btn-xs btn-outline ml-auto" on:click={loadLogs}>{T && T.btnReload}</button>
       </div>
     </div>
   </div>
 
+  <!-- Log container -->
   {#if loading}
-    <Loading message="Loading logs..." />
-  {:else if filteredLogs.length === 0}
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-      <p class="text-sm text-gray-500 dark:text-gray-400">
-        {filterLevel === "all"
-          ? "No logs available."
-          : `No ${filterLevel} logs found.`}
-      </p>
+    <div class="flex-1 flex items-center justify-center">
+      <Loading message={T && T.loading || ""} />
     </div>
   {:else}
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+    <div class="flex-1 relative min-h-0">
       <div
-        class="h-[600px] overflow-y-auto p-4 font-mono text-sm bg-gray-900 dark:bg-black"
+        bind:this={logContainer}
+        class="absolute inset-0 overflow-y-auto font-mono text-xs bg-base-300 rounded-lg border border-base-300 p-2 space-y-0.5"
       >
-        {#each parsedLogs as parsed}
-          <div
-            class="mb-2 px-3 py-1.5 rounded {getLevelBgColor(
-              parsed.level,
-            )} hover:opacity-80"
-          >
-            <span class="{getLevelColor(parsed.level)} font-semibold">
-              [{parsed.level.toUpperCase()}]
-            </span>
-            {#if parsed.timestamp}
-              <span class="text-gray-400 dark:text-gray-500 ml-2">
-                {parsed.timestamp}
-              </span>
-            {/if}
-            <span class="text-gray-300 dark:text-gray-400 ml-2">
-              {parsed.message}
-            </span>
-            {#if parsed.extras}
-              <span class="text-gray-400 dark:text-gray-500 ml-2">
-                {parsed.extras}
-              </span>
-            {/if}
+        {#if parsedLogs.length === 0}
+          <div class="flex items-center justify-center h-full">
+            <p class="text-base-content/40">
+              {filterLevel !== "all" || searchQuery ? (T && T.emptyFiltered) : (T && T.empty)}
+            </p>
           </div>
-        {/each}
+        {:else}
+          {#each parsedLogs as parsed}
+            <div class="group flex items-start gap-2 px-2 py-1 rounded hover:bg-base-content/5">
+              <span class="{getLevelColor(parsed.level)} font-semibold w-10 shrink-0 select-none">
+                {parsed.level.slice(0, 4).toUpperCase()}
+              </span>
+              {#if parsed.timestamp}
+                <span class="text-base-content/30 shrink-0">{parsed.timestamp}</span>
+              {/if}
+              <span class="text-base-content/80 break-all flex-1">
+                {parsed.message}
+                {#if parsed.extras}
+                  <span class="text-base-content/40 ml-1">{parsed.extras}</span>
+                {/if}
+              </span>
+              <button
+                class="opacity-0 group-hover:opacity-60 hover:!opacity-100 shrink-0 text-base-content/50 transition-opacity"
+                title="Copy"
+                on:click={() => copyLine(parsed.raw)}
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+              </button>
+            </div>
+          {/each}
+        {/if}
       </div>
 
-      <div
-        class="px-4 py-2 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600"
+      <!-- Scroll to bottom button -->
+      <button
+        class="absolute bottom-4 right-4 btn btn-circle btn-sm btn-neutral shadow-lg opacity-80 hover:opacity-100"
+        title="Scroll to bottom"
+        on:click={scrollToBottom}
       >
-        <p class="text-xs text-gray-500 dark:text-gray-400">
-          Showing {filteredLogs.length} of {logs.length} log lines
-          {#if filterLevel !== "all"}
-            (filtered by {filterLevel})
-          {/if}
-        </p>
-      </div>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Footer -->
+    <div class="flex-none pt-2 text-xs text-base-content/40">
+      {$locale && m.logs_x_of_y({ shown: filteredLogs.length, total: logs.length })}
+      {#if filterLevel !== "all" || searchQuery}{T && T.filteredSuffix}{/if}
     </div>
   {/if}
 </div>
