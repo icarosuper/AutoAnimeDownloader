@@ -1,3 +1,5 @@
+import { toasts } from '../stores/toasts.js'
+
 // Usa o host atual da página quando não há variável de ambiente definida
 // Isso permite que o frontend funcione tanto localmente quanto quando acessado remotamente
 const getApiBaseUrl = (): string => {
@@ -40,8 +42,10 @@ async function apiRequest<T>(method: string, endpoint: string, body: unknown = n
     options.body = JSON.stringify(body)
   }
 
+  let responseStatus = 0
   try {
     const response = await fetch(url, options)
+    responseStatus = response.status
     const data: ApiResponse<T> = await response.json()
 
     if (!response.ok) {
@@ -51,6 +55,14 @@ async function apiRequest<T>(method: string, endpoint: string, body: unknown = n
     return data.data
   } catch (error) {
     console.error('API request failed:', error)
+    const isAnilistEndpoint = /\/animes\/\d+\/episodes$/.test(endpoint)
+    const message =
+      isAnilistEndpoint && (responseStatus === 500 || responseStatus === 0)
+        ? 'Falha na comunicação com o AniList'
+        : error instanceof Error
+          ? error.message
+          : 'Erro desconhecido'
+    toasts.add(message)
     throw error
   }
 }
@@ -136,6 +148,10 @@ export async function downloadEpisode(animeId: number, episodeId: number): Promi
 
 export async function deleteEpisode(animeId: number, episodeId: number): Promise<void> {
   return apiRequest<void>('DELETE', `/animes/${animeId}/episodes/${episodeId}`)
+}
+
+export async function releaseEpisode(animeId: number, episodeId: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/release`)
 }
 
 export async function triggerCheck(): Promise<void> {

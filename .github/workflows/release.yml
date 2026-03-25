@@ -16,6 +16,12 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=$(echo "${{ github.ref }}" | sed 's/refs\/tags\/v//')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Build frontend
         run: |
           cd src/internal/frontend

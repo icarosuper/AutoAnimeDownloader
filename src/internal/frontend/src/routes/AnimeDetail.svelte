@@ -4,6 +4,7 @@
     getAnimes,
     downloadEpisode,
     deleteEpisode,
+    releaseEpisode,
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
@@ -118,6 +119,18 @@
     }
   }
 
+  async function handleRelease(ep: AnimeEpisodeInfo) {
+    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    try {
+      await releaseEpisode(animeId, ep.episode_id);
+      await loadData(animeId);
+    } catch (err) {
+      console.error("Failed to release episode:", err);
+    } finally {
+      actionLoading = { ...actionLoading, [ep.episode_id]: false };
+    }
+  }
+
   $: loadData(animeId);
 </script>
 
@@ -222,23 +235,38 @@
                   {ep.is_downloaded ? formatDate(ep.download_date) : "—"}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  {#if ep.is_aired && !ep.is_downloaded}
-                    <button
-                      on:click={() => handleDownload(ep)}
-                      disabled={isLoading}
-                      class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isLoading ? "..." : m.detail_btn_download()}
-                    </button>
-                  {:else if ep.is_downloaded}
-                    <button
-                      on:click={() => handleDelete(ep)}
-                      disabled={isLoading}
-                      class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isLoading ? "..." : m.detail_btn_delete()}
-                    </button>
-                  {/if}
+                  <div class="flex items-center gap-1.5">
+                    {#if ep.is_aired && !ep.is_downloaded}
+                      <button
+                        on:click={() => handleDownload(ep)}
+                        disabled={isLoading}
+                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isLoading ? "..." : m.detail_btn_download()}
+                      </button>
+                    {:else if ep.is_downloaded}
+                      <button
+                        on:click={() => handleDelete(ep)}
+                        disabled={isLoading}
+                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isLoading ? "..." : m.detail_btn_delete()}
+                      </button>
+                    {/if}
+                    {#if ep.is_manually_managed || ep.is_blocked}
+                      <button
+                        on:click={() => handleRelease(ep)}
+                        disabled={isLoading}
+                        title="Soltar episódio"
+                        class="inline-flex items-center px-1.5 py-1 text-xs font-medium rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    {/if}
+                  </div>
                 </td>
               </tr>
             {/each}
@@ -295,7 +323,7 @@
                 </div>
               {/if}
             </div>
-            <div class="mt-3">
+            <div class="mt-3 flex items-center gap-1.5">
               {#if ep.is_aired && !ep.is_downloaded}
                 <button
                   on:click={() => handleDownload(ep)}
@@ -311,6 +339,19 @@
                   class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? m.detail_btn_deleting() : m.detail_btn_delete()}
+                </button>
+              {/if}
+              {#if ep.is_manually_managed || ep.is_blocked}
+                <button
+                  on:click={() => handleRelease(ep)}
+                  disabled={isLoading}
+                  title="Soltar episódio"
+                  class="inline-flex items-center px-1.5 py-1.5 text-xs font-medium rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
                 </button>
               {/if}
             </div>
