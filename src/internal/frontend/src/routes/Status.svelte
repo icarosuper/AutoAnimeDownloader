@@ -14,6 +14,7 @@
   import Loading from "../components/Loading.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
   import { toast } from "../lib/stores/toast.js";
+  import { wsConnectionState } from "../lib/stores/wsState.js";
 
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
@@ -170,7 +171,7 @@
   onMount(() => {
     loadInitialData();
     wsClient = new WebSocketClient();
-    wsClient.connect(handleWebSocketStatus);
+    wsClient.connect(handleWebSocketStatus, (state) => wsConnectionState.set(state));
     animesPollInterval = setInterval(loadAnimes, 30000);
     tickInterval = setInterval(() => { now = Date.now(); }, 1000);
   });

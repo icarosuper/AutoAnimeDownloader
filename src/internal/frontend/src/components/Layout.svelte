@@ -4,6 +4,7 @@
   import { theme, THEMES, type Theme } from '../lib/stores/theme.js'
   import { getStatus } from '../lib/api/client.js'
   import Toasts from './Toasts.svelte'
+  import { wsConnectionState } from '../lib/stores/wsState.js'
 
   $: currentPath = $location
 
@@ -52,8 +53,20 @@
         </div>
         
         <div class="flex items-center gap-3">
+          <!-- WebSocket connection indicator -->
+          <div
+            class="tooltip tooltip-bottom"
+            data-tip={$wsConnectionState === 'connected' ? 'Real-time updates active' : $wsConnectionState === 'reconnecting' ? 'Reconnecting...' : 'Disconnected'}
+          >
+            <span class="inline-block w-2 h-2 rounded-full {
+              $wsConnectionState === 'connected' ? 'bg-success' :
+              $wsConnectionState === 'reconnecting' ? 'bg-warning animate-pulse' :
+              'bg-error'
+            }"></span>
+          </div>
+
           {#if appVersion}
-            <span class="text-xs text-gray-400 dark:text-gray-500">v{appVersion}</span>
+            <span class="text-xs text-base-content/40">v{appVersion}</span>
           {/if}
           <label for="theme-select" class="sr-only">Theme</label>
           <select
