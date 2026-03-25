@@ -230,7 +230,7 @@
       </div>
 
       <!-- Actions -->
-      <div class="flex justify-end gap-2 pt-2">
+      <div class="flex justify-end gap-3 pt-2">
         <button
           type="button"
           on:click={async () => {
@@ -238,7 +238,7 @@
             window.location.hash = "#/status";
           }}
           disabled={saving}
-          class="btn btn-sm btn-outline"
+          class="btn btn-secondary"
         >
           Run Check Now
         </button>
@@ -246,14 +246,14 @@
           type="button"
           on:click={loadConfig}
           disabled={loading || saving}
-          class="btn btn-sm btn-outline"
+          class="btn btn-neutral btn-outline"
         >
           Reload
         </button>
         <button
           type="submit"
           disabled={saving}
-          class="btn btn-sm btn-primary"
+          class="btn btn-primary"
         >
           {saving ? "Saving..." : "Save"}
         </button>

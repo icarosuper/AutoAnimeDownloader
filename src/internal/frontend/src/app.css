@@ -16,3 +16,8 @@ html {
 #app {
   min-height: 100vh;
 }
+
+/* DaisyUI 5 buttons default to a bottom-shadow "3D" style — flatten them */
+.btn {
+  --btn-shadow: 0;
+}
