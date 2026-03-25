@@ -10,7 +10,7 @@
     type AnimeInfo,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
-  import ErrorMessage from "../components/ErrorMessage.svelte";
+  import { toast } from "../lib/stores/toast.js";
 
   export let params: { id?: string } = {};
 
@@ -19,7 +19,6 @@
   let anime: AnimeInfo | null = null;
   let detail: AnimeDetailResponse | null = null;
   let loading = true;
-  let error: string | null = null;
   let actionLoading: Record<number, boolean> = {};
 
   function formatDate(dateString: string | undefined) {
@@ -78,8 +77,7 @@
       detail = detailData;
       anime = animesData.find((a) => a.anime_id === id) ?? null;
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
-      console.error("Failed to load anime detail:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load anime detail");
     } finally {
       loading = false;
     }
@@ -89,9 +87,10 @@
     actionLoading = { ...actionLoading, [ep.episode_id]: true };
     try {
       await downloadEpisode(animeId, ep.episode_id);
+      toast.success(`Episode ${ep.episode_number} queued for download`);
       await loadData(animeId);
     } catch (err) {
-      console.error("Failed to download episode:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to download episode");
     } finally {
       actionLoading = { ...actionLoading, [ep.episode_id]: false };
     }
@@ -101,9 +100,10 @@
     actionLoading = { ...actionLoading, [ep.episode_id]: true };
     try {
       await deleteEpisode(animeId, ep.episode_id);
+      toast.success(`Episode ${ep.episode_number} deleted`);
       await loadData(animeId);
     } catch (err) {
-      console.error("Failed to delete episode:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to delete episode");
     } finally {
       actionLoading = { ...actionLoading, [ep.episode_id]: false };
     }
@@ -136,12 +136,6 @@
       </p>
     {/if}
   </div>
-
-  {#if error}
-    <div class="mb-6">
-      <ErrorMessage message={error} />
-    </div>
-  {/if}
 
   {#if loading}
     <Loading message="Loading episodes..." />

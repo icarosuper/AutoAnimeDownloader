@@ -10,14 +10,13 @@
     type AnimeInfo,
   } from "../lib/api/client.js";
   import { WebSocketClient } from "../lib/websocket/client.js";
-  import ErrorMessage from "../components/ErrorMessage.svelte";
   import Loading from "../components/Loading.svelte";
   import StatusBadge from "../components/StatusBadge.svelte";
+  import { toast } from "../lib/stores/toast.js";
 
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
   let loading = true;
-  let error: string | null = null;
   let actionLoading = false;
 
   type SortKey = "episodes_count" | "last_download_date";
@@ -76,8 +75,7 @@
       status = statusData;
       animes = animesData.slice(0, 10);
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
-      console.error("Failed to load initial data:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load data");
     } finally {
       loading = false;
     }
@@ -115,10 +113,9 @@
     try {
       actionLoading = true;
       await startDaemon();
-      // Status will be updated via WebSocket
       await loadAnimes();
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
+      toast.error(err instanceof Error ? err.message : "Failed to start daemon");
     } finally {
       actionLoading = false;
     }
@@ -128,10 +125,9 @@
     try {
       actionLoading = true;
       await stopDaemon();
-      // Status will be updated via WebSocket
       await loadAnimes();
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
+      toast.error(err instanceof Error ? err.message : "Failed to stop daemon");
     } finally {
       actionLoading = false;
     }
@@ -141,10 +137,10 @@
     try {
       actionLoading = true;
       await triggerCheck();
-      // Status will be updated via WebSocket
+      toast.success("Check triggered successfully");
       await loadAnimes();
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
+      toast.error(err instanceof Error ? err.message : "Failed to trigger check");
     } finally {
       actionLoading = false;
     }
@@ -215,12 +211,6 @@
       Daemon monitoring and statistics
     </p>
   </div>
-
-  {#if error}
-    <div class="mb-6">
-      <ErrorMessage message={error} />
-    </div>
-  {/if}
 
   {#if loading}
     <Loading message="Loading status..." />

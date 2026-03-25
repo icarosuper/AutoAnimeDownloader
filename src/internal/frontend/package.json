@@ -5,23 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "bun run i18n:compile && vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/i18n"
   },
   "devDependencies": {
+    "@inlang/paraglide-js": "^2.15.1",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tsconfig/svelte": "^5.0.0",
-    "@types/node": "^20.0.0",
+    "@types/node": "^25.5.0",
     "autoprefixer": "^10.4.23",
+    "daisyui": "^5.5.19",
     "postcss": "^8.4.47",
     "svelte": "^5.0.0",
-    "svelte-check": "^3.8.5",
+    "svelte-check": "^4.4.5",
     "tailwindcss": "^3.4.19",
-    "typescript": "^5.7.2",
+    "typescript": "^6.0.2",
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "svelte-spa-router": "^4.0.1"
   },
   "overrides": {

@@ -25,19 +25,20 @@ docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
 swag init -g src/cmd/daemon/main.go -o src/internal/api/docs
 
 # Build manually (frontend must be built first)
-cd src/internal/frontend && npm ci && npm run build && cd ../../..
+cd src/internal/frontend && bun install --frozen-lockfile && bun run build && cd ../../..
 go build -o build/autoanimedownloader-daemon ./src/cmd/daemon
 go build -o build/autoanimedownloader ./src/cmd/cli
 ```
 
-### Frontend (Svelte + Vite)
+### Frontend (Svelte + Vite + Bun)
 
 ```bash
 cd src/internal/frontend
-npm install
-npm run dev    # dev server (proxies API to localhost:8091)
-npm run build  # production build (output embedded in Go binary)
-npm run check  # TypeScript type checking
+bun install
+bun run dev    # dev server (proxies API to localhost:8091)
+bun run build  # production build (output embedded in Go binary)
+bun run check  # TypeScript type checking
+bun run i18n:compile  # recompile i18n messages (paraglide-js)
 ```
 
 ### Full Platform Builds (Docker required)
@@ -92,7 +93,7 @@ src/tests/
    - Add new episodes to qBittorrent via its WebUI API
    - Record downloaded episodes in `episodes.json` to avoid re-downloading
 
-2. **Frontend embedding**: `npm run build` outputs to `src/internal/frontend/dist/`, which Go embeds via `//go:embed dist` in the API server. The daemon serves the SPA at `/` and proxies `/api/` to the REST handlers.
+2. **Frontend embedding**: `bun run build` outputs to `src/internal/frontend/dist/`, which Go embeds via `//go:embed dist` in the API server. The daemon serves the SPA at `/` and proxies `/api/` to the REST handlers.
 
 3. **Real-time updates**: WebSocket at `/api/v1/ws` broadcasts daemon state changes. The Svelte frontend subscribes for live status.
 

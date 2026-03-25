@@ -1,0 +1,12 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "nav_status": "Status",
+  "nav_config": "Configuration",
+  "nav_logs": "Logs",
+  "theme_light": "Light",
+  "theme_dark": "Dark",
+  "theme_system": "System",
+  "ws_connected": "Real-time updates active",
+  "ws_reconnecting": "Reconnecting...",
+  "ws_disconnected": "Disconnected"
+}

@@ -3,6 +3,7 @@
   import { location } from 'svelte-spa-router'
   import { theme, THEMES, type Theme } from '../lib/stores/theme.js'
   import { getStatus } from '../lib/api/client.js'
+  import Toasts from './Toasts.svelte'
 
   $: currentPath = $location
 
@@ -77,4 +78,6 @@
     <slot />
   </main>
 </div>
+
+<Toasts />
 

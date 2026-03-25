@@ -29,23 +29,23 @@
 
 ---
 
-## 0. Setup Base
-- [ ] Migrar de npm para Bun (`bun install`, atualizar scripts no package.json e Makefile/scripts de build)
-- [ ] Instalar DaisyUI: `bun add -d daisyui`
-- [ ] Instalar Inter: `bun add @fontsource/inter`
-- [ ] Instalar paraglide-js e configurar locales pt-BR e en
-- [ ] Configurar DaisyUI no `tailwind.config.js` com os temas dark e light
-- [ ] Importar fonte Inter no `app.css`
-- [ ] Adaptar `theme.ts` para setar `data-theme` no `<html>` junto com a classe `dark` do Tailwind
+## 0. Setup Base ✅
+- [x] Migrar de npm para Bun (`bun install`, atualizar scripts no package.json e workflows de CI)
+- [x] Instalar DaisyUI: `bun add -d daisyui`
+- [x] Instalar Inter: `bun add @fontsource/inter`
+- [x] Instalar paraglide-js e configurar locales pt-BR e en
+- [x] Configurar DaisyUI no `tailwind.config.js` com os temas dark (night) e light
+- [x] Importar fonte Inter no `app.css`
+- [x] Adaptar `theme.ts` para setar `data-theme` no `<html>` junto com a classe `dark` do Tailwind
+- [x] Atualizar CLAUDE.md com novos comandos de build
 
-## 1. Sistema de Toasts
-- [ ] Criar store `src/lib/stores/toast.ts` com funções `addToast` e `removeToast`
-- [ ] Criar componente `Toast.svelte` com suporte a tipos: success, error, warning, info
-- [ ] Toast aparece no canto inferior direito e some após 4 segundos
-- [ ] Substituir todos os banners/alerts inline de Config.svelte, Status.svelte e AnimeDetail.svelte por toasts
-- [ ] Suporte a múltiplos toasts empilhados
-- [ ] Animação de entrada/saída (slide + fade)
-- [ ] Textos dos toasts traduzidos em pt-BR e en
+## 1. Sistema de Toasts ✅
+- [x] Criar store `src/lib/stores/toast.ts` com funções `addToast` e `removeToast`
+- [x] Criar componente `Toasts.svelte` com suporte a tipos: success, error, warning, info
+- [x] Toast aparece no canto inferior direito e some após 4 segundos
+- [x] Substituir todos os banners/alerts inline de Config.svelte, Status.svelte e AnimeDetail.svelte por toasts
+- [x] Suporte a múltiplos toasts empilhados
+- [x] Animação de entrada/saída (slide + fade)
 
 ## 2+8. Redesign do Dashboard + Busca de Animes (Status.svelte)
 - [ ] Remover o limite hardcoded de Top 10 animes — exibir todos

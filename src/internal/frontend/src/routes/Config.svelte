@@ -7,8 +7,8 @@
     type Config,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
-  import ErrorMessage from "../components/ErrorMessage.svelte";
   import Input from "../components/Input.svelte";
+  import { toast } from "../lib/stores/toast.js";
 
   let config: Config = {
     anilist_username: "",
@@ -25,8 +25,6 @@
 
   let loading = true;
   let saving = false;
-  let error: string | null = null;
-  let success = false;
   let showMissingConfigBanner = false;
 
   function checkQueryParams() {
@@ -66,12 +64,10 @@
   async function loadConfig() {
     try {
       loading = true;
-      error = null;
       const data = await getConfig();
       config = { ...data };
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
-      console.error("Failed to load config:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to load configuration");
     } finally {
       loading = false;
     }
@@ -80,8 +76,6 @@
   async function saveConfig() {
     try {
       saving = true;
-      error = null;
-      success = false;
 
       // Validation
       if (!config.anilist_username || config.anilist_username.trim() === "") {
@@ -107,10 +101,9 @@
       }
 
       await updateConfig(config);
-      success = true;
+      toast.success("Configuration saved successfully");
     } catch (err) {
-      error = err instanceof Error ? err.message : "Unknown error";
-      console.error("Failed to save config:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to save configuration");
     } finally {
       saving = false;
     }
@@ -158,64 +151,6 @@
       Configure daemon behavior
     </p>
   </div>
-
-  {#if error}
-    <div class="mb-6">
-      <ErrorMessage message={error} />
-    </div>
-  {/if}
-
-  {#if success}
-    <div class="mb-6 rounded-md bg-white dark:bg-gray-800 p-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center">
-          <div class="flex-shrink-0">
-            <svg
-              class="h-5 w-5 text-green-400"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clip-rule="evenodd"
-              />
-            </svg>
-          </div>
-          <div class="ml-3">
-            <p class="text-sm font-medium text-green-800 dark:text-green-200">
-              Configuration saved successfully!
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          class="inline-flex items-center px-3 py-1.5 border border-transparent text-sm leading-4 font-semibold rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          on:click={() => {
-            triggerCheck().then(() => {
-              window.location.href = "/status";
-            });
-          }}
-          title="Run anime check"
-        >
-          <svg
-            class="h-4 w-4 mr-1 -ml-1"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="M13 5l7 7-7 7M5 5v14"
-            />
-          </svg>
-          Run anime check now
-        </button>
-      </div>
-    </div>
-  {/if}
 
   {#if loading}
     <Loading message="Loading configuration..." />
@@ -329,6 +264,17 @@
         <div
           class="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700"
         >
+          <button
+            type="button"
+            on:click={async () => {
+              await triggerCheck();
+              window.location.hash = '#/status';
+            }}
+            disabled={saving}
+            class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Run check now
+          </button>
           <button
             type="button"
             on:click={loadConfig}
