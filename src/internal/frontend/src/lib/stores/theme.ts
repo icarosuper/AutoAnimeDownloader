@@ -31,7 +31,7 @@ function applyTheme(themeValue: Theme): void {
 
   if (effectiveTheme === 'dark') {
     root.classList.add('dark')
-    root.setAttribute('data-theme', 'night')
+    root.setAttribute('data-theme', 'dark')
   } else {
     root.classList.remove('dark')
     root.setAttribute('data-theme', 'light')
