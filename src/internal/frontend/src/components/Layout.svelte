@@ -34,6 +34,12 @@
     }
   })
 
+  $: wsTooltip = T
+    ? ($wsConnectionState === 'connected' ? T.wsConnected
+      : $wsConnectionState === 'reconnecting' ? T.wsReconnecting
+      : T.wsDisconnected)
+    : ''
+
   function toggleLocale() {
     locale.set($locale === 'en' ? 'pt-BR' : 'en')
   }
@@ -73,10 +79,8 @@
 
         <div class="flex items-center gap-3">
           <!-- WebSocket connection indicator -->
-          <div
-            class="tooltip tooltip-bottom"
-            data-tip={$wsConnectionState === 'connected' ? T && T.wsConnected : $wsConnectionState === 'reconnecting' ? T && T.wsReconnecting : T && T.wsDisconnected}
-          >
+          <div class="tooltip tooltip-bottom">
+            <div class="tooltip-content">{wsTooltip}</div>
             <span class="inline-block w-2 h-2 rounded-full {
               $wsConnectionState === 'connected' ? 'bg-success' :
               $wsConnectionState === 'reconnecting' ? 'bg-warning animate-pulse' :
