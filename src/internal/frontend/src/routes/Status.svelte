@@ -18,6 +18,33 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
+  // Reactive translations — re-evaluated when $locale changes, no remount needed
+  $: T = $locale && {
+    title: m.status_title(),
+    subtitle: m.status_subtitle(),
+    cardDaemon: m.status_card_daemon(),
+    cardLastCheck: m.status_card_last_check(),
+    cardNextCheck: m.status_card_next_check(),
+    cardLibrary: m.status_card_library(),
+    checking: m.status_checking(),
+    never: m.common_never(),
+    errorAlert: m.status_error_alert(),
+    start: m.status_start(),
+    starting: m.status_starting(),
+    stop: m.status_stop(),
+    stopping: m.status_stopping(),
+    forceCheck: m.status_force_check(),
+    animesHeader: m.status_animes_header(),
+    searchPlaceholder: m.status_search_placeholder(),
+    colName: m.status_col_name(),
+    colEpisodes: m.status_col_episodes(),
+    colProgress: m.status_col_progress(),
+    colLastDownload: m.status_col_last_download(),
+    emptyTitle: m.status_empty_title(),
+    emptyDesc: m.status_empty_desc(),
+    goToConfig: m.status_go_to_config(),
+  }
+
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
   let checkInterval = 0;
@@ -189,8 +216,8 @@
 <div class="space-y-6">
   <!-- Header -->
   <div>
-    <h1 class="text-2xl font-semibold text-base-content">{m.status_title()}</h1>
-    <p class="text-sm text-base-content/50 mt-0.5">{m.status_subtitle()}</p>
+    <h1 class="text-2xl font-semibold text-base-content">{T && T.title}</h1>
+    <p class="text-sm text-base-content/50 mt-0.5">{T && T.subtitle}</p>
   </div>
 
   {#if loading}
@@ -201,7 +228,7 @@
       <!-- Daemon status -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_daemon()}</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{T && T.cardDaemon}</span>
           <StatusBadge status={status.status} />
         </div>
       </div>
@@ -209,9 +236,9 @@
       <!-- Last check -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_last_check()}</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{T && T.cardLastCheck}</span>
           <span class="text-base font-medium text-base-content">
-            {formatTimeAgo(status.last_check) || m.common_never()}
+            {formatTimeAgo(status.last_check) || (T && T.never)}
           </span>
           {#if status.last_check && formatTimeAgo(status.last_check)}
             <span class="text-xs text-base-content/40">{formatDate(status.last_check)}</span>
@@ -222,12 +249,12 @@
       <!-- Next check -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_next_check()}</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{T && T.cardNextCheck}</span>
           <span class="text-base font-medium text-base-content">
             {#if status.status === "stopped"}
               <span class="text-base-content/40">—</span>
             {:else if status.status === "checking"}
-              <span class="text-warning">{m.status_checking()}</span>
+              <span class="text-warning">{T && T.checking}</span>
             {:else if nextCheckIn}
               {nextCheckIn}
             {:else}
@@ -240,9 +267,9 @@
       <!-- Totals -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
-          <span class="text-xs text-base-content/50 uppercase tracking-wider">{m.status_card_library()}</span>
-          <span class="text-base font-medium text-base-content">{m.status_animes_count({ count: animes.length })}</span>
-          <span class="text-xs text-base-content/40">{m.status_episodes_count({ count: totalEpisodes })}</span>
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{T && T.cardLibrary}</span>
+          <span class="text-base font-medium text-base-content">{$locale && m.status_animes_count({ count: animes.length })}</span>
+          <span class="text-xs text-base-content/40">{$locale && m.status_episodes_count({ count: totalEpisodes })}</span>
         </div>
       </div>
     </div>
@@ -254,7 +281,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
-        <span class="text-sm">{m.status_error_alert()}</span>
+        <span class="text-sm">{T && T.errorAlert}</span>
       </div>
     {/if}
 
@@ -266,7 +293,7 @@
           on:click={handleStart}
           disabled={actionLoading}
         >
-          {actionLoading ? m.status_starting() : m.status_start()}
+          {actionLoading ? (T && T.starting) : (T && T.start)}
         </button>
       {:else}
         <button
@@ -274,7 +301,7 @@
           on:click={handleStop}
           disabled={actionLoading}
         >
-          {actionLoading ? m.status_stopping() : m.status_stop()}
+          {actionLoading ? (T && T.stopping) : (T && T.stop)}
         </button>
       {/if}
       <button
@@ -282,7 +309,7 @@
         on:click={handleCheck}
         disabled={status.status === "checking" || actionLoading}
       >
-        {status.status === "checking" ? m.status_checking() : m.status_force_check()}
+        {status.status === "checking" ? (T && T.checking) : (T && T.forceCheck)}
       </button>
     </div>
 
@@ -291,7 +318,7 @@
       <div class="card-body p-4 gap-4">
         <!-- List header -->
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-          <h2 class="text-base font-medium text-base-content flex-1">{m.status_animes_header()}</h2>
+          <h2 class="text-base font-medium text-base-content flex-1">{T && T.animesHeader}</h2>
           <!-- Search -->
           <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64">
             <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,7 +327,7 @@
             </svg>
             <input
               type="text"
-              placeholder={m.status_search_placeholder()}
+              placeholder={T && T.searchPlaceholder || ""}
               bind:value={search}
               class="grow"
             />
@@ -310,7 +337,7 @@
           </label>
           {#if search}
             <span class="text-xs text-base-content/50 whitespace-nowrap">
-              {m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
+              {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
             </span>
           {/if}
         </div>
@@ -323,14 +350,14 @@
                 d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/>
             </svg>
             <div>
-              <p class="font-medium text-base-content/60">{m.status_empty_title()}</p>
-              <p class="text-sm text-base-content/40 mt-1">{m.status_empty_desc()}</p>
+              <p class="font-medium text-base-content/60">{T && T.emptyTitle}</p>
+              <p class="text-sm text-base-content/40 mt-1">{T && T.emptyDesc}</p>
             </div>
-            <a href="#/config" class="btn btn-primary btn-sm mt-2">{m.status_go_to_config()}</a>
+            <a href="#/config" class="btn btn-primary btn-sm mt-2">{T && T.goToConfig}</a>
           </div>
         {:else if filteredAnimes.length === 0}
           <div class="py-8 text-center">
-            <p class="text-base-content/50">{m.status_no_results({ search })}</p>
+            <p class="text-base-content/50">{$locale && m.status_no_results({ search })}</p>
           </div>
         {:else}
           <!-- Desktop Table -->
@@ -338,13 +365,13 @@
             <table class="table table-sm w-full">
               <thead>
                 <tr class="text-base-content/50">
-                  <th>{m.status_col_name()}</th>
+                  <th>{T && T.colName}</th>
                   <th
                     class="cursor-pointer select-none hover:text-base-content"
                     on:click={() => handleSort("episodes_count")}
                   >
                     <span class="inline-flex items-center gap-1">
-                      {m.status_col_episodes()}
+                      {T && T.colEpisodes}
                       {#if sortKey === "episodes_count"}
                         <span class="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>
                       {:else}
@@ -352,13 +379,13 @@
                       {/if}
                     </span>
                   </th>
-                  <th>{m.status_col_progress()}</th>
+                  <th>{T && T.colProgress}</th>
                   <th
                     class="cursor-pointer select-none hover:text-base-content"
                     on:click={() => handleSort("last_download_date")}
                   >
                     <span class="inline-flex items-center gap-1">
-                      {m.status_col_last_download()}
+                      {T && T.colLastDownload}
                       {#if sortKey === "last_download_date"}
                         <span class="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>
                       {:else}

@@ -10,6 +10,19 @@
 
   $: currentPath = $location
 
+  // Reactive translations — re-evaluated when $locale changes
+  $: T = $locale && {
+    navStatus: m.nav_status(),
+    navConfig: m.nav_config(),
+    navLogs: m.nav_logs(),
+    themeLight: m.theme_light(),
+    themeDark: m.theme_dark(),
+    themeSystem: m.theme_system(),
+    wsConnected: m.ws_connected(),
+    wsReconnecting: m.ws_reconnecting(),
+    wsDisconnected: m.ws_disconnected(),
+  }
+
   let appVersion = ''
 
   onMount(async () => {
@@ -38,7 +51,7 @@
               ? 'border-blue-500 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
           >
-            {m.nav_status()}
+            {T && T.navStatus}
           </a>
           <a
             href="#/config"
@@ -46,7 +59,7 @@
               ? 'border-blue-500 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
           >
-            {m.nav_config()}
+            {T && T.navConfig}
           </a>
           <a
             href="#/logs"
@@ -54,7 +67,7 @@
               ? 'border-blue-500 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
           >
-            {m.nav_logs()}
+            {T && T.navLogs}
           </a>
         </div>
 
@@ -62,7 +75,7 @@
           <!-- WebSocket connection indicator -->
           <div
             class="tooltip tooltip-bottom"
-            data-tip={$wsConnectionState === 'connected' ? m.ws_connected() : $wsConnectionState === 'reconnecting' ? m.ws_reconnecting() : m.ws_disconnected()}
+            data-tip={$wsConnectionState === 'connected' ? T && T.wsConnected : $wsConnectionState === 'reconnecting' ? T && T.wsReconnecting : T && T.wsDisconnected}
           >
             <span class="inline-block w-2 h-2 rounded-full {
               $wsConnectionState === 'connected' ? 'bg-success' :
@@ -85,7 +98,7 @@
           </button>
 
           <!-- Theme selector -->
-          <label for="theme-select" class="sr-only">{m.theme_light()}</label>
+          <label for="theme-select" class="sr-only">{T && T.themeLight}</label>
           <select
             id="theme-select"
             value={$theme}
@@ -94,20 +107,18 @@
             }}
             class="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:border-blue-500 focus:ring-blue-500 py-1 px-2"
           >
-            <option value={THEMES.LIGHT}>{m.theme_light()}</option>
-            <option value={THEMES.DARK}>{m.theme_dark()}</option>
-            <option value={THEMES.SYSTEM}>{m.theme_system()}</option>
+            <option value={THEMES.LIGHT}>{T && T.themeLight}</option>
+            <option value={THEMES.DARK}>{T && T.themeDark}</option>
+            <option value={THEMES.SYSTEM}>{T && T.themeSystem}</option>
           </select>
         </div>
       </div>
     </div>
   </nav>
 
-  <!-- Page Content — re-keyed on locale change to force re-render of all translations -->
+  <!-- Page Content — no {#key $locale} here; each route handles its own reactivity -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    {#key $locale}
-      <slot />
-    {/key}
+    <slot />
   </main>
 </div>
 
