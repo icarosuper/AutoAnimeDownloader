@@ -260,7 +260,7 @@
     <div class="flex flex-wrap gap-2">
       {#if status.status === "stopped"}
         <button
-          class="btn btn-primary"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           on:click={handleStart}
           disabled={actionLoading}
         >
@@ -268,7 +268,7 @@
         </button>
       {:else}
         <button
-          class="btn btn-error"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           on:click={handleStop}
           disabled={actionLoading}
         >
@@ -276,7 +276,7 @@
         </button>
       {/if}
       <button
-        class="btn btn-secondary"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         on:click={handleCheck}
         disabled={status.status === "checking" || actionLoading}
       >
