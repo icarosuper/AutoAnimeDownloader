@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import {
     getAnimeDetail,
     getAnimes,
@@ -63,14 +62,12 @@
 
   async function loadData(id: number) {
     if (!id || id <= 0) {
-      error = "Invalid anime ID";
       loading = false;
       return;
     }
 
     try {
       loading = true;
-      error = null;
 
       const [detailData, animesData] = await Promise.all([
         getAnimeDetail(id),
@@ -121,10 +118,6 @@
   }
 
   $: loadData(animeId);
-
-  onMount(() => {
-    loadData(animeId);
-  });
 </script>
 
 <ConfirmDialog
