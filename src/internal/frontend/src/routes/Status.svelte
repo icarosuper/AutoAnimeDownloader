@@ -16,6 +16,7 @@
   import { toast } from "../lib/stores/toast.js";
   import { wsConnectionState } from "../lib/stores/wsState.js";
   import * as m from "../lib/i18n/messages.js";
+  import { locale } from "../lib/stores/locale.js";
 
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
@@ -162,7 +163,7 @@
     const diffMinutes = Math.floor(diffSeconds / 60);
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
-    const rtf = new Intl.RelativeTimeFormat(navigator.language, { numeric: "auto" });
+    const rtf = new Intl.RelativeTimeFormat($locale, { numeric: "auto" });
     if (diffSeconds < 60) return rtf.format(-diffSeconds, "second");
     if (diffMinutes < 60) return rtf.format(-diffMinutes, "minute");
     if (diffHours < 24) return rtf.format(-diffHours, "hour");
