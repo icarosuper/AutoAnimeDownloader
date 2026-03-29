@@ -1,5 +1,6 @@
 services:
   mock-anilist:
+    image: test-mock-anilist
     build:
       context: ./src/tests/mocks/anilist
       dockerfile: Dockerfile
@@ -16,6 +17,7 @@ services:
       - test-network
 
   mock-nyaa:
+    image: test-mock-nyaa
     build:
       context: ./src/tests/mocks/nyaa
       dockerfile: Dockerfile
@@ -31,6 +33,7 @@ services:
       - test-network
 
   mock-qbittorrent:
+    image: test-mock-qbittorrent
     build:
       context: ./src/tests/mocks/qbittorrent
       dockerfile: Dockerfile
@@ -45,6 +48,7 @@ services:
       - test-network
 
   daemon:
+    image: test-daemon
     build:
       context: .
       dockerfile: Dockerfile
