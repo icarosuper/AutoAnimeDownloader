@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,16 +28,17 @@ type EpisodeStruct struct {
 }
 
 type Config struct {
-	SavePath              string `json:"save_path"`
-	CompletedAnimePath    string `json:"completed_anime_path"`
-	AnilistUsername       string `json:"anilist_username"`
-	CheckInterval         int    `json:"check_interval"`
-	QBittorrentUrl        string `json:"qbittorrent_url"`
-	MaxEpisodesPerAnime   int    `json:"max_episodes_per_anime"`
-	EpisodeRetryLimit     int    `json:"episode_retry_limit"`
-	DeleteWatchedEpisodes bool   `json:"delete_watched_episodes"`
-	WatchedEpisodesToKeep int    `json:"watched_episodes_to_keep"`
-	ExcludedList          string `json:"excluded_list"`
+	SavePath               string `json:"save_path"`
+	CompletedAnimePath     string `json:"completed_anime_path"`
+	AnilistUsername        string `json:"anilist_username"`
+	CheckInterval          int    `json:"check_interval"`
+	QBittorrentUrl         string `json:"qbittorrent_url"`
+	MaxEpisodesPerAnime    int    `json:"max_episodes_per_anime"`
+	EpisodeRetryLimit      int    `json:"episode_retry_limit"`
+	DeleteWatchedEpisodes  bool   `json:"delete_watched_episodes"`
+	WatchedEpisodesToKeep  int    `json:"watched_episodes_to_keep"`
+	ExcludedList           string `json:"excluded_list"`
+	RenameFilesForJellyfin bool   `json:"rename_files_for_jellyfin"`
 }
 
 type FileManager struct {
@@ -44,6 +46,7 @@ type FileManager struct {
 	configPath          string
 	episodesPath        string
 	blockedEpisodesPath string
+	mu                  sync.Mutex
 }
 
 func getDefaultConfig() *Config {
@@ -111,11 +114,14 @@ func NewDefaultFileManager() (*FileManager, error) {
 }
 
 func (m *FileManager) LoadConfigs() (*Config, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	config := getDefaultConfig()
 
 	_, err := m.fs.Stat(m.configPath)
 	if os.IsNotExist(err) {
-		if err := m.SaveConfigs(config); err != nil {
+		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
 		return config, nil
@@ -131,9 +137,8 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 	// Check if file is empty or contains only whitespace
 	trimmed := strings.TrimSpace(string(file))
 	if len(trimmed) == 0 {
-		// File exists but is empty, recreate with default config
 		logger.Logger.Warn().Msg("Config file is empty, recreating with default values")
-		if err := m.SaveConfigs(config); err != nil {
+		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
 		return config, nil
@@ -141,34 +146,42 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 
 	// Try to parse the JSON
 	if err := json.Unmarshal(file, config); err != nil {
-		// If parsing fails, recreate with default config
 		logger.Logger.Warn().Err(err).Msg("Failed to parse config JSON, recreating with default values")
 		config = getDefaultConfig()
-		if err := m.SaveConfigs(config); err != nil {
+		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
 		}
 		return config, nil
-	}
-
-	if err := m.SaveConfigs(config); err != nil {
-		return nil, fmt.Errorf("failed to update config file: %w", err)
 	}
 
 	return config, nil
 }
 
 func (m *FileManager) SaveConfigs(config *Config) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.saveConfigsLocked(config)
+}
+
+// saveConfigsLocked performs an atomic write of config. Must be called with m.mu held.
+func (m *FileManager) saveConfigsLocked(config *Config) error {
 	if config == nil {
 		return fmt.Errorf("config cannot be nil")
 	}
 
-	file, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := m.fs.WriteFile(m.configPath, file, 0644); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	tmpPath := m.configPath + ".tmp"
+	if err := m.fs.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config temp file: %w", err)
+	}
+
+	if err := m.fs.Rename(tmpPath, m.configPath); err != nil {
+		_ = m.fs.Remove(tmpPath)
+		return fmt.Errorf("failed to rename config temp file: %w", err)
 	}
 
 	return nil
@@ -364,6 +377,28 @@ func (m *FileManager) BlockEpisode(episodeID int) error {
 
 	ids = append(ids, episodeID)
 	return m.saveBlockedEpisodes(ids)
+}
+
+func (m *FileManager) UnmanageEpisode(episodeID int) error {
+	episodes, err := m.LoadSavedEpisodes()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	for i, ep := range episodes {
+		if ep.EpisodeID == episodeID {
+			episodes[i].ManuallyManaged = false
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil
+	}
+
+	return m.saveEpisodesToFileJSON(episodes)
 }
 
 func (m *FileManager) UnblockEpisode(episodeID int) error {
