@@ -70,6 +70,8 @@
   "config_label_retry_limit": "Limite de Tentativas por Episódio",
   "config_label_qbit_url": "URL do WebUI",
   "config_hint_qbit_url": "Padrão: http://127.0.0.1:8080",
+  "config_label_rename_jellyfin": "Renomear arquivos para o Jellyfin",
+  "config_hint_rename_jellyfin": "Renomeia os arquivos de episódio para \"Nome do Anime - E05.mkv\" para melhor identificação de metadados no Jellyfin",
   "config_label_excluded_list": "Lista de Exclusão",
   "config_hint_excluded_list": "Listas que não devem ser baixadas",
   "config_btn_run_check": "Verificar Agora",

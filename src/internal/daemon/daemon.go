@@ -804,6 +804,10 @@ func processAnimeEpisodes(
 				EpisodeName:        epName,
 				DownloadDate:       time.Now(),
 			})
+
+			if configs.RenameFilesForJellyfin && !skipSubfolder {
+				go torrentsService.RenameEpisodeFile(hash, getAnimeTitleSafe(anime), ep.Episode)
+			}
 		}
 	}
 

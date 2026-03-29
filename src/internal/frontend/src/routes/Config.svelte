@@ -35,6 +35,8 @@
     labelRetryLimit: m.config_label_retry_limit(),
     labelQbitUrl: m.config_label_qbit_url(),
     hintQbitUrl: m.config_hint_qbit_url(),
+    labelRenameJellyfin: m.config_label_rename_jellyfin(),
+    hintRenameJellyfin: m.config_hint_rename_jellyfin(),
     labelExcludedList: m.config_label_excluded_list(),
     hintExcludedList: m.config_hint_excluded_list(),
     btnRunCheck: m.config_btn_run_check(),
@@ -54,6 +56,7 @@
     delete_watched_episodes: true,
     watched_episodes_to_keep: 0,
     excluded_list: "",
+    rename_files_for_jellyfin: false,
   };
 
   let loading = true;
@@ -193,6 +196,22 @@
                   min="0"
                 />
               </div>
+            {/if}
+          </div>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="rename_files_for_jellyfin"
+                bind:checked={config.rename_files_for_jellyfin}
+                class="checkbox checkbox-sm"
+              />
+              <label for="rename_files_for_jellyfin" class="text-sm text-base-content cursor-pointer">
+                {T && T.labelRenameJellyfin}
+              </label>
+            </div>
+            {#if config.rename_files_for_jellyfin}
+              <p class="text-xs text-base-content/50 pl-6">{T && T.hintRenameJellyfin}</p>
             {/if}
           </div>
         </div>

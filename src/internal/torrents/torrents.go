@@ -50,6 +50,10 @@ type Torrent struct {
 	ContentPath string `json:"content_path"`
 }
 
+type TorrentFile struct {
+	Name string `json:"name"`
+}
+
 const CATEGORY = "autoAnimeDownloader"
 
 func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string, animeIsCompleted bool) string {
@@ -313,4 +317,110 @@ func (ts *TorrentService) getDownloadedTorrents() ([]Torrent, error) {
 func getBaseUrl(qBittorrentUrl string) string {
 	fullUrl := qBittorrentUrl + "/api/v2/torrents"
 	return fullUrl
+}
+
+func (ts *TorrentService) getTorrentFiles(hash string) ([]TorrentFile, error) {
+	response, err := ts.httpClient.Get(ts.baseURL + "/files?hash=" + hash)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	if response.StatusCode != http.StatusOK {
+		bodyBytes := make([]byte, 512)
+		n, _ := response.Body.Read(bodyBytes)
+		return nil, fmt.Errorf("qBittorrent API returned status %d: %s", response.StatusCode, string(bodyBytes[:n]))
+	}
+
+	var files []TorrentFile
+	if err := json.NewDecoder(response.Body).Decode(&files); err != nil {
+		return nil, fmt.Errorf("failed to decode torrent files response: %w", err)
+	}
+
+	return files, nil
+}
+
+func sanitizeFileName(name string) string {
+	invalidChars := []string{":", "<", ">", "|", "?", "*", "\"", "\\", "/"}
+	sanitized := name
+	for _, char := range invalidChars {
+		sanitized = strings.ReplaceAll(sanitized, char, "")
+	}
+	sanitized = strings.TrimSpace(sanitized)
+	sanitized = strings.ReplaceAll(sanitized, "  ", " ")
+	return sanitized
+}
+
+// RenameEpisodeFile renomeia o arquivo de vídeo de um torrent para o padrão Jellyfin:
+// "{AnimeName} - E{EpisodeNumber:02d}{ext}"
+// Tenta obter a lista de arquivos até maxAttempts vezes com intervalo de retryInterval.
+func (ts *TorrentService) RenameEpisodeFile(hash, animeName string, episodeNumber int) {
+	const maxAttempts = 10
+	const retryInterval = 3 * time.Second
+
+	sanitizedName := sanitizeFileName(animeName)
+	newBaseName := fmt.Sprintf("%s - E%02d", sanitizedName, episodeNumber)
+
+	var files []TorrentFile
+	var err error
+
+	for i := range maxAttempts {
+		files, err = ts.getTorrentFiles(hash)
+		if err == nil && len(files) > 0 {
+			break
+		}
+		if i < maxAttempts-1 {
+			time.Sleep(retryInterval)
+		}
+	}
+
+	if err != nil || len(files) == 0 {
+		logger.Logger.Warn().
+			Str("hash", hash).
+			Str("anime", animeName).
+			Int("episode", episodeNumber).
+			Msg("Could not retrieve torrent files for Jellyfin rename")
+		return
+	}
+
+	for _, f := range files {
+		dotIdx := strings.LastIndex(f.Name, ".")
+		if dotIdx < 0 {
+			continue
+		}
+		ext := f.Name[dotIdx:]
+		newPath := newBaseName + ext
+
+		values := url.Values{}
+		values.Add("hash", hash)
+		values.Add("oldPath", f.Name)
+		values.Add("newPath", newPath)
+
+		resp, err := ts.httpClient.PostForm(ts.baseURL+"/renameFile", values)
+		if err != nil {
+			logger.Logger.Warn().
+				Err(err).
+				Str("hash", hash).
+				Str("old_path", f.Name).
+				Str("new_path", newPath).
+				Msg("Failed to rename torrent file for Jellyfin")
+			continue
+		}
+		_ = resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			logger.Logger.Info().
+				Str("hash", hash).
+				Str("old_path", f.Name).
+				Str("new_path", newPath).
+				Msg("Renamed torrent file for Jellyfin")
+		} else {
+			logger.Logger.Warn().
+				Str("hash", hash).
+				Str("old_path", f.Name).
+				Str("new_path", newPath).
+				Int("status_code", resp.StatusCode).
+				Msg("qBittorrent returned error when renaming torrent file")
+		}
+	}
 }
