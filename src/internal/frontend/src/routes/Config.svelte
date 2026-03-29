@@ -25,6 +25,7 @@
     labelUsername: m.config_label_username(),
     labelSavePath: m.config_label_save_path(),
     hintSavePath: m.config_hint_save_path(),
+    labelUseCompletedPath: m.config_label_use_completed_path(),
     labelCompletedPath: m.config_label_completed_path(),
     hintCompletedPath: m.config_hint_completed_path(),
     labelDeleteWatched: m.config_label_delete_watched(),
@@ -62,6 +63,7 @@
   let loading = true;
   let saving = false;
   let showMissingConfigBanner = false;
+  let useCompletedPath = false;
 
   function checkQueryParams() {
     if (typeof window === "undefined") return;
@@ -82,6 +84,7 @@
       loading = true;
       const data = await getConfig();
       config = { ...data };
+      useCompletedPath = !!config.completed_anime_path;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.config_error_load());
     } finally {
@@ -165,14 +168,32 @@
             placeholder="/path/to/downloads"
             required={true}
           />
-          <Input
-            id="completed_anime_path"
-            label={T && T.labelCompletedPath || ""}
-            subtitle={T && T.hintCompletedPath || ""}
-            type="text"
-            bind:value={config.completed_anime_path}
-            placeholder="/path/to/completed"
-          />
+          <div class="space-y-3">
+            <div class="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="use_completed_path"
+                bind:checked={useCompletedPath}
+                on:change={() => { if (!useCompletedPath) config.completed_anime_path = ""; }}
+                class="checkbox checkbox-sm"
+              />
+              <label for="use_completed_path" class="text-sm text-base-content cursor-pointer">
+                {T && T.labelUseCompletedPath}
+              </label>
+            </div>
+            {#if useCompletedPath}
+              <div class="pl-6">
+                <Input
+                  id="completed_anime_path"
+                  label={T && T.labelCompletedPath || ""}
+                  subtitle={T && T.hintCompletedPath || ""}
+                  type="text"
+                  bind:value={config.completed_anime_path}
+                  placeholder="/path/to/completed"
+                />
+              </div>
+            {/if}
+          </div>
           <div class="space-y-3">
             <div class="flex items-center gap-2">
               <input
