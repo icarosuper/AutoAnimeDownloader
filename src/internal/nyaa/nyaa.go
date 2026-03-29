@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/stringutil"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -54,20 +55,6 @@ func MockNyaaHttpGet(fn func(string) (*http.Response, error)) (restore func()) {
 	return func() { httpGet = prev }
 }
 
-// removeSpecialCharacters remove caracteres especiais de um título
-// Mantém apenas letras, números e espaços
-func removeSpecialCharacters(s string) string {
-	// Converte para minúsculas
-	s = strings.ToLower(s)
-	// Remove tudo exceto letras, números e espaços
-	re := regexp.MustCompile(`[^a-z0-9\s]`)
-	s = re.ReplaceAllString(s, "")
-	// Remove espaços múltiplos e trim
-	s = strings.Join(strings.Fields(s), " ")
-	s = strings.TrimSpace(s)
-	return s
-}
-
 // GenerateSearchTitleVariants gera múltiplas variantes de busca para um título
 // priorizando versões limpas (sem caracteres especiais) sobre as originais
 // IMPORTANTE: Esta função deve ser usada APENAS para gerar queries de busca,
@@ -87,7 +74,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 
 	// Prioridade 1: Romaji limpo (sem caracteres especiais)
 	if romaji != "" {
-		cleanRomaji := removeSpecialCharacters(romaji)
+		cleanRomaji := stringutil.RemoveSpecialCharacters(romaji)
 		addVariant(cleanRomaji)
 
 		// Prioridade 2: Romaji original
@@ -96,7 +83,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 
 	// Prioridade 3: English limpo (sem caracteres especiais)
 	if english != "" && english != romaji {
-		cleanEnglish := removeSpecialCharacters(english)
+		cleanEnglish := stringutil.RemoveSpecialCharacters(english)
 		addVariant(cleanEnglish)
 
 		// Prioridade 4: English original
@@ -381,8 +368,8 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 			// Tenta match exato primeiro (mais rápido)
 			if !strings.Contains(strings.ToLower(name), baseTitle) {
 				// Se não encontrar, tenta removendo caracteres especiais
-				cleanName := removeSpecialCharacters(name)
-				cleanQuery := removeSpecialCharacters(query)
+				cleanName := stringutil.RemoveSpecialCharacters(name)
+				cleanQuery := stringutil.RemoveSpecialCharacters(query)
 				if cleanQuery == "" || !strings.Contains(cleanName, cleanQuery) {
 					return
 				}
@@ -526,8 +513,8 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 			// Tenta match exato primeiro (mais rápido)
 			if !strings.Contains(strings.ToLower(name), baseTitle) {
 				// Se não encontrar, tenta removendo caracteres especiais
-				cleanName := removeSpecialCharacters(name)
-				cleanQuery := removeSpecialCharacters(query)
+				cleanName := stringutil.RemoveSpecialCharacters(name)
+				cleanQuery := stringutil.RemoveSpecialCharacters(query)
 				if cleanQuery == "" || !strings.Contains(cleanName, cleanQuery) {
 					return
 				}
@@ -656,8 +643,8 @@ func ScrapNyaaForBatch(animeName string, season *int) ([]TorrentResult, error) {
 		baseTitle := strings.ToLower(query)
 		if baseTitle != "" {
 			if !strings.Contains(strings.ToLower(name), baseTitle) {
-				cleanName := removeSpecialCharacters(name)
-				cleanQuery := removeSpecialCharacters(query)
+				cleanName := stringutil.RemoveSpecialCharacters(name)
+				cleanQuery := stringutil.RemoveSpecialCharacters(query)
 				if cleanQuery == "" || !strings.Contains(cleanName, cleanQuery) {
 					return
 				}
@@ -776,8 +763,8 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 		baseTitle := strings.ToLower(extractSeasonFromName(animeName))
 		if baseTitle != "" {
 			if !strings.Contains(strings.ToLower(name), baseTitle) {
-				cleanName := removeSpecialCharacters(name)
-				cleanQuery := removeSpecialCharacters(baseTitle)
+				cleanName := stringutil.RemoveSpecialCharacters(name)
+				cleanQuery := stringutil.RemoveSpecialCharacters(baseTitle)
 				if cleanQuery == "" || !strings.Contains(cleanName, cleanQuery) {
 					return
 				}
