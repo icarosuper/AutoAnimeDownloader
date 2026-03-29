@@ -50,9 +50,50 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Run integration tests
+      - name: Build test images with cache
         run: |
-          docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+          docker buildx build \
+            --cache-from type=gha,scope=integration-daemon \
+            --cache-to type=gha,mode=max,scope=integration-daemon \
+            --tag test-daemon --load -f Dockerfile .
+
+          docker buildx build \
+            --cache-from type=gha,scope=integration-mock-anilist \
+            --cache-to type=gha,mode=max,scope=integration-mock-anilist \
+            --tag test-mock-anilist --load \
+            src/tests/mocks/anilist
+
+          docker buildx build \
+            --cache-from type=gha,scope=integration-mock-nyaa \
+            --cache-to type=gha,mode=max,scope=integration-mock-nyaa \
+            --tag test-mock-nyaa --load \
+            src/tests/mocks/nyaa
+
+          docker buildx build \
+            --cache-from type=gha,scope=integration-mock-qbittorrent \
+            --cache-to type=gha,mode=max,scope=integration-mock-qbittorrent \
+            --tag test-mock-qbittorrent --load \
+            src/tests/mocks/qbittorrent
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Start services
+        run: |
+          docker compose -f docker-compose.test.yml up -d --no-build daemon
+
+      - name: Wait for daemon
+        run: |
+          timeout 60 sh -c 'until curl -sf http://localhost:8091/api/v1/status; do sleep 1; done'
+
+      - name: Run integration tests
+        env:
+          DAEMON_URL: http://localhost:8091
+        run: |
+          go test -v ./src/tests/integration/...
 
       - name: Cleanup
         if: always()
