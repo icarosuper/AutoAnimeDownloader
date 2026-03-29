@@ -332,10 +332,16 @@ func getAnimeTitleSafe(anime anilist.MediaList) string {
 	if anime.Media.Title.English != nil && *anime.Media.Title.English != "" {
 		return *anime.Media.Title.English
 	}
-	return *anime.Media.Title.Romaji
+	if anime.Media.Title.Romaji != nil {
+		return *anime.Media.Title.Romaji
+	}
+	return "Unknown"
 }
 
 func extractSeasonFromAnime(anime anilist.MediaList) *int {
+	if anime.Media.Title.Romaji == nil {
+		return nil
+	}
 	title := *anime.Media.Title.Romaji
 	seasonPattern := regexp.MustCompile(`(?i)Season\s*(\d+)|S(\d{1,2})\b|(\d{1,2})(?:st|nd|rd|th)\s+Season`)
 
@@ -455,7 +461,14 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 
 func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (result []nyaa.TorrentResult) {
 	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+	var romaji, english string
+	if titles.Romaji != nil {
+		romaji = *titles.Romaji
+	}
+	if titles.English != nil {
+		english = *titles.English
+	}
+	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -494,7 +507,14 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (re
 
 func searchNyaaForBatch(titles anilist.Title, requestedSeason *int) (result []nyaa.TorrentResult) {
 	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+	var romaji, english string
+	if titles.Romaji != nil {
+		romaji = *titles.Romaji
+	}
+	if titles.English != nil {
+		english = *titles.English
+	}
+	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -530,7 +550,14 @@ func searchNyaaForBatch(titles anilist.Title, requestedSeason *int) (result []ny
 
 func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) (result []nyaa.TorrentResult) {
 	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+	var romaji, english string
+	if titles.Romaji != nil {
+		romaji = *titles.Romaji
+	}
+	if titles.English != nil {
+		english = *titles.English
+	}
+	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -566,7 +593,14 @@ func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) (result []nyaa
 
 func searchNyaaForMultipleEpisodes(titles anilist.Title, episodes []int) (result []nyaa.TorrentResult) {
 	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	titleVariants := nyaa.GenerateSearchTitleVariants(*titles.Romaji, *titles.English)
+	var romaji, english string
+	if titles.Romaji != nil {
+		romaji = *titles.Romaji
+	}
+	if titles.English != nil {
+		english = *titles.English
+	}
+	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -648,10 +682,9 @@ func processAnimeEpisodes(
 	idsToDelete *[]int,
 	blockedMap map[int]bool,
 ) {
-	title := anime.Media.Title.Romaji
+	animeTitle := getAnimeTitleSafe(anime)
 	logger.Logger.Info().
-		Str("anime", *title).
-		Str("english_title", getAnimeTitleSafe(anime)).
+		Str("anime", animeTitle).
 		Msg("Processing anime episodes")
 
 	torrentsMap := buildTorrentsMap(torrents)
@@ -665,7 +698,7 @@ func processAnimeEpisodes(
 
 	for _, ep := range episodes {
 		*checkedEpisodes = append(*checkedEpisodes, ep.ID)
-		epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
+		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 
 		isInTorrents := torrentsMap[epName]
 		alreadySaved := savedEpisodesMap[ep.ID]
@@ -691,7 +724,7 @@ func processAnimeEpisodes(
 	// ESTRATÉGIA 1: Filmes
 	if animeIsMovie {
 		logger.Logger.Info().
-			Str("anime", getAnimeTitleSafe(anime)).
+			Str("anime", animeTitle).
 			Msg("Detected movie - searching for movie torrent")
 
 		result := searchNyaaForMovie(anime.Media.Title, true)
@@ -706,7 +739,7 @@ func processAnimeEpisodes(
 			fakeEp.Episode = 1
 			episodesToDownload = append(episodesToDownload, fakeEp)
 			logger.Logger.Info().
-				Str("anime", getAnimeTitleSafe(anime)).
+				Str("anime", animeTitle).
 				Msg("Created fake episode for movie download")
 		}
 	}
@@ -718,7 +751,7 @@ func processAnimeEpisodes(
 	// ESTRATÉGIA 2: Animes completos - tentar batch
 	if animeIsFinished && !animeIsMovie && len(episodesToDownload) > 1 {
 		logger.Logger.Info().
-			Str("anime", getAnimeTitleSafe(anime)).
+			Str("anime", animeTitle).
 			Msg("Detected finished anime - searching for batch torrent")
 
 		// Extrair temporada se houver
@@ -744,18 +777,18 @@ func processAnimeEpisodes(
 	}
 
 	for _, ep := range episodesToDownload {
-		epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
+		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 		var magnets []string
 		var skipSubfolder bool
 
 		// Prioridade 1: Movie (para filmes)
 		if animeIsMovie && len(movieResult) > 0 {
 			// Para filmes, usa o nome do filme diretamente (sem "- Episode X")
-			epName = getAnimeTitleSafe(anime)
+			epName = animeTitle
 			magnets = []string{movieResult[0].MagnetLink}
 			skipSubfolder = true // Filmes ficam na pasta raiz, não em subpasta
 			logger.Logger.Info().
-				Str("anime", getAnimeTitleSafe(anime)).
+				Str("anime", animeTitle).
 				Str("torrent", movieResult[0].Name).
 				Msg("Using movie torrent")
 		}
@@ -763,11 +796,11 @@ func processAnimeEpisodes(
 		// Prioridade 2: Batch (para animes completos)
 		if len(batchResult) > 0 && len(magnets) == 0 {
 			// Para batches, usa o nome do anime diretamente (sem "- Episode X")
-			epName = getAnimeTitleSafe(anime)
+			epName = animeTitle
 			magnets = []string{batchResult[0].MagnetLink}
 			skipSubfolder = true // Batches já criam sua própria pasta
 			logger.Logger.Info().
-				Str("anime", getAnimeTitleSafe(anime)).
+				Str("anime", animeTitle).
 				Str("torrent", batchResult[0].Name).
 				Msg("Using batch torrent for finished anime")
 		}
@@ -806,7 +839,7 @@ func processAnimeEpisodes(
 			})
 
 			if configs.RenameFilesForJellyfin && !skipSubfolder {
-				go torrentsService.RenameEpisodeFile(hash, getAnimeTitleSafe(anime), ep.Episode)
+				go torrentsService.RenameEpisodeFile(hash, animeTitle, ep.Episode)
 			}
 		}
 	}

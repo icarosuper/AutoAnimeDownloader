@@ -2,8 +2,10 @@ package torrents
 
 import (
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/stringutil"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -56,6 +58,8 @@ type TorrentFile struct {
 
 const CATEGORY = "autoAnimeDownloader"
 
+var seasonPattern = regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season|cour\s*\d+)`)
+
 func (ts *TorrentService) DownloadTorrent(magnet string, animeName string, epName string, animeIsCompleted bool) string {
 	return ts.DownloadTorrentWithOptions(magnet, animeName, epName, animeIsCompleted, false)
 }
@@ -73,11 +77,20 @@ func (ts *TorrentService) DownloadTorrentWithOptions(magnet string, animeName st
 		return ""
 	}
 
-	// Tijolo pra esperar o torrent ser adicionado completamente
-	// TODO: Remover quando imbutir torrent no projeto
-	time.Sleep(50 * time.Millisecond)
+	const maxAttempts = 10
+	const retryInterval = 50 * time.Millisecond
 
-	hash := ts.getTorrentsHash(epName)
+	var hash string
+	for i := range maxAttempts {
+		hash = ts.getTorrentsHash(epName)
+		if hash != "" {
+			break
+		}
+		if i < maxAttempts-1 {
+			time.Sleep(retryInterval)
+		}
+	}
+
 	if hash == "" {
 		logger.Logger.Warn().
 			Str("episode", epName).
@@ -110,8 +123,7 @@ func (ts *TorrentService) DeleteTorrents(hashes []string) error {
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes := make([]byte, 512)
-		resp.Body.Read(bodyBytes)
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("qBittorrent API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -139,8 +151,7 @@ func (ts *TorrentService) SendAnimeToCompletedFolder(hashes []string, animeName 
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes := make([]byte, 512)
-		resp.Body.Read(bodyBytes)
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("qBittorrent API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
@@ -160,25 +171,12 @@ func sanitizeFolderName(name string) string {
 	}
 
 	// Remover informações de temporada/cour do nome da pasta
-	seasonPattern := regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season|cour\s*\d+)`)
 	sanitized = seasonPattern.ReplaceAllString(sanitized, "")
 
 	sanitized = strings.TrimSpace(sanitized)
 	sanitized = strings.ReplaceAll(sanitized, "  ", " ")
 
 	return sanitized
-}
-
-func removeSpecialCharacters(s string) string {
-	// Converte para minúsculas
-	s = strings.ToLower(s)
-	// Remove tudo exceto letras, números e espaços
-	re := regexp.MustCompile(`[^a-z0-9\s]`)
-	s = re.ReplaceAllString(s, "")
-	// Remove espaços múltiplos e trim
-	s = strings.Join(strings.Fields(s), " ")
-	s = strings.TrimSpace(s)
-	return s
 }
 
 func (ts *TorrentService) addTorrentWithOptions(magnet string, animeName string, animeIsCompleted bool, epName string, skipSubfolder bool) error {
@@ -212,8 +210,7 @@ func (ts *TorrentService) addTorrentWithOptions(magnet string, animeName string,
 
 	// Verificar status code da resposta
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes := make([]byte, 512)
-		resp.Body.Read(bodyBytes)
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		err := fmt.Errorf("qBittorrent API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 		logger.Logger.Error().
 			Err(err).
@@ -244,8 +241,8 @@ func (ts *TorrentService) getTorrentsHash(torrentName string) string {
 			return torrent.Hash
 		}
 		// Se não encontrar, tenta removendo caracteres especiais
-		cleanName := removeSpecialCharacters(torrent.Name)
-		cleanTorrentName := removeSpecialCharacters(torrentName)
+		cleanName := stringutil.RemoveSpecialCharacters(torrent.Name)
+		cleanTorrentName := stringutil.RemoveSpecialCharacters(torrentName)
 		if cleanTorrentName != "" && strings.Contains(cleanName, cleanTorrentName) {
 			return torrent.Hash
 		}
