@@ -464,6 +464,10 @@ func (m *mockFileSystemForDaemon) Remove(filename string) error {
 	return nil
 }
 
+func (m *mockFileSystemForDaemon) Rename(oldpath, newpath string) error {
+	return nil
+}
+
 func (m *mockFileSystemForDaemon) Mkdir(dirname string, perm fs.FileMode) error {
 	return nil
 }

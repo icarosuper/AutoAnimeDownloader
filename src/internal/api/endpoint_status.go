@@ -1,6 +1,7 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/version"
 	"net/http"
 	"time"
 )
@@ -9,6 +10,7 @@ type StatusResponse struct {
 	Status    string    `json:"status" example:"running"`
 	LastCheck time.Time `json:"last_check" example:"2024-01-01T00:00:00Z"`
 	HasError  bool      `json:"has_error" example:"false"`
+	Version   string    `json:"version" example:"1.2.0"`
 }
 
 // @Summary      Get daemon status
@@ -32,6 +34,7 @@ func handleStatus(server *Server) http.HandlerFunc {
 			Status:    string(status),
 			LastCheck: lastCheck,
 			HasError:  hasError,
+			Version:   version.Version,
 		}
 		
 		JSONSuccess(w, http.StatusOK, response)

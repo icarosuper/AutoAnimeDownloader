@@ -28,6 +28,7 @@ type FileManagerInterface interface {
 	LoadBlockedEpisodes() ([]int, error)
 	BlockEpisode(episodeID int) error
 	UnblockEpisode(episodeID int) error
+	UnmanageEpisode(episodeID int) error
 }
 
 type StartLoopPayload struct {
@@ -803,6 +804,10 @@ func processAnimeEpisodes(
 				EpisodeName:        epName,
 				DownloadDate:       time.Now(),
 			})
+
+			if configs.RenameFilesForJellyfin && !skipSubfolder {
+				go torrentsService.RenameEpisodeFile(hash, getAnimeTitleSafe(anime), ep.Episode)
+			}
 		}
 	}
 

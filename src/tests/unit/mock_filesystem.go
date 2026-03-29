@@ -237,6 +237,21 @@ func (m *MockFileSystem) Remove(filename string) error {
 	return &fs.PathError{Op: "remove", Path: filename, Err: fs.ErrNotExist}
 }
 
+func (m *MockFileSystem) Rename(oldpath, newpath string) error {
+	if m.writeError != nil {
+		return m.writeError
+	}
+
+	content, exists := m.files[oldpath]
+	if !exists {
+		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
+	}
+
+	m.files[newpath] = content
+	delete(m.files, oldpath)
+	return nil
+}
+
 func (m *MockFileSystem) Mkdir(dirname string, perm fs.FileMode) error {
 	if m.writeError != nil {
 		return m.writeError

@@ -28,13 +28,13 @@ ENV CC=x86_64-w64-mingw32-gcc
 ENV CXX=x86_64-w64-mingw32-g++
 
 RUN go build -installsuffix cgo \
-    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/tray.currentVersion=${VERSION}" \
+    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/version.Version=${VERSION}" \
     -o /app/autoanimedownloader-daemon.exe \
     ./src/cmd/daemon
 
 # Build CLI without CGO
 RUN CGO_ENABLED=0 go build -installsuffix cgo \
-    -ldflags="-w -s" \
+    -ldflags="-w -s -X AutoAnimeDownloader/src/internal/version.Version=${VERSION}" \
     -o /app/autoanimedownloader.exe \
     ./src/cmd/cli
 

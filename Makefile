@@ -37,9 +37,9 @@ CONTAINER_linuxamd64 := aad-temp-amd64
 CONTAINER_linuxarm64 := aad-temp-arm64
 CONTAINER_windows := aad-temp-windows
 
-PACKAGE_NAME_linuxamd64 := AutoAnimeDownloader_Linux_x86
-PACKAGE_NAME_linuxarm64 := AutoAnimeDownloader_Linux_Arm64
-PACKAGE_NAME_windows := AutoAnimeDownloader_Windows
+PACKAGE_NAME_linuxamd64 = AutoAnimeDownloader_Linux_x86_v$(VERSION)
+PACKAGE_NAME_linuxarm64 = AutoAnimeDownloader_Linux_Arm64_v$(VERSION)
+PACKAGE_NAME_windows = AutoAnimeDownloader_Windows_v$(VERSION)
 
 PACKAGES_DIR := build/packages
 
