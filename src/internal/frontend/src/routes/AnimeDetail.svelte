@@ -25,6 +25,38 @@
   let confirmOpen = false;
   let pendingDeleteEp: AnimeEpisodeInfo | null = null;
 
+  // Bulk selection state
+  let selectedEpisodes: Set<number> = new Set();
+  let bulkLoading = false;
+  let confirmBulkOpen = false;
+
+  $: allEpisodes = detail?.episodes ?? [];
+  $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_id));
+  $: someSelected = selectedEpisodes.size > 0 && !allSelected;
+
+  $: selectedList = allEpisodes.filter(ep => selectedEpisodes.has(ep.episode_id));
+  $: canBulkDownload = selectedList.some(ep => ep.is_aired && !ep.is_downloaded);
+  $: canBulkDelete = selectedList.some(ep => ep.is_downloaded);
+  $: canBulkRelease = selectedList.some(ep => ep.is_manually_managed || ep.is_blocked);
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      selectedEpisodes = new Set();
+    } else {
+      selectedEpisodes = new Set(allEpisodes.map(ep => ep.episode_id));
+    }
+  }
+
+  function toggleEpisode(id: number) {
+    const next = new Set(selectedEpisodes);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    selectedEpisodes = next;
+  }
+
   function formatDate(dateString: string | undefined) {
     if (!dateString) return m.common_na();
     return new Date(dateString).toLocaleString();
@@ -131,6 +163,67 @@
     }
   }
 
+  async function handleBulkDownload() {
+    const targets = selectedList.filter(ep => ep.is_aired && !ep.is_downloaded);
+    bulkLoading = true;
+    let success = 0, failed = 0;
+    await Promise.all(targets.map(async ep => {
+      try {
+        await downloadEpisode(animeId, ep.episode_id);
+        success++;
+      } catch {
+        failed++;
+      }
+    }));
+    bulkLoading = false;
+    if (success > 0) toast.success(m.detail_bulk_toast_dl_done({ success }));
+    if (failed > 0) toast.error(m.detail_bulk_toast_partial({ failed }));
+    selectedEpisodes = new Set();
+    await loadData(animeId);
+  }
+
+  function handleBulkDelete() {
+    confirmBulkOpen = true;
+  }
+
+  async function confirmBulkDelete() {
+    const targets = selectedList.filter(ep => ep.is_downloaded);
+    bulkLoading = true;
+    let success = 0, failed = 0;
+    await Promise.all(targets.map(async ep => {
+      try {
+        await deleteEpisode(animeId, ep.episode_id);
+        success++;
+      } catch {
+        failed++;
+      }
+    }));
+    bulkLoading = false;
+    if (success > 0) toast.success(m.detail_bulk_toast_del_done({ success }));
+    if (failed > 0) toast.error(m.detail_bulk_toast_partial({ failed }));
+    selectedEpisodes = new Set();
+    await loadData(animeId);
+  }
+
+  async function handleBulkRelease() {
+    const targets = selectedList.filter(ep => ep.is_manually_managed || ep.is_blocked);
+    bulkLoading = true;
+    let success = 0, failed = 0;
+    await Promise.all(targets.map(async ep => {
+      try {
+        await releaseEpisode(animeId, ep.episode_id);
+        success++;
+      } catch {
+        failed++;
+      }
+    }));
+    bulkLoading = false;
+    if (success > 0) toast.success(m.detail_bulk_toast_rel_done({ success }));
+    if (failed > 0) toast.error(m.detail_bulk_toast_partial({ failed }));
+    selectedEpisodes = new Set();
+    await loadData(animeId);
+  }
+
   $: loadData(animeId);
 </script>
 
@@ -141,6 +234,15 @@
   confirmLabel={m.detail_confirm_btn()}
   cancelLabel={m.common_cancel()}
   on:confirm={confirmDelete}
+/>
+
+<ConfirmDialog
+  bind:open={confirmBulkOpen}
+  title={m.detail_bulk_confirm_title()}
+  message={m.detail_bulk_confirm_msg({ count: selectedList.filter(ep => ep.is_downloaded).length })}
+  confirmLabel={m.detail_bulk_confirm_btn()}
+  cancelLabel={m.common_cancel()}
+  on:confirm={confirmBulkDelete}
 />
 
 <div>
@@ -171,12 +273,63 @@
       <p class="text-sm text-gray-500 dark:text-gray-400">{m.detail_empty()}</p>
     </div>
   {:else}
+    <!-- Bulk action bar -->
+    {#if selectedEpisodes.size > 0}
+      <div class="mb-3 flex items-center gap-2 flex-wrap bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2.5">
+        <span class="text-sm font-medium text-blue-700 dark:text-blue-300 mr-1">
+          {m.detail_bulk_selected({ count: selectedEpisodes.size })}
+        </span>
+        {#if canBulkDownload}
+          <button
+            on:click={handleBulkDownload}
+            disabled={bulkLoading}
+            class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {m.detail_bulk_download()}
+          </button>
+        {/if}
+        {#if canBulkDelete}
+          <button
+            on:click={handleBulkDelete}
+            disabled={bulkLoading}
+            class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {m.detail_bulk_delete()}
+          </button>
+        {/if}
+        {#if canBulkRelease}
+          <button
+            on:click={handleBulkRelease}
+            disabled={bulkLoading}
+            class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-gray-400 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {m.detail_bulk_release()}
+          </button>
+        {/if}
+        <button
+          on:click={() => { selectedEpisodes = new Set(); }}
+          class="ml-auto inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50"
+        >
+          {m.detail_bulk_deselect_all()}
+        </button>
+      </div>
+    {/if}
+
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
       <!-- Desktop Table View -->
       <div class="hidden md:block overflow-x-auto">
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>
+              <th class="px-4 py-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  on:change={toggleSelectAll}
+                  class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer"
+                />
+              </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_episode()}
               </th>
@@ -205,7 +358,16 @@
               {@const anilist = getAniListBadge(ep)}
               {@const download = getDownloadBadge(ep)}
               {@const isLoading = !!actionLoading[ep.episode_id]}
-              <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+              {@const isSelected = selectedEpisodes.has(ep.episode_id)}
+              <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
+                <td class="px-4 py-4 w-10">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    on:change={() => toggleEpisode(ep.episode_id)}
+                    class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer"
+                  />
+                </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                   {ep.episode_number}
                   {#if ep.is_manually_managed}
@@ -280,18 +442,27 @@
           {@const anilist = getAniListBadge(ep)}
           {@const download = getDownloadBadge(ep)}
           {@const isLoading = !!actionLoading[ep.episode_id]}
-          <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
+          {@const isSelected = selectedEpisodes.has(ep.episode_id)}
+          <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
             <div class="flex items-start justify-between mb-2">
-              <div>
-                <p class="text-sm font-medium text-gray-900 dark:text-white">
-                  {m.detail_col_episode()} {ep.episode_number}
-                </p>
-                {#if ep.is_manually_managed}
-                  <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_delete_short()}</p>
-                {/if}
-                {#if ep.is_blocked}
-                  <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_download_short()}</p>
-                {/if}
+              <div class="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  on:change={() => toggleEpisode(ep.episode_id)}
+                  class="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer flex-shrink-0"
+                />
+                <div>
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">
+                    {m.detail_col_episode()} {ep.episode_number}
+                  </p>
+                  {#if ep.is_manually_managed}
+                    <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_delete_short()}</p>
+                  {/if}
+                  {#if ep.is_blocked}
+                    <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_download_short()}</p>
+                  {/if}
+                </div>
               </div>
               <div class="flex flex-col items-end gap-1">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {anilist.classes}">

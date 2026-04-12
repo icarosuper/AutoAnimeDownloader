@@ -361,16 +361,20 @@ func extractSeasonFromAnime(anime anilist.MediaList) *int {
 
 func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
 	episodesNotInWatching := identifyEpisodesNotInWatching(data.savedEpisodes, data.checkedEpisodes)
-	episodeIdsToDelete := append(data.idsToDelete, episodesNotInWatching...)
 
 	saveEpisodesToFile(fileManager, data.newEpisodes)
 
 	if configs.DeleteWatchedEpisodes {
-		if err := fileManager.DeleteEpisodesFromFile(episodeIdsToDelete); err != nil {
+		// Remove from episodes.json only for actively managed episodes (watched/exceeding limit).
+		// Episodes from animes no longer in the watching list (COMPLETED, DROPPED, etc.) keep
+		// their records so the dashboard can still display them.
+		if err := fileManager.DeleteEpisodesFromFile(data.idsToDelete); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
 		}
 
-		hashesToDelete := extractEpisodesHashes(data.savedEpisodes, episodeIdsToDelete)
+		// Delete torrent files for both actively managed AND completed-anime episodes.
+		allHashIds := append(data.idsToDelete, episodesNotInWatching...)
+		hashesToDelete := extractEpisodesHashes(data.savedEpisodes, allHashIds)
 		if len(hashesToDelete) > 0 {
 			if err := torrentsService.DeleteTorrents(hashesToDelete); err != nil {
 				logger.Logger.Warn().Err(err).Int("count", len(hashesToDelete)).Msg("Failed to delete torrents")

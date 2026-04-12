@@ -143,5 +143,17 @@
   "detail_toast_dl_error": "Failed to download episode",
   "detail_toast_deleted": "Episode {number} deleted",
   "detail_toast_del_error": "Failed to delete episode",
-  "detail_toast_load_error": "Failed to load anime detail"
+  "detail_toast_load_error": "Failed to load anime detail",
+  "detail_bulk_selected": "{count} selected",
+  "detail_bulk_download": "Download Selected",
+  "detail_bulk_delete": "Delete Selected",
+  "detail_bulk_release": "Release Selected",
+  "detail_bulk_deselect_all": "Deselect All",
+  "detail_bulk_confirm_title": "Delete selected episodes?",
+  "detail_bulk_confirm_msg": "{count} episode(s) will be removed. This action cannot be undone.",
+  "detail_bulk_confirm_btn": "Delete All",
+  "detail_bulk_toast_dl_done": "{success} episode(s) queued for download",
+  "detail_bulk_toast_del_done": "{success} episode(s) deleted",
+  "detail_bulk_toast_rel_done": "{success} episode(s) released",
+  "detail_bulk_toast_partial": "{failed} failed"
 }
