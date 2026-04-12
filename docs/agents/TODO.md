@@ -1,0 +1,46 @@
+- Download de animes
+	- Caso do 'Classroom of the Elite'
+		- Parece que não incluiu a season na pesquisa
+		- Talvez padronizar a pesquisa pra melhor compatibilidade com nyaa
+- Loop
+	- Padronizar/ajustar download de animes completos
+	- Otimizar loop de checagem
+		- Paralelizar
+		- Retries no final do loop
+- Novas opcões no front
+	- Apagar animes dropados
+	- Apagar animes finalizados
+	- Apagar animes que não estão mais na lista
+	- Baixar anime completo em batch
+	- Adicionar multiplos campos pras blacklists, ao invés de um campo separado por vírgula
+	- Deixar usuário definir de quais status baixar
+- Nova tela de prioridades dos torrents
+	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
+	- Usuário por reordenar, adicionar e excluir itens
+	- Botão pra voltar pro default
+- Melhorias no front
+	- Navbar responsiva
+	- Colocar imagem dos animes
+- Tela de listagem de animes
+	- Adicionar uma coluna indicando animes que estão nas blacklists
+		- Usuário pode marcar pra ver ou não esses animes
+- Tela do anime
+	- Checkboxes pra realizar acão em vários episódios de uma vez
+	- Opcão de substituir episódio ou anime inteiro por um magnet específico
+	- Botão de baixar o anime em batch
+		- Só aparece se o anime estiver finalizado
+		- Mostra modal com opcões no nyaa?
+		- Exclúi episódios avulsos ao baixar batch
+- Baixar animes avulsos
+	- Nova tela de baixar animes avulsos.
+	- Nessa tela vai ter uma barra de pesquisa.
+	- Ao pesquisar vai buscar animes no anilist.
+	- Ao selecionar um anime vai abrir a tela do anime
+	- Usuário pode escolher 
+- Multi contas
+	- No front o usuário insere mais de uma conta e o app trackeia animes de todas
+- Windows
+	- Autenticar app?
+	- Testar no windows
+- Torrent imbutido
+- Trocar arquivos de configuracão por sqlite?
