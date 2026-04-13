@@ -208,6 +208,96 @@ func handleReleaseEpisode(server *Server) http.HandlerFunc {
 	}
 }
 
+// @Summary      Redownload an episode from Nyaa
+// @Description  Deletes the existing torrent (if any) and searches Nyaa again for a fresh download
+// @Tags         animes
+// @Accept       json
+// @Produce      json
+// @Param        id        path int true "Anime ID (AniList MediaList ID)"
+// @Param        episodeId path int true "Episode ID (AniList AiringNode ID)"
+// @Success      200  {object}  SuccessResponse
+// @Failure      400  {object}  SuccessResponse
+// @Failure      404  {object}  SuccessResponse
+// @Failure      405  {object}  SuccessResponse
+// @Failure      500  {object}  SuccessResponse
+// @Router       /animes/{id}/episodes/{episodeId}/redownload [post]
+func handleRedownloadEpisode(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST method is allowed")
+			return
+		}
+
+		animeId, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil || animeId <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_ID", "Invalid anime ID")
+			return
+		}
+
+		episodeId, err := strconv.Atoi(r.PathValue("episodeId"))
+		if err != nil || episodeId <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "Invalid episode ID")
+			return
+		}
+
+		configs, err := server.FileManager.LoadConfigs()
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to load configs")
+			JSONInternalError(w, err)
+			return
+		}
+
+		savedEpisodes, err := server.FileManager.LoadSavedEpisodes()
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to load saved episodes")
+			JSONInternalError(w, err)
+			return
+		}
+
+		var existingHash string
+		for _, ep := range savedEpisodes {
+			if ep.EpisodeID == episodeId && ep.AnimeID == animeId {
+				existingHash = ep.EpisodeHash
+				break
+			}
+		}
+
+		qBittorrentURL := getQBittorrentURLForAPI(configs.QBittorrentUrl)
+		torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
+
+		if existingHash != "" {
+			if err := torrentsService.DeleteTorrents([]string{existingHash}); err != nil {
+				logger.Logger.Warn().Err(err).Str("hash", existingHash).Msg("Failed to delete existing torrent")
+			}
+			if err := server.FileManager.DeleteEpisodesFromFile([]int{episodeId}); err != nil {
+				logger.Logger.Error().Err(err).Int("episode_id", episodeId).Msg("Failed to remove episode from file")
+				JSONInternalError(w, err)
+				return
+			}
+		}
+
+		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
+			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
+		}
+
+		ep, err := daemon.ManualDownloadEpisode(animeId, episodeId, configs)
+		if err != nil {
+			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to redownload episode")
+			JSONError(w, http.StatusInternalServerError, "REDOWNLOAD_FAILED", err.Error())
+			return
+		}
+
+		if err := server.FileManager.SaveEpisodesToFile([]files.EpisodeStruct{ep}); err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to save episode to file")
+			JSONInternalError(w, err)
+			return
+		}
+
+		logger.Logger.Info().Int("anime_id", animeId).Int("episode_id", episodeId).Str("hash", ep.EpisodeHash).Msg("Redownloaded episode")
+		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode redownload started"})
+	}
+}
+
 // @Summary      Replace a downloaded episode with a user-supplied magnet link
 // @Description  Deletes the existing torrent (if any) and downloads the episode using the provided magnet link
 // @Tags         animes

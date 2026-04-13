@@ -155,6 +155,10 @@ export async function releaseEpisode(animeId: number, episodeId: number): Promis
   return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/release`)
 }
 
+export async function redownloadEpisode(animeId: number, episodeId: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/redownload`)
+}
+
 export async function replaceEpisodeWithMagnet(animeId: number, episodeId: number, magnet: string): Promise<void> {
   return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/replace`, { magnet })
 }

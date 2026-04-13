@@ -165,5 +165,12 @@
   "detail_replace_anime_done": "Anime queued for replacement",
   "detail_replace_anime_error": "Failed to replace anime",
   "detail_replace_btn_anime": "Replace Anime with Magnet",
-  "detail_replace_invalid_magnet": "Please enter a valid magnet link"
+  "detail_replace_invalid_magnet": "Please enter a valid magnet link",
+  "detail_btn_redownload": "Redownload",
+  "detail_btn_redownloading": "Redownloading...",
+  "detail_toast_redownload": "Episode {number} requeued for download",
+  "detail_toast_redl_error": "Failed to redownload episode",
+  "detail_redownload_confirm_title": "Redownload episode?",
+  "detail_redownload_confirm_msg": "Episode {number} will be deleted and searched again on Nyaa.",
+  "detail_redownload_confirm_btn": "Redownload"
 }

@@ -5,6 +5,7 @@
     downloadEpisode,
     deleteEpisode,
     releaseEpisode,
+    redownloadEpisode,
     replaceEpisodeWithMagnet,
     replaceAnimeWithMagnet,
     type AnimeDetailResponse,
@@ -26,6 +27,8 @@
   let actionLoading: Record<number, boolean> = {};
   let confirmOpen = false;
   let pendingDeleteEp: AnimeEpisodeInfo | null = null;
+  let confirmRedownloadOpen = false;
+  let pendingRedownloadEp: AnimeEpisodeInfo | null = null;
 
   // Bulk selection state
   let selectedEpisodes: Set<number> = new Set();
@@ -173,6 +176,27 @@
     }
   }
 
+  function handleRedownload(ep: AnimeEpisodeInfo) {
+    pendingRedownloadEp = ep;
+    confirmRedownloadOpen = true;
+  }
+
+  async function confirmRedownload() {
+    if (!pendingRedownloadEp) return;
+    const ep = pendingRedownloadEp;
+    pendingRedownloadEp = null;
+    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    try {
+      await redownloadEpisode(animeId, ep.episode_id);
+      toast.success(m.detail_toast_redownload({ number: ep.episode_number }));
+      await loadData(animeId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_toast_redl_error());
+    } finally {
+      actionLoading = { ...actionLoading, [ep.episode_id]: false };
+    }
+  }
+
   async function handleBulkDownload() {
     const targets = selectedList.filter(ep => ep.is_aired && !ep.is_downloaded);
     bulkLoading = true;
@@ -289,6 +313,15 @@
   confirmLabel={m.detail_confirm_btn()}
   cancelLabel={m.common_cancel()}
   on:confirm={confirmDelete}
+/>
+
+<ConfirmDialog
+  bind:open={confirmRedownloadOpen}
+  title={m.detail_redownload_confirm_title()}
+  message={pendingRedownloadEp ? m.detail_redownload_confirm_msg({ number: pendingRedownloadEp.episode_number }) : ""}
+  confirmLabel={m.detail_redownload_confirm_btn()}
+  cancelLabel={m.common_cancel()}
+  on:confirm={confirmRedownload}
 />
 
 <ConfirmDialog
@@ -543,6 +576,13 @@
                       >
                         {isLoading ? "..." : m.detail_btn_delete()}
                       </button>
+                      <button
+                        on:click={() => handleRedownload(ep)}
+                        disabled={isLoading}
+                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isLoading ? "..." : m.detail_btn_redownload()}
+                      </button>
                     {/if}
                     {#if ep.is_aired}
                       <button
@@ -649,6 +689,13 @@
                   class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? m.detail_btn_deleting() : m.detail_btn_delete()}
+                </button>
+                <button
+                  on:click={() => handleRedownload(ep)}
+                  disabled={isLoading}
+                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? m.detail_btn_redownloading() : m.detail_btn_redownload()}
                 </button>
               {/if}
               {#if ep.is_aired}

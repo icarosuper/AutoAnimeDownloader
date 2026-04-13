@@ -165,5 +165,12 @@
   "detail_replace_anime_done": "Anime adicionado para substituição",
   "detail_replace_anime_error": "Falha ao substituir anime",
   "detail_replace_btn_anime": "Substituir Anime com Magnet",
-  "detail_replace_invalid_magnet": "Por favor insira um link magnet válido"
+  "detail_replace_invalid_magnet": "Por favor insira um link magnet válido",
+  "detail_btn_redownload": "Rebaixar",
+  "detail_btn_redownloading": "Rebaixando...",
+  "detail_toast_redownload": "Episódio {number} adicionado para re-download",
+  "detail_toast_redl_error": "Falha ao rebaixar o episódio",
+  "detail_redownload_confirm_title": "Rebaixar episódio?",
+  "detail_redownload_confirm_msg": "O episódio {number} será deletado e buscado novamente no Nyaa.",
+  "detail_redownload_confirm_btn": "Rebaixar"
 }
