@@ -80,27 +80,7 @@
     return new Date(dateString).toLocaleString();
   }
 
-  function formatAiringAt(unixSeconds: number): string {
-    if (!unixSeconds) return m.common_na();
-    return new Date(unixSeconds * 1000).toLocaleString();
-  }
 
-  function getAniListBadge(ep: AnimeEpisodeInfo): { label: string; classes: string } {
-    if (ep.is_watched) {
-      return { label: m.detail_badge_watched(), classes: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300" };
-    }
-    if (ep.is_aired) {
-      return { label: m.detail_badge_not_watched(), classes: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300" };
-    }
-    return { label: m.detail_badge_upcoming(), classes: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" };
-  }
-
-  function getDownloadBadge(ep: AnimeEpisodeInfo): { label: string; classes: string } {
-    if (ep.is_downloaded) {
-      return { label: m.detail_badge_downloaded(), classes: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" };
-    }
-    return { label: m.detail_badge_not_downloaded(), classes: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" };
-  }
 
   function formatTimeUntilAiring(seconds: number, isAired: boolean): string {
     if (isAired || seconds <= 0) return "Released";
@@ -539,9 +519,6 @@
                 {m.detail_col_downloaded()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                {m.detail_col_air_date()}
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_next_ep()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -554,8 +531,6 @@
           </thead>
           <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {#each detail.episodes as ep}
-              {@const anilist = getAniListBadge(ep)}
-              {@const download = getDownloadBadge(ep)}
               {@const isLoading = !!actionLoading[ep.episode_id]}
               {@const isSelected = selectedEpisodes.has(ep.episode_id)}
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
@@ -577,17 +552,40 @@
                   {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {anilist.classes}">
-                    {anilist.label}
-                  </span>
+                  {#if ep.is_watched}
+                    <!-- Watched: eye icon -->
+                    <svg class="w-4 h-4 text-blue-500" aria-label={m.detail_badge_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  {:else if ep.is_aired}
+                    <!-- Aired but not watched: eye-off icon -->
+                    <svg class="w-4 h-4 text-yellow-500" aria-label={m.detail_badge_not_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  {:else}
+                    <!-- Upcoming: clock icon -->
+                    <svg class="w-4 h-4 text-gray-400" aria-label={m.detail_badge_upcoming()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                  {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {download.classes}">
-                    {download.label}
-                  </span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {formatAiringAt(ep.airing_at)}
+                  {#if ep.is_downloaded}
+                    <!-- Downloaded: check circle -->
+                    <svg class="w-4 h-4 text-green-500" aria-label={m.detail_badge_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  {:else}
+                    <!-- Not downloaded: dash -->
+                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600" aria-label={m.detail_badge_not_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="8" y1="12" x2="16" y2="12"/>
+                    </svg>
+                  {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   {formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}
@@ -598,47 +596,76 @@
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center gap-1.5">
                     {#if ep.is_aired && !ep.is_downloaded}
+                      <!-- Download -->
                       <button
                         on:click={() => handleDownload(ep)}
                         disabled={isLoading}
-                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={m.detail_btn_download()}
+                        class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isLoading ? "..." : m.detail_btn_download()}
+                        {#if isLoading}
+                          <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0110 10" stroke-linecap="round"/></svg>
+                        {:else}
+                          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                          </svg>
+                        {/if}
                       </button>
                     {:else if ep.is_downloaded}
+                      <!-- Delete -->
                       <button
                         on:click={() => handleDelete(ep)}
                         disabled={isLoading}
-                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={m.detail_btn_delete()}
+                        class="inline-flex items-center p-1.5 rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isLoading ? "..." : m.detail_btn_delete()}
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                          <path d="M10 11v6M14 11v6"/>
+                          <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                        </svg>
                       </button>
+                      <!-- Redownload -->
                       <button
                         on:click={() => handleRedownload(ep)}
                         disabled={isLoading}
-                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={m.detail_btn_redownload()}
+                        class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isLoading ? "..." : m.detail_btn_redownload()}
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="23 4 23 10 17 10"/>
+                          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                        </svg>
                       </button>
                     {/if}
                     {#if ep.is_aired}
+                      <!-- Replace -->
                       <button
                         on:click={() => handleReplace(ep)}
                         disabled={isLoading}
                         title={m.detail_btn_replace()}
-                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center p-1.5 rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {m.detail_btn_replace()}
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="17 1 21 5 17 9"/>
+                          <path d="M3 11V9a4 4 0 014-4h14"/>
+                          <polyline points="7 23 3 19 7 15"/>
+                          <path d="M21 13v2a4 4 0 01-4 4H3"/>
+                        </svg>
                       </button>
                     {/if}
                     {#if ep.is_manually_managed || ep.is_blocked}
+                      <!-- Release -->
                       <button
                         on:click={() => handleRelease(ep)}
                         disabled={isLoading}
                         title="Soltar episódio"
-                        class="inline-flex items-center px-1.5 py-1 text-xs font-medium rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center p-1.5 rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <line x1="18" y1="6" x2="6" y2="18"></line>
                           <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
@@ -655,8 +682,6 @@
       <!-- Mobile Card View -->
       <div class="md:hidden divide-y divide-gray-200 dark:divide-gray-700">
         {#each detail.episodes as ep}
-          {@const anilist = getAniListBadge(ep)}
-          {@const download = getDownloadBadge(ep)}
           {@const isLoading = !!actionLoading[ep.episode_id]}
           {@const isSelected = selectedEpisodes.has(ep.episode_id)}
           <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
@@ -680,13 +705,34 @@
                   {/if}
                 </div>
               </div>
-              <div class="flex flex-col items-end gap-1">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {anilist.classes}">
-                  {anilist.label}
-                </span>
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {download.classes}">
-                  {download.label}
-                </span>
+              <div class="flex items-center gap-2">
+                {#if ep.is_watched}
+                  <svg class="w-4 h-4 text-blue-500" aria-label={m.detail_badge_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                {:else if ep.is_aired}
+                  <svg class="w-4 h-4 text-yellow-500" aria-label={m.detail_badge_not_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                {:else}
+                  <svg class="w-4 h-4 text-gray-400" aria-label={m.detail_badge_upcoming()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                {/if}
+                {#if ep.is_downloaded}
+                  <svg class="w-4 h-4 text-green-500" aria-label={m.detail_badge_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                {:else}
+                  <svg class="w-4 h-4 text-gray-300 dark:text-gray-600" aria-label={m.detail_badge_not_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  </svg>
+                {/if}
               </div>
             </div>
             {#if ep.episode_name}
@@ -695,10 +741,6 @@
               </p>
             {/if}
             <div class="grid grid-cols-2 gap-4 mt-2">
-              <div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{m.detail_col_air_date()}</p>
-                <p class="text-sm text-gray-900 dark:text-white">{formatAiringAt(ep.airing_at)}</p>
-              </div>
               <div>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{m.detail_col_next_ep()}</p>
                 <p class="text-sm text-gray-900 dark:text-white">{formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}</p>
@@ -712,46 +754,72 @@
             </div>
             <div class="mt-3 flex items-center gap-1.5">
               {#if ep.is_aired && !ep.is_downloaded}
+                <!-- Download -->
                 <button
                   on:click={() => handleDownload(ep)}
                   disabled={isLoading}
-                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={m.detail_btn_download()}
+                  class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? m.detail_btn_downloading() : m.detail_btn_download()}
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
                 </button>
               {:else if ep.is_downloaded}
+                <!-- Delete -->
                 <button
                   on:click={() => handleDelete(ep)}
                   disabled={isLoading}
-                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={m.detail_btn_delete()}
+                  class="inline-flex items-center p-1.5 rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? m.detail_btn_deleting() : m.detail_btn_delete()}
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                    <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                  </svg>
                 </button>
+                <!-- Redownload -->
                 <button
                   on:click={() => handleRedownload(ep)}
                   disabled={isLoading}
-                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={m.detail_btn_redownload()}
+                  class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? m.detail_btn_redownloading() : m.detail_btn_redownload()}
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
+                  </svg>
                 </button>
               {/if}
               {#if ep.is_aired}
+                <!-- Replace -->
                 <button
                   on:click={() => handleReplace(ep)}
                   disabled={isLoading}
-                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={m.detail_btn_replace()}
+                  class="inline-flex items-center p-1.5 rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {m.detail_btn_replace()}
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="17 1 21 5 17 9"/>
+                    <path d="M3 11V9a4 4 0 014-4h14"/>
+                    <polyline points="7 23 3 19 7 15"/>
+                    <path d="M21 13v2a4 4 0 01-4 4H3"/>
+                  </svg>
                 </button>
               {/if}
               {#if ep.is_manually_managed || ep.is_blocked}
+                <!-- Release -->
                 <button
                   on:click={() => handleRelease(ep)}
                   disabled={isLoading}
                   title="Soltar episódio"
-                  class="inline-flex items-center px-1.5 py-1.5 text-xs font-medium rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="inline-flex items-center p-1.5 rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>

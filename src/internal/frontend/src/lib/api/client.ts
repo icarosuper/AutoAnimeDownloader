@@ -95,6 +95,7 @@ export interface AnimeInfo {
   total_episodes: number
   latest_episode_id: number
   last_download_date: string
+  is_blacklisted?: boolean
 }
 
 export interface LogsResponse {

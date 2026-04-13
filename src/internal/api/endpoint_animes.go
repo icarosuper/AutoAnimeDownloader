@@ -17,6 +17,7 @@ type AnimeInfo struct {
 	TotalEpisodes    int    `json:"total_episodes" example:"12"`
 	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
 	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
+	IsBlacklisted    bool   `json:"is_blacklisted,omitempty"`
 }
 
 func extractAnimeName(episodeName string) string {
@@ -127,7 +128,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 
 		// Merge CURRENT animes from AniList so they remain visible even with 0 downloaded episodes
 		if config.AnilistUsername != "" {
-			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername)
+			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername, config.ExcludedList)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
@@ -139,7 +140,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 	}
 }
 
-func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string) {
+func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedList string) {
 	resp, err := anilist.GetAllCurrentAnime(username)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
@@ -169,12 +170,23 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string) 
 			totalEpisodes = *ml.Media.Episodes
 		}
 
+		isBlacklisted := false
+		if excludedList != "" {
+			for listName, inList := range ml.CustomLists {
+				if listName == excludedList && inList {
+					isBlacklisted = true
+					break
+				}
+			}
+		}
+
 		if existing, ok := knownByID[ml.Id]; ok {
 			// Update the name to always reflect the AniList title
 			existing.Name = name
 			if existing.TotalEpisodes == 0 {
 				existing.TotalEpisodes = totalEpisodes
 			}
+			existing.IsBlacklisted = isBlacklisted
 			continue
 		}
 
@@ -183,6 +195,7 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string) 
 			Name:          name,
 			EpisodesCount: 0,
 			TotalEpisodes: totalEpisodes,
+			IsBlacklisted: isBlacklisted,
 		}
 	}
 }
