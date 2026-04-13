@@ -2,6 +2,7 @@ package api
 
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
+	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"net/http"
 	"strconv"
@@ -23,11 +24,12 @@ type AnimeEpisodeInfo struct {
 }
 
 type AnimeDetailResponse struct {
-	AnimeID       int                `json:"anime_id"`
-	TotalEpisodes int                `json:"total_episodes"`
-	Progress      int                `json:"progress"`
-	Status        string             `json:"status"`
-	Episodes      []AnimeEpisodeInfo `json:"episodes"`
+	AnimeID           int                `json:"anime_id"`
+	TotalEpisodes     int                `json:"total_episodes"`
+	Progress          int                `json:"progress"`
+	Status            string             `json:"status"`
+	Episodes          []AnimeEpisodeInfo `json:"episodes"`
+	CustomSearchQuery string             `json:"custom_search_query,omitempty"`
 }
 
 // @Summary      Get detail and episodes for a specific anime
@@ -120,12 +122,19 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			episodes = append(episodes, info)
 		}
 
+		animeSettings, err := server.FileManager.LoadAnimeSettings(id)
+		if err != nil {
+			logger.Logger.Warn().Err(err).Int("anime_id", id).Msg("Failed to load anime settings")
+			animeSettings = &files.AnimeSettings{}
+		}
+
 		response := AnimeDetailResponse{
-			AnimeID:       id,
-			TotalEpisodes: mediaList.Media.Episodes,
-			Progress:      mediaList.Progress,
-			Status:        string(mediaList.Status),
-			Episodes:      episodes,
+			AnimeID:           id,
+			TotalEpisodes:     mediaList.Media.Episodes,
+			Progress:          mediaList.Progress,
+			Status:            string(mediaList.Status),
+			Episodes:          episodes,
+			CustomSearchQuery: animeSettings.CustomSearchQuery,
 		}
 
 		JSONSuccess(w, http.StatusOK, response)

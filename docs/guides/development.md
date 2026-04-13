@@ -347,7 +347,7 @@ npm install <package>
 ### Updating Swagger Documentation
 
 1. Update comments in `src/cmd/daemon/main.go`
-2. Run: `swag init -g src/cmd/daemon/main.go -o docs`
+2. Run: `swag init -g src/cmd/daemon/main.go -o docs/swagger`
 3. Commit generated files
 
 ### Updating Frontend

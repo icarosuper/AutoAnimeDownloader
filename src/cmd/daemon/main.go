@@ -48,7 +48,7 @@ import (
 	"syscall"
 	"time"
 
-	_ "AutoAnimeDownloader/docs"
+	_ "AutoAnimeDownloader/docs/swagger"
 )
 
 func getEnvironment() string {

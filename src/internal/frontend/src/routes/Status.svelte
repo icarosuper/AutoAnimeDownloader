@@ -38,6 +38,7 @@
     searchPlaceholder: m.status_search_placeholder(),
     colName: m.status_col_name(),
     colEpisodes: m.status_col_episodes(),
+    colBlacklist: m.status_col_blacklist(),
     colProgress: m.status_col_progress(),
     colLastDownload: m.status_col_last_download(),
     emptyTitle: m.status_empty_title(),
@@ -379,6 +380,7 @@
                       {/if}
                     </span>
                   </th>
+                  <th title={T && T.colBlacklist}>{T && T.colBlacklist}</th>
                   <th>{T && T.colProgress}</th>
                   <th
                     class="cursor-pointer select-none hover:text-base-content"
@@ -416,6 +418,16 @@
                     <td class="text-base-content/60">
                       {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : anime.episodes_count}
                     </td>
+                    <td>
+                      {#if anime.is_blacklisted}
+                        <svg class="w-4 h-4 text-red-500" aria-label={T && T.colBlacklist} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                        </svg>
+                      {:else}
+                        <span class="text-base-content/20">—</span>
+                      {/if}
+                    </td>
                     <td class="min-w-32">
                       {#if pct !== null}
                         <div class="flex items-center gap-2">
@@ -448,9 +460,17 @@
                 on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
               >
                 <div class="flex items-start justify-between gap-2 mb-2">
-                  <p class="text-sm font-medium text-base-content truncate">
-                    {anime.name}
-                  </p>
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <p class="text-sm font-medium text-base-content truncate">
+                      {anime.name}
+                    </p>
+                    {#if anime.is_blacklisted}
+                      <svg class="w-3.5 h-3.5 text-red-500 shrink-0" aria-label={T && T.colBlacklist} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                      </svg>
+                    {/if}
+                  </div>
                   <span class="text-xs text-base-content/50 whitespace-nowrap shrink-0">
                     {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : `${anime.episodes_count} eps`}
                   </span>

@@ -16,11 +16,13 @@ const configsFolder = ".autoAnimeDownloader"
 const configFileName = "config.json"
 const downloadedEpsFileName = "downloaded_episodes"
 const blockedEpsFileName = "blocked_episodes"
+const animeSettingsFileName = "anime_settings"
 
 type EpisodeStruct struct {
 	EpisodeID          int       `json:"episode_id"`
 	AnimeID            int       `json:"anime_id,omitempty"`
 	AnimeTotalEpisodes int       `json:"anime_total_episodes,omitempty"`
+	AnimeName          string    `json:"anime_name,omitempty"`
 	EpisodeHash        string    `json:"episode_hash"`
 	EpisodeName        string    `json:"episode_name"`
 	DownloadDate       time.Time `json:"download_date"`
@@ -41,11 +43,16 @@ type Config struct {
 	RenameFilesForJellyfin bool   `json:"rename_files_for_jellyfin"`
 }
 
+type AnimeSettings struct {
+	CustomSearchQuery string `json:"custom_search_query,omitempty"`
+}
+
 type FileManager struct {
 	fs                  FileSystem
 	configPath          string
 	episodesPath        string
 	blockedEpisodesPath string
+	animeSettingsPath   string
 	mu                  sync.Mutex
 }
 
@@ -90,12 +97,13 @@ func ensureConfigsFolder(fs FileSystem) (string, error) {
 	return configsFolderPath, nil
 }
 
-func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath string) *FileManager {
+func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath string) *FileManager {
 	return &FileManager{
 		fs:                  fs,
 		configPath:          configPath,
 		episodesPath:        episodesPath,
 		blockedEpisodesPath: blockedEpisodesPath,
+		animeSettingsPath:   animeSettingsPath,
 	}
 }
 
@@ -109,8 +117,9 @@ func NewDefaultFileManager() (*FileManager, error) {
 	configPath := filepath.Join(configsFolderPath, configFileName)
 	episodesPath := filepath.Join(configsFolderPath, downloadedEpsFileName)
 	blockedEpisodesPath := filepath.Join(configsFolderPath, blockedEpsFileName)
+	animeSettingsPath := filepath.Join(configsFolderPath, animeSettingsFileName)
 
-	return NewManager(fs, configPath, episodesPath, blockedEpisodesPath), nil
+	return NewManager(fs, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath), nil
 }
 
 func (m *FileManager) LoadConfigs() (*Config, error) {
@@ -433,6 +442,73 @@ func (m *FileManager) saveBlockedEpisodes(ids []int) error {
 		return fmt.Errorf("failed to write blocked episodes file: %w", err)
 	}
 	return nil
+}
+
+func (m *FileManager) loadAllAnimeSettings() (map[int]AnimeSettings, error) {
+	_, err := m.fs.Stat(m.animeSettingsPath)
+	if os.IsNotExist(err) {
+		return map[int]AnimeSettings{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat anime settings file: %w", err)
+	}
+
+	b, err := m.fs.ReadFile(m.animeSettingsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read anime settings file: %w", err)
+	}
+
+	var settings map[int]AnimeSettings
+	if err := json.Unmarshal(b, &settings); err != nil {
+		return nil, fmt.Errorf("failed to parse anime settings file: %w", err)
+	}
+
+	return settings, nil
+}
+
+func (m *FileManager) saveAllAnimeSettings(settings map[int]AnimeSettings) error {
+	b, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal anime settings: %w", err)
+	}
+	if err := m.fs.WriteFile(m.animeSettingsPath, b, 0644); err != nil {
+		return fmt.Errorf("failed to write anime settings file: %w", err)
+	}
+	return nil
+}
+
+func (m *FileManager) LoadAnimeSettings(animeID int) (*AnimeSettings, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	all, err := m.loadAllAnimeSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	s, ok := all[animeID]
+	if !ok {
+		return &AnimeSettings{}, nil
+	}
+	return &s, nil
+}
+
+func (m *FileManager) SaveAnimeSettings(animeID int, settings AnimeSettings) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	all, err := m.loadAllAnimeSettings()
+	if err != nil {
+		return err
+	}
+
+	all[animeID] = settings
+	return m.saveAllAnimeSettings(all)
+}
+
+func (m *FileManager) LoadAllAnimeSettings() (map[int]AnimeSettings, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.loadAllAnimeSettings()
 }
 
 func (m *FileManager) deleteEmptyFolders(path string) error {
