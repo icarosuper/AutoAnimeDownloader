@@ -63,7 +63,13 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(animeId, episodeId, configs)
+		animeSettings, err := server.FileManager.LoadAnimeSettings(animeId)
+		if err != nil {
+			logger.Logger.Warn().Err(err).Int("anime_id", animeId).Msg("Failed to load anime settings")
+			animeSettings = &files.AnimeSettings{}
+		}
+
+		ep, err := daemon.ManualDownloadEpisode(animeId, episodeId, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to manually download episode")
 			JSONError(w, http.StatusInternalServerError, "DOWNLOAD_FAILED", err.Error())
@@ -280,7 +286,13 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(animeId, episodeId, configs)
+		animeSettings, err := server.FileManager.LoadAnimeSettings(animeId)
+		if err != nil {
+			logger.Logger.Warn().Err(err).Int("anime_id", animeId).Msg("Failed to load anime settings")
+			animeSettings = &files.AnimeSettings{}
+		}
+
+		ep, err := daemon.ManualDownloadEpisode(animeId, episodeId, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to redownload episode")
 			JSONError(w, http.StatusInternalServerError, "REDOWNLOAD_FAILED", err.Error())

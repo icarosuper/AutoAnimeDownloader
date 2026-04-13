@@ -8,6 +8,7 @@
     redownloadEpisode,
     replaceEpisodeWithMagnet,
     replaceAnimeWithMagnet,
+    updateAnimeSettings,
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
@@ -42,6 +43,10 @@
   let replaceAnimeOpen = false;
   let replaceAnimeMagnet = "";
   let replaceLoading = false;
+
+  // Custom search query state
+  let customSearchQuery = "";
+  let searchQuerySaving = false;
 
   $: allEpisodes = detail?.episodes ?? [];
   $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_id));
@@ -123,6 +128,7 @@
 
       detail = detailData;
       anime = animesData.find((a) => a.anime_id === id) ?? null;
+      customSearchQuery = detailData.custom_search_query ?? "";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.detail_toast_load_error());
     } finally {
@@ -303,6 +309,18 @@
     }
   }
 
+  async function handleSaveSearchQuery() {
+    searchQuerySaving = true;
+    try {
+      await updateAnimeSettings(animeId, { custom_search_query: customSearchQuery });
+      toast.success(m.detail_search_query_saved());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_search_query_error());
+    } finally {
+      searchQuerySaving = false;
+    }
+  }
+
   $: loadData(animeId);
 </script>
 
@@ -417,12 +435,31 @@
       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
         {m.detail_progress({ progress: detail.progress, total: detail.total_episodes || "?", status: detail.status })}
       </p>
-      <div class="mt-2">
+      <div class="mt-2 flex items-center gap-2 flex-wrap">
         <button
           on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}
           class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
         >
           {m.detail_replace_btn_anime()}
+        </button>
+      </div>
+      <div class="mt-3 flex items-center gap-2 max-w-xl">
+        <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
+          {m.detail_search_query_label()}
+        </label>
+        <input
+          type="text"
+          bind:value={customSearchQuery}
+          placeholder={m.detail_search_query_placeholder()}
+          class="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          on:keydown={(e) => { if (e.key === 'Enter') handleSaveSearchQuery(); }}
+        />
+        <button
+          on:click={handleSaveSearchQuery}
+          disabled={searchQuerySaving}
+          class="shrink-0 px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {searchQuerySaving ? "..." : "Save"}
         </button>
       </div>
     {/if}

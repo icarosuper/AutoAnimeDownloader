@@ -172,5 +172,9 @@
   "detail_toast_redl_error": "Failed to redownload episode",
   "detail_redownload_confirm_title": "Redownload episode?",
   "detail_redownload_confirm_msg": "Episode {number} will be deleted and searched again on Nyaa.",
-  "detail_redownload_confirm_btn": "Redownload"
+  "detail_redownload_confirm_btn": "Redownload",
+  "detail_search_query_label": "Custom Nyaa search query",
+  "detail_search_query_placeholder": "Auto-generated from anime title",
+  "detail_search_query_saved": "Search query saved",
+  "detail_search_query_error": "Failed to save search query"
 }

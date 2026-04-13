@@ -137,6 +137,11 @@ export interface AnimeDetailResponse {
   progress: number
   status: string
   episodes: AnimeEpisodeInfo[]
+  custom_search_query?: string
+}
+
+export interface AnimeSettings {
+  custom_search_query: string
 }
 
 export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {
@@ -165,6 +170,10 @@ export async function replaceEpisodeWithMagnet(animeId: number, episodeId: numbe
 
 export async function replaceAnimeWithMagnet(animeId: number, magnet: string): Promise<void> {
   return apiRequest<void>('POST', `/animes/${animeId}/replace`, { magnet })
+}
+
+export async function updateAnimeSettings(animeId: number, settings: AnimeSettings): Promise<void> {
+  return apiRequest<void>('PUT', `/animes/${animeId}/settings`, settings)
 }
 
 export async function triggerCheck(): Promise<void> {

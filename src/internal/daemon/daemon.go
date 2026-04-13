@@ -29,6 +29,9 @@ type FileManagerInterface interface {
 	BlockEpisode(episodeID int) error
 	UnblockEpisode(episodeID int) error
 	UnmanageEpisode(episodeID int) error
+	LoadAllAnimeSettings() (map[int]files.AnimeSettings, error)
+	LoadAnimeSettings(animeID int) (*files.AnimeSettings, error)
+	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
 }
 
 type StartLoopPayload struct {
@@ -234,6 +237,12 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		blockedMap[id] = true
 	}
 
+	animeSettingsMap, err := fileManager.LoadAllAnimeSettings()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load anime settings, using defaults")
+		animeSettingsMap = map[int]files.AnimeSettings{}
+	}
+
 	animes := anilistResponse.Data.Page.MediaList
 	var newEpisodes []files.EpisodeStruct
 	var checkedEpisodes []int
@@ -250,6 +259,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		default:
 		}
 
+		customQuery := ""
+		if s, ok := animeSettingsMap[anime.Id]; ok {
+			customQuery = s.CustomSearchQuery
+		}
+
 		processAnimeEpisodes(
 			configs,
 			torrentsService,
@@ -260,6 +274,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			&checkedEpisodes,
 			&idsToDelete,
 			blockedMap,
+			customQuery,
 		)
 	}
 	elapsed := time.Since(start)
@@ -463,16 +478,21 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 	return anilistResponse, nil
 }
 
-func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (result []nyaa.TorrentResult) {
-	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	var romaji, english string
-	if titles.Romaji != nil {
-		romaji = *titles.Romaji
+func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, customQuery string) (result []nyaa.TorrentResult) {
+	var titleVariants []string
+	if customQuery != "" {
+		titleVariants = []string{customQuery}
+	} else {
+		// Gerar variantes de busca com prioridade (limpas antes de originais)
+		var romaji, english string
+		if titles.Romaji != nil {
+			romaji = *titles.Romaji
+		}
+		if titles.English != nil {
+			english = *titles.English
+		}
+		titleVariants = nyaa.GenerateSearchTitleVariants(romaji, english)
 	}
-	if titles.English != nil {
-		english = *titles.English
-	}
-	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -509,16 +529,21 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title) (re
 	return nyaaResponse
 }
 
-func searchNyaaForBatch(titles anilist.Title, requestedSeason *int) (result []nyaa.TorrentResult) {
-	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	var romaji, english string
-	if titles.Romaji != nil {
-		romaji = *titles.Romaji
+func searchNyaaForBatch(titles anilist.Title, requestedSeason *int, customQuery string) (result []nyaa.TorrentResult) {
+	var titleVariants []string
+	if customQuery != "" {
+		titleVariants = []string{customQuery}
+	} else {
+		// Gerar variantes de busca com prioridade (limpas antes de originais)
+		var romaji, english string
+		if titles.Romaji != nil {
+			romaji = *titles.Romaji
+		}
+		if titles.English != nil {
+			english = *titles.English
+		}
+		titleVariants = nyaa.GenerateSearchTitleVariants(romaji, english)
 	}
-	if titles.English != nil {
-		english = *titles.English
-	}
-	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -552,16 +577,21 @@ func searchNyaaForBatch(titles anilist.Title, requestedSeason *int) (result []ny
 	return nyaaResponse
 }
 
-func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) (result []nyaa.TorrentResult) {
-	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	var romaji, english string
-	if titles.Romaji != nil {
-		romaji = *titles.Romaji
+func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool, customQuery string) (result []nyaa.TorrentResult) {
+	var titleVariants []string
+	if customQuery != "" {
+		titleVariants = []string{customQuery}
+	} else {
+		// Gerar variantes de busca com prioridade (limpas antes de originais)
+		var romaji, english string
+		if titles.Romaji != nil {
+			romaji = *titles.Romaji
+		}
+		if titles.English != nil {
+			english = *titles.English
+		}
+		titleVariants = nyaa.GenerateSearchTitleVariants(romaji, english)
 	}
-	if titles.English != nil {
-		english = *titles.English
-	}
-	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -595,16 +625,21 @@ func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) (result []nyaa
 	return nyaaResponse
 }
 
-func searchNyaaForMultipleEpisodes(titles anilist.Title, episodes []int) (result []nyaa.TorrentResult) {
-	// Gerar variantes de busca com prioridade (limpas antes de originais)
-	var romaji, english string
-	if titles.Romaji != nil {
-		romaji = *titles.Romaji
+func searchNyaaForMultipleEpisodes(titles anilist.Title, episodes []int, customQuery string) (result []nyaa.TorrentResult) {
+	var titleVariants []string
+	if customQuery != "" {
+		titleVariants = []string{customQuery}
+	} else {
+		// Gerar variantes de busca com prioridade (limpas antes de originais)
+		var romaji, english string
+		if titles.Romaji != nil {
+			romaji = *titles.Romaji
+		}
+		if titles.English != nil {
+			english = *titles.English
+		}
+		titleVariants = nyaa.GenerateSearchTitleVariants(romaji, english)
 	}
-	if titles.English != nil {
-		english = *titles.English
-	}
-	titleVariants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
 	var nyaaResponse []nyaa.TorrentResult
 	var err error
@@ -685,6 +720,7 @@ func processAnimeEpisodes(
 	checkedEpisodes *[]int,
 	idsToDelete *[]int,
 	blockedMap map[int]bool,
+	customQuery string,
 ) {
 	animeTitle := getAnimeTitleSafe(anime)
 	logger.Logger.Info().
@@ -731,7 +767,7 @@ func processAnimeEpisodes(
 			Str("anime", animeTitle).
 			Msg("Detected movie - searching for movie torrent")
 
-		result := searchNyaaForMovie(anime.Media.Title, true)
+		result := searchNyaaForMovie(anime.Media.Title, true, customQuery)
 		if result != nil {
 			movieResult = result
 		}
@@ -761,7 +797,7 @@ func processAnimeEpisodes(
 		// Extrair temporada se houver
 		requestedSeason := extractSeasonFromAnime(anime)
 
-		result := searchNyaaForBatch(anime.Media.Title, requestedSeason)
+		result := searchNyaaForBatch(anime.Media.Title, requestedSeason, customQuery)
 		if result != nil {
 			batchResult = result
 		}
@@ -774,7 +810,7 @@ func processAnimeEpisodes(
 			eps = append(eps, ep.Episode)
 		}
 
-		result := searchNyaaForMultipleEpisodes(anime.Media.Title, eps)
+		result := searchNyaaForMultipleEpisodes(anime.Media.Title, eps, customQuery)
 		if result != nil {
 			multipleResult = result
 		}
@@ -820,7 +856,7 @@ func processAnimeEpisodes(
 
 		// Prioridade 4: Episódio individual (fallback)
 		if len(magnets) == 0 {
-			results := searchNyaaForSingleEpisode(ep, anime.Media.Title)
+			results := searchNyaaForSingleEpisode(ep, anime.Media.Title, customQuery)
 			for _, result := range results {
 				magnets = append(magnets, result.MagnetLink)
 			}
@@ -837,6 +873,7 @@ func processAnimeEpisodes(
 				EpisodeID:          ep.ID,
 				AnimeID:            anime.Id,
 				AnimeTotalEpisodes: totalEpisodes,
+				AnimeName:          animeTitle,
 				EpisodeHash:        hash,
 				EpisodeName:        epName,
 				DownloadDate:       time.Now(),
@@ -1098,7 +1135,7 @@ func ManualDownloadAnimeWithMagnet(animeId int, magnet string, configs *files.Co
 
 // ManualDownloadEpisode downloads a specific episode manually (called from API).
 // Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config) (files.EpisodeStruct, error) {
+func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
 	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
 	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
 
@@ -1131,7 +1168,7 @@ func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config) (f
 
 	epName := fmt.Sprintf("%s - Episode %d", animeTitle, targetNode.Episode)
 
-	results := searchNyaaForSingleEpisode(*targetNode, mediaList.Media.Title)
+	results := searchNyaaForSingleEpisode(*targetNode, mediaList.Media.Title, customQuery)
 	var magnets []string
 	for _, result := range results {
 		magnets = append(magnets, result.MagnetLink)
@@ -1159,6 +1196,7 @@ func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config) (f
 	ep := files.EpisodeStruct{
 		EpisodeID:       episodeId,
 		AnimeID:         animeId,
+		AnimeName:       animeTitle,
 		EpisodeHash:     hash,
 		EpisodeName:     epName,
 		DownloadDate:    time.Now(),

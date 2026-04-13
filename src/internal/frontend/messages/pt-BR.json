@@ -172,5 +172,9 @@
   "detail_toast_redl_error": "Falha ao rebaixar o episódio",
   "detail_redownload_confirm_title": "Rebaixar episódio?",
   "detail_redownload_confirm_msg": "O episódio {number} será deletado e buscado novamente no Nyaa.",
-  "detail_redownload_confirm_btn": "Rebaixar"
+  "detail_redownload_confirm_btn": "Rebaixar",
+  "detail_search_query_label": "Busca personalizada no Nyaa",
+  "detail_search_query_placeholder": "Gerada automaticamente pelo título",
+  "detail_search_query_saved": "Busca salva",
+  "detail_search_query_error": "Erro ao salvar busca"
 }
