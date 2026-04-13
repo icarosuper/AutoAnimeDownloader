@@ -993,6 +993,109 @@ func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, an
 	}
 }
 
+// ManualDownloadEpisodeWithMagnet downloads a specific episode using a user-supplied magnet link.
+// Skips Nyaa search entirely. Returns the saved EpisodeStruct with ManuallyManaged=true on success.
+func ManualDownloadEpisodeWithMagnet(animeId int, episodeId int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
+	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
+	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
+
+	detail, err := anilist.GetAnimeInfo(animeId)
+	if err != nil {
+		return files.EpisodeStruct{}, fmt.Errorf("failed to get anime info: %w", err)
+	}
+
+	mediaList := detail.Data.MediaList
+
+	var targetNode *anilist.AiringNode
+	for _, node := range mediaList.Media.AiringSchedule.Nodes {
+		if node.ID == episodeId {
+			n := node
+			targetNode = &n
+			break
+		}
+	}
+
+	if targetNode == nil {
+		return files.EpisodeStruct{}, fmt.Errorf("episode %d not found for anime %d", episodeId, animeId)
+	}
+
+	animeTitle := ""
+	if mediaList.Media.Title.English != nil && *mediaList.Media.Title.English != "" {
+		animeTitle = *mediaList.Media.Title.English
+	} else if mediaList.Media.Title.Romaji != nil {
+		animeTitle = *mediaList.Media.Title.Romaji
+	}
+
+	epName := fmt.Sprintf("%s - Episode %d", animeTitle, targetNode.Episode)
+	isFinished := mediaList.Media.Status == anilist.MediaStatusFinished
+
+	hash := torrentsService.DownloadTorrentWithOptions(magnet, animeTitle, epName, isFinished, false)
+	if hash == "" {
+		return files.EpisodeStruct{}, fmt.Errorf("failed to add torrent to qBittorrent")
+	}
+
+	return files.EpisodeStruct{
+		EpisodeID:       episodeId,
+		AnimeID:         animeId,
+		EpisodeHash:     hash,
+		EpisodeName:     epName,
+		DownloadDate:    time.Now(),
+		ManuallyManaged: true,
+	}, nil
+}
+
+// ManualDownloadAnimeWithMagnet downloads an entire anime using a user-supplied batch magnet link.
+// Marks all aired episodes as downloaded sharing the same torrent hash.
+func ManualDownloadAnimeWithMagnet(animeId int, magnet string, configs *files.Config) ([]files.EpisodeStruct, error) {
+	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
+	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
+
+	detail, err := anilist.GetAnimeInfo(animeId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get anime info: %w", err)
+	}
+
+	mediaList := detail.Data.MediaList
+
+	animeTitle := ""
+	if mediaList.Media.Title.English != nil && *mediaList.Media.Title.English != "" {
+		animeTitle = *mediaList.Media.Title.English
+	} else if mediaList.Media.Title.Romaji != nil {
+		animeTitle = *mediaList.Media.Title.Romaji
+	}
+
+	isFinished := mediaList.Media.Status == anilist.MediaStatusFinished
+
+	// Use anime title as torrent name for batch; skip subfolder so files land directly
+	hash := torrentsService.DownloadTorrentWithOptions(magnet, animeTitle, animeTitle, isFinished, false)
+	if hash == "" {
+		return nil, fmt.Errorf("failed to add torrent to qBittorrent")
+	}
+
+	now := time.Now()
+	var episodes []files.EpisodeStruct
+	for _, node := range mediaList.Media.AiringSchedule.Nodes {
+		if node.TimeUntilAiring > 0 {
+			continue // not yet aired
+		}
+		epName := fmt.Sprintf("%s - Episode %d", animeTitle, node.Episode)
+		episodes = append(episodes, files.EpisodeStruct{
+			EpisodeID:       node.ID,
+			AnimeID:         animeId,
+			EpisodeHash:     hash,
+			EpisodeName:     epName,
+			DownloadDate:    now,
+			ManuallyManaged: true,
+		})
+	}
+
+	if len(episodes) == 0 {
+		return nil, fmt.Errorf("no aired episodes found for anime %d", animeId)
+	}
+
+	return episodes, nil
+}
+
 // ManualDownloadEpisode downloads a specific episode manually (called from API).
 // Returns the saved EpisodeStruct with ManuallyManaged=true on success.
 func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config) (files.EpisodeStruct, error) {

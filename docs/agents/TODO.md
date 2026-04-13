@@ -25,7 +25,6 @@
 	- Adicionar uma coluna indicando animes que estão nas blacklists
 		- Usuário pode marcar pra ver ou não esses animes
 - Tela do anime
-	- Opcão de substituir episódio ou anime inteiro por um magnet específico
 	- Botão de baixar o anime em batch
 		- Só aparece se o anime estiver finalizado
 		- Mostra modal com opcões no nyaa?

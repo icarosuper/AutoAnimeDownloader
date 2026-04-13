@@ -155,6 +155,14 @@ export async function releaseEpisode(animeId: number, episodeId: number): Promis
   return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/release`)
 }
 
+export async function replaceEpisodeWithMagnet(animeId: number, episodeId: number, magnet: string): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/replace`, { magnet })
+}
+
+export async function replaceAnimeWithMagnet(animeId: number, magnet: string): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/replace`, { magnet })
+}
+
 export async function triggerCheck(): Promise<void> {
   return apiRequest<void>('POST', '/check')
 }

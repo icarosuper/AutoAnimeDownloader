@@ -155,5 +155,15 @@
   "detail_bulk_toast_dl_done": "{success} episode(s) queued for download",
   "detail_bulk_toast_del_done": "{success} episode(s) deleted",
   "detail_bulk_toast_rel_done": "{success} episode(s) released",
-  "detail_bulk_toast_partial": "{failed} failed"
+  "detail_bulk_toast_partial": "{failed} failed",
+  "detail_btn_replace": "Replace",
+  "detail_replace_ep_title": "Replace Episode {number}",
+  "detail_replace_anime_title": "Replace Anime with Magnet",
+  "detail_replace_magnet_placeholder": "magnet:?xt=urn:btih:...",
+  "detail_replace_ep_done": "Episode {number} queued for replacement",
+  "detail_replace_ep_error": "Failed to replace episode",
+  "detail_replace_anime_done": "Anime queued for replacement",
+  "detail_replace_anime_error": "Failed to replace anime",
+  "detail_replace_btn_anime": "Replace Anime with Magnet",
+  "detail_replace_invalid_magnet": "Please enter a valid magnet link"
 }

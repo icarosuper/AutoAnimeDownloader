@@ -5,6 +5,8 @@
     downloadEpisode,
     deleteEpisode,
     releaseEpisode,
+    replaceEpisodeWithMagnet,
+    replaceAnimeWithMagnet,
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
@@ -29,6 +31,14 @@
   let selectedEpisodes: Set<number> = new Set();
   let bulkLoading = false;
   let confirmBulkOpen = false;
+
+  // Replace with magnet state
+  let replaceEpOpen = false;
+  let pendingReplaceEp: AnimeEpisodeInfo | null = null;
+  let replaceEpMagnet = "";
+  let replaceAnimeOpen = false;
+  let replaceAnimeMagnet = "";
+  let replaceLoading = false;
 
   $: allEpisodes = detail?.episodes ?? [];
   $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_id));
@@ -224,6 +234,51 @@
     await loadData(animeId);
   }
 
+  function handleReplace(ep: AnimeEpisodeInfo) {
+    pendingReplaceEp = ep;
+    replaceEpMagnet = "";
+    replaceEpOpen = true;
+  }
+
+  async function confirmReplaceEp() {
+    if (!pendingReplaceEp) return;
+    if (!replaceEpMagnet.startsWith("magnet:")) {
+      toast.error(m.detail_replace_invalid_magnet());
+      return;
+    }
+    const ep = pendingReplaceEp;
+    replaceLoading = true;
+    try {
+      await replaceEpisodeWithMagnet(animeId, ep.episode_id, replaceEpMagnet);
+      toast.success(m.detail_replace_ep_done({ number: ep.episode_number }));
+      replaceEpOpen = false;
+      pendingReplaceEp = null;
+      await loadData(animeId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_replace_ep_error());
+    } finally {
+      replaceLoading = false;
+    }
+  }
+
+  async function confirmReplaceAnime() {
+    if (!replaceAnimeMagnet.startsWith("magnet:")) {
+      toast.error(m.detail_replace_invalid_magnet());
+      return;
+    }
+    replaceLoading = true;
+    try {
+      await replaceAnimeWithMagnet(animeId, replaceAnimeMagnet);
+      toast.success(m.detail_replace_anime_done());
+      replaceAnimeOpen = false;
+      await loadData(animeId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_replace_anime_error());
+    } finally {
+      replaceLoading = false;
+    }
+  }
+
   $: loadData(animeId);
 </script>
 
@@ -245,6 +300,72 @@
   on:confirm={confirmBulkDelete}
 />
 
+<!-- Replace Episode with Magnet Modal -->
+{#if replaceEpOpen}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" on:click|self={() => { replaceEpOpen = false; }}>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        {m.detail_replace_ep_title({ number: pendingReplaceEp?.episode_number ?? "" })}
+      </h3>
+      <input
+        type="text"
+        bind:value={replaceEpMagnet}
+        placeholder={m.detail_replace_magnet_placeholder()}
+        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        on:keydown={(e) => { if (e.key === 'Enter') confirmReplaceEp(); if (e.key === 'Escape') replaceEpOpen = false; }}
+      />
+      <div class="mt-4 flex justify-end gap-2">
+        <button
+          on:click={() => { replaceEpOpen = false; }}
+          class="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          {m.common_cancel()}
+        </button>
+        <button
+          on:click={confirmReplaceEp}
+          disabled={replaceLoading}
+          class="px-3 py-1.5 text-sm rounded border border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {replaceLoading ? "..." : m.detail_btn_replace()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Replace Anime with Magnet Modal -->
+{#if replaceAnimeOpen}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" on:click|self={() => { replaceAnimeOpen = false; }}>
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        {m.detail_replace_anime_title()}
+      </h3>
+      <input
+        type="text"
+        bind:value={replaceAnimeMagnet}
+        placeholder={m.detail_replace_magnet_placeholder()}
+        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        on:keydown={(e) => { if (e.key === 'Enter') confirmReplaceAnime(); if (e.key === 'Escape') replaceAnimeOpen = false; }}
+      />
+      <div class="mt-4 flex justify-end gap-2">
+        <button
+          on:click={() => { replaceAnimeOpen = false; }}
+          class="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+        >
+          {m.common_cancel()}
+        </button>
+        <button
+          on:click={confirmReplaceAnime}
+          disabled={replaceLoading}
+          class="px-3 py-1.5 text-sm rounded border border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {replaceLoading ? "..." : m.detail_btn_replace()}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <div>
   <div class="mb-6">
     <a
@@ -263,6 +384,14 @@
       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
         {m.detail_progress({ progress: detail.progress, total: detail.total_episodes || "?", status: detail.status })}
       </p>
+      <div class="mt-2">
+        <button
+          on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}
+          class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+        >
+          {m.detail_replace_btn_anime()}
+        </button>
+      </div>
     {/if}
   </div>
 
@@ -415,6 +544,16 @@
                         {isLoading ? "..." : m.detail_btn_delete()}
                       </button>
                     {/if}
+                    {#if ep.is_aired}
+                      <button
+                        on:click={() => handleReplace(ep)}
+                        disabled={isLoading}
+                        title={m.detail_btn_replace()}
+                        class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {m.detail_btn_replace()}
+                      </button>
+                    {/if}
                     {#if ep.is_manually_managed || ep.is_blocked}
                       <button
                         on:click={() => handleRelease(ep)}
@@ -510,6 +649,15 @@
                   class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? m.detail_btn_deleting() : m.detail_btn_delete()}
+                </button>
+              {/if}
+              {#if ep.is_aired}
+                <button
+                  on:click={() => handleReplace(ep)}
+                  disabled={isLoading}
+                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {m.detail_btn_replace()}
                 </button>
               {/if}
               {#if ep.is_manually_managed || ep.is_blocked}

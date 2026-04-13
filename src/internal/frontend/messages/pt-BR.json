@@ -155,5 +155,15 @@
   "detail_bulk_toast_dl_done": "{success} episódio(s) adicionado(s) para download",
   "detail_bulk_toast_del_done": "{success} episódio(s) deletado(s)",
   "detail_bulk_toast_rel_done": "{success} episódio(s) solto(s)",
-  "detail_bulk_toast_partial": "{failed} falharam"
+  "detail_bulk_toast_partial": "{failed} falharam",
+  "detail_btn_replace": "Substituir",
+  "detail_replace_ep_title": "Substituir Episódio {number}",
+  "detail_replace_anime_title": "Substituir Anime com Magnet",
+  "detail_replace_magnet_placeholder": "magnet:?xt=urn:btih:...",
+  "detail_replace_ep_done": "Episódio {number} adicionado para substituição",
+  "detail_replace_ep_error": "Falha ao substituir episódio",
+  "detail_replace_anime_done": "Anime adicionado para substituição",
+  "detail_replace_anime_error": "Falha ao substituir anime",
+  "detail_replace_btn_anime": "Substituir Anime com Magnet",
+  "detail_replace_invalid_magnet": "Por favor insira um link magnet válido"
 }
