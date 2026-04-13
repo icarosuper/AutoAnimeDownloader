@@ -23,9 +23,6 @@
 - Melhorias no front
 	- Navbar responsiva
 	- Colocar imagem dos animes
-- Tela de listagem de animes
-	- Adicionar uma coluna indicando animes que estão nas blacklists
-		- Usuário pode marcar pra ver ou não esses animes
 - Tela do anime
 	- Botão de baixar o anime em batch
 		- Só aparece se o anime estiver finalizado
@@ -35,8 +32,8 @@
 	- Nova tela de baixar animes avulsos.
 	- Nessa tela vai ter uma barra de pesquisa.
 	- Ao pesquisar vai buscar animes no anilist.
-	- Ao selecionar um anime vai abrir a tela do anime
-	- Usuário pode escolher 
+	- Ao selecionar um anime vai adicionar anime aos animes trackeados
+	- Vai ter que implementar um gerenciamento de tracking do anime
 - Multi contas
 	- No front o usuário insere mais de uma conta e o app trackeia animes de todas
 - Windows
