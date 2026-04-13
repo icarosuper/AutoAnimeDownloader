@@ -29,6 +29,9 @@ type FileManagerInterface interface {
 	BlockEpisode(episodeID int) error
 	UnblockEpisode(episodeID int) error
 	UnmanageEpisode(episodeID int) error
+	LoadAllAnimeSettings() (map[int]files.AnimeSettings, error)
+	LoadAnimeSettings(animeID int) (*files.AnimeSettings, error)
+	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
 }
 
 type Server struct {
@@ -75,8 +78,12 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/animes", handleAnimes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes", handleAnimeEpisodes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/download", handleDownloadEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/redownload", handleRedownloadEpisode(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/release", handleReleaseEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/replace", handleReplaceEpisodeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}", handleDeleteEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/replace", handleReplaceAnimeWithMagnet(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/settings", handleAnimeSettings(s))
 	apiMux.HandleFunc("/api/v1/check", handleCheck(s))
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))

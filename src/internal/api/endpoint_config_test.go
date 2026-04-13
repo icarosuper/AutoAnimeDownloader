@@ -120,6 +120,18 @@ func (m *mockFileManager) UnmanageEpisode(episodeID int) error {
 	return nil
 }
 
+func (m *mockFileManager) LoadAllAnimeSettings() (map[int]files.AnimeSettings, error) {
+	return map[int]files.AnimeSettings{}, nil
+}
+
+func (m *mockFileManager) LoadAnimeSettings(animeID int) (*files.AnimeSettings, error) {
+	return &files.AnimeSettings{}, nil
+}
+
+func (m *mockFileManager) SaveAnimeSettings(animeID int, settings files.AnimeSettings) error {
+	return nil
+}
+
 func TestHandleGetConfig(t *testing.T) {
 	state := daemon.NewState()
 	mockFM := &mockFileManager{}

@@ -27,7 +27,7 @@ func withTempManager(t *testing.T, fn func(*files.FileManager)) {
 	episodesPath := filepath.Join(configsFolder, ".downloaded_episodes")
 
 	fs := files.NewOSFileSystem()
-	manager := files.NewManager(fs, configPath, episodesPath, "/blocked_episodes")
+	manager := files.NewManager(fs, configPath, episodesPath, "/blocked_episodes", "/anime_settings")
 
 	fn(manager)
 }
@@ -179,7 +179,7 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 
 func TestManager_LoadConfigs_WithNonExistentFile(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	config, err := manager.LoadConfigs()
 	if err != nil {
@@ -214,7 +214,7 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 	}`
 	mockFS.SetFile("/config.json", []byte(configJSON))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	config, err := manager.LoadConfigs()
 	if err != nil {
@@ -234,7 +234,7 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 
 func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	config := &files.Config{
 		SavePath:              "/test",
@@ -271,7 +271,7 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 
 func TestManager_SaveConfigs_WithNilConfig(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	err := manager.SaveConfigs(nil)
 	if err == nil {
@@ -285,7 +285,7 @@ func TestManager_SaveConfigs_WithNilConfig(t *testing.T) {
 
 func TestManager_LoadSavedEpisodes_WithNonExistentFile(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	episodes, err := manager.LoadSavedEpisodes()
 	if err != nil {
@@ -302,7 +302,7 @@ func TestManager_LoadSavedEpisodes_WithValidContent(t *testing.T) {
 	content := "1:hash1:Episode 1\n2:hash2:Episode 2\n3:hash3\n"
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	episodes, err := manager.LoadSavedEpisodes()
 	if err != nil {
@@ -326,7 +326,7 @@ func TestManager_LoadSavedEpisodes_WithValidContent(t *testing.T) {
 
 func TestManager_SaveEpisodesToFile_WithNewEpisodes(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	episodes := []files.EpisodeStruct{
 		{EpisodeID: 1, EpisodeHash: "abc", EpisodeName: "Test Episode"},
@@ -346,7 +346,7 @@ func TestManager_SaveEpisodesToFile_WithNewEpisodes(t *testing.T) {
 
 func TestManager_SaveEpisodesToFile_WithEmptyList(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	err := manager.SaveEpisodesToFile([]files.EpisodeStruct{})
 	if err != nil {
@@ -364,7 +364,7 @@ func TestManager_DeleteEpisodesFromFile_WithValidIds(t *testing.T) {
 	content := "1:hash1:Ep1\n2:hash2:Ep2\n3:hash3:Ep3\n"
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	err := manager.DeleteEpisodesFromFile([]int{2})
 	if err != nil {
@@ -394,7 +394,7 @@ func TestManager_DeleteEpisodesFromFile_WithNonExistentIds(t *testing.T) {
 	content := "1:hash1:Ep1\n"
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	err := manager.DeleteEpisodesFromFile([]int{999})
 	if err != nil {
@@ -417,7 +417,7 @@ func TestManager_DeleteEpisodesFromFile_WithEmptyList(t *testing.T) {
 	content := "1:hash1:Ep1\n"
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	err := manager.DeleteEpisodesFromFile([]int{})
 	if err != nil {
@@ -438,7 +438,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 	mockFS.SetDir("/save/nonempty")
 	mockFS.SetFile("/save/nonempty/file.txt", []byte("content"))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	err := manager.DeleteEmptyFolders("/save", "")
 	if err != nil {
@@ -458,7 +458,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 
 func TestManager_DeleteEmptyFolders_WithEmptySavePath(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
 	err := manager.DeleteEmptyFolders("", "")
 	if err == nil {

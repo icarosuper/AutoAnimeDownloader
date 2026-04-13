@@ -3,6 +3,7 @@ package api
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/logger"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -16,6 +17,7 @@ type AnimeInfo struct {
 	TotalEpisodes    int    `json:"total_episodes" example:"12"`
 	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
 	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
+	IsBlacklisted    bool   `json:"is_blacklisted,omitempty"`
 }
 
 func extractAnimeName(episodeName string) string {
@@ -75,13 +77,25 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Group episodes by anime
+		// Group episodes by anime.
+		// Key: "id:<AnimeID>" when AnimeID is set, otherwise the extracted name (backward compat).
 		animeMap := make(map[string]*AnimeInfo)
 
 		for _, episode := range episodes {
-			animeName := extractAnimeName(episode.EpisodeName)
+			var key string
+			if episode.AnimeID != 0 {
+				key = fmt.Sprintf("id:%d", episode.AnimeID)
+			} else {
+				key = extractAnimeName(episode.EpisodeName)
+			}
 
-			if animeInfo, exists := animeMap[animeName]; exists {
+			// Prefer the persisted AnimeName; fall back to extracting from EpisodeName.
+			displayName := episode.AnimeName
+			if displayName == "" {
+				displayName = extractAnimeName(episode.EpisodeName)
+			}
+
+			if animeInfo, exists := animeMap[key]; exists {
 				animeInfo.EpisodesCount++
 				if episode.EpisodeID > animeInfo.LatestEpisodeID {
 					animeInfo.LatestEpisodeID = episode.EpisodeID
@@ -89,6 +103,10 @@ func handleAnimes(server *Server) http.HandlerFunc {
 				lastDownloadedTime, _ := time.Parse(time.RFC3339, animeInfo.LastDownloadDate)
 				if episode.DownloadDate.After(lastDownloadedTime) {
 					animeInfo.LastDownloadDate = episode.DownloadDate.Format(time.RFC3339)
+					// Update name from the most recent episode that has AnimeName set.
+					if episode.AnimeName != "" {
+						animeInfo.Name = episode.AnimeName
+					}
 				}
 				if animeInfo.AnimeID == 0 && episode.AnimeID != 0 {
 					animeInfo.AnimeID = episode.AnimeID
@@ -97,9 +115,9 @@ func handleAnimes(server *Server) http.HandlerFunc {
 					animeInfo.TotalEpisodes = episode.AnimeTotalEpisodes
 				}
 			} else {
-				animeMap[animeName] = &AnimeInfo{
+				animeMap[key] = &AnimeInfo{
 					AnimeID:          episode.AnimeID,
-					Name:             animeName,
+					Name:             displayName,
 					EpisodesCount:    1,
 					TotalEpisodes:    episode.AnimeTotalEpisodes,
 					LatestEpisodeID:  episode.EpisodeID,
@@ -110,7 +128,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 
 		// Merge CURRENT animes from AniList so they remain visible even with 0 downloaded episodes
 		if config.AnilistUsername != "" {
-			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername)
+			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername, config.ExcludedList)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
@@ -122,24 +140,22 @@ func handleAnimes(server *Server) http.HandlerFunc {
 	}
 }
 
-func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string) {
+func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedList string) {
 	resp, err := anilist.GetAllCurrentAnime(username)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
 		return
 	}
 
-	knownIDs := make(map[int]bool)
+	// Build map from AnimeID → *AnimeInfo pointer so we can update existing entries
+	knownByID := make(map[int]*AnimeInfo)
 	for _, info := range animeMap {
 		if info.AnimeID != 0 {
-			knownIDs[info.AnimeID] = true
+			knownByID[info.AnimeID] = info
 		}
 	}
 
 	for _, ml := range resp.Data.Page.MediaList {
-		if knownIDs[ml.Id] {
-			continue
-		}
 		name := ""
 		if ml.Media.Title.English != nil && *ml.Media.Title.English != "" {
 			name = *ml.Media.Title.English
@@ -153,11 +169,33 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string) 
 		if ml.Media.Episodes != nil {
 			totalEpisodes = *ml.Media.Episodes
 		}
+
+		isBlacklisted := false
+		if excludedList != "" {
+			for listName, inList := range ml.CustomLists {
+				if listName == excludedList && inList {
+					isBlacklisted = true
+					break
+				}
+			}
+		}
+
+		if existing, ok := knownByID[ml.Id]; ok {
+			// Update the name to always reflect the AniList title
+			existing.Name = name
+			if existing.TotalEpisodes == 0 {
+				existing.TotalEpisodes = totalEpisodes
+			}
+			existing.IsBlacklisted = isBlacklisted
+			continue
+		}
+
 		animeMap[name] = &AnimeInfo{
 			AnimeID:       ml.Id,
 			Name:          name,
 			EpisodesCount: 0,
 			TotalEpisodes: totalEpisodes,
+			IsBlacklisted: isBlacklisted,
 		}
 	}
 }
