@@ -40,6 +40,7 @@ type Server struct {
 	FileManager   FileManagerInterface
 	StartLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl
 	WSManager     *WebSocketManager
+	JobQueue      *daemon.JobQueue
 
 	mu                 sync.Mutex
 	currentLoopControl *daemon.LoopControl
@@ -206,6 +207,7 @@ func (s *Server) StartDaemonLoop() error {
 		FileManager: s.FileManager,
 		Interval:    interval,
 		State:       s.State,
+		JobQueue:    s.JobQueue,
 	})
 	s.currentLoopControl = loopControl
 	s.mu.Unlock()

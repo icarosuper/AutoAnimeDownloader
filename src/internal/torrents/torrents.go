@@ -348,38 +348,25 @@ func sanitizeFileName(name string) string {
 	return sanitized
 }
 
-// RenameEpisodeFile renomeia o arquivo de vídeo de um torrent para o padrão Jellyfin:
-// "{AnimeName} - E{EpisodeNumber:02d}{ext}"
-// Tenta obter a lista de arquivos até maxAttempts vezes com intervalo de retryInterval.
-func (ts *TorrentService) RenameEpisodeFile(hash, animeName string, episodeNumber int) {
-	const maxAttempts = 10
-	const retryInterval = 3 * time.Second
-
+// RenameEpisodeFile renames the video file(s) in a torrent to the Jellyfin format
+// "{AnimeName} - E{EpisodeNumber:02d}{ext}". Makes a single attempt and returns true
+// on success. Returns false if the file list is not yet available or any rename fails —
+// the caller (job queue) will retry with backoff.
+func (ts *TorrentService) RenameEpisodeFile(hash, animeName string, episodeNumber int) bool {
 	sanitizedName := sanitizeFileName(animeName)
 	newBaseName := fmt.Sprintf("%s - E%02d", sanitizedName, episodeNumber)
 
-	var files []TorrentFile
-	var err error
-
-	for i := range maxAttempts {
-		files, err = ts.getTorrentFiles(hash)
-		if err == nil && len(files) > 0 {
-			break
-		}
-		if i < maxAttempts-1 {
-			time.Sleep(retryInterval)
-		}
-	}
-
+	files, err := ts.getTorrentFiles(hash)
 	if err != nil || len(files) == 0 {
-		logger.Logger.Warn().
+		logger.Logger.Debug().
 			Str("hash", hash).
 			Str("anime", animeName).
 			Int("episode", episodeNumber).
-			Msg("Could not retrieve torrent files for Jellyfin rename")
-		return
+			Msg("RenameEpisodeFile: files not yet available in qBittorrent")
+		return false
 	}
 
+	success := true
 	for _, f := range files {
 		dotIdx := strings.LastIndex(f.Name, ".")
 		if dotIdx < 0 {
@@ -401,6 +388,7 @@ func (ts *TorrentService) RenameEpisodeFile(hash, animeName string, episodeNumbe
 				Str("old_path", f.Name).
 				Str("new_path", newPath).
 				Msg("Failed to rename torrent file for Jellyfin")
+			success = false
 			continue
 		}
 		_ = resp.Body.Close()
@@ -418,6 +406,8 @@ func (ts *TorrentService) RenameEpisodeFile(hash, animeName string, episodeNumbe
 				Str("new_path", newPath).
 				Int("status_code", resp.StatusCode).
 				Msg("qBittorrent returned error when renaming torrent file")
+			success = false
 		}
 	}
+	return success
 }

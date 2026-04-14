@@ -42,6 +42,7 @@ src/tests/
 | `episodes.json` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL) |
 | `blocked_episodes.json` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of IDs) |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
+| `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (rename/move ops) |
 
 Windows uses `%APPDATA%\AutoAnimeDownloader\` instead.
 
@@ -88,7 +89,7 @@ Main verification orchestrator. Key functions:
 | Function | Purpose |
 |----------|---------|
 | `StartLoop(p)` | Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
-| `AnimeVerification(ctx, fm, state)` | Main check: fetches Anilist → Nyaa → qBittorrent |
+| `AnimeVerification(ctx, fm, state, jobQueue)` | Main check: fetches Anilist → Nyaa → qBittorrent |
 | `processAnimeEpisodes(...)` | Per-anime: decide download/delete per episode, execute download strategy |
 | `checkEpisode(...)` | Returns `(shouldDownload, shouldDelete)` per episode |
 | `shouldSkipEpisode(...)` | Skip if: excluded list, already watched, not yet aired |
@@ -99,7 +100,7 @@ Main verification orchestrator. Key functions:
 | `searchNyaaForBatch(...)` | Batch search for finished animes (priority 2) |
 | `searchNyaaForMovie(...)` | Movie search (priority 1) |
 | `searchNyaaForMultipleEpisodes(...)` | Multi-episode search for airing animes (priority 3) |
-| `ensureAnimeIsInCompletedFolder(...)` | Moves finished anime torrents to CompletedAnimePath |
+| `enqueueOrMoveToCompletedFolder(...)` | Enqueues `move_to_completed` job (or runs sync if no queue) |
 | `ManualDownloadEpisode(animeId, episodeId, cfg)` | Used by API for manual download — calls Anilist then Nyaa |
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
 | `ManualDownloadAnimeWithMagnet(...)` | Used by API for replace-with-magnet for full anime batch |
@@ -109,6 +110,36 @@ Main verification orchestrator. Key functions:
 2. Batch (finished + >1 ep) → `searchNyaaForBatch` → `skipSubfolder=true`
 3. Multiple ep search → `searchNyaaForMultipleEpisodes`
 4. Single ep fallback → `searchNyaaForSingleEpisode`
+
+### `src/internal/daemon/jobs.go`
+
+Deferred job queue for async qBittorrent operations. Decouples slow/unreliable qBit calls from the main verification loop by persisting jobs to disk and retrying them on a background ticker.
+
+**Lifecycle**: Created in `main.go` before `NewServer`, passed to `Server.JobQueue`, threaded into every `AnimeVerification` call via `StartLoopPayload.JobQueue`. Starts on daemon boot, stops on shutdown.
+
+**Tick interval**: 15 seconds.
+
+**Backoff**: `30s * 2^(attempts-1)`, capped at 10 minutes.
+
+| Symbol | Purpose |
+|--------|---------|
+| `JobQueue` struct | Background processor; loads/saves `pending_jobs.json` |
+| `NewJobQueue(fm, jobsPath)` | Constructor — takes FileManager (for config) and file path |
+| `JobQueue.Start()` | Loads persisted jobs, starts background goroutine |
+| `JobQueue.Stop()` | Signals goroutine to stop and waits |
+| `JobQueue.EnqueueRenameFile(hash, animeName, epNum)` | Schedule Jellyfin rename; max 20 retries |
+| `JobQueue.EnqueueMoveToCompleted(hashes, animeName)` | Schedule move to completed folder; max 10 retries |
+
+**Job types**:
+
+| Type | Payload | Trigger |
+|------|---------|---------|
+| `rename_file` | `hash`, `anime_name`, `episode_number` | After successful torrent add when `RenameFilesForJellyfin=true` |
+| `move_to_completed` | `hashes[]`, `anime_name` | After all episodes of a finished anime are downloaded |
+
+**Persistence**: `~/.autoAnimeDownloader/pending_jobs.json` (Windows: `%APPDATA%\AutoAnimeDownloader\pending_jobs.json`). Written after every enqueue and after every tick that changes queue state. Jobs survive daemon restarts.
+
+**Nil-safety**: All callers check `jobQueue != nil` and fall back to the old synchronous / goroutine behavior when the queue is absent (e.g., in unit tests).
 
 ### `src/internal/daemon/state.go`
 
@@ -247,7 +278,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `TorrentService.DownloadTorrent(magnet, animeName, epName, isCompleted)` | Adds torrent, waits for hash, returns hash |
 | `TorrentService.DownloadTorrentWithOptions(..., skipSubfolder)` | Like above but `skipSubfolder=true` saves directly in savePath |
 | `TorrentService.DeleteTorrents(hashes[])` | Deletes torrents + files |
-| `TorrentService.RenameEpisodeFile(hash, animeName, epNum)` | Renames file to Jellyfin-compatible name (async, called in goroutine) |
+| `TorrentService.RenameEpisodeFile(hash, animeName, epNum)` | Renames file to Jellyfin-compatible name; single attempt, returns bool (job queue retries on false) |
 | `TorrentService.MoveToCompletedFolder(hash)` | Sets torrent location to `completedPath` |
 | `HTTPClient` interface | `Get(url)`, `PostForm(url, data)` — `DefaultHTTPClient` wraps std lib |
 | `CATEGORY` const | `"autoAnimeDownloader"` — used to tag/filter torrents |
