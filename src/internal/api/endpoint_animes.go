@@ -128,7 +128,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 
 		// Merge CURRENT animes from AniList so they remain visible even with 0 downloaded episodes
 		if config.AnilistUsername != "" {
-			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername, config.ExcludedList)
+			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername, config.ExcludedList, config.DownloadStatuses)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
@@ -140,11 +140,24 @@ func handleAnimes(server *Server) http.HandlerFunc {
 	}
 }
 
-func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedList string) {
-	resp, err := anilist.GetAllCurrentAnime(username)
+func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedList string, statuses []string) {
+	resp, err := anilist.GetAllCurrentAnime(username, statuses)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
 		return
+	}
+
+	// Build set of valid AnimeIDs from AniList response (only statuses in DownloadStatuses)
+	validIDs := make(map[int]bool, len(resp.Data.Page.MediaList))
+	for _, ml := range resp.Data.Page.MediaList {
+		validIDs[ml.Id] = true
+	}
+
+	// Remove animes whose AnimeID is known but not in the valid set
+	for key, info := range animeMap {
+		if info.AnimeID != 0 && !validIDs[info.AnimeID] {
+			delete(animeMap, key)
+		}
 	}
 
 	// Build map from AnimeID → *AnimeInfo pointer so we can update existing entries

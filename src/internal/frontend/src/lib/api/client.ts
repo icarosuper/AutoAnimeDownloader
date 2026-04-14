@@ -86,6 +86,8 @@ export interface Config {
   watched_episodes_to_keep: number
   excluded_list: string
   rename_files_for_jellyfin: boolean
+  download_statuses: string[]
+  delete_statuses: string[]
 }
 
 export interface AnimeInfo {
