@@ -134,7 +134,7 @@ Integration tests require Docker and docker-compose:
 
 ```bash
 # Start test environment
-docker-compose -f docker-compose.test.yml up -d
+docker compose -f docker/docker-compose.test.yml up -d
 
 # Run integration tests
 cd src/tests/integration

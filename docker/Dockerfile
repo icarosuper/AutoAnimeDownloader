@@ -45,7 +45,7 @@ WORKDIR /app
 COPY --from=go-builder /app/daemon .
 
 # Copy entrypoint script
-COPY scripts/docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker/entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 # Create data directory for configs, episodes, logs
