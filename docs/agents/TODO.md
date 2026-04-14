@@ -1,4 +1,7 @@
 - Download de animes
+	- Animes completos
+		- Ajustar download em batch
+		- Contar episódios
 	- Caso do 'Classroom of the Elite'
 		- Parece que não incluiu a season na pesquisa
 		- Talvez padronizar a pesquisa pra melhor compatibilidade com nyaa
@@ -10,12 +13,10 @@
 		- Paralelizar
 		- Retries no final do loop
 - Novas opcões no front
-	- Apagar animes dropados
-	- Apagar animes finalizados
+	- Lista de status pra baixar
+	- Lista de status pra apagar
 	- Apagar animes que não estão mais na lista
-	- Baixar anime completo em batch
 	- Adicionar multiplos campos pras blacklists, ao invés de um campo separado por vírgula
-	- Deixar usuário definir de quais status baixar
 - Nova tela de prioridades dos torrents
 	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
 	- Usuário por reordenar, adicionar e excluir itens

@@ -40,11 +40,25 @@
     hintRenameJellyfin: m.config_hint_rename_jellyfin(),
     labelExcludedList: m.config_label_excluded_list(),
     hintExcludedList: m.config_hint_excluded_list(),
+    labelDownloadStatuses: m.config_label_download_statuses(),
+    hintDownloadStatuses: m.config_hint_download_statuses(),
+    labelDeleteStatuses: m.config_label_delete_statuses(),
+    hintDeleteStatuses: m.config_hint_delete_statuses(),
+    statusLabels: {
+      CURRENT:   m.config_status_current(),
+      REPEATING: m.config_status_repeating(),
+      PLANNING:  m.config_status_planning(),
+      PAUSED:    m.config_status_paused(),
+      DROPPED:   m.config_status_dropped(),
+      COMPLETED: m.config_status_completed(),
+    } as Record<string, string>,
     btnRunCheck: m.config_btn_run_check(),
     btnReload: m.config_btn_reload(),
     btnSave: m.config_btn_save(),
     btnSaving: m.config_btn_saving(),
   }
+
+  const ALL_STATUSES = ["CURRENT", "REPEATING", "PLANNING", "PAUSED", "DROPPED", "COMPLETED"];
 
   let config: Config = {
     anilist_username: "",
@@ -58,7 +72,29 @@
     watched_episodes_to_keep: 0,
     excluded_list: "",
     rename_files_for_jellyfin: false,
+    download_statuses: ["CURRENT", "REPEATING"],
+    delete_statuses: [],
   };
+
+  function toggleDownloadStatus(status: string) {
+    const active = (config.download_statuses ?? []).includes(status);
+    if (active) {
+      config.download_statuses = (config.download_statuses ?? []).filter(s => s !== status);
+    } else {
+      config.download_statuses = [...(config.download_statuses ?? []), status];
+      config.delete_statuses = (config.delete_statuses ?? []).filter(s => s !== status);
+    }
+  }
+
+  function toggleDeleteStatus(status: string) {
+    const active = (config.delete_statuses ?? []).includes(status);
+    if (active) {
+      config.delete_statuses = (config.delete_statuses ?? []).filter(s => s !== status);
+    } else {
+      config.delete_statuses = [...(config.delete_statuses ?? []), status];
+      config.download_statuses = (config.download_statuses ?? []).filter(s => s !== status);
+    }
+  }
 
   let loading = true;
   let saving = false;
@@ -152,6 +188,46 @@
             bind:value={config.anilist_username}
             required={true}
           />
+          <div class="flex flex-col gap-2">
+            <label class="text-sm font-medium text-base-content">{T && T.labelDownloadStatuses}</label>
+            <p class="text-xs text-base-content/50">{T && T.hintDownloadStatuses}</p>
+            <div class="flex flex-wrap gap-2">
+              {#each ALL_STATUSES as status}
+                {@const active = (config.download_statuses ?? []).includes(status)}
+                <button
+                  type="button"
+                  on:click={() => toggleDownloadStatus(status)}
+                  title={status}
+                  class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none transition-colors
+                    {active
+                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'}"
+                >
+                  {T ? T.statusLabels[status] : status}
+                </button>
+              {/each}
+            </div>
+          </div>
+          <div class="flex flex-col gap-2">
+            <label class="text-sm font-medium text-base-content">{T && T.labelDeleteStatuses}</label>
+            <p class="text-xs text-base-content/50">{T && T.hintDeleteStatuses}</p>
+            <div class="flex flex-wrap gap-2">
+              {#each ALL_STATUSES as status}
+                {@const active = (config.delete_statuses ?? []).includes(status)}
+                <button
+                  type="button"
+                  on:click={() => toggleDeleteStatus(status)}
+                  title={status}
+                  class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none transition-colors
+                    {active
+                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'}"
+                >
+                  {T ? T.statusLabels[status] : status}
+                </button>
+              {/each}
+            </div>
+          </div>
         </div>
       </div>
 

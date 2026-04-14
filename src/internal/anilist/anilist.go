@@ -170,7 +170,7 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 	return &response, nil
 }
 
-func GetAllCurrentAnime(userName string) (*AniListResponse, error) {
+func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, error) {
 	query := `
 		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
 			Page {
@@ -200,13 +200,14 @@ func GetAllCurrentAnime(userName string) (*AniListResponse, error) {
 		}
 	`
 
+	if len(statuses) == 0 {
+		return &AniListResponse{}, nil
+	}
+
 	variables := RequestVariables{
 		"userName": userName,
 		"type":     "ANIME",
-		"statuses": []string{
-			string(MediaListStatusCurrent),
-			string(MediaListStatusRepeating),
-		},
+		"statuses": statuses,
 	}
 
 	return sendAnilistRequest[AniListResponse](query, variables)

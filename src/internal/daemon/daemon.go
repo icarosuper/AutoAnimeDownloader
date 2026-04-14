@@ -259,6 +259,15 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		default:
 		}
 
+		if isInDeleteStatuses(configs.DeleteStatuses, anime.Status) {
+			for _, ep := range savedEpisodes {
+				if ep.AnimeID == anime.Id && !ep.ManuallyManaged {
+					idsToDelete = append(idsToDelete, ep.EpisodeID)
+				}
+			}
+			continue
+		}
+
 		customQuery := ""
 		if s, ok := animeSettingsMap[anime.Id]; ok {
 			customQuery = s.CustomSearchQuery
@@ -278,6 +287,8 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		)
 	}
 	elapsed := time.Since(start)
+
+	deleteEpisodesByStatus(configs, fileManager, torrentsService, savedEpisodes)
 
 	handleSavedEpisodes(fileManager, configs, torrentsService, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
@@ -374,6 +385,70 @@ func extractSeasonFromAnime(anime anilist.MediaList) *int {
 	return nil
 }
 
+func isInDeleteStatuses(deleteStatuses []string, status anilist.MediaListStatus) bool {
+	for _, s := range deleteStatuses {
+		if s == string(status) {
+			return true
+		}
+	}
+	return false
+}
+
+func deleteEpisodesByStatus(configs *files.Config, fileManager FileManagerInterface, torrentsService *torrents.TorrentService, savedEpisodes []files.EpisodeStruct) {
+	if len(configs.DeleteStatuses) == 0 {
+		return
+	}
+
+	logger.Logger.Debug().
+		Strs("delete_statuses", configs.DeleteStatuses).
+		Msg("Running status-based episode deletion")
+
+	deleteResp, err := anilist.GetAllCurrentAnime(configs.AnilistUsername, configs.DeleteStatuses)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList animes for delete statuses")
+		return
+	}
+
+	deleteAnimeIDs := make(map[int]bool, len(deleteResp.Data.Page.MediaList))
+	for _, anime := range deleteResp.Data.Page.MediaList {
+		deleteAnimeIDs[anime.Id] = true
+	}
+
+	logger.Logger.Debug().
+		Int("anilist_entries", len(deleteResp.Data.Page.MediaList)).
+		Int("saved_episodes", len(savedEpisodes)).
+		Msg("Status-based deletion: fetched AniList entries")
+
+	var idsToDelete []int
+	for _, ep := range savedEpisodes {
+		if deleteAnimeIDs[ep.AnimeID] && !ep.ManuallyManaged {
+			idsToDelete = append(idsToDelete, ep.EpisodeID)
+		}
+	}
+
+	if len(idsToDelete) == 0 {
+		logger.Logger.Debug().Msg("Status-based deletion: no matching episodes found")
+		return
+	}
+
+	logger.Logger.Info().
+		Int("count", len(idsToDelete)).
+		Msg("Deleting episodes for animes with delete statuses")
+
+	if err := fileManager.DeleteEpisodesFromFile(idsToDelete); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to delete episodes by status from file")
+	}
+
+	hashesToDelete := extractEpisodesHashes(savedEpisodes, idsToDelete)
+	if len(hashesToDelete) > 0 {
+		if err := torrentsService.DeleteTorrents(hashesToDelete); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to delete torrents by status")
+		} else {
+			logger.Logger.Info().Int("count", len(hashesToDelete)).Msg("Deleted torrents by status")
+		}
+	}
+}
+
 func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
 	episodesNotInWatching := identifyEpisodesNotInWatching(data.savedEpisodes, data.checkedEpisodes)
 
@@ -462,7 +537,7 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 		return nil, err
 	}
 
-	anilistResponse, err := anilist.GetAllCurrentAnime(configs.AnilistUsername)
+	anilistResponse, err := anilist.GetAllCurrentAnime(configs.AnilistUsername, configs.DownloadStatuses)
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().
 			Str("username", configs.AnilistUsername).

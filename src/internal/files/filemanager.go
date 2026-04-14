@@ -30,17 +30,19 @@ type EpisodeStruct struct {
 }
 
 type Config struct {
-	SavePath               string `json:"save_path"`
-	CompletedAnimePath     string `json:"completed_anime_path"`
-	AnilistUsername        string `json:"anilist_username"`
-	CheckInterval          int    `json:"check_interval"`
-	QBittorrentUrl         string `json:"qbittorrent_url"`
-	MaxEpisodesPerAnime    int    `json:"max_episodes_per_anime"`
-	EpisodeRetryLimit      int    `json:"episode_retry_limit"`
-	DeleteWatchedEpisodes  bool   `json:"delete_watched_episodes"`
-	WatchedEpisodesToKeep  int    `json:"watched_episodes_to_keep"`
-	ExcludedList           string `json:"excluded_list"`
-	RenameFilesForJellyfin bool   `json:"rename_files_for_jellyfin"`
+	SavePath               string   `json:"save_path"`
+	CompletedAnimePath     string   `json:"completed_anime_path"`
+	AnilistUsername        string   `json:"anilist_username"`
+	CheckInterval          int      `json:"check_interval"`
+	QBittorrentUrl         string   `json:"qbittorrent_url"`
+	MaxEpisodesPerAnime    int      `json:"max_episodes_per_anime"`
+	EpisodeRetryLimit      int      `json:"episode_retry_limit"`
+	DeleteWatchedEpisodes  bool     `json:"delete_watched_episodes"`
+	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
+	ExcludedList           string   `json:"excluded_list"`
+	RenameFilesForJellyfin bool     `json:"rename_files_for_jellyfin"`
+	DownloadStatuses       []string `json:"download_statuses"`
+	DeleteStatuses         []string `json:"delete_statuses"`
 }
 
 type AnimeSettings struct {
@@ -67,6 +69,8 @@ func getDefaultConfig() *Config {
 		DeleteWatchedEpisodes: true,
 		WatchedEpisodesToKeep: 0,
 		ExcludedList:          "",
+		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
+		DeleteStatuses:        []string{},
 	}
 }
 
