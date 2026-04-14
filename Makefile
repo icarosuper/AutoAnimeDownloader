@@ -21,9 +21,9 @@ PLATFORMS := linuxamd64 linuxarm64 windows
 PLATFORM ?=
 
 # Platform mappings
-DOCKERFILE_linuxamd64 := Dockerfile.build.amd64
-DOCKERFILE_linuxarm64 := Dockerfile.build.arm64
-DOCKERFILE_windows := Dockerfile.build.windows
+DOCKERFILE_linuxamd64 := docker/Dockerfile.build.amd64
+DOCKERFILE_linuxarm64 := docker/Dockerfile.build.arm64
+DOCKERFILE_windows := docker/Dockerfile.build.windows
 
 BUILD_DIR_linuxamd64 := build/linux-amd64
 BUILD_DIR_linuxarm64 := build/linux-arm64

@@ -2,7 +2,7 @@ services:
   mock-anilist:
     image: test-mock-anilist
     build:
-      context: ./src/tests/mocks/anilist
+      context: ../src/tests/mocks/anilist
       dockerfile: Dockerfile
     dns:
       - 8.8.8.8
@@ -19,7 +19,7 @@ services:
   mock-nyaa:
     image: test-mock-nyaa
     build:
-      context: ./src/tests/mocks/nyaa
+      context: ../src/tests/mocks/nyaa
       dockerfile: Dockerfile
     dns:
       - 8.8.8.8
@@ -35,7 +35,7 @@ services:
   mock-qbittorrent:
     image: test-mock-qbittorrent
     build:
-      context: ./src/tests/mocks/qbittorrent
+      context: ../src/tests/mocks/qbittorrent
       dockerfile: Dockerfile
     dns:
       - 8.8.8.8
@@ -50,15 +50,15 @@ services:
   daemon:
     image: test-daemon
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     dns:
       - 8.8.8.8
       - 1.1.1.1
     ports:
       - "8091:8091"
     volumes:
-      - ./runtime/test-data:/app/data
+      - ../runtime/test-data:/app/data
     environment:
       - ENVIRONMENT=prod
       - PORT=:8091
@@ -81,7 +81,7 @@ services:
   test:
     image: golang:1.24-alpine
     volumes:
-      - .:/workspace
+      - ..:/workspace
       - go-mod-cache:/go/pkg/mod
     working_dir: /workspace
     environment:
