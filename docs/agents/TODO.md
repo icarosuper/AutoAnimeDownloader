@@ -11,19 +11,18 @@
 	- Padronizar/ajustar download de animes completos
 	- Otimizar loop de checagem
 		- Paralelizar
-		- Retries no final do loop
-- Novas opcões no front
-	- Lista de status pra baixar
-	- Lista de status pra apagar
-	- Apagar animes que não estão mais na lista
+		- Retries serão agendados
+- Operações asincronas com qBittorrent
+	- Agendar ao invés de executar no loop
+	- Usar redis?
+- Front
+	- Imagens dos animes
+	- Navbar responsiva
 	- Adicionar multiplos campos pras blacklists, ao invés de um campo separado por vírgula
 - Nova tela de prioridades dos torrents
 	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
 	- Usuário por reordenar, adicionar e excluir itens
 	- Botão pra voltar pro default
-- Melhorias no front
-	- Navbar responsiva
-	- Colocar imagem dos animes
 - Tela do anime
 	- Botão de baixar o anime em batch
 		- Só aparece se o anime estiver finalizado
@@ -42,3 +41,20 @@
 	- Testar no windows
 - Torrent imbutido
 - Trocar arquivos de configuracão por sqlite?
+
+
+
+
+
+
+- Substituição de anime completo por magnet
+    - Apagar episódios baixados
+    - Remover torrent batch anterior no caso de anime completo
+- Download batch
+    - Verificar arquivos pra ver se é só o que o user quer
+    - Renomear pasta
+    
+    
+- Operações com qBittorrent
+    - Tirar do loop principal
+    - Colocar em uma fila e fazer um cron pra essas operações asincronas
