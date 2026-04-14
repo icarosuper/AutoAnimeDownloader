@@ -39,7 +39,7 @@ func TestAnimeVerification_ErrorHandling_ConfigLoadError(t *testing.T) {
 	state.SetNotifier(notifier)
 
 	ctx := context.Background()
-	daemon.AnimeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state, nil)
 
 	// Verify error was set in state
 	if !state.HasLastCheckError() {
@@ -89,7 +89,7 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 	state.SetNotifier(notifier)
 
 	ctx := context.Background()
-	daemon.AnimeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state, nil)
 
 	// Verify error was set in state
 	if !state.HasLastCheckError() {
@@ -167,7 +167,7 @@ func TestAnimeVerification_ContextCancellation(t *testing.T) {
 	// The function will likely fail earlier due to missing services,
 	// but we can verify that if cancellation happens, error is cleared.
 	// For a more complete test, we'd need to mock the external services.
-	daemon.AnimeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state, nil)
 
 	// Note: Since we can't easily mock external services (anilist, qbittorrent),
 	// the cancellation might not be reached. This test verifies that:
@@ -200,7 +200,7 @@ func TestAnimeVerification_LogsGenerated(t *testing.T) {
 	state := daemon.NewState()
 	ctx := context.Background()
 
-	daemon.AnimeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state, nil)
 
 	// Verify that logs were generated (error log should be present)
 	logOutput := logBuf.String()
@@ -232,7 +232,7 @@ func TestAnimeVerification_StatusResetOnError(t *testing.T) {
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
 
 	ctx := context.Background()
-	daemon.AnimeVerification(ctx, fileManager, state)
+	daemon.AnimeVerification(ctx, fileManager, state, nil)
 
 	// Verify error was set
 	if !state.HasLastCheckError() {

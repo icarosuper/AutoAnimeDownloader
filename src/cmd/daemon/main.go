@@ -73,6 +73,22 @@ func getPort() string {
 
 const pidFileName = "daemon.pid"
 
+func getJobsFilePath() (string, error) {
+	var baseFolder string
+
+	if runtime.GOOS == "windows" {
+		baseFolder = os.Getenv("APPDATA")
+	} else {
+		baseFolder = os.Getenv("HOME")
+	}
+
+	if baseFolder == "" {
+		return "", fmt.Errorf("unable to determine home directory")
+	}
+
+	return filepath.Join(baseFolder, ".autoAnimeDownloader", "pending_jobs.json"), nil
+}
+
 func getPIDFilePath() (string, error) {
 	var baseFolder string
 
@@ -156,12 +172,21 @@ func main() {
 		logger.Logger.Fatal().Err(err).Msg("Failed to initialize files manager")
 	}
 
+	jobsFilePath, err := getJobsFilePath()
+	if err != nil {
+		logger.Logger.Fatal().Err(err).Msg("Failed to determine jobs file path")
+	}
+	jobQueue := daemon.NewJobQueue(fileManager, jobsFilePath)
+	jobQueue.Start()
+	defer jobQueue.Stop()
+
 	state := daemon.NewState()
 
 	apiPort := getPort()
 	apiServer := api.NewServer(apiPort, state, fileManager, func(p daemon.StartLoopPayload) *daemon.LoopControl {
 		return daemon.StartLoop(p)
 	})
+	apiServer.JobQueue = jobQueue
 
 	// Set WebSocket manager as state notifier
 	state.SetNotifier(apiServer.WSManager)

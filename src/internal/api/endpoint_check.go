@@ -31,7 +31,7 @@ func handleCheck(server *Server) http.HandlerFunc {
 			server.State.SetStatus(daemon.StatusChecking)
 
 			ctx := context.Background()
-			daemon.AnimeVerification(ctx, server.FileManager, server.State)
+			daemon.AnimeVerification(ctx, server.FileManager, server.State, server.JobQueue)
 
 			// Restore status after verification completes
 			// Only restore to running if it was running before, otherwise keep it as is

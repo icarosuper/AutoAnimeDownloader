@@ -38,6 +38,7 @@ type StartLoopPayload struct {
 	FileManager FileManagerInterface
 	Interval    time.Duration
 	State       *State
+	JobQueue    *JobQueue
 }
 
 type LoopControl struct {
@@ -74,7 +75,7 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 
 				p.State.SetStatus(StatusChecking)
 
-				AnimeVerification(c, p.FileManager, p.State)
+				AnimeVerification(c, p.FileManager, p.State, p.JobQueue)
 
 				// Set status back to running after verification completes
 				// Check if context was cancelled during verification
@@ -183,7 +184,7 @@ func getQBittorrentURL(configURL string) string {
 	return configURL
 }
 
-func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State) {
+func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State, jobQueue *JobQueue) {
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
@@ -284,6 +285,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			&idsToDelete,
 			blockedMap,
 			customQuery,
+			jobQueue,
 		)
 	}
 	elapsed := time.Since(start)
@@ -796,6 +798,7 @@ func processAnimeEpisodes(
 	idsToDelete *[]int,
 	blockedMap map[int]bool,
 	customQuery string,
+	jobQueue *JobQueue,
 ) {
 	animeTitle := getAnimeTitleSafe(anime)
 	logger.Logger.Info().
@@ -955,12 +958,16 @@ func processAnimeEpisodes(
 			})
 
 			if configs.RenameFilesForJellyfin && !skipSubfolder {
-				go torrentsService.RenameEpisodeFile(hash, animeTitle, ep.Episode)
+				if jobQueue != nil {
+					jobQueue.EnqueueRenameFile(hash, animeTitle, ep.Episode)
+				} else {
+					go func() { torrentsService.RenameEpisodeFile(hash, animeTitle, ep.Episode) }()
+				}
 			}
 		}
 	}
 
-	ensureAnimeIsInCompletedFolder(torrentsService, anime, configs, savedEpisodes)
+	enqueueOrMoveToCompletedFolder(torrentsService, anime, configs, savedEpisodes, jobQueue)
 }
 
 func buildWatchedKeepSet(n int, episodes []anilist.AiringNode, savedEpisodesMap map[int]bool, progress int) map[int]bool {
@@ -1062,17 +1069,15 @@ func handleAlreadySavedEpisode(configs *files.Config, downloadedEpisodes *int, i
 	return true, false
 }
 
-func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, anime anilist.MediaList, configs *files.Config, savedEpisodes []files.EpisodeStruct) {
+// enqueueOrMoveToCompletedFolder schedules a move-to-completed job when a job queue is
+// available, otherwise executes the move synchronously (fallback for tests / nil queue).
+func enqueueOrMoveToCompletedFolder(torrentsService *torrents.TorrentService, anime anilist.MediaList, configs *files.Config, savedEpisodes []files.EpisodeStruct, jobQueue *JobQueue) {
 	completeAnimePathIsSet := configs.CompletedAnimePath != "" && configs.CompletedAnimePath != configs.SavePath
 	animeIsFinished := anime.Media.Status == anilist.MediaStatusFinished
 
 	if !animeIsFinished || !completeAnimePathIsSet {
 		return
 	}
-
-	// Só vai chegar aqui pra animes completos com episódios novos
-	// Também só chega aqui após baixar todos os episódios do anime
-	// Não precisa preocupar com checagens redundantes
 
 	savedEpisodesMap := make(map[int]string)
 	for _, ep := range savedEpisodes {
@@ -1086,7 +1091,22 @@ func ensureAnimeIsInCompletedFolder(torrentsService *torrents.TorrentService, an
 		}
 	}
 
+	if len(animeHashes) == 0 {
+		return
+	}
+
 	animeName := getAnimeTitleSafe(anime)
+
+	if jobQueue != nil {
+		logger.Logger.Info().
+			Str("anime", animeName).
+			Int("torrents_count", len(animeHashes)).
+			Msg("Scheduling move of completed anime to completed folder")
+		jobQueue.EnqueueMoveToCompleted(animeHashes, animeName)
+		return
+	}
+
+	// Fallback: synchronous (used when no job queue, e.g. tests)
 	logger.Logger.Info().
 		Str("anime", animeName).
 		Int("torrents_count", len(animeHashes)).
