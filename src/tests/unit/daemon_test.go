@@ -494,7 +494,7 @@ func createValidConfigJSON() []byte {
 		MaxEpisodesPerAnime:   12,
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: false,
-		ExcludedList:          "",
+		ExcludedLists:         []string{},
 	}
 	data, _ := json.MarshalIndent(config, "", "  ")
 	return data

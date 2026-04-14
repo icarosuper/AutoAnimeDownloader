@@ -39,7 +39,8 @@ type Config struct {
 	EpisodeRetryLimit      int      `json:"episode_retry_limit"`
 	DeleteWatchedEpisodes  bool     `json:"delete_watched_episodes"`
 	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
-	ExcludedList           string   `json:"excluded_list"`
+	ExcludedList           string   `json:"excluded_list,omitempty"`
+	ExcludedLists          []string `json:"excluded_lists"`
 	RenameFilesForJellyfin bool     `json:"rename_files_for_jellyfin"`
 	DownloadStatuses       []string `json:"download_statuses"`
 	DeleteStatuses         []string `json:"delete_statuses"`
@@ -68,7 +69,7 @@ func getDefaultConfig() *Config {
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: true,
 		WatchedEpisodesToKeep: 0,
-		ExcludedList:          "",
+		ExcludedLists:         []string{},
 		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
 		DeleteStatuses:        []string{},
 	}
@@ -165,6 +166,24 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
 		}
 		return config, nil
+	}
+
+	// Migrate deprecated excluded_list (string) → excluded_lists ([]string)
+	if config.ExcludedList != "" && len(config.ExcludedLists) == 0 {
+		for _, item := range strings.Split(config.ExcludedList, ",") {
+			trimmed := strings.TrimSpace(item)
+			if trimmed != "" {
+				config.ExcludedLists = append(config.ExcludedLists, trimmed)
+			}
+		}
+		config.ExcludedList = ""
+		if err := m.saveConfigsLocked(config); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to save migrated config")
+		}
+	}
+
+	if config.ExcludedLists == nil {
+		config.ExcludedLists = []string{}
 	}
 
 	return config, nil

@@ -91,7 +91,7 @@ func TestAPIEndpoints(t *testing.T) {
 			"max_episodes_per_anime":  12,
 			"episode_retry_limit":     5,
 			"delete_watched_episodes": true,
-			"excluded_list":           "",
+			"excluded_lists":          []string{},
 		}
 
 		jsonData, err := json.Marshal(config)
@@ -343,7 +343,7 @@ func TestFullDownloadFlow(t *testing.T) {
 		"max_episodes_per_anime":  12,
 		"episode_retry_limit":     5,
 		"delete_watched_episodes": true,
-		"excluded_list":           "",
+		"excluded_lists":          []string{},
 	}
 
 	jsonData, err := json.Marshal(config)

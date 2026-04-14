@@ -69,11 +69,17 @@ const (
 	MediaStatusHiatus         MediaStatus = "HIATUS"
 )
 
+type CoverImage struct {
+	Large  string `json:"large"`
+	Medium string `json:"medium"`
+}
+
 type Media struct {
 	Status         MediaStatus    `json:"status"`
 	Format         MediaFormat    `json:"format"`
 	Title          Title          `json:"title"`
 	Episodes       *int           `json:"episodes"`
+	CoverImage     CoverImage     `json:"coverImage"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 }
 
@@ -108,6 +114,7 @@ type MediaListDetail struct {
 		Format         MediaFormat    `json:"format"`
 		Status         MediaStatus    `json:"status"`
 		Title          Title          `json:"title"`
+		CoverImage     CoverImage     `json:"coverImage"`
 		AiringSchedule AiringSchedule `json:"airingSchedule"`
 	} `json:"media"`
 }
@@ -187,6 +194,10 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 							english
 							romaji
 						}
+						coverImage {
+							large
+							medium
+						}
 						airingSchedule {
 							nodes {
 								id
@@ -227,6 +238,10 @@ func GetAnimeInfo(mediaListId int) (*MediaListDetailResponse, error) {
 					title {
 						english
 						romaji
+					}
+					coverImage {
+						large
+						medium
 					}
 					airingSchedule {
 						nodes {

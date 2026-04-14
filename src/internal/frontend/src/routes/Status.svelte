@@ -362,34 +362,35 @@
           </div>
         {:else}
           <!-- Desktop Table -->
-          <div class="hidden md:block overflow-x-auto">
-            <table class="table table-sm w-full">
-              <thead>
-                <tr class="text-base-content/50">
-                  <th>{T && T.colName}</th>
+          <div class="hidden md:block overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <th class="px-4 py-3 w-14"></th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{T && T.colName}</th>
                   <th
-                    class="cursor-pointer select-none hover:text-base-content"
+                    class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-white"
                     on:click={() => handleSort("episodes_count")}
                   >
-                    <span class="inline-flex items-center gap-1">
+                    <span class="inline-flex items-center justify-center gap-1">
                       {T && T.colEpisodes}
                       {#if sortKey === "episodes_count"}
-                        <span class="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>
+                        <span class="text-blue-500">{sortDir === "asc" ? "▲" : "▼"}</span>
                       {:else}
                         <span class="opacity-30">▲</span>
                       {/if}
                     </span>
                   </th>
-                  <th title={T && T.colBlacklist}>{T && T.colBlacklist}</th>
-                  <th>{T && T.colProgress}</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" title={T && T.colBlacklist}>{T && T.colBlacklist}</th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{T && T.colProgress}</th>
                   <th
-                    class="cursor-pointer select-none hover:text-base-content"
+                    class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-white"
                     on:click={() => handleSort("last_download_date")}
                   >
-                    <span class="inline-flex items-center gap-1">
+                    <span class="inline-flex items-center justify-center gap-1">
                       {T && T.colLastDownload}
                       {#if sortKey === "last_download_date"}
-                        <span class="text-primary">{sortDir === "asc" ? "▲" : "▼"}</span>
+                        <span class="text-blue-500">{sortDir === "asc" ? "▲" : "▼"}</span>
                       {:else}
                         <span class="opacity-30">▲</span>
                       {/if}
@@ -397,52 +398,68 @@
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {#each sortedAnimes as anime}
                   {@const pct = anime.total_episodes ? Math.round((anime.episodes_count / anime.total_episodes) * 100) : null}
                   <tr
-                    class="hover {anime.anime_id ? 'cursor-pointer' : ''}"
+                    class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors {anime.anime_id ? 'cursor-pointer' : ''}"
                     on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
                   >
-                    <td class="font-medium">
+                    <td class="px-0 py-1 pl-3 w-14">
+                      {#if anime.cover_image}
+                        <img
+                          src={anime.cover_image}
+                          alt={anime.name}
+                          class="w-12 h-16 object-cover rounded"
+                          loading="lazy"
+                        />
+                      {:else}
+                        <div class="w-12 h-16 rounded bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                          <svg class="w-5 h-5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                          </svg>
+                        </div>
+                      {/if}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {#if anime.anime_id}
                         <a
                           href="#/status/{anime.anime_id}"
-                          class="link link-hover text-primary"
+                          class="text-blue-600 dark:text-blue-400 hover:underline"
                           on:click|stopPropagation
                         >{anime.name}</a>
                       {:else}
                         {anime.name}
                       {/if}
                     </td>
-                    <td class="text-base-content/60">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
                       {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : anime.episodes_count}
                     </td>
-                    <td>
+                    <td class="px-6 py-4 whitespace-nowrap text-center">
                       {#if anime.is_blacklisted}
-                        <svg class="w-4 h-4 text-red-500" aria-label={T && T.colBlacklist} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg class="w-4 h-4 text-red-500 inline-block" aria-label={T && T.colBlacklist} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                           <circle cx="12" cy="12" r="10"/>
                           <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
                         </svg>
                       {:else}
-                        <span class="text-base-content/20">—</span>
+                        <span class="text-gray-300 dark:text-gray-600">—</span>
                       {/if}
                     </td>
-                    <td class="min-w-32">
+                    <td class="px-6 py-4 min-w-36">
                       {#if pct !== null}
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center justify-center gap-2">
                           <progress
                             class="progress w-24 {pct === 100 ? 'progress-success' : 'progress-primary'}"
                             value={pct}
                             max="100"
                           ></progress>
-                          <span class="text-xs text-base-content/50">{pct}%</span>
+                          <span class="text-xs text-gray-500 dark:text-gray-400">{pct}%</span>
                         </div>
                       {:else}
-                        <span class="text-base-content/30 text-xs">—</span>
+                        <span class="text-gray-300 dark:text-gray-600 text-xs text-center block">—</span>
                       {/if}
                     </td>
-                    <td class="text-base-content/60 text-xs">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
                       {formatTimeAgo(anime.last_download_date) || formatDate(anime.last_download_date)}
                     </td>
                   </tr>
@@ -459,6 +476,16 @@
                 class="rounded-lg bg-base-100 border border-base-300 p-3 {anime.anime_id ? 'cursor-pointer active:opacity-80' : ''}"
                 on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
               >
+                <div class="flex gap-3">
+                  {#if anime.cover_image}
+                    <img
+                      src={anime.cover_image}
+                      alt={anime.name}
+                      class="w-12 h-16 object-cover rounded shrink-0"
+                      loading="lazy"
+                    />
+                  {/if}
+                  <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between gap-2 mb-2">
                   <div class="flex items-center gap-1.5 min-w-0">
                     <p class="text-sm font-medium text-base-content truncate">
@@ -488,6 +515,8 @@
                 <p class="text-xs text-base-content/40 mt-1">
                   {formatTimeAgo(anime.last_download_date) || formatDate(anime.last_download_date)}
                 </p>
+                  </div>
+                </div>
               </div>
             {/each}
           </div>

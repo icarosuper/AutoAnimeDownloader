@@ -408,41 +408,52 @@
       </svg>
       {m.detail_back()}
     </a>
-    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-      {anime ? anime.name : m.detail_title_fallback()}
-    </h1>
-    {#if detail}
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        {m.detail_progress({ progress: detail.progress, total: detail.total_episodes || "?", status: detail.status })}
-      </p>
-      <div class="mt-2 flex items-center gap-2 flex-wrap">
-        <button
-          on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}
-          class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-        >
-          {m.detail_replace_btn_anime()}
-        </button>
-      </div>
-      <div class="mt-3 flex items-center gap-2 max-w-xl">
-        <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
-          {m.detail_search_query_label()}
-        </label>
-        <input
-          type="text"
-          bind:value={customSearchQuery}
-          placeholder={m.detail_search_query_placeholder()}
-          class="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          on:keydown={(e) => { if (e.key === 'Enter') handleSaveSearchQuery(); }}
+    <div class="flex gap-4">
+      {#if detail?.cover_image}
+        <img
+          src={detail.cover_image}
+          alt={anime?.name ?? ""}
+          class="w-24 h-36 sm:w-28 sm:h-40 object-cover rounded-lg shadow-md shrink-0"
         />
-        <button
-          on:click={handleSaveSearchQuery}
-          disabled={searchQuerySaving}
-          class="shrink-0 px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {searchQuerySaving ? "..." : "Save"}
-        </button>
+      {/if}
+      <div class="flex-1 min-w-0">
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+          {anime ? anime.name : m.detail_title_fallback()}
+        </h1>
+        {#if detail}
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {m.detail_progress({ progress: detail.progress, total: detail.total_episodes || "?", status: detail.status })}
+          </p>
+          <div class="mt-2 flex items-center gap-2 flex-wrap">
+            <button
+              on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}
+              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+            >
+              {m.detail_replace_btn_anime()}
+            </button>
+          </div>
+          <div class="mt-3 flex items-center gap-2 max-w-xl">
+            <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
+              {m.detail_search_query_label()}
+            </label>
+            <input
+              type="text"
+              bind:value={customSearchQuery}
+              placeholder={m.detail_search_query_placeholder()}
+              class="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              on:keydown={(e) => { if (e.key === 'Enter') handleSaveSearchQuery(); }}
+            />
+            <button
+              on:click={handleSaveSearchQuery}
+              disabled={searchQuerySaving}
+              class="shrink-0 px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {searchQuerySaving ? "..." : "Save"}
+            </button>
+          </div>
+        {/if}
       </div>
-    {/if}
+    </div>
   </div>
 
   {#if loading}
@@ -509,22 +520,22 @@
                   class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer"
                 />
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_episode()}
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_anilist()}
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_downloaded()}
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_next_ep()}
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_download_date()}
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 {m.detail_col_actions()}
               </th>
             </tr>
@@ -542,7 +553,7 @@
                     class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer"
                   />
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white text-center">
                   {ep.episode_number}
                   {#if ep.is_manually_managed}
                     <span class="block text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_delete()}</span>
@@ -551,50 +562,50 @@
                     <span class="block text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_download()}</span>
                   {/if}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-6 py-4 whitespace-nowrap text-center">
                   {#if ep.is_watched}
                     <!-- Watched: eye icon -->
-                    <svg class="w-4 h-4 text-blue-500" aria-label={m.detail_badge_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-4 h-4 text-blue-500 inline-block" aria-label={m.detail_badge_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                       <circle cx="12" cy="12" r="3"/>
                     </svg>
                   {:else if ep.is_aired}
                     <!-- Aired but not watched: eye-off icon -->
-                    <svg class="w-4 h-4 text-yellow-500" aria-label={m.detail_badge_not_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-4 h-4 text-yellow-500 inline-block" aria-label={m.detail_badge_not_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
                       <line x1="1" y1="1" x2="23" y2="23"/>
                     </svg>
                   {:else}
                     <!-- Upcoming: clock icon -->
-                    <svg class="w-4 h-4 text-gray-400" aria-label={m.detail_badge_upcoming()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-4 h-4 text-gray-400 inline-block" aria-label={m.detail_badge_upcoming()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="12" cy="12" r="10"/>
                       <polyline points="12 6 12 12 16 14"/>
                     </svg>
                   {/if}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-6 py-4 whitespace-nowrap text-center">
                   {#if ep.is_downloaded}
                     <!-- Downloaded: check circle -->
-                    <svg class="w-4 h-4 text-green-500" aria-label={m.detail_badge_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-4 h-4 text-green-500 inline-block" aria-label={m.detail_badge_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
                       <polyline points="22 4 12 14.01 9 11.01"/>
                     </svg>
                   {:else}
                     <!-- Not downloaded: dash -->
-                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600" aria-label={m.detail_badge_not_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 inline-block" aria-label={m.detail_badge_not_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="12" cy="12" r="10"/>
                       <line x1="8" y1="12" x2="16" y2="12"/>
                     </svg>
                   {/if}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
                   {formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                   {ep.is_downloaded ? formatDate(ep.download_date) : "—"}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center justify-center gap-1.5">
                     {#if ep.is_aired && !ep.is_downloaded}
                       <!-- Download -->
                       <button

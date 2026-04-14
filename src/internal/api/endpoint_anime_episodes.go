@@ -28,6 +28,7 @@ type AnimeDetailResponse struct {
 	TotalEpisodes     int                `json:"total_episodes"`
 	Progress          int                `json:"progress"`
 	Status            string             `json:"status"`
+	CoverImage        string             `json:"cover_image,omitempty"`
 	Episodes          []AnimeEpisodeInfo `json:"episodes"`
 	CustomSearchQuery string             `json:"custom_search_query,omitempty"`
 }
@@ -128,11 +129,17 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
+		coverImage := mediaList.Media.CoverImage.Large
+		if coverImage == "" {
+			coverImage = mediaList.Media.CoverImage.Medium
+		}
+
 		response := AnimeDetailResponse{
 			AnimeID:           id,
 			TotalEpisodes:     mediaList.Media.Episodes,
 			Progress:          mediaList.Progress,
 			Status:            string(mediaList.Status),
+			CoverImage:        coverImage,
 			Episodes:          episodes,
 			CustomSearchQuery: animeSettings.CustomSearchQuery,
 		}

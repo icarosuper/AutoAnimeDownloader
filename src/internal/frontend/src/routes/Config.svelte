@@ -70,7 +70,7 @@
     episode_retry_limit: 5,
     delete_watched_episodes: true,
     watched_episodes_to_keep: 0,
-    excluded_list: "",
+    excluded_lists: [],
     rename_files_for_jellyfin: false,
     download_statuses: ["CURRENT", "REPEATING"],
     delete_statuses: [],
@@ -94,6 +94,20 @@
       config.delete_statuses = [...(config.delete_statuses ?? []), status];
       config.download_statuses = (config.download_statuses ?? []).filter(s => s !== status);
     }
+  }
+
+  let newExcludedItem = "";
+
+  function addExcludedList() {
+    const trimmed = newExcludedItem.trim();
+    if (trimmed && !(config.excluded_lists ?? []).includes(trimmed)) {
+      config.excluded_lists = [...(config.excluded_lists ?? []), trimmed];
+    }
+    newExcludedItem = "";
+  }
+
+  function removeExcludedList(item: string) {
+    config.excluded_lists = (config.excluded_lists ?? []).filter(i => i !== item);
   }
 
   let loading = true;
@@ -367,14 +381,45 @@
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-5 gap-4">
           <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionFilters}</h2>
-          <Input
-            id="excluded_list"
-            label={T && T.labelExcludedList || ""}
-            subtitle={T && T.hintExcludedList || ""}
-            type="text"
-            bind:value={config.excluded_list}
-            placeholder="Name of excluded list"
-          />
+          <div class="flex flex-col gap-2">
+            <label class="text-sm font-medium text-base-content">{T && T.labelExcludedList}</label>
+            <p class="text-xs text-base-content/50">{T && T.hintExcludedList}</p>
+            {#if (config.excluded_lists ?? []).length > 0}
+              <div class="flex flex-wrap gap-2">
+                {#each config.excluded_lists ?? [] as item}
+                  <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                    {item}
+                    <button
+                      type="button"
+                      on:click={() => removeExcludedList(item)}
+                      class="ml-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                      aria-label="Remove {item}"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+            <div class="flex gap-2">
+              <input
+                type="text"
+                bind:value={newExcludedItem}
+                placeholder="Name of excluded list"
+                class="flex-1 block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
+                on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addExcludedList(); } }}
+              />
+              <button
+                type="button"
+                on:click={addExcludedList}
+                class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

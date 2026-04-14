@@ -84,7 +84,8 @@ export interface Config {
   episode_retry_limit: number
   delete_watched_episodes: boolean
   watched_episodes_to_keep: number
-  excluded_list: string
+  excluded_list?: string
+  excluded_lists: string[]
   rename_files_for_jellyfin: boolean
   download_statuses: string[]
   delete_statuses: string[]
@@ -97,6 +98,7 @@ export interface AnimeInfo {
   total_episodes: number
   latest_episode_id: number
   last_download_date: string
+  cover_image?: string
   is_blacklisted?: boolean
 }
 
@@ -139,6 +141,7 @@ export interface AnimeDetailResponse {
   total_episodes: number
   progress: number
   status: string
+  cover_image?: string
   episodes: AnimeEpisodeInfo[]
   custom_search_query?: string
 }
