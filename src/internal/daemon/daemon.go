@@ -34,6 +34,16 @@ type FileManagerInterface interface {
 	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
 }
 
+// animeProcessResult holds the per-anime outputs from processAnimeEpisodes.
+type animeProcessResult struct {
+	newEpisodes     []files.EpisodeStruct
+	checkedEpisodes []int
+	idsToDelete     []int
+}
+
+// maxConcurrentAnimes limits simultaneous Nyaa HTTP searches to avoid rate limiting.
+const maxConcurrentAnimes = 5
+
 type StartLoopPayload struct {
 	FileManager FileManagerInterface
 	Interval    time.Duration
@@ -209,64 +219,131 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
 	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
 
-	downloadedTorrents, err := fetchDownloadedTorrents(torrentsService)
-	if err != nil {
-		state.SetLastCheckError(err)
+	// Phase 1: fetch all independent data sources in parallel.
+	var (
+		downloadedTorrents []torrents.Torrent
+		anilistResponse    *anilist.AniListResponse
+		savedEpisodes      []files.EpisodeStruct
+		blockedEpisodes    []int
+		animeSettingsMap   map[int]files.AnimeSettings
+		deleteListResponse *anilist.AniListResponse
+
+		errTorrents error
+		errAnilist  error
+		errEpisodes error
+	)
+
+	var fetchWg sync.WaitGroup
+
+	fetchWg.Add(1)
+	go func() {
+		defer fetchWg.Done()
+		downloadedTorrents, errTorrents = fetchDownloadedTorrents(torrentsService)
+	}()
+
+	fetchWg.Add(1)
+	go func() {
+		defer fetchWg.Done()
+		anilistResponse, errAnilist = searchAnilist(configs)
+	}()
+
+	fetchWg.Add(1)
+	go func() {
+		defer fetchWg.Done()
+		var e error
+		savedEpisodes, e = fileManager.LoadSavedEpisodes()
+		if e != nil {
+			logger.Logger.Error().Err(e).Stack().Msg("Failed to load saved episodes")
+			errEpisodes = e
+		}
+	}()
+
+	fetchWg.Add(1)
+	go func() {
+		defer fetchWg.Done()
+		var e error
+		blockedEpisodes, e = fileManager.LoadBlockedEpisodes()
+		if e != nil {
+			logger.Logger.Warn().Err(e).Msg("Failed to load blocked episodes, continuing without block list")
+			blockedEpisodes = []int{}
+		}
+	}()
+
+	fetchWg.Add(1)
+	go func() {
+		defer fetchWg.Done()
+		var e error
+		animeSettingsMap, e = fileManager.LoadAllAnimeSettings()
+		if e != nil {
+			logger.Logger.Warn().Err(e).Msg("Failed to load anime settings, using defaults")
+			animeSettingsMap = map[int]files.AnimeSettings{}
+		}
+	}()
+
+	if len(configs.DeleteStatuses) > 0 {
+		fetchWg.Add(1)
+		go func() {
+			defer fetchWg.Done()
+			var e error
+			deleteListResponse, e = anilist.GetAllCurrentAnime(configs.AnilistUsername, configs.DeleteStatuses)
+			if e != nil {
+				logger.Logger.Warn().Err(e).Msg("Failed to fetch AniList animes for delete statuses")
+			}
+		}()
+	}
+
+	fetchWg.Wait()
+
+	// Check fatal errors in priority order (mirrors original sequential behaviour).
+	if errTorrents != nil {
+		state.SetLastCheckError(errTorrents)
+		return
+	}
+	if errAnilist != nil {
+		state.SetLastCheckError(errAnilist)
+		return
+	}
+	if errEpisodes != nil {
+		state.SetLastCheckError(errEpisodes)
 		return
 	}
 
-	anilistResponse, err := searchAnilist(configs)
-	if err != nil {
-		state.SetLastCheckError(err)
-		return
-	}
-
-	savedEpisodes, err := fileManager.LoadSavedEpisodes()
-	if err != nil {
-		logger.Logger.Error().Err(err).Stack().Msg("Failed to load saved episodes")
-		state.SetLastCheckError(err)
-		return
-	}
-
-	blockedEpisodes, err := fileManager.LoadBlockedEpisodes()
-	if err != nil {
-		logger.Logger.Warn().Err(err).Msg("Failed to load blocked episodes, continuing without block list")
-		blockedEpisodes = []int{}
-	}
 	blockedMap := make(map[int]bool, len(blockedEpisodes))
 	for _, id := range blockedEpisodes {
 		blockedMap[id] = true
 	}
 
-	animeSettingsMap, err := fileManager.LoadAllAnimeSettings()
-	if err != nil {
-		logger.Logger.Warn().Err(err).Msg("Failed to load anime settings, using defaults")
-		animeSettingsMap = map[int]files.AnimeSettings{}
-	}
-
 	animes := anilistResponse.Data.Page.MediaList
-	var newEpisodes []files.EpisodeStruct
-	var checkedEpisodes []int
+
+	// Collect episodes to delete for animes that are in deleteStatuses (fast, no I/O).
 	var idsToDelete []int
-
-	start := time.Now()
 	for _, anime := range animes {
-		// Check for context cancellation
-		select {
-		case <-ctx.Done():
-			logger.Logger.Info().Msg("Verification cancelled")
-			state.SetLastCheckError(nil) // Avoids stale error reports
-			return
-		default:
-		}
-
 		if isInDeleteStatuses(configs.DeleteStatuses, anime.Status) {
 			for _, ep := range savedEpisodes {
 				if ep.AnimeID == anime.Id && !ep.ManuallyManaged {
 					idsToDelete = append(idsToDelete, ep.EpisodeID)
 				}
 			}
-			continue
+		}
+	}
+
+	// Phase 2: process each anime concurrently, bounded by maxConcurrentAnimes.
+	sem := make(chan struct{}, maxConcurrentAnimes)
+	resultCh := make(chan animeProcessResult, len(animes))
+
+	var animeWg sync.WaitGroup
+	start := time.Now()
+
+outer:
+	for _, anime := range animes {
+		select {
+		case <-ctx.Done():
+			break outer
+		default:
+		}
+
+		if isInDeleteStatuses(configs.DeleteStatuses, anime.Status) {
+			continue // already handled above
 		}
 
 		customQuery := ""
@@ -274,23 +351,46 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			customQuery = s.CustomSearchQuery
 		}
 
-		processAnimeEpisodes(
-			configs,
-			torrentsService,
-			anime,
-			downloadedTorrents,
-			savedEpisodes,
-			&newEpisodes,
-			&checkedEpisodes,
-			&idsToDelete,
-			blockedMap,
-			customQuery,
-			jobQueue,
-		)
+		animeWg.Add(1)
+		go func(a anilist.MediaList, q string) {
+			defer animeWg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			resultCh <- processAnimeEpisodes(configs, torrentsService, a, downloadedTorrents, savedEpisodes, blockedMap, q, jobQueue)
+		}(anime, customQuery)
 	}
+
+	animeWg.Wait()
+	close(resultCh)
 	elapsed := time.Since(start)
 
-	deleteEpisodesByStatus(configs, fileManager, torrentsService, savedEpisodes)
+	// Merge per-anime results.
+	var newEpisodes []files.EpisodeStruct
+	var checkedEpisodes []int
+	for r := range resultCh {
+		newEpisodes = append(newEpisodes, r.newEpisodes...)
+		checkedEpisodes = append(checkedEpisodes, r.checkedEpisodes...)
+		idsToDelete = append(idsToDelete, r.idsToDelete...)
+	}
+
+	// Check if context was cancelled during parallel work.
+	select {
+	case <-ctx.Done():
+		logger.Logger.Info().Msg("Verification cancelled")
+		state.SetLastCheckError(nil)
+		return
+	default:
+	}
+
+	// Phase 3: sequential cleanup (file writes must not overlap).
+	deleteEpisodesByStatus(deleteListResponse, fileManager, torrentsService, savedEpisodes)
 
 	handleSavedEpisodes(fileManager, configs, torrentsService, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
@@ -396,20 +496,15 @@ func isInDeleteStatuses(deleteStatuses []string, status anilist.MediaListStatus)
 	return false
 }
 
-func deleteEpisodesByStatus(configs *files.Config, fileManager FileManagerInterface, torrentsService *torrents.TorrentService, savedEpisodes []files.EpisodeStruct) {
-	if len(configs.DeleteStatuses) == 0 {
+// deleteEpisodesByStatus deletes episodes for animes in the delete-status list.
+// deleteResp is the pre-fetched Anilist response (nil → skip, e.g. fetch failed or no statuses configured).
+func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager FileManagerInterface, torrentsService *torrents.TorrentService, savedEpisodes []files.EpisodeStruct) {
+	if deleteResp == nil {
 		return
 	}
 
 	logger.Logger.Debug().
-		Strs("delete_statuses", configs.DeleteStatuses).
 		Msg("Running status-based episode deletion")
-
-	deleteResp, err := anilist.GetAllCurrentAnime(configs.AnilistUsername, configs.DeleteStatuses)
-	if err != nil {
-		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList animes for delete statuses")
-		return
-	}
 
 	deleteAnimeIDs := make(map[int]bool, len(deleteResp.Data.Page.MediaList))
 	for _, anime := range deleteResp.Data.Page.MediaList {
@@ -793,13 +888,11 @@ func processAnimeEpisodes(
 	anime anilist.MediaList,
 	torrents []torrents.Torrent,
 	savedEpisodes []files.EpisodeStruct,
-	newEpisodes *[]files.EpisodeStruct,
-	checkedEpisodes *[]int,
-	idsToDelete *[]int,
 	blockedMap map[int]bool,
 	customQuery string,
 	jobQueue *JobQueue,
-) {
+) animeProcessResult {
+	var result animeProcessResult
 	animeTitle := getAnimeTitleSafe(anime)
 	logger.Logger.Info().
 		Str("anime", animeTitle).
@@ -815,7 +908,7 @@ func processAnimeEpisodes(
 	var episodesToDownload []anilist.AiringNode
 
 	for _, ep := range episodes {
-		*checkedEpisodes = append(*checkedEpisodes, ep.ID)
+		result.checkedEpisodes = append(result.checkedEpisodes, ep.ID)
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 
 		isInTorrents := torrentsMap[epName]
@@ -827,7 +920,7 @@ func processAnimeEpisodes(
 			episodesToDownload = append(episodesToDownload, ep)
 		} else if shouldDelete {
 			if savedEp, ok := savedEpisodesFullMap[ep.ID]; !ok || !savedEp.ManuallyManaged {
-				*idsToDelete = append(*idsToDelete, ep.ID)
+				result.idsToDelete = append(result.idsToDelete, ep.ID)
 			}
 		}
 	}
@@ -845,9 +938,9 @@ func processAnimeEpisodes(
 			Str("anime", animeTitle).
 			Msg("Detected movie - searching for movie torrent")
 
-		result := searchNyaaForMovie(anime.Media.Title, true, customQuery)
-		if result != nil {
-			movieResult = result
+		movieSearch := searchNyaaForMovie(anime.Media.Title, true, customQuery)
+		if movieSearch != nil {
+			movieResult = movieSearch
 		}
 
 		// Para filmes sem episódios no AiringSchedule, criar um episódio fake
@@ -863,7 +956,7 @@ func processAnimeEpisodes(
 	}
 
 	if len(episodesToDownload) == 0 {
-		return
+		return result
 	}
 
 	// ESTRATÉGIA 2: Animes completos - tentar batch
@@ -875,9 +968,9 @@ func processAnimeEpisodes(
 		// Extrair temporada se houver
 		requestedSeason := extractSeasonFromAnime(anime)
 
-		result := searchNyaaForBatch(anime.Media.Title, requestedSeason, customQuery)
-		if result != nil {
-			batchResult = result
+		batchSearch := searchNyaaForBatch(anime.Media.Title, requestedSeason, customQuery)
+		if batchSearch != nil {
+			batchResult = batchSearch
 		}
 	}
 
@@ -888,9 +981,9 @@ func processAnimeEpisodes(
 			eps = append(eps, ep.Episode)
 		}
 
-		result := searchNyaaForMultipleEpisodes(anime.Media.Title, eps, customQuery)
-		if result != nil {
-			multipleResult = result
+		multipleSearch := searchNyaaForMultipleEpisodes(anime.Media.Title, eps, customQuery)
+		if multipleSearch != nil {
+			multipleResult = multipleSearch
 		}
 	}
 
@@ -925,18 +1018,17 @@ func processAnimeEpisodes(
 
 		// Prioridade 3: Múltiplos episódios (busca otimizada)
 		if len(multipleResult) > 0 && len(magnets) == 0 {
-			for _, result := range multipleResult {
-				if *result.Episode == ep.Episode {
-					magnets = append(magnets, result.MagnetLink)
+			for _, tr := range multipleResult {
+				if *tr.Episode == ep.Episode {
+					magnets = append(magnets, tr.MagnetLink)
 				}
 			}
 		}
 
 		// Prioridade 4: Episódio individual (fallback)
 		if len(magnets) == 0 {
-			results := searchNyaaForSingleEpisode(ep, anime.Media.Title, customQuery)
-			for _, result := range results {
-				magnets = append(magnets, result.MagnetLink)
+			for _, tr := range searchNyaaForSingleEpisode(ep, anime.Media.Title, customQuery) {
+				magnets = append(magnets, tr.MagnetLink)
 			}
 		}
 
@@ -947,7 +1039,7 @@ func processAnimeEpisodes(
 			if anime.Media.Episodes != nil {
 				totalEpisodes = *anime.Media.Episodes
 			}
-			*newEpisodes = append(*newEpisodes, files.EpisodeStruct{
+			result.newEpisodes = append(result.newEpisodes, files.EpisodeStruct{
 				EpisodeID:          ep.ID,
 				AnimeID:            anime.Id,
 				AnimeTotalEpisodes: totalEpisodes,
@@ -968,6 +1060,7 @@ func processAnimeEpisodes(
 	}
 
 	enqueueOrMoveToCompletedFolder(torrentsService, anime, configs, savedEpisodes, jobQueue)
+	return result
 }
 
 func buildWatchedKeepSet(n int, episodes []anilist.AiringNode, savedEpisodesMap map[int]bool, progress int) map[int]bool {
