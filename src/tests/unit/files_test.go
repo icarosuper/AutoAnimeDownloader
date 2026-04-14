@@ -230,6 +230,12 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 	if config.CheckInterval != 20 {
 		t.Errorf("expected CheckInterval 20, got %d", config.CheckInterval)
 	}
+	if len(config.ExcludedLists) != 1 || config.ExcludedLists[0] != "test" {
+		t.Errorf("expected ExcludedLists [\"test\"], got %v", config.ExcludedLists)
+	}
+	if config.ExcludedList != "" {
+		t.Errorf("expected ExcludedList to be empty after migration, got '%s'", config.ExcludedList)
+	}
 }
 
 func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
@@ -244,7 +250,7 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 		MaxEpisodesPerAnime:   10,
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: true,
-		ExcludedList:          "excluded",
+		ExcludedLists:         []string{"excluded"},
 	}
 
 	err := manager.SaveConfigs(config)

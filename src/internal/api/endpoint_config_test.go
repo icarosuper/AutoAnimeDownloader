@@ -35,7 +35,9 @@ func (m *mockFileManager) LoadConfigs() (*files.Config, error) {
 			MaxEpisodesPerAnime:   12,
 			EpisodeRetryLimit:     5,
 			DeleteWatchedEpisodes: true,
-			ExcludedList:          "",
+			ExcludedLists:         []string{},
+			DownloadStatuses:      []string{"CURRENT", "REPEATING"},
+			DeleteStatuses:        []string{},
 		}, nil
 	}
 	return m.configs, nil
@@ -192,7 +194,7 @@ func TestHandleUpdateConfig(t *testing.T) {
 			MaxEpisodesPerAnime:   20,
 			EpisodeRetryLimit:     3,
 			DeleteWatchedEpisodes: false,
-			ExcludedList:          "test",
+			ExcludedLists:         []string{"test"},
 		}
 
 		jsonData, _ := json.Marshal(config)

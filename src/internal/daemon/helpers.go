@@ -99,9 +99,16 @@ func buildSavedEpisodesFullMap(episodes []files.EpisodeStruct) map[int]files.Epi
 	return m
 }
 
-func animeIsInExcludedList(anime anilist.MediaList, excludedList string) bool {
+func animeIsInExcludedList(anime anilist.MediaList, excludedLists []string) bool {
+	if len(excludedLists) == 0 {
+		return false
+	}
+	excludedSet := make(map[string]bool, len(excludedLists))
+	for _, name := range excludedLists {
+		excludedSet[name] = true
+	}
 	for listName, isInList := range anime.CustomLists {
-		if listName == excludedList && isInList {
+		if excludedSet[listName] && isInList {
 			return true
 		}
 	}

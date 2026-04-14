@@ -131,10 +131,10 @@ func main() {
   - max_episodes_per_anime (int)
   - episode_retry_limit (int)
   - delete_watched_episodes (bool: true/false)
-  - excluded_list (string)`,
+  - excluded_lists (comma-separated strings)`,
 						Action: func(c *cli.Context) error {
 							if c.NArg() != 2 {
-								return fmt.Errorf("usage: config set <key> <value>\n\nAvailable keys:\n  - anilist_username\n  - save_path\n  - completed_anime_path\n  - check_interval\n  - qbittorrent_url\n  - max_episodes_per_anime\n  - episode_retry_limit\n  - delete_watched_episodes\n  - excluded_list")
+								return fmt.Errorf("usage: config set <key> <value>\n\nAvailable keys:\n  - anilist_username\n  - save_path\n  - completed_anime_path\n  - check_interval\n  - qbittorrent_url\n  - max_episodes_per_anime\n  - episode_retry_limit\n  - delete_watched_episodes\n  - excluded_lists")
 							}
 							return handleConfigSet(c.Args().Get(0), c.Args().Get(1))
 						},
@@ -299,7 +299,7 @@ func handleConfigGet() error {
 		t.AppendRow(table.Row{"Max Episodes Per Anime", config.MaxEpisodesPerAnime})
 		t.AppendRow(table.Row{"Episode Retry Limit", config.EpisodeRetryLimit})
 		t.AppendRow(table.Row{"Delete Watched Episodes", config.DeleteWatchedEpisodes})
-		t.AppendRow(table.Row{"Excluded List", config.ExcludedList})
+		t.AppendRow(table.Row{"Excluded Lists", strings.Join(config.ExcludedLists, ", ")})
 		t.Render()
 	}
 	return nil
@@ -342,8 +342,15 @@ func handleConfigSet(key, value string) error {
 		config.EpisodeRetryLimit = limit
 	case "delete_watched_episodes", "deletewatchedepisodes":
 		config.DeleteWatchedEpisodes = strings.ToLower(value) == "true"
-	case "excluded_list", "excludedlist":
-		config.ExcludedList = value
+	case "excluded_list", "excludedlist", "excluded_lists", "excludedlists":
+		var lists []string
+		for _, item := range strings.Split(value, ",") {
+			trimmed := strings.TrimSpace(item)
+			if trimmed != "" {
+				lists = append(lists, trimmed)
+			}
+		}
+		config.ExcludedLists = lists
 	default:
 		return fmt.Errorf("unknown config key: %s", key)
 	}

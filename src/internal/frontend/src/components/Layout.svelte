@@ -10,7 +10,6 @@
 
   $: currentPath = $location
 
-  // Reactive translations — re-evaluated when $locale changes
   $: T = $locale && {
     navStatus: m.nav_status(),
     navConfig: m.nav_config(),
@@ -24,13 +23,14 @@
   }
 
   let appVersion = ''
+  let mobileMenuOpen = false
 
   onMount(async () => {
     try {
       const status = await getStatus()
       appVersion = status.version
     } catch {
-      // ignore - version just won't show
+      // ignore
     }
   })
 
@@ -43,14 +43,17 @@
   function toggleLocale() {
     locale.set($locale === 'en' ? 'pt-BR' : 'en')
   }
+
+  // Close mobile menu on navigation
+  $: if (currentPath) mobileMenuOpen = false;
 </script>
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-  <!-- Tabs Navigation -->
   <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between">
-        <div class="flex space-x-8">
+      <div class="flex items-center justify-between h-14">
+        <!-- Desktop nav links -->
+        <div class="hidden sm:flex space-x-8">
           <a
             href="#/status"
             class="inline-flex items-center px-1 pt-4 pb-4 border-b-2 text-sm font-medium transition-colors {currentPath === '/status' || currentPath === '/'
@@ -77,8 +80,24 @@
           </a>
         </div>
 
+        <!-- Mobile hamburger -->
+        <button
+          class="sm:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          on:click={() => mobileMenuOpen = !mobileMenuOpen}
+          aria-label="Menu"
+        >
+          {#if mobileMenuOpen}
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          {:else}
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+          {/if}
+        </button>
+
         <div class="flex items-center gap-3">
-          <!-- WebSocket connection indicator -->
           <div class="tooltip tooltip-bottom">
             <div class="tooltip-content">{wsTooltip}</div>
             <span class="inline-block w-2 h-2 rounded-full {
@@ -89,10 +108,9 @@
           </div>
 
           {#if appVersion}
-            <span class="text-xs text-base-content/40">v{appVersion}</span>
+            <span class="text-xs text-base-content/40 hidden sm:inline">v{appVersion}</span>
           {/if}
 
-          <!-- Language toggle -->
           <button
             on:click={toggleLocale}
             class="text-xs font-semibold px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -101,7 +119,6 @@
             {$locale === 'en' ? 'EN' : 'PT'}
           </button>
 
-          <!-- Theme selector -->
           <label for="theme-select" class="sr-only">{T && T.themeLight}</label>
           <select
             id="theme-select"
@@ -118,6 +135,38 @@
         </div>
       </div>
     </div>
+
+    <!-- Mobile menu -->
+    {#if mobileMenuOpen}
+      <div class="sm:hidden border-t border-gray-200 dark:border-gray-700">
+        <div class="px-2 pt-2 pb-3 space-y-1">
+          <a
+            href="#/status"
+            class="block px-3 py-2 rounded-md text-base font-medium transition-colors {currentPath === '/status' || currentPath === '/'
+              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+          >
+            {T && T.navStatus}
+          </a>
+          <a
+            href="#/config"
+            class="block px-3 py-2 rounded-md text-base font-medium transition-colors {currentPath === '/config'
+              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+          >
+            {T && T.navConfig}
+          </a>
+          <a
+            href="#/logs"
+            class="block px-3 py-2 rounded-md text-base font-medium transition-colors {currentPath === '/logs'
+              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+          >
+            {T && T.navLogs}
+          </a>
+        </div>
+      </div>
+    {/if}
   </nav>
 
   <!-- Page Content — no {#key $locale} here; each route handles its own reactivity -->

@@ -17,6 +17,7 @@ type AnimeInfo struct {
 	TotalEpisodes    int    `json:"total_episodes" example:"12"`
 	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
 	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
+	CoverImage       string `json:"cover_image,omitempty"`
 	IsBlacklisted    bool   `json:"is_blacklisted,omitempty"`
 }
 
@@ -128,7 +129,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 
 		// Merge CURRENT animes from AniList so they remain visible even with 0 downloaded episodes
 		if config.AnilistUsername != "" {
-			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername, config.ExcludedList, config.DownloadStatuses)
+			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername, config.ExcludedLists, config.DownloadStatuses)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
@@ -140,7 +141,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 	}
 }
 
-func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedList string, statuses []string) {
+func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedLists []string, statuses []string) {
 	resp, err := anilist.GetAllCurrentAnime(username, statuses)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
@@ -184,21 +185,30 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 		}
 
 		isBlacklisted := false
-		if excludedList != "" {
+		if len(excludedLists) > 0 {
+			excludedSet := make(map[string]bool, len(excludedLists))
+			for _, name := range excludedLists {
+				excludedSet[name] = true
+			}
 			for listName, inList := range ml.CustomLists {
-				if listName == excludedList && inList {
+				if excludedSet[listName] && inList {
 					isBlacklisted = true
 					break
 				}
 			}
 		}
 
+		coverImage := ml.Media.CoverImage.Large
+		if coverImage == "" {
+			coverImage = ml.Media.CoverImage.Medium
+		}
+
 		if existing, ok := knownByID[ml.Id]; ok {
-			// Update the name to always reflect the AniList title
 			existing.Name = name
 			if existing.TotalEpisodes == 0 {
 				existing.TotalEpisodes = totalEpisodes
 			}
+			existing.CoverImage = coverImage
 			existing.IsBlacklisted = isBlacklisted
 			continue
 		}
@@ -208,6 +218,7 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 			Name:          name,
 			EpisodesCount: 0,
 			TotalEpisodes: totalEpisodes,
+			CoverImage:    coverImage,
 			IsBlacklisted: isBlacklisted,
 		}
 	}
