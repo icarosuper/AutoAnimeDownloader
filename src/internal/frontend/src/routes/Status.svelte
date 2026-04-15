@@ -363,7 +363,7 @@
         {:else}
           <!-- Desktop Table -->
           <div class="hidden md:block overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <table class="w-auto divide-y divide-gray-200 dark:divide-gray-700">
               <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th class="px-4 py-3 w-14"></th>
@@ -405,12 +405,12 @@
                     class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors {anime.anime_id ? 'cursor-pointer' : ''}"
                     on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
                   >
-                    <td class="px-0 py-1 pl-3 w-14">
+                    <td class="px-0 py-1 pl-3 w-14 min-w-[3.5rem]">
                       {#if anime.cover_image}
                         <img
                           src={anime.cover_image}
                           alt={anime.name}
-                          class="w-12 h-16 object-cover rounded"
+                          class="block w-12 h-16 object-cover rounded"
                           loading="lazy"
                         />
                       {:else}
