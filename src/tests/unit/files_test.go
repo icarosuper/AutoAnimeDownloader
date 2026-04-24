@@ -224,8 +224,11 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 	if config.SavePath != "/anime" {
 		t.Errorf("expected SavePath '/anime', got '%s'", config.SavePath)
 	}
-	if config.AnilistUsername != "testuser" {
-		t.Errorf("expected AnilistUsername 'testuser', got '%s'", config.AnilistUsername)
+	if len(config.AnilistUsernames) != 1 || config.AnilistUsernames[0] != "testuser" {
+		t.Errorf("expected AnilistUsernames ['testuser'], got %v", config.AnilistUsernames)
+	}
+	if config.AnilistUsername != "" {
+		t.Errorf("expected AnilistUsername to be empty after migration, got '%s'", config.AnilistUsername)
 	}
 	if config.CheckInterval != 20 {
 		t.Errorf("expected CheckInterval 20, got %d", config.CheckInterval)
@@ -244,7 +247,7 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 
 	config := &files.Config{
 		SavePath:              "/test",
-		AnilistUsername:       "user123",
+		AnilistUsernames:      []string{"user123"},
 		CheckInterval:         15,
 		QBittorrentUrl:        "http://test:8080",
 		MaxEpisodesPerAnime:   10,
@@ -270,8 +273,8 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 	if !strings.Contains(contentStr, `"save_path": "/test"`) {
 		t.Error("expected save_path in JSON")
 	}
-	if !strings.Contains(contentStr, `"anilist_username": "user123"`) {
-		t.Error("expected anilist_username in JSON")
+	if !strings.Contains(contentStr, `"user123"`) {
+		t.Error("expected user123 in anilist_usernames JSON")
 	}
 }
 

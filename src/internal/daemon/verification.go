@@ -111,11 +111,16 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		fetchWg.Add(1)
 		go func() {
 			defer fetchWg.Done()
-			var e error
-			deleteListResponse, e = anilist.GetAllCurrentAnime(configs.AnilistUsername, configs.DeleteStatuses)
-			if e != nil {
-				logger.Logger.Warn().Err(e).Msg("Failed to fetch AniList animes for delete statuses")
+			merged := &anilist.AniListResponse{}
+			for _, username := range configs.AnilistUsernames {
+				resp, e := anilist.GetAllCurrentAnime(username, configs.DeleteStatuses)
+				if e != nil {
+					logger.Logger.Warn().Err(e).Str("username", username).Msg("Failed to fetch AniList animes for delete statuses")
+					continue
+				}
+				merged.Data.Page.MediaList = append(merged.Data.Page.MediaList, resp.Data.Page.MediaList...)
 			}
+			deleteListResponse = merged
 		}()
 	}
 
@@ -255,28 +260,38 @@ func fetchDownloadedTorrents(torrentsService *torrents.TorrentService) ([]torren
 }
 
 func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
-	if configs.AnilistUsername == "" || configs.SavePath == "" {
+	if len(configs.AnilistUsernames) == 0 || configs.SavePath == "" {
 		err := fmt.Errorf("missing required configuration: Anilist username or save path")
 		logger.Logger.Error().
 			Err(err).
-			Str("anilist_username", configs.AnilistUsername).
+			Strs("anilist_usernames", configs.AnilistUsernames).
 			Str("save_path", configs.SavePath).
-			Msg("Missing required configuration: Anilist username or save path")
+			Msg("Missing required configuration: Anilist usernames or save path")
 		return nil, err
 	}
 
-	anilistResponse, err := anilist.GetAllCurrentAnime(configs.AnilistUsername, configs.DownloadStatuses)
-	if err != nil {
-		logger.Logger.Error().Err(err).Stack().
-			Str("username", configs.AnilistUsername).
-			Msg("Failed to search animes on Anilist")
-		return nil, fmt.Errorf("failed to search animes on Anilist: %w", err)
+	merged := &anilist.AniListResponse{}
+	var lastErr error
+	for _, username := range configs.AnilistUsernames {
+		resp, err := anilist.GetAllCurrentAnime(username, configs.DownloadStatuses)
+		if err != nil {
+			logger.Logger.Error().Err(err).Stack().
+				Str("username", username).
+				Msg("Failed to search animes on Anilist")
+			lastErr = err
+			continue
+		}
+		merged.Data.Page.MediaList = append(merged.Data.Page.MediaList, resp.Data.Page.MediaList...)
+	}
+
+	if len(merged.Data.Page.MediaList) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("failed to search animes on Anilist: %w", lastErr)
 	}
 
 	logger.Logger.Info().
-		Str("username", configs.AnilistUsername).
-		Int("animes_found", len(anilistResponse.Data.Page.MediaList)).
+		Strs("usernames", configs.AnilistUsernames).
+		Int("animes_found", len(merged.Data.Page.MediaList)).
 		Msg("Successfully fetched animes from Anilist")
 
-	return anilistResponse, nil
+	return merged, nil
 }

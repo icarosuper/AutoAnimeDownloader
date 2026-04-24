@@ -23,6 +23,7 @@
     sectionQbit: m.config_section_qbittorrent(),
     sectionFilters: m.config_section_filters(),
     labelUsername: m.config_label_username(),
+    hintAnilistUsernames: m.config_hint_anilist_usernames(),
     labelSavePath: m.config_label_save_path(),
     hintSavePath: m.config_hint_save_path(),
     labelUseCompletedPath: m.config_label_use_completed_path(),
@@ -61,7 +62,7 @@
   const ALL_STATUSES = ["CURRENT", "REPEATING", "PLANNING", "PAUSED", "DROPPED", "COMPLETED"];
 
   let config: Config = {
-    anilist_username: "",
+    anilist_usernames: [],
     save_path: "",
     completed_anime_path: "",
     check_interval: 10,
@@ -94,6 +95,20 @@
       config.delete_statuses = [...(config.delete_statuses ?? []), status];
       config.download_statuses = (config.download_statuses ?? []).filter(s => s !== status);
     }
+  }
+
+  let newAnilistUsername = "";
+
+  function addAnilistUsername() {
+    const trimmed = newAnilistUsername.trim();
+    if (trimmed && !(config.anilist_usernames ?? []).includes(trimmed)) {
+      config.anilist_usernames = [...(config.anilist_usernames ?? []), trimmed];
+    }
+    newAnilistUsername = "";
+  }
+
+  function removeAnilistUsername(item: string) {
+    config.anilist_usernames = (config.anilist_usernames ?? []).filter(i => i !== item);
   }
 
   let newExcludedItem = "";
@@ -133,7 +148,10 @@
     try {
       loading = true;
       const data = await getConfig();
-      config = { ...data };
+      config = { ...data, anilist_usernames: data.anilist_usernames ?? [] };
+      if (config.anilist_username && (config.anilist_usernames ?? []).length === 0) {
+        config.anilist_usernames = [config.anilist_username];
+      }
       useCompletedPath = !!config.completed_anime_path;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.config_error_load());
@@ -146,7 +164,7 @@
     try {
       saving = true;
 
-      if (!config.anilist_username?.trim()) throw new Error(m.config_val_username());
+      if ((config.anilist_usernames ?? []).length === 0) throw new Error(m.config_val_username());
       if (!config.save_path?.trim()) throw new Error(m.config_val_save_path());
       if (!config.qbittorrent_url?.trim()) throw new Error(m.config_val_qbit_url());
       if (config.check_interval <= 0) throw new Error(m.config_val_interval());
@@ -195,13 +213,45 @@
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-5 gap-4">
           <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionAnilist}</h2>
-          <Input
-            id="anilist_username"
-            label={T && T.labelUsername || ""}
-            type="text"
-            bind:value={config.anilist_username}
-            required={true}
-          />
+          <div class="flex flex-col gap-2">
+            <label class="text-sm font-medium text-base-content">{T && T.labelUsername}</label>
+            <p class="text-xs text-base-content/50">{T && T.hintAnilistUsernames}</p>
+            {#if (config.anilist_usernames ?? []).length > 0}
+              <div class="flex flex-wrap gap-2">
+                {#each config.anilist_usernames ?? [] as item}
+                  <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                    {item}
+                    <button
+                      type="button"
+                      on:click={() => removeAnilistUsername(item)}
+                      class="ml-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                      aria-label="Remove {item}"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                      </svg>
+                    </button>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+            <div class="flex gap-2">
+              <input
+                type="text"
+                bind:value={newAnilistUsername}
+                placeholder="Anilist username"
+                class="flex-1 block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
+                on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAnilistUsername(); } }}
+              />
+              <button
+                type="button"
+                on:click={addAnilistUsername}
+                class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </div>
           <div class="flex flex-col gap-2">
             <label class="text-sm font-medium text-base-content">{T && T.labelDownloadStatuses}</label>
             <p class="text-xs text-base-content/50">{T && T.hintDownloadStatuses}</p>

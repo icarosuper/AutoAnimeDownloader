@@ -27,7 +27,7 @@ func (m *mockFileManager) LoadConfigs() (*files.Config, error) {
 	}
 	if m.configs == nil {
 		return &files.Config{
-			AnilistUsername:       "testuser",
+			AnilistUsernames:      []string{"testuser"},
 			SavePath:              "/tmp/test",
 			CompletedAnimePath:    "/tmp/completed",
 			CheckInterval:         10,
@@ -168,8 +168,9 @@ func TestHandleGetConfig(t *testing.T) {
 			t.Fatal("Expected data to be an object")
 		}
 
-		if username, ok := config["anilist_username"].(string); !ok || username != "testuser" {
-			t.Errorf("Expected anilist_username 'testuser', got %v", config["anilist_username"])
+		usernames, ok := config["anilist_usernames"].([]interface{})
+		if !ok || len(usernames) == 0 || usernames[0].(string) != "testuser" {
+			t.Errorf("Expected anilist_usernames ['testuser'], got %v", config["anilist_usernames"])
 		}
 	})
 }
@@ -186,7 +187,7 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 	t.Run("PUT with valid config succeeds", func(t *testing.T) {
 		config := files.Config{
-			AnilistUsername:       "newuser",
+			AnilistUsernames:      []string{"newuser"},
 			SavePath:              "/tmp/newpath",
 			CompletedAnimePath:    "/tmp/newcompleted",
 			CheckInterval:         15,
@@ -253,7 +254,7 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 	t.Run("PUT with invalid check_interval returns 400", func(t *testing.T) {
 		config := files.Config{
-			AnilistUsername:     "testuser",
+			AnilistUsernames:    []string{"testuser"},
 			SavePath:            "/tmp/test",
 			QBittorrentUrl:      "http://localhost:8080",
 			CheckInterval:       0,
@@ -308,7 +309,7 @@ func TestHandleConfig(t *testing.T) {
 
 	t.Run("PUT method calls handleUpdateConfig", func(t *testing.T) {
 		config := files.Config{
-			AnilistUsername:       "testuser",
+			AnilistUsernames:      []string{"testuser"},
 			SavePath:              "/tmp/test",
 			QBittorrentUrl:        "http://localhost:8080",
 			CheckInterval:         10,

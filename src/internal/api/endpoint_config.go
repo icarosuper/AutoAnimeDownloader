@@ -72,9 +72,15 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
+		// Migrate legacy anilist_username → anilist_usernames (supports old CLI clients)
+		if config.AnilistUsername != "" && len(config.AnilistUsernames) == 0 {
+			config.AnilistUsernames = []string{config.AnilistUsername}
+			config.AnilistUsername = ""
+		}
+
 		// Validate required fields
-		if config.AnilistUsername == "" {
-			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Anilist username is required")
+		if len(config.AnilistUsernames) == 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "At least one Anilist username is required")
 			return
 		}
 

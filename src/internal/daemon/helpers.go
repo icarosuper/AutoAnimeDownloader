@@ -41,7 +41,7 @@ func getWebUiURL() string {
 }
 
 func isConfigComplete(config *files.Config) bool {
-	return config.AnilistUsername != "" && config.SavePath != "" && config.QBittorrentUrl != ""
+	return len(config.AnilistUsernames) > 0 && config.SavePath != "" && config.QBittorrentUrl != ""
 }
 
 func openBrowserToConfig(webUIURL string) error {

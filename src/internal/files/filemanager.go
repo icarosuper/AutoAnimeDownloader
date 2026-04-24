@@ -32,7 +32,8 @@ type EpisodeStruct struct {
 type Config struct {
 	SavePath               string   `json:"save_path"`
 	CompletedAnimePath     string   `json:"completed_anime_path"`
-	AnilistUsername        string   `json:"anilist_username"`
+	AnilistUsername        string   `json:"anilist_username,omitempty"`
+	AnilistUsernames       []string `json:"anilist_usernames"`
 	CheckInterval          int      `json:"check_interval"`
 	QBittorrentUrl         string   `json:"qbittorrent_url"`
 	MaxEpisodesPerAnime    int      `json:"max_episodes_per_anime"`
@@ -62,7 +63,7 @@ type FileManager struct {
 func getDefaultConfig() *Config {
 	return &Config{
 		SavePath:              "",
-		AnilistUsername:       "",
+		AnilistUsernames:      []string{},
 		CheckInterval:         10,
 		QBittorrentUrl:        "http://127.0.0.1:8080",
 		MaxEpisodesPerAnime:   12,
@@ -184,6 +185,19 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 
 	if config.ExcludedLists == nil {
 		config.ExcludedLists = []string{}
+	}
+
+	// Migrate deprecated anilist_username (string) → anilist_usernames ([]string)
+	if config.AnilistUsername != "" && len(config.AnilistUsernames) == 0 {
+		config.AnilistUsernames = []string{config.AnilistUsername}
+		config.AnilistUsername = ""
+		if err := m.saveConfigsLocked(config); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to save migrated config")
+		}
+	}
+
+	if config.AnilistUsernames == nil {
+		config.AnilistUsernames = []string{}
 	}
 
 	return config, nil

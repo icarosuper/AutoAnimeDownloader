@@ -128,8 +128,8 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		}
 
 		// Merge CURRENT animes from AniList so they remain visible even with 0 downloaded episodes
-		if config.AnilistUsername != "" {
-			mergeCurrentAniListAnimes(animeMap, config.AnilistUsername, config.ExcludedLists, config.DownloadStatuses)
+		for _, username := range config.AnilistUsernames {
+			mergeCurrentAniListAnimes(animeMap, username, config.ExcludedLists, config.DownloadStatuses)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
