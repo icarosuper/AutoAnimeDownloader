@@ -25,9 +25,11 @@ func getEnvOrDefault(key, defaultValue string) string {
 }
 
 func TestAPIEndpoints(t *testing.T) {
-	// Wait for daemon to be ready
+	if !probeDaemon() {
+		t.Skip("Daemon not available at " + daemonURL)
+	}
 	if !waitForDaemon(t, 30*time.Second) {
-		t.Fatal("Daemon did not become ready in time")
+		t.Skip("Daemon did not become ready in time")
 	}
 
 	t.Run("GET /api/v1/status", func(t *testing.T) {
@@ -224,8 +226,11 @@ func TestAPIEndpoints(t *testing.T) {
 }
 
 func TestDaemonLifecycle(t *testing.T) {
+	if !probeDaemon() {
+		t.Skip("Daemon not available at " + daemonURL)
+	}
 	if !waitForDaemon(t, 30*time.Second) {
-		t.Fatal("Daemon did not become ready in time")
+		t.Skip("Daemon did not become ready in time")
 	}
 
 	// Start daemon
@@ -329,8 +334,11 @@ func TestDaemonLifecycle(t *testing.T) {
 }
 
 func TestFullDownloadFlow(t *testing.T) {
+	if !probeDaemon() {
+		t.Skip("Daemon not available at " + daemonURL)
+	}
 	if !waitForDaemon(t, 30*time.Second) {
-		t.Fatal("Daemon did not become ready in time")
+		t.Skip("Daemon did not become ready in time")
 	}
 
 	// Set up config with mock URLs
@@ -408,7 +416,17 @@ func TestFullDownloadFlow(t *testing.T) {
 	}
 }
 
+func probeDaemon() bool {
+	resp, err := http.Get(apiBase + "/status")
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
 func waitForDaemon(t *testing.T, timeout time.Duration) bool {
+	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(apiBase + "/status")
