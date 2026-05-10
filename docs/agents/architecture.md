@@ -258,14 +258,55 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 
 | Symbol | Purpose |
 |--------|---------|
-| `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Episode*`, `Resolution*`, `Season*`, `Size`, `Fansub`, `IsBatch` |
-| `ScrapNyaa(title, episode)` | Scrapes Nyaa for a single episode |
+| `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Size`, `Fansub`, `IsBatch` |
+| `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
+| `ScrapNyaa(title, episode)` | Scrapes Nyaa for a single episode (2 pages) |
 | `ScrapNyaaForBatch(title, season*)` | Scrapes for batch (completed anime) |
-| `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie |
-| `ScrapNyaaForMultipleEpisodes(title, eps[])` | Scrapes for multiple specific episodes |
-| `GenerateSearchTitleVariants(romaji, english)` | Generates search query variants: clean romaji → original romaji → clean english → original english |
-| `httpGet` var | Swappable — overridden in tests via `MockNyaaHttpGet` |
+| `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
+| `ScrapNyaaForMultipleEpisodes(title, eps[])` | Scrapes for multiple specific episodes (2 pages) |
+| `GenerateSearchTitleVariants(romaji, english)` | Search query variants: clean romaji → original romaji → clean english → original english |
+| `SortTorrentResults(results)` | Sorts by: uncensored → resolution → fansub → health score → size |
+| `SortMovieResults(results)` | Sorts by: source (BD>WEB) → resolution → codec → fansub → audio → health → size |
+| `IsBatch(name)` | Exported batch detection for tests |
+| `IsMovie(torrentName, animeName, isFormatMovie?)` | Exported movie detection for tests |
+| `MockNyaaHttpGet(fn)` | Replaces `httpGet` for tests; returns restore func |
+| `httpGet` var | Swappable HTTP func — overridden in tests via `MockNyaaHttpGet` |
 | `getNyaaBaseURL()` | Reads `NYAA_URL` env or defaults to `https://nyaa.si` |
+
+### `src/internal/nyaa/nyaa_regex.go`
+
+Pre-compiled package-level regex vars. All compiled at package init for performance inside per-torrent loops.
+
+| Var | Purpose |
+|-----|---------|
+| `reSeasonStrip` | Strips season suffixes from query names before search |
+| `reBatchPatterns` | 17 patterns detecting batch torrents (range, complete, season markers) |
+| `reBatchRange`, `reBatchComplete` | Batch episode range and "complete/batch" extraction |
+| `reIgnorePatterns` | Unwanted releases: dub, raw, hardcoded, re-encode |
+| `reMovieKeywords`, `reOvaPattern`, `reSpecialPattern`, `reHasEpisode` | Movie/OVA/special detection, episode presence check |
+| `reFansub` | Extracts fansub from `[FANSUB]` or `(FANSUB)` prefix |
+| `reEpisodePatterns` | 10 episode extraction patterns ordered by specificity (SxxExx → `- 05` → `[05]` → etc.) |
+| `reSeasonPatterns` | 7 season extraction patterns (S01 → Season 1 → ordinal → Cour) |
+| `reResolutionPatterns` | Resolution extraction (1080p, 1920x1080, 4K, etc.) |
+| `reSourcePatterns` | Release source (BD, BDRip, WEB-DL, HDTV, etc.) |
+| `reCodecPatterns` | Video codec (HEVC, AV1, H.264, XviD) |
+| `reAudioPatterns` | Audio codec (FLAC, DTS-HD, TrueHD, DDP, AAC, AC3, MP3) |
+| `reSeasonNamePatterns` | Season name stripping for query base extraction |
+| `reParseSizeRe` | Size string parsing (e.g. `"1.5 GiB"`) |
+
+### `src/internal/nyaa/nyaa_match.go`
+
+Title-matching logic for filtering Nyaa search results.
+
+| Symbol | Purpose |
+|--------|---------|
+| `titleTechnicalTokens` | Map of tokens to strip before title comparison (codecs, sources, fansubs, season/ep markers) |
+| `extractTitleTokens(name)` | Returns meaningful title tokens, stripping all technical metadata |
+| `isTitleTechnicalToken(s)` | True if token is technical (codec, resolution, episode marker, hex hash, etc.) |
+| `jaccardSimilarity(a, b)` | `|intersection| / |union|` over two token sets |
+| `titleJaccardThreshold` | `0.8` — minimum Jaccard similarity for a match |
+| `titleMatchesQuery(torrentName, query)` | Two-pass: (1) all query tokens present in torrent title; (2) Jaccard ≥ 0.8. Prevents partial-title and spinoff false positives |
+| `TitleMatchesQuery(torrentName, query)` | Exported alias for tests |
 
 ### `src/internal/torrents/torrents.go`
 

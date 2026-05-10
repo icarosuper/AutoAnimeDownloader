@@ -1,11 +1,5 @@
 # Coding Conventions
 
-## Critical Rules
-
-1. **Always run tests** after implementing anything: `go test ./...`
-2. **Always update docs** (`docs/agents/`) when adding/changing endpoints, config fields, env vars, or patterns
-3. **Always update Swagger** annotations when changing API endpoints
-
 ## Error Handling
 
 Wrap errors with `fmt.Errorf("failed to <action>: %w", err)`. Use `%w` (not `%v`) so callers can use `errors.Is`/`errors.As`.

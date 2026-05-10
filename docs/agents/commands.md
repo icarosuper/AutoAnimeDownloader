@@ -2,17 +2,9 @@
 
 ## Backend (Go)
 
+For test commands and mock patterns, see [Testing](testing.md).
+
 ```bash
-# Run unit tests
-go test ./...
-go test -v ./src/tests/unit/
-
-# Run a single test
-go test -v -run TestName ./src/tests/unit/
-
-# Run integration tests (requires Docker)
-docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit
-
 # Generate Swagger docs
 swag init -g src/cmd/daemon/main.go -o docs/swagger
 
