@@ -407,7 +407,7 @@ func handleAnimes() error {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Name", "Episodes", "Latest Episode ID"})
 		for _, anime := range animes {
-			t.AppendRow(table.Row{anime.Name, anime.EpisodesCount, anime.LatestEpisodeID})
+			t.AppendRow(table.Row{anime.Name, anime.EpisodesDownloaded, anime.LatestEpisodeID})
 		}
 		t.Render()
 	}

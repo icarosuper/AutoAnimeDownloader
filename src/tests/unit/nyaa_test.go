@@ -991,3 +991,67 @@ func TestAudioPriority_CorrectOrder(t *testing.T) {
 	// Função não é exportada, testada indiretamente via SortMovieResults
 	t.Skip("audioPriority is not exported - tested indirectly via SortMovieResults")
 }
+
+func TestTitleMatchesQuery_AcceptsCorrectTorrents(t *testing.T) {
+	tests := []struct {
+		torrent string
+		query   string
+	}{
+		{"[SubsPlease] Kemono Friends - 05 (1080p)", "Kemono Friends"},
+		{"Kemono Friends Episode 5", "Kemono Friends"},
+		{"[Erai-Raws] Lucky Star - 15 (720p)", "Lucky Star"},
+		{"Lucky Star S01E15 1080p", "Lucky Star"},
+		{"[SubsPlease] Silent Witch - Chinmoku no Majo no Kakushigoto - 03v2 (1080p)", "Silent Witch: Chinmoku no Majo no Kakushigoto"},
+		{"SPY x FAMILY Season 3 - 03 [1080p]", "SPY x FAMILY"},
+		{"[SubsPlease] Machikado Mazoku S2 - 07 (1080p)", "Machikado Mazoku"},
+		{"My.Show.S01E02.1080p", "My.Show"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.torrent, func(t *testing.T) {
+			if !nyaa.TitleMatchesQuery(tt.torrent, tt.query) {
+				t.Errorf("TitleMatchesQuery(%q, %q) = false, want true", tt.torrent, tt.query)
+			}
+		})
+	}
+}
+
+func TestTitleMatchesQuery_RejectsSpinoffsAndWrongAnime(t *testing.T) {
+	tests := []struct {
+		torrent string
+		query   string
+	}{
+		// Spinoff com título muito diferente
+		{"[SubsPlease] Sword Art Online Alternative Gun Gale Online - 05 (1080p)", "Sword Art Online"},
+		// Anime diferente com palavras em comum
+		{"Kemono Jihen Episode 5", "Kemono Friends"},
+		{"Manaria Friends Episode 5", "Kemono Friends"},
+		// Título parcial (falta parte do nome)
+		{"Silent Witch Episode 3", "Silent Witch: Chinmoku no Majo no Kakushigoto"},
+		{"Chinmoku no Majo no Kakushigoto Episode 3", "Silent Witch: Chinmoku no Majo no Kakushigoto"},
+		// Anime completamente diferente
+		{"Different Anime - 05 [1080p]", "Kemono Friends"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.torrent, func(t *testing.T) {
+			if nyaa.TitleMatchesQuery(tt.torrent, tt.query) {
+				t.Errorf("TitleMatchesQuery(%q, %q) = true, want false", tt.torrent, tt.query)
+			}
+		})
+	}
+}
+
+func TestNyaaModule_DoesNotReturnSpinoffs(t *testing.T) {
+	options := testOptions{
+		animeName: "Sword Art Online",
+		episode:   5,
+		correct: []string{
+			"[SubsPlease] Sword Art Online - 05 (1080p)",
+			"Sword Art Online Episode 5",
+		},
+		incorrect: []string{
+			"[SubsPlease] Sword Art Online Alternative Gun Gale Online - 05 (1080p)",
+			"[SubsPlease] Sword Art Online Progressive - 05 (1080p)",
+		},
+	}
+	runEpisodeNameTest(options, t)
+}

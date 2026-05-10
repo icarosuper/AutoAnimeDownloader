@@ -11,14 +11,16 @@ import (
 )
 
 type AnimeInfo struct {
-	AnimeID          int    `json:"anime_id" example:"12345"`
-	Name             string `json:"name" example:"Naruto"`
-	EpisodesCount    int    `json:"episodes_count" example:"8"`
-	TotalEpisodes    int    `json:"total_episodes" example:"12"`
-	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
-	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
-	CoverImage       string `json:"cover_image,omitempty"`
-	IsBlacklisted    bool   `json:"is_blacklisted,omitempty"`
+	AnimeID            int    `json:"anime_id" example:"12345"`
+	Name               string `json:"name" example:"Naruto"`
+	EpisodesDownloaded int    `json:"episodes_downloaded" example:"8"`
+	EpisodesReleased   int    `json:"episodes_released" example:"10"`
+	EpisodesWatched    int    `json:"episodes_watched" example:"5"`
+	TotalEpisodes      int    `json:"total_episodes" example:"12"`
+	LatestEpisodeID    int    `json:"latest_episode_id" example:"12"`
+	LastDownloadDate   string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
+	CoverImage         string `json:"cover_image,omitempty"`
+	IsBlacklisted      bool   `json:"is_blacklisted,omitempty"`
 }
 
 func extractAnimeName(episodeName string) string {
@@ -97,7 +99,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			}
 
 			if animeInfo, exists := animeMap[key]; exists {
-				animeInfo.EpisodesCount++
+				animeInfo.EpisodesDownloaded++
 				if episode.EpisodeID > animeInfo.LatestEpisodeID {
 					animeInfo.LatestEpisodeID = episode.EpisodeID
 				}
@@ -117,12 +119,12 @@ func handleAnimes(server *Server) http.HandlerFunc {
 				}
 			} else {
 				animeMap[key] = &AnimeInfo{
-					AnimeID:          episode.AnimeID,
-					Name:             displayName,
-					EpisodesCount:    1,
-					TotalEpisodes:    episode.AnimeTotalEpisodes,
-					LatestEpisodeID:  episode.EpisodeID,
-					LastDownloadDate: episode.DownloadDate.Format(time.RFC3339),
+					AnimeID:            episode.AnimeID,
+					Name:               displayName,
+					EpisodesDownloaded: 1,
+					TotalEpisodes:      episode.AnimeTotalEpisodes,
+					LatestEpisodeID:    episode.EpisodeID,
+					LastDownloadDate:   episode.DownloadDate.Format(time.RFC3339),
 				}
 			}
 		}
@@ -203,23 +205,36 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 			coverImage = ml.Media.CoverImage.Medium
 		}
 
+		episodesReleased := 0
+		for _, node := range ml.Media.AiringSchedule.Nodes {
+			if node.TimeUntilAiring <= 0 && node.Episode > episodesReleased {
+				episodesReleased = node.Episode
+			}
+		}
+		if episodesReleased == 0 && ml.Media.Status == anilist.MediaStatusFinished {
+			episodesReleased = totalEpisodes
+		}
+
 		if existing, ok := knownByID[ml.Id]; ok {
 			existing.Name = name
 			if existing.TotalEpisodes == 0 {
 				existing.TotalEpisodes = totalEpisodes
 			}
+			existing.EpisodesReleased = episodesReleased
+			existing.EpisodesWatched = ml.Progress
 			existing.CoverImage = coverImage
 			existing.IsBlacklisted = isBlacklisted
 			continue
 		}
 
 		animeMap[name] = &AnimeInfo{
-			AnimeID:       ml.Id,
-			Name:          name,
-			EpisodesCount: 0,
-			TotalEpisodes: totalEpisodes,
-			CoverImage:    coverImage,
-			IsBlacklisted: isBlacklisted,
+			AnimeID:          ml.Id,
+			Name:             name,
+			EpisodesReleased: episodesReleased,
+			EpisodesWatched:  ml.Progress,
+			TotalEpisodes:    totalEpisodes,
+			CoverImage:       coverImage,
+			IsBlacklisted:    isBlacklisted,
 		}
 	}
 }

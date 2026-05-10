@@ -37,13 +37,16 @@
     animesHeader: m.status_animes_header(),
     searchPlaceholder: m.status_search_placeholder(),
     colName: m.status_col_name(),
-    colEpisodes: m.status_col_episodes(),
     colBlacklist: m.status_col_blacklist(),
     colProgress: m.status_col_progress(),
     colLastDownload: m.status_col_last_download(),
     emptyTitle: m.status_empty_title(),
     emptyDesc: m.status_empty_desc(),
     goToConfig: m.status_go_to_config(),
+    filterUnwatched: m.status_filter_unwatched(),
+    legendWatched: m.status_legend_watched(),
+    legendReleased: m.status_legend_released(),
+    legendTotal: m.status_legend_total(),
   }
 
   let status: StatusResponse | null = null;
@@ -52,29 +55,35 @@
   let loading = true;
   let actionLoading = false;
   let search = "";
+  let filterUnwatched = false;
   let now = Date.now();
 
-  type SortKey = "episodes_count" | "last_download_date";
+  type SortKey = "name" | "episodes_watched" | "last_download_date";
   let sortKey: SortKey = "last_download_date";
   let sortDir: "asc" | "desc" = "desc";
 
-  $: filteredAnimes = animes.filter(a =>
-    a.name.toLowerCase().includes(search.toLowerCase())
-  );
+  $: filteredAnimes = animes.filter(a => {
+    if (!a.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterUnwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false;
+    return true;
+  });
 
   $: sortedAnimes = [...filteredAnimes].sort((a, b) => {
-    let valA = a[sortKey];
-    let valB = b[sortKey];
-    if (sortKey === "last_download_date") {
-      valA = new Date((valA as string) || "1970-01-01").getTime() as any;
-      valB = new Date((valB as string) || "1970-01-01").getTime() as any;
+    if (sortKey === "name") {
+      return sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
     }
+    let valA: any = sortKey === "last_download_date"
+      ? new Date((a.last_download_date as string) || "1970-01-01").getTime()
+      : a[sortKey];
+    let valB: any = sortKey === "last_download_date"
+      ? new Date((b.last_download_date as string) || "1970-01-01").getTime()
+      : b[sortKey];
     if (valA < valB) return sortDir === "asc" ? -1 : 1;
     if (valA > valB) return sortDir === "asc" ? 1 : -1;
     return 0;
   });
 
-  $: totalEpisodes = animes.reduce((sum, a) => sum + a.episodes_count, 0);
+  $: totalEpisodes = animes.reduce((sum, a) => sum + a.episodes_downloaded, 0);
 
   $: nextCheckIn = (() => {
     if (!status?.last_check || !checkInterval || status.status === "stopped") return null;
@@ -93,7 +102,7 @@
       sortDir = sortDir === "desc" ? "asc" : "desc";
     } else {
       sortKey = key;
-      sortDir = "desc";
+      sortDir = key === "name" ? "asc" : "desc";
     }
   }
 
@@ -320,6 +329,11 @@
         <!-- List header -->
         <div class="flex flex-col sm:flex-row sm:items-center gap-3">
           <h2 class="text-base font-medium text-base-content flex-1">{T && T.animesHeader}</h2>
+          {#if search || filterUnwatched}
+            <span class="text-xs text-base-content/50 whitespace-nowrap">
+              {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
+            </span>
+          {/if}
           <!-- Search -->
           <label class="input input-sm input-bordered flex items-center gap-2 w-full sm:w-64">
             <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -336,11 +350,19 @@
               <button class="opacity-50 hover:opacity-100" on:click={() => search = ""}>✕</button>
             {/if}
           </label>
-          {#if search}
-            <span class="text-xs text-base-content/50 whitespace-nowrap">
-              {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
-            </span>
-          {/if}
+          <!-- Unwatched filter chip -->
+          <button
+            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors {filterUnwatched ? 'bg-blue-600 text-white' : 'bg-base-300 text-base-content/60 hover:bg-base-300/80'}"
+            on:click={() => filterUnwatched = !filterUnwatched}
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+            {T && T.filterUnwatched}
+          </button>
         </div>
 
         {#if animes.length === 0}
@@ -363,18 +385,17 @@
         {:else}
           <!-- Desktop Table -->
           <div class="hidden md:block overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-            <table class="w-auto divide-y divide-gray-200 dark:divide-gray-700">
+            <table class="w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
                   <th class="px-4 py-3 w-14"></th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{T && T.colName}</th>
                   <th
-                    class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-white"
-                    on:click={() => handleSort("episodes_count")}
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-white"
+                    on:click={() => handleSort("name")}
                   >
-                    <span class="inline-flex items-center justify-center gap-1">
-                      {T && T.colEpisodes}
-                      {#if sortKey === "episodes_count"}
+                    <span class="inline-flex items-center gap-1">
+                      {T && T.colName}
+                      {#if sortKey === "name"}
                         <span class="text-blue-500">{sortDir === "asc" ? "▲" : "▼"}</span>
                       {:else}
                         <span class="opacity-30">▲</span>
@@ -382,7 +403,33 @@
                     </span>
                   </th>
                   <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" title={T && T.colBlacklist}>{T && T.colBlacklist}</th>
-                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{T && T.colProgress}</th>
+                  <th
+                    class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-white"
+                    on:click={() => handleSort("episodes_watched")}
+                  >
+                    <div class="inline-flex items-center justify-center gap-1">
+                      {T && T.colProgress}
+                      {#if sortKey === "episodes_watched"}
+                        <span class="text-blue-500">{sortDir === "asc" ? "▲" : "▼"}</span>
+                      {:else}
+                        <span class="opacity-30">▲</span>
+                      {/if}
+                    </div>
+                    <div class="flex items-center justify-center gap-2 mt-1 font-normal normal-case tracking-normal text-[10px] text-gray-400 dark:text-gray-500">
+                      <span class="flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-sm bg-success inline-block"></span>
+                        {T && T.legendWatched}
+                      </span>
+                      <span class="flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-sm bg-primary inline-block"></span>
+                        {T && T.legendReleased}
+                      </span>
+                      <span class="flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-sm bg-base-300 border border-base-content/20 inline-block"></span>
+                        {T && T.legendTotal}
+                      </span>
+                    </div>
+                  </th>
                   <th
                     class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 dark:hover:text-white"
                     on:click={() => handleSort("last_download_date")}
@@ -400,7 +447,11 @@
               </thead>
               <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {#each sortedAnimes as anime}
-                  {@const pct = anime.total_episodes ? Math.round((anime.episodes_count / anime.total_episodes) * 100) : null}
+                  {@const _denom = anime.total_episodes > 0 ? anime.total_episodes : anime.episodes_released}
+                  {@const _watched = _denom ? Math.min(anime.episodes_watched, _denom) : 0}
+                  {@const _released = anime.total_episodes > 0 ? Math.min(Math.max(anime.episodes_released, _watched), anime.total_episodes) : _denom}
+                  {@const watchedPct = _denom ? (_watched / _denom) * 100 : null}
+                  {@const releasedPct = _denom ? ((_released - _watched) / _denom) * 100 : 0}
                   <tr
                     class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors {anime.anime_id ? 'cursor-pointer' : ''}"
                     on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
@@ -421,19 +472,24 @@
                         </div>
                       {/if}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                      {#if anime.anime_id}
-                        <a
-                          href="#/status/{anime.anime_id}"
-                          class="text-blue-600 dark:text-blue-400 hover:underline"
-                          on:click|stopPropagation
-                        >{anime.name}</a>
-                      {:else}
-                        {anime.name}
-                      {/if}
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
-                      {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : anime.episodes_count}
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white max-w-xs">
+                      <div class="relative group/name">
+                        {#if anime.anime_id}
+                          <a
+                            href="#/status/{anime.anime_id}"
+                            class="text-blue-600 dark:text-blue-400 hover:underline block truncate"
+                            on:click|stopPropagation
+                          >{anime.name}</a>
+                        {:else}
+                          <span class="block truncate">{anime.name}</span>
+                        {/if}
+                        <div class="absolute bottom-full left-0 mb-2.5 invisible group-hover/name:visible z-50 pointer-events-none">
+                          <div class="bg-gray-900 dark:bg-gray-950 text-white text-xs rounded-lg px-3 py-2 shadow-xl border border-white/10 max-w-xs">
+                            <span class="text-gray-100 leading-snug">{anime.name}</span>
+                          </div>
+                          <div class="absolute top-full left-4 border-[5px] border-transparent border-t-gray-900 dark:border-t-gray-950"></div>
+                        </div>
+                      </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-center">
                       {#if anime.is_blacklisted}
@@ -446,14 +502,37 @@
                       {/if}
                     </td>
                     <td class="px-6 py-4 min-w-36">
-                      {#if pct !== null}
+                      {#if watchedPct !== null}
                         <div class="flex items-center justify-center gap-2">
-                          <progress
-                            class="progress w-24 {pct === 100 ? 'progress-success' : 'progress-primary'}"
-                            value={pct}
-                            max="100"
-                          ></progress>
-                          <span class="text-xs text-gray-500 dark:text-gray-400">{pct}%</span>
+                          <div class="relative group/bar">
+                            <div class="flex h-2 w-24 rounded-full overflow-hidden bg-base-300 cursor-default">
+                              <div class="h-full bg-success" style="width: {watchedPct}%"></div>
+                              <div class="h-full bg-primary" style="width: {releasedPct}%"></div>
+                            </div>
+                            <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 invisible group-hover/bar:visible z-50 pointer-events-none">
+                              <div class="bg-gray-900 dark:bg-gray-950 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap space-y-1.5 border border-white/10">
+                                <div class="flex items-center gap-2">
+                                  <span class="w-2 h-2 rounded-sm bg-success shrink-0"></span>
+                                  <span class="text-gray-300">{T && T.legendWatched}</span>
+                                  <span class="ml-auto font-semibold pl-4">{_watched}</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                  <span class="w-2 h-2 rounded-sm bg-primary shrink-0"></span>
+                                  <span class="text-gray-300">{T && T.legendReleased}</span>
+                                  <span class="ml-auto font-semibold pl-4">{_released}</span>
+                                </div>
+                                {#if anime.total_episodes > 0}
+                                  <div class="flex items-center gap-2 border-t border-white/10 pt-1.5">
+                                    <span class="w-2 h-2 rounded-sm bg-gray-500 shrink-0"></span>
+                                    <span class="text-gray-300">{T && T.legendTotal}</span>
+                                    <span class="ml-auto font-semibold pl-4">{anime.total_episodes}</span>
+                                  </div>
+                                {/if}
+                              </div>
+                              <div class="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-gray-950"></div>
+                            </div>
+                          </div>
+                          <span class="text-xs text-gray-500 dark:text-gray-400">{_watched}/{_denom}</span>
                         </div>
                       {:else}
                         <span class="text-gray-300 dark:text-gray-600 text-xs text-center block">—</span>
@@ -471,7 +550,11 @@
           <!-- Mobile Cards -->
           <div class="md:hidden space-y-2">
             {#each sortedAnimes as anime}
-              {@const pct = anime.total_episodes ? Math.round((anime.episodes_count / anime.total_episodes) * 100) : null}
+              {@const _denom = anime.total_episodes > 0 ? anime.total_episodes : anime.episodes_released}
+              {@const _watched = _denom ? Math.min(anime.episodes_watched, _denom) : 0}
+              {@const _released = anime.total_episodes > 0 ? Math.min(Math.max(anime.episodes_released, _watched), anime.total_episodes) : _denom}
+              {@const watchedPct = _denom ? (_watched / _denom) * 100 : null}
+              {@const releasedPct = _denom ? ((_released - _watched) / _denom) * 100 : 0}
               <div
                 class="rounded-lg bg-base-100 border border-base-300 p-3 {anime.anime_id ? 'cursor-pointer active:opacity-80' : ''}"
                 on:click={() => anime.anime_id && (window.location.hash = `#/status/${anime.anime_id}`)}
@@ -498,18 +581,38 @@
                       </svg>
                     {/if}
                   </div>
-                  <span class="text-xs text-base-content/50 whitespace-nowrap shrink-0">
-                    {anime.total_episodes ? `${anime.episodes_count}/${anime.total_episodes}` : `${anime.episodes_count} eps`}
-                  </span>
                 </div>
-                {#if pct !== null}
+                {#if watchedPct !== null}
                   <div class="flex items-center gap-2">
-                    <progress
-                      class="progress flex-1 {pct === 100 ? 'progress-success' : 'progress-primary'}"
-                      value={pct}
-                      max="100"
-                    ></progress>
-                    <span class="text-xs text-base-content/50">{pct}%</span>
+                    <div class="relative group/bar flex-1">
+                      <div class="flex h-2 w-full rounded-full overflow-hidden bg-base-300 cursor-default">
+                        <div class="h-full bg-success" style="width: {watchedPct}%"></div>
+                        <div class="h-full bg-primary" style="width: {releasedPct}%"></div>
+                      </div>
+                      <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 invisible group-hover/bar:visible z-50 pointer-events-none">
+                        <div class="bg-gray-900 dark:bg-gray-950 text-white text-xs rounded-lg px-3 py-2 shadow-xl whitespace-nowrap space-y-1.5 border border-white/10">
+                          <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-sm bg-success shrink-0"></span>
+                            <span class="text-gray-300">{T && T.legendWatched}</span>
+                            <span class="ml-auto font-semibold pl-4">{_watched}</span>
+                          </div>
+                          <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-sm bg-primary shrink-0"></span>
+                            <span class="text-gray-300">{T && T.legendReleased}</span>
+                            <span class="ml-auto font-semibold pl-4">{_released}</span>
+                          </div>
+                          {#if anime.total_episodes > 0}
+                            <div class="flex items-center gap-2 border-t border-white/10 pt-1.5">
+                              <span class="w-2 h-2 rounded-sm bg-gray-500 shrink-0"></span>
+                              <span class="text-gray-300">{T && T.legendTotal}</span>
+                              <span class="ml-auto font-semibold pl-4">{anime.total_episodes}</span>
+                            </div>
+                          {/if}
+                        </div>
+                        <div class="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-900 dark:border-t-gray-950"></div>
+                      </div>
+                    </div>
+                    <span class="text-xs text-base-content/50">{_watched}/{_denom}</span>
                   </div>
                 {/if}
                 <p class="text-xs text-base-content/40 mt-1">

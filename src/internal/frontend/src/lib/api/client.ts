@@ -95,7 +95,9 @@ export interface Config {
 export interface AnimeInfo {
   anime_id: number
   name: string
-  episodes_count: number
+  episodes_downloaded: number
+  episodes_released: number
+  episodes_watched: number
   total_episodes: number
   latest_episode_id: number
   last_download_date: string

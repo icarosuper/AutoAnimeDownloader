@@ -159,8 +159,8 @@ func TestHandleAnimes(t *testing.T) {
 		if animeData["name"] != "Vivy: Fluorite Eye's Song" {
 			t.Errorf("Expected anime name 'Vivy: Fluorite Eye's Song', got %v", animeData["name"])
 		}
-		if animeData["episodes_count"].(float64) != 0 {
-			t.Errorf("Expected episodes_count=0, got %v", animeData["episodes_count"])
+		if animeData["episodes_downloaded"].(float64) != 0 {
+			t.Errorf("Expected episodes_downloaded=0, got %v", animeData["episodes_downloaded"])
 		}
 		if animeData["anime_id"].(float64) != 42 {
 			t.Errorf("Expected anime_id=42, got %v", animeData["anime_id"])
