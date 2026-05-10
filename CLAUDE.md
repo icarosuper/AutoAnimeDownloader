@@ -9,12 +9,12 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 ## Important — After Any Change
 
 1. **Run tests**: `go test ./...`
-2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`
+2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add an entry to `decisions.md`
 3. **Regenerate Swagger**: if API changed → `swag init -g src/cmd/daemon/main.go -o docs/swagger`
 
 ## Docs
 
-- [Architecture](docs/agents/architecture.md) — read when navigating code or adding features; maps all packages, symbols, data flow, API endpoints
+- [Architecture](docs/agents/architecture.md) — read when navigating code or adding features; update when adding packages, symbols, or API endpoints; maps all packages, symbols, data flow, API endpoints
 - [Rules](docs/agents/rules.md) — read when adding/removing files or unsure about a convention
 - [Conventions](docs/agents/conventions.md) — read when writing Go code; error handling, handler pattern, naming, checklists for new endpoints/config fields
 - [Config Reference](docs/agents/config.md) — read when touching `config.json` fields
