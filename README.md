@@ -36,7 +36,7 @@ Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for ma
 
 | Dashboard | Anime Status | Configuration |
 |-----------|--------------|--------------|
-| ![Dashboard](https://i.imgur.com/cDk8o3Y.png) | ![Anime Status](https://i.imgur.com/vjmUxqL.png) | ![Configuration](https://i.imgur.com/vAFpGTy.png) |
+| ![Dashboard](https://i.imgur.com/i8gVepu.png) | ![Anime Status](https://i.imgur.com/vjmUxqL.png) | ![Configuration](https://i.imgur.com/vAFpGTy.png) |
 
 ## Requirements
 
