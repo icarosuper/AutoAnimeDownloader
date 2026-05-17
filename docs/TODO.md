@@ -11,20 +11,28 @@
 	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
 	- Usuário por reordenar, adicionar e excluir itens
 	- Botão pra voltar pro default
-- Tela do anime
-	- Botão de baixar o anime em batch
-		- Só aparece se o anime estiver finalizado
-		- Mostra modal com opcões no nyaa?
-		- Exclúi episódios avulsos ao baixar batch
 - Baixar animes avulsos
 	- Nova tela de baixar animes avulsos.
 	- Nessa tela vai ter uma barra de pesquisa.
 	- Ao pesquisar vai buscar animes no anilist.
 	- Ao selecionar um anime vai adicionar anime aos animes trackeados
 	- Vai ter que implementar um gerenciamento de tracking do anime
-- Multi contas
+- Push notifications
+	- Notificar ao baixar novo episódio
+	- Suportar Discord webhook, Telegram, ntfy
+	- Um handler + config field, chamado após addTorrent
+- Fontes alternativas de torrent
+	- Fallback pra AnimeTosho quando Nyaa não retorna resultado
+	- Abstrair interface TorrentSource com múltiplas implementações
+- Integração Jellyfin/Plex
+	- Trigger de library scan após download concluído
+	- Marcar episódio como assistido no Anilist após assistir
+- Dashboard de estatísticas
+	- Episódios baixados por semana/anime
+	- Tamanho total, tamanho disponível no disco
+	- Fansubs mais usados
+	- Dados já disponíveis no downloaded_episodes JSONL
 - Windows
 	- Autenticar app?
 	- Testar no windows
 - Torrent imbutido
-- Trocar arquivos de configuracão por sqlite?

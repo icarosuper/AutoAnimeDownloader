@@ -378,3 +378,11 @@ Exports typed fetch wrappers for every endpoint. Uses `window.location.origin` a
 **WebSocket client** (`src/lib/websocket/client.ts`):
 
 Connects to `/api/v1/ws`, updates `wsState` store on messages.
+
+## Implemented Features (notable)
+
+**Manual magnet paste**: `AnimeDetail.svelte` exposes a magnet input UI that calls `/api/v1/animes/{id}/episodes/{episodeId}/replace` (per-episode) or `/api/v1/animes/{id}/replace` (full anime/batch). Allows bypassing Nyaa search and sending any magnet link directly to qBittorrent.
+
+## Planned / Not Yet Implemented
+
+**Multi-account Anilist**: Current config holds a single `AnilistUsername` string. Multi-account support is planned — would require either an array of usernames in config or a separate accounts file, and separate episode tracking per account.
