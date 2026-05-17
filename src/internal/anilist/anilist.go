@@ -79,6 +79,8 @@ type Media struct {
 	Format         MediaFormat    `json:"format"`
 	Title          Title          `json:"title"`
 	Episodes       *int           `json:"episodes"`
+	Synonyms       []string       `json:"synonyms"`
+	Relations      MediaRelations `json:"relations"`
 	CoverImage     CoverImage     `json:"coverImage"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 }
@@ -86,6 +88,21 @@ type Media struct {
 type Title struct {
 	English *string `json:"english"`
 	Romaji  *string `json:"romaji"`
+}
+
+type MediaRelationNode struct {
+	Title    Title    `json:"title"`
+	Synonyms []string `json:"synonyms"`
+	Episodes *int     `json:"episodes"`
+}
+
+type MediaRelationEdge struct {
+	Node         MediaRelationNode `json:"node"`
+	RelationType string            `json:"relationType"`
+}
+
+type MediaRelations struct {
+	Edges []MediaRelationEdge `json:"edges"`
 }
 
 type AiringSchedule struct {
@@ -193,6 +210,20 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 						title {
 							english
 							romaji
+						}
+						synonyms
+						relations {
+							edges {
+								node {
+									title {
+										english
+										romaji
+									}
+									synonyms
+									episodes
+								}
+								relationType
+							}
 						}
 						coverImage {
 							large

@@ -74,7 +74,7 @@ func processAnimeEpisodes(
 
 		// Fallback: individual episode search
 		if len(magnets) == 0 {
-			for _, tr := range searchNyaaForSingleEpisode(ep, anime.Media.Title, customQuery) {
+			for _, tr := range searchNyaaForSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery) {
 				magnets = append(magnets, tr.MagnetLink)
 			}
 		}
@@ -165,8 +165,7 @@ func resolveSearchStrategy(anime anilist.MediaList, animeTitle string, episodesT
 			Str("anime", animeTitle).
 			Msg("Detected finished anime - searching for batch torrent")
 
-		requestedSeason := extractSeasonFromAnime(anime)
-		batchResult := searchNyaaForBatch(anime.Media.Title, requestedSeason, customQuery)
+		batchResult := searchNyaaForBatch(anime.Media.Title, anime.Media.Synonyms, customQuery)
 
 		if len(batchResult) > 0 {
 			for _, ep := range episodesToDownload {
@@ -190,7 +189,7 @@ func resolveSearchStrategy(anime anilist.MediaList, animeTitle string, episodesT
 		eps = append(eps, ep.Episode)
 	}
 
-	multipleResult := searchNyaaForMultipleEpisodes(anime.Media.Title, eps, customQuery)
+	multipleResult := searchNyaaForMultipleEpisodes(anime.Media.Title, anime.Media.Synonyms, eps, customQuery)
 	if len(multipleResult) > 0 {
 		byEpisode := make(map[int][]nyaa.TorrentResult)
 		for _, tr := range multipleResult {

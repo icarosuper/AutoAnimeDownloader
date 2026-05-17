@@ -4,13 +4,12 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -129,25 +128,46 @@ func getAnimeTitleSafe(anime anilist.MediaList) string {
 	return "Unknown"
 }
 
-func extractSeasonFromAnime(anime anilist.MediaList) *int {
-	if anime.Media.Title.Romaji == nil {
-		return nil
+// ExtractAnimeSeasonPart extrai os números de season e part dos dados do Anilist.
+// Prioridade: english → romaji → synonyms. Cada campo é lido de forma independente —
+// english pode dar season e synonym pode dar part.
+func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, part *int) {
+	candidates := make([]string, 0, 2+len(synonyms))
+	if title.English != nil {
+		candidates = append(candidates, *title.English)
 	}
-	title := *anime.Media.Title.Romaji
-	seasonPattern := regexp.MustCompile(`(?i)Season\s*(\d+)|S(\d{1,2})\b|(\d{1,2})(?:st|nd|rd|th)\s+Season`)
+	if title.Romaji != nil {
+		candidates = append(candidates, *title.Romaji)
+	}
+	candidates = append(candidates, synonyms...)
 
-	matches := seasonPattern.FindStringSubmatch(title)
-	if len(matches) > 1 {
-		for i := 1; i < len(matches); i++ {
-			if matches[i] != "" {
-				if seasonNum, err := strconv.Atoi(matches[i]); err == nil {
-					return &seasonNum
-				}
-			}
+	for _, s := range candidates {
+		if season == nil {
+			season = nyaa.ExtractSeason(s)
+		}
+		if part == nil {
+			part = nyaa.ExtractPart(s)
+		}
+		if season != nil && part != nil {
+			break
 		}
 	}
+	return
+}
 
-	return nil
+// ComputeEpisodeOffset retorna o total de episódios do PREQUEL quando part >= 2.
+// Usado para converter o progresso relativo do Anilist no número absoluto usado
+// por fansubs com numeração contínua (ex: SubsPlease).
+func ComputeEpisodeOffset(relations anilist.MediaRelations, part *int) int {
+	if part == nil || *part < 2 {
+		return 0
+	}
+	for _, edge := range relations.Edges {
+		if edge.RelationType == "PREQUEL" && edge.Node.Episodes != nil {
+			return *edge.Node.Episodes
+		}
+	}
+	return 0
 }
 
 func isInDeleteStatuses(deleteStatuses []string, status anilist.MediaListStatus) bool {

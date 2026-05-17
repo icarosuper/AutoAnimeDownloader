@@ -19,7 +19,7 @@
 	- Vai ter que implementar um gerenciamento de tracking do anime
 - Push notifications
 	- Notificar ao baixar novo episódio
-	- Suportar Discord webhook, Telegram, ntfy
+	- Bot no Discord e Telegram
 	- Um handler + config field, chamado após addTorrent
 - Fontes alternativas de torrent
 	- Fallback pra AnimeTosho quando Nyaa não retorna resultado

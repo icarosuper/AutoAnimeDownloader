@@ -15,8 +15,8 @@ var (
 		regexp.MustCompile(`(?i)\(batch\)|\[batch\]|\s+batch\s+`),
 		regexp.MustCompile(`(?i)\(unofficial\s+batch\)`),
 		regexp.MustCompile(`(?i)\(\d{1,3}\s*[-~]\s*\d{1,3}\)`),
-		regexp.MustCompile(`(?i)\s\d{1,3}\s*[-~]\s*\d{1,3}\s`),
-		regexp.MustCompile(`(?i)\s\d{1,3}~\d{1,3}\s`),
+		regexp.MustCompile(`(?i)\s\d{2,3}\s*[-~]\s*\d{2,3}\s`),
+		regexp.MustCompile(`(?i)\s\d{2,3}~\d{2,3}\s`),
 		regexp.MustCompile(`(?i)\(complete\)|\[complete\]|\s+complete\s+`),
 		regexp.MustCompile(`(?i)complete\s+series|complete\s+season`),
 		regexp.MustCompile(`(?i)\(season\s+\d+.*complete\)`),
@@ -143,13 +143,29 @@ var (
 		{regexp.MustCompile(`(?i)MP3`), "MP3"},
 	}
 
-	// Season name stripping patterns
+	// Season/Part name stripping patterns (used to sanitize batch search queries)
 	reSeasonNamePatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\s+Season\s*\d+`),
 		regexp.MustCompile(`(?i)\s+S\s*\d+`),
 		regexp.MustCompile(`(?i)\s+\d+(?:st|nd|rd|th)\s+Season`),
 		regexp.MustCompile(`(?i)\s+Cour\s*\d+`),
+		regexp.MustCompile(`(?i)\s+Part\s*\d+`),
 	}
+
+	// Part/Cour number extraction (ordered by specificity)
+	rePartPatterns = []struct {
+		re   *regexp.Regexp
+		desc string
+	}{
+		{regexp.MustCompile(`(?i)\|\s*Part\s*0*(\d+)`),  "| Part 02"},
+		{regexp.MustCompile(`(?i)\(Part\s*(\d+)\)`),     "(Part 2)"},
+		{regexp.MustCompile(`(?i)\[Part\s*(\d+)\]`),     "[Part 2]"},
+		{regexp.MustCompile(`(?i)\bPart\s*(\d+)\b`),     "Part 2"},
+		{regexp.MustCompile(`(?i)\bCour\s*(\d+)\b`),     "Cour 2"},
+	}
+
+	// Part stripping from query names (companion to reSeasonStrip)
+	rePartStrip = regexp.MustCompile(`(?i)\s+(?:part\s*\d+|cour\s*\d+)`)
 
 	// Size parsing
 	reParseSizeRe = regexp.MustCompile(`(?i)^([\d.]+)\s*([KMGT]?i?B)$`)

@@ -54,15 +54,32 @@ func searchNyaaWithVariants(titles anilist.Title, customQuery string, searchFn n
 	return nil
 }
 
-func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, customQuery string) []nyaa.TorrentResult {
-	return searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
-		return nyaa.ScrapNyaa(title, ep.Episode)
+func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string) []nyaa.TorrentResult {
+	season, part := ExtractAnimeSeasonPart(titles, synonyms)
+
+	results := searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
+		return nyaa.ScrapNyaa(title, ep.Episode, season, part)
 	}, "single episode")
+
+	if len(results) > 0 {
+		return results
+	}
+
+	// Fallback com offset: converte progresso relativo em número absoluto para fansubs
+	// com numeração contínua. Só aplica quando part >= 2 (gate obrigatório).
+	if offset := ComputeEpisodeOffset(relations, part); offset > 0 {
+		results = searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
+			return nyaa.ScrapNyaa(title, ep.Episode+offset, season, nil)
+		}, "single episode (offset fallback)")
+	}
+
+	return results
 }
 
-func searchNyaaForBatch(titles anilist.Title, requestedSeason *int, customQuery string) []nyaa.TorrentResult {
+func searchNyaaForBatch(titles anilist.Title, synonyms []string, customQuery string) []nyaa.TorrentResult {
+	season, part := ExtractAnimeSeasonPart(titles, synonyms)
 	return searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
-		return nyaa.ScrapNyaaForBatch(title, requestedSeason)
+		return nyaa.ScrapNyaaForBatch(title, season, part)
 	}, "batch")
 }
 
@@ -72,8 +89,9 @@ func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool, customQuery st
 	}, "movie")
 }
 
-func searchNyaaForMultipleEpisodes(titles anilist.Title, episodes []int, customQuery string) []nyaa.TorrentResult {
+func searchNyaaForMultipleEpisodes(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult {
+	season, part := ExtractAnimeSeasonPart(titles, synonyms)
 	return searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
-		return nyaa.ScrapNyaaForMultipleEpisodes(title, episodes)
+		return nyaa.ScrapNyaaForMultipleEpisodes(title, episodes, season, part)
 	}, "multiple episodes")
 }

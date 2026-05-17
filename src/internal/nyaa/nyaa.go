@@ -31,6 +31,7 @@ type TorrentResult struct {
 	Episode    *int      `json:"episode,omitempty"`
 	Resolution *string   `json:"resolution,omitempty"`
 	Season     *int      `json:"season,omitempty"`
+	Part       *int      `json:"part,omitempty"`
 	Size       int64     `json:"size,omitempty"`
 	Fansub     string    `json:"fansub,omitempty"`
 	IsBatch    bool      `json:"isBatch,omitempty"`
@@ -164,6 +165,16 @@ func IsBatch(name string) bool {
 	return isBatch(name)
 }
 
+// ExtractSeason é uma versão exportável de extractSeason para uso externo ao pacote
+func ExtractSeason(name string) *int {
+	return extractSeason(name)
+}
+
+// ExtractPart é uma versão exportável de extractPart para uso externo ao pacote
+func ExtractPart(name string) *int {
+	return extractPart(name)
+}
+
 // IsMovie é uma versão exportável de isMovie para testes
 // isFormatMovie indica se o AniList classifica como filme (format = MOVIE)
 func IsMovie(torrentName, animeName string, isFormatMovie ...bool) bool {
@@ -235,12 +246,11 @@ func deduplicateByMagnet(results []TorrentResult) []TorrentResult {
 	return unique
 }
 
-// ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio
-func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
-	// Extrair temporada solicitada (se houver) e sanitizar o nome base
-	requestedSeason := extractSeason(animeName)
-
+// ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio.
+// requestedSeason e requestedPart são extraídos upstream dos dados do Anilist.
+func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *int) ([]TorrentResult, error) {
 	sanitizedRomajiName := reSeasonStrip.ReplaceAllString(animeName, "")
+	sanitizedRomajiName = rePartStrip.ReplaceAllString(sanitizedRomajiName, "")
 
 	query := strings.TrimSpace(sanitizedRomajiName)
 
@@ -318,13 +328,19 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 
 		// Filtrar por temporada
 		if requestedSeason != nil {
-			// Se uma temporada específica foi solicitada, o torrent deve ter essa temporada
 			if season == nil || *season != *requestedSeason {
 				return
 			}
 		} else {
-			// Se nenhuma temporada foi especificada, aceitar apenas torrents sem temporada ou da primeira temporada
 			if season != nil && *season != 1 {
+				return
+			}
+		}
+
+		// Filtrar por parte (hard filter: rejeita torrent sem marker ou com part errada)
+		part := extractPart(name)
+		if requestedPart != nil {
+			if part == nil || *part != *requestedPart {
 				return
 			}
 		}
@@ -342,6 +358,7 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 			MagnetLink: torrentLink,
 			Episode:    animeEpisode,
 			Season:     season,
+			Part:       part,
 			Resolution: resolution,
 			Size:       size,
 			Fansub:     fansub,
@@ -369,11 +386,11 @@ func ScrapNyaa(animeName string, episode int) ([]TorrentResult, error) {
 	return sortedResults, nil
 }
 
-func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentResult, error) {
-	// Extrair temporada solicitada (se houver) e sanitizar o nome base
-	requestedSeason := extractSeason(animeName)
-
+// ScrapNyaaForMultipleEpisodes busca torrents para múltiplos episódios simultaneamente.
+// requestedSeason e requestedPart são extraídos upstream dos dados do Anilist.
+func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSeason, requestedPart *int) ([]TorrentResult, error) {
 	sanitizedRomajiName := reSeasonStrip.ReplaceAllString(animeName, "")
+	sanitizedRomajiName = rePartStrip.ReplaceAllString(sanitizedRomajiName, "")
 
 	query := strings.TrimSpace(sanitizedRomajiName)
 
@@ -448,13 +465,19 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 
 		// Filtrar por temporada
 		if requestedSeason != nil {
-			// Se uma temporada específica foi solicitada, o torrent deve ter essa temporada
 			if season == nil || *season != *requestedSeason {
 				return
 			}
 		} else {
-			// Se nenhuma temporada foi especificada, aceitar apenas torrents sem temporada ou da primeira temporada
 			if season != nil && *season != 1 {
+				return
+			}
+		}
+
+		// Filtrar por parte (hard filter)
+		part := extractPart(name)
+		if requestedPart != nil {
+			if part == nil || *part != *requestedPart {
 				return
 			}
 		}
@@ -476,6 +499,7 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 			MagnetLink: torrentLink,
 			Episode:    animeEpisode,
 			Season:     season,
+			Part:       part,
 			Resolution: resolution,
 			Size:       size,
 			Fansub:     fansub,
@@ -502,10 +526,10 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int) ([]TorrentRe
 	return sortedResults, nil
 }
 
-// ScrapNyaaForBatch busca torrents de batch (anime completo)
-// Prioriza torrents que contenham múltiplos episódios ou temporadas completas
+// ScrapNyaaForBatch busca torrents de batch (anime completo).
+// season e part são extraídos upstream dos dados do Anilist.
 // Baseado nas regras do documento (Seção 3 do RegrasFilmesBatches.md)
-func ScrapNyaaForBatch(animeName string, season *int) ([]TorrentResult, error) {
+func ScrapNyaaForBatch(animeName string, season, part *int) ([]TorrentResult, error) {
 	// Extrair temporada do nome se presente
 	sanitizedName := extractSeasonFromName(animeName)
 	query := strings.TrimSpace(sanitizedName)
@@ -568,6 +592,7 @@ func ScrapNyaaForBatch(animeName string, season *int) ([]TorrentResult, error) {
 
 		// Extrair informações do nome
 		seasonNum := extractSeason(name)
+		partNum := extractPart(name)
 		res := extractResolution(name)
 		resolution := &res
 		fansub := extractFansub(name)
@@ -584,6 +609,13 @@ func ScrapNyaaForBatch(animeName string, season *int) ([]TorrentResult, error) {
 			}
 		}
 
+		// Filtrar por parte (hard filter)
+		if part != nil {
+			if partNum == nil || *partNum != *part {
+				return
+			}
+		}
+
 		// Adicionar resultado
 		results = append(results, TorrentResult{
 			Name:       name,
@@ -591,6 +623,7 @@ func ScrapNyaaForBatch(animeName string, season *int) ([]TorrentResult, error) {
 			Leechers:   leechers,
 			MagnetLink: torrentLink,
 			Season:     seasonNum,
+			Part:       partNum,
 			Resolution: resolution,
 			Size:       size,
 			Fansub:     fansub,
@@ -744,6 +777,22 @@ func extractSeason(name string) *int {
 			if seasonNum, err := strconv.Atoi(matches[1]); err == nil {
 				if seasonNum > 0 && seasonNum < 100 {
 					return &seasonNum
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// extractPart extrai o número da parte/cour do nome do torrent ou título Anilist
+// Testa os padrões em ordem de prioridade (mais específico primeiro)
+func extractPart(name string) *int {
+	for _, p := range rePartPatterns {
+		matches := p.re.FindStringSubmatch(name)
+		if len(matches) > 1 {
+			if partNum, err := strconv.Atoi(matches[1]); err == nil {
+				if partNum > 0 && partNum < 100 {
+					return &partNum
 				}
 			}
 		}

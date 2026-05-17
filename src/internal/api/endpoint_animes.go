@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+// reStripEpisodeNumber strips common episode-numbering suffixes from an episode name.
+var reStripEpisodeNumber = []*regexp.Regexp{
+	regexp.MustCompile(`\s*-\s*[Ee]pisode\s*\d+.*$`),
+	regexp.MustCompile(`\s*-\s*[Ee]p\s*\d+.*$`),
+	regexp.MustCompile(`\s*-\s*\d+.*$`),
+	regexp.MustCompile(`\s+\d+.*$`),
+	regexp.MustCompile(`\s*\(.*\)\s*$`),
+}
+
 type AnimeInfo struct {
 	AnimeID            int    `json:"anime_id" example:"12345"`
 	Name               string `json:"name" example:"Naruto"`
@@ -28,17 +37,8 @@ func extractAnimeName(episodeName string) string {
 		return "Unknown"
 	}
 
-	// Remove padrões comuns de numeração de episódios
-	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`\s*-\s*[Ee]pisode\s*\d+.*$`),
-		regexp.MustCompile(`\s*-\s*[Ee]p\s*\d+.*$`),
-		regexp.MustCompile(`\s*-\s*\d+.*$`),
-		regexp.MustCompile(`\s+\d+.*$`),
-		regexp.MustCompile(`\s*\(.*\)\s*$`),
-	}
-
 	result := episodeName
-	for _, pattern := range patterns {
+	for _, pattern := range reStripEpisodeNumber {
 		result = pattern.ReplaceAllString(result, "")
 	}
 

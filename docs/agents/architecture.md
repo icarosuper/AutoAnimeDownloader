@@ -98,10 +98,12 @@ Main verification orchestrator. Key functions:
 | `handleAlreadySavedEpisode(...)` | Re-download if missing from torrents, delete if over limit |
 | `handleSavedEpisodes(...)` | Post-loop: save new, delete watched, delete torrent files |
 | `attemptDownloadWithRetries(...)` | Tries up to `EpisodeRetryLimit` magnets, returns first hash |
-| `searchNyaaForSingleEpisode(...)` | Single ep search — used as fallback (priority 4) |
-| `searchNyaaForBatch(...)` | Batch search for finished animes (priority 2) |
+| `searchNyaaForSingleEpisode(ep, titles, synonyms, relations, customQuery)` | Single ep search — extracts season/part from titles+synonyms, falls back to `ep+offset` (no part filter) if 0 results and PREQUEL has episode count |
+| `searchNyaaForBatch(titles, synonyms, customQuery)` | Batch search for finished animes (priority 2) |
 | `searchNyaaForMovie(...)` | Movie search (priority 1) |
-| `searchNyaaForMultipleEpisodes(...)` | Multi-episode search for airing animes (priority 3) |
+| `searchNyaaForMultipleEpisodes(titles, synonyms, episodes, customQuery)` | Multi-episode search for airing animes (priority 3) |
+| `ExtractAnimeSeasonPart(title, synonyms)` | Exported: reads english→romaji→synonyms, returns `(season, part *int)` — first non-nil wins independently |
+| `ComputeEpisodeOffset(relations, part)` | Exported: returns PREQUEL episode count when `part >= 2`; 0 otherwise (gate prevents spurious offsets on non-split seasons) |
 | `enqueueOrMoveToCompletedFolder(...)` | Enqueues `move_to_completed` job (or runs sync if no queue) |
 | `ManualDownloadEpisode(animeId, episodeId, cfg)` | Used by API for manual download — calls Anilist then Nyaa |
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
@@ -252,11 +254,14 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `AniListResponse` | Response for `GetAllCurrentAnime` — `Data.Page.MediaList[]` |
 | `MediaListDetailResponse` | Response for `GetAnimeInfo` — single `MediaList` with full `AiringSchedule` |
 | `MediaList` struct | `Id`, `Status`, `Progress`, `CustomLists`, `Media` |
-| `Media` struct | `Format`, `Status`, `Title`, `Episodes`, `AiringSchedule` |
+| `Media` struct | `Format`, `Status`, `Title`, `Episodes`, `AiringSchedule`, `Synonyms`, `Relations` |
 | `AiringNode` struct | `ID`, `Episode`, `TimeUntilAiring`, `AiringAt` |
+| `MediaRelations` struct | `Edges []MediaRelationEdge` — PREQUEL/SEQUEL links |
+| `MediaRelationEdge` struct | `RelationType string`, `Node MediaRelationNode` |
+| `MediaRelationNode` struct | `Title`, `Synonyms`, `Episodes *int` — the related anime |
 | `MediaFormat` consts | `TV`, `MOVIE`, `OVA`, `ONA`, etc. |
 | `MediaListStatus` consts | `CURRENT`, `COMPLETED`, `DROPPED`, `PAUSED`, `PLANNING`, `REPEATING` |
-| `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list (used by verification loop) |
+| `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list with synonyms and relations (used by verification loop) |
 | `GetAnimeInfo(mediaListId)` | Fetches single anime detail with full airing schedule (used by `/animes/{id}/episodes`) |
 | `sendAnilistRequest[T]` | Generic GraphQL POST helper |
 | `httpDo` var | Swappable HTTP func — overridden in tests via `MockAniListDo` |
@@ -265,12 +270,14 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 
 | Symbol | Purpose |
 |--------|---------|
-| `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Size`, `Fansub`, `IsBatch` |
+| `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Part*`, `Size`, `Fansub`, `IsBatch` |
 | `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
-| `ScrapNyaa(title, episode)` | Scrapes Nyaa for a single episode (2 pages) |
-| `ScrapNyaaForBatch(title, season*)` | Scrapes for batch (completed anime) |
+| `ScrapNyaa(title, episode, season*, part*)` | Scrapes Nyaa for a single episode (2 pages); hard-filters by season and part when non-nil |
+| `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
-| `ScrapNyaaForMultipleEpisodes(title, eps[])` | Scrapes for multiple specific episodes (2 pages) |
+| `ScrapNyaaForMultipleEpisodes(title, eps[], season*, part*)` | Scrapes for multiple specific episodes (2 pages); hard-filters by season and part when non-nil |
+| `ExtractSeason(name)` | Exported: extracts season number from torrent name |
+| `ExtractPart(name)` | Exported: extracts part/cour number from torrent name |
 | `GenerateSearchTitleVariants(romaji, english)` | Search query variants: clean romaji → original romaji → clean english → original english |
 | `SortTorrentResults(results)` | Sorts by: uncensored → resolution → fansub → health score → size |
 | `SortMovieResults(results)` | Sorts by: source (BD>WEB) → resolution → codec → fansub → audio → health → size |
@@ -298,7 +305,9 @@ Pre-compiled package-level regex vars. All compiled at package init for performa
 | `reSourcePatterns` | Release source (BD, BDRip, WEB-DL, HDTV, etc.) |
 | `reCodecPatterns` | Video codec (HEVC, AV1, H.264, XviD) |
 | `reAudioPatterns` | Audio codec (FLAC, DTS-HD, TrueHD, DDP, AAC, AC3, MP3) |
-| `reSeasonNamePatterns` | Season name stripping for query base extraction |
+| `reSeasonNamePatterns` | Season/part name stripping for query base extraction (Season N, S N, Cour N, Part N) |
+| `rePartPatterns` | 5 part/cour extraction patterns ordered by specificity (`\| Part 02`, `(Part 2)`, `[Part 2]`, `Part 2`, `Cour 2`) |
+| `rePartStrip` | Strips part/cour suffixes from query names before search |
 | `reParseSizeRe` | Size string parsing (e.g. `"1.5 GiB"`) |
 
 ### `src/internal/nyaa/nyaa_match.go`

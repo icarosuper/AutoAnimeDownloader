@@ -12,6 +12,8 @@ import (
 type testOptions struct {
 	animeName string
 	episode   int
+	season    *int
+	part      *int
 	correct   []string
 	incorrect []string
 }
@@ -63,7 +65,7 @@ func TestNyaaModule_CanGetMagnet(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaa("My.Show", 2)
+	results, err := nyaa.ScrapNyaa("My.Show", 2, nil, nil)
 	if err != nil {
 		t.Fatalf("ScrapNyaa error: %v", err)
 	}
@@ -175,9 +177,11 @@ func TestNyaaModule_CanGetCorrectMagnets_OfSeason1Anime(t *testing.T) {
 }
 
 func TestNyaaModule_CanGetCorrectMagnets_OfSeason2Anime(t *testing.T) {
+	season2 := 2
 	options := testOptions{
 		animeName: "Machikado Mazoku Season 2",
 		episode:   7,
+		season:    &season2,
 		correct: []string{
 			"Machikado Mazoku Season 2 Episode 7",
 			"Machikado Mazoku Season 2 Episode 07",
@@ -204,9 +208,11 @@ func TestNyaaModule_CanGetCorrectMagnets_OfSeason2Anime(t *testing.T) {
 }
 
 func TestNyaaModule_CanGetCorrectMagnets_OfSeason3Anime(t *testing.T) {
+	season3 := 3
 	options := testOptions{
 		animeName: "SPY x FAMILY Season 3",
 		episode:   3,
+		season:    &season3,
 		correct: []string{
 			"SPY x FAMILY Season 3 Episode 3",
 			"SPY x FAMILY Season 3 EP03",
@@ -232,7 +238,7 @@ func runEpisodeNameTest(opt testOptions, t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaa(opt.animeName, opt.episode)
+	results, err := nyaa.ScrapNyaa(opt.animeName, opt.episode, opt.season, opt.part)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaa error: %v", err)
@@ -381,7 +387,7 @@ func TestScrapNyaaForMultipleEpisodes_CanGetMultipleEpisodes(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("My.Show", []int{2, 3, 5})
+	results, err := nyaa.ScrapNyaaForMultipleEpisodes("My.Show", []int{2, 3, 5}, nil, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
@@ -426,7 +432,7 @@ func TestScrapNyaaForMultipleEpisodes_CanFilterByAnimeTitle(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Kemono Friends", []int{2, 5, 10})
+	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Kemono Friends", []int{2, 5, 10}, nil, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
@@ -455,7 +461,7 @@ func TestScrapNyaaForMultipleEpisodes_ReturnsNilWhenNoResults(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("My.Show", []int{2, 3, 5})
+	results, err := nyaa.ScrapNyaaForMultipleEpisodes("My.Show", []int{2, 3, 5}, nil, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
@@ -478,7 +484,8 @@ func TestScrapNyaaForMultipleEpisodes_WithSeasonFiltering(t *testing.T) {
 	defer restore()
 
 	// Solicitar especificamente Season 2
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Show Season 2", []int{5, 10})
+	season2 := 2
+	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Show Season 2", []int{5, 10}, &season2, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
@@ -504,7 +511,7 @@ func TestScrapNyaaForMultipleEpisodes_ResultsAreSorted(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Show", []int{2})
+	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Show", []int{2}, nil, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
@@ -557,7 +564,7 @@ func TestScrapNyaaForMultipleEpisodes_CanGetCorrectAnimeMultipleSeasons(t *testi
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Lucky Star", []int{5, 10, 15})
+	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Lucky Star", []int{5, 10, 15}, nil, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
@@ -821,7 +828,7 @@ func TestScrapNyaaForBatch_FindsBatchTorrents(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForBatch("Frieren", nil)
+	results, err := nyaa.ScrapNyaaForBatch("Frieren", nil, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForBatch error: %v", err)
@@ -874,7 +881,7 @@ func TestScrapNyaaForBatch_FiltersBySeason(t *testing.T) {
 	defer restore()
 
 	season := 2
-	results, err := nyaa.ScrapNyaaForBatch("Machikado Mazoku 2", &season)
+	results, err := nyaa.ScrapNyaaForBatch("Machikado Mazoku 2", &season, nil)
 
 	if err != nil {
 		t.Fatalf("ScrapNyaaForBatch error: %v", err)
@@ -1005,6 +1012,12 @@ func TestTitleMatchesQuery_AcceptsCorrectTorrents(t *testing.T) {
 		{"SPY x FAMILY Season 3 - 03 [1080p]", "SPY x FAMILY"},
 		{"[SubsPlease] Machikado Mazoku S2 - 07 (1080p)", "Machikado Mazoku"},
 		{"My.Show.S01E02.1080p", "My.Show"},
+		// Torrents com metadados técnicos que inflavam o Jaccard (NF, AMZN, WEB-DL, EAC3, MultiSub)
+		{"[Erai-raws] Akane-banashi - 07 [1080p NF WEB-DL AVC AAC][MultiSub][805A5B50]", "Akane-banashi"},
+		{"[Erai-raws] Nippon Sangoku - 07 [1080p AMZN WEB-DL AVC EAC3][MultiSub][86BD091C]", "Nippon Sangoku"},
+		{"[Erai-raws] Ichijyoma Mankitsu Gurashi - 06 [1080p AMZN WEB-DL AVC EAC3][MultiSub][BC657289]", "Ichijyoma Mankitsu Gurashi"},
+		// Fansub com ambos os títulos no nome (English + romaji) — threshold 0.4 p/ query ≥4 tokens
+		{"[ToonsHub] ReZERO -Starting Life in Another World- S04E06 1080p CR WEB-DL DUAL AAC2.0 H.264 (Re:Zero kara Hajimeru Isekai Seikatsu, Dual-Audio, Multi-Subs)", "rezero starting life in another world"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.torrent, func(t *testing.T) {
@@ -1020,7 +1033,7 @@ func TestTitleMatchesQuery_RejectsSpinoffsAndWrongAnime(t *testing.T) {
 		torrent string
 		query   string
 	}{
-		// Spinoff com título muito diferente
+		// Spinoff com título muito diferente (query curta ≤3 tokens, threshold 0.8)
 		{"[SubsPlease] Sword Art Online Alternative Gun Gale Online - 05 (1080p)", "Sword Art Online"},
 		// Anime diferente com palavras em comum
 		{"Kemono Jihen Episode 5", "Kemono Friends"},
@@ -1030,6 +1043,10 @@ func TestTitleMatchesQuery_RejectsSpinoffsAndWrongAnime(t *testing.T) {
 		{"Chinmoku no Majo no Kakushigoto Episode 3", "Silent Witch: Chinmoku no Majo no Kakushigoto"},
 		// Anime completamente diferente
 		{"Different Anime - 05 [1080p]", "Kemono Friends"},
+		// Mesmo formato de metadados Erai-raws mas título errado: tokens técnicos filtrados não devem
+		// mascarar a ausência do token de título correto.
+		{"[Erai-raws] Different Show - 07 [1080p NF WEB-DL AVC AAC][MultiSub][AABBCCDD]", "Akane-banashi"},
+		{"[Erai-raws] Other Anime - 06 [1080p AMZN WEB-DL AVC EAC3][MultiSub][11223344]", "Ichijyoma Mankitsu Gurashi"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.torrent, func(t *testing.T) {
@@ -1055,3 +1072,205 @@ func TestNyaaModule_DoesNotReturnSpinoffs(t *testing.T) {
 	}
 	runEpisodeNameTest(options, t)
 }
+
+// ============================================
+// TESTES PARA SEASON/PART FEATURE
+// ============================================
+
+// TestExtractPart verifica extração de número de parte/cour de nomes de torrents e títulos Anilist
+func TestExtractPart_ExtractsFromVariousFormats(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected *int
+	}{
+		// Formatos encontrados nos samples do Nyaa
+		{"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 07 [1080p]", intPtr(2)},
+		{"[EMBER] Hataraku Maou-sama! (2023) (Season 2 | Part 02) [1080p]", intPtr(2)},
+		{"[EMBER] Hataraku Maou-sama! (2022) (Season 2 | Part 01) [1080p]", intPtr(1)},
+		{"[DB] NieR:Automata Ver1.1a (Season 1 Part 1+2) [Dual Audio]", intPtr(1)},
+		{"[EMBER] Shingeki no Kyojin (2023) (Season 4 Part 03+04) [BDRip]", intPtr(3)},
+		// Títulos Anilist (para ExtractAnimeSeasonPart)
+		{"Shingeki no Kyojin Season 3 Part 2", intPtr(2)},
+		{"Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", intPtr(2)},
+		{"NieR:Automata Ver1.1a Cour 2", intPtr(2)},
+		// Sem part
+		{"[SubsPlease] Hataraku Maou-sama S2 - 13 (1080p)", nil},
+		{"[SubsPlease] Shingeki no Kyojin - 07 (1080p)", nil},
+		{"Kaguya-sama wa Kokurasetai?: Tensaitachi no Renai Zunousen", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := nyaa.ExtractPart(tt.input)
+			if tt.expected == nil {
+				if got != nil {
+					t.Errorf("ExtractPart(%q) = %d, want nil", tt.input, *got)
+				}
+			} else {
+				if got == nil {
+					t.Errorf("ExtractPart(%q) = nil, want %d", tt.input, *tt.expected)
+				} else if *got != *tt.expected {
+					t.Errorf("ExtractPart(%q) = %d, want %d", tt.input, *got, *tt.expected)
+				}
+			}
+		})
+	}
+}
+
+// TestNyaaModule_KaguySa2_AcceptsSeason2Torrents confirma o fix do bug:
+// Kaguya S2 (romaji sem número de season) agora aceita torrents S02 quando season=2 é passado.
+func TestNyaaModule_KaguySa2_AcceptsSeason2Torrents(t *testing.T) {
+	season2 := 2
+	options := testOptions{
+		// Anilist id 112641: romaji não tem season number, season vem dos synonyms
+		animeName: "Kaguya-sama wa Kokurasetai",
+		episode:   3,
+		season:    &season2,
+		correct: []string{
+			"[MTBB] Kaguya-sama wa Kokurasetai S2 - 03 (1080p)",
+			"Kaguya-sama wa Kokurasetai Season 2 Episode 3",
+			"[SubsPlease] Kaguya-sama wa Kokurasetai S02 - 03 (1080p)",
+		},
+		incorrect: []string{
+			// Season 1 deve ser rejeitada (season=2 explícito filtra)
+			"[SubsPlease] Kaguya-sama wa Kokurasetai S01 - 03 (1080p)",
+			"Kaguya-sama wa Kokurasetai Season 1 Episode 3",
+			// Episódio errado
+			"[MTBB] Kaguya-sama wa Kokurasetai S2 - 05 (1080p)",
+		},
+	}
+	runEpisodeNameTest(options, t)
+}
+
+// TestNyaaModule_SnKS3P2_SeasonAndPartFilter verifica filtro combinado de season=3 + part=2
+// (Anilist id 104578: Shingeki no Kyojin Season 3 Part 2)
+func TestNyaaModule_SnKS3P2_SeasonAndPartFilter(t *testing.T) {
+	season3 := 3
+	part2 := 2
+	options := testOptions{
+		animeName: "Shingeki no Kyojin Season 3 Part 2",
+		episode:   5,
+		season:    &season3,
+		part:      &part2,
+		correct: []string{
+			"[Erai-raws] Shingeki no Kyojin Season 3 Part 2 - 05 [1080p]",
+		},
+		incorrect: []string{
+			// Part 1 deve ser rejeitada (hard part filter)
+			"[Erai-raws] Shingeki no Kyojin Season 3 Part 1 - 05 [1080p]",
+			// Season errada
+			"[SubsPlease] Shingeki no Kyojin Season 2 Part 2 - 05 (1080p)",
+			// Episódio errado
+			"[Erai-raws] Shingeki no Kyojin Season 3 Part 2 - 07 [1080p]",
+		},
+	}
+	runEpisodeNameTest(options, t)
+}
+
+// TestNyaaModule_MushokuTenseiIIP2_PartFilter verifica filtro de season=2 + part=2
+// (Anilist id 166873: Mushoku Tensei II Part 2)
+// ExtractAnimeSeasonPart retorna season=2 (do título inglês) e part=2 (do romaji/inglês)
+func TestNyaaModule_MushokuTenseiIIP2_PartFilter(t *testing.T) {
+	season2 := 2
+	part2 := 2
+	options := testOptions{
+		animeName: "Mushoku Tensei II Isekai Ittara Honki Dasu Part 2",
+		episode:   7,
+		season:    &season2,
+		part:      &part2,
+		correct: []string{
+			"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 07 [1080p]",
+		},
+		incorrect: []string{
+			// Part 1 deve ser rejeitada
+			"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 1 - 07 [1080p]",
+			// Sem part marker: rejeitado pelo hard filter quando part é solicitada
+			"[SubsPlease] Mushoku Tensei II - 07 (1080p)",
+			// Episódio errado
+			"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 03 [1080p]",
+		},
+	}
+	runEpisodeNameTest(options, t)
+}
+
+// TestNyaaModule_NieRCour2_CourTreatedAsPart verifica que "Cour 2" é tratado como part=2
+// (Anilist id 167420: NieR:Automata Ver1.1a Cour 2)
+func TestNyaaModule_NieRCour2_CourTreatedAsPart(t *testing.T) {
+	season2 := 2
+	part2 := 2
+	options := testOptions{
+		// Título inglês: "NieR:Automata Ver1.1a Cour 2" → ExtractPart = 2
+		// Título romaji: "NieR:Automata Ver1.1a 2nd Season" → ExtractSeason = 2
+		animeName: "NieR Automata Ver1.1a Cour 2",
+		episode:   5,
+		season:    &season2,
+		part:      &part2,
+		correct: []string{
+			"[SubsPlease] NieR Automata Ver1.1a Cour 2 - 05 (1080p)",
+		},
+		incorrect: []string{
+			"[SubsPlease] NieR Automata Ver1.1a Cour 1 - 05 (1080p)",
+			"[SubsPlease] NieR Automata Ver1.1a - 05 (1080p)",
+		},
+	}
+	runEpisodeNameTest(options, t)
+}
+
+// TestNyaaModule_HatarakuS2P2_PartHardFilter verifica que hard filter funciona corretamente
+// para Hataraku Maou-sama season 2 part 2 (Anilist id 155168)
+func TestNyaaModule_HatarakuS2P2_PartHardFilter(t *testing.T) {
+	season2 := 2
+	part2 := 2
+
+	// Hard filter: com requestedPart=2, torrents sem part marker OU com part=1 são rejeitados
+	html := mockHtml([]string{
+		"[SubsPlease] Hataraku Maou-sama S2 - 01 (1080p)",         // ep=1, part=nil → rejeitado
+		"[EMBER] Hataraku Maou-sama! (Season 2 | Part 01) Batch",  // part=1 → rejeitado (isBatch)
+		"[EMBER] Hataraku Maou-sama! (Season 2 | Part 02) Batch",  // part=2 → rejeitado (isBatch)
+		"[Erai-raws] Hataraku Maou-sama Part 2 - 01 [1080p]",      // part=2, ep=1 → aceito
+	})
+	restore := mockHttpGet(html)
+	defer restore()
+
+	results, err := nyaa.ScrapNyaa("Hataraku Maou-sama", 1, &season2, &part2)
+	if err != nil {
+		t.Fatalf("ScrapNyaa error: %v", err)
+	}
+
+	for _, r := range results {
+		// Nenhum resultado deve ter part=nil ou part != 2
+		if r.Part == nil || *r.Part != 2 {
+			t.Errorf("expected part=2, got %v in torrent: %s", r.Part, r.Name)
+		}
+		// Nenhum resultado deve ter season != 2
+		if r.Season != nil && *r.Season != 2 {
+			t.Errorf("expected season=2, got %d in torrent: %s", *r.Season, r.Name)
+		}
+	}
+
+	found := false
+	for _, r := range results {
+		if r.Name == "[Erai-raws] Hataraku Maou-sama Part 2 - 01 [1080p]" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected Part 2 torrent to be found, got %d results", len(results))
+	}
+}
+
+// TestNyaaModule_PartFilter_NoPartRequested verifica que sem requestedPart, torrents com qualquer part são aceitos
+func TestNyaaModule_PartFilter_NoPartRequested(t *testing.T) {
+	options := testOptions{
+		animeName: "My Show Season 2",
+		episode:   5,
+		season:    intPtr(2),
+		correct: []string{
+			"My Show Season 2 Part 1 Episode 5",
+			"My Show Season 2 Part 2 Episode 5",
+			"My Show Season 2 Episode 5",
+		},
+	}
+	runEpisodeNameTest(options, t)
+}
+
+func intPtr(n int) *int { return &n }

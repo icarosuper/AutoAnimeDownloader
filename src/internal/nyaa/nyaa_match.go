@@ -13,13 +13,19 @@ var titleTechnicalTokens = map[string]bool{
 	"av1": true, "xvid": true, "avc": true,
 	// Rip sources (multi-char only to avoid ambiguity)
 	"bdrip": true, "bdremux": true, "webdl": true, "webrip": true, "hdtv": true, "bluray": true,
+	// WEB-DL splits into "web" + "dl" after stripping hyphens; add both
+	"web": true, "dl": true, "rip": true,
 	// Audio codecs
 	"flac": true, "aac": true, "dts": true, "ddp": true, "ac3": true,
 	"opus": true, "truehd": true, "mp3": true,
+	// Versioned audio codec tags (e.g. AAC2.0 → "aac2", DDP2.0 → "ddp2", EAC3)
+	"eac3": true, "aac2": true, "ddp2": true,
 	// Encoding details
 	"remux": true, "hi10": true, "hi10p": true, "10bit": true, "8bit": true,
 	// Language tags (unambiguous 3-char codes)
 	"eng": true, "jpn": true,
+	// Streaming service source tags
+	"nf": true, "amzn": true, "cr": true,
 	// Known fansubs
 	"subsplease": true, "erai": true, "raws": true, "judas": true,
 	"toonshub": true, "asw": true, "ember": true,
@@ -27,6 +33,10 @@ var titleTechnicalTokens = map[string]bool{
 	"season": true, "episode": true, "cour": true, "part": true,
 	// Batch/collection markers (type already checked by isBatch/isMovie)
 	"batch": true, "complete": true, "movie": true, "ova": true, "ona": true, "special": true, "film": true,
+	// Subtitle/audio track tags
+	"multisub": true, "multi": true, "subs": true, "dual": true, "audio": true,
+	// Release type tags
+	"repack": true,
 	// Misc unambiguous tags
 	"uncensored": true,
 }
@@ -131,7 +141,18 @@ func jaccardSimilarity(aTokens, bTokens []string) float64 {
 	return float64(intersection) / float64(union)
 }
 
-const titleJaccardThreshold = 0.8
+// jaccardThreshold returns the Jaccard threshold based on query length.
+// Short queries (≤3 tokens) need a high threshold to prevent spinoffs like
+// "SAO" matching "SAO Alternative Gun Gale Online". Long queries (≥4 tokens)
+// can use a lower threshold because some fansubs embed both the English and
+// Japanese title in the torrent name, inflating the union without indicating
+// a wrong match (e.g. ToonsHub including both titles in parentheses).
+func jaccardThreshold(queryLen int) float64 {
+	if queryLen >= 4 {
+		return 0.4
+	}
+	return 0.8
+}
 
 // titleMatchesQuery checks if a torrent name matches a search query using two complementary checks:
 //  1. All query title tokens must be present in the torrent title (prevents partial-title matches
@@ -163,7 +184,7 @@ func titleMatchesQuery(torrentName, query string) bool {
 	}
 
 	// Jaccard similarity prevents accepting spinoffs/sequels with many extra title words
-	return jaccardSimilarity(torrentTokens, queryTokens) >= titleJaccardThreshold
+	return jaccardSimilarity(torrentTokens, queryTokens) >= jaccardThreshold(len(queryTokens))
 }
 
 // TitleMatchesQuery is the exported version for testing.

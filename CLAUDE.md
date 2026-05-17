@@ -22,3 +22,4 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 - [Testing](docs/agents/testing.md) — read when writing or running tests; mock patterns
 - [Commands](docs/agents/commands.md) — read when building or running the daemon/frontend
 - [Decisions](docs/agents/decisions.md) — read before "fixing" unusual patterns; documents intentional architectural choices
+- [Troubleshooting Downloads](docs/agents/troubleshooting-downloads.md) — follow when animes fail to download; diagnose search/filter logic bugs step by step

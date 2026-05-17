@@ -137,7 +137,7 @@ func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config, cu
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
 
-	results := searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, customQuery)
+	results := searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, customQuery)
 	var magnets []string
 	for _, result := range results {
 		magnets = append(magnets, result.MagnetLink)
