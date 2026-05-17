@@ -39,8 +39,9 @@ src/tests/
 | File | Location (Linux) | Purpose |
 |------|-----------------|---------|
 | `config.json` | `~/.autoAnimeDownloader/` | User settings (qBittorrent URL, Anilist username, intervals) |
-| `episodes.json` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL) |
-| `blocked_episodes.json` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of IDs) |
+| `downloaded_episodes` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL, no extension) |
+| `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of IDs, no extension) |
+| `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList MediaList ID (JSON map, no extension) |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (rename/move ops) |
 
@@ -57,6 +58,7 @@ Key endpoints:
 | `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` |
+| `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
 | `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeId}/download` | `handleDownloadEpisode` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeId}/redownload` | `handleRedownloadEpisode` | `endpoint_episode_actions.go` |
@@ -166,10 +168,15 @@ All persistence. Key types:
 | `FileManager.LoadSavedEpisodes()` | Reads `episodes.json` (JSONL), migrates old format |
 | `FileManager.SaveEpisodesToFile(eps)` | Appends only new episodes (deduped by ID) |
 | `FileManager.DeleteEpisodesFromFile(ids)` | Removes episodes by ID from JSONL |
-| `FileManager.BlockEpisode(id)` | Appends ID to `blocked_episodes.json` |
-| `FileManager.UnblockEpisode(id)` | Removes ID from `blocked_episodes.json` |
+| `FileManager.BlockEpisode(id)` | Appends ID to `blocked_episodes` |
+| `FileManager.UnblockEpisode(id)` | Removes ID from `blocked_episodes` |
 | `FileManager.UnmanageEpisode(id)` | Sets `ManuallyManaged=false` for episode |
+| `FileManager.LoadAnimeSettings(animeID)` | Returns `*AnimeSettings` for one anime (empty struct if not set) |
+| `FileManager.SaveAnimeSettings(animeID, settings)` | Persists `AnimeSettings` for one anime to `anime_settings` |
+| `FileManager.LoadAllAnimeSettings()` | Returns full `map[int]AnimeSettings` — used by daemon loop |
 | `FileManager.DeleteEmptyFolders(...)` | Removes empty dirs in `savePath` and `completedPath` |
+
+`AnimeSettings` struct fields: `CustomSearchQuery string` — overrides Nyaa search query for this anime.
 
 Config defaults: `CheckInterval=10`, `MaxEpisodesPerAnime=12`, `EpisodeRetryLimit=5`, `QBittorrentUrl="http://127.0.0.1:8080"`.
 
