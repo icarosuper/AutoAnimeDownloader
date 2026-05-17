@@ -44,3 +44,18 @@ make uninstall
 ENVIRONMENT=dev ./autoanimedownloader-daemon   # formatted logs
 PORT=:8092 ./autoanimedownloader-daemon        # custom port (default 8091)
 ```
+
+## CLI Notable Flags
+
+```bash
+# logs command — flags mirror the web UI Logs page
+autoanimedownloader logs                        # last 1000 lines, colorized
+autoanimedownloader logs -n 500                 # last 500 lines
+autoanimedownloader logs --level error          # filter by level (all/debug/info/warn/error)
+autoanimedownloader logs --search "nyaa"        # text search (-q alias)
+autoanimedownloader logs --level warn -q retry  # combine filters
+
+# global flags
+autoanimedownloader --json logs                 # JSON output (returns lines/total/shown)
+NO_COLOR=1 autoanimedownloader logs             # disable ANSI colors
+```
