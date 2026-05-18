@@ -126,6 +126,9 @@
   "logs_copy_error": "Failed to copy",
   "logs_loading": "Loading logs...",
   "logs_error_load": "Failed to load logs",
+  "logs_scroll_top": "Scroll to top",
+  "logs_label_live": "Live",
+  "logs_new_logs": "+{count} new",
 
   "detail_back": "Back to Status",
   "detail_title_fallback": "Anime Detail",

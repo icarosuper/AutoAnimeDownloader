@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { getLogs, type LogsResponse } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import { toast } from "../lib/stores/toast.js";
@@ -13,6 +13,7 @@
     labelLevel: m.logs_label_level(),
     searchPlaceholder: m.logs_search_placeholder(),
     labelAutoscroll: m.logs_label_autoscroll(),
+    labelLive: m.logs_label_live(),
     btnReload: m.logs_btn_reload(),
     levelAll: m.logs_level_all(),
     levelDebug: m.logs_level_debug(),
@@ -23,6 +24,8 @@
     emptyFiltered: m.logs_empty_filtered(),
     empty: m.logs_empty(),
     filteredSuffix: m.logs_filtered_suffix(),
+    scrollTop: m.logs_scroll_top(),
+    newLogs: (count: number) => m.logs_new_logs({ count }),
   };
 
   let logs: string[] = [];
@@ -33,6 +36,11 @@
   let autoScroll = true;
   let initialized = false;
   let logContainer: HTMLElement;
+  let atTop = true;
+  let newLogsCount = 0;
+  let liveReload = true;
+  let liveReloadSeconds = 5;
+  let liveInterval: ReturnType<typeof setInterval> | null = null;
 
   type ParsedLogLine = {
     level: string;
@@ -41,6 +49,24 @@
     raw: string;
     extras?: string;
   };
+
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function highlightMatch(text: string, query: string): string {
+    const safe = escapeHtml(text);
+    if (!query.trim()) return safe;
+    const escapedQuery = escapeHtml(query.trim()).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return safe.replace(
+      new RegExp(`(${escapedQuery})`, "gi"),
+      '<mark class="bg-warning text-warning-content rounded px-0.5">$1</mark>'
+    );
+  }
 
   function parseLogLine(line: string): ParsedLogLine {
     if (line.startsWith("{")) {
@@ -91,11 +117,26 @@
   $: filteredLogs = filterLogs(logs, linesToLoad, filterLevel, searchQuery);
   $: parsedLogs = filteredLogs.map(parseLogLine);
   $: updateUrlQuery(linesToLoad, filterLevel, searchQuery);
-  $: if (parsedLogs && autoScroll) scrollToBottom();
+  $: if (parsedLogs && autoScroll) scrollToTop();
+  $: if (liveReload) startLiveReload(); else stopLiveReload();
 
-  async function scrollToBottom() {
+  async function scrollToTop() {
     await tick();
-    if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
+    if (logContainer) logContainer.scrollTop = 0;
+    newLogsCount = 0;
+  }
+
+  function handleScroll() {
+    if (logContainer) atTop = logContainer.scrollTop < 50;
+  }
+
+  function startLiveReload() {
+    if (liveInterval) clearInterval(liveInterval);
+    liveInterval = setInterval(loadLogs, liveReloadSeconds * 1000);
+  }
+
+  function stopLiveReload() {
+    if (liveInterval) { clearInterval(liveInterval); liveInterval = null; }
   }
 
   function updateUrlQuery(linesToLoad: number, filterLevel: string, searchQuery: string) {
@@ -112,9 +153,14 @@
 
   async function loadLogs() {
     try {
-      loading = true;
+      const isBackground = liveReload;
+      if (!isBackground) loading = true;
+      const prevCount = logs.length;
       const response: LogsResponse = await getLogs(linesToLoad);
       logs = response.lines;
+      if (isBackground && !autoScroll && response.lines.length > prevCount) {
+        newLogsCount += response.lines.length - prevCount;
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.logs_error_load());
     } finally {
@@ -153,6 +199,8 @@
     loadLogs();
     initialized = true;
   });
+
+  onDestroy(() => stopLiveReload());
 </script>
 
 <div class="flex flex-col" style="height: calc(100vh - 8rem)">
@@ -203,6 +251,19 @@
           {T && T.labelAutoscroll}
         </label>
 
+        <label class="flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
+          <input type="checkbox" bind:checked={liveReload} class="checkbox checkbox-xs" />
+          {T && T.labelLive}
+          {#if liveReload}
+            <select bind:value={liveReloadSeconds} on:change={startLiveReload} class="select select-xs select-bordered w-16">
+              <option value={3}>3s</option>
+              <option value={5}>5s</option>
+              <option value={10}>10s</option>
+              <option value={30}>30s</option>
+            </select>
+          {/if}
+        </label>
+
         <button class="btn btn-xs btn-outline ml-auto" on:click={loadLogs}>{T && T.btnReload}</button>
       </div>
     </div>
@@ -217,6 +278,7 @@
     <div class="flex-1 relative min-h-0">
       <div
         bind:this={logContainer}
+        on:scroll={handleScroll}
         class="absolute inset-0 overflow-y-auto font-mono text-xs bg-base-300 rounded-lg border border-base-300 p-2 space-y-0.5"
       >
         {#if parsedLogs.length === 0}
@@ -235,9 +297,9 @@
                 <span class="text-base-content/30 shrink-0">{parsed.timestamp}</span>
               {/if}
               <span class="text-base-content/80 break-all flex-1">
-                {parsed.message}
+                {@html highlightMatch(parsed.message, searchQuery)}
                 {#if parsed.extras}
-                  <span class="text-base-content/40 ml-1">{parsed.extras}</span>
+                  <span class="text-base-content/40 ml-1">{@html highlightMatch(parsed.extras, searchQuery)}</span>
                 {/if}
               </span>
               <button
@@ -255,16 +317,23 @@
         {/if}
       </div>
 
-      <!-- Scroll to bottom button -->
-      <button
-        class="absolute bottom-4 right-4 btn btn-circle btn-sm btn-neutral shadow-lg opacity-80 hover:opacity-100"
-        title="Scroll to bottom"
-        on:click={scrollToBottom}
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-        </svg>
-      </button>
+      <!-- Scroll to top button -->
+      {#if !atTop}
+        <button
+          class="absolute bottom-4 right-4 btn btn-circle btn-sm btn-neutral shadow-lg opacity-80 hover:opacity-100"
+          title={T && T.scrollTop || "Scroll to top"}
+          on:click={scrollToTop}
+        >
+          {#if newLogsCount > 0}
+            <span class="absolute -top-2 -right-2 badge badge-warning badge-xs text-xs font-bold px-1 min-w-fit">
+              {T && T.newLogs(newLogsCount)}
+            </span>
+          {/if}
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+          </svg>
+        </button>
+      {/if}
     </div>
 
     <!-- Footer -->

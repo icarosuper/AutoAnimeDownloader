@@ -126,6 +126,9 @@
   "logs_copy_error": "Falha ao copiar",
   "logs_loading": "Carregando logs...",
   "logs_error_load": "Falha ao carregar logs",
+  "logs_scroll_top": "Ir ao início",
+  "logs_label_live": "Ao vivo",
+  "logs_new_logs": "+{count} novo(s)",
 
   "detail_back": "Voltar ao Status",
   "detail_title_fallback": "Detalhes do Anime",
