@@ -17,10 +17,6 @@
 	- Ao pesquisar vai buscar animes no anilist.
 	- Ao selecionar um anime vai adicionar anime aos animes trackeados
 	- Vai ter que implementar um gerenciamento de tracking do anime
-- Push notifications
-	- Notificar ao baixar novo episódio
-	- Bot no Discord e Telegram
-	- Um handler + config field, chamado após addTorrent
 - Fontes alternativas de torrent
 	- Fallback pra AnimeTosho quando Nyaa não retorna resultado
 	- Abstrair interface TorrentSource com múltiplas implementações
@@ -36,3 +32,4 @@
 	- Autenticar app?
 	- Testar no windows
 - Torrent imbutido
+- Adicionar modal com opções de torrents de animes / episódios
