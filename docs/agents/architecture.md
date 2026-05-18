@@ -376,6 +376,7 @@ Title-matching logic for filtering Nyaa search results.
 | `routes/AnimeDetail.svelte` | `#/anime/:id` | Per-anime episode list + actions |
 | `routes/Config.svelte` | `#/config` | Edit all config fields |
 | `routes/Logs.svelte` | `#/logs` | Tail daemon logs |
+| `routes/Notifications.svelte` | `#/notifications` | Webhook configuration CRUD |
 
 **Shared components** (`src/components/`):
 
