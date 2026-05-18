@@ -4,9 +4,7 @@
     getConfig,
     updateConfig,
     triggerCheck,
-    testWebhook,
     type Config,
-    type WebhookPreset,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import Input from "../components/Input.svelte";
@@ -56,22 +54,11 @@
       COMPLETED: m.config_status_completed(),
     } as Record<string, string>,
     btnRunCheck: m.config_btn_run_check(),
-    btnReload: m.config_btn_reload(),
     btnSave: m.config_btn_save(),
     btnSaving: m.config_btn_saving(),
   }
 
   const ALL_STATUSES = ["CURRENT", "REPEATING", "PLANNING", "PAUSED", "DROPPED", "COMPLETED"];
-
-  const WEBHOOK_PRESETS: Record<string, WebhookPreset> = {
-    ntfy: { name: 'ntfy', url: 'https://ntfy.sh/CHANGE_ME', method: 'POST', headers: { Title: '{{title}}', Priority: 'default' }, body: '{{message}}' },
-    gotify: { name: 'Gotify', url: 'http://YOUR_GOTIFY_URL/message?token=CHANGE_ME', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"title":"{{title}}","message":"{{message}}","priority":5}' },
-    discord: { name: 'Discord', url: 'https://discord.com/api/webhooks/CHANGE_ME', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"content":"**{{title}}**\\n{{message}}"}' },
-    telegram: { name: 'Telegram', url: 'https://api.telegram.org/botCHANGE_TOKEN/sendMessage', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"chat_id":"CHANGE_CHAT_ID","text":"*{{title}}*\\n{{message}}","parse_mode":"Markdown"}' },
-    pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}' },
-    slack: { name: 'Slack', url: 'https://hooks.slack.com/services/CHANGE_ME', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"text":"*{{title}}*\\n{{message}}"}' },
-    apprise: { name: 'Apprise', url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"title":"{{title}}","body":"{{message}}"}' },
-  };
 
   let config: Config = {
     anilist_usernames: [],
@@ -89,50 +76,6 @@
     delete_statuses: [],
     notifications: { webhooks: [] },
   };
-
-  let showWebhookForm = false;
-  let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '' };
-  let newHeaderKey = '';
-  let newHeaderValue = '';
-
-  function applyPreset(key: string) {
-    newWebhook = { ...WEBHOOK_PRESETS[key] };
-  }
-
-  function addWebhook() {
-    if (!newWebhook.name || !newWebhook.url) return;
-    config.notifications.webhooks = [...config.notifications.webhooks, { ...newWebhook }];
-    newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '' };
-    showWebhookForm = false;
-  }
-
-  function removeWebhook(index: number) {
-    config.notifications.webhooks = config.notifications.webhooks.filter((_, i) => i !== index);
-  }
-
-  async function testWebhookHandler(name: string) {
-    try {
-      await testWebhook(name);
-      toast.success(`Webhook "${name}" disparado`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao testar webhook');
-    }
-  }
-
-  function addHeader() {
-    if (!newHeaderKey) return;
-    newWebhook.headers = { ...newWebhook.headers, [newHeaderKey]: newHeaderValue };
-    newHeaderKey = '';
-    newHeaderValue = '';
-  }
-
-  function removeHeader(key: string) {
-    const { [key]: _, ...rest } = newWebhook.headers;
-    newWebhook.headers = rest;
-  }
-
-  const bodyPlaceholder = '{"message":"{{message}}"}';
-  const varsHint = 'Variáveis: {{title}}, {{message}}, {{anime_name}}, {{episode}}, {{timestamp}}';
 
   function toggleDownloadStatus(status: string) {
     const active = (config.download_statuses ?? []).includes(status);
@@ -532,167 +475,6 @@
         </div>
       </div>
 
-      <!-- Notificações -->
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">Notificações</h2>
-
-          {#if (config.notifications?.webhooks ?? []).length > 0}
-            <div class="flex flex-col gap-2">
-              {#each config.notifications.webhooks as hook, i}
-                <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-base-100 border border-base-300">
-                  <div class="flex-1 min-w-0">
-                    <span class="text-sm font-medium text-base-content">{hook.name}</span>
-                    <span class="text-xs text-base-content/50 ml-2 truncate">{hook.url.length > 50 ? hook.url.slice(0, 50) + '…' : hook.url}</span>
-                  </div>
-                  <div class="flex gap-2 shrink-0">
-                    <button
-                      type="button"
-                      on:click={() => testWebhookHandler(hook.name)}
-                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      Testar
-                    </button>
-                    <button
-                      type="button"
-                      on:click={() => removeWebhook(i)}
-                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                    >
-                      Remover
-                    </button>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-
-          {#if !showWebhookForm}
-            <button
-              type="button"
-              on:click={() => { showWebhookForm = true; }}
-              class="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-dashed border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm transition-colors w-fit"
-            >
-              + Adicionar webhook
-            </button>
-          {:else}
-            <div class="flex flex-col gap-3 p-4 rounded-md border border-base-300 bg-base-100">
-              <!-- Preset buttons -->
-              <div>
-                <p class="text-xs text-base-content/50 mb-2">Usar preset:</p>
-                <div class="flex flex-wrap gap-2">
-                  {#each Object.keys(WEBHOOK_PRESETS) as key}
-                    <button
-                      type="button"
-                      on:click={() => applyPreset(key)}
-                      class="px-3 py-1 rounded-full text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                    >
-                      {WEBHOOK_PRESETS[key].name}
-                    </button>
-                  {/each}
-                </div>
-              </div>
-
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div class="flex flex-col gap-1">
-                  <label class="text-xs font-medium text-base-content">Nome</label>
-                  <input
-                    type="text"
-                    bind:value={newWebhook.name}
-                    placeholder="ex: ntfy"
-                    class="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
-                  />
-                </div>
-                <div class="flex flex-col gap-1">
-                  <label class="text-xs font-medium text-base-content">Método</label>
-                  <select
-                    bind:value={newWebhook.method}
-                    class="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
-                  >
-                    <option>POST</option>
-                    <option>GET</option>
-                    <option>PUT</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-base-content">URL</label>
-                <input
-                  type="text"
-                  bind:value={newWebhook.url}
-                  placeholder="https://ntfy.sh/meu-topico"
-                  class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
-                />
-              </div>
-
-              <!-- Headers -->
-              <div class="flex flex-col gap-2">
-                <label class="text-xs font-medium text-base-content">Headers</label>
-                {#each Object.entries(newWebhook.headers) as [k, v]}
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-base-content/70 flex-1">{k}: {v}</span>
-                    <button
-                      type="button"
-                      on:click={() => removeHeader(k)}
-                      class="text-xs text-red-400 hover:text-red-600"
-                    >✕</button>
-                  </div>
-                {/each}
-                <div class="flex gap-2">
-                  <input
-                    type="text"
-                    bind:value={newHeaderKey}
-                    placeholder="Header"
-                    class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
-                  />
-                  <input
-                    type="text"
-                    bind:value={newHeaderValue}
-                    placeholder="Valor"
-                    class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
-                  />
-                  <button
-                    type="button"
-                    on:click={addHeader}
-                    class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  >+</button>
-                </div>
-              </div>
-
-              <!-- Body -->
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-base-content">Body</label>
-                <textarea
-                  bind:value={newWebhook.body}
-                  rows="3"
-                  placeholder={bodyPlaceholder}
-                  class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2 font-mono"
-                ></textarea>
-                <p class="text-xs text-base-content/40">{varsHint}</p>
-              </div>
-
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  on:click={addWebhook}
-                  disabled={!newWebhook.name || !newWebhook.url}
-                  class="inline-flex items-center px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Confirmar
-                </button>
-                <button
-                  type="button"
-                  on:click={() => { showWebhookForm = false; newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '' }; }}
-                  class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          {/if}
-        </div>
-      </div>
-
       <!-- Actions -->
       <div class="flex justify-end gap-3 pt-2">
         <button
@@ -705,14 +487,6 @@
           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {T && T.btnRunCheck}
-        </button>
-        <button
-          type="button"
-          on:click={loadConfig}
-          disabled={loading || saving}
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {T && T.btnReload}
         </button>
         <button
           type="submit"
