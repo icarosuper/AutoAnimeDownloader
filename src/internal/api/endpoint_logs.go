@@ -19,7 +19,7 @@ type LogsResponse struct {
 // @Produce      json
 // @Param        lines  query     int  false  "Number of lines to return (default: 1000, max: 10000)"
 // @Success      200    {object}  SuccessResponse{data=LogsResponse}
-// @Failure      500    {object}  ErrorResponse
+// @Failure      500    {object}  SuccessResponse
 // @Router       /logs [get]
 func handleLogs(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

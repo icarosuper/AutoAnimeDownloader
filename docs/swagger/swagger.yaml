@@ -1,16 +1,79 @@
 basePath: /api/v1
 definitions:
+  api.AnimeDetailResponse:
+    properties:
+      anime_id:
+        type: integer
+      cover_image:
+        type: string
+      custom_search_query:
+        type: string
+      episodes:
+        items:
+          $ref: '#/definitions/api.AnimeEpisodeInfo'
+        type: array
+      progress:
+        type: integer
+      status:
+        type: string
+      total_episodes:
+        type: integer
+    type: object
+  api.AnimeEpisodeInfo:
+    properties:
+      airing_at:
+        type: integer
+      download_date:
+        type: string
+      episode_id:
+        type: integer
+      episode_name:
+        type: string
+      episode_number:
+        type: integer
+      is_aired:
+        type: boolean
+      is_blocked:
+        type: boolean
+      is_downloaded:
+        type: boolean
+      is_manually_managed:
+        type: boolean
+      is_watched:
+        type: boolean
+      time_until_airing:
+        type: integer
+    type: object
   api.AnimeInfo:
     properties:
-      episodes_count:
-        example: 12
+      anime_id:
+        example: 12345
         type: integer
+      cover_image:
+        type: string
+      episodes_downloaded:
+        example: 8
+        type: integer
+      episodes_released:
+        example: 10
+        type: integer
+      episodes_watched:
+        example: 5
+        type: integer
+      is_blacklisted:
+        type: boolean
+      last_download_date:
+        example: "2026-02-24T10:30:00Z"
+        type: string
       latest_episode_id:
         example: 12
         type: integer
       name:
         example: Naruto
         type: string
+      total_episodes:
+        example: 12
+        type: integer
     type: object
   api.ErrorInfo:
     properties:
@@ -18,6 +81,13 @@ definitions:
         type: string
       message:
         type: string
+    type: object
+  api.LogsResponse:
+    properties:
+      lines:
+        items:
+          type: string
+        type: array
     type: object
   api.StatusResponse:
     properties:
@@ -30,6 +100,9 @@ definitions:
       status:
         example: running
         type: string
+      version:
+        example: 1.2.0
+        type: string
     type: object
   api.SuccessResponse:
     properties:
@@ -39,34 +112,74 @@ definitions:
       success:
         type: boolean
     type: object
+  api.animeSettingsRequest:
+    properties:
+      custom_search_query:
+        type: string
+    type: object
   files.Config:
     properties:
       anilist_username:
         type: string
+      anilist_usernames:
+        items:
+          type: string
+        type: array
       check_interval:
         type: integer
       completed_anime_path:
         type: string
+      delete_statuses:
+        items:
+          type: string
+        type: array
       delete_watched_episodes:
         type: boolean
+      download_statuses:
+        items:
+          type: string
+        type: array
       episode_retry_limit:
         type: integer
       excluded_list:
         type: string
+      excluded_lists:
+        items:
+          type: string
+        type: array
       max_episodes_per_anime:
         type: integer
+      notifications:
+        $ref: '#/definitions/files.NotificationsConfig'
       qbittorrent_url:
         type: string
+      rename_files_for_jellyfin:
+        type: boolean
       save_path:
         type: string
-    type: object
-  files.EpisodeStruct:
-    properties:
-      episode_hash:
-        type: string
-      episode_id:
+      watched_episodes_to_keep:
         type: integer
-      episode_name:
+    type: object
+  files.NotificationsConfig:
+    properties:
+      webhooks:
+        items:
+          $ref: '#/definitions/files.WebhookPreset'
+        type: array
+    type: object
+  files.WebhookPreset:
+    properties:
+      body:
+        type: string
+      headers:
+        additionalProperties:
+          type: string
+        type: object
+      method:
+        type: string
+      name:
+        type: string
+      url:
         type: string
     type: object
 host: localhost:8091
@@ -111,6 +224,374 @@ paths:
           schema:
             $ref: '#/definitions/api.SuccessResponse'
       summary: Get animes list
+      tags:
+      - animes
+  /animes/{id}/episodes:
+    get:
+      consumes:
+      - application/json
+      description: Returns anime info from AniList combined with downloaded episodes
+        data
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/api.AnimeDetailResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get detail and episodes for a specific anime
+      tags:
+      - animes
+  /animes/{id}/episodes/{episodeId}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes a downloaded episode from qBittorrent and blocks it from
+        being re-downloaded automatically
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Episode ID (AniList AiringNode ID)
+        in: path
+        name: episodeId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Manually delete a downloaded episode
+      tags:
+      - animes
+  /animes/{id}/episodes/{episodeId}/download:
+    post:
+      consumes:
+      - application/json
+      description: Triggers an immediate download for an aired episode and marks it
+        as manually managed
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Episode ID (AniList AiringNode ID)
+        in: path
+        name: episodeId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Manually download an episode
+      tags:
+      - animes
+  /animes/{id}/episodes/{episodeId}/redownload:
+    post:
+      consumes:
+      - application/json
+      description: Deletes the existing torrent (if any) and searches Nyaa again for
+        a fresh download
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Episode ID (AniList AiringNode ID)
+        in: path
+        name: episodeId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Redownload an episode from Nyaa
+      tags:
+      - animes
+  /animes/{id}/episodes/{episodeId}/release:
+    post:
+      consumes:
+      - application/json
+      description: Unblocks and unmanages an episode so the daemon can handle it automatically
+        again
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Episode ID (AniList AiringNode ID)
+        in: path
+        name: episodeId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Release an episode from manual management
+      tags:
+      - animes
+  /animes/{id}/episodes/{episodeId}/replace:
+    post:
+      consumes:
+      - application/json
+      description: Deletes the existing torrent (if any) and downloads the episode
+        using the provided magnet link
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Episode ID (AniList AiringNode ID)
+        in: path
+        name: episodeId
+        required: true
+        type: integer
+      - description: Magnet link
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Replace a downloaded episode with a user-supplied magnet link
+      tags:
+      - animes
+  /animes/{id}/replace:
+    post:
+      consumes:
+      - application/json
+      description: Deletes all existing torrents for the anime and downloads using
+        the provided magnet link, marking all aired episodes as downloaded
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Magnet link
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Replace all downloaded episodes of an anime with a user-supplied batch
+        magnet link
+      tags:
+      - animes
+  /animes/{id}/settings:
+    get:
+      consumes:
+      - application/json
+      description: GET returns current settings; PUT updates them
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Settings
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api.animeSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get or update anime-specific settings
+      tags:
+      - animes
+    put:
+      consumes:
+      - application/json
+      description: GET returns current settings; PUT updates them
+      parameters:
+      - description: Anime ID (AniList MediaList ID)
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Settings
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api.animeSettingsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get or update anime-specific settings
       tags:
       - animes
   /check:
@@ -243,11 +724,16 @@ paths:
       summary: Stop daemon
       tags:
       - daemon
-  /episodes:
+  /logs:
     get:
       consumes:
       - application/json
-      description: Returns a list of all downloaded episodes
+      description: Returns the last N lines from the daemon log file
+      parameters:
+      - description: 'Number of lines to return (default: 1000, max: 10000)'
+        in: query
+        name: lines
+        type: integer
       produces:
       - application/json
       responses:
@@ -258,10 +744,35 @@ paths:
             - $ref: '#/definitions/api.SuccessResponse'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/files.EpisodeStruct'
-                  type: array
+                  $ref: '#/definitions/api.LogsResponse'
               type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get daemon logs
+      tags:
+      - logs
+  /notifications/webhooks/{name}/test:
+    post:
+      description: Fires a named webhook with sample variables to verify connectivity
+      parameters:
+      - description: Webhook preset name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
         "405":
           description: Method Not Allowed
           schema:
@@ -270,9 +781,9 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/api.SuccessResponse'
-      summary: Get episodes list
+      summary: Test a webhook preset
       tags:
-      - episodes
+      - notifications
   /status:
     get:
       consumes:

@@ -21,6 +21,12 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 | `RenameFilesForJellyfin` | `rename_files_for_jellyfin` | `bool` | `false` | Rename downloaded files to Jellyfin-compatible format |
 | `DownloadStatuses` | `download_statuses` | `[]string` | `["CURRENT", "REPEATING"]` | Anilist statuses to download. Valid values: `CURRENT`, `REPEATING`, `COMPLETED`, `PAUSED`, `DROPPED`, `PLANNING` |
 | `DeleteStatuses` | `delete_statuses` | `[]string` | `[]` | Anilist statuses to auto-delete episodes from. Same valid values as above |
+| `Notifications.Webhooks` | `notifications.webhooks` | `[]WebhookPreset` | `[]` | List of webhook presets to fire on events |
+| `Notifications.Webhooks[].Name` | `name` | `string` | — | Human-readable label (used to identify webhook in API/UI) |
+| `Notifications.Webhooks[].URL` | `url` | `string` | — | Target URL — supports `{{vars}}` |
+| `Notifications.Webhooks[].Method` | `method` | `string` | — | HTTP method (`POST`/`GET`/`PUT`) |
+| `Notifications.Webhooks[].Headers` | `headers` | `map[string]string` | — | Request headers — values support `{{vars}}` |
+| `Notifications.Webhooks[].Body` | `body` | `string` | — | Request body — supports `{{vars}}` |
 
 ## Required Fields
 
@@ -37,6 +43,20 @@ If missing, daemon opens browser to `http://localhost:<port>/#/config?missingCon
 - `anilist_username`, `save_path`, `qbittorrent_url` — non-empty
 - `check_interval`, `max_episodes_per_anime` — > 0
 - `episode_retry_limit`, `watched_episodes_to_keep` — >= 0
+
+## Webhook Template Variables
+
+Available in `url`, `headers` values, and `body`:
+
+| Variable | Value |
+|----------|-------|
+| `{{title}}` | Short event label (e.g. "Novo episódio detectado") |
+| `{{message}}` | Full sentence with anime name and episode number |
+| `{{anime_name}}` | Anime title |
+| `{{episode}}` | Episode number as string |
+| `{{quality}}` | Always empty — not tracked at hook point |
+| `{{file_path}}` | Always empty — not tracked |
+| `{{timestamp}}` | Current time formatted as `2006-01-02 15:04` |
 
 ## Loading Behavior
 
