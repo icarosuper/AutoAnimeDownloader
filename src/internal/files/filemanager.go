@@ -29,6 +29,18 @@ type EpisodeStruct struct {
 	ManuallyManaged    bool      `json:"manually_managed,omitempty"`
 }
 
+type WebhookPreset struct {
+	Name    string            `json:"name"`
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+}
+
+type NotificationsConfig struct {
+	Webhooks []WebhookPreset `json:"webhooks"`
+}
+
 type Config struct {
 	SavePath               string   `json:"save_path"`
 	CompletedAnimePath     string   `json:"completed_anime_path"`
@@ -42,9 +54,10 @@ type Config struct {
 	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
 	ExcludedList           string   `json:"excluded_list,omitempty"`
 	ExcludedLists          []string `json:"excluded_lists"`
-	RenameFilesForJellyfin bool     `json:"rename_files_for_jellyfin"`
-	DownloadStatuses       []string `json:"download_statuses"`
-	DeleteStatuses         []string `json:"delete_statuses"`
+	RenameFilesForJellyfin bool                `json:"rename_files_for_jellyfin"`
+	DownloadStatuses       []string            `json:"download_statuses"`
+	DeleteStatuses         []string            `json:"delete_statuses"`
+	Notifications          NotificationsConfig `json:"notifications"`
 }
 
 type AnimeSettings struct {
@@ -73,6 +86,7 @@ func getDefaultConfig() *Config {
 		ExcludedLists:         []string{},
 		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
 		DeleteStatuses:        []string{},
+		Notifications:         NotificationsConfig{Webhooks: []WebhookPreset{}},
 	}
 }
 
