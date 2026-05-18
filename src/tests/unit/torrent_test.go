@@ -281,6 +281,47 @@ func TestTorrentService_CannotGetDownloadedTorrents_WithInvalidResponse(t *testi
 	}
 }
 
+func TestGetDownloadedTorrents_ParsesState(t *testing.T) {
+	mockClient, service := setupMockService()
+
+	torrentsJSON := `[{"hash":"abc123","name":"Frieren - Episode 5","save_path":"/downloads","content_path":"/downloads/Frieren","state":"uploading"}]`
+	mockSuccessfulTorrentList(mockClient, torrentsJSON)
+
+	ts, err := service.GetDownloadedTorrents()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ts) != 1 {
+		t.Fatalf("expected 1 torrent, got %d", len(ts))
+	}
+	if ts[0].State != "uploading" {
+		t.Fatalf("state not parsed: %q", ts[0].State)
+	}
+}
+
+func TestIsTorrentCompleted(t *testing.T) {
+	cases := []struct {
+		state    string
+		expected bool
+	}{
+		{"uploading", true},
+		{"stalledUP", true},
+		{"pausedUP", true},
+		{"forcedUP", true},
+		{"checkingUP", true},
+		{"queuedUP", true},
+		{"downloading", false},
+		{"error", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		got := torrents.IsTorrentCompleted(c.state)
+		if got != c.expected {
+			t.Errorf("IsTorrentCompleted(%q) = %v, want %v", c.state, got, c.expected)
+		}
+	}
+}
+
 func TestTorrentService_SanitizesFolderName(t *testing.T) {
 	testCases := []struct {
 		input    string
