@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -14,8 +17,9 @@ import (
 type JobType string
 
 const (
-	JobRenameFile      JobType = "rename_file"
-	JobMoveToCompleted JobType = "move_to_completed"
+	JobRenameFile        JobType = "rename_file"
+	JobMoveToCompleted   JobType = "move_to_completed"
+	JobNotifyOnComplete  JobType = "notify_on_complete"
 )
 
 const (
@@ -35,6 +39,13 @@ type RenameFilePayload struct {
 type MoveToCompletedPayload struct {
 	Hashes    []string `json:"hashes"`
 	AnimeName string   `json:"anime_name"`
+}
+
+// NotifyOnCompletePayload carries the data needed to fire a webhook when a torrent finishes.
+type NotifyOnCompletePayload struct {
+	Hash      string `json:"hash"`
+	AnimeName string `json:"anime_name"`
+	Episode   int    `json:"episode"`
 }
 
 // Job is a single unit of deferred work.
@@ -89,6 +100,15 @@ func (q *JobQueue) EnqueueRenameFile(hash, animeName string, episodeNumber int) 
 		AnimeName:     animeName,
 		EpisodeNumber: episodeNumber,
 	}, maxRetriesRenameFile)
+}
+
+// EnqueueNotifyOnComplete schedules a webhook notification once the torrent finishes in qBittorrent.
+func (q *JobQueue) EnqueueNotifyOnComplete(hash, animeName string, episode int) {
+	q.enqueue(JobNotifyOnComplete, NotifyOnCompletePayload{
+		Hash:      hash,
+		AnimeName: animeName,
+		Episode:   episode,
+	}, 100)
 }
 
 // EnqueueMoveToCompleted schedules moving an anime's torrents to the completed folder.
@@ -178,7 +198,7 @@ func (q *JobQueue) processDueJobs() {
 
 	changed := false
 	for _, job := range due {
-		success := q.executeJob(job, ts)
+		success := q.executeJob(job, ts, configs)
 
 		q.mu.Lock()
 		if success {
@@ -229,7 +249,7 @@ func retryBackoff(attempts int) time.Duration {
 	return backoff
 }
 
-func (q *JobQueue) executeJob(job *Job, ts *torrents.TorrentService) bool {
+func (q *JobQueue) executeJob(job *Job, ts *torrents.TorrentService, configs *files.Config) bool {
 	switch job.Type {
 	case JobRenameFile:
 		var p RenameFilePayload
@@ -249,6 +269,40 @@ func (q *JobQueue) executeJob(job *Job, ts *torrents.TorrentService) bool {
 			logger.Logger.Warn().Err(err).Str("anime", p.AnimeName).Msg("Job queue: failed to move anime to completed folder")
 			return false
 		}
+		return true
+
+	case JobNotifyOnComplete:
+		var p NotifyOnCompletePayload
+		if err := json.Unmarshal(job.Payload, &p); err != nil {
+			logger.Logger.Error().Err(err).Str("id", job.ID).Msg("Job queue: failed to unmarshal notify payload")
+			return true // drop malformed job
+		}
+
+		allTorrents, err := ts.GetDownloadedTorrents()
+		if err != nil {
+			logger.Logger.Warn().Err(err).Msg("Job queue: failed to get torrents for notify check")
+			return false // retry
+		}
+
+		for _, t := range allTorrents {
+			if strings.EqualFold(t.Hash, p.Hash) {
+				if t.State == "error" {
+					logger.Logger.Warn().
+						Str("hash", p.Hash).
+						Str("anime", p.AnimeName).
+						Msg("Job queue: torrent in error state, dropping notify job")
+					return true
+				}
+				if torrents.IsTorrentCompleted(t.State) {
+					notifications.Notify(configs, notifications.QBittorrentDownloadCompleted, p.AnimeName, p.Episode)
+					return true
+				}
+				return false // not complete yet, retry on next tick
+			}
+		}
+
+		// Torrent not found — likely deleted
+		logger.Logger.Debug().Str("hash", p.Hash).Msg("Job queue: torrent not found, dropping notify job")
 		return true
 
 	default:

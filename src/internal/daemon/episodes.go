@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"fmt"
@@ -79,6 +80,8 @@ func processAnimeEpisodes(
 			}
 		}
 
+		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode)
+
 		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName, skipSubfolder)
 
 		if hash != "" {
@@ -103,6 +106,12 @@ func processAnimeEpisodes(
 					go func() { torrentsService.RenameEpisodeFile(hash, animeTitle, ep.Episode) }()
 				}
 			}
+
+			if jobQueue != nil {
+				jobQueue.EnqueueNotifyOnComplete(hash, animeTitle, ep.Episode)
+			}
+		} else {
+			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode)
 		}
 	}
 
