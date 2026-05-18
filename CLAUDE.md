@@ -11,6 +11,7 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 1. **Run tests**: `go test ./...`
 2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add an entry to `decisions.md`
 3. **Regenerate Swagger**: if API changed → `swag init -g src/cmd/daemon/main.go -o docs/swagger`
+4. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
 
 ## Docs
 
