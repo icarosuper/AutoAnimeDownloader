@@ -13,6 +13,7 @@ src/internal/
   nyaa/              → HTML scraper for Nyaa torrent site
   torrents/          → qBittorrent WebUI HTTP client
   frontend/          → Svelte 5 + Vite + Tailwind web UI (compiled to Go embed)
+  notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on NewEpisode/DownloadFailed; by job queue on QBittorrentDownloadCompleted.
   logger/            → zerolog-based structured logger (console + rotating file)
   tray/              → System tray icon (fyne/systray)
   version/           → Build-time version injection via ldflags
@@ -70,6 +71,7 @@ Key endpoints:
 | `POST` | `/api/v1/daemon/start` | `handleDaemonStart` | `endpoint_daemon_start.go` |
 | `POST` | `/api/v1/daemon/stop` | `handleDaemonStop` | `endpoint_daemon_stop.go` |
 | `GET` | `/api/v1/logs` | `handleLogs` | `endpoint_logs.go` |
+| `POST` | `/api/v1/notifications/webhooks/{name}/test` | `handleNotificationWebhookTest` | `endpoint_notifications.go` |
 | `WS` | `/api/v1/ws` | `handleWebSocket` | `websocket.go` |
 
 ## Version Injection
@@ -133,6 +135,7 @@ Deferred job queue for async qBittorrent operations. Decouples slow/unreliable q
 | `JobQueue.Stop()` | Signals goroutine to stop and waits |
 | `JobQueue.EnqueueRenameFile(hash, animeName, epNum)` | Schedule Jellyfin rename; max 20 retries |
 | `JobQueue.EnqueueMoveToCompleted(hashes, animeName)` | Schedule move to completed folder; max 10 retries |
+| `JobQueue.EnqueueNotifyOnComplete(hash, animeName, episode)` | Poll until torrent reaches a seeding state, then fire `QBittorrentDownloadCompleted` webhook; max 100 retries (~25 min) |
 
 **Job types**:
 
@@ -140,6 +143,7 @@ Deferred job queue for async qBittorrent operations. Decouples slow/unreliable q
 |------|---------|---------|
 | `rename_file` | `hash`, `anime_name`, `episode_number` | After successful torrent add when `RenameFilesForJellyfin=true` |
 | `move_to_completed` | `hashes[]`, `anime_name` | After all episodes of a finished anime are downloaded |
+| `notify_on_complete` | `hash`, `anime_name`, `episode` | After successful torrent add — polls until qBit state is a seeding state, then fires `QBittorrentDownloadCompleted` webhook |
 
 **Persistence**: `~/.autoAnimeDownloader/pending_jobs.json` (Windows: `%APPDATA%\AutoAnimeDownloader\pending_jobs.json`). Written after every enqueue and after every tick that changes queue state. Jobs survive daemon restarts.
 
@@ -329,7 +333,8 @@ Title-matching logic for filtering Nyaa search results.
 | Symbol | Purpose |
 |--------|---------|
 | `TorrentService` struct | `httpClient`, `baseURL`, `savePath`, `completedPath` |
-| `Torrent` struct | `Hash`, `Magnet`, `Name`, `SavePath`, `ContentPath` |
+| `Torrent` struct | `Hash`, `Magnet`, `Name`, `SavePath`, `ContentPath`, `State` |
+| `IsTorrentCompleted(state)` | Returns true for any seeding state (`"uploading"` or states ending in `"UP"`) |
 | `NewTorrentService(client, url, save, completed)` | Constructor |
 | `TorrentService.GetDownloadedTorrents()` | Lists torrents in `autoAnimeDownloader` category |
 | `TorrentService.DownloadTorrent(magnet, animeName, epName, isCompleted)` | Adds torrent, waits for hash, returns hash |
@@ -339,6 +344,19 @@ Title-matching logic for filtering Nyaa search results.
 | `TorrentService.MoveToCompletedFolder(hash)` | Sets torrent location to `completedPath` |
 | `HTTPClient` interface | `Get(url)`, `PostForm(url, data)` — `DefaultHTTPClient` wraps std lib |
 | `CATEGORY` const | `"autoAnimeDownloader"` — used to tag/filter torrents |
+
+### `src/internal/notifications/notifications.go`
+
+| Symbol | Purpose |
+|--------|---------|
+| `Event` type | `NewEpisode`, `DownloadFailed`, `QBittorrentDownloadCompleted` |
+| `Notify(cfg, event, animeName, episode)` | Fires all configured webhooks for an event in background goroutines. No-op if cfg is nil or has no webhooks |
+| `FireTestWebhook(cfg, name)` | Fires one named webhook with sample variables. Returns error if not found |
+| `interpolate(template, vars)` | Replaces `{{var}}` placeholders — missing vars become empty string |
+| `buildVars(animeName, episode, event)` | Builds the template variable map from event data |
+| `fireWebhook(preset, vars)` | Sends HTTP request; logs error/warn on failure but never panics |
+
+**Template variables available in URL, headers, and body**: `{{title}}`, `{{message}}`, `{{anime_name}}`, `{{episode}}`, `{{quality}}` (always empty), `{{file_path}}` (always empty), `{{timestamp}}` (formatted `2006-01-02 15:04`).
 
 ### `src/internal/stringutil/stringutil.go`
 
@@ -358,6 +376,7 @@ Title-matching logic for filtering Nyaa search results.
 | `routes/AnimeDetail.svelte` | `#/anime/:id` | Per-anime episode list + actions |
 | `routes/Config.svelte` | `#/config` | Edit all config fields |
 | `routes/Logs.svelte` | `#/logs` | Tail daemon logs |
+| `routes/Notifications.svelte` | `#/notifications` | Webhook configuration CRUD |
 
 **Shared components** (`src/components/`):
 

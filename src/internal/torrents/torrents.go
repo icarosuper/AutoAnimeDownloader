@@ -50,6 +50,13 @@ type Torrent struct {
 	Name        string `json:"name"`
 	SavePath    string `json:"save_path"`
 	ContentPath string `json:"content_path"`
+	State       string `json:"state"`
+}
+
+// IsTorrentCompleted returns true when a qBittorrent state indicates download is done.
+// Covers all seeding states: "uploading" and any state ending in "UP" (stalledUP, pausedUP, etc.).
+func IsTorrentCompleted(state string) bool {
+	return state == "uploading" || strings.HasSuffix(state, "UP")
 }
 
 type TorrentFile struct {

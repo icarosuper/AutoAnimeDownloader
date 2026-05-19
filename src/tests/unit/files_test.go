@@ -709,6 +709,37 @@ func TestSerializeEpisodes_WithEmptyList(t *testing.T) {
 	}
 }
 
+func TestConfigRoundtripWithNotifications(t *testing.T) {
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{
+					Name:    "ntfy",
+					URL:     "https://ntfy.sh/test",
+					Method:  "POST",
+					Headers: map[string]string{"Title": "{{title}}"},
+					Body:    "{{message}}",
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded files.Config
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Notifications.Webhooks) != 1 {
+		t.Fatalf("expected 1 webhook, got %d", len(decoded.Notifications.Webhooks))
+	}
+	if decoded.Notifications.Webhooks[0].Headers["Title"] != "{{title}}" {
+		t.Fatal("headers not preserved")
+	}
+}
+
 // Test round-trip: parse then serialize should give same result (JSON format)
 func TestParseSerialize_RoundTrip_JSON(t *testing.T) {
 	now := time.Now()

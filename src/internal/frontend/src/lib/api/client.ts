@@ -74,6 +74,15 @@ export interface StatusResponse {
   version: string
 }
 
+export interface WebhookPreset {
+  name: string
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string
+  events: string[]
+}
+
 export interface Config {
   anilist_username?: string
   anilist_usernames: string[]
@@ -90,6 +99,9 @@ export interface Config {
   rename_files_for_jellyfin: boolean
   download_statuses: string[]
   delete_statuses: string[]
+  notifications: {
+    webhooks: WebhookPreset[]
+  }
 }
 
 export interface AnimeInfo {
@@ -200,5 +212,16 @@ export async function stopDaemon(): Promise<void> {
 export async function getLogs(lines?: number): Promise<LogsResponse> {
   const endpoint = lines ? `/logs?lines=${lines}` : '/logs'
   return apiRequest<LogsResponse>('GET', endpoint)
+}
+
+export async function testWebhook(name: string): Promise<void> {
+  const res = await fetch(
+    `/api/v1/notifications/webhooks/${encodeURIComponent(name)}/test`,
+    { method: 'POST' }
+  )
+  if (!res.ok) {
+    const data = await res.json()
+    throw new Error(data.error?.message ?? 'Failed to test webhook')
+  }
 }
 

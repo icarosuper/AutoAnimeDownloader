@@ -54,7 +54,6 @@
       COMPLETED: m.config_status_completed(),
     } as Record<string, string>,
     btnRunCheck: m.config_btn_run_check(),
-    btnReload: m.config_btn_reload(),
     btnSave: m.config_btn_save(),
     btnSaving: m.config_btn_saving(),
   }
@@ -75,6 +74,7 @@
     rename_files_for_jellyfin: false,
     download_statuses: ["CURRENT", "REPEATING"],
     delete_statuses: [],
+    notifications: { webhooks: [] },
   };
 
   function toggleDownloadStatus(status: string) {
@@ -152,6 +152,8 @@
       if (config.anilist_username && (config.anilist_usernames ?? []).length === 0) {
         config.anilist_usernames = [config.anilist_username];
       }
+      if (!config.notifications) config.notifications = { webhooks: [] };
+      if (!Array.isArray(config.notifications.webhooks)) config.notifications.webhooks = [];
       useCompletedPath = !!config.completed_anime_path;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.config_error_load());
@@ -485,14 +487,6 @@
           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {T && T.btnRunCheck}
-        </button>
-        <button
-          type="button"
-          on:click={loadConfig}
-          disabled={loading || saving}
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {T && T.btnReload}
         </button>
         <button
           type="submit"

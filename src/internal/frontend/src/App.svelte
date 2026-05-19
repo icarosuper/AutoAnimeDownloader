@@ -5,6 +5,7 @@
   import AnimeDetail from "./routes/AnimeDetail.svelte";
   import Config from "./routes/Config.svelte";
   import Logs from "./routes/Logs.svelte";
+  import Notifications from "./routes/Notifications.svelte";
 
   const routes: Record<string, unknown> = {
     "/": Status,
@@ -12,6 +13,7 @@
     "/status/:id": AnimeDetail,
     "/config": Config,
     "/logs": Logs,
+    "/notifications": Notifications,
   };
 </script>
 
