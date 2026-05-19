@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -19,6 +20,18 @@ const (
 )
 
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
+
+func eventString(e Event) string {
+	switch e {
+	case NewEpisode:
+		return "new_episode"
+	case DownloadFailed:
+		return "download_failed"
+	case QBittorrentDownloadCompleted:
+		return "download_completed"
+	}
+	return ""
+}
 
 func interpolate(template string, vars map[string]string) string {
 	return reVar.ReplaceAllStringFunc(template, func(match string) string {
@@ -84,14 +97,18 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
 	}
 }
 
-// Notify fires all configured webhooks for an event in background goroutines.
+// Notify fires webhooks subscribed to the given event in background goroutines.
 // No-op if cfg is nil or has no webhooks.
 func Notify(cfg *files.Config, event Event, animeName string, episode int) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 {
 		return
 	}
+	eventStr := eventString(event)
 	vars := buildVars(animeName, episode, event)
 	for _, preset := range cfg.Notifications.Webhooks {
+		if !slices.Contains(preset.Events, eventStr) {
+			continue
+		}
 		go func(p files.WebhookPreset) {
 			fireWebhook(p, vars)
 		}(preset)

@@ -23,7 +23,7 @@ const (
 )
 
 const (
-	jobTickInterval         = 15 * time.Second
+	jobTickInterval         = 5 * time.Second
 	maxRetriesRenameFile    = 20
 	maxRetriesMoveCompleted = 10
 )

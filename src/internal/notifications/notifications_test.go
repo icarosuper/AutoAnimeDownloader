@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestInterpolate(t *testing.T) {
@@ -91,4 +92,52 @@ func TestNotifyNoOp_WhenNoWebhooks(t *testing.T) {
 
 func TestNotifyNoOp_WhenNilConfig(t *testing.T) {
 	Notify(nil, NewEpisode, "Frieren", 5)
+}
+
+func TestNotify_SkipsWebhookWhenEventNotSubscribed(t *testing.T) {
+	fired := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fired <- struct{}{}
+	}))
+	defer srv.Close()
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "test", Events: []string{"download_failed"}},
+			},
+		},
+	}
+
+	Notify(cfg, NewEpisode, "Frieren", 5)
+
+	select {
+	case <-fired:
+		t.Fatal("webhook should not have fired for unsubscribed event")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestNotify_FiresWebhookWhenEventSubscribed(t *testing.T) {
+	fired := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fired <- struct{}{}
+	}))
+	defer srv.Close()
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "test", Events: []string{"new_episode"}},
+			},
+		},
+	}
+
+	Notify(cfg, NewEpisode, "Frieren", 5)
+
+	select {
+	case <-fired:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("webhook should have fired for subscribed event")
+	}
 }

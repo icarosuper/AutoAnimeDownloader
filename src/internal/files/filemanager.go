@@ -35,6 +35,7 @@ type WebhookPreset struct {
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
+	Events  []string          `json:"events"`
 }
 
 type NotificationsConfig struct {

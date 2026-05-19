@@ -212,5 +212,10 @@
   "notifications_toast_test_ok": "Webhook \"{name}\" disparado",
   "notifications_toast_test_err": "Erro ao testar webhook",
   "notifications_toast_saved": "Salvo!",
-  "notifications_toast_save_err": "Erro ao salvar notificações"
+  "notifications_toast_save_err": "Erro ao salvar notificações",
+  "notifications_label_events": "Eventos",
+  "notifications_event_new_episode": "Novo episódio detectado",
+  "notifications_event_download_failed": "Falha no download",
+  "notifications_event_download_completed": "Download concluído",
+  "notifications_btn_edit": "Editar"
 }

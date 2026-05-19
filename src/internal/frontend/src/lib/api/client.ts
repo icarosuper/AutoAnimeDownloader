@@ -80,6 +80,7 @@ export interface WebhookPreset {
   method: string
   headers: Record<string, string>
   body: string
+  events: string[]
 }
 
 export interface Config {

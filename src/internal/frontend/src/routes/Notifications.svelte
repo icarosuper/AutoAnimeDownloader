@@ -30,16 +30,23 @@
     labelHeaders: m.notifications_label_headers(),
     labelBody: m.notifications_label_body(),
     presetLabel: m.notifications_preset_label(),
+    btnEdit: m.notifications_btn_edit(),
+    labelEvents: m.notifications_label_events(),
+    eventNewEpisode: m.notifications_event_new_episode(),
+    eventDownloadFailed: m.notifications_event_download_failed(),
+    eventDownloadCompleted: m.notifications_event_download_completed(),
   };
 
+  const ALL_EVENTS = ['new_episode', 'download_failed', 'download_completed'] as const;
+
   const WEBHOOK_PRESETS: Record<string, WebhookPreset> = {
-    ntfy:     { name: 'ntfy',     url: 'https://ntfy.sh/CHANGE_ME',                                    method: 'POST', headers: { Title: '{{title}}', Priority: 'default' },         body: '{{message}}' },
-    gotify:   { name: 'Gotify',   url: 'http://YOUR_GOTIFY_URL/message?token=CHANGE_ME',               method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","message":"{{message}}","priority":5}' },
-    discord:  { name: 'Discord',  url: 'https://discord.com/api/webhooks/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"content":"**{{title}}**\\n{{message}}"}' },
-    telegram: { name: 'Telegram', url: 'https://api.telegram.org/botCHANGE_TOKEN/sendMessage',         method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"chat_id":"CHANGE_CHAT_ID","text":"*{{title}}*\\n{{message}}","parse_mode":"Markdown"}' },
-    pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json',                     method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}' },
-    slack:    { name: 'Slack',    url: 'https://hooks.slack.com/services/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"text":"*{{title}}*\\n{{message}}"}' },
-    apprise:  { name: 'Apprise',  url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG',                    method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","body":"{{message}}"}' },
+    ntfy:     { name: 'ntfy',     url: 'https://ntfy.sh/CHANGE_ME',                                    method: 'POST', headers: { Title: '{{title}}', Priority: 'default' },         body: '{{message}}',                                                                                                                                            events: [...ALL_EVENTS] },
+    gotify:   { name: 'Gotify',   url: 'http://YOUR_GOTIFY_URL/message?token=CHANGE_ME',               method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","message":"{{message}}","priority":5}',                                                                                            events: [...ALL_EVENTS] },
+    discord:  { name: 'Discord',  url: 'https://discord.com/api/webhooks/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"content":"**{{title}}**\\n{{message}}"}',                                                                                                              events: [...ALL_EVENTS] },
+    telegram: { name: 'Telegram', url: 'https://api.telegram.org/botCHANGE_TOKEN/sendMessage',         method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"chat_id":"CHANGE_CHAT_ID","text":"*{{title}}*\\n{{message}}","parse_mode":"Markdown"}',                                                                events: [...ALL_EVENTS] },
+    pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json',                     method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}',                                                      events: [...ALL_EVENTS] },
+    slack:    { name: 'Slack',    url: 'https://hooks.slack.com/services/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"text":"*{{title}}*\\n{{message}}"}',                                                                                                                   events: [...ALL_EVENTS] },
+    apprise:  { name: 'Apprise',  url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG',                    method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","body":"{{message}}"}',                                                                                                             events: [...ALL_EVENTS] },
   };
 
   const bodyPlaceholder = '{"message":"{{message}}"}';
@@ -52,19 +59,39 @@
   let saving = false;
 
   let showWebhookForm = false;
-  let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '' };
+  let editingIndex: number | null = null;
+  let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
   let newHeaderKey = '';
   let newHeaderValue = '';
+
+  function resetForm() {
+    newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
+    newHeaderKey = '';
+    newHeaderValue = '';
+    editingIndex = null;
+    showWebhookForm = false;
+  }
 
   function applyPreset(key: string) {
     newWebhook = { ...WEBHOOK_PRESETS[key] };
   }
 
-  function addWebhook() {
+  function editWebhook(index: number) {
+    newWebhook = { ...notifications.webhooks[index], headers: { ...notifications.webhooks[index].headers }, events: [...(notifications.webhooks[index].events ?? [])] };
+    newHeaderKey = '';
+    newHeaderValue = '';
+    editingIndex = index;
+    showWebhookForm = true;
+  }
+
+  function confirmWebhook() {
     if (!newWebhook.name || !newWebhook.url) return;
-    notifications.webhooks = [...notifications.webhooks, { ...newWebhook }];
-    newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '' };
-    showWebhookForm = false;
+    if (editingIndex !== null) {
+      notifications.webhooks = notifications.webhooks.map((h, i) => i === editingIndex ? { ...newWebhook } : h);
+    } else {
+      notifications.webhooks = [...notifications.webhooks, { ...newWebhook }];
+    }
+    resetForm();
   }
 
   function removeWebhook(index: number) {
@@ -154,6 +181,13 @@
                         {T && T.btnTest}
                       </button>
                     {/if}
+                    <button
+                      type="button"
+                      on:click={() => editWebhook(i)}
+                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      {T && T.btnEdit}
+                    </button>
                     <button
                       type="button"
                       on:click={() => removeWebhook(i)}
@@ -269,10 +303,37 @@
                 <p class="text-xs text-base-content/40">{varsHint}</p>
               </div>
 
+              <div class="flex flex-col gap-2">
+                <label class="text-xs font-medium text-base-content">{T && T.labelEvents}</label>
+                <div class="flex flex-col gap-1">
+                  {#each [
+                    { value: 'new_episode',        label: T && T.eventNewEpisode },
+                    { value: 'download_failed',    label: T && T.eventDownloadFailed },
+                    { value: 'download_completed', label: T && T.eventDownloadCompleted },
+                  ] as ev}
+                    <label class="flex items-center gap-2 text-sm text-base-content cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newWebhook.events.includes(ev.value)}
+                        on:change={(e) => {
+                          if (e.currentTarget.checked) {
+                            newWebhook.events = [...newWebhook.events, ev.value];
+                          } else {
+                            newWebhook.events = newWebhook.events.filter(v => v !== ev.value);
+                          }
+                        }}
+                        class="checkbox checkbox-sm"
+                      />
+                      {ev.label}
+                    </label>
+                  {/each}
+                </div>
+              </div>
+
               <div class="flex gap-2">
                 <button
                   type="button"
-                  on:click={addWebhook}
+                  on:click={confirmWebhook}
                   disabled={!newWebhook.name || !newWebhook.url}
                   class="inline-flex items-center px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -280,7 +341,7 @@
                 </button>
                 <button
                   type="button"
-                  on:click={() => { showWebhookForm = false; newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '' }; }}
+                  on:click={resetForm}
                   class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm transition-colors"
                 >
                   {T && T.btnCancel}
