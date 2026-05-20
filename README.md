@@ -72,12 +72,12 @@ Download the ZIP for your architecture:
 
 | Architecture | Download |
 |---|---|
-| x86_64 | [AutoAnimeDownloader_Linux_x86.zip](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_x86.zip) |
-| ARM64 | [AutoAnimeDownloader_Linux_Arm64.zip](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_Arm64.zip) |
+| x86_64 | [AutoAnimeDownloader_Linux_x86_v1.3.2.zip](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_x86_v1.3.2.zip) |
+| ARM64 | [AutoAnimeDownloader_Linux_Arm64_v1.3.2.zip](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_Arm64_v1.3.2.zip) |
 
 ```bash
-unzip AutoAnimeDownloader_Linux_x86.zip
-cd AutoAnimeDownloader_Linux_x86
+unzip AutoAnimeDownloader_Linux_x86_v1.3.2.zip
+cd AutoAnimeDownloader_Linux_x86_v1.3.2
 make install
 ```
 
@@ -95,7 +95,7 @@ make uninstall
 
 ### Windows
 
-Download [AutoAnimeDownloader_Windows.exe](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Windows.exe) and run it — no installation needed.
+Download [AutoAnimeDownloader_Windows_v1.3.2.exe](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Windows_v1.3.2.exe) and run it — no installation needed.
 
 Access the web UI at **http://localhost:8091**.
 

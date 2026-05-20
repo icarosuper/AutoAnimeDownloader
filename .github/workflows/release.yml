@@ -134,7 +134,7 @@ jobs:
           retention-days: 30
 
   create-release:
-    needs: [release-linux-amd64, release-linux-arm64, release-windows-amd64]
+    needs: [release-linux-amd64, release-linux-arm64, release-windows-amd64, build-frontend]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -142,13 +142,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
+      - name: Update README download links
+        run: |
+          VERSION=${{ needs.build-frontend.outputs.version }}
+          sed -i -E "s/(AutoAnimeDownloader_(Linux_x86|Linux_Arm64|Windows)_v)[0-9]+\.[0-9]+\.[0-9]+/\1${VERSION}/g" README.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --staged --quiet || git commit -m "chore: update download links to v${VERSION}"
+          git push origin HEAD:refs/heads/master
+
       - name: Download release packages
         uses: actions/download-artifact@v4
         with:
           pattern: '*-package'
           path: release-artifacts
-      
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
