@@ -22,14 +22,12 @@
 	- Abstrair interface TorrentSource com múltiplas implementações
 - Integração Jellyfin/Plex
 	- Trigger de library scan após download concluído
-	- Marcar episódio como assistido no Anilist após assistir
 - Dashboard de estatísticas
 	- Episódios baixados por semana/anime
 	- Tamanho total, tamanho disponível no disco
 	- Fansubs mais usados
 	- Dados já disponíveis no downloaded_episodes JSONL
 - Windows
-	- Autenticar app?
-	- Testar no windows
+	- Dar detach e rodar no background
 - Torrent imbutido
 - Adicionar modal com opções de torrents de animes / episódios

@@ -126,4 +126,14 @@ assert(strings.Contains(buf.String(), "expected message"))
 
 ## Frontend Tests
 
-No automated tests exist for the Svelte frontend. Only static type checking via `bun run check` (svelte-check).
+Frontend tests live in `src/internal/frontend/tests/`:
+
+| Layer | Dir | Tool | Command |
+|---|---|---|---|
+| Unit | `tests/unit/` | Vitest + jsdom | `bun run test:unit` |
+| Component | `tests/component/` | Vitest + @testing-library/svelte | `bun run test:component` |
+| Smoke | `tests/smoke/` | Playwright (Chromium) | `bun run test:smoke` |
+
+All layers mock the backend — no daemon needed. Config: `vitest.config.ts`, `playwright.config.ts`.
+
+Run `bun install` in `src/internal/frontend/` and `bunx playwright install chromium` before first use.
