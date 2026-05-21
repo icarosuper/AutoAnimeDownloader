@@ -8,21 +8,29 @@
     "build": "bun run i18n:compile && vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/i18n"
+    "i18n:compile": "paraglide-js compile --project ./project.inlang --outdir ./src/lib/i18n",
+    "test:unit": "vitest run tests/unit",
+    "test:component": "vitest run tests/component",
+    "test:smoke": "playwright test"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.15.1",
+    "@playwright/test": "^1.50.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/svelte": "^5.2.0",
     "@tsconfig/svelte": "^5.0.0",
     "@types/node": "^25.5.0",
     "autoprefixer": "^10.4.23",
     "daisyui": "^5.5.19",
+    "jsdom": "^25.0.0",
     "postcss": "^8.4.47",
     "svelte": "^5.0.0",
     "svelte-check": "^4.4.5",
     "tailwindcss": "^3.4.19",
     "typescript": "^6.0.2",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",

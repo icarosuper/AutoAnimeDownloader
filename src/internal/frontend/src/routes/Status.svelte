@@ -17,6 +17,7 @@
   import { wsConnectionState } from "../lib/stores/wsState.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
+  import { filterAnimes, sortAnimes, computeNextCheckIn, type SortKey, type SortDir } from "../lib/utils/status.js";
 
   // Reactive translations — re-evaluated when $locale changes, no remount needed
   $: T = $locale && {
@@ -58,44 +59,17 @@
   let filterUnwatched = false;
   let now = Date.now();
 
-  type SortKey = "name" | "episodes_watched" | "last_download_date";
   let sortKey: SortKey = "last_download_date";
-  let sortDir: "asc" | "desc" = "desc";
+  let sortDir: SortDir = "desc";
 
-  $: filteredAnimes = animes.filter(a => {
-    if (!a.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filterUnwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false;
-    return true;
-  });
-
-  $: sortedAnimes = [...filteredAnimes].sort((a, b) => {
-    if (sortKey === "name") {
-      return sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-    }
-    let valA: any = sortKey === "last_download_date"
-      ? new Date((a.last_download_date as string) || "1970-01-01").getTime()
-      : a[sortKey];
-    let valB: any = sortKey === "last_download_date"
-      ? new Date((b.last_download_date as string) || "1970-01-01").getTime()
-      : b[sortKey];
-    if (valA < valB) return sortDir === "asc" ? -1 : 1;
-    if (valA > valB) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
+  $: filteredAnimes = filterAnimes(animes, search, filterUnwatched);
+  $: sortedAnimes = sortAnimes(filteredAnimes, sortKey, sortDir);
 
   $: totalEpisodes = animes.reduce((sum, a) => sum + a.episodes_downloaded, 0);
 
-  $: nextCheckIn = (() => {
-    if (!status?.last_check || !checkInterval || status.status === "stopped") return null;
-    const last = new Date(status.last_check).getTime();
-    if (isNaN(last) || last < new Date("2010-01-01").getTime()) return null;
-    const next = last + checkInterval * 60 * 1000;
-    const diff = next - now;
-    if (diff <= 0) return "soon";
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-  })();
+  $: nextCheckIn = status
+    ? computeNextCheckIn(status.last_check, checkInterval, status.status, now)
+    : null;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
