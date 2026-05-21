@@ -173,19 +173,10 @@ func TestAPIEndpoints(t *testing.T) {
 		if stopResp != nil {
 			stopResp.Body.Close()
 		}
-		time.Sleep(1 * time.Second)
 
-		// Verify daemon is stopped
-		statusResp, err := http.Get(apiBase + "/status")
-		if err == nil {
-			var statusResult map[string]interface{}
-			json.NewDecoder(statusResp.Body).Decode(&statusResult)
-			statusResp.Body.Close()
-			if data, ok := statusResult["data"].(map[string]interface{}); ok {
-				if status, ok := data["status"].(string); ok && status != "stopped" {
-					t.Logf("Warning: Daemon status is %s, expected stopped", status)
-				}
-			}
+		// Wait for the current cycle to drain (daemon may auto-restart, so don't assert "stopped")
+		if s, ok := pollStatus(t, func(s string) bool { return s != "checking" }, 2*time.Second); !ok {
+			t.Logf("Warning: Daemon still checking after 2s, last status: %s", s)
 		}
 
 		req, err := http.NewRequest(http.MethodPost, apiBase+"/daemon/start", nil)
@@ -241,19 +232,10 @@ func TestDaemonLifecycle(t *testing.T) {
 		if stopResp != nil {
 			stopResp.Body.Close()
 		}
-		time.Sleep(1 * time.Second)
 
-		// Verify daemon is stopped
-		checkStatusResp, checkErr := http.Get(apiBase + "/status")
-		if checkErr == nil {
-			var statusResult map[string]interface{}
-			json.NewDecoder(checkStatusResp.Body).Decode(&statusResult)
-			checkStatusResp.Body.Close()
-			if data, ok := statusResult["data"].(map[string]interface{}); ok {
-				if status, okStatus := data["status"].(string); okStatus && status != "stopped" {
-					t.Logf("Warning: Daemon status is %s, expected stopped", status)
-				}
-			}
+		// Wait for current cycle to drain before attempting start
+		if s, ok := pollStatus(t, func(s string) bool { return s != "checking" }, 2*time.Second); !ok {
+			t.Logf("Warning: Daemon still checking after 2s, last status: %s", s)
 		}
 
 		req, err := http.NewRequest(http.MethodPost, apiBase+"/daemon/start", nil)
@@ -274,23 +256,9 @@ func TestDaemonLifecycle(t *testing.T) {
 			t.Fatalf("Expected status 200 or 400, got %d: %s", resp.StatusCode, string(body))
 		}
 
-		// Wait a bit and check status
-		time.Sleep(2 * time.Second)
-		statusResp, err := http.Get(apiBase + "/status")
-		if err != nil {
-			t.Fatalf("Failed to get status: %v", err)
-		}
-		defer statusResp.Body.Close()
-
-		var result map[string]interface{}
-		if err := json.NewDecoder(statusResp.Body).Decode(&result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		data := result["data"].(map[string]interface{})
-		status := data["status"].(string)
-		if status != "running" && status != "checking" {
-			t.Fatalf("Expected status to be 'running' or 'checking', got '%s'", status)
+		// Poll until daemon is running or checking
+		if s, ok := pollStatus(t, func(s string) bool { return s == "running" || s == "checking" }, 3*time.Second); !ok {
+			t.Fatalf("Expected status 'running' or 'checking' after start, last: %s", s)
 		}
 	})
 
@@ -311,24 +279,9 @@ func TestDaemonLifecycle(t *testing.T) {
 			t.Fatalf("Expected status 200, got %d", resp.StatusCode)
 		}
 
-		// Wait a bit and check status
-		time.Sleep(2 * time.Second)
-		statusResp, err := http.Get(apiBase + "/status")
-		if err != nil {
-			t.Fatalf("Failed to get status: %v", err)
-		}
-		defer statusResp.Body.Close()
-
-		var result map[string]interface{}
-		if err := json.NewDecoder(statusResp.Body).Decode(&result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-
-		data := result["data"].(map[string]interface{})
-		status := data["status"].(string)
-		// Accept stopped or running as valid, since daemon may restart automatically
-		if status != "stopped" && status != "running" && status != "checking" {
-			t.Fatalf("Expected status to be 'stopped', 'running', or 'checking', got '%s'", status)
+		// Wait for cycle to drain; daemon may auto-restart so any non-checking state is valid
+		if s, ok := pollStatus(t, func(s string) bool { return s != "checking" }, 3*time.Second); !ok {
+			t.Fatalf("Expected status to settle after stop, last: %s", s)
 		}
 	})
 }
@@ -395,24 +348,9 @@ func TestFullDownloadFlow(t *testing.T) {
 	}
 	checkResp.Body.Close()
 
-	// Wait for check to complete
-	time.Sleep(5 * time.Second)
-
-	// Verify status
-	statusResp, err := http.Get(apiBase + "/status")
-	if err != nil {
-		t.Fatalf("Failed to get status: %v", err)
-	}
-	defer statusResp.Body.Close()
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(statusResp.Body).Decode(&result); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
-
-	data := result["data"].(map[string]interface{})
-	if _, ok := data["last_check"]; !ok {
-		t.Fatal("Expected last_check field in status")
+	// Poll until last_check is set (check completed)
+	if !pollLastCheck(t, 5*time.Second) {
+		t.Fatal("Expected last_check to be set within 5s")
 	}
 }
 
@@ -436,7 +374,58 @@ func waitForDaemon(t *testing.T, timeout time.Duration) bool {
 				return true
 			}
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false
+}
+
+// pollStatus polls /api/v1/status every 100ms until predicate(status) is true or timeout.
+// Returns the last observed status and whether the predicate was satisfied.
+func pollStatus(t *testing.T, predicate func(string) bool, timeout time.Duration) (string, bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last string
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(apiBase + "/status")
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		var result map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if data, ok := result["data"].(map[string]interface{}); ok {
+			if s, ok := data["status"].(string); ok {
+				last = s
+				if predicate(s) {
+					return s, true
+				}
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return last, false
+}
+
+// pollLastCheck polls /api/v1/status every 100ms until last_check is present or timeout.
+func pollLastCheck(t *testing.T, timeout time.Duration) bool {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(apiBase + "/status")
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		var result map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if data, ok := result["data"].(map[string]interface{}); ok {
+			if v, ok := data["last_check"]; ok && v != nil {
+				return true
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	return false
 }
