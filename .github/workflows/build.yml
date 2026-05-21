@@ -29,18 +29,34 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache: true
 
       - name: Build project
+        run: go build -v ./...
+
+  test-backend-unit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Create fake frontend dist
         run: |
-          go build -v ./...
+          mkdir -p src/internal/frontend/dist
+          echo "<html></html>" > src/internal/frontend/dist/index.html
 
       - name: Run unit tests
-        run: |
-          go test -v ./src/tests/unit/
+        run: go test -v ./src/tests/unit/... ./src/internal/...
 
-  integration-tests:
+  test-backend-integration:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -78,25 +94,77 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache: true
 
       - name: Start services
-        run: |
-          docker compose -f docker/docker-compose.test.yml up -d --no-build daemon
+        run: docker compose -f docker/docker-compose.test.yml up -d --no-build daemon
 
       - name: Wait for daemon
-        run: |
-          timeout 60 sh -c 'until curl -sf http://localhost:8091/api/v1/status; do sleep 1; done'
+        run: timeout 60 sh -c 'until curl -sf http://localhost:8091/api/v1/status; do sleep 1; done'
 
       - name: Run integration tests
         env:
           DAEMON_URL: http://localhost:8091
-        run: |
-          go test -v ./src/tests/integration/...
+        run: go test -v ./src/tests/integration/...
 
       - name: Cleanup
         if: always()
-        run: |
-          docker compose -f docker/docker-compose.test.yml down -v
+        run: docker compose -f docker/docker-compose.test.yml down -v
 
+  test-frontend-unit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: cd src/internal/frontend && bun install --frozen-lockfile
+
+      - name: Run unit tests
+        run: cd src/internal/frontend && bun run test:unit
+
+  test-frontend-component:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: cd src/internal/frontend && bun install --frozen-lockfile
+
+      - name: Run component tests
+        run: cd src/internal/frontend && bun run test:component
+
+  test-frontend-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: cd src/internal/frontend && bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: cd src/internal/frontend && bunx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        run: cd src/internal/frontend && bun run test:smoke

@@ -6,6 +6,8 @@
 .PHONY: build-linuxamd64 build-linuxarm64 build-windows
 .PHONY: package-linuxamd64 package-linuxarm64 package-windows
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
+.PHONY: test test-backend test-backend-unit test-backend-integration
+.PHONY: test-frontend test-frontend-unit test-frontend-component test-frontend-smoke
 
 # Colors for output
 GREEN := \033[0;32m
@@ -51,14 +53,24 @@ else
 endif
 
 help:
-	@echo -e "$(GREEN)Available targets:$(NC)"
-	@echo -e "  $(YELLOW)make build$(NC)                    - Build for all platforms"
-	@echo -e "  $(YELLOW)make build PLATFORM=windows$(NC) - Build for specific platform"
-	@echo -e "  $(YELLOW)make package$(NC)                 - Package for all platforms"
-	@echo -e "  $(YELLOW)make package PLATFORM=linuxamd64$(NC) - Package for specific platform"
-	@echo -e "  $(YELLOW)make release$(NC)                 - Build + package for all platforms"
-	@echo -e "  $(YELLOW)make release PLATFORM=linuxarm64$(NC) - Build + package for specific platform"
-	@echo -e "  $(YELLOW)make clean$(NC)                  - Remove build artifacts"
+	@echo -e "$(GREEN)Build targets:$(NC)"
+	@echo -e "  $(YELLOW)make build$(NC)                         - Build for all platforms"
+	@echo -e "  $(YELLOW)make build PLATFORM=windows$(NC)        - Build for specific platform"
+	@echo -e "  $(YELLOW)make package$(NC)                       - Package for all platforms"
+	@echo -e "  $(YELLOW)make package PLATFORM=linuxamd64$(NC)   - Package for specific platform"
+	@echo -e "  $(YELLOW)make release$(NC)                       - Build + package for all platforms"
+	@echo -e "  $(YELLOW)make release PLATFORM=linuxarm64$(NC)   - Build + package for specific platform"
+	@echo -e "  $(YELLOW)make clean$(NC)                         - Remove build artifacts"
+	@echo ""
+	@echo -e "$(GREEN)Test targets:$(NC)"
+	@echo -e "  $(YELLOW)make test$(NC)                          - Run all suites with pass/fail summary"
+	@echo -e "  $(YELLOW)make test-backend$(NC)                  - Run backend unit + integration"
+	@echo -e "  $(YELLOW)make test-backend-unit$(NC)             - Run Go unit tests"
+	@echo -e "  $(YELLOW)make test-backend-integration$(NC)      - Run integration tests (Docker)"
+	@echo -e "  $(YELLOW)make test-frontend$(NC)                 - Run all frontend tests"
+	@echo -e "  $(YELLOW)make test-frontend-unit$(NC)            - Run frontend unit tests (Vitest)"
+	@echo -e "  $(YELLOW)make test-frontend-component$(NC)       - Run component tests (Vitest)"
+	@echo -e "  $(YELLOW)make test-frontend-smoke$(NC)           - Run smoke tests (Playwright)"
 	@echo ""
 	@echo -e "$(GREEN)Supported platforms:$(NC)"
 	@echo -e "  - $(YELLOW)linuxamd64$(NC)  (Linux AMD64)"
@@ -68,6 +80,30 @@ help:
 	@echo -e "$(GREEN)Variables:$(NC)"
 	@echo -e "  $(YELLOW)VERSION=$(VERSION)$(NC)      - Version to embed in binaries"
 	@echo -e "  $(YELLOW)PLATFORM=$(PLATFORM)$(NC)    - Platform to build (empty = all)"
+
+# Test targets
+test:
+	@bash scripts/run-all-tests.sh
+
+test-backend: test-backend-unit test-backend-integration
+
+test-backend-unit:
+	@test -d src/internal/frontend/dist || (mkdir -p src/internal/frontend/dist && printf '<html></html>' > src/internal/frontend/dist/index.html)
+	go test ./src/tests/unit/... ./src/internal/...
+
+test-backend-integration:
+	@bash scripts/run-integration-tests.sh
+
+test-frontend: test-frontend-unit test-frontend-component test-frontend-smoke
+
+test-frontend-unit:
+	cd src/internal/frontend && bun install --frozen-lockfile && bun run test:unit
+
+test-frontend-component:
+	cd src/internal/frontend && bun install --frozen-lockfile && bun run test:component
+
+test-frontend-smoke:
+	cd src/internal/frontend && bun install --frozen-lockfile && bun run test:smoke
 
 # Main targets
 build: check-docker
