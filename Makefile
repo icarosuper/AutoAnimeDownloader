@@ -8,6 +8,7 @@
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
 .PHONY: test test-backend test-backend-unit test-backend-integration
 .PHONY: test-frontend test-frontend-unit test-frontend-component test-frontend-smoke
+.PHONY: docker-build docker-buildx-build docker-build-classic checksums
 
 # Colors for output
 GREEN := \033[0;32m
@@ -122,7 +123,7 @@ package:
 	@echo -e "Packages are in: $(GREEN)$(PACKAGES_DIR)/$(NC)\n"
 
 release: check-docker
-	@$(foreach p,$(PLATFORMS_TO_PROCESS),$(MAKE) build-$(p) && $(MAKE) package-$(p);)
+	@$(foreach p,$(PLATFORMS_TO_PROCESS),$(MAKE) build-$(p) package-$(p);)
 	@echo -e "\n"
 	@echo -e "$(GREEN)════════════════════════════════════════$(NC)\n"
 	@echo -e "$(GREEN)All releases complete!$(NC)\n"
@@ -227,7 +228,6 @@ docker-buildx-build:
 	docker create --name $$CONTAINER $$DOCKER_IMAGE; \
 	docker cp $$CONTAINER:/output/. $$BUILD_DIR/; \
 	docker rm $$CONTAINER; \
-	$(MAKE) rename-binaries PLATFORM=$$PLATFORM; \
 	$(MAKE) checksums PLATFORM=$$PLATFORM
 
 # Classic Docker build (fallback for local development)
@@ -260,12 +260,7 @@ docker-build-classic:
 	docker create --name $$CONTAINER $$DOCKER_IMAGE; \
 	docker cp $$CONTAINER:/output/. $$BUILD_DIR/; \
 	docker rm $$CONTAINER; \
-	$(MAKE) rename-binaries PLATFORM=$$PLATFORM; \
 	$(MAKE) checksums PLATFORM=$$PLATFORM
-
-# Rename binaries to expected names (no longer needed, Dockerfiles generate correct names)
-rename-binaries:
-	@# Binaries are already named correctly by Dockerfiles
 
 # Generate checksums
 checksums:
@@ -296,7 +291,7 @@ package-linuxamd64: $(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon
 		PACKAGE_DIR=$$(mktemp -d); \
 		trap "rm -rf $$PACKAGE_DIR" EXIT INT TERM; \
 		PACKAGE_NAME=$(PACKAGE_NAME_linuxamd64); \
-		PACKAGES_DIR_ABS="$(shell pwd)/$(PACKAGES_DIR)"; \
+		PACKAGES_DIR_ABS="$(CURDIR)/$(PACKAGES_DIR)"; \
 		mkdir -p $$PACKAGE_DIR/$$PACKAGE_NAME || exit 1; \
 		cp $(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
 		cp $(BUILD_DIR_linuxamd64)/autoanimedownloader $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
@@ -342,7 +337,7 @@ package-linuxarm64: $(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon
 		PACKAGE_DIR=$$(mktemp -d); \
 		trap "rm -rf $$PACKAGE_DIR" EXIT INT TERM; \
 		PACKAGE_NAME=$(PACKAGE_NAME_linuxarm64); \
-		PACKAGES_DIR_ABS="$(shell pwd)/$(PACKAGES_DIR)"; \
+		PACKAGES_DIR_ABS="$(CURDIR)/$(PACKAGES_DIR)"; \
 		mkdir -p $$PACKAGE_DIR/$$PACKAGE_NAME || exit 1; \
 		cp $(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
 		cp $(BUILD_DIR_linuxarm64)/autoanimedownloader $$PACKAGE_DIR/$$PACKAGE_NAME/ || exit 1; \
