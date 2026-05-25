@@ -216,13 +216,17 @@ func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 
 // fetchNyaaPage fetches a single Nyaa results page and returns the parsed document.
 func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
+	logger.Logger.Debug().Str("url", nyaaURL).Msg("Fetching Nyaa page")
+
 	resp, err := httpGet(nyaaURL)
 	if err != nil {
+		logger.Logger.Debug().Err(err).Str("url", nyaaURL).Msg("Failed to fetch Nyaa page")
 		return nil, fmt.Errorf("erro ao fazer requisição: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Logger.Debug().Int("status_code", resp.StatusCode).Str("url", nyaaURL).Msg("Nyaa returned non-200 status")
 		return nil, fmt.Errorf("erro HTTP: status %d", resp.StatusCode)
 	}
 

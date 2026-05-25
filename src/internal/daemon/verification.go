@@ -118,6 +118,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 					logger.Logger.Warn().Err(e).Str("username", username).Msg("Failed to fetch AniList animes for delete statuses")
 					continue
 				}
+				count := len(resp.Data.Page.MediaList)
+				logger.Logger.Debug().
+					Str("username", username).
+					Int("animes_found", count).
+					Msg("Fetched animes from Anilist for delete statuses")
 				merged.Data.Page.MediaList = append(merged.Data.Page.MediaList, resp.Data.Page.MediaList...)
 			}
 			deleteListResponse = merged
@@ -281,6 +286,11 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 			lastErr = err
 			continue
 		}
+		count := len(resp.Data.Page.MediaList)
+		logger.Logger.Debug().
+			Str("username", username).
+			Int("animes_found", count).
+			Msg("Fetched animes from Anilist for username")
 		merged.Data.Page.MediaList = append(merged.Data.Page.MediaList, resp.Data.Page.MediaList...)
 	}
 

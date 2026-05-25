@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"AutoAnimeDownloader/src/internal/logger"
 )
 
 var httpDo = func(req *http.Request) (*http.Response, error) {
@@ -171,6 +173,8 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 	}
 	req.Header.Set("Content-Type", "application/json")
 
+	logger.Logger.Debug().Str("url", aniListAPIURL).Msg("Sending Anilist request")
+
 	resp, err := httpDo(req)
 	if err != nil {
 		return nil, fmt.Errorf("error making request: %v", err)
@@ -178,6 +182,7 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		logger.Logger.Warn().Int("status_code", resp.StatusCode).Msg("Anilist returned non-200 status")
 		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
 	}
 
@@ -185,6 +190,8 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 	if err != nil {
 		return nil, fmt.Errorf("error reading response: %v", err)
 	}
+
+	logger.Logger.Debug().Int("status_code", resp.StatusCode).Int("body_size", len(body)).Msg("Anilist response received")
 
 	var response T
 	if err = json.Unmarshal(body, &response); err != nil {
