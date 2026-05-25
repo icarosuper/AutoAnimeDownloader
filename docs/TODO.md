@@ -28,6 +28,7 @@
 	- Fansubs mais usados
 	- Dados já disponíveis no downloaded_episodes JSONL
 - Windows
+	- Instalar ao invés de rodar separado
 	- Dar detach e rodar no background
 - Torrent imbutido
 - Adicionar modal com opções de torrents de animes / episódios
