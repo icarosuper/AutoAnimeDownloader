@@ -2,19 +2,17 @@
 # Cross-platform builds using Docker
 # Works on Linux, macOS, and WSL (Windows Subsystem for Linux)
 
-.PHONY: build package release clean help check-docker
+.PHONY: build package release clean help
 .PHONY: build-linuxamd64 build-linuxarm64 build-windows
 .PHONY: package-linuxamd64 package-linuxarm64 package-windows
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
 .PHONY: test test-backend test-backend-unit test-backend-integration
 .PHONY: test-frontend test-frontend-unit test-frontend-component test-frontend-smoke
-.PHONY: docker-build docker-buildx-build docker-build-classic checksums
 
 # Colors for output
 GREEN := \033[0;32m
 YELLOW := \033[1;33m
-RED := \033[0;31m
-NC := \033[0m # No Color
+NC := \033[0m
 
 # Get version from git tag or use default
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo "dev")
@@ -23,22 +21,10 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v/
 PLATFORMS := linuxamd64 linuxarm64 windows
 PLATFORM ?=
 
-# Platform mappings
-DOCKERFILE_linuxamd64 := docker/Dockerfile.build.amd64
-DOCKERFILE_linuxarm64 := docker/Dockerfile.build.arm64
-DOCKERFILE_windows := docker/Dockerfile.build.windows
-
+# Build output directories
 BUILD_DIR_linuxamd64 := build/linux-amd64
 BUILD_DIR_linuxarm64 := build/linux-arm64
 BUILD_DIR_windows := build/windows-amd64
-
-DOCKER_IMAGE_linuxamd64 := aad-build-amd64
-DOCKER_IMAGE_linuxarm64 := aad-build-arm64
-DOCKER_IMAGE_windows := aad-build-windows
-
-CONTAINER_linuxamd64 := aad-temp-amd64
-CONTAINER_linuxarm64 := aad-temp-arm64
-CONTAINER_windows := aad-temp-windows
 
 PACKAGE_NAME_linuxamd64 = AutoAnimeDownloader_Linux_x86_v$(VERSION)
 PACKAGE_NAME_linuxarm64 = AutoAnimeDownloader_Linux_Arm64_v$(VERSION)
@@ -46,7 +32,6 @@ PACKAGE_NAME_windows = AutoAnimeDownloader_Windows_v$(VERSION)
 
 PACKAGES_DIR := build/packages
 
-# Helper function to get platforms to process
 ifeq ($(PLATFORM),)
   PLATFORMS_TO_PROCESS := $(PLATFORMS)
 else
@@ -107,7 +92,7 @@ test-frontend-smoke:
 	cd src/internal/frontend && bun install --frozen-lockfile && bun run test:smoke
 
 # Main targets
-build: check-docker
+build:
 	@$(foreach p,$(PLATFORMS_TO_PROCESS),$(MAKE) build-$(p);)
 	@echo -e "\n"
 	@echo -e "$(GREEN)════════════════════════════════════════$(NC)\n"
@@ -122,7 +107,7 @@ package:
 	@echo -e "$(GREEN)════════════════════════════════════════$(NC)\n"
 	@echo -e "Packages are in: $(GREEN)$(PACKAGES_DIR)/$(NC)\n"
 
-release: check-docker
+release:
 	@$(foreach p,$(PLATFORMS_TO_PROCESS),$(MAKE) build-$(p) package-$(p);)
 	@echo -e "\n"
 	@echo -e "$(GREEN)════════════════════════════════════════$(NC)\n"
@@ -131,160 +116,22 @@ release: check-docker
 	@echo -e "Packages are in: $(GREEN)$(PACKAGES_DIR)/$(NC)\n"
 
 # Platform-specific build targets
-build-linuxamd64: $(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon $(BUILD_DIR_linuxamd64)/autoanimedownloader
-	@echo -e "$(GREEN)✓ Linux AMD64 build complete!$(NC)\n"
+build-linuxamd64:
+	@bash scripts/build.sh linuxamd64 "$(VERSION)"
 
-build-linuxarm64: $(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon $(BUILD_DIR_linuxarm64)/autoanimedownloader
-	@echo -e "$(GREEN)✓ Linux ARM64 build complete!$(NC)\n"
+build-linuxarm64:
+	@bash scripts/build.sh linuxarm64 "$(VERSION)"
 
-build-windows: $(BUILD_DIR_windows)/autoanimedownloader-daemon.exe $(BUILD_DIR_windows)/autoanimedownloader.exe
-	@echo -e "$(GREEN)✓ Windows AMD64 build complete!$(NC)\n"
+build-windows:
+	@bash scripts/build.sh windows "$(VERSION)"
 
-# Build binaries using Docker
-$(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon $(BUILD_DIR_linuxamd64)/autoanimedownloader: PLATFORM := linuxamd64
-$(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon $(BUILD_DIR_linuxamd64)/autoanimedownloader: | $(BUILD_DIR_linuxamd64)
-	@echo -e "$(YELLOW)Building for Linux AMD64...$(NC)\n"
-	@$(MAKE) docker-build PLATFORM=linuxamd64
+# Platform-specific release targets
+release-linuxamd64: build-linuxamd64 package-linuxamd64
+release-linuxarm64: build-linuxarm64 package-linuxarm64
+release-windows: build-windows package-windows
 
-$(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon $(BUILD_DIR_linuxarm64)/autoanimedownloader: PLATFORM := linuxarm64
-$(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon $(BUILD_DIR_linuxarm64)/autoanimedownloader: | $(BUILD_DIR_linuxarm64)
-	@echo -e "$(YELLOW)Building for Linux ARM64...$(NC)\n"
-	@$(MAKE) docker-build PLATFORM=linuxarm64
-
-$(BUILD_DIR_windows)/autoanimedownloader-daemon.exe $(BUILD_DIR_windows)/autoanimedownloader.exe: PLATFORM := windows
-$(BUILD_DIR_windows)/autoanimedownloader-daemon.exe $(BUILD_DIR_windows)/autoanimedownloader.exe: | $(BUILD_DIR_windows)
-	@echo -e "$(YELLOW)Building for Windows AMD64...$(NC)\n"
-	@$(MAKE) docker-build PLATFORM=windows
-
-# Generic Docker build target
-# ARM64 always uses buildx (cross-compilation), others use classic docker build locally (faster)
-# CI/CD always uses buildx
-docker-build: check-docker
-	@PLATFORM=$(PLATFORM); \
-	if [ -n "$$CI" ] || [ -n "$$GITHUB_ACTIONS" ]; then \
-		if command -v docker >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then \
-			echo -e "$(YELLOW)Using docker buildx (CI/CD)...$(NC)\n"; \
-			$(MAKE) docker-buildx-build PLATFORM=$$PLATFORM; \
-		else \
-			echo -e "$(YELLOW)Using docker build...$(NC)\n"; \
-			$(MAKE) docker-build-classic PLATFORM=$$PLATFORM; \
-		fi; \
-	elif [ "$$PLATFORM" = "linuxarm64" ]; then \
-		if command -v docker >/dev/null 2>&1 && docker buildx version >/dev/null 2>&1; then \
-			echo -e "$(YELLOW)Using docker buildx (required for ARM64 cross-compilation)...$(NC)\n"; \
-			$(MAKE) docker-buildx-build PLATFORM=$$PLATFORM; \
-		else \
-			echo -e "$(RED)Error: docker buildx is required for ARM64 builds$(NC)\n"; \
-			echo -e "$(YELLOW)Please install docker buildx: docker buildx install$(NC)\n"; \
-			exit 1; \
-		fi; \
-	else \
-		echo -e "$(YELLOW)Using docker build (faster for local builds)...$(NC)\n"; \
-		$(MAKE) docker-build-classic PLATFORM=$$PLATFORM; \
-	fi
-
-# Docker buildx build (preferred, used in CI/CD)
-docker-buildx-build:
-	@PLATFORM=$(PLATFORM); \
-	case "$$PLATFORM" in \
-		linuxamd64) \
-			DOCKERFILE=$(DOCKERFILE_linuxamd64); \
-			BUILD_DIR=$(BUILD_DIR_linuxamd64); \
-			DOCKER_IMAGE=$(DOCKER_IMAGE_linuxamd64); \
-			CONTAINER=$(CONTAINER_linuxamd64); \
-			;; \
-		linuxarm64) \
-			DOCKERFILE=$(DOCKERFILE_linuxarm64); \
-			BUILD_DIR=$(BUILD_DIR_linuxarm64); \
-			DOCKER_IMAGE=$(DOCKER_IMAGE_linuxarm64); \
-			CONTAINER=$(CONTAINER_linuxarm64); \
-			;; \
-		windows) \
-			DOCKERFILE=$(DOCKERFILE_windows); \
-			BUILD_DIR=$(BUILD_DIR_windows); \
-			DOCKER_IMAGE=$(DOCKER_IMAGE_windows); \
-			CONTAINER=$(CONTAINER_windows); \
-			;; \
-	esac; \
-	echo -e "$(YELLOW)Building Docker image with buildx...$(NC)\n"; \
-	if [ "$$PLATFORM" = "linuxarm64" ]; then \
-		docker buildx build \
-			--platform linux/arm64 \
-			--load \
-			-f $$DOCKERFILE \
-			--build-arg VERSION=$(VERSION) \
-			-t $$DOCKER_IMAGE \
-			. || exit 1; \
-	else \
-		docker buildx build \
-			--load \
-			-f $$DOCKERFILE \
-			--build-arg VERSION=$(VERSION) \
-			-t $$DOCKER_IMAGE \
-			. || exit 1; \
-	fi; \
-	echo -e "$(YELLOW)Extracting binaries...$(NC)\n"; \
-	docker rm -f $$CONTAINER 2>/dev/null || true; \
-	docker create --name $$CONTAINER $$DOCKER_IMAGE; \
-	docker cp $$CONTAINER:/output/. $$BUILD_DIR/; \
-	docker rm $$CONTAINER; \
-	$(MAKE) checksums PLATFORM=$$PLATFORM
-
-# Classic Docker build (fallback for local development)
-docker-build-classic:
-	@PLATFORM=$(PLATFORM); \
-	case "$$PLATFORM" in \
-		linuxamd64) \
-			DOCKERFILE=$(DOCKERFILE_linuxamd64); \
-			BUILD_DIR=$(BUILD_DIR_linuxamd64); \
-			DOCKER_IMAGE=$(DOCKER_IMAGE_linuxamd64); \
-			CONTAINER=$(CONTAINER_linuxamd64); \
-			;; \
-		linuxarm64) \
-			DOCKERFILE=$(DOCKERFILE_linuxarm64); \
-			BUILD_DIR=$(BUILD_DIR_linuxarm64); \
-			DOCKER_IMAGE=$(DOCKER_IMAGE_linuxarm64); \
-			CONTAINER=$(CONTAINER_linuxarm64); \
-			;; \
-		windows) \
-			DOCKERFILE=$(DOCKERFILE_windows); \
-			BUILD_DIR=$(BUILD_DIR_windows); \
-			DOCKER_IMAGE=$(DOCKER_IMAGE_windows); \
-			CONTAINER=$(CONTAINER_windows); \
-			;; \
-	esac; \
-	echo -e "$(YELLOW)Building Docker image...$(NC)\n"; \
-	docker build -f $$DOCKERFILE --build-arg VERSION=$(VERSION) -t $$DOCKER_IMAGE .; \
-	echo -e "$(YELLOW)Extracting binaries...$(NC)\n"; \
-	docker rm -f $$CONTAINER 2>/dev/null || true; \
-	docker create --name $$CONTAINER $$DOCKER_IMAGE; \
-	docker cp $$CONTAINER:/output/. $$BUILD_DIR/; \
-	docker rm $$CONTAINER; \
-	$(MAKE) checksums PLATFORM=$$PLATFORM
-
-# Generate checksums
-checksums:
-	@PLATFORM=$(PLATFORM); \
-	case "$$PLATFORM" in \
-		linuxamd64) BUILD_DIR=$(BUILD_DIR_linuxamd64) ;; \
-		linuxarm64) BUILD_DIR=$(BUILD_DIR_linuxarm64) ;; \
-		windows) BUILD_DIR=$(BUILD_DIR_windows) ;; \
-	esac; \
-	cd $$BUILD_DIR && \
-	if [ "$$PLATFORM" = "windows" ]; then \
-		sha256sum autoanimedownloader-daemon.exe > autoanimedownloader-daemon.exe.sha256 2>/dev/null || true; \
-		sha256sum autoanimedownloader.exe > autoanimedownloader.exe.sha256 2>/dev/null || true; \
-	else \
-		sha256sum autoanimedownloader-daemon > autoanimedownloader-daemon.sha256 2>/dev/null || true; \
-		sha256sum autoanimedownloader > autoanimedownloader.sha256 2>/dev/null || true; \
-	fi
-
-# Create build directories
-$(BUILD_DIR_linuxamd64) $(BUILD_DIR_linuxarm64) $(BUILD_DIR_windows):
-	@mkdir -p $@
-
-# Package targets
-package-linuxamd64: $(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon
+# Package targets (require binaries to exist — run make build or make release first)
+package-linuxamd64:
 	@echo -e "$(YELLOW)Packaging Linux AMD64...$(NC)\n"
 	@mkdir -p $(PACKAGES_DIR)
 	@bash -c ' \
@@ -330,7 +177,7 @@ package-linuxamd64: $(BUILD_DIR_linuxamd64)/autoanimedownloader-daemon
 		sha256sum $$PACKAGE_NAME.zip > $$PACKAGE_NAME.zip.sha256 || exit 1; \
 		printf "$(GREEN)Created: $(PACKAGES_DIR)/$$PACKAGE_NAME.zip$(NC)\n"'
 
-package-linuxarm64: $(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon
+package-linuxarm64:
 	@echo -e "$(YELLOW)Packaging Linux ARM64...$(NC)\n"
 	@mkdir -p $(PACKAGES_DIR)
 	@bash -c ' \
@@ -376,7 +223,7 @@ package-linuxarm64: $(BUILD_DIR_linuxarm64)/autoanimedownloader-daemon
 		sha256sum $$PACKAGE_NAME.zip > $$PACKAGE_NAME.zip.sha256 || exit 1; \
 		printf "$(GREEN)Created: $(PACKAGES_DIR)/$$PACKAGE_NAME.zip$(NC)\n"'
 
-package-windows: $(BUILD_DIR_windows)/autoanimedownloader-daemon.exe
+package-windows:
 	@echo -e "$(YELLOW)Packaging Windows...$(NC)\n"
 	@mkdir -p $(PACKAGES_DIR)
 	@PACKAGE_NAME=$(PACKAGE_NAME_windows); \
@@ -385,21 +232,8 @@ package-windows: $(BUILD_DIR_windows)/autoanimedownloader-daemon.exe
 	sha256sum $$PACKAGE_NAME.exe > $$PACKAGE_NAME.exe.sha256; \
 	echo -e "$(GREEN)Created: $(PACKAGES_DIR)/$$PACKAGE_NAME.exe$(NC)\n"
 
-# Check Docker availability
-check-docker:
-	@command -v docker >/dev/null 2>&1 || { \
-		echo -e "$(RED)Error: Docker is not installed or not in PATH$(NC)\n"; \
-		echo -e "$(YELLOW)Please install Docker to build for all platforms$(NC)\n"; \
-		exit 1; \
-	}
-
 # Clean build artifacts
 clean:
 	@echo -e "$(YELLOW)Cleaning build artifacts...$(NC)\n"
 	rm -rf build/
 	@echo -e "$(GREEN)Clean complete!$(NC)\n"
-
-# Legacy targets (for backward compatibility)
-build-linux-amd64: build-linuxamd64
-build-linux-arm64: build-linuxarm64
-build-all: build
