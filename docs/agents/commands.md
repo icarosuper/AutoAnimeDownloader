@@ -33,6 +33,12 @@ make build PLATFORM=linuxamd64      # linux x86_64
 make build PLATFORM=linuxarm64      # linux ARM64
 make build PLATFORM=windows         # windows amd64
 
+make package PLATFORM=linuxamd64    # package already-built binaries
+make release PLATFORM=linuxamd64    # build + package in one step
+
+# The actual Docker logic lives in scripts/build.sh <platform> <version>
+# Makefile delegates to it — don't add build logic directly to Makefile targets
+
 # Linux installation
 make install    # install daemon, CLI, and systemd service
 make uninstall
