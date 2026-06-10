@@ -144,10 +144,20 @@ func handleAnimes(server *Server) http.HandlerFunc {
 }
 
 func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedLists []string, statuses []string) {
+	// Fetch customLists via cached minimal query before the complex query that may null it out.
+	clMap := anilist.GetCustomListsMap(username, statuses)
+
 	resp, err := anilist.GetAllCurrentAnime(username, statuses)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
 		return
+	}
+
+	for i := range resp.Data.Page.MediaList {
+		ml := &resp.Data.Page.MediaList[i]
+		if cl, ok := clMap[ml.Id]; ok && len(cl) > 0 {
+			ml.CustomLists = cl
+		}
 	}
 
 	// Build set of valid AnimeIDs from AniList response (only statuses in DownloadStatuses)

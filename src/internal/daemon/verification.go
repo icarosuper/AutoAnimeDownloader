@@ -278,6 +278,9 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 	merged := &anilist.AniListResponse{}
 	var lastErr error
 	for _, username := range configs.AnilistUsernames {
+		// Fetch customLists first via a minimal query (before the complex query that may null it out).
+		clMap := anilist.GetCustomListsMap(username, configs.DownloadStatuses)
+
 		resp, err := anilist.GetAllCurrentAnime(username, configs.DownloadStatuses)
 		if err != nil {
 			logger.Logger.Error().Err(err).Stack().
@@ -286,6 +289,14 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 			lastErr = err
 			continue
 		}
+
+		for i := range resp.Data.Page.MediaList {
+			ml := &resp.Data.Page.MediaList[i]
+			if cl, ok := clMap[ml.Id]; ok && len(cl) > 0 {
+				ml.CustomLists = cl
+			}
+		}
+
 		count := len(resp.Data.Page.MediaList)
 		logger.Logger.Debug().
 			Str("username", username).

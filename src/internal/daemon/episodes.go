@@ -269,7 +269,6 @@ func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anili
 	if animeIsInExcludedList(anime, configs.ExcludedLists) {
 		logger.Logger.Debug().
 			Str("episode", epName).
-			Strs("excluded_lists", configs.ExcludedLists).
 			Msg("Skipping episode: in excluded list")
 		return true
 	}

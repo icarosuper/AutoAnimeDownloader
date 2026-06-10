@@ -7,9 +7,17 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"AutoAnimeDownloader/src/internal/logger"
+)
+
+var (
+	customListsCacheMu     sync.RWMutex
+	customListsCacheData   = make(map[string]map[int]CustomLists)
+	customListsCacheExpiry = make(map[string]time.Time)
 )
 
 var httpDo = func(req *http.Request) (*http.Response, error) {
@@ -199,6 +207,62 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 	}
 
 	return &response, nil
+}
+
+// GetCustomListsMap fetches a lightweight map of MediaList ID → CustomLists via a minimal query.
+// Results are cached for 5 minutes so repeated calls (e.g. from the API endpoint) don't hit
+// Anilist's rate limit. Only a response with at least one non-null CustomLists entry is cached.
+func GetCustomListsMap(userName string, statuses []string) map[int]CustomLists {
+	key := userName + "\x00" + strings.Join(statuses, "\x00")
+
+	customListsCacheMu.RLock()
+	if exp, ok := customListsCacheExpiry[key]; ok && time.Now().Before(exp) {
+		result := customListsCacheData[key]
+		customListsCacheMu.RUnlock()
+		return result
+	}
+	customListsCacheMu.RUnlock()
+
+	type miniEntry struct {
+		Id          int         `json:"id"`
+		CustomLists CustomLists `json:"customLists"`
+	}
+	type miniResponse struct {
+		Data struct {
+			Page struct {
+				MediaList []miniEntry `json:"mediaList"`
+			} `json:"Page"`
+		} `json:"data"`
+	}
+
+	query := `query($u:String,$t:MediaType,$s:[MediaListStatus]){Page{mediaList(userName:$u,type:$t,status_in:$s){id customLists}}}`
+	resp, err := sendAnilistRequest[miniResponse](query, RequestVariables{
+		"u": userName,
+		"t": "ANIME",
+		"s": statuses,
+	})
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("username", userName).Msg("Failed to fetch customLists map")
+		return nil
+	}
+
+	m := make(map[int]CustomLists, len(resp.Data.Page.MediaList))
+	hasData := false
+	for _, ml := range resp.Data.Page.MediaList {
+		m[ml.Id] = ml.CustomLists
+		if len(ml.CustomLists) > 0 {
+			hasData = true
+		}
+	}
+
+	if hasData {
+		customListsCacheMu.Lock()
+		customListsCacheData[key] = m
+		customListsCacheExpiry[key] = time.Now().Add(5 * time.Minute)
+		customListsCacheMu.Unlock()
+	}
+
+	return m
 }
 
 func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, error) {
