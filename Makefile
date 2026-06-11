@@ -156,12 +156,17 @@ package-linuxamd64:
 			echo "## Installation"; \
 			echo ""; \
 			echo "1. Extract this archive"; \
-			echo "2. Run \`make install\` in the extracted directory"; \
+			echo "2. Run \`make install-user\` or \`sudo make install-global\` in the extracted directory"; \
 			echo ""; \
 			echo "This will install:"; \
 			echo "- autoanimedownloader-daemon (with embedded frontend)"; \
 			echo "- autoanimedownloader (CLI)"; \
 			echo "- systemd user service"; \
+			echo ""; \
+			echo "### install-user vs install-global"; \
+			echo ""; \
+			echo "- \`make install-user\` — installs to ~/.local/bin (no sudo required)"; \
+			echo "- \`sudo make install-global\` — installs to /usr/local/bin (accessible system-wide)"; \
 			echo ""; \
 			echo "## Usage"; \
 			echo ""; \
@@ -173,7 +178,7 @@ package-linuxamd64:
 			echo ""; \
 			echo "## Uninstallation"; \
 			echo ""; \
-			echo "Run \`make uninstall\` in the installation directory."; \
+			echo "Run \`make uninstall-user\` or \`sudo make uninstall-global\` in the installation directory."; \
 		} > $$PACKAGE_DIR/$$PACKAGE_NAME/README.md || exit 1; \
 		cd $$PACKAGE_DIR && \
 		zip -r $$PACKAGES_DIR_ABS/$$PACKAGE_NAME.zip $$PACKAGE_NAME > /dev/null || exit 1; \
@@ -202,12 +207,17 @@ package-linuxarm64:
 			echo "## Installation"; \
 			echo ""; \
 			echo "1. Extract this archive"; \
-			echo "2. Run \`make install\` in the extracted directory"; \
+			echo "2. Run \`make install-user\` or \`sudo make install-global\` in the extracted directory"; \
 			echo ""; \
 			echo "This will install:"; \
 			echo "- autoanimedownloader-daemon (with embedded frontend)"; \
 			echo "- autoanimedownloader (CLI)"; \
 			echo "- systemd user service"; \
+			echo ""; \
+			echo "### install-user vs install-global"; \
+			echo ""; \
+			echo "- \`make install-user\` — installs to ~/.local/bin (no sudo required)"; \
+			echo "- \`sudo make install-global\` — installs to /usr/local/bin (accessible system-wide)"; \
 			echo ""; \
 			echo "## Usage"; \
 			echo ""; \
@@ -219,7 +229,7 @@ package-linuxarm64:
 			echo ""; \
 			echo "## Uninstallation"; \
 			echo ""; \
-			echo "Run \`make uninstall\` in the installation directory."; \
+			echo "Run \`make uninstall-user\` or \`sudo make uninstall-global\` in the installation directory."; \
 		} > $$PACKAGE_DIR/$$PACKAGE_NAME/README.md || exit 1; \
 		cd $$PACKAGE_DIR && \
 		zip -r $$PACKAGES_DIR_ABS/$$PACKAGE_NAME.zip $$PACKAGE_NAME > /dev/null || exit 1; \
