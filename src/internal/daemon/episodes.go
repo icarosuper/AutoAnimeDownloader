@@ -43,11 +43,13 @@ func processAnimeEpisodes(
 	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, episodes, savedEpisodesMap, anime.Progress)
 	var episodesToDownload []anilist.AiringNode
 
+	animeIsInTorrents := torrentsMap[animeTitle]
+
 	for _, ep := range episodes {
 		result.checkedEpisodes = append(result.checkedEpisodes, ep.ID)
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 
-		isInTorrents := torrentsMap[epName]
+		isInTorrents := torrentsMap[epName] || animeIsInTorrents
 		alreadySaved := savedEpisodesMap[ep.ID]
 
 		shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents, keepSet[ep.ID])
@@ -62,6 +64,7 @@ func processAnimeEpisodes(
 	}
 
 	magnetsForEpisodes := resolveSearchStrategy(anime, animeTitle, episodesToDownload, customQuery)
+	notifiedHashes := make(map[string]bool)
 
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
@@ -107,8 +110,9 @@ func processAnimeEpisodes(
 				}
 			}
 
-			if jobQueue != nil {
+			if jobQueue != nil && !notifiedHashes[hash] {
 				jobQueue.EnqueueNotifyOnComplete(hash, animeTitle, ep.Episode)
+				notifiedHashes[hash] = true
 			}
 		} else {
 			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode)
