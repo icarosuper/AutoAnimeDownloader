@@ -27,6 +27,7 @@ func processAnimeEpisodes(
 	blockedMap map[int]bool,
 	customQuery string,
 	jobQueue *JobQueue,
+	searcher nyaaSearcher,
 ) animeProcessResult {
 	var result animeProcessResult
 	animeTitle := getAnimeTitleSafe(anime)
@@ -34,7 +35,7 @@ func processAnimeEpisodes(
 		Str("anime", animeTitle).
 		Msg("Processing anime episodes")
 
-	torrentsMap := buildTorrentsMap(dlTorrents)
+	torrentsHashSet := buildTorrentsHashSet(dlTorrents)
 	savedEpisodesMap := buildSavedEpisodesMap(savedEpisodes)
 	savedEpisodesFullMap := buildSavedEpisodesFullMap(savedEpisodes)
 
@@ -43,13 +44,10 @@ func processAnimeEpisodes(
 	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, episodes, savedEpisodesMap, anime.Progress)
 	var episodesToDownload []anilist.AiringNode
 
-	animeIsInTorrents := torrentsMap[animeTitle]
-
 	for _, ep := range episodes {
 		result.checkedEpisodes = append(result.checkedEpisodes, ep.ID)
-		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 
-		isInTorrents := torrentsMap[epName] || animeIsInTorrents
+		isInTorrents := episodeInTorrents(savedEpisodesFullMap[ep.ID].EpisodeHash, torrentsHashSet)
 		alreadySaved := savedEpisodesMap[ep.ID]
 
 		shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents, keepSet[ep.ID])
@@ -63,7 +61,7 @@ func processAnimeEpisodes(
 		}
 	}
 
-	magnetsForEpisodes := resolveSearchStrategy(anime, animeTitle, episodesToDownload, customQuery)
+	magnetsForEpisodes := resolveSearchStrategy(anime, animeTitle, episodesToDownload, customQuery, searcher)
 	notifiedHashes := make(map[string]bool)
 
 	for _, ep := range episodesToDownload {
@@ -78,7 +76,7 @@ func processAnimeEpisodes(
 
 		// Fallback: individual episode search
 		if len(magnets) == 0 {
-			for _, tr := range searchNyaaForSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery) {
+			for _, tr := range searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery) {
 				magnets = append(magnets, tr.MagnetLink)
 			}
 		}
@@ -131,7 +129,7 @@ type resolvedMagnets struct {
 
 // resolveSearchStrategy picks the best Nyaa search strategy for the anime and returns
 // magnets keyed by episode ID. Tries movie → batch → multi-episode in priority order.
-func resolveSearchStrategy(anime anilist.MediaList, animeTitle string, episodesToDownload []anilist.AiringNode, customQuery string) map[int]resolvedMagnets {
+func resolveSearchStrategy(anime anilist.MediaList, animeTitle string, episodesToDownload []anilist.AiringNode, customQuery string, searcher nyaaSearcher) map[int]resolvedMagnets {
 	result := make(map[int]resolvedMagnets, len(episodesToDownload))
 	animeIsFinished := anime.Media.Status == anilist.MediaStatusFinished
 	animeIsMovie := isAnimeMovie(anime)
@@ -142,7 +140,7 @@ func resolveSearchStrategy(anime anilist.MediaList, animeTitle string, episodesT
 			Str("anime", animeTitle).
 			Msg("Detected movie - searching for movie torrent")
 
-		movieResult := searchNyaaForMovie(anime.Media.Title, true, customQuery)
+		movieResult := searcher.searchMovie(anime.Media.Title, true, customQuery)
 
 		if len(episodesToDownload) == 0 && len(movieResult) > 0 {
 			fakeEp := anilist.AiringNode{ID: 0, Episode: 1}
@@ -178,7 +176,7 @@ func resolveSearchStrategy(anime anilist.MediaList, animeTitle string, episodesT
 			Str("anime", animeTitle).
 			Msg("Detected finished anime - searching for batch torrent")
 
-		batchResult := searchNyaaForBatch(anime.Media.Title, anime.Media.Synonyms, customQuery)
+		batchResult := searcher.searchBatch(anime.Media.Title, anime.Media.Synonyms, customQuery)
 
 		if len(batchResult) > 0 {
 			for _, ep := range episodesToDownload {
@@ -202,7 +200,7 @@ func resolveSearchStrategy(anime anilist.MediaList, animeTitle string, episodesT
 		eps = append(eps, ep.Episode)
 	}
 
-	multipleResult := searchNyaaForMultipleEpisodes(anime.Media.Title, anime.Media.Synonyms, eps, customQuery)
+	multipleResult := searcher.searchMultiple(anime.Media.Title, anime.Media.Synonyms, eps, customQuery)
 	if len(multipleResult) > 0 {
 		byEpisode := make(map[int][]nyaa.TorrentResult)
 		for _, tr := range multipleResult {

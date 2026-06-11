@@ -74,12 +74,21 @@ func getQBittorrentURL(configURL string) string {
 	return configURL
 }
 
-func buildTorrentsMap(t []torrents.Torrent) map[string]bool {
+func buildTorrentsHashSet(t []torrents.Torrent) map[string]bool {
 	m := make(map[string]bool, len(t))
 	for _, torrent := range t {
-		m[torrent.Name] = true
+		if torrent.Hash != "" {
+			m[torrent.Hash] = true
+		}
 	}
 	return m
+}
+
+// episodeInTorrents reports whether a saved episode's torrent is still present in qBittorrent.
+// Name-based checks are unreliable when qBittorrent retains the original torrent name (e.g. for
+// batch torrents added before the daemon ran). Hash comparison is always definitive.
+func episodeInTorrents(savedHash string, torrentsHashSet map[string]bool) bool {
+	return savedHash != "" && torrentsHashSet[savedHash]
 }
 
 func buildSavedEpisodesMap(episodes []files.EpisodeStruct) map[int]bool {

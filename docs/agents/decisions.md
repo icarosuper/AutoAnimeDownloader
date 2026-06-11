@@ -151,6 +151,18 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ---
 
+### 14. `nyaaSearcher` — dependency injection for Nyaa search in `processAnimeEpisodes`
+
+**Location:** `internal/daemon/search.go` (`nyaaSearcher` struct + `defaultNyaaSearcher()`); `internal/daemon/episodes.go` (`processAnimeEpisodes`, `resolveSearchStrategy`).
+
+**What it looks like:** `processAnimeEpisodes` receives a `nyaaSearcher` struct with function-valued fields instead of calling `searchNyaaForBatch`, `searchNyaaForMovie`, etc. directly. Looks like unnecessary indirection — these are pure functions with no state.
+
+**Why it's right:** The `episodeInTorrents` hash-check fix prevents batch torrents from being re-downloaded in a loop. Without injection, it's impossible to write a test that proves the loop can't recur: a test that calls the real Nyaa makes a live HTTP request, is flaky, and can't observe whether `searchBatch` was invoked. Injection lets the regression test (`TestProcessAnimeEpisodes_BatchNoRedownload`) confirm both that `searchBatch` is never called and that `POST /add` is never sent when all episode hashes already match.
+
+**Don't "fix" by:** removing the `nyaaSearcher` parameter and going back to direct package calls. That makes the regression test impossible to write, and the loop bug would be undetectable until it reappears in production.
+
+---
+
 ### 10. "Cour N" treated as Part N, not as a distinct concept
 
 **Location:** `internal/nyaa/nyaa_regex.go` — `rePartPatterns`; `internal/daemon/helpers.go` — `ExtractAnimeSeasonPart`

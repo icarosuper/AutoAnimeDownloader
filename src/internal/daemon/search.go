@@ -8,6 +8,22 @@ import (
 
 type nyaaSearchFunc func(title string) ([]nyaa.TorrentResult, error)
 
+type nyaaSearcher struct {
+	searchBatch         func(titles anilist.Title, synonyms []string, customQuery string) []nyaa.TorrentResult
+	searchSingleEpisode func(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string) []nyaa.TorrentResult
+	searchMovie         func(titles anilist.Title, isFormatMovie bool, customQuery string) []nyaa.TorrentResult
+	searchMultiple      func(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult
+}
+
+func defaultNyaaSearcher() nyaaSearcher {
+	return nyaaSearcher{
+		searchBatch:         searchNyaaForBatch,
+		searchSingleEpisode: searchNyaaForSingleEpisode,
+		searchMovie:         searchNyaaForMovie,
+		searchMultiple:      searchNyaaForMultipleEpisodes,
+	}
+}
+
 func buildTitleVariants(titles anilist.Title, customQuery string) []string {
 	if customQuery != "" {
 		return []string{customQuery}

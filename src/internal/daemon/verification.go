@@ -198,7 +198,7 @@ outer:
 			default:
 			}
 
-			resultCh <- processAnimeEpisodes(configs, torrentsService, a, downloadedTorrents, savedEpisodes, blockedMap, q, jobQueue)
+			resultCh <- processAnimeEpisodes(configs, torrentsService, a, downloadedTorrents, savedEpisodes, blockedMap, q, jobQueue, defaultNyaaSearcher())
 		}(anime, customQuery)
 	}
 
