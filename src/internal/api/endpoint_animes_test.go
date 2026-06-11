@@ -236,7 +236,7 @@ func TestHandleAnimes(t *testing.T) {
 		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
 			body := readBody(req)
 			respBody := lightweightBody
-			if strings.Contains(body, "airingSchedule") {
+			if strings.Contains(body, "coverImage") {
 				respBody = complexBody
 			}
 			return &http.Response{

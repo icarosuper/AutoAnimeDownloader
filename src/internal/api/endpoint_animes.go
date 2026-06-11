@@ -147,7 +147,7 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 	// Fetch customLists via cached minimal query before the complex query that may null it out.
 	clMap := anilist.GetCustomListsMap(username, statuses)
 
-	resp, err := anilist.GetAllCurrentAnime(username, statuses)
+	resp, err := anilist.GetFrontendAnimeList(username, statuses)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
 		return

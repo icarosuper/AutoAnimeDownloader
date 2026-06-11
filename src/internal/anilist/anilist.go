@@ -296,13 +296,53 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 								relationType
 							}
 						}
+						airingSchedule {
+							nodes {
+								id
+								episode
+								timeUntilAiring
+							}
+						}
+					}
+				}
+			}
+		}
+	`
+
+	if len(statuses) == 0 {
+		return &AniListResponse{}, nil
+	}
+
+	variables := RequestVariables{
+		"userName": userName,
+		"type":     "ANIME",
+		"statuses": statuses,
+	}
+
+	return sendAnilistRequest[AniListResponse](query, variables)
+}
+
+func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse, error) {
+	query := `
+		query GetFrontendAnimeList($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
+			Page {
+				mediaList(userName: $userName, type: $type, status_in: $statuses) {
+					id
+					progress
+					customLists
+					media {
+						title {
+							english
+							romaji
+						}
+						episodes
+						status
 						coverImage {
 							large
 							medium
 						}
 						airingSchedule {
 							nodes {
-								id
 								episode
 								timeUntilAiring
 							}
