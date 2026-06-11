@@ -2,7 +2,7 @@
 # Cross-platform builds using Docker
 # Works on Linux, macOS, and WSL (Windows Subsystem for Linux)
 
-.PHONY: build package release clean help
+.PHONY: build package release clean help dev clear-data
 .PHONY: build-linuxamd64 build-linuxarm64 build-windows
 .PHONY: package-linuxamd64 package-linuxarm64 package-windows
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
@@ -57,6 +57,10 @@ help:
 	@echo -e "  $(YELLOW)make test-frontend-unit$(NC)            - Run frontend unit tests (Vitest)"
 	@echo -e "  $(YELLOW)make test-frontend-component$(NC)       - Run component tests (Vitest)"
 	@echo -e "  $(YELLOW)make test-frontend-smoke$(NC)           - Run smoke tests (Playwright)"
+	@echo ""
+	@echo -e "$(GREEN)Dev targets:$(NC)"
+	@echo -e "  $(YELLOW)make dev$(NC)                           - Run dev server (frontend + backend)"
+	@echo -e "  $(YELLOW)make clear-data$(NC)                    - Clear local daemon data files"
 	@echo ""
 	@echo -e "$(GREEN)Supported platforms:$(NC)"
 	@echo -e "  - $(YELLOW)linuxamd64$(NC)  (Linux AMD64)"
@@ -231,6 +235,12 @@ package-windows:
 	cd $(PACKAGES_DIR); \
 	sha256sum $$PACKAGE_NAME.exe > $$PACKAGE_NAME.exe.sha256; \
 	echo -e "$(GREEN)Created: $(PACKAGES_DIR)/$$PACKAGE_NAME.exe$(NC)\n"
+
+dev:
+	@bash scripts/dev.sh
+
+clear-data:
+	@bash scripts/clear_data.sh
 
 # Clean build artifacts
 clean:
