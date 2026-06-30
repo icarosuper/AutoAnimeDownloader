@@ -50,7 +50,7 @@
   };
 
   const bodyPlaceholder = '{"message":"{{message}}"}';
-  const varsHint = 'Variables: {{title}}, {{message}}, {{anime_name}}, {{episode}}, {{timestamp}}';
+  const varsHint = 'Variables: {{title}}, {{message}}, {{anime_name}}, {{episode}}, {{reason}}, {{timestamp}}';
 
   let fullConfig: Config | null = null;
   let notifications: { webhooks: WebhookPreset[] } = { webhooks: [] };

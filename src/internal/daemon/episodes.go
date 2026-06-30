@@ -81,7 +81,7 @@ func processAnimeEpisodes(
 			}
 		}
 
-		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode)
+		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
 
 		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName, skipSubfolder)
 
@@ -113,7 +113,11 @@ func processAnimeEpisodes(
 				notifiedHashes[hash] = true
 			}
 		} else {
-			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode)
+			reason := notifications.ReasonQbitRejected
+			if len(magnets) == 0 {
+				reason = notifications.ReasonNotFound
+			}
+			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, reason)
 		}
 	}
 

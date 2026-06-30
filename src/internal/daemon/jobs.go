@@ -294,7 +294,7 @@ func (q *JobQueue) executeJob(job *Job, ts *torrents.TorrentService, configs *fi
 					return true
 				}
 				if torrents.IsTorrentCompleted(t.State) {
-					notifications.Notify(configs, notifications.QBittorrentDownloadCompleted, p.AnimeName, p.Episode)
+					notifications.Notify(configs, notifications.QBittorrentDownloadCompleted, p.AnimeName, p.Episode, "")
 					return true
 				}
 				return false // not complete yet, retry on next tick

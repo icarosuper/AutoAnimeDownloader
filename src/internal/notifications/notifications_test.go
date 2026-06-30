@@ -45,7 +45,7 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 		Body:    "{{anime_name}} EP {{episode}}",
 	}
 
-	vars := buildVars("Frieren", 5, NewEpisode)
+	vars := buildVars("Frieren", 5, NewEpisode, "")
 	fireWebhook(preset, vars)
 
 	if capturedBody != "Frieren EP 5" {
@@ -53,6 +53,16 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 	}
 	if capturedHeader == "" {
 		t.Fatal("Title header not set")
+	}
+}
+
+func TestBuildVarsDownloadFailedReason(t *testing.T) {
+	vars := buildVars("Frieren", 5, DownloadFailed, ReasonNotFound)
+	if vars["reason"] != ReasonNotFound {
+		t.Fatalf("reason var = %q", vars["reason"])
+	}
+	if want := "Frieren EP 5 falhou: " + ReasonNotFound; vars["message"] != want {
+		t.Fatalf("message = %q, want %q", vars["message"], want)
 	}
 }
 
@@ -87,11 +97,11 @@ func TestFireTestWebhookFires(t *testing.T) {
 }
 
 func TestNotifyNoOp_WhenNoWebhooks(t *testing.T) {
-	Notify(&files.Config{}, NewEpisode, "Frieren", 5)
+	Notify(&files.Config{}, NewEpisode, "Frieren", 5, "")
 }
 
 func TestNotifyNoOp_WhenNilConfig(t *testing.T) {
-	Notify(nil, NewEpisode, "Frieren", 5)
+	Notify(nil, NewEpisode, "Frieren", 5, "")
 }
 
 func TestNotify_SkipsWebhookWhenEventNotSubscribed(t *testing.T) {
@@ -109,7 +119,7 @@ func TestNotify_SkipsWebhookWhenEventNotSubscribed(t *testing.T) {
 		},
 	}
 
-	Notify(cfg, NewEpisode, "Frieren", 5)
+	Notify(cfg, NewEpisode, "Frieren", 5, "")
 
 	select {
 	case <-fired:
@@ -133,7 +143,7 @@ func TestNotify_FiresWebhookWhenEventSubscribed(t *testing.T) {
 		},
 	}
 
-	Notify(cfg, NewEpisode, "Frieren", 5)
+	Notify(cfg, NewEpisode, "Frieren", 5, "")
 
 	select {
 	case <-fired:

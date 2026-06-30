@@ -19,6 +19,12 @@ const (
 	QBittorrentDownloadCompleted
 )
 
+// Motivos de falha de download, usados como {{reason}} e na mensagem padrão.
+const (
+	ReasonNotFound     = "nenhum torrent encontrado"
+	ReasonQbitRejected = "qBittorrent rejeitou o torrent"
+)
+
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
 
 func eventString(e Event) string {
@@ -40,8 +46,8 @@ func interpolate(template string, vars map[string]string) string {
 	})
 }
 
-func buildVars(animeName string, episode int, event Event) map[string]string {
-	title, message := eventStrings(animeName, episode, event)
+func buildVars(animeName string, episode int, event Event, reason string) map[string]string {
+	title, message := eventStrings(animeName, episode, event, reason)
 	return map[string]string{
 		"title":      title,
 		"message":    message,
@@ -49,18 +55,22 @@ func buildVars(animeName string, episode int, event Event) map[string]string {
 		"episode":    fmt.Sprintf("%d", episode),
 		"quality":    "",
 		"file_path":  "",
+		"reason":     reason,
 		"timestamp":  time.Now().Format("2006-01-02 15:04"),
 	}
 }
 
-func eventStrings(animeName string, episode int, event Event) (title, message string) {
+func eventStrings(animeName string, episode int, event Event, reason string) (title, message string) {
 	switch event {
 	case NewEpisode:
 		return "Novo episódio detectado",
 			fmt.Sprintf("%s EP %d detectado, iniciando download", animeName, episode)
 	case DownloadFailed:
+		if reason == "" {
+			reason = "todas as tentativas falharam"
+		}
 		return "Erro no download",
-			fmt.Sprintf("%s EP %d falhou após todas as tentativas", animeName, episode)
+			fmt.Sprintf("%s EP %d falhou: %s", animeName, episode, reason)
 	case QBittorrentDownloadCompleted:
 		return "Download concluído",
 			fmt.Sprintf("%s EP %d foi baixado com sucesso", animeName, episode)
@@ -99,12 +109,12 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
 
 // Notify fires webhooks subscribed to the given event in background goroutines.
 // No-op if cfg is nil or has no webhooks.
-func Notify(cfg *files.Config, event Event, animeName string, episode int) {
+func Notify(cfg *files.Config, event Event, animeName string, episode int, reason string) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 {
 		return
 	}
 	eventStr := eventString(event)
-	vars := buildVars(animeName, episode, event)
+	vars := buildVars(animeName, episode, event, reason)
 	for _, preset := range cfg.Notifications.Webhooks {
 		if !slices.Contains(preset.Events, eventStr) {
 			continue
@@ -119,7 +129,7 @@ func Notify(cfg *files.Config, event Event, animeName string, episode int) {
 func FireTestWebhook(cfg *files.Config, name string) error {
 	for _, preset := range cfg.Notifications.Webhooks {
 		if preset.Name == name {
-			vars := buildVars("Frieren Beyond Journey's End", 5, QBittorrentDownloadCompleted)
+			vars := buildVars("Frieren Beyond Journey's End", 5, QBittorrentDownloadCompleted, "")
 			fireWebhook(preset, vars)
 			return nil
 		}
