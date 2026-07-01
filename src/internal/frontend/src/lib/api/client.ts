@@ -83,6 +83,16 @@ export interface WebhookPreset {
   events: string[]
 }
 
+export interface Priorities {
+  criteria_order: string[]
+  fansubs: string[]
+  resolutions: string[]
+  sources: string[]
+  codecs: string[]
+  audio: string[]
+  ignore_list: string[]
+}
+
 export interface Config {
   anilist_username?: string
   anilist_usernames: string[]
@@ -102,6 +112,7 @@ export interface Config {
   notifications: {
     webhooks: WebhookPreset[]
   }
+  priorities: Priorities
 }
 
 export interface AnimeInfo {
@@ -131,6 +142,10 @@ export async function getConfig(): Promise<Config> {
 
 export async function updateConfig(config: Config): Promise<void> {
   return apiRequest<void>('PUT', '/config', config)
+}
+
+export async function getPriorityDefaults(): Promise<Priorities> {
+  return apiRequest<Priorities>('GET', '/config/priorities/defaults')
 }
 
 export async function getAnimes(): Promise<AnimeInfo[]> {

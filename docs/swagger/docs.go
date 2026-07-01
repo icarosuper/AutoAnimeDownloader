@@ -747,6 +747,44 @@ const docTemplate = `{
                 }
             }
         },
+        "/config/priorities/defaults": {
+            "get": {
+                "description": "Returns the built-in default priority lists (for the \"reset to default\" button)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Get default torrent priorities",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/api.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/nyaa.Priorities"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/daemon/start": {
             "post": {
                 "description": "Starts the daemon loop for automatic anime checking",
@@ -1186,6 +1224,9 @@ const docTemplate = `{
                 "notifications": {
                     "$ref": "#/definitions/files.NotificationsConfig"
                 },
+                "priorities": {
+                    "$ref": "#/definitions/nyaa.Priorities"
+                },
                 "qbittorrent_url": {
                     "type": "string"
                 },
@@ -1217,6 +1258,12 @@ const docTemplate = `{
                 "body": {
                     "type": "string"
                 },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "headers": {
                     "type": "object",
                     "additionalProperties": {
@@ -1231,6 +1278,55 @@ const docTemplate = `{
                 },
                 "url": {
                     "type": "string"
+                }
+            }
+        },
+        "nyaa.Priorities": {
+            "type": "object",
+            "properties": {
+                "audio": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "codecs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "criteria_order": {
+                    "description": "CriteriaOrder é a ordem em que os critérios de sort são aplicados.\nValores válidos: uncensored, source, resolution, codec, fansub, audio, health, size.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fansubs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ignore_list": {
+                    "description": "IgnoreList: substrings (case-insensitive) que descartam o release de vez.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "resolutions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         }

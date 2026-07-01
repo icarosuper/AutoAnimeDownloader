@@ -75,6 +75,15 @@
     download_statuses: ["CURRENT", "REPEATING"],
     delete_statuses: [],
     notifications: { webhooks: [] },
+    priorities: {
+      criteria_order: [],
+      fansubs: [],
+      resolutions: [],
+      sources: [],
+      codecs: [],
+      audio: [],
+      ignore_list: [],
+    },
   };
 
   function toggleDownloadStatus(status: string) {

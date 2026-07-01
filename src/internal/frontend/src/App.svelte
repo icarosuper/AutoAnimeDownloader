@@ -4,6 +4,7 @@
   import Status from "./routes/Status.svelte";
   import AnimeDetail from "./routes/AnimeDetail.svelte";
   import Config from "./routes/Config.svelte";
+  import Priorities from "./routes/Priorities.svelte";
   import Logs from "./routes/Logs.svelte";
   import Notifications from "./routes/Notifications.svelte";
 
@@ -12,6 +13,7 @@
     "/status": Status,
     "/status/:id": AnimeDetail,
     "/config": Config,
+    "/priorities": Priorities,
     "/logs": Logs,
     "/notifications": Notifications,
   };

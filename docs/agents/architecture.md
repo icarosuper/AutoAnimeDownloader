@@ -58,6 +58,7 @@ Key endpoints:
 |--------|----------|-------------|------|
 | `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
+| `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
 | `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` |
 | `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
 | `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` |
@@ -283,13 +284,29 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `ExtractSeason(name)` | Exported: extracts season number from torrent name |
 | `ExtractPart(name)` | Exported: extracts part/cour number from torrent name |
 | `GenerateSearchTitleVariants(romaji, english)` | Search query variants: clean romaji → original romaji → clean english → original english |
-| `SortTorrentResults(results)` | Sorts by: uncensored → resolution → fansub → health score → size |
-| `SortMovieResults(results)` | Sorts by: source (BD>WEB) → resolution → codec → fansub → audio → health → size |
+| `SortTorrentResults(results)` | Sorts by the episode-relevant subset of `ActivePriorities().CriteriaOrder` (default: uncensored → resolution → fansub → health score → size) |
+| `SortMovieResults(results)` | Sorts by all of `ActivePriorities().CriteriaOrder` (default: uncensored → source → resolution → codec → fansub → audio → health → size) |
 | `IsBatch(name)` | Exported batch detection for tests |
 | `IsMovie(torrentName, animeName, isFormatMovie?)` | Exported movie detection for tests |
 | `MockNyaaHttpGet(fn)` | Replaces `httpGet` for tests; returns restore func |
 | `httpGet` var | Swappable HTTP func — overridden in tests via `MockNyaaHttpGet` |
 | `getNyaaBaseURL()` | Reads `NYAA_URL` env or defaults to `https://nyaa.si` |
+
+### `src/internal/nyaa/priorities.go`
+
+Holds the user-configurable priority lists that drive torrent ranking/filtering. See [Config Reference](config.md) for the `Priorities` struct fields.
+
+| Symbol | Purpose |
+|--------|---------|
+| `Priorities` struct | `CriteriaOrder`, `Fansubs`, `Resolutions`, `Sources`, `Codecs`, `Audio`, `IgnoreList` |
+| `DefaultPriorities()` | Returns the built-in defaults (faithfully reproduces the original hardcoded maps/regex) |
+| `ActivePriorities()` | Returns the currently active `Priorities` (never nil — package `init()` seeds it with defaults) |
+| `SetPriorities(p)` | Atomically swaps the active priorities; returns a `restore func()` to revert (same pattern as `MockNyaaHttpGet`). Called by `files.LoadConfigs()` on every successful load |
+| `ShouldIgnore(name)` | True if `name` matches any (case-insensitive substring) entry in the active `IgnoreList` |
+| `priorityIndex(list, token)` | Index of `token` (lowercased) in `list`, or `len(list)` (worst) if absent |
+| `criterionCompare` map | `criteria_order` value → comparator `func(a, b TorrentResult) int` |
+| `sortByCriteria(results, criteria)` | Stable sort applying `criteria` in order, first non-zero comparator wins |
+| `episodeCriteria` | Subset of criteria valid for `SortTorrentResults` (excludes `source`, `codec`, `audio`) |
 
 ### `src/internal/nyaa/nyaa_regex.go`
 
@@ -300,7 +317,6 @@ Pre-compiled package-level regex vars. All compiled at package init for performa
 | `reSeasonStrip` | Strips season suffixes from query names before search |
 | `reBatchPatterns` | 17 patterns detecting batch torrents (range, complete, season markers) |
 | `reBatchRange`, `reBatchComplete` | Batch episode range and "complete/batch" extraction |
-| `reIgnorePatterns` | Unwanted releases: dub, raw, hardcoded, re-encode |
 | `reMovieKeywords`, `reOvaPattern`, `reSpecialPattern`, `reHasEpisode` | Movie/OVA/special detection, episode presence check |
 | `reFansub` | Extracts fansub from `[FANSUB]` or `(FANSUB)` prefix |
 | `reEpisodePatterns` | 10 episode extraction patterns ordered by specificity (SxxExx → `- 05` → `[05]` → etc.) |
@@ -375,6 +391,7 @@ Title-matching logic for filtering Nyaa search results.
 | `routes/Status.svelte` | `#/` | Daemon status, start/stop, anime list |
 | `routes/AnimeDetail.svelte` | `#/anime/:id` | Per-anime episode list + actions |
 | `routes/Config.svelte` | `#/config` | Edit all config fields |
+| `routes/Priorities.svelte` | `#/priorities` | Reorder/add/remove torrent priority lists (fansubs, resolutions, source, codec, audio, criteria order, ignore list); reset per-list or all, via `GET/PUT /api/v1/config` + `GET /api/v1/config/priorities/defaults` |
 | `routes/Logs.svelte` | `#/logs` | Tail daemon logs |
 | `routes/Notifications.svelte` | `#/notifications` | Webhook configuration CRUD |
 

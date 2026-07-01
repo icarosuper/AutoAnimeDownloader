@@ -35,15 +35,6 @@ var (
 	reBatchRange    = regexp.MustCompile(`(?i)(\d{1,3})\s*[-~]\s*(\d{1,3})`)
 	reBatchComplete = regexp.MustCompile(`(?i)complete|batch`)
 
-	// Ignore patterns (dub, raw, hardcoded, etc.)
-	reIgnorePatterns = []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\[dub\]`),
-		regexp.MustCompile(`(?i)\[raw\]`),
-		regexp.MustCompile(`(?i)\[hardcoded\]`),
-		regexp.MustCompile(`(?i)\[hc\]`),
-		regexp.MustCompile(`(?i)re-encode`),
-	}
-
 	// Movie keyword patterns
 	reMovieKeywords = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\(movie\)|\[movie\]|\smovie\s`),

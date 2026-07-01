@@ -2,6 +2,7 @@ package files
 
 import (
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -43,22 +44,23 @@ type NotificationsConfig struct {
 }
 
 type Config struct {
-	SavePath               string   `json:"save_path"`
-	CompletedAnimePath     string   `json:"completed_anime_path"`
-	AnilistUsername        string   `json:"anilist_username,omitempty"`
-	AnilistUsernames       []string `json:"anilist_usernames"`
-	CheckInterval          int      `json:"check_interval"`
-	QBittorrentUrl         string   `json:"qbittorrent_url"`
-	MaxEpisodesPerAnime    int      `json:"max_episodes_per_anime"`
-	EpisodeRetryLimit      int      `json:"episode_retry_limit"`
-	DeleteWatchedEpisodes  bool     `json:"delete_watched_episodes"`
-	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
-	ExcludedList           string   `json:"excluded_list,omitempty"`
-	ExcludedLists          []string `json:"excluded_lists"`
+	SavePath               string              `json:"save_path"`
+	CompletedAnimePath     string              `json:"completed_anime_path"`
+	AnilistUsername        string              `json:"anilist_username,omitempty"`
+	AnilistUsernames       []string            `json:"anilist_usernames"`
+	CheckInterval          int                 `json:"check_interval"`
+	QBittorrentUrl         string              `json:"qbittorrent_url"`
+	MaxEpisodesPerAnime    int                 `json:"max_episodes_per_anime"`
+	EpisodeRetryLimit      int                 `json:"episode_retry_limit"`
+	DeleteWatchedEpisodes  bool                `json:"delete_watched_episodes"`
+	WatchedEpisodesToKeep  int                 `json:"watched_episodes_to_keep"`
+	ExcludedList           string              `json:"excluded_list,omitempty"`
+	ExcludedLists          []string            `json:"excluded_lists"`
 	RenameFilesForJellyfin bool                `json:"rename_files_for_jellyfin"`
 	DownloadStatuses       []string            `json:"download_statuses"`
 	DeleteStatuses         []string            `json:"delete_statuses"`
 	Notifications          NotificationsConfig `json:"notifications"`
+	Priorities             nyaa.Priorities     `json:"priorities"`
 }
 
 type AnimeSettings struct {
@@ -88,6 +90,7 @@ func getDefaultConfig() *Config {
 		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
 		DeleteStatuses:        []string{},
 		Notifications:         NotificationsConfig{Webhooks: []WebhookPreset{}},
+		Priorities:            nyaa.DefaultPriorities(),
 	}
 }
 
@@ -154,6 +157,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
+		nyaa.SetPriorities(config.Priorities)
 		return config, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to stat config file: %w", err)
@@ -171,6 +175,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
+		nyaa.SetPriorities(config.Priorities)
 		return config, nil
 	}
 
@@ -181,6 +186,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
 		}
+		nyaa.SetPriorities(config.Priorities)
 		return config, nil
 	}
 
@@ -215,6 +221,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		config.AnilistUsernames = []string{}
 	}
 
+	nyaa.SetPriorities(config.Priorities)
 	return config, nil
 }
 

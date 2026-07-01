@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -151,13 +150,7 @@ func extractBatchInfo(torrentName string) BatchInfo {
 // shouldIgnoreTorrent verifica se o torrent deve ser ignorado
 // baseado em padrões indesejados (dub, raw, hardcoded, etc.)
 func shouldIgnoreTorrent(name string) bool {
-	nameLower := strings.ToLower(name)
-	for _, re := range reIgnorePatterns {
-		if re.MatchString(nameLower) {
-			return true
-		}
-	}
-	return false
+	return ShouldIgnore(name)
 }
 
 // IsBatch é uma versão exportável de isBatch para testes
@@ -844,25 +837,7 @@ func isWithinThreeMonths(date time.Time) bool {
 // resolutionPriority retorna um valor de prioridade para a resolução (menor = melhor)
 // Baseado nas regras do Nyaa (Seção 3 do documento de regras)
 func resolutionPriority(resolution string) int {
-	priorityMap := map[string]int{
-		"1080p": 0, // Melhor opção - padrão mais comum
-		"720p":  1, // Segunda melhor opção
-		"480p":  2, // Aceitável
-		"4k":    3, // 4K
-		"8k":    4, // 8K
-		"fhd":   5, // Full HD
-		"uhd":   6, // Ultra HD
-		"hd":    7, // HD genérico
-		"2160p": 8, // 4K alternativo
-		"1440p": 9, // 2K
-	}
-
-	normalized := strings.ToLower(resolution)
-	if priority, exists := priorityMap[normalized]; exists {
-		return priority
-	}
-
-	return 999 // Resolução desconhecida tem menor prioridade
+	return priorityIndex(ActivePriorities().Resolutions, resolution)
 }
 
 // isUncensored verifica se o torrent contém "Uncensored" no título
@@ -873,42 +848,15 @@ func isUncensored(torrentName string) bool {
 // fansubPriority retorna um valor de prioridade para o fansub (menor = melhor)
 // Baseado nas regras do Nyaa (Seção 4 do documento de regras)
 func fansubPriority(torrentName string) int {
-	// Fansubs reconhecidos - em ordem de prioridade (menor = melhor)
-	fansubPriorities := map[string]int{
-		// Melhores opções (releases consistentes e de alta qualidade)
-		"subsplease": 0, // MELHOR - consistência semanal
-		"erai-raws":  1, // Excelente qualidade
-
-		// Boas opções
-		"judas":    2, // Bom para dual audio
-		"toonshub": 3, // Multi-subs
-		"asw":      4, // Active Simulcast Watch
-
-		// Aceitáveis
-		"ember":    5, // Batches
-		"hd-zone":  6,
-		"kamig":    7,
-		"remix":    8,
-		"aniverse": 9,
-
-		// Menos preferíveis
-		"dub": 10, // Dublado (geralmente não queremos)
-		"raw": 11, // Sem legendas
-	}
-
 	nameLower := strings.ToLower(torrentName)
-
-	// Encontrar o fansub com maior prioridade (menor número)
-	bestPriority := 999
-	for fansub, priority := range fansubPriorities {
-		if strings.Contains(nameLower, fansub) {
-			if priority < bestPriority {
-				bestPriority = priority
-			}
+	fansubs := ActivePriorities().Fansubs
+	best := len(fansubs)
+	for i, f := range fansubs {
+		if strings.Contains(nameLower, f) && i < best {
+			best = i
 		}
 	}
-
-	return bestPriority
+	return best
 }
 
 // extractSource extrai a fonte do release (BD, WEB-DL, TV, etc.)
@@ -947,64 +895,19 @@ func extractAudio(name string) string {
 // sourcePriority retorna prioridade da fonte (menor = melhor)
 // Baseado nas regras do documento (Seção 6.1 do RegrasFilmesBatches.md)
 func sourcePriority(source string) int {
-	priorityMap := map[string]int{
-		"BD":      0, // Blu-ray (MELHOR)
-		"BDRip":   1,
-		"BDRemux": 2,
-		"WEB-DL":  3, // Web download (bom)
-		"WEBRip":  4,
-		"TV":      5, // TV rip (aceitável)
-		"DVD":     6,
-		"HDTV":    7,
-	}
-
-	normalized := strings.ToLower(source)
-	if priority, exists := priorityMap[normalized]; exists {
-		return priority
-	}
-
-	return 999 // Source desconhecida
+	return priorityIndex(ActivePriorities().Sources, source)
 }
 
 // codecPriority retorna prioridade do codec (menor = melhor)
 // Baseado nas regras do documento (Seção 6.2 do RegrasFilmesBatches.md)
 func codecPriority(codec string) int {
-	priorityMap := map[string]int{
-		"HEVC":  0, // H.265 (MELHOR - melhor compressão)
-		"AV1":   1, // AV1 (novo, excelente)
-		"x265":  2, // H.265 (mesmo que HEVC)
-		"H.264": 3, // H.264 (padrão)
-		"x264":  4, // H.264
-		"XviD":  5, // Antigo
-	}
-
-	normalized := strings.ToLower(codec)
-	if priority, exists := priorityMap[normalized]; exists {
-		return priority
-	}
-
-	return 999 // Codec desconhecido
+	return priorityIndex(ActivePriorities().Codecs, codec)
 }
 
 // audioPriority retorna prioridade do áudio (menor = melhor)
 // Baseado nas regras do documento (Seção 6.3 do RegrasFilmesBatches.md)
 func audioPriority(audio string) int {
-	priorityMap := map[string]int{
-		"FLAC":   0, // Lossless (MELHOR)
-		"DTS-HD": 1,
-		"TrueHD": 2,
-		"DDP":    3, // Dolby Digital Plus
-		"AAC":    4, // AAC (comum)
-		"AC3":    5, // Dolby Digital
-		"MP3":    6, // MP3 (menor qualidade)
-	}
-
-	normalized := strings.ToLower(audio)
-	if priority, exists := priorityMap[normalized]; exists {
-		return priority
-	}
-
-	return 999 // Áudio desconhecido
+	return priorityIndex(ActivePriorities().Audio, audio)
 }
 
 // SortTorrentResults ordena os torrents por qualidade
@@ -1016,58 +919,7 @@ func audioPriority(audio string) int {
 // 5. Tamanho (menor é melhor para mesma qualidade)
 // Baseado nas regras do Nyaa (Seção 8 do documento de regras)
 func SortTorrentResults(results []TorrentResult) []TorrentResult {
-	sorted := make([]TorrentResult, len(results))
-	copy(sorted, results)
-
-	sort.Slice(sorted, func(i, j int) bool {
-		// 1. Priorizar torrents com "Uncensored" no título
-		uncensoredI := isUncensored(sorted[i].Name)
-		uncensoredJ := isUncensored(sorted[j].Name)
-
-		if uncensoredI != uncensoredJ {
-			return uncensoredI // Se i é Uncensored e j não, i vem primeiro
-		}
-
-		// 2. Comparar por prioridade de resolução
-		if sorted[i].Resolution != nil && sorted[j].Resolution != nil {
-			priorityI := resolutionPriority(*sorted[i].Resolution)
-			priorityJ := resolutionPriority(*sorted[j].Resolution)
-
-			if priorityI != priorityJ {
-				return priorityI < priorityJ // Menor prioridade = melhor
-			}
-		} else if sorted[i].Resolution != nil {
-			return true // i tem resolução, j não
-		} else if sorted[j].Resolution != nil {
-			return false // j tem resolução, i não
-		}
-
-		// 3. Comparar por fansub
-		fansubI := fansubPriority(sorted[i].Name)
-		fansubJ := fansubPriority(sorted[j].Name)
-		if fansubI != fansubJ {
-			return fansubI < fansubJ // Menor prioridade = melhor
-		}
-
-		// 4. Comparar por health score (seeders + ratio seeders/leechers)
-		healthI := torrentHealthScore(sorted[i])
-		healthJ := torrentHealthScore(sorted[j])
-		if healthI != healthJ {
-			return healthI > healthJ
-		}
-
-		// 5. Comparar por tamanho (menor é melhor para mesma qualidade)
-		// Apenas se resolução for a mesma
-		if sorted[i].Resolution != nil && sorted[j].Resolution != nil {
-			if *sorted[i].Resolution == *sorted[j].Resolution {
-				return sorted[i].Size < sorted[j].Size
-			}
-		}
-
-		return false
-	})
-
-	return sorted
+	return sortByCriteria(results, filterCriteria(ActivePriorities().CriteriaOrder, episodeCriteria))
 }
 
 // parseSeeders converte a string de seeders para int
@@ -1153,85 +1005,5 @@ func extractSeasonFromName(name string) string {
 // 6. Seeders (mais é melhor)
 // 7. Tamanho (menor é melhor para mesma qualidade)
 func SortMovieResults(results []TorrentResult) []TorrentResult {
-	sorted := make([]TorrentResult, len(results))
-	copy(sorted, results)
-
-	sort.Slice(sorted, func(i, j int) bool {
-		// Extrair informações técnicas
-		sourceI := extractSource(sorted[i].Name)
-		sourceJ := extractSource(sorted[j].Name)
-
-		codecI := extractCodec(sorted[i].Name)
-		codecJ := extractCodec(sorted[j].Name)
-
-		audioI := extractAudio(sorted[i].Name)
-		audioJ := extractAudio(sorted[j].Name)
-
-		// 1. Comparar por source
-		if sourceI != "" && sourceJ != "" {
-			priorityI := sourcePriority(sourceI)
-			priorityJ := sourcePriority(sourceJ)
-			if priorityI != priorityJ {
-				return priorityI < priorityJ // Menor prioridade = melhor
-			}
-		} else if sourceI != "" {
-			return true // i tem source, j não
-		} else if sourceJ != "" {
-			return false // j tem source, i não
-		}
-
-		// 2. Comparar por resolução
-		if sorted[i].Resolution != nil && sorted[j].Resolution != nil {
-			priorityI := resolutionPriority(*sorted[i].Resolution)
-			priorityJ := resolutionPriority(*sorted[j].Resolution)
-			if priorityI != priorityJ {
-				return priorityI < priorityJ
-			}
-		} else if sorted[i].Resolution != nil {
-			return true
-		} else if sorted[j].Resolution != nil {
-			return false
-		}
-
-		// 3. Comparar por codec
-		if codecI != "" && codecJ != "" {
-			priorityI := codecPriority(codecI)
-			priorityJ := codecPriority(codecJ)
-			if priorityI != priorityJ {
-				return priorityI < priorityJ
-			}
-		} else if codecI != "" {
-			return true
-		} else if codecJ != "" {
-			return false
-		}
-
-		// 4. Comparar por fansub
-		fansubI := fansubPriority(sorted[i].Name)
-		fansubJ := fansubPriority(sorted[j].Name)
-		if fansubI != fansubJ {
-			return fansubI < fansubJ
-		}
-
-		// 5. Comparar por áudio
-		if audioI != "" && audioJ != "" {
-			priorityI := audioPriority(audioI)
-			priorityJ := audioPriority(audioJ)
-			if priorityI != priorityJ {
-				return priorityI < priorityJ
-			}
-		}
-
-		// 6. Comparar por health score (seeders + ratio seeders/leechers)
-		healthI := torrentHealthScore(sorted[i])
-		healthJ := torrentHealthScore(sorted[j])
-		if healthI != healthJ {
-			return healthI > healthJ
-		}
-
-		// 7. Comparar por tamanho
-		return sorted[i].Size < sorted[j].Size
-	})
-
-	return sorted
+	return sortByCriteria(results, ActivePriorities().CriteriaOrder)
 }

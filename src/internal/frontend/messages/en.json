@@ -3,6 +3,7 @@
 
   "nav_status": "Status",
   "nav_config": "Configuration",
+  "nav_priorities": "Priorities",
   "nav_logs": "Logs",
 
   "theme_light": "Light",

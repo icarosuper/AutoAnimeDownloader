@@ -76,6 +76,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/v1/status", handleStatus(s))
 	apiMux.HandleFunc("/api/v1/config", handleConfig(s))
+	apiMux.HandleFunc("/api/v1/config/priorities/defaults", handlePriorityDefaults(s))
 	apiMux.HandleFunc("/api/v1/animes", handleAnimes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes", handleAnimeEpisodes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/download", handleDownloadEpisode(s))

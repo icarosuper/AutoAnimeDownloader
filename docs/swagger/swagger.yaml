@@ -151,6 +151,8 @@ definitions:
         type: integer
       notifications:
         $ref: '#/definitions/files.NotificationsConfig'
+      priorities:
+        $ref: '#/definitions/nyaa.Priorities'
       qbittorrent_url:
         type: string
       rename_files_for_jellyfin:
@@ -171,6 +173,10 @@ definitions:
     properties:
       body:
         type: string
+      events:
+        items:
+          type: string
+        type: array
       headers:
         additionalProperties:
           type: string
@@ -181,6 +187,42 @@ definitions:
         type: string
       url:
         type: string
+    type: object
+  nyaa.Priorities:
+    properties:
+      audio:
+        items:
+          type: string
+        type: array
+      codecs:
+        items:
+          type: string
+        type: array
+      criteria_order:
+        description: |-
+          CriteriaOrder é a ordem em que os critérios de sort são aplicados.
+          Valores válidos: uncensored, source, resolution, codec, fansub, audio, health, size.
+        items:
+          type: string
+        type: array
+      fansubs:
+        items:
+          type: string
+        type: array
+      ignore_list:
+        description: 'IgnoreList: substrings (case-insensitive) que descartam o release
+          de vez.'
+        items:
+          type: string
+        type: array
+      resolutions:
+        items:
+          type: string
+        type: array
+      sources:
+        items:
+          type: string
+        type: array
     type: object
 host: localhost:8091
 info:
@@ -672,6 +714,29 @@ paths:
           schema:
             $ref: '#/definitions/api.SuccessResponse'
       summary: Update configuration
+      tags:
+      - config
+  /config/priorities/defaults:
+    get:
+      description: Returns the built-in default priority lists (for the "reset to
+        default" button)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/nyaa.Priorities'
+              type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get default torrent priorities
       tags:
       - config
   /daemon/start:

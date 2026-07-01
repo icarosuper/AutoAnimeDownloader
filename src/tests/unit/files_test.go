@@ -2,6 +2,7 @@ package unit
 
 import (
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -238,6 +239,26 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 	}
 	if config.ExcludedList != "" {
 		t.Errorf("expected ExcludedList to be empty after migration, got '%s'", config.ExcludedList)
+	}
+}
+
+func TestManager_LoadConfigs_AppliesDefaultPrioritiesToNyaa(t *testing.T) {
+	defer nyaa.SetPriorities(nyaa.Priorities{})()
+
+	mockFS := NewMockFileSystem()
+	mockFS.SetFile("/config.json", []byte("{}"))
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+
+	config, err := manager.LoadConfigs()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(config.Priorities.Fansubs) == 0 || config.Priorities.Fansubs[0] != "subsplease" {
+		t.Fatalf("expected default priorities on config, got %v", config.Priorities.Fansubs)
+	}
+	if nyaa.ActivePriorities().Fansubs[0] != "subsplease" {
+		t.Fatal("expected LoadConfigs to apply priorities to nyaa active state")
 	}
 }
 

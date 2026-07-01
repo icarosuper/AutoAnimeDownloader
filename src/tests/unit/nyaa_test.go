@@ -962,7 +962,7 @@ func TestSortMovieResults_SortsByTechnicalQuality(t *testing.T) {
 
 	// Primeiro deve ser BD (melhor source)
 	if !strings.Contains(sorted[0].Name, "BD ") && !strings.Contains(sorted[0].Name, "BDRip") {
-		t.Logf("Warning: Expected BD or BDRip first, got: %s", sorted[0].Name)
+		t.Fatalf("Expected BD or BDRip first, got: %s", sorted[0].Name)
 	}
 
 	// Segundo deve ter melhor prioridade

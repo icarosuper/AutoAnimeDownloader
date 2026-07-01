@@ -13,6 +13,7 @@
   $: T = $locale && {
     navStatus: m.nav_status(),
     navConfig: m.nav_config(),
+    navPriorities: m.nav_priorities(),
     navLogs: m.nav_logs(),
     navNotifications: m.nav_notifications(),
     themeLight: m.theme_light(),
@@ -78,6 +79,14 @@
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
           >
             {T && T.navNotifications}
+          </a>
+          <a
+            href="#/priorities"
+            class="inline-flex items-center px-1 pt-4 pb-4 border-b-2 text-sm font-medium transition-colors {currentPath === '/priorities'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
+          >
+            {T && T.navPriorities}
           </a>
           <a
             href="#/logs"
@@ -172,6 +181,14 @@
               : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
           >
             {T && T.navNotifications}
+          </a>
+          <a
+            href="#/priorities"
+            class="block px-3 py-2 rounded-md text-base font-medium transition-colors {currentPath === '/priorities'
+              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+          >
+            {T && T.navPriorities}
           </a>
           <a
             href="#/logs"

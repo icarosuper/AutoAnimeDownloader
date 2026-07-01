@@ -27,6 +27,16 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 | `Notifications.Webhooks[].Method` | `method` | `string` | — | HTTP method (`POST`/`GET`/`PUT`) |
 | `Notifications.Webhooks[].Headers` | `headers` | `map[string]string` | — | Request headers — values support `{{vars}}` |
 | `Notifications.Webhooks[].Body` | `body` | `string` | — | Request body — supports `{{vars}}` |
+| `Priorities` | `priorities` | `nyaa.Priorities` | see below | Ordered lists driving torrent ranking/filtering. Defined in `src/internal/nyaa/priorities.go` |
+| `Priorities.CriteriaOrder` | `priorities.criteria_order` | `[]string` | `["uncensored","source","resolution","codec","fansub","audio","health","size"]` | Order in which sort criteria are applied. `SortTorrentResults` only uses the episode-relevant subset (`uncensored`, `resolution`, `fansub`, `health`, `size`); `SortMovieResults` uses all |
+| `Priorities.Fansubs` | `priorities.fansubs` | `[]string` | `["subsplease","erai-raws","judas","toonshub","asw","ember","hd-zone","kamig","remix","aniverse","dub","raw"]` | Fansub preference order, lowercase, matched as substring of torrent name |
+| `Priorities.Resolutions` | `priorities.resolutions` | `[]string` | `["1080p","720p","480p","4k","8k","fhd","uhd","hd","2160p","1440p"]` | Resolution preference order |
+| `Priorities.Sources` | `priorities.sources` | `[]string` | `["bd","bdrip","bdremux","web-dl","webrip","tv","dvd","hdtv"]` | Source preference order (movie sort only) |
+| `Priorities.Codecs` | `priorities.codecs` | `[]string` | `["hevc","av1","x265","h.264","x264","xvid"]` | Codec preference order (movie sort only) |
+| `Priorities.Audio` | `priorities.audio` | `[]string` | `["flac","dts-hd","truehd","ddp","aac","ac3","mp3"]` | Audio codec preference order (movie sort only) |
+| `Priorities.IgnoreList` | `priorities.ignore_list` | `[]string` | `["[dub]","[raw]","[hardcoded]","[hc]","re-encode"]` | Substrings (case-insensitive) that discard a release entirely |
+
+Items absent from a list rank worst (sent to the end). Edited via the `#/priorities` screen, persisted through the regular `GET/PUT /api/v1/config` endpoints.
 
 ## Required Fields
 
