@@ -2,7 +2,7 @@
 # Cross-platform builds using Docker
 # Works on Linux, macOS, and WSL (Windows Subsystem for Linux)
 
-.PHONY: build package release clean help dev clear-data
+.PHONY: build package release clean help dev clear-data debug-anime
 .PHONY: build-linuxamd64 build-linuxarm64 build-windows
 .PHONY: package-linuxamd64 package-linuxarm64 package-windows
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
@@ -61,6 +61,7 @@ help:
 	@echo -e "$(GREEN)Dev targets:$(NC)"
 	@echo -e "  $(YELLOW)make dev$(NC)                           - Run dev server (frontend + backend)"
 	@echo -e "  $(YELLOW)make clear-data$(NC)                    - Clear local daemon data files"
+	@echo -e "  $(YELLOW)make debug-anime ID=123$(NC)            - Debug why an anime isn't downloading"
 	@echo ""
 	@echo -e "$(GREEN)Supported platforms:$(NC)"
 	@echo -e "  - $(YELLOW)linuxamd64$(NC)  (Linux AMD64)"
@@ -248,6 +249,11 @@ package-windows:
 
 dev:
 	@bash scripts/dev.sh
+
+# Debug why a specific anime isn't downloading. Usage: make debug-anime ID=123
+# ID is the AniList MediaList ID (same ID used in /api/v1/animes/{id}/episodes).
+debug-anime:
+	@go run ./src/cmd/daemon --debug-anime $(ID)
 
 clear-data:
 	@bash scripts/clear_data.sh

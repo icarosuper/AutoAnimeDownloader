@@ -18,6 +18,32 @@ func mockAniListResponse(body string, status int) func() {
 	})
 }
 
+func TestAniListModule_GetAnimeInfo_ParsesSynonymsAndRelations(t *testing.T) {
+	json := `{"data": {"MediaList": {"id": 1, "status": "CURRENT", "progress": 2, "media": {
+		"episodes": 12, "format": "TV", "status": "RELEASING",
+		"title": {"english": "My Anime", "romaji": "Boku no Anime"},
+		"synonyms": ["My Anime Season 2"],
+		"relations": {"edges": [{"relationType": "PREQUEL", "node": {"title": {"romaji": "Prequel"}, "episodes": 12}}]},
+		"coverImage": {"large": "", "medium": ""},
+		"airingSchedule": {"nodes": [{"id": 10, "episode": 3, "timeUntilAiring": 0}]}
+	}}}}`
+	restore := mockAniListResponse(json, 200)
+	defer restore()
+
+	resp, err := anilist.GetAnimeInfo(1)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	ml := resp.Data.MediaList
+	if len(ml.Media.Synonyms) != 1 || ml.Media.Synonyms[0] != "My Anime Season 2" {
+		t.Fatalf("expected synonyms to be parsed, got %v", ml.Media.Synonyms)
+	}
+	if len(ml.Media.Relations.Edges) != 1 || ml.Media.Relations.Edges[0].RelationType != "PREQUEL" {
+		t.Fatalf("expected relations to be parsed, got %v", ml.Media.Relations)
+	}
+}
+
 func TestAniListModule_SearchAnimes_Success(t *testing.T) {
 	json := `{"data": {"Page": {"mediaList": [{"progress": 3, "customLists": {"AutoAnimeDownloader": true}, "media": {"title": {"english": "My Anime", "romaji": "Boku no Anime"}, "airingSchedule": {"nodes": [{"id": 1, "episode": 4, "timeUntilAiring": 3600}]}}}]}}}`
 	restore := mockAniListResponse(json, 200)

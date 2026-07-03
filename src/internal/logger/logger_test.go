@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -407,6 +408,47 @@ func TestLogger_LevelFiltering(t *testing.T) {
 	Logger = originalLogger
 }
 
+func TestInitDebug_WritesJSONLToGivenPath(t *testing.T) {
+	originalLogger := Logger
+
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "debug.jsonl")
+
+	closeLog, err := InitDebug(logPath)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	Logger.Info().Str("anime", "Test Anime").Msg("test message")
+
+	if err := closeLog(); err != nil {
+		t.Fatalf("expected close to succeed, got %v", err)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("expected log file to exist: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 log line, got %d: %q", len(lines), string(data))
+	}
+
+	var entry map[string]interface{}
+	if err := json.Unmarshal([]byte(lines[0]), &entry); err != nil {
+		t.Fatalf("expected valid JSON line, got error: %v. Line: %s", err, lines[0])
+	}
+	if entry["anime"] != "Test Anime" {
+		t.Errorf("expected anime field 'Test Anime', got %v", entry["anime"])
+	}
+	if entry["message"] != "test message" {
+		t.Errorf("expected message 'test message', got %v", entry["message"])
+	}
+
+	Logger = originalLogger
+}
+
 // testLoggerError é um tipo de erro simples para testes
 type testLoggerError struct {
 	msg string
@@ -424,4 +466,3 @@ func init() {
 		Init(true)
 	}
 }
-

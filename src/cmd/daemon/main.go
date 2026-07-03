@@ -39,6 +39,7 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/tray"
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -147,7 +148,63 @@ func shouldShowTray() bool {
 	return runtime.GOOS == "windows" || runtime.GOOS == "darwin"
 }
 
+// runDebugAnime runs a one-shot debug pass for a single anime (AniList
+// MediaList ID) and exits. Skips the PID file, API server, tray, and loop
+// entirely — this is a read-only diagnostic, not a daemon startup path.
+// Output goes to a new .debug_<animeId>_<N>/ directory in the current
+// working directory (debug.jsonl trace + summary.json) — nothing is written
+// to ~/.autoAnimeDownloader.
+func runDebugAnime(animeId int) {
+	debugDir, err := daemon.NextDebugDir(".", animeId)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to determine debug directory: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.MkdirAll(debugDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create debug directory %s: %v\n", debugDir, err)
+		os.Exit(1)
+	}
+
+	closeLog, err := logger.InitDebug(filepath.Join(debugDir, "debug.jsonl"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize debug logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer closeLog()
+
+	fileManager, err := files.NewDefaultFileManager()
+	if err != nil {
+		logger.Logger.Fatal().Err(err).Msg("Failed to initialize files manager")
+	}
+
+	configs, err := fileManager.LoadConfigs()
+	if err != nil {
+		logger.Logger.Fatal().Err(err).Msg("Failed to load configs")
+	}
+
+	summary, err := daemon.RunAnimeDebug(animeId, configs, fileManager)
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Debug run failed")
+		os.Exit(1)
+	}
+
+	if err := daemon.WriteDebugSummary(debugDir, summary); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to write summary.json")
+	}
+
+	logger.Logger.Info().Str("debug_dir", debugDir).Msg("Debug run complete")
+	os.Exit(0)
+}
+
 func main() {
+	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList MediaList ID and exit (no daemon, no qBittorrent needed)")
+	flag.Parse()
+
+	if *debugAnimeID > 0 {
+		runDebugAnime(*debugAnimeID)
+		return
+	}
+
 	environment := getEnvironment()
 	isDevelopment := environment == "dev"
 	logger.Init(isDevelopment)
