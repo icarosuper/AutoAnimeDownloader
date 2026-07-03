@@ -83,6 +83,10 @@ go build -ldflags "-X AutoAnimeDownloader/src/internal/version.Version=v1.2.0" .
 ```
 Defaults to `"dev"` if not injected.
 
+## Debug Mode
+
+`cmd/daemon/main.go` accepts `--debug-anime <anilistId>`: runs `daemon.RunAnimeDebug` (see `daemon/debug.go`) and exits, skipping the PID file / API server / tray / loop entirely. See [Commands](commands.md) and [Troubleshooting Downloads](troubleshooting-downloads.md).
+
 ---
 
 ## Detailed File Map
@@ -117,6 +121,18 @@ Main verification orchestrator. Key functions:
 2. Batch (finished + >1 ep) → `searchNyaaForBatch` → `skipSubfolder=true`
 3. Multiple ep search → `searchNyaaForMultipleEpisodes`
 4. Single ep fallback → `searchNyaaForSingleEpisode`
+
+### `src/internal/daemon/debug.go`
+
+One-shot diagnostic for a single anime, driven by the `--debug-anime` flag on the daemon binary (see `cmd/daemon/main.go`). No qBittorrent or episodes.json involved. Output goes to `.debug_<animeId>_<N>/` in the invoker's cwd, not `~/.autoAnimeDownloader`.
+
+| Symbol | Purpose |
+|--------|---------|
+| `RunAnimeDebug(animeId, configs, fileManager)` | Fetches the anime, logs the raw AniList response, runs `checkEpisode` + `resolveSearchStrategy` (real production functions) against live Nyaa, logs raw vs. matched results per episode. Returns a `*DebugSummary` |
+| `mediaListFromDetail(d)` | Adapts `anilist.MediaListDetail` (from `GetAnimeInfo`) into `anilist.MediaList` so it can be passed to `checkEpisode`/`resolveSearchStrategy`. `CustomLists` is left empty — excluded-list checks always evaluate false in debug mode |
+| `DebugSummary` / `EpisodeDebugResult` structs | JSON-tagged summary written to `summary.json` — per episode, whether it would be searched and how many magnets were found |
+| `NextDebugDir(baseDir, animeId)` | Returns the next unused `.debug_<animeId>_<N>` directory name inside `baseDir` (scans for existing ones, doesn't create it) |
+| `WriteDebugSummary(dir, summary)` | Marshals `DebugSummary` to `<dir>/summary.json` |
 
 ### `src/internal/daemon/jobs.go`
 
@@ -259,6 +275,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `AniListResponse` | Response for `GetAllCurrentAnime` — `Data.Page.MediaList[]` |
 | `MediaListDetailResponse` | Response for `GetAnimeInfo` — single `MediaList` with full `AiringSchedule`; `Media.Id` is the real AniList media ID |
 | `MediaList` struct | `Id`, `Status`, `Progress`, `CustomLists`, `Media` |
+| `MediaListDetail` struct | Response shape for `GetAnimeInfo` — like `MediaList` but `Episodes` is `int` not `*int`, and has no `CustomLists` |
 | `Media` struct | `Format`, `Status`, `Title`, `Episodes`, `AiringSchedule`, `Synonyms`, `Relations` |
 | `AiringNode` struct | `ID`, `Episode`, `TimeUntilAiring`, `AiringAt` |
 | `MediaRelations` struct | `Edges []MediaRelationEdge` — PREQUEL/SEQUEL links |
@@ -267,7 +284,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `MediaFormat` consts | `TV`, `MOVIE`, `OVA`, `ONA`, etc. |
 | `MediaListStatus` consts | `CURRENT`, `COMPLETED`, `DROPPED`, `PAUSED`, `PLANNING`, `REPEATING` |
 | `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list with synonyms and relations (used by verification loop) |
-| `GetAnimeInfo(mediaListId)` | Fetches single anime detail with full airing schedule (used by `/animes/{id}/episodes`) |
+| `GetAnimeInfo(mediaListId)` | Fetches single anime detail with full airing schedule, synonyms, and relations (used by `/animes/{id}/episodes` and `daemon.RunAnimeDebug`) |
 | `sendAnilistRequest[T]` | Generic GraphQL POST helper |
 | `httpDo` var | Swappable HTTP func — overridden in tests via `MockAniListDo` |
 
@@ -277,6 +294,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 |--------|---------|
 | `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Part*`, `Size`, `Fansub`, `IsBatch` |
 | `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
+| `torrentNames(results)` | Extracts `.Name` from each result, for debug logging |
 | `ScrapNyaa(title, episode, season*, part*)` | Scrapes Nyaa for a single episode (2 pages); hard-filters by season and part when non-nil |
 | `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
@@ -291,6 +309,8 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `MockNyaaHttpGet(fn)` | Replaces `httpGet` for tests; returns restore func |
 | `httpGet` var | Swappable HTTP func — overridden in tests via `MockNyaaHttpGet` |
 | `getNyaaBaseURL()` | Reads `NYAA_URL` env or defaults to `https://nyaa.si` |
+
+All four `ScrapNyaa*` functions log every parsed row at Debug (`"Raw Nyaa row"`, before any filter) and log the matched torrent names alongside the count in their final `"Found ..."` log — used by `daemon.RunAnimeDebug` and manual troubleshooting to see what got filtered out.
 
 ### `src/internal/nyaa/priorities.go`
 
@@ -381,6 +401,7 @@ Title-matching logic for filtering Nyaa search results.
 ### `src/internal/logger/logger.go`
 
 - `Logger` global — zerolog instance, writes to console + rotating `daemon.log`
+- `InitDebug(filePath)` — like `Init(true)` but the structured JSONL trace goes to `filePath` instead of `daemon.log`. Used by `--debug-anime` so one-shot debug runs never touch `~/.autoAnimeDownloader`. Returns a `close func() error`
 
 ### `src/internal/frontend/src/`
 

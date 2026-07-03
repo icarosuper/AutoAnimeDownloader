@@ -230,6 +230,15 @@ func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
 	return doc, nil
 }
 
+// torrentNames extracts the Name field of each result, for debug logging.
+func torrentNames(results []TorrentResult) []string {
+	names := make([]string, len(results))
+	for i, r := range results {
+		names[i] = r.Name
+	}
+	return names
+}
+
 // deduplicateByMagnet removes duplicate TorrentResult entries by magnet link.
 func deduplicateByMagnet(results []TorrentResult) []TorrentResult {
 	seen := make(map[string]bool, len(results))
@@ -293,6 +302,10 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 
 		seeders := strings.TrimSpace(cells.Eq(5).Text())
 		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
+
+		if name != "" {
+			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
+		}
 
 		// Verificar se o torrent deve ser ignorado (dub, raw, hardcoded, etc.)
 		if shouldIgnoreTorrent(name) {
@@ -372,6 +385,7 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		Str("anime_name", animeName).
 		Int("episode", episode).
 		Int("results", len(results)).
+		Strs("matched_names", torrentNames(results)).
 		Msg("Found Nyaa results for single episode")
 
 	if len(results) == 0 {
@@ -433,6 +447,10 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 
 		seeders := strings.TrimSpace(cells.Eq(5).Text())
 		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
+
+		if name != "" {
+			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
+		}
 
 		// Verificar se o torrent deve ser ignorado (dub, raw, hardcoded, etc.)
 		if shouldIgnoreTorrent(name) {
@@ -512,6 +530,7 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
 		Int("results", len(results)).
+		Strs("matched_names", torrentNames(results)).
 		Msg("Found Nyaa results for multiple episodes")
 
 	if len(results) == 0 {
@@ -577,6 +596,10 @@ func ScrapNyaaForBatch(animeName string, season, part *int) ([]TorrentResult, er
 		seeders := strings.TrimSpace(cells.Eq(5).Text())
 		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
 
+		if name != "" {
+			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
+		}
+
 		// Verificar se o torrent deve ser ignorado (dub, raw, hardcoded, etc.)
 		if shouldIgnoreTorrent(name) {
 			return
@@ -631,6 +654,7 @@ func ScrapNyaaForBatch(animeName string, season, part *int) ([]TorrentResult, er
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
 		Int("results", len(results)).
+		Strs("matched_names", torrentNames(results)).
 		Msg("Found Nyaa batch results")
 
 	if len(results) == 0 {
@@ -702,6 +726,10 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 		seeders := strings.TrimSpace(cells.Eq(5).Text())
 		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
 
+		if name != "" {
+			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
+		}
+
 		// Verificar se o torrent deve ser ignorado
 		if shouldIgnoreTorrent(name) {
 			return
@@ -738,6 +766,7 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
 		Int("results", len(results)).
+		Strs("matched_names", torrentNames(results)).
 		Msg("Found Nyaa movie results")
 
 	if len(results) == 0 {

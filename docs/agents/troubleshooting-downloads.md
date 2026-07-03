@@ -4,6 +4,31 @@ Use this guide when investigating why animes are failing to download, to identif
 
 ---
 
+## Step 0 — Fast path: `make debug-anime`
+
+Before doing anything manual, try:
+
+```bash
+make debug-anime ID=<anilistId>
+```
+
+`<anilistId>` is the AniList MediaList ID (visible in the web UI URL for that anime, `#/anime/<id>`, or via `GET /api/v1/animes`). This runs a one-shot pass — no daemon or qBittorrent required — that:
+
+1. Fetches the anime from AniList and logs the full response (title, progress, status, synonyms, relations, airing schedule).
+2. Picks the episodes that would be searched (same `checkEpisode` logic the real loop uses).
+3. Runs the real search/match pipeline (`resolveSearchStrategy` — same movie→batch→multi→single priority as production) against live Nyaa.
+4. Logs **every raw torrent row** Nyaa returned for the query (`"Raw Nyaa row"`), then the **matched subset** (`"Found ... results"` with `matched_names`), then a per-episode summary (`magnets_found`).
+
+Output goes to `.debug_<anilistId>_<N>/` in the current directory — nothing is written to `~/.autoAnimeDownloader`:
+- `debug.jsonl` has the full trace from steps 1-4 above (one JSON object per line — grep/`jq` it, or just read it directly)
+- `summary.json` has the quick per-episode view (`would_search`, `magnets_found`)
+
+Comparing `debug.jsonl`'s raw rows against its matched set tells you immediately whether the problem is upstream (Nyaa has nothing for this title/episode) or in filtering (Nyaa has it, but it got rejected — see Step 6 for why).
+
+**Known limitations** (logged as a warning at the start of every run): episodes are always treated as not-yet-downloaded (no `episodes.json` / qBittorrent check), and excluded-list membership is never evaluated (the single-anime AniList query doesn't fetch custom-list data). If the anime is being skipped for one of those two reasons, this tool won't show it — fall back to Steps 1-8 below.
+
+---
+
 ## Step 1 — Read the logs
 
 ```bash

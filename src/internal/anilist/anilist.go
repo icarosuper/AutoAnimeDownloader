@@ -142,6 +142,8 @@ type MediaListDetail struct {
 		Format         MediaFormat    `json:"format"`
 		Status         MediaStatus    `json:"status"`
 		Title          Title          `json:"title"`
+		Synonyms       []string       `json:"synonyms"`
+		Relations      MediaRelations `json:"relations"`
 		CoverImage     CoverImage     `json:"coverImage"`
 		AiringSchedule AiringSchedule `json:"airingSchedule"`
 	} `json:"media"`
@@ -382,6 +384,20 @@ func GetAnimeInfo(mediaListId int) (*MediaListDetailResponse, error) {
 					title {
 						english
 						romaji
+					}
+					synonyms
+					relations {
+						edges {
+							node {
+								title {
+									english
+									romaji
+								}
+								synonyms
+								episodes
+							}
+							relationType
+						}
 					}
 					coverImage {
 						large

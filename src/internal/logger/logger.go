@@ -101,6 +101,42 @@ func Init(development bool) {
 	log.Logger = Logger
 }
 
+// InitDebug configures the logger for a one-shot debug run: console output
+// stays pretty (same as Init(true)), but the structured JSONL trace goes to
+// filePath instead of the production daemon.log. Returns a close func for
+// the opened file — callers should defer it. Does not touch
+// ~/.autoAnimeDownloader in any way.
+func InitDebug(filePath string) (close func() error, err error) {
+	zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
+		return filepath.Base(file) + ":" + strconv.Itoa(line)
+	}
+	zerolog.TimeFieldFormat = time.RFC3339
+
+	f, err := os.Create(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create debug log file: %w", err)
+	}
+
+	consoleWriter := zerolog.ConsoleWriter{
+		Out:        os.Stderr,
+		TimeFormat: time.RFC3339,
+		NoColor:    false,
+	}
+
+	multiWriter := io.MultiWriter(consoleWriter, f)
+
+	Logger = zerolog.New(multiWriter).
+		With().
+		Timestamp().
+		Caller().
+		Logger().
+		Level(zerolog.DebugLevel)
+
+	log.Logger = Logger
+
+	return f.Close, nil
+}
+
 func SetLevel(level zerolog.Level) {
 	zerolog.SetGlobalLevel(level)
 	Logger = Logger.Level(level)

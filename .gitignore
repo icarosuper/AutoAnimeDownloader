@@ -21,3 +21,6 @@ runtime/
 
 # Environment variables
 .env
+
+# --debug-anime output
+.debug_*/
