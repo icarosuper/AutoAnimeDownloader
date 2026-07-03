@@ -1003,6 +1003,10 @@ const docTemplate = `{
         "api.AnimeDetailResponse": {
             "type": "object",
             "properties": {
+                "anilist_id": {
+                    "type": "integer",
+                    "example": 21
+                },
                 "anime_id": {
                     "type": "integer"
                 },

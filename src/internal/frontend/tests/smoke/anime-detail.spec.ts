@@ -22,6 +22,7 @@ const mockDetail = {
   success: true,
   data: {
     anime_id: 123,
+    anilist_id: 21,
     total_episodes: 12,
     progress: 1,
     status: 'CURRENT',
@@ -68,6 +69,14 @@ test('anime detail page loads episode list', async ({ page }) => {
   await page.goto('/#/status/123')
   // 2 episodes in mock data → 2 rows in the desktop table
   await expect(page.locator('table tbody tr')).toHaveCount(2)
+})
+
+test('anime title links to its AniList page', async ({ page }) => {
+  await page.goto('/#/status/123')
+  const titleLink = page.getByRole('link', { name: 'Test Anime' })
+  await expect(titleLink).toBeVisible()
+  await expect(titleLink).toHaveAttribute('href', 'https://anilist.co/anime/21')
+  await expect(titleLink).toHaveAttribute('target', '_blank')
 })
 
 test('anime detail shows Download button for undownloaded aired episode', async ({ page }) => {

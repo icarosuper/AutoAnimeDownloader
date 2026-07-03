@@ -418,7 +418,18 @@
       {/if}
       <div class="flex-1 min-w-0">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-          {anime ? anime.name : m.detail_title_fallback()}
+          {#if anime && detail?.anilist_id}
+            <a
+              href="https://anilist.co/anime/{detail.anilist_id}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="hover:underline"
+            >
+              {anime.name}
+            </a>
+          {:else}
+            {anime ? anime.name : m.detail_title_fallback()}
+          {/if}
         </h1>
         {#if detail}
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">

@@ -168,6 +168,7 @@ export interface AnimeEpisodeInfo {
 
 export interface AnimeDetailResponse {
   anime_id: number
+  anilist_id?: number
   total_episodes: number
   progress: number
   status: string

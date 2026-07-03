@@ -137,6 +137,7 @@ type MediaListDetail struct {
 	Status   MediaListStatus `json:"status"`
 	Progress int             `json:"progress"`
 	Media    struct {
+		Id             int            `json:"id"`
 		Episodes       int            `json:"episodes"`
 		Format         MediaFormat    `json:"format"`
 		Status         MediaStatus    `json:"status"`
@@ -374,6 +375,7 @@ func GetAnimeInfo(mediaListId int) (*MediaListDetailResponse, error) {
 				status
 				progress
 				media {
+					id
 					episodes
 					format
 					status

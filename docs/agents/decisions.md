@@ -184,3 +184,15 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 **Why it's right:** The sort/filter call sites (`ScrapNyaa*`, `SortTorrentResults`, `SortMovieResults`, and a dozen small `xPriority` helpers) are deep, numerous, and have no `*Config` or context parameter today — threading one through would touch most of `nyaa.go` for a value that changes rarely (only on config save/load). `atomic.Pointer` makes reads lock-free and the swap atomic, so the daemon's verification loop (running concurrently with API requests) never observes a torn read. `SetPriorities` returns a `restore func()`, mirroring the existing `MockNyaaHttpGet` convention (decision 1) — tests `defer restore()` instead of mutating shared state permanently. Package `init()` seeds the pointer with `DefaultPriorities()` so any code that calls the sort functions without ever calling `SetPriorities` (most unit tests) still gets correct, non-nil behavior.
 
 **Don't "fix" by:** threading a `Priorities` parameter through every nyaa function, or replacing the atomic pointer with a mutex-guarded struct. The former is a large, low-value refactor; the latter adds lock contention to a hot path (every torrent comparison during sort) for no correctness benefit over `atomic.Pointer`.
+
+---
+
+### 16. `anime_id` is the AniList MediaList entry ID, not the AniList media ID
+
+**Location:** `internal/anilist/anilist.go` (`MediaList.Id`, `GetAnimeInfo(mediaListId)`); `internal/api/endpoint_animes.go` and `endpoint_anime_episodes.go` (`AnimeID` fields).
+
+**What it looks like:** `anime_id` is used everywhere as *the* identifier for an anime (settings files keyed by it, episode records, route params) — it would be natural to assume it's the AniList media ID and build an `anilist.co/anime/{id}` link directly from it.
+
+**Why it's right:** The value actually comes from the top-level `id` field of AniList's `MediaList` GraphQL type, i.e. the list-entry ID (unique per user-entry), not `media.id` (the actual anime). It's stable and available from every query that returns a user's list, which is why it was chosen as the app-wide key. But it is not a valid AniList media URL component — `anilist.co/anime/{mediaListEntryId}` 404s. The real media ID is only fetched where needed: `AnimeDetailResponse.AnilistID` (from `GetAnimeInfo`'s `media { id }`), used solely to build the "view on AniList" link.
+
+**Don't "fix" by:** assuming `anime_id` can be used to build AniList URLs, or replacing `anime_id` app-wide with the media ID — that would require re-keying settings files and episode records, a much larger and unrelated change.

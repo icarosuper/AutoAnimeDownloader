@@ -25,6 +25,7 @@ type AnimeEpisodeInfo struct {
 
 type AnimeDetailResponse struct {
 	AnimeID           int                `json:"anime_id"`
+	AnilistID         int                `json:"anilist_id,omitempty" example:"21"`
 	TotalEpisodes     int                `json:"total_episodes"`
 	Progress          int                `json:"progress"`
 	Status            string             `json:"status"`
@@ -136,6 +137,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 
 		response := AnimeDetailResponse{
 			AnimeID:           id,
+			AnilistID:         mediaList.Media.Id,
 			TotalEpisodes:     mediaList.Media.Episodes,
 			Progress:          mediaList.Progress,
 			Status:            string(mediaList.Status),

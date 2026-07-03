@@ -231,7 +231,7 @@ Middleware stack (API routes): CORS → JSON Content-Type → Logging. Static fi
 ### `src/internal/api/endpoint_anime_episodes.go`
 
 - `AnimeEpisodeInfo` struct — per-episode detail (aired, watched, downloaded, blocked, manually managed)
-- `AnimeDetailResponse` struct — `{animeId, totalEpisodes, progress, status, episodes[]}`
+- `AnimeDetailResponse` struct — `{animeId, anilistId, totalEpisodes, progress, status, episodes[]}` — `animeId` is the AniList MediaList entry ID (used as primary key everywhere else); `anilistId` is the actual AniList media ID, only useful for building `anilist.co/anime/{id}` links
 - `handleAnimeEpisodes` — fetches `GetAnimeInfo(id)` from AniList + saved episodes + blocked list → merges
 
 ### `src/internal/api/endpoint_episode_actions.go`
@@ -257,7 +257,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | Symbol | Purpose |
 |--------|---------|
 | `AniListResponse` | Response for `GetAllCurrentAnime` — `Data.Page.MediaList[]` |
-| `MediaListDetailResponse` | Response for `GetAnimeInfo` — single `MediaList` with full `AiringSchedule` |
+| `MediaListDetailResponse` | Response for `GetAnimeInfo` — single `MediaList` with full `AiringSchedule`; `Media.Id` is the real AniList media ID |
 | `MediaList` struct | `Id`, `Status`, `Progress`, `CustomLists`, `Media` |
 | `Media` struct | `Format`, `Status`, `Title`, `Episodes`, `AiringSchedule`, `Synonyms`, `Relations` |
 | `AiringNode` struct | `ID`, `Episode`, `TimeUntilAiring`, `AiringAt` |

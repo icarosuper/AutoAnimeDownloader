@@ -80,6 +80,20 @@ func TestAniListModule_SearchAnimes_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestAniListModule_GetAnimeInfo_ParsesMediaID(t *testing.T) {
+	json := `{"data": {"MediaList": {"id": 12345, "status": "CURRENT", "progress": 3, "media": {"id": 21, "episodes": 12, "title": {"english": "My Anime", "romaji": "Boku no Anime"}, "airingSchedule": {"nodes": [{"id": 1, "episode": 4, "timeUntilAiring": 3600}]}}}}}`
+	restore := mockAniListResponse(json, 200)
+	defer restore()
+
+	resp, err := anilist.GetAnimeInfo(12345)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if resp.Data.MediaList.Media.Id != 21 {
+		t.Fatalf("expected media id 21, got %d", resp.Data.MediaList.Media.Id)
+	}
+}
+
 func TestAniListModule_SearchAnimes_EmptyStatuses(t *testing.T) {
 	resp, err := anilist.GetAllCurrentAnime("icarosuper", nil)
 	if err != nil {

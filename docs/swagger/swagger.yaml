@@ -2,6 +2,9 @@ basePath: /api/v1
 definitions:
   api.AnimeDetailResponse:
     properties:
+      anilist_id:
+        example: 21
+        type: integer
       anime_id:
         type: integer
       cover_image:
