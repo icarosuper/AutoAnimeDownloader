@@ -196,7 +196,10 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 **Why it's right:** The value actually comes from the top-level `id` field of AniList's `MediaList` GraphQL type, i.e. the list-entry ID (unique per user-entry), not `media.id` (the actual anime). It's stable and available from every query that returns a user's list, which is why it was chosen as the app-wide key. But it is not a valid AniList media URL component — `anilist.co/anime/{mediaListEntryId}` 404s. The real media ID is only fetched where needed: `AnimeDetailResponse.AnilistID` (from `GetAnimeInfo`'s `media { id }`), used solely to build the "view on AniList" link.
 
 **Don't "fix" by:** assuming `anime_id` can be used to build AniList URLs, or replacing `anime_id` app-wide with the media ID — that would require re-keying settings files and episode records, a much larger and unrelated change.
-### 16. `--debug-anime` early-exit branch in `cmd/daemon/main.go`
+
+---
+
+### 17. `--debug-anime` early-exit branch in `cmd/daemon/main.go`
 
 **Location:** `cmd/daemon/main.go` — `runDebugAnime`, the `flag.Int("debug-anime", ...)` check at the top of `main()`.
 
