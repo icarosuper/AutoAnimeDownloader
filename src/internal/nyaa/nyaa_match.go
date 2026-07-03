@@ -52,11 +52,39 @@ var (
 	reMatchResToken   = regexp.MustCompile(`^\d{3,4}p$`)      // 1080p, 720p
 	reMatchOrdinal    = regexp.MustCompile(`^\d+(?:st|nd|rd|th)$`) // 1st, 2nd
 	reMatchHexHash    = regexp.MustCompile(`^[0-9a-f]{6,10}$`)
+	reLeadingBracket  = regexp.MustCompile(`^\s*(?:\[[^\]]*\]|\([^)]*\))\s*`)
 )
+
+// truncateAtFirstMarker cuts a torrent name at the earliest season/episode
+// marker (S01E05, " - 05", "Episode 3", etc). Everything after the marker is
+// episode title, resolution, codec, and fansub noise that inflates the
+// Jaccard union enough to sink genuine matches — it is never part of the
+// anime's core title, so it's dropped rather than tokenized.
+func truncateAtFirstMarker(name string) string {
+	earliest := -1
+	for _, p := range reEpisodePatterns {
+		if loc := p.re.FindStringIndex(name); loc != nil && (earliest == -1 || loc[0] < earliest) {
+			earliest = loc[0]
+		}
+	}
+	for _, p := range reSeasonPatterns {
+		if loc := p.re.FindStringIndex(name); loc != nil && (earliest == -1 || loc[0] < earliest) {
+			earliest = loc[0]
+		}
+	}
+	if earliest <= 0 {
+		return name
+	}
+	return name[:earliest]
+}
 
 // extractTitleTokens returns meaningful title tokens from a torrent name or anime title,
 // stripping technical metadata (resolution, codec, fansub, episode/season numbers, etc.)
 func extractTitleTokens(name string) []string {
+	name = truncateAtFirstMarker(name)
+	// A leading fansub tag ("[SubsPlease] ", "(Erai-raws) ") survives truncation
+	// since it sits before the marker; strip it so it doesn't count as a title token.
+	name = reLeadingBracket.ReplaceAllString(name, "")
 	lower := strings.ToLower(name)
 	cleaned := reMatchNonAlpha.ReplaceAllString(lower, " ")
 	parts := strings.Fields(cleaned)
