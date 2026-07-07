@@ -203,6 +203,8 @@ All persistence. Key types:
 
 Config defaults: `CheckInterval=10`, `MaxEpisodesPerAnime=12`, `EpisodeRetryLimit=5`, `QBittorrentUrl="http://127.0.0.1:8080"`.
 
+| `DiskSpace(path)` | Cross-platform total/free bytes for the filesystem containing `path` (`diskspace_unix.go` for Linux/Darwin via `syscall.Statfs`, `diskspace_windows.go` via `golang.org/x/sys/windows.GetDiskFreeSpaceEx`) |
+
 ### `src/internal/files/filesystem.go`
 
 `FileSystem` interface + `OSFileSystem` implementation. Used for testability — tests inject `MockFileSystem`.

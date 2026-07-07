@@ -959,7 +959,7 @@ const docTemplate = `{
         },
         "/status": {
             "get": {
-                "description": "Returns the current status of the daemon, including last check time and error state",
+                "description": "Returns the current status of the daemon, including last check time, error state, and disk space for the configured save path",
                 "consumes": [
                     "application/json"
                 ],
@@ -1139,6 +1139,14 @@ const docTemplate = `{
         "api.StatusResponse": {
             "type": "object",
             "properties": {
+                "disk_free": {
+                    "type": "integer",
+                    "example": 128849018880
+                },
+                "disk_total": {
+                    "type": "integer",
+                    "example": 500107862016
+                },
                 "has_error": {
                     "type": "boolean",
                     "example": false

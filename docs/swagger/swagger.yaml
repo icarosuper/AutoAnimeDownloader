@@ -94,6 +94,12 @@ definitions:
     type: object
   api.StatusResponse:
     properties:
+      disk_free:
+        example: 128849018880
+        type: integer
+      disk_total:
+        example: 500107862016
+        type: integer
       has_error:
         example: false
         type: boolean
@@ -857,7 +863,7 @@ paths:
       consumes:
       - application/json
       description: Returns the current status of the daemon, including last check
-        time and error state
+        time, error state, and disk space for the configured save path
       produces:
       - application/json
       responses:

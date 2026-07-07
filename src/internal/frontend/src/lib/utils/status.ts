@@ -52,3 +52,16 @@ export function computeNextCheckIn(
   const secs = Math.floor((diff % 60000) / 1000)
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
 }
+
+const GIB = 1024 ** 3
+// ponytail: 10% hardcoded — promote to a config field if users ever ask to tune it
+const LOW_DISK_SPACE_RATIO = 0.1
+
+export function formatBytes(bytes: number): string {
+  return `${(bytes / GIB).toFixed(1)} GB`
+}
+
+export function isDiskSpaceLow(free: number, total: number): boolean {
+  if (total <= 0) return false
+  return free / total < LOW_DISK_SPACE_RATIO
+}

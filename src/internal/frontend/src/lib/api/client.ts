@@ -72,6 +72,8 @@ export interface StatusResponse {
   last_check: string
   has_error: boolean
   version: string
+  disk_total: number
+  disk_free: number
 }
 
 export interface WebhookPreset {

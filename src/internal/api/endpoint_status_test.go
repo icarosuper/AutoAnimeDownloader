@@ -16,7 +16,8 @@ func TestHandleStatus(t *testing.T) {
 	state.SetLastCheck(time.Now())
 	state.SetLastCheckError(nil)
 
-	fileManager := &files.FileManager{}
+	tmpDir := t.TempDir()
+	fileManager := &mockFileManager{configs: &files.Config{SavePath: tmpDir}}
 	server := &Server{
 		State:       state,
 		FileManager: fileManager,
@@ -50,6 +51,15 @@ func TestHandleStatus(t *testing.T) {
 
 		if status, ok := data["status"].(string); !ok || status != "running" {
 			t.Errorf("Expected status 'running', got %v", data["status"])
+		}
+
+		diskTotal, ok := data["disk_total"].(float64)
+		if !ok || diskTotal <= 0 {
+			t.Errorf("Expected disk_total > 0, got %v", data["disk_total"])
+		}
+		diskFree, ok := data["disk_free"].(float64)
+		if !ok || diskFree < 0 {
+			t.Errorf("Expected disk_free >= 0, got %v", data["disk_free"])
 		}
 	})
 

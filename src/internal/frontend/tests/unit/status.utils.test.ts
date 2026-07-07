@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterAnimes, sortAnimes, computeNextCheckIn } from '../../src/lib/utils/status.js'
+import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes, isDiskSpaceLow } from '../../src/lib/utils/status.js'
 import type { AnimeInfo } from '../../src/lib/api/client.js'
 
 function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
@@ -102,9 +102,7 @@ describe('computeNextCheckIn', () => {
   })
 
   it('returns "soon" when next check is overdue', () => {
-    // last check was 2h ago, interval is 60min → overdue
-    const lastCheck = new Date('2026-01-01T00:00:00Z').getTime()  // 1h before now
-    // actually now is 01:00, last is 00:00, diff = -1h = already past
+    // last check was 1h ago, interval is 30min → overdue
     expect(computeNextCheckIn('2026-01-01T00:00:00Z', 30, 'running', now)).toBe('soon')
   })
 
@@ -120,5 +118,29 @@ describe('computeNextCheckIn', () => {
     const lastCheck = new Date(now - (59 * 60 + 30) * 1000).toISOString()
     const result = computeNextCheckIn(lastCheck, 60, 'running', now)
     expect(result).toBe('30s')
+  })
+})
+
+describe('formatBytes', () => {
+  it('formats bytes as GB with one decimal', () => {
+    expect(formatBytes(500_107_862_016)).toBe('465.8 GB')
+  })
+
+  it('returns 0.0 GB for zero', () => {
+    expect(formatBytes(0)).toBe('0.0 GB')
+  })
+})
+
+describe('isDiskSpaceLow', () => {
+  it('is true when free/total is below 10%', () => {
+    expect(isDiskSpaceLow(5, 100)).toBe(true)
+  })
+
+  it('is false when free/total is at or above 10%', () => {
+    expect(isDiskSpaceLow(10, 100)).toBe(false)
+  })
+
+  it('is false when total is 0 (no data)', () => {
+    expect(isDiskSpaceLow(0, 0)).toBe(false)
   })
 })

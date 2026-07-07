@@ -17,7 +17,7 @@
   import { wsConnectionState } from "../lib/stores/wsState.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
-  import { filterAnimes, sortAnimes, computeNextCheckIn, type SortKey, type SortDir } from "../lib/utils/status.js";
+  import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes, isDiskSpaceLow, type SortKey, type SortDir } from "../lib/utils/status.js";
 
   // Reactive translations — re-evaluated when $locale changes, no remount needed
   $: T = $locale && {
@@ -27,6 +27,7 @@
     cardLastCheck: m.status_card_last_check(),
     cardNextCheck: m.status_card_next_check(),
     cardLibrary: m.status_card_library(),
+    cardDisk: m.status_card_disk(),
     checking: m.status_checking(),
     never: m.common_never(),
     errorAlert: m.status_error_alert(),
@@ -70,6 +71,8 @@
   $: nextCheckIn = status
     ? computeNextCheckIn(status.last_check, checkInterval, status.status, now)
     : null;
+
+  $: diskSpaceLow = status ? isDiskSpaceLow(status.disk_free, status.disk_total) : false;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -115,7 +118,7 @@
     if (status) {
       status = { ...status, status: statusValue, last_check: lastCheck, has_error: hasError };
     } else {
-      status = { status: statusValue, last_check: lastCheck, has_error: hasError, version: "" };
+      status = { status: statusValue, last_check: lastCheck, has_error: hasError, version: "", disk_total: 0, disk_free: 0 };
     }
     if (previousStatus !== "running" && statusValue === "running") {
       loadAnimes();
@@ -208,7 +211,7 @@
     <Loading message="Loading status..." />
   {:else if status}
     <!-- Stat Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
       <!-- Daemon status -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
@@ -256,6 +259,21 @@
           <span class="text-xs text-base-content/40">{$locale && m.status_episodes_count({ count: totalEpisodes })}</span>
         </div>
       </div>
+
+      <!-- Disk space -->
+      {#if status.disk_total > 0}
+        <div class="card bg-base-200 border border-base-300">
+          <div class="card-body p-4 gap-1">
+            <span class="text-xs text-base-content/50 uppercase tracking-wider">{T && T.cardDisk}</span>
+            <span class="text-base font-medium {diskSpaceLow ? 'text-error' : 'text-base-content'}">
+              {formatBytes(status.disk_free)}
+            </span>
+            <span class="text-xs text-base-content/40">
+              {$locale && m.status_disk_free_of_total({ total: formatBytes(status.disk_total) })}
+            </span>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Error warning -->

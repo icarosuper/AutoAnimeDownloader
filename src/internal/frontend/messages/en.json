@@ -28,6 +28,8 @@
   "status_card_last_check": "Last Check",
   "status_card_next_check": "Next Check",
   "status_card_library": "Library",
+  "status_card_disk": "Disk Space",
+  "status_disk_free_of_total": "free of {total}",
   "status_checking": "Checking...",
   "status_animes_count": "{count} animes",
   "status_episodes_count": "{count} episodes",

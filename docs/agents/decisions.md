@@ -220,3 +220,15 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 **Why it's right:** Real torrent names often carry the episode's plot title, streaming-service tag, or a duplicate alt-title in parentheses *after* the episode marker (e.g. `KAIJU GIRL CARAMELISE S01E01 The Kaiju Girl Appears in Tokyo 1080p CR WEB-DL ... (Otome Kaijuu Caramelise, Multi-Subs)`). None of that belongs to the anime's core title, but it isn't covered by the fixed `titleTechnicalTokens` allowlist (unknown fansub tags like `varyg`/`ironclad`, stray split tokens like `h` from `H 264`, episode-title prose). Tokenizing it anyway inflates the Jaccard union enough that `jaccardThreshold` (0.8 for ≤3-token queries) rejects genuine matches — this caused two real currently-airing anime to never download (see debug session that produced this decision). Truncating at the marker (reusing `reEpisodePatterns`/`reSeasonPatterns`, already used by `extractEpisodeNumber`/`extractSeason`) removes exactly the noise while preserving genuine extra title words that appear *before* the marker (e.g. "Alternative Gun Gale Online" in a Sword Art Online spinoff), so the existing spin-off-rejection tests still pass.
 
 **Don't "fix" by:** lowering `jaccardThreshold` instead. The two failure modes overlap: the real Kaiju Girl Caramelise match scores ~0.33 Jaccard, but the SAO-spinoff torrent that must stay rejected scores ~0.5 — no single threshold accepts one without accepting the other. The marker-truncation approach fixes the union inflation at its source instead.
+
+---
+
+### 19. Disk space is read via OS stat on `SavePath`, not qBittorrent's API
+
+**Location:** `internal/files/diskspace_unix.go`, `internal/files/diskspace_windows.go`; `internal/api/endpoint_status.go` (`handleStatus`).
+
+**What it looks like:** Reading disk space with a raw filesystem syscall on a local path, when qBittorrent's WebUI already exposes `free_space_on_disk` via `/api/v2/sync/maindata` — reaching for a platform-specific syscall pair looks like reinventing something the existing HTTP dependency already provides.
+
+**Why it's right:** qBittorrent's endpoint only reports free space, not total capacity — the dashboard needs both ("tamanho total, tamanho disponível" per `docs/TODO.md`). The syscall approach is the only one of the two that can answer that. The known trade-off: if qBittorrent's actual save directory isn't the same filesystem the daemon process sees (e.g. daemon and qBittorrent split across hosts/containers with misaligned mounts), the numbers reflect the daemon's view of `SavePath`, not necessarily qBittorrent's real disk. Accepted for now since this project targets the common single-box setup; `handleStatus` swallows stat errors (empty/unreadable `SavePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
+
+**Don't "fix" by:** switching to qBittorrent's `free_space_on_disk` alone (loses total capacity) or trying to detect cross-host mount mismatches — no reliable way to do that from the daemon's side without an out-of-band signal from qBittorrent itself.
