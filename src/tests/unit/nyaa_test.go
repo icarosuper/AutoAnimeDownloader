@@ -1215,6 +1215,27 @@ func TestNyaaModule_NieRCour2_CourTreatedAsPart(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
+// TestNyaaModule_RomanNumeralSequel_AcceptsSeasonFromTitleItself verifica o fix do bug:
+// sequências cujo título usa apenas um numeral romano (ex: "... II") como marcador de
+// season, sem "Season 2"/"S2" em lugar nenhum e sem o fansub reafirmar isso no nome do
+// torrent, agora são aceitas (Anilist id 194829: Katainaka no Ossan, Kensei ni Naru II).
+func TestNyaaModule_RomanNumeralSequel_AcceptsSeasonFromTitleItself(t *testing.T) {
+	season2 := 2
+	options := testOptions{
+		animeName: "Katainaka no Ossan, Kensei ni Naru II",
+		episode:   1,
+		season:    &season2,
+		correct: []string{
+			"[Erai-raws] Katainaka no Ossan, Kensei ni Naru II - 01 [1080p AMZN WEB-DL AVC EAC3][MultiSub][13F1C02B]",
+		},
+		incorrect: []string{
+			// Episódio errado
+			"[Erai-raws] Katainaka no Ossan, Kensei ni Naru II - 02 [1080p AMZN WEB-DL AVC EAC3][MultiSub][13F1C02B]",
+		},
+	}
+	runEpisodeNameTest(options, t)
+}
+
 // TestNyaaModule_HatarakuS2P2_PartHardFilter verifica que hard filter funciona corretamente
 // para Hataraku Maou-sama season 2 part 2 (Anilist id 155168)
 func TestNyaaModule_HatarakuS2P2_PartHardFilter(t *testing.T) {

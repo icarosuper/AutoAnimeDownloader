@@ -122,7 +122,7 @@ Dub, raw, hardcoded, HC, re-encode are dropped. Check if the available torrents 
 For single-episode searches, a torrent is only kept if its extracted episode number matches the target. Check if the torrent names on Nyaa use an unusual pattern not covered by `reEpisodePatterns`.
 
 **6c. Season/Part filtering**:
-If `ExtractAnimeSeasonPart` returns a season or part, results are filtered to match. Check if the season/part extracted from the title is correct. A wrong extraction causes all results to be dropped.
+If `ExtractAnimeSeasonPart` returns a season or part, results are filtered to match. Check if the season/part extracted from the title is correct. A wrong extraction causes all results to be dropped. Watch for sequels titled with only a roman numeral (e.g. "... II") — `extractSeason` (`nyaa.go`) has a roman-numeral fallback (`reRomanSeason` in `nyaa_regex.go`, decision 20) precisely because fansub releases for these often carry no other season marker; if a new roman-numeral case still fails, check whether the numeral is spelled differently in the torrent name than in the AniList title.
 
 **6d. Batch detection** (`reBatchPatterns`):
 Single-episode searches drop batch torrents. If Nyaa only has a batch available for a finished anime, the single-episode search will return nothing (correct behavior — the batch strategy in `resolveSearchStrategy` should have caught it first).

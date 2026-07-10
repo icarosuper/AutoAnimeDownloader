@@ -131,6 +131,21 @@ func TestExtractAnimeSeasonPart_SnKFinalSeason_NoSeasonNumber(t *testing.T) {
 	}
 }
 
+func TestExtractAnimeSeasonPart_RomanNumeralOnly_SeasonFromRomaji(t *testing.T) {
+	// Anilist id 194829: english = "From Old Country Bumpkin to Master Swordsman II"
+	//                    romaji  = "Katainaka no Ossan, Kensei ni Naru II"
+	// Nem english nem romaji dizem "Season 2"/"S2" — só o numeral romano "II".
+	title := makeTitle("From Old Country Bumpkin to Master Swordsman II", "Katainaka no Ossan, Kensei ni Naru II")
+	season, part := daemon.ExtractAnimeSeasonPart(title, nil)
+
+	if season == nil || *season != 2 {
+		t.Errorf("expected season=2 (from roman numeral), got %v", season)
+	}
+	if part != nil {
+		t.Errorf("expected part=nil, got %v", *part)
+	}
+}
+
 func TestExtractAnimeSeasonPart_NoSeasonOrPart(t *testing.T) {
 	// Anime S1 simples, sem season/part no título
 	title := makeTitle("Frieren: Beyond Journey's End", "Sousou no Frieren")

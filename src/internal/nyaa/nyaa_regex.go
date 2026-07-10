@@ -81,6 +81,14 @@ var (
 		{regexp.MustCompile(`(?i)Cour\s*(\d{1,2})`), "Cour 1"},
 	}
 
+	// Roman numeral season marker, e.g. "Katainaka no Ossan, Kensei ni Naru II".
+	// Tried as a fallback after reSeasonPatterns (lower confidence than an explicit
+	// "Season 2"/"S2" marker) since fansub groups often release sequels using the
+	// anime's own title verbatim, with no separate season marker beyond the numeral.
+	// Kept out of reSeasonPatterns because that slice also drives truncateAtFirstMarker
+	// (nyaa_match.go), which must not cut the title before a numeral that's part of it.
+	reRomanSeason = regexp.MustCompile(`\b(II|III|IV|V|VI|VII|VIII|IX|X)\b`)
+
 	// Resolution patterns
 	reResolutionPatterns = []struct {
 		re   *regexp.Regexp

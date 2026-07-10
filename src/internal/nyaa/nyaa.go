@@ -794,6 +794,12 @@ func extractEpisodeNumber(name string) *int {
 	return nil
 }
 
+// romanSeasonValues converts the roman numerals matched by reRomanSeason to their
+// integer season number.
+var romanSeasonValues = map[string]int{
+	"II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10,
+}
+
 // extractSeason extrai o número da temporada do nome do torrent
 // Testa os padrões em ordem de prioridade
 func extractSeason(name string) *int {
@@ -805,6 +811,11 @@ func extractSeason(name string) *int {
 					return &seasonNum
 				}
 			}
+		}
+	}
+	if matches := reRomanSeason.FindStringSubmatch(name); len(matches) > 1 {
+		if seasonNum, ok := romanSeasonValues[matches[1]]; ok {
+			return &seasonNum
 		}
 	}
 	return nil
