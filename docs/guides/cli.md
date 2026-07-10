@@ -110,7 +110,7 @@ autoanimedownloader config get
 ```
 
 **Shows all configuration values:**
-- Anilist username
+- Anilist usernames (supports more than one, comma-separated)
 - Save path
 - Completed anime path
 - Check interval (minutes)
@@ -118,7 +118,9 @@ autoanimedownloader config get
 - Max episodes per anime
 - Episode retry limit
 - Delete watched episodes (true/false)
-- Excluded list
+- Excluded lists
+
+Fields not covered by `config set` (webhooks, torrent priorities, Jellyfin renaming, per-status download/delete rules) are only editable through the web UI's Config, Notifications, and Priorities pages — see the [WebUI Guide](webui.md).
 
 #### `config set <key> <value>`
 
@@ -131,7 +133,7 @@ autoanimedownloader config set delete_watched_episodes true
 ```
 
 **Available keys:**
-- `anilist_username` (string) - Your Anilist username
+- `anilist_username` (string) - Anilist username(s). Comma-separated for multiple accounts
 - `save_path` (string) - Path where episodes are saved
 - `completed_anime_path` (string) - Path for completed anime
 - `check_interval` (int) - Check interval in minutes
@@ -143,8 +145,9 @@ autoanimedownloader config set delete_watched_episodes true
 
 **Examples:**
 ```bash
-# Set Anilist username
+# Set Anilist username(s)
 autoanimedownloader config set anilist_username myusername
+autoanimedownloader config set anilist_username myusername,secondaccount
 
 # Set check interval to 15 minutes
 autoanimedownloader config set check_interval 15
@@ -222,20 +225,27 @@ Episode ID  Episode Name                    Hash                              Do
 View daemon logs.
 
 ```bash
-# Show last 50 lines (default)
+# Show last 1000 lines (default)
 autoanimedownloader logs
 
 # Show last 100 lines
-autoanimedownloader logs --lines 100
+autoanimedownloader logs --lines 100   # or: -n 100
 
-# Show last 20 lines
-autoanimedownloader logs --lines 20
+# Filter by level (all/debug/info/warn/error)
+autoanimedownloader logs --level error
+
+# Filter by text
+autoanimedownloader logs --search "nyaa"   # or: -q "nyaa"
+
+# Combine filters
+autoanimedownloader logs --level warn -q retry
 ```
 
 **What it shows:**
 - Recent log entries from the daemon
 - Logs are read from the daemon's log file
 - Useful for debugging and monitoring
+- `NO_COLOR=1` disables ANSI colors in the output
 
 ### Web UI
 
@@ -373,7 +383,6 @@ On Linux, you may need to ensure:
 
 ## See Also
 
-- [Installation Guide](installation.md) - How to install the CLI
-- [WebUI Guide](webui-guide.md) - Web interface guide
+- [WebUI Guide](webui.md) - Web interface guide
 - [Development Guide](development.md) - For developers
 

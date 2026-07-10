@@ -24,7 +24,6 @@
 	- Trigger de library scan após download concluído
 - Dashboard de estatísticas
 	- Episódios baixados por semana/anime
-	- Tamanho total, tamanho disponível no disco
 	- Fansubs mais usados
 	- Dados já disponíveis no downloaded_episodes JSONL
 - Windows

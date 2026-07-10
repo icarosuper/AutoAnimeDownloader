@@ -412,7 +412,7 @@ Title-matching logic for filtering Nyaa search results.
 | File | Route | Purpose |
 |------|-------|---------|
 | `routes/Status.svelte` | `#/` | Daemon status, start/stop, anime list |
-| `routes/AnimeDetail.svelte` | `#/anime/:id` | Per-anime episode list + actions |
+| `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions |
 | `routes/Config.svelte` | `#/config` | Edit all config fields |
 | `routes/Priorities.svelte` | `#/priorities` | Reorder/add/remove torrent priority lists (fansubs, resolutions, source, codec, audio, criteria order, ignore list); reset per-list or all, via `GET/PUT /api/v1/config` + `GET /api/v1/config/priorities/defaults` |
 | `routes/Logs.svelte` | `#/logs` | Tail daemon logs |
@@ -451,6 +451,5 @@ Connects to `/api/v1/ws`, updates `wsState` store on messages.
 
 **Manual magnet paste**: `AnimeDetail.svelte` exposes a magnet input UI that calls `/api/v1/animes/{id}/episodes/{episodeId}/replace` (per-episode) or `/api/v1/animes/{id}/replace` (full anime/batch). Allows bypassing Nyaa search and sending any magnet link directly to qBittorrent.
 
-## Planned / Not Yet Implemented
+**Multi-account Anilist**: `Config.AnilistUsernames []string` — the verification loop (`verification.go`) and `mergeCurrentAniListAnimes` (`endpoint_animes.go`) both iterate over every configured username. Episode tracking is not per-account; all accounts share the same `episodes.json`. See [Config Reference](config.md) for the legacy singular-field migration.
 
-**Multi-account Anilist**: Current config holds a single `AnilistUsername` string. Multi-account support is planned — would require either an array of usernames in config or a separate accounts file, and separate episode tracking per account.

@@ -68,16 +68,11 @@ After install, the systemd user service starts automatically. Access the web UI 
 
 ### Linux (other distros)
 
-Download the ZIP for your architecture:
-
-| Architecture | Download |
-|---|---|
-| x86_64 | [AutoAnimeDownloader_Linux_x86_v1.3.2.zip](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_x86_v1.3.2.zip) |
-| ARM64 | [AutoAnimeDownloader_Linux_Arm64_v1.3.2.zip](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Linux_Arm64_v1.3.2.zip) |
+Grab the zip for your architecture from the [latest release](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest) — `AutoAnimeDownloader_Linux_x86_v*.zip` (x86_64) or `AutoAnimeDownloader_Linux_Arm64_v*.zip` (ARM64).
 
 ```bash
-unzip AutoAnimeDownloader_Linux_x86_v1.3.2.zip
-cd AutoAnimeDownloader_Linux_x86_v1.3.2
+unzip AutoAnimeDownloader_Linux_x86_v*.zip
+cd AutoAnimeDownloader_Linux_x86_v*
 make install
 ```
 
@@ -95,11 +90,11 @@ make uninstall
 
 ### Windows
 
-Download [AutoAnimeDownloader_Windows_v1.3.2.exe](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest/download/AutoAnimeDownloader_Windows_v1.3.2.exe) and run it — no installation needed.
+Download `AutoAnimeDownloader_Windows_v*.exe` from the [latest release](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest) and run it — no installation needed.
 
 Access the web UI at **http://localhost:8091**.
 
-For running as a Windows Service, see the [Installation Guide](docs/guides/installation.md#windows-installation).
+For running as a Windows Service, see the [Development Guide](docs/guides/development.md#windows-service-install).
 
 See [all releases](https://github.com/icarosuper/AutoAnimeDownloader/releases) for older versions.
 
@@ -187,11 +182,9 @@ Key settings:
 - Verify API is reachable: http://localhost:8091/api/v1/status
 - Check browser console for errors
 
-See the [Installation Guide](docs/guides/installation.md#troubleshooting) for more.
-
 ## Contributing
 
-Contributions are welcome! See the [Contributing Guide](docs/guides/contributing.md) for details.
+Contributions are welcome! See the [Development Guide](docs/guides/development.md#contributing) for details.
 
 ## License
 

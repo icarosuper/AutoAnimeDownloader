@@ -4,236 +4,68 @@ This guide covers the AutoAnimeDownloader web interface.
 
 ## Overview
 
-The WebUI is a modern, embedded web interface that runs alongside the daemon. It provides a user-friendly way to monitor and configure AutoAnimeDownloader without using the command line.
+The WebUI is a Svelte single-page app embedded directly in the daemon binary — no separate installation or server needed. It uses hash-based routing, so URLs look like `http://localhost:8091/#/status`.
 
 ## Accessing the WebUI
 
-After starting the daemon, access the web interface at:
-
-**http://localhost:8091**
-
-The WebUI is embedded directly in the daemon binary, so no separate installation is required.
+After starting the daemon, open **http://localhost:8091** in your browser.
 
 ## Pages
 
-### Status Page
+### Status (`/` or `/status`)
 
-The Status page (`/` or `/status`) is the main dashboard showing:
+The main dashboard:
 
-#### Daemon Status
+- **Daemon card** — current status (stopped/running/checking), last check time, next check countdown, and Start/Stop/Force-check controls
+- **Library card** — total anime and episode counts
+- **Disk card** — free/total space on the save path's filesystem, with a warning color when space is low
+- **Monitored animes** — searchable/filterable table of tracked anime (progress, last download, blacklist status). Click a row to open its detail page
 
-- **Status Badge**: Visual indicator of current status
-  - 🟢 **Running** - Daemon is active and checking for episodes
-  - 🟡 **Checking** - Currently verifying for new episodes
-  - 🔴 **Stopped** - Daemon is not running
+Status changes push over WebSocket, so the page updates live without a refresh.
 
-- **Last Check**: Timestamp of the last verification
-- **Error Indicator**: Shows if the last check encountered an error
+### Anime Detail (`/status/:id`)
 
-#### Control Buttons
+Per-anime episode list, opened by clicking an anime on the Status page:
 
-- **Start** - Start the daemon loop
-- **Stop** - Stop the daemon loop
-- **Check** - Trigger an immediate manual check
+- Episode table (episode number, Anilist watch status, downloaded state)
+- Per-episode actions: download, delete, re-download, replace with a manual magnet link
+- Bulk actions on selected episodes: download, delete, release (unpin from retry queue)
+- Custom search query override for that anime's Nyaa searches
 
-#### Monitored Animes
+### Config (`/config`)
 
-Displays a list of animes being monitored:
-- Anime name (extracted from episode names)
-- Number of episodes downloaded
-- Latest episode information
+Daemon configuration, grouped into sections: Anilist, Downloads, Automation, qBittorrent, Filters. Covers paths, check interval, qBittorrent URL, episode limits/retries, and download/delete rules. See [Config Reference](../agents/config.md) for the full field list and defaults.
 
-**Real-time Updates**: The status page uses WebSocket to update automatically when the daemon status changes.
+If required config is missing, the daemon opens this page automatically with a `?missingConfig=true` banner.
 
-### Episodes Page
+### Priorities (`/priorities`)
 
-The Episodes page (`/episodes`) shows all downloaded episodes:
+Reorderable lists that drive torrent ranking during search (fansub groups, resolutions, sources, codecs, audio, an ignore list, and the order criteria are applied in). See [Config Reference](../agents/config.md#fields) for what each list does.
 
-#### Episode List
+### Notifications (`/notifications`)
 
-Each episode displays:
-- **Episode Name** - Full name of the episode
-- **Episode ID** - Unique identifier
-- **Hash** - Episode hash for tracking
-- **Download Date** - When the episode was downloaded
+Webhook configuration: add/edit/remove webhook presets (name, URL, method, headers, body template), pick which events trigger each one (new episode, download failed, download completed), and send a test request. Template variables like `{{title}}`/`{{message}}` are documented in [Config Reference](../agents/config.md#webhook-template-variables).
 
-**Features:**
-- Sorted by download date (newest first)
-- Search/filter capabilities (if implemented)
-- Pagination for large lists
+### Logs (`/logs`)
 
-### Config Page
+Real-time daemon logs over WebSocket:
 
-The Config page (`/config`) allows you to configure all daemon settings:
-
-#### Configuration Fields
-
-- **Anilist Username** (required)
-  - Your Anilist username
-  - Used to fetch your watching list
-
-- **Save Path** (required)
-  - Directory where episodes are saved
-  - Must be an absolute path
-  - Example: `/home/user/downloads` (Linux) or `C:\Downloads` (Windows)
-
-- **Completed Anime Path** (required)
-  - Directory where completed anime are moved
-  - Must be an absolute path
-
-- **Check Interval** (required)
-  - How often to check for new episodes (in minutes)
-  - Minimum: 1 minute
-  - Recommended: 10-30 minutes
-
-- **qBittorrent URL** (required)
-  - URL of qBittorrent WebUI
-  - Default: `http://localhost:8080`
-  - Format: `http://host:port`
-
-- **Max Episodes Per Anime** (required)
-  - Maximum number of episodes to download per anime
-  - Prevents downloading entire series at once
-  - Recommended: 10-20
-
-- **Episode Retry Limit** (required)
-  - Maximum retry attempts for failed downloads
-  - Default: 5
-
-- **Delete Watched Episodes** (required)
-  - Automatically delete episodes after watching
-  - Options: `true` or `false`
-
-- **Excluded List** (optional)
-  - Comma-separated list of anime titles to exclude
-  - Case-insensitive matching
-  - Example: `One Piece, Naruto, Bleach`
-
-#### Saving Configuration
-
-1. Fill in all required fields
-2. Click **Save** button
-3. Wait for success confirmation
-4. Configuration is saved immediately
-
-**Validation:**
-- Required fields must be filled
-- Numeric fields must be valid numbers
-- Paths must be absolute paths
-- URLs must be valid HTTP/HTTPS URLs
-
-### Logs Page
-
-The Logs page (`/logs`) displays real-time daemon logs:
-
-#### Features
-
-- **Real-time Updates**: Logs update automatically via WebSocket
-- **Log Levels**: Color-coded by severity
-  - 🔵 DEBUG - Detailed information
-  - 🟢 INFO - Normal operations
-  - 🟡 WARN - Warnings
-  - 🔴 ERROR - Errors
-
-- **Filtering**: Filter by log level (if implemented)
-- **Auto-scroll**: Automatically scrolls to newest logs
-- **Copy**: Copy log entries to clipboard
-
-## Navigation
-
-The WebUI has a consistent navigation bar at the top:
-
-- **Status** - Go to status/dashboard page
-- **Episodes** - View downloaded episodes
-- **Config** - Configure daemon settings
-- **Logs** - View daemon logs
-
-## Real-time Updates
-
-The WebUI uses WebSocket connections for real-time updates:
-
-- **Status changes** are reflected immediately
-- **Log entries** appear in real-time
-- **Automatic reconnection** if connection is lost
-
-You'll see a connection indicator showing WebSocket status.
-
-## Responsive Design
-
-The WebUI is responsive and works on:
-- Desktop browsers
-- Tablets
-- Mobile devices (with some limitations)
-
-## Browser Compatibility
-
-The WebUI works with modern browsers:
-- Chrome/Edge (recommended)
-- Firefox
-- Safari
-- Opera
-
-**Note**: Some features may require JavaScript to be enabled.
-
-## Keyboard Shortcuts
-
-(If implemented)
-- `Ctrl/Cmd + K` - Focus search
-- `Esc` - Close modals/dialogs
-- `Ctrl/Cmd + R` - Refresh data
-
-## Tips
-
-1. **Keep the Status page open**: Monitor daemon activity in real-time
-2. **Check logs regularly**: Use the Logs page to debug issues
-3. **Save configuration carefully**: Verify paths and URLs before saving
-4. **Use manual check**: Test configuration with the "Check" button
+- Line count and level filter (all/debug/info/warn/error), text search
+- Autoscroll and live-tail toggles, copy-to-clipboard
+- Manual reload button
 
 ## Troubleshooting
 
-### WebUI not loading
+**Blank page / WebUI not loading**
+- Confirm the daemon is running and reachable at `http://localhost:8091/api/v1/status`
+- Check the browser console for errors
+- Hard refresh (`Ctrl/Cmd + Shift + R`) if styling looks broken — usually a stale cached bundle
 
-**Symptoms**: Blank page or connection error
-
-**Solutions:**
-1. Verify daemon is running: Check system status
-2. Check URL: Ensure you're using `http://localhost:8091`
-3. Check browser console: Look for JavaScript errors
-4. Verify API is accessible: Try `http://localhost:8091/api/v1/status`
-
-### Real-time updates not working
-
-**Symptoms**: Status doesn't update automatically
-
-**Solutions:**
-1. Check WebSocket connection indicator
-2. Refresh the page
-3. Check browser console for WebSocket errors
-4. Verify firewall isn't blocking WebSocket connections
-
-### Configuration not saving
-
-**Symptoms**: Changes don't persist
-
-**Solutions:**
-1. Check for validation errors (red fields)
-2. Verify all required fields are filled
-3. Check browser console for errors
-4. Verify daemon has write permissions to config directory
-
-### Styling issues
-
-**Symptoms**: Page looks broken or unstyled
-
-**Solutions:**
-1. Hard refresh: `Ctrl/Cmd + Shift + R`
-2. Clear browser cache
-3. Check browser console for CSS loading errors
-4. Try a different browser
+**Status/logs not updating live**
+- Check the WebSocket connection isn't blocked by a firewall or proxy
+- Refresh the page to reconnect
 
 ## See Also
 
-- [Installation Guide](installation.md) - How to install and start the daemon
-- [CLI Guide](cli-guide.md) - Command-line interface
-- [Development Guide](development.md) - For developers
-
+- [CLI Guide](cli.md) — command-line equivalent for most of these actions
+- [Config Reference](../agents/config.md) — full config field reference

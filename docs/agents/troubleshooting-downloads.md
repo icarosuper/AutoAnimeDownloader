@@ -12,7 +12,7 @@ Before doing anything manual, try:
 make debug-anime ID=<anilistId>
 ```
 
-`<anilistId>` is the AniList MediaList ID (visible in the web UI URL for that anime, `#/anime/<id>`, or via `GET /api/v1/animes`). This runs a one-shot pass — no daemon or qBittorrent required — that:
+`<anilistId>` is the AniList MediaList ID (visible in the web UI URL for that anime, `#/status/<id>`, or via `GET /api/v1/animes`). This runs a one-shot pass — no daemon or qBittorrent required — that:
 
 1. Fetches the anime from AniList and logs the full response (title, progress, status, synonyms, relations, airing schedule).
 2. Picks the episodes that would be searched (same `checkEpisode` logic the real loop uses).
@@ -167,7 +167,7 @@ go test ./...
 Fix the logic, run tests, then trigger a manual download cycle to confirm:
 
 ```bash
-build/autoanimedownloader trigger
+build/autoanimedownloader check
 grep '"Failed to download' ~/.autoAnimeDownloader/daemon.log | tail -20
 ```
 
@@ -180,7 +180,7 @@ go build -o build/autoanimedownloader ./src/cmd/daemon
 Then trigger and check:
 
 ```bash
-build/autoanimedownloader trigger
+build/autoanimedownloader check
 grep '"Failed to download' ~/.autoAnimeDownloader/daemon.log | tail -20
 ```
 

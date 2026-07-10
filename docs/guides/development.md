@@ -1,15 +1,13 @@
 # Development Guide
 
-This guide is for developers who want to contribute to or modify AutoAnimeDownloader.
+For contributors working on AutoAnimeDownloader itself (as opposed to just running it).
 
 ## Prerequisites
 
-- **Go** 1.24 or later
-- **Node.js** 20 or later
-- **npm** (comes with Node.js)
-- **Git** for version control
-- **qBittorrent** with WebUI enabled (for testing)
-- **Anilist account** (for testing)
+- **Go** 1.24+
+- **Bun** (frontend package manager/build tool — not npm)
+- **Docker** (for integration tests and cross-platform builds)
+- **qBittorrent** with WebUI enabled, and an **Anilist account** (for manual testing)
 
 ## Project Structure
 
@@ -20,391 +18,124 @@ AutoAnimeDownloader/
 │   │   ├── daemon/          # Daemon entry point
 │   │   └── cli/             # CLI entry point
 │   ├── internal/
-│   │   ├── api/             # REST API and WebSocket
-│   │   ├── daemon/          # Core daemon logic
-│   │   ├── files/            # File management
-│   │   ├── logger/          # Logging system
-│   │   ├── anilist/         # Anilist API client
-│   │   ├── nyaa/            # Nyaa scraper
+│   │   ├── api/              # REST API and WebSocket
+│   │   ├── daemon/           # Core daemon logic / verification loop
+│   │   ├── files/            # Config and file management
+│   │   ├── logger/           # Logging system
+│   │   ├── anilist/          # Anilist API client
+│   │   ├── nyaa/             # Nyaa scraper and torrent priority/matching
 │   │   ├── torrents/         # qBittorrent client
-│   │   └── frontend/        # Svelte frontend
+│   │   ├── notifications/    # Webhook notifications
+│   │   ├── tray/             # System tray icon
+│   │   └── frontend/         # Svelte frontend (embedded into the daemon binary)
 │   └── tests/
-│       ├── integration/     # Integration tests
+│       ├── integration/     # Integration tests (Docker + mock servers)
 │       ├── unit/            # Unit tests
-│       └── mocks/           # Mock servers
-├── docs/                    # Documentation
-├── scripts/                 # Build and utility scripts
-├── infra/                   # Service files and installers
-└── build/                   # Build outputs
+│       └── mocks/           # Mock servers (Anilist, Nyaa, qBittorrent)
+├── docs/                     # Documentation
+├── scripts/                  # Build, dev, and test scripts
+├── infra/                    # systemd/NSSM service files and installers
+└── build/                    # Build outputs (gitignored)
 ```
 
-## Setting Up Development Environment
+See [Architecture](../agents/architecture.md) for a package-by-package map of symbols and data flow.
 
-### 1. Clone the Repository
+## Setup
 
 ```bash
 git clone https://github.com/icarosuper/AutoAnimeDownloader.git
 cd AutoAnimeDownloader
-```
 
-### 2. Install Go Dependencies
-
-```bash
 go mod download
+cd src/internal/frontend && bun install && cd ../../..
 ```
 
-### 3. Install Frontend Dependencies
+## Dev Workflow
 
 ```bash
-cd src/internal/frontend
-npm install
-cd ../../..
+make dev
 ```
 
-### 4. Build Frontend
+Runs the frontend dev server (Vite, hot reload) and the Go daemon together, proxying API calls. See `scripts/dev.sh` for the exact wiring.
 
-The frontend must be built before building the Go code (it's embedded):
+To run the daemon alone with verbose console logs:
 
 ```bash
-cd src/internal/frontend
-npm run build
-cd ../../..
+ENVIRONMENT=dev go run ./src/cmd/daemon
 ```
 
-### 5. Build and Run
+Logs are written to `~/.autoAnimeDownloader/daemon.log` (Linux/macOS) or `%APPDATA%\AutoAnimeDownloader\daemon.log` (Windows); in dev mode they also print to console.
 
-```bash
-# Build daemon
-go build -o autoanimedownloader-daemon ./src/cmd/daemon
-
-# Build CLI
-go build -o autoanimedownloader ./src/cmd/cli
-
-# Run daemon
-./autoanimedownloader-daemon
-```
-
-## Development Workflow
-
-### Running in Development Mode
-
-Set the `ENVIRONMENT` variable to `dev` for development mode:
-
-```bash
-ENVIRONMENT=dev ./autoanimedownloader-daemon
-```
-
-**Development mode features:**
-- Formatted console logs (instead of JSON)
-- More verbose logging
-- Debug information
-
-### Hot Reloading
-
-For frontend development:
-
-```bash
-cd src/internal/frontend
-npm run dev
-```
-
-This starts Vite dev server. Note: The daemon serves the embedded frontend, so you'll need to rebuild after changes.
-
-### Testing
-
-#### Unit Tests
-
-```bash
-# Run all unit tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Run tests with race detector
-go test -race ./...
-
-# Run specific package tests
-go test ./src/internal/api/...
-```
-
-#### Integration Tests
-
-Integration tests require Docker and docker-compose:
-
-```bash
-# Start test environment
-docker compose -f docker/docker-compose.test.yml up -d
-
-# Run integration tests
-cd src/tests/integration
-go test -v ./...
-
-# Or use the script
-./scripts/run-integration-tests.sh
-```
-
-## Code Style and Conventions
-
-### Go Code
-
-Follow standard Go conventions:
-
-1. **Format code**: Use `gofmt` or `go fmt`
-2. **Lint**: Use `golint` or `golangci-lint`
-3. **Documentation**: Document exported functions and types
-4. **Error handling**: Always handle errors, never ignore them
-5. **Naming**: Use descriptive names, follow Go naming conventions
-
-### Frontend Code
-
-1. **Format**: Use Prettier (configured in project)
-2. **Lint**: Use ESLint (if configured)
-3. **Components**: Keep components small and focused
-4. **Styling**: Use Tailwind CSS utility classes
-
-## Architecture Overview
-
-### Daemon
-
-The daemon (`src/cmd/daemon/main.go`) is the main service:
-
-1. Initializes logger
-2. Creates file manager
-3. Creates state manager
-4. Starts API server
-5. Starts verification loop
-
-### API Server
-
-The API server (`src/internal/api/`) provides:
-
-- REST endpoints for CLI and WebUI
-- WebSocket for real-time updates
-- Static file serving for frontend
-
-### Daemon Logic
-
-The daemon logic (`src/internal/daemon/`) handles:
-
-- State management
-- Verification loop
-- Episode tracking
-- Error handling
-
-### File Management
-
-File management (`src/internal/files/`) handles:
-
-- Configuration loading/saving
-- Episode tracking
-- File system operations
-
-## Adding New Features
-
-### Adding a New API Endpoint
-
-1. Create handler in `src/internal/api/endpoint_*.go`
-2. Register route in `src/internal/api/server.go`
-3. Add Swagger documentation
-4. Write tests
-5. Update CLI if needed
-
-### Adding Frontend Features
-
-1. Create component in `src/internal/frontend/src/`
-2. Add route if needed
-3. Update API client if needed
-4. Style with Tailwind CSS
-5. Test in browser
-
-### Adding Configuration Options
-
-1. Add field to `src/internal/files/config.go`
-2. Update validation
-3. Update API endpoints
-4. Update frontend form
-5. Update CLI commands
-6. Update documentation
-
-## Debugging
-
-### Logs
-
-Logs are written to:
-- **Linux/Mac**: `~/.autoAnimeDownloader/daemon.log`
-- **Windows**: `%APPDATA%\AutoAnimeDownloader\daemon.log`
-
-In development mode, logs also go to console.
-
-### Debugging the Daemon
-
-```bash
-# Run with verbose logging
-ENVIRONMENT=dev ./autoanimedownloader-daemon
-
-# Check logs
-tail -f ~/.autoAnimeDownloader/daemon.log
-```
-
-### Debugging the Frontend
-
-1. Open browser DevTools (F12)
-2. Check Console for errors
-3. Check Network tab for API calls
-4. Check WebSocket connection
-
-### Debugging API
-
-Use Swagger UI:
-- Access: `http://localhost:8091/swagger/`
-- Test endpoints directly
-- View API documentation
-
-## Building for Production
-
-### Build Scripts
-
-```bash
-# Linux
-make build
-
-# Windows
-.\scripts\build.ps1
-```
-
-### Manual Build
-
-```bash
-# 1. Build frontend
-cd src/internal/frontend
-npm run build
-cd ../../..
-
-# 2. Build Go binaries
-go build -ldflags="-w -s" -o autoanimedownloader-daemon ./src/cmd/daemon
-go build -ldflags="-w -s" -o autoanimedownloader ./src/cmd/cli
-```
+Swagger UI for the API is at `http://localhost:8091/swagger/` while the daemon is running.
 
 ## Testing
 
-### Writing Tests
-
-#### Unit Tests
-
-Create `*_test.go` files in the same package:
-
-```go
-package api
-
-import "testing"
-
-func TestHandler(t *testing.T) {
-    // Test implementation
-}
+```bash
+make test                       # everything, with a pass/fail summary
+make test-backend-unit          # go test ./src/tests/unit/... ./src/internal/...
+make test-backend-integration   # Docker-based integration tests
+make test-frontend-unit         # Vitest unit tests
+make test-frontend-component    # Vitest + Testing Library component tests
+make test-frontend-smoke        # Playwright end-to-end smoke tests
 ```
 
-#### Integration Tests
+For mock patterns and how to write new tests, see [Testing](../agents/testing.md).
 
-Create tests in `src/tests/integration/`:
-
-```go
-package integration
-
-import "testing"
-
-func TestAPIEndpoint(t *testing.T) {
-    // Integration test
-}
-```
-
-### Test Coverage
+## Debugging a Specific Anime
 
 ```bash
-# Generate coverage report
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
+make debug-anime ID=123   # ID is the AniList MediaList ID
 ```
 
-## Dependencies
+Runs a one-shot search/match pass against Nyaa without touching qBittorrent or the daemon state. See [Commands](../agents/commands.md#debugging-a-specific-anime) and [Troubleshooting Downloads](../agents/troubleshooting-downloads.md) for details.
 
-### Adding Go Dependencies
+## Regenerating Swagger Docs
+
+After changing API endpoints or their comments in `src/cmd/daemon/main.go`:
 
 ```bash
-go get <package>
-go mod tidy
+swag init -g src/cmd/daemon/main.go -o docs/swagger
 ```
 
-### Adding Frontend Dependencies
+## Windows Service Install
 
-```bash
-cd src/internal/frontend
-npm install <package>
+To run the daemon as a Windows service (via [NSSM](https://nssm.cc/download)):
+
+```powershell
+# Run PowerShell as Administrator
+cd infra\windows
+.\install.ps1
 ```
 
-## Common Tasks
+`.\uninstall.ps1` removes it. See `infra/windows/install.ps1` for what it configures if you need to do it manually.
 
-### Updating Swagger Documentation
+## Contributing
 
-1. Update comments in `src/cmd/daemon/main.go`
-2. Run: `swag init -g src/cmd/daemon/main.go -o docs/swagger`
-3. Commit generated files
+1. Fork the repo and create a branch off `master`: `git checkout -b feat/your-feature`
+2. Make your changes — run `go test ./...` and, for frontend changes, `make test-frontend` before opening a PR
+3. Push and open a pull request against `master`
 
-### Updating Frontend
+### Commit Messages
 
-1. Make changes in `src/internal/frontend/src/`
-2. Build: `cd src/internal/frontend && npm run build`
-3. Rebuild daemon: `go build ./src/cmd/daemon`
-
-### Running Tests
-
-```bash
-# All tests
-go test ./...
-
-# Specific package
-go test ./src/internal/api/...
-
-# With verbose output
-go test -v ./...
-
-# With race detector
-go test -race ./...
+```
+feat: add new endpoint for episode filtering
+fix: resolve memory leak in state manager
+docs: update build guide
+test: add tests for config validation
+refactor: simplify daemon loop logic
 ```
 
-## Troubleshooting
+### Code Style
 
-### Build Errors
+- **Go**: `gofmt`, handle all errors, follow the patterns in [Conventions](../agents/conventions.md)
+- **Frontend**: Svelte + Tailwind, formatted with Prettier
 
-**Frontend not found:**
-- Make sure frontend is built before Go build
-- Check `src/internal/frontend/dist/` exists
+### Reporting Bugs
 
-**Import errors:**
-- Run `go mod download`
-- Run `go mod tidy`
-
-### Runtime Errors
-
-**Port already in use:**
-- Change port: `PORT=:8092 ./autoanimedownloader-daemon`
-- Or stop existing daemon
-
-**Permission errors:**
-- Check file permissions
-- Check directory permissions
-
-## Resources
-
-- [Go Documentation](https://golang.org/doc/)
-- [Svelte Documentation](https://svelte.dev/docs)
-- [Tailwind CSS Documentation](https://tailwindcss.com/docs)
-- [Swagger/OpenAPI](https://swagger.io/specification/)
+Include: steps to reproduce, expected vs. actual behavior, relevant log lines (`autoanimedownloader logs` or `~/.autoAnimeDownloader/daemon.log`), and your OS/version.
 
 ## See Also
 
-- [Contributing Guide](contributing.md) - How to contribute
-- [Build Guide](build.md) - Building from source
-- [CLI Guide](cli-guide.md) - CLI reference
-- [WebUI Guide](webui-guide.md) - WebUI reference
-
+- [Build Guide](build.md) — building release binaries
+- [CLI Guide](cli.md) — CLI reference
+- [WebUI Guide](webui.md) — web interface reference
