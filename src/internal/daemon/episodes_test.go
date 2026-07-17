@@ -442,3 +442,51 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 		t.Errorf("idsToDelete deve estar vazio, obteve %v", result.idsToDelete)
 	}
 }
+
+// TestDedupeAnimesByMedia verifica que o mesmo anime linkado em contas diferentes é
+// colapsado numa única entrada, mantendo a de MENOR progresso (mais conservadora para
+// não deletar episódios que alguma conta ainda não assistiu).
+func TestDedupeAnimesByMedia(t *testing.T) {
+	list := []anilist.MediaList{
+		{Id: 1, Progress: 10, Media: anilist.Media{Id: 500}}, // conta A, à frente
+		{Id: 2, Progress: 3, Media: anilist.Media{Id: 500}},  // conta B, atrás (mesmo anime)
+		{Id: 3, Progress: 7, Media: anilist.Media{Id: 999}},  // outro anime, só conta A
+	}
+
+	got := dedupeAnimesByMedia(list)
+
+	if len(got) != 2 {
+		t.Fatalf("esperava 2 animes após dedup, obteve %d", len(got))
+	}
+
+	var media500 *anilist.MediaList
+	for i := range got {
+		if got[i].Media.Id == 500 {
+			media500 = &got[i]
+		}
+	}
+	if media500 == nil {
+		t.Fatal("anime media 500 sumiu do resultado")
+	}
+	if media500.Progress != 3 {
+		t.Errorf("esperava progresso 3 (menor entre contas), obteve %d", media500.Progress)
+	}
+	if media500.Id != 2 {
+		t.Errorf("esperava manter entrada da conta B (Id 2), obteve Id %d", media500.Id)
+	}
+}
+
+// TestDedupeAnimesByMedia_NoMediaID garante que entradas sem media id (caso inesperado)
+// são preservadas em vez de colapsadas todas no id 0.
+func TestDedupeAnimesByMedia_NoMediaID(t *testing.T) {
+	list := []anilist.MediaList{
+		{Id: 1, Progress: 5},
+		{Id: 2, Progress: 8},
+	}
+
+	got := dedupeAnimesByMedia(list)
+
+	if len(got) != 2 {
+		t.Errorf("entradas sem media id não devem ser colapsadas, esperava 2, obteve %d", len(got))
+	}
+}

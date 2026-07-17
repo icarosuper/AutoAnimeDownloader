@@ -309,10 +309,41 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 		return nil, fmt.Errorf("failed to search animes on Anilist: %w", lastErr)
 	}
 
+	merged.Data.Page.MediaList = dedupeAnimesByMedia(merged.Data.Page.MediaList)
+
 	logger.Logger.Info().
 		Strs("usernames", configs.AnilistUsernames).
 		Int("animes_found", len(merged.Data.Page.MediaList)).
 		Msg("Successfully fetched animes from Anilist")
 
 	return merged, nil
+}
+
+// dedupeAnimesByMedia collapses the same anime appearing across multiple linked
+// accounts into a single entry, keeping the one with the LOWEST progress. Every
+// download/keep/delete decision is keyed by airing-schedule episode ID (shared
+// across accounts), so duplicate entries with divergent progress would otherwise
+// fight — the account further ahead deleting episodes another account hasn't
+// watched yet, causing download/delete churn. Lowest progress is the conservative
+// choice: an episode is only "watched" once all accounts have seen it.
+// ponytail: keeps the lowest-progress entry wholesale (its status/customLists win
+// too); split status/customLists per-account only if that edge actually bites.
+func dedupeAnimesByMedia(list []anilist.MediaList) []anilist.MediaList {
+	byMedia := make(map[int]int, len(list)) // media id -> index in result
+	result := make([]anilist.MediaList, 0, len(list))
+	for _, anime := range list {
+		if anime.Media.Id == 0 { // no media id (shouldn't happen) — keep as-is
+			result = append(result, anime)
+			continue
+		}
+		if idx, ok := byMedia[anime.Media.Id]; ok {
+			if anime.Progress < result[idx].Progress {
+				result[idx] = anime
+			}
+			continue
+		}
+		byMedia[anime.Media.Id] = len(result)
+		result = append(result, anime)
+	}
+	return result
 }

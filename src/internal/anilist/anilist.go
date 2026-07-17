@@ -85,6 +85,7 @@ type CoverImage struct {
 }
 
 type Media struct {
+	Id             int            `json:"id"`
 	Status         MediaStatus    `json:"status"`
 	Format         MediaFormat    `json:"format"`
 	Title          Title          `json:"title"`
@@ -278,6 +279,7 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 					progress
 					customLists
 					media {
+						id
 						format
 						status
 						episodes
