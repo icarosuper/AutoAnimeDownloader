@@ -188,7 +188,8 @@ func TestHandleAnimes(t *testing.T) {
 			configs: &files.Config{
 				AnilistUsernames: []string{"testuser"},
 				ExcludedLists:    []string{"Blacklist"},
-				DownloadStatuses: []string{"CURRENT", "REPEATING"},
+				DownloadStatuses:      []string{"CURRENT", "REPEATING"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
 			},
 		}
 		serverBlacklist := &Server{State: state, FileManager: mockFMBlacklist}
@@ -248,9 +249,10 @@ func TestHandleAnimes(t *testing.T) {
 		mockFMRL := &mockFileManager{
 			episodes: []files.EpisodeStruct{},
 			configs: &files.Config{
-				AnilistUsernames: []string{"rateLimitUser"},
-				ExcludedLists:    []string{"Blacklist"},
-				DownloadStatuses: []string{"CURRENT"},
+				AnilistUsernames:      []string{"rateLimitUser"},
+				ExcludedLists:         []string{"Blacklist"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
 			},
 		}
 		serverRL := &Server{State: state, FileManager: mockFMRL}
@@ -296,7 +298,8 @@ func TestHandleAnimes(t *testing.T) {
 			configs: &files.Config{
 				AnilistUsernames: []string{"testuser"},
 				ExcludedLists:    []string{"Blacklist"},
-				DownloadStatuses: []string{"CURRENT", "REPEATING"},
+				DownloadStatuses:      []string{"CURRENT", "REPEATING"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
 			},
 		}
 		serverNormal := &Server{State: state, FileManager: mockFMNormal}
@@ -320,6 +323,136 @@ func TestHandleAnimes(t *testing.T) {
 		animeData := animes[0].(map[string]interface{})
 		if _, exists := animeData["is_blacklisted"]; exists {
 			t.Error("Expected is_blacklisted to be absent for non-blacklisted anime")
+		}
+	})
+
+	t.Run("Downloaded anime whose status fell out of allowed sets stays visible and gets refreshed", func(t *testing.T) {
+		orphanInfoBody := `{"data":{"MediaList":{"id":999,"status":"COMPLETED","progress":10,"customLists":{"Blacklist":false},"media":{"id":500,"episodes":12,"format":"TV","status":"HIATUS","title":{"english":"Old Anime","romaji":"Old Anime"},"coverImage":{"large":"http://cover","medium":""},"airingSchedule":{"nodes":[]}}}}}`
+		emptyListBody := `{"data":{"Page":{"mediaList":[]}}}`
+		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+			body := readBody(req)
+			respBody := emptyListBody
+			if strings.Contains(body, "mediaListId") {
+				respBody = orphanInfoBody
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(respBody))}, nil
+		})()
+
+		mockFMOrphan := &mockFileManager{
+			episodes: []files.EpisodeStruct{
+				{EpisodeID: 1, AnimeID: 999, AnimeName: "Old Anime", AnimeTotalEpisodes: 12, EpisodeName: "Old Anime - Episode 1", DownloadDate: time.Now()},
+			},
+			configs: &files.Config{
+				AnilistUsernames:      []string{"testuser"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+			},
+		}
+		serverOrphan := &Server{State: state, FileManager: mockFMOrphan}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil)
+		w := httptest.NewRecorder()
+		handleAnimes(serverOrphan)(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var response SuccessResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		animes, ok := response.Data.([]interface{})
+		if !ok || len(animes) != 1 {
+			t.Fatalf("expected 1 anime (orphan stays visible), got %v", response.Data)
+		}
+
+		animeData := animes[0].(map[string]interface{})
+		if animeData["anime_id"].(float64) != 999 {
+			t.Errorf("expected anime_id 999, got %v", animeData["anime_id"])
+		}
+		if animeData["cover_image"] != "http://cover" {
+			t.Errorf("expected refreshed cover_image, got %v", animeData["cover_image"])
+		}
+		if animeData["episodes_watched"].(float64) != 10 {
+			t.Errorf("expected refreshed episodes_watched=10, got %v", animeData["episodes_watched"])
+		}
+	})
+
+	t.Run("Orphan refresh failure keeps anime visible without refreshed fields", func(t *testing.T) {
+		emptyListBody := `{"data":{"Page":{"mediaList":[]}}}`
+		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+			body := readBody(req)
+			if strings.Contains(body, "mediaListId") {
+				return &http.Response{StatusCode: http.StatusInternalServerError, Body: io.NopCloser(strings.NewReader("error"))}, nil
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(emptyListBody))}, nil
+		})()
+
+		mockFMOrphanFail := &mockFileManager{
+			episodes: []files.EpisodeStruct{
+				{EpisodeID: 1, AnimeID: 998, AnimeName: "Failing Refresh Anime", AnimeTotalEpisodes: 12, EpisodeName: "Failing Refresh Anime - Episode 1", DownloadDate: time.Now()},
+			},
+			configs: &files.Config{
+				AnilistUsernames:      []string{"testuser"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+			},
+		}
+		serverOrphanFail := &Server{State: state, FileManager: mockFMOrphanFail}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil)
+		w := httptest.NewRecorder()
+		handleAnimes(serverOrphanFail)(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 even when orphan refresh fails, got %d", w.Code)
+		}
+
+		var response SuccessResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		animes, ok := response.Data.([]interface{})
+		if !ok || len(animes) != 1 {
+			t.Fatalf("expected anime to stay visible despite refresh failure, got %v", response.Data)
+		}
+		animeData := animes[0].(map[string]interface{})
+		if animeData["name"] != "Failing Refresh Anime" {
+			t.Errorf("expected name from episodes.json to stand, got %v", animeData["name"])
+		}
+	})
+
+	t.Run("Anime with no downloaded episodes and disallowed media status is not merged in", func(t *testing.T) {
+		anilistBody := `{"data":{"Page":{"mediaList":[{"id":55,"status":"CURRENT","progress":0,"customLists":{},"media":{"format":"TV","status":"CANCELLED","episodes":12,"title":{"english":"Cancelled Anime","romaji":"Cancelled Anime"},"airingSchedule":{"nodes":[]}}}]}}}`
+		defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(anilistBody))}, nil
+		})()
+
+		mockFMCancelled := &mockFileManager{
+			episodes: []files.EpisodeStruct{},
+			configs: &files.Config{
+				AnilistUsernames:      []string{"testuser"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+			},
+		}
+		serverCancelled := &Server{State: state, FileManager: mockFMCancelled}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil)
+		w := httptest.NewRecorder()
+		handleAnimes(serverCancelled)(w, req)
+
+		var response SuccessResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		animes, ok := response.Data.([]interface{})
+		if !ok {
+			t.Fatal("expected data to be an array")
+		}
+		if len(animes) != 0 {
+			t.Fatalf("expected CANCELLED anime with no downloads to be filtered out, got %d", len(animes))
 		}
 	})
 }

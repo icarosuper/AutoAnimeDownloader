@@ -144,6 +144,10 @@ definitions:
         type: array
       delete_watched_episodes:
         type: boolean
+      download_media_statuses:
+        items:
+          type: string
+        type: array
       download_statuses:
         items:
           type: string

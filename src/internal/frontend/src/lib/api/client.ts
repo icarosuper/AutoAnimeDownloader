@@ -110,6 +110,7 @@ export interface Config {
   excluded_lists: string[]
   rename_files_for_jellyfin: boolean
   download_statuses: string[]
+  download_media_statuses: string[]
   delete_statuses: string[]
   notifications: {
     webhooks: WebhookPreset[]
