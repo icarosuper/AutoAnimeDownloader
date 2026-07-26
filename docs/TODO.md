@@ -2,11 +2,7 @@
 	- Animes completos
 		- Ajustar download em batch
 		- Contar episódios
-	- Caso do 'Classroom of the Elite'
-		- Parece que não incluiu a season na pesquisa
-		- Talvez padronizar a pesquisa pra melhor compatibilidade com nyaa
-		- Ver se tem um título com "Season X" no Anilist 
-		- Pesquisar com S0X
+- Renomear arquivos de batch
 - Nova tela de prioridades dos torrents
 	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
 	- Usuário por reordenar, adicionar e excluir itens

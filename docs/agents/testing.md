@@ -8,15 +8,21 @@ go test -v ./src/tests/unit/                     # verbose unit tests
 go test -v -run TestName ./src/tests/unit/       # single test
 
 # integration (requires Docker)
+make test-backend-integration
+# or directly:
 docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit
 ```
 
 **Always run `go test ./...` after any code change.**
 
+`go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions.md). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
+
 ## Test Structure
 
 - `src/tests/unit/` — unit tests (`package unit`)
-- `src/tests/integration/` — Docker-based end-to-end HTTP tests
+- `src/tests/integration/` — Docker-based end-to-end HTTP tests. Gated on `DAEMON_URL`; the
+  save/library paths it writes into the daemon's config come from `TEST_SAVE_PATH` /
+  `TEST_COMPLETED_PATH` (default `~/aad-test/downloads` and `~/aad-test/library`)
 - `src/tests/mocks/` — standalone mock HTTP servers (Docker images, **not** Go test imports)
 - `src/internal/api/*_test.go` — handler-level tests
 
@@ -45,21 +51,30 @@ defer restore()
 
 Same pattern for Nyaa: `nyaa.MockNyaaHttpGet(fn) (restore func())`.
 
-### 2. Interface Injection (qBittorrent / Torrents)
+### 2. Interface Injection (Torrent backend)
 
-`torrents.HTTPClient` interface — tests pass a `MockHTTPClient` with URL-keyed responses:
+Torrent logic sits behind the `torrents.TorrentBackend` interface. Production uses the rain-backed `SessionManager`/`Session`; tests use the in-memory `torrents.FakeBackend` instead of a mock qBittorrent HTTP server:
 
 ```go
-type HTTPClient interface {
-    Get(url string) (*http.Response, error)
-    PostForm(url string, data url.Values) (*http.Response, error)
+type TorrentBackend interface {
+    Ensure(savePath string) (bool, error)
+    Add(magnet string) (string, error)
+    List() []TorrentInfo
+    Get(hash string) (TorrentInfo, bool)
+    Remove(hash string, keepData bool) error
+    SetCallbacks(onComplete func(hash string), onFailed func(hash string, err error))
+    Close() error
 }
 
 // Test:
-mock := NewMockHTTPClient()
-mock.AddResponse("/api/v2/torrents/info", 200, torrentsJSON)
-service := torrents.NewTorrentService(mock, "http://localhost:8080", "/save", "/completed")
+backend := torrents.NewFakeBackend()
+backend.AddCompleted("abcd...hash", "/save/abcd")   // seed a completed torrent
+// or drive callbacks:
+backend.CompleteTorrent("abcd...hash", "/save/abcd") // fires onComplete
+backend.FailTorrent("abcd...hash", err)              // fires onFailed
 ```
+
+Library hardlinking is likewise tested through the `files.Librarian` interface (`NewLibrarian`) backed by a `MockFileSystem`, so `Organize`/`ProbePaths` can be exercised without touching a real disk.
 
 ### 3. In-Memory FileSystem
 
@@ -120,9 +135,8 @@ assert(strings.Contains(buf.String(), "expected message"))
 |------|-------------|-------------|
 | `anilist/mock_server.go` | 8080 | `SCENARIO=empty` → empty media list |
 | `nyaa/mock_server.go` | 8081 | `SCENARIO=empty` → no results |
-| `qbittorrent/mock_server.go` | 8082 | In-memory torrent store |
 
-`docker-compose.test.yml` wires daemon env vars (`ANILIST_API_URL`, `NYAA_URL`, `QBITTORRENT_URL`) to point at these mocks.
+There is no qBittorrent mock server anymore — `src/tests/mocks/` contains the Anilist and Nyaa mocks only (the torrent client is embedded). `docker-compose.test.yml` wires daemon env vars `ANILIST_API_URL` and `NYAA_URL` to point at these mocks.
 
 ## Frontend Tests
 

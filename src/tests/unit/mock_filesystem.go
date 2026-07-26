@@ -252,6 +252,21 @@ func (m *MockFileSystem) Rename(oldpath, newpath string) error {
 	return nil
 }
 
+func (m *MockFileSystem) Link(oldname, newname string) error {
+	if m.writeError != nil {
+		return m.writeError
+	}
+
+	content, exists := m.files[oldname]
+	if !exists {
+		return &fs.PathError{Op: "link", Path: oldname, Err: fs.ErrNotExist}
+	}
+
+	// Hardlink: newname points at the same bytes; oldname stays.
+	m.files[newname] = content
+	return nil
+}
+
 func (m *MockFileSystem) Mkdir(dirname string, perm fs.FileMode) error {
 	if m.writeError != nil {
 		return m.writeError

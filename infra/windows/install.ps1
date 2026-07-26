@@ -46,7 +46,7 @@ if (-not (Test-Path $daemonExe)) {
 
 $serviceName = "AutoAnimeDownloader"
 $serviceDisplayName = "Auto Anime Downloader"
-$serviceDescription = "Automatically downloads anime from Anilist via qBittorrent"
+$serviceDescription = "Automatically downloads anime from Anilist (embedded BitTorrent client)"
 
 # Check if service already exists
 $existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue

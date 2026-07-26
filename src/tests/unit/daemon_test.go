@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -39,7 +40,7 @@ func TestAnimeVerification_ErrorHandling_ConfigLoadError(t *testing.T) {
 	state.SetNotifier(notifier)
 
 	ctx := context.Background()
-	daemon.AnimeVerification(ctx, fileManager, state, nil)
+	daemon.AnimeVerification(ctx, fileManager, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 
 	// Verify error was set in state
 	if !state.HasLastCheckError() {
@@ -89,7 +90,7 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 	state.SetNotifier(notifier)
 
 	ctx := context.Background()
-	daemon.AnimeVerification(ctx, fileManager, state, nil)
+	daemon.AnimeVerification(ctx, fileManager, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 
 	// Verify error was set in state
 	if !state.HasLastCheckError() {
@@ -100,15 +101,15 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error to be set")
 	}
-	// The code may fail earlier when trying to connect to qBittorrent (which is expected in tests)
-	// If it reaches LoadSavedEpisodes, it should contain our error message
+	// An external fetch (Anilist) may fail first in unit tests (no network); the parallel
+	// Anilist error is checked before the episodes error, so accept it as an expected path.
 	errMsg := err.Error()
-	if strings.Contains(errMsg, "qBittorrent") || strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "connect") || strings.Contains(errMsg, "connectex") {
-		// qBittorrent connection failed first, which is expected in unit tests
-		// This is acceptable since we're testing the error handling path
-		t.Logf("qBittorrent connection failed first (expected in unit tests): %s", errMsg)
-		// If qBittorrent failed first, the log won't contain "Failed to load saved episodes"
-		// because the function returns early
+	if strings.Contains(errMsg, "Anilist") || strings.Contains(errMsg, "anilist") ||
+		strings.Contains(errMsg, "connection refused") || strings.Contains(errMsg, "connect") ||
+		strings.Contains(errMsg, "connectex") || strings.Contains(errMsg, "no such host") ||
+		strings.Contains(errMsg, "lookup") || strings.Contains(errMsg, "timeout") {
+		// An external service failed first, which is expected in unit tests without network.
+		t.Logf("external fetch failed first (expected in unit tests): %s", errMsg)
 	} else {
 		// If we got past qBittorrent, the error should be about episodes
 		if !strings.Contains(errMsg, "episodes load error") {
@@ -167,7 +168,7 @@ func TestAnimeVerification_ContextCancellation(t *testing.T) {
 	// The function will likely fail earlier due to missing services,
 	// but we can verify that if cancellation happens, error is cleared.
 	// For a more complete test, we'd need to mock the external services.
-	daemon.AnimeVerification(ctx, fileManager, state, nil)
+	daemon.AnimeVerification(ctx, fileManager, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 
 	// Note: Since we can't easily mock external services (anilist, qbittorrent),
 	// the cancellation might not be reached. This test verifies that:
@@ -200,7 +201,7 @@ func TestAnimeVerification_LogsGenerated(t *testing.T) {
 	state := daemon.NewState()
 	ctx := context.Background()
 
-	daemon.AnimeVerification(ctx, fileManager, state, nil)
+	daemon.AnimeVerification(ctx, fileManager, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 
 	// Verify that logs were generated (error log should be present)
 	logOutput := logBuf.String()
@@ -232,7 +233,7 @@ func TestAnimeVerification_StatusResetOnError(t *testing.T) {
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
 
 	ctx := context.Background()
-	daemon.AnimeVerification(ctx, fileManager, state, nil)
+	daemon.AnimeVerification(ctx, fileManager, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 
 	// Verify error was set
 	if !state.HasLastCheckError() {
@@ -262,6 +263,8 @@ func TestStartLoop_StatusTransitions(t *testing.T) {
 		FileManager: fileManager,
 		Interval:    interval,
 		State:       state,
+		Backend:     torrents.NewFakeBackend(),
+		Librarian:   files.NewLibrarian(files.NewOSFileSystem()),
 	})
 
 	// Wait a bit for the loop to start and set status to running
@@ -330,6 +333,8 @@ func TestStartLoop_StatusCheckingDuringVerification(t *testing.T) {
 		FileManager: fileManager,
 		Interval:    interval,
 		State:       state,
+		Backend:     torrents.NewFakeBackend(),
+		Librarian:   files.NewLibrarian(files.NewOSFileSystem()),
 	})
 
 	// Wait for loop to start and set initial status
@@ -468,6 +473,10 @@ func (m *mockFileSystemForDaemon) Rename(oldpath, newpath string) error {
 	return nil
 }
 
+func (m *mockFileSystemForDaemon) Link(oldname, newname string) error {
+	return nil
+}
+
 func (m *mockFileSystemForDaemon) Mkdir(dirname string, perm fs.FileMode) error {
 	return nil
 }
@@ -488,9 +497,10 @@ func (m *mockFileInfoForDaemon) Sys() interface{}   { return nil }
 func createValidConfigJSON() []byte {
 	config := &files.Config{
 		SavePath:              "/test/save",
+		CompletedAnimePath:    "/test/completed",
 		AnilistUsername:       "testuser",
+		AnilistUsernames:      []string{"testuser"},
 		CheckInterval:         10,
-		QBittorrentUrl:        "http://127.0.0.1:8080",
 		MaxEpisodesPerAnime:   12,
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: false,

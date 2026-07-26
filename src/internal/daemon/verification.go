@@ -21,7 +21,7 @@ type animeProcessResult struct {
 // maxConcurrentAnimes limits simultaneous Nyaa HTTP searches to avoid rate limiting.
 const maxConcurrentAnimes = 5
 
-func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State, jobQueue *JobQueue) {
+func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State, jobQueue *JobQueue, backend torrents.TorrentBackend, librarian files.Librarian) {
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
@@ -39,34 +39,40 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			}
 		}()
 
-		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username, save path or qBittorrent URL)"))
+		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username, save path or completed anime path)"))
 		return
 	}
 
-	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
-	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
+	if backend == nil {
+		logger.Logger.Error().Msg("Torrent backend not initialized; skipping verification")
+		state.SetLastCheckError(fmt.Errorf("torrent backend not initialized"))
+		return
+	}
+
+	// Ensure the embedded torrent session exists for the current save path (created lazily,
+	// recreated if the save path changed).
+	if _, err := backend.Ensure(configs.SavePath); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to initialize embedded torrent session")
+		state.SetLastCheckError(err)
+		return
+	}
+
+	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
+	downloadedTorrents := backend.List()
 
 	// Phase 1: fetch all independent data sources in parallel.
 	var (
-		downloadedTorrents []torrents.Torrent
 		anilistResponse    *anilist.AniListResponse
 		savedEpisodes      []files.EpisodeStruct
 		blockedEpisodes    []int
 		animeSettingsMap   map[int]files.AnimeSettings
 		deleteListResponse *anilist.AniListResponse
 
-		errTorrents error
 		errAnilist  error
 		errEpisodes error
 	)
 
 	var fetchWg sync.WaitGroup
-
-	fetchWg.Add(1)
-	go func() {
-		defer fetchWg.Done()
-		downloadedTorrents, errTorrents = fetchDownloadedTorrents(torrentsService)
-	}()
 
 	fetchWg.Add(1)
 	go func() {
@@ -131,10 +137,6 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	fetchWg.Wait()
 
-	if errTorrents != nil {
-		state.SetLastCheckError(errTorrents)
-		return
-	}
 	if errAnilist != nil {
 		state.SetLastCheckError(errAnilist)
 		return
@@ -143,6 +145,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		state.SetLastCheckError(errEpisodes)
 		return
 	}
+
+	// Reconciliation (durable safety net): enqueue JobOrganize for any completed torrent
+	// whose episodes are not yet in the library. Covers completions missed while the daemon
+	// was down and a save-path change. JobOrganize is idempotent, so re-runs are no-ops.
+	reconcileLibrary(downloadedTorrents, savedEpisodes, jobQueue)
 
 	blockedMap := make(map[int]bool, len(blockedEpisodes))
 	for _, id := range blockedEpisodes {
@@ -198,7 +205,7 @@ outer:
 			default:
 			}
 
-			resultCh <- processAnimeEpisodes(configs, torrentsService, a, downloadedTorrents, savedEpisodes, blockedMap, q, jobQueue, defaultNyaaSearcher())
+			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, blockedMap, q, jobQueue, defaultNyaaSearcher())
 		}(anime, customQuery)
 	}
 
@@ -223,9 +230,9 @@ outer:
 	}
 
 	// Phase 3: sequential cleanup (file writes must not overlap).
-	deleteEpisodesByStatus(deleteListResponse, fileManager, torrentsService, savedEpisodes)
+	deleteEpisodesByStatus(deleteListResponse, fileManager, backend, librarian, savedEpisodes)
 
-	handleSavedEpisodes(fileManager, configs, torrentsService, handleEpisodesData{
+	handleSavedEpisodes(fileManager, configs, backend, librarian, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
 		idsToDelete:     idsToDelete,
 		checkedEpisodes: checkedEpisodes,
@@ -253,15 +260,38 @@ outer:
 		Msg("Verification completed")
 }
 
-func fetchDownloadedTorrents(torrentsService *torrents.TorrentService) ([]torrents.Torrent, error) {
-	downloadedTorrents, err := torrentsService.GetDownloadedTorrents()
-	if err != nil {
-		logger.Logger.Error().Err(err).Stack().Msg("Failed to connect to qBittorrent")
-		return nil, fmt.Errorf("failed to connect to qBittorrent: %w", err)
+// reconcileLibrary enqueues JobOrganize for completed torrents whose saved episodes have
+// not yet been hardlinked into the library (empty LibraryPaths). Enqueue is deduped, so
+// repeated passes are cheap.
+func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.EpisodeStruct, jobQueue *JobQueue) {
+	if jobQueue == nil {
+		return
 	}
-
-	logger.Logger.Debug().Int("count", len(downloadedTorrents)).Msg("Fetched downloaded torrents")
-	return downloadedTorrents, nil
+	byHash := make(map[string][]files.EpisodeStruct)
+	for _, ep := range savedEpisodes {
+		if ep.EpisodeHash != "" {
+			byHash[ep.EpisodeHash] = append(byHash[ep.EpisodeHash], ep)
+		}
+	}
+	for _, t := range downloaded {
+		if !t.Completed {
+			continue
+		}
+		eps := byHash[t.Hash]
+		if len(eps) == 0 {
+			continue // orphan torrent with no episode record; nothing to organize
+		}
+		needs := false
+		for _, ep := range eps {
+			if len(ep.LibraryPaths) == 0 {
+				needs = true
+				break
+			}
+		}
+		if needs {
+			jobQueue.EnqueueOrganize(t.Hash)
+		}
+	}
 }
 
 func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {

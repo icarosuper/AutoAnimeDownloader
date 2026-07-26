@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/frontend"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
 	"io"
 	"io/fs"
@@ -23,6 +24,7 @@ type FileManagerInterface interface {
 	SaveConfigs(config *files.Config) error
 	LoadSavedEpisodes() ([]files.EpisodeStruct, error)
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
+	UpsertEpisodes(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
 	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
 	LoadBlockedEpisodes() ([]int, error)
@@ -41,6 +43,8 @@ type Server struct {
 	StartLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl
 	WSManager     *WebSocketManager
 	JobQueue      *daemon.JobQueue
+	Torrents      torrents.TorrentBackend
+	Librarian     files.Librarian
 
 	mu                 sync.Mutex
 	currentLoopControl *daemon.LoopControl
@@ -210,6 +214,8 @@ func (s *Server) StartDaemonLoop() error {
 		Interval:    interval,
 		State:       s.State,
 		JobQueue:    s.JobQueue,
+		Backend:     s.Torrents,
+		Librarian:   s.Librarian,
 	})
 	s.currentLoopControl = loopControl
 	s.mu.Unlock()

@@ -20,6 +20,7 @@ func (m *debugMockFileManager) LoadConfigs() (*files.Config, error)             
 func (m *debugMockFileManager) SaveConfigs(config *files.Config) error                  { return nil }
 func (m *debugMockFileManager) LoadSavedEpisodes() ([]files.EpisodeStruct, error)       { return nil, nil }
 func (m *debugMockFileManager) SaveEpisodesToFile(episodes []files.EpisodeStruct) error { return nil }
+func (m *debugMockFileManager) UpsertEpisodes(episodes []files.EpisodeStruct) error     { return nil }
 func (m *debugMockFileManager) DeleteEpisodesFromFile(ids []int) error                  { return nil }
 func (m *debugMockFileManager) DeleteEmptyFolders(a, b string) error                    { return nil }
 func (m *debugMockFileManager) LoadBlockedEpisodes() ([]int, error)                     { return nil, nil }

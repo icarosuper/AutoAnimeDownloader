@@ -57,12 +57,12 @@ type EpisodeDebugResult struct {
 
 // RunAnimeDebug reproduces the real search/match pipeline for a single anime
 // and logs the AniList response, every raw Nyaa row, and which results
-// matched — without touching qBittorrent or episodes.json. No download is
-// attempted. Returns a DebugSummary for the caller to persist alongside the
+// matched — without touching the torrent client or episodes.json. No download
+// is attempted. Returns a DebugSummary for the caller to persist alongside the
 // log trace.
 //
 // ponytail: episodes are always treated as not-yet-downloaded (no
-// episodes.json / qBittorrent check) and excluded-list membership is never
+// episodes.json / torrent-client check) and excluded-list membership is never
 // checked (GetAnimeInfo doesn't return it). Add both if this tool starts
 // producing false positives in practice.
 func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerInterface) (*DebugSummary, error) {

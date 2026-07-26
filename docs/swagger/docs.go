@@ -138,7 +138,7 @@ const docTemplate = `{
         },
         "/animes/{id}/episodes/{episodeId}": {
             "delete": {
-                "description": "Deletes a downloaded episode from qBittorrent and blocks it from being re-downloaded automatically",
+                "description": "Deletes a downloaded episode (library hardlink + torrent) and blocks it from being re-downloaded automatically",
                 "consumes": [
                     "application/json"
                 ],
@@ -1238,9 +1238,6 @@ const docTemplate = `{
                 },
                 "priorities": {
                     "$ref": "#/definitions/nyaa.Priorities"
-                },
-                "qbittorrent_url": {
-                    "type": "string"
                 },
                 "rename_files_for_jellyfin": {
                     "type": "boolean"

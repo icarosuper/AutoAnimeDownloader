@@ -2,7 +2,7 @@
 
 **Automatically downloads your anime from your Anilist watching list.**
 
-Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for matching torrents, and sends them to [qBittorrent](https://www.qbittorrent.org) — all unattended. Includes an embedded Svelte web UI for monitoring and configuration.
+Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for matching torrents, and downloads them with a built-in BitTorrent client — all unattended, from a single self-contained binary (no external torrent client to install or configure). Includes an embedded Svelte web UI for monitoring and configuration.
 
 [![Build Status](https://github.com/icarosuper/AutoAnimeDownloader/workflows/Build/badge.svg)](https://github.com/icarosuper/AutoAnimeDownloader/actions)
 
@@ -26,10 +26,12 @@ Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for ma
 ## Features
 
 - **Automatic Downloads** — monitors your Anilist watching list and downloads new episodes as they air
+- **Embedded BitTorrent client** — downloads and seeds internally (via [rain](https://github.com/cenkalti/rain)); no qBittorrent or other external client required
+- **Jellyfin-ready library** — completed episodes are hardlinked into your library folder (optionally with Jellyfin naming) while the original keeps seeding
 - **Web UI** — modern browser interface for monitoring, configuration, and control
 - **CLI** — command-line interface for scripting and advanced users
 - **Real-time Updates** — WebSocket support for live status in the UI
-- **Self-contained** — frontend embedded in the binary, no separate server needed
+- **Self-contained** — frontend and torrent client embedded in the binary, no separate server needed
 - **Cross-platform** — Linux (amd64/arm64) and Windows
 
 ## Screenshots
@@ -40,17 +42,14 @@ Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for ma
 
 ## Requirements
 
-- **qBittorrent** 4.3.0+ with WebUI enabled
 - **Anilist account** (username only, no password needed)
+- A **save path** and a **completed anime path** on the **same filesystem/volume** (completed episodes are hardlinked, which cannot cross volumes)
 
-### Setting up qBittorrent WebUI
+That's it — the BitTorrent client is built in, so there is no qBittorrent (or any other torrent client) to install or configure.
 
-1. Open qBittorrent → **Tools → Options → Web UI**
-2. Enable **Web User Interface (Remote control)**
-3. Set a username and password (or leave blank for local use)
-4. Note the port (default: 8080)
+> **Upgrading from a qBittorrent-based version?** See the [Migration Guide](docs/guides/migration-embedded-torrent.md) — `completed_anime_path` is now required and must share a volume with `save_path`, and in-progress torrents re-download once on first run.
 
-![qBittorrent WebUI tutorial](https://i.imgur.com/vYgUdyy.png)
+> **Ports:** the embedded client listens on a default port range (20000–30000) and finds peers via DHT/PEX. There is no automatic port forwarding (UPnP/NAT-PMP); forwarding a port is optional and only improves inbound connectivity.
 
 ## Installation
 
@@ -106,7 +105,7 @@ Open **http://localhost:8091** in your browser.
 
 - **Status** — daemon status, start/stop control, force episode check
 - **Episodes** — browse downloaded episodes
-- **Config** — Anilist username, qBittorrent URL, paths, intervals
+- **Config** — Anilist username, paths, intervals
 
 ### CLI
 
@@ -124,7 +123,7 @@ See the [CLI Guide](docs/guides/cli.md) for the full reference.
 
 ## Building from Source
 
-**Prerequisites:** Go 1.24+, Node.js 20+, npm, make (Linux)
+**Prerequisites:** Go 1.25+, Node.js 20+, npm, make (Linux)
 
 The frontend must be built before the Go binaries, as it's embedded into the daemon.
 
@@ -152,22 +151,20 @@ Key settings:
 | Setting | Description |
 |---|---|
 | Anilist Username | Your Anilist username |
-| qBittorrent URL | Usually `http://localhost:8080` |
-| Save Path | Where to save in-progress downloads |
-| Completed Anime Path | Where to move finished series |
+| Save Path | Download/seeding working directory |
+| Completed Anime Path | Jellyfin library — required, and must be on the same volume as the Save Path (episodes are hardlinked into it) |
 | Check Interval | How often to check for new episodes (minutes) |
 
 ## Troubleshooting
 
 **Daemon won't start**
 - Check if port 8091 is in use: `ss -tlnp | grep 8091`
-- Verify qBittorrent WebUI is enabled
+- Make sure both the save path and completed anime path are set and on the same volume
 - Check service logs: `systemctl --user status autoanimedownloader`
 
-**Can't connect to qBittorrent**
-- Verify WebUI is enabled in qBittorrent settings
-- Confirm the URL and port in AAD configuration
-- Ensure qBittorrent is running before starting AAD
+**Downloaded but nothing shows up in the library**
+- The save path and completed anime path must be on the **same filesystem/volume** — completed episodes are hardlinked, which cannot cross volumes
+- Check the logs for `Organize:` messages: `autoanimedownloader logs --search Organize`
 
 **Anime not found on Nyaa**
 - The anime title from Anilist may not match Nyaa's naming — set a custom search title in the anime config
@@ -194,6 +191,6 @@ Licensed under the [GNU General Public License v3.0](https://www.gnu.org/license
 
 - Backend: [Go](https://golang.org/)
 - Frontend: [Svelte](https://svelte.dev/)
-- Downloads: [qBittorrent](https://www.qbittorrent.org/)
+- BitTorrent client: [rain](https://github.com/cenkalti/rain)
 - Watch list: [Anilist](https://anilist.co/)
 - Torrents: [Nyaa](https://nyaa.si/)

@@ -4,7 +4,7 @@ How to build AutoAnimeDownloader from source.
 
 ## Prerequisites
 
-- **Go** 1.24+
+- **Go** 1.25+
 - **Bun** (frontend package manager/build tool)
 - **Docker** — only needed for the Makefile's cross-platform builds
 - **make** (Linux/macOS/WSL)

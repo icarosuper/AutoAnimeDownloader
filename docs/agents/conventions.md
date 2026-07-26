@@ -20,7 +20,7 @@ return fmt.Errorf("episode %d not found for anime %d", episodeId, animeId)
 Logging errors (zerolog chain):
 
 ```go
-logger.Logger.Error().Err(err).Msg("Failed to connect to qBittorrent")
+logger.Logger.Error().Err(err).Msg("Failed to add torrent")
 logger.Logger.Error().Err(err).Stack().Msg("Critical failure")  // .Stack() for serious errors
 ```
 
@@ -111,7 +111,7 @@ import (
 | API endpoint tests | `endpoint_<area>_test.go` | `endpoint_config_test.go` |
 | Handler functions | `handle` + resource/action | `handleConfig`, `handleDownloadEpisode` |
 | JSON tags | snake_case | `json:"save_path"` |
-| Go types | PascalCase | `EpisodeStruct`, `TorrentService` |
+| Go types | PascalCase | `EpisodeStruct`, `SessionManager` |
 
 ## Dual FileManagerInterface
 

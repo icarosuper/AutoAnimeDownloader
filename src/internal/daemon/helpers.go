@@ -18,6 +18,7 @@ type FileManagerInterface interface {
 	SaveConfigs(config *files.Config) error
 	LoadSavedEpisodes() ([]files.EpisodeStruct, error)
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
+	UpsertEpisodes(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
 	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
 	LoadBlockedEpisodes() ([]int, error)
@@ -40,7 +41,7 @@ func getWebUiURL() string {
 }
 
 func isConfigComplete(config *files.Config) bool {
-	return len(config.AnilistUsernames) > 0 && config.SavePath != "" && config.QBittorrentUrl != ""
+	return len(config.AnilistUsernames) > 0 && config.SavePath != "" && config.CompletedAnimePath != ""
 }
 
 func openBrowserToConfig(webUIURL string) error {
@@ -67,14 +68,7 @@ func openBrowserToConfig(webUIURL string) error {
 	return nil
 }
 
-func getQBittorrentURL(configURL string) string {
-	if envURL := os.Getenv("QBITTORRENT_URL"); envURL != "" {
-		return envURL
-	}
-	return configURL
-}
-
-func buildTorrentsHashSet(t []torrents.Torrent) map[string]bool {
+func buildTorrentsHashSet(t []torrents.TorrentInfo) map[string]bool {
 	m := make(map[string]bool, len(t))
 	for _, torrent := range t {
 		if torrent.Hash != "" {
@@ -84,9 +78,9 @@ func buildTorrentsHashSet(t []torrents.Torrent) map[string]bool {
 	return m
 }
 
-// episodeInTorrents reports whether a saved episode's torrent is still present in qBittorrent.
-// Name-based checks are unreliable when qBittorrent retains the original torrent name (e.g. for
-// batch torrents added before the daemon ran). Hash comparison is always definitive.
+// episodeInTorrents reports whether a saved episode's torrent is still present in the
+// embedded torrent client. The join is always by infohash (never by name), which is
+// definitive even for batch torrents whose display name doesn't match the anime title.
 func episodeInTorrents(savedHash string, torrentsHashSet map[string]bool) bool {
 	return savedHash != "" && torrentsHashSet[savedHash]
 }

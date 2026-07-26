@@ -12,7 +12,6 @@ ANILIST_USERNAME="${ANILIST_USERNAME:-}"
 SAVE_PATH="${SAVE_PATH:-/app/downloads}"
 COMPLETED_ANIME_PATH="${COMPLETED_ANIME_PATH:-/app/downloads/completed}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-10}"
-QBITTORRENT_URL="${QBITTORRENT_URL:-http://qbittorrent:8080}"
 MAX_EPISODES_PER_ANIME="${MAX_EPISODES_PER_ANIME:-12}"
 EPISODE_RETRY_LIMIT="${EPISODE_RETRY_LIMIT:-5}"
 DELETE_WATCHED_EPISODES="${DELETE_WATCHED_EPISODES:-true}"
@@ -33,7 +32,6 @@ if [ ! -f "$CONFIG_FILE" ] || [ -n "$FORCE_CONFIG_UPDATE" ]; then
   "completed_anime_path": "$COMPLETED_ANIME_PATH",
   "anilist_username": "$ANILIST_USERNAME",
   "check_interval": $CHECK_INTERVAL,
-  "qbittorrent_url": "$QBITTORRENT_URL",
   "max_episodes_per_anime": $MAX_EPISODES_PER_ANIME,
   "episode_retry_limit": $EPISODE_RETRY_LIMIT,
   "delete_watched_episodes": $DELETE_WATCHED_EPISODES_JSON,

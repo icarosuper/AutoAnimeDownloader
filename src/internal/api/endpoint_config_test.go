@@ -5,10 +5,20 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+// stubLibrarian is a files.Librarian for testing config validation (ProbePaths behavior).
+type stubLibrarian struct {
+	probeErr error
+}
+
+func (s *stubLibrarian) Organize(files.OrganizeRequest) ([]string, error) { return nil, nil }
+func (s *stubLibrarian) RemoveFromLibrary(string) error                   { return nil }
+func (s *stubLibrarian) ProbePaths(savePath, completedPath string) error  { return s.probeErr }
 
 type mockFileManager struct {
 	configs           *files.Config
@@ -31,7 +41,6 @@ func (m *mockFileManager) LoadConfigs() (*files.Config, error) {
 			SavePath:              "/tmp/test",
 			CompletedAnimePath:    "/tmp/completed",
 			CheckInterval:         10,
-			QBittorrentUrl:        "http://localhost:8080",
 			MaxEpisodesPerAnime:   12,
 			EpisodeRetryLimit:     5,
 			DeleteWatchedEpisodes: true,
@@ -59,6 +68,14 @@ func (m *mockFileManager) LoadSavedEpisodes() ([]files.EpisodeStruct, error) {
 }
 
 func (m *mockFileManager) SaveEpisodesToFile(episodes []files.EpisodeStruct) error {
+	if m.saveEpisodesErr != nil {
+		return m.saveEpisodesErr
+	}
+	m.episodes = episodes
+	return nil
+}
+
+func (m *mockFileManager) UpsertEpisodes(episodes []files.EpisodeStruct) error {
 	if m.saveEpisodesErr != nil {
 		return m.saveEpisodesErr
 	}
@@ -191,7 +208,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 			SavePath:              "/tmp/newpath",
 			CompletedAnimePath:    "/tmp/newcompleted",
 			CheckInterval:         15,
-			QBittorrentUrl:        "http://localhost:8080",
 			MaxEpisodesPerAnime:   20,
 			EpisodeRetryLimit:     3,
 			DeleteWatchedEpisodes: false,
@@ -222,7 +238,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 	t.Run("PUT with missing anilist_username returns 400", func(t *testing.T) {
 		config := files.Config{
 			SavePath:            "/tmp/test",
-			QBittorrentUrl:      "http://localhost:8080",
 			CheckInterval:       10,
 			MaxEpisodesPerAnime: 12,
 		}
@@ -256,7 +271,7 @@ func TestHandleUpdateConfig(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:    []string{"testuser"},
 			SavePath:            "/tmp/test",
-			QBittorrentUrl:      "http://localhost:8080",
+			CompletedAnimePath:  "/tmp/completed",
 			CheckInterval:       0,
 			MaxEpisodesPerAnime: 12,
 		}
@@ -267,6 +282,54 @@ func TestHandleUpdateConfig(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		handler(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
+		}
+	})
+
+	t.Run("PUT with missing completed_anime_path returns 400", func(t *testing.T) {
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			SavePath:            "/tmp/test",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
+		}
+	})
+
+	t.Run("PUT with cross-device paths returns 400", func(t *testing.T) {
+		crossDeviceServer := &Server{
+			State:       state,
+			FileManager: mockFM,
+			Librarian:   &stubLibrarian{probeErr: fmt.Errorf("save path and completed path are on different volumes")},
+		}
+		crossHandler := handleUpdateConfig(crossDeviceServer)
+
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			SavePath:            "/vol1/save",
+			CompletedAnimePath:  "/vol2/completed",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		crossHandler(w, req)
 
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
@@ -311,7 +374,7 @@ func TestHandleConfig(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:      []string{"testuser"},
 			SavePath:              "/tmp/test",
-			QBittorrentUrl:        "http://localhost:8080",
+			CompletedAnimePath:    "/tmp/completed",
 			CheckInterval:         10,
 			MaxEpisodesPerAnime:   12,
 			EpisodeRetryLimit:     5,

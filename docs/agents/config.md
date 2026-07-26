@@ -8,19 +8,18 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 
 | Field | JSON key | Type | Default | Description |
 |-------|----------|------|---------|-------------|
-| `SavePath` | `save_path` | `string` | `""` | Directory where torrents are saved. **Required** for daemon to work |
-| `CompletedAnimePath` | `completed_anime_path` | `string` | `""` | Directory to move finished anime to. Empty = don't move |
+| `SavePath` | `save_path` | `string` | `""` | Download/seeding working directory (rain's DataDir, layout `<save_path>/<torrent-id>/...`). **Required** |
+| `CompletedAnimePath` | `completed_anime_path` | `string` | `""` | The Jellyfin library location. Completed episodes are **hardlinked** here (not moved/copied). **Required**, and **must be on the same filesystem/volume as `save_path`** (hardlinks cannot cross devices) |
 | `AnilistUsernames` | `anilist_usernames` | `[]string` | `[]` | Anilist usernames to sync watch lists from (multi-account supported). **Required** — at least one |
 | `AnilistUsername` | `anilist_username` | `string` | `""` | **Legacy.** Single-username field, `omitempty`. Migrated into `AnilistUsernames` and cleared — by `FileManager.LoadConfigs()` (`filemanager.go`) on every load, and again by `handleUpdateConfig` (`endpoint_config.go`) so a PUT from an old client is migrated before validation. Kept only for backward compatibility |
 | `CheckInterval` | `check_interval` | `int` | `10` | Minutes between verification loops. Must be > 0 |
-| `QBittorrentUrl` | `qbittorrent_url` | `string` | `"http://127.0.0.1:8080"` | qBittorrent WebUI URL. **Required**. Can be overridden by `QBITTORRENT_URL` env var |
 | `MaxEpisodesPerAnime` | `max_episodes_per_anime` | `int` | `12` | Max saved episodes per anime before oldest are deleted. Must be > 0 |
 | `EpisodeRetryLimit` | `episode_retry_limit` | `int` | `5` | Max magnet links to try per episode before giving up. Must be >= 0 |
 | `DeleteWatchedEpisodes` | `delete_watched_episodes` | `bool` | `true` | Whether to auto-delete episodes marked as watched on Anilist |
 | `WatchedEpisodesToKeep` | `watched_episodes_to_keep` | `int` | `0` | Number of watched episodes to keep before deleting. 0 = delete all watched. Must be >= 0 |
 | `ExcludedLists` | `excluded_lists` | `[]string` | `[]` | Names of Anilist custom lists to exclude from downloads |
 | `ExcludedList` | `excluded_list` | `string` | `""` | **Legacy.** Same migration pattern as `AnilistUsername` — merged (comma-split) into `ExcludedLists` by `FileManager.LoadConfigs()` on load |
-| `RenameFilesForJellyfin` | `rename_files_for_jellyfin` | `bool` | `false` | Rename downloaded files to Jellyfin-compatible format |
+| `RenameFilesForJellyfin` | `rename_files_for_jellyfin` | `bool` | `false` | Give the **library hardlink** a Jellyfin-compatible name (`"Anime Name - E05.mkv"`). Applies only to single episodes (not batches/movies) with a known episode number and a single video file. The seeded copy in `save_path` is never renamed (that would break seeding) |
 | `DownloadStatuses` | `download_statuses` | `[]string` | `["CURRENT", "REPEATING"]` | Anilist statuses to download. Valid values: `CURRENT`, `REPEATING`, `COMPLETED`, `PAUSED`, `DROPPED`, `PLANNING` |
 | `DeleteStatuses` | `delete_statuses` | `[]string` | `[]` | Anilist statuses to auto-delete episodes from. Same valid values as above |
 | `Notifications.Webhooks` | `notifications.webhooks` | `[]WebhookPreset` | `[]` | List of webhook presets to fire on events |
@@ -40,19 +39,24 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 
 Items absent from a list rank worst (sent to the end). Edited via the `#/priorities` screen, persisted through the regular `GET/PUT /api/v1/config` endpoints.
 
+## Removed Field
+
+`qbittorrent_url` (and its `QBITTORRENT_URL` env override) was **removed** when the external qBittorrent dependency was replaced by an embedded BitTorrent client. Old configs that still contain the key load fine (JSON ignores unknown fields) and the key disappears on the next save.
+
 ## Required Fields
 
-Daemon checks these in `isConfigComplete()` before starting the verification loop:
+Daemon checks these in `isConfigComplete()` (`daemon/helpers.go`) before starting the verification loop:
 - `anilist_usernames` — at least one
 - `save_path`
-- `qbittorrent_url`
+- `completed_anime_path`
 
 If missing, daemon opens browser to `http://localhost:<port>/#/config?missingConfig=true`.
 
 ## Validation (API)
 
 `handleUpdateConfig()` in `endpoint_config.go` validates:
-- `anilist_usernames` — at least one entry (after legacy-field migration), `save_path`, `qbittorrent_url` — non-empty
+- `anilist_usernames` — at least one entry (after legacy-field migration), `save_path`, `completed_anime_path` — non-empty
+- `save_path` and `completed_anime_path` must be on the same volume — verified with a hardlink probe (`Librarian.ProbePaths`); a cross-device pair is rejected with HTTP 400
 - `check_interval`, `max_episodes_per_anime` — > 0
 - `episode_retry_limit`, `watched_episodes_to_keep` — >= 0
 
@@ -66,6 +70,7 @@ Available in `url`, `headers` values, and `body`:
 | `{{message}}` | Full sentence with anime name and episode number |
 | `{{anime_name}}` | Anime title |
 | `{{episode}}` | Episode number as string |
+| `{{reason}}` | Failure reason (for `download_failed`); empty for other events |
 | `{{quality}}` | Always empty — not tracked at hook point |
 | `{{file_path}}` | Always empty — not tracked |
 | `{{timestamp}}` | Current time formatted as `2006-01-02 15:04` |

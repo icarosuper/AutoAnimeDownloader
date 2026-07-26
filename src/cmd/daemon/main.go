@@ -36,6 +36,7 @@ import (
 	"AutoAnimeDownloader/src/internal/api"
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/tray"
 	"context"
@@ -88,6 +89,24 @@ func getJobsFilePath() (string, error) {
 	}
 
 	return filepath.Join(baseFolder, ".autoAnimeDownloader", "pending_jobs.json"), nil
+}
+
+// getSessionDBPath returns the embedded torrent client's resume database path. It lives in
+// the config folder (not the data dir) so resume data survives a save-path change.
+func getSessionDBPath() (string, error) {
+	var baseFolder string
+
+	if runtime.GOOS == "windows" {
+		baseFolder = os.Getenv("APPDATA")
+	} else {
+		baseFolder = os.Getenv("HOME")
+	}
+
+	if baseFolder == "" {
+		return "", fmt.Errorf("unable to determine home directory")
+	}
+
+	return filepath.Join(baseFolder, ".autoAnimeDownloader", "session.db"), nil
 }
 
 func getPIDFilePath() (string, error) {
@@ -197,7 +216,7 @@ func runDebugAnime(animeId int) {
 }
 
 func main() {
-	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList MediaList ID and exit (no daemon, no qBittorrent needed)")
+	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList MediaList ID and exit (no daemon, no downloads)")
 	flag.Parse()
 
 	if *debugAnimeID > 0 {
@@ -234,7 +253,33 @@ func main() {
 		logger.Logger.Fatal().Err(err).Msg("Failed to determine jobs file path")
 	}
 	jobQueue := daemon.NewJobQueue(fileManager, jobsFilePath)
+
+	// Embedded torrent client (rain) and the library organizer (hardlinks into the
+	// completed-anime folder). The session is created lazily by SessionManager once the
+	// save path is known (config may be incomplete at startup).
+	sessionDBPath, err := getSessionDBPath()
+	if err != nil {
+		logger.Logger.Fatal().Err(err).Msg("Failed to determine session database path")
+	}
+	torrentManager := torrents.NewSessionManager(sessionDBPath)
+	librarian := files.NewLibrarian(files.NewOSFileSystem())
+
+	// Completion events enqueue a durable JobOrganize; failures fire a webhook.
+	torrentManager.SetCallbacks(
+		func(hash string) { jobQueue.EnqueueOrganize(hash) },
+		func(hash string, err error) {
+			logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent stopped with error")
+		},
+	)
+	jobQueue.SetOrchestration(torrentManager, librarian)
 	jobQueue.Start()
+	// Defers run LIFO: register Close first so jobQueue.Stop() (which may run organize jobs
+	// that use the session) runs before the session is closed.
+	defer func() {
+		if err := torrentManager.Close(); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Error closing torrent session")
+		}
+	}()
 	defer jobQueue.Stop()
 
 	state := daemon.NewState()
@@ -244,6 +289,8 @@ func main() {
 		return daemon.StartLoop(p)
 	})
 	apiServer.JobQueue = jobQueue
+	apiServer.Torrents = torrentManager
+	apiServer.Librarian = librarian
 
 	// Set WebSocket manager as state notifier
 	state.SetNotifier(apiServer.WSManager)

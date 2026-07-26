@@ -32,21 +32,6 @@ services:
     networks:
       - test-network
 
-  mock-qbittorrent:
-    image: test-mock-qbittorrent
-    build:
-      context: ../src/tests/mocks/qbittorrent
-      dockerfile: Dockerfile
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    expose:
-      - "8082"
-    environment:
-      - PORT=8082
-    networks:
-      - test-network
-
   daemon:
     image: test-daemon
     build:
@@ -64,11 +49,9 @@ services:
       - PORT=:8091
       - ANILIST_API_URL=http://mock-anilist:8080
       - NYAA_URL=http://mock-nyaa:8081
-      - QBITTORRENT_URL=http://mock-qbittorrent:8082
     depends_on:
       - mock-anilist
       - mock-nyaa
-      - mock-qbittorrent
     networks:
       - test-network
     healthcheck:
@@ -79,7 +62,7 @@ services:
       start_period: 10s
 
   test:
-    image: golang:1.24-alpine
+    image: golang:1.25-alpine
     volumes:
       - ..:/workspace
       - go-mod-cache:/go/pkg/mod
@@ -87,6 +70,11 @@ services:
     environment:
       - CGO_ENABLED=0
       - DAEMON_URL=http://daemon:8091
+      # Paths the daemon container writes to. Both under /app/data (the mounted volume) so
+      # they share a filesystem — the config endpoint rejects cross-volume paths because
+      # completed episodes are hardlinked into the library.
+      - TEST_SAVE_PATH=/app/data/aad-test/downloads
+      - TEST_COMPLETED_PATH=/app/data/aad-test/library
     command: >
       sh -c "
         apk add --no-cache wget &&

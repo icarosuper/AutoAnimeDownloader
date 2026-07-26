@@ -4,7 +4,7 @@ Guidance for Claude Code (claude.ai/code) in this repo.
 
 ## Project Overview
 
-AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anilist (watch list), Nyaa (torrent scraper), qBittorrent. Has embedded Svelte web UI + REST API.
+AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anilist (watch list), Nyaa (torrent scraper), and an embedded BitTorrent client (github.com/cenkalti/rain/v2 — no external qBittorrent). Has embedded Svelte web UI + REST API.
 
 ## Important — After Any Change
 

@@ -101,7 +101,6 @@ export interface Config {
   save_path: string
   completed_anime_path: string
   check_interval: number
-  qbittorrent_url: string
   max_episodes_per_anime: number
   episode_retry_limit: number
   delete_watched_episodes: boolean

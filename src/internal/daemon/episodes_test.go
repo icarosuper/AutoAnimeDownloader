@@ -5,40 +5,22 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
-	"io"
-	"net/http"
-	"net/url"
-	"strings"
 	"testing"
 	"time"
 )
 
-// mockQBitHTTPClient implements torrents.HTTPClient and captures DeleteTorrents and add calls.
-type mockQBitHTTPClient struct {
-	deletedHashes []string
-	addCallCount  int
+// testLibrarian returns a real Librarian; with empty LibraryPaths it performs no FS ops.
+func testLibrarian() files.Librarian {
+	return files.NewLibrarian(files.NewOSFileSystem())
 }
 
-func (m *mockQBitHTTPClient) Get(rawURL string) (*http.Response, error) {
-	return &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(strings.NewReader("[]")),
-	}, nil
-}
-
-func (m *mockQBitHTTPClient) PostForm(rawURL string, data url.Values) (*http.Response, error) {
-	if strings.HasSuffix(rawURL, "/delete") {
-		if hashes := data.Get("hashes"); hashes != "" {
-			m.deletedHashes = append(m.deletedHashes, strings.Split(hashes, "|")...)
-		}
+// fakeWithTorrents returns a FakeBackend pre-populated with completed torrents by hash.
+func fakeWithTorrents(hashes ...string) *torrents.FakeBackend {
+	fb := torrents.NewFakeBackend()
+	for _, h := range hashes {
+		fb.AddCompleted(h, "/data/"+h)
 	}
-	if strings.HasSuffix(rawURL, "/add") {
-		m.addCallCount++
-	}
-	return &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(strings.NewReader("")),
-	}, nil
+	return fb
 }
 
 // mockFileManagerForEpisodes implements FileManagerInterface minimally for episode tests.
@@ -50,6 +32,7 @@ func (m *mockFileManagerForEpisodes) LoadConfigs() (*files.Config, error)       
 func (m *mockFileManagerForEpisodes) SaveConfigs(*files.Config) error                   { return nil }
 func (m *mockFileManagerForEpisodes) LoadSavedEpisodes() ([]files.EpisodeStruct, error) { return nil, nil }
 func (m *mockFileManagerForEpisodes) SaveEpisodesToFile([]files.EpisodeStruct) error    { return nil }
+func (m *mockFileManagerForEpisodes) UpsertEpisodes([]files.EpisodeStruct) error        { return nil }
 func (m *mockFileManagerForEpisodes) DeleteEpisodesFromFile(ids []int) error {
 	m.deletedEpisodeIDs = append(m.deletedEpisodeIDs, ids...)
 	return nil
@@ -148,14 +131,13 @@ func TestDeleteEpisodesByStatus_DroppedAnime(t *testing.T) {
 		},
 	}
 
-	mockHTTP := &mockQBitHTTPClient{}
-	ts := torrents.NewTorrentService(mockHTTP, "http://localhost:8080", "/save", "")
+	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
-	deleteEpisodesByStatus(deleteListResponse, fm, ts, savedEpisodes)
+	deleteEpisodesByStatus(deleteListResponse, fm, backend, testLibrarian(), savedEpisodes)
 
-	if !containsHash(mockHTTP.deletedHashes, episodeHash) {
-		t.Errorf("esperava hash %q deletado do qBittorrent, obteve %v", episodeHash, mockHTTP.deletedHashes)
+	if _, ok := backend.Get(episodeHash); ok {
+		t.Errorf("esperava torrent %q removido do cliente, mas ainda presente", episodeHash)
 	}
 	if !containsID(fm.deletedEpisodeIDs, episodeID) {
 		t.Errorf("esperava episódio ID %d removido do arquivo, obteve %v", episodeID, fm.deletedEpisodeIDs)
@@ -184,14 +166,13 @@ func TestDeleteEpisodesByStatus_ManuallyManagedNotDeleted(t *testing.T) {
 		},
 	}
 
-	mockHTTP := &mockQBitHTTPClient{}
-	ts := torrents.NewTorrentService(mockHTTP, "http://localhost:8080", "/save", "")
+	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
-	deleteEpisodesByStatus(deleteListResponse, fm, ts, savedEpisodes)
+	deleteEpisodesByStatus(deleteListResponse, fm, backend, testLibrarian(), savedEpisodes)
 
-	if containsHash(mockHTTP.deletedHashes, episodeHash) {
-		t.Error("episódio manualmente gerenciado não deve ser deletado do qBittorrent")
+	if _, ok := backend.Get(episodeHash); !ok {
+		t.Error("episódio manualmente gerenciado não deve ter o torrent removido")
 	}
 	if containsID(fm.deletedEpisodeIDs, episodeID) {
 		t.Error("episódio manualmente gerenciado não deve ser removido do arquivo")
@@ -249,8 +230,7 @@ func TestHandleSavedEpisodes_BlacklistedAnime_DeletesTorrents(t *testing.T) {
 		MaxEpisodesPerAnime:   12,
 	}
 
-	mockHTTP := &mockQBitHTTPClient{}
-	ts := torrents.NewTorrentService(mockHTTP, "http://localhost:8080", "/save", "")
+	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
 	data := handleEpisodesData{
@@ -259,10 +239,10 @@ func TestHandleSavedEpisodes_BlacklistedAnime_DeletesTorrents(t *testing.T) {
 		checkedEpisodes: []int{episodeID},
 	}
 
-	handleSavedEpisodes(fm, configs, ts, data)
+	handleSavedEpisodes(fm, configs, backend, testLibrarian(), data)
 
-	if !containsHash(mockHTTP.deletedHashes, episodeHash) {
-		t.Errorf("esperava hash %q deletado do qBittorrent, obteve %v", episodeHash, mockHTTP.deletedHashes)
+	if _, ok := backend.Get(episodeHash); ok {
+		t.Errorf("esperava torrent %q removido do cliente, mas ainda presente", episodeHash)
 	}
 }
 
@@ -303,10 +283,9 @@ func TestProcessAnimeEpisodes_BlacklistedAnime_PopulatesIdsToDelete(t *testing.T
 		MaxEpisodesPerAnime: 12,
 	}
 
-	mockHTTP := &mockQBitHTTPClient{}
-	ts := torrents.NewTorrentService(mockHTTP, "http://localhost:8080", "/save", "")
+	backend := torrents.NewFakeBackend()
 
-	result := processAnimeEpisodes(configs, ts, anime, nil, savedEpisodes, map[int]bool{}, "", nil, defaultNyaaSearcher())
+	result := processAnimeEpisodes(configs, backend, anime, nil, savedEpisodes, map[int]bool{}, "", nil, defaultNyaaSearcher())
 
 	if !containsID(result.idsToDelete, episodeID) {
 		t.Errorf("esperava episode ID %d em idsToDelete, obteve %v", episodeID, result.idsToDelete)
@@ -336,8 +315,7 @@ func TestHandleSavedEpisodes_BlacklistedAnime_NoDeleteWhenFlagOff(t *testing.T) 
 		MaxEpisodesPerAnime:   12,
 	}
 
-	mockHTTP := &mockQBitHTTPClient{}
-	ts := torrents.NewTorrentService(mockHTTP, "http://localhost:8080", "/save", "")
+	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
 	data := handleEpisodesData{
@@ -346,10 +324,10 @@ func TestHandleSavedEpisodes_BlacklistedAnime_NoDeleteWhenFlagOff(t *testing.T) 
 		checkedEpisodes: []int{episodeID},
 	}
 
-	handleSavedEpisodes(fm, configs, ts, data)
+	handleSavedEpisodes(fm, configs, backend, testLibrarian(), data)
 
-	if containsHash(mockHTTP.deletedHashes, episodeHash) {
-		t.Error("episódio não deve ser deletado quando DeleteWatchedEpisodes=false")
+	if _, ok := backend.Get(episodeHash); !ok {
+		t.Error("torrent não deve ser removido quando DeleteWatchedEpisodes=false")
 	}
 }
 
@@ -393,8 +371,8 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 		}
 	}
 
-	// qBittorrent tem o torrent batch com o nome original do grupo (não bate por nome)
-	dlTorrents := []torrents.Torrent{
+	// O cliente tem o torrent batch com o nome original do grupo (não bate por nome)
+	dlTorrents := []torrents.TorrentInfo{
 		{
 			Name: "[EMBER] Mairimashita! Iruma-kun (2021) (Season 2) [1080p][HEVC][AAC]",
 			Hash: batchHash,
@@ -424,16 +402,15 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 		EpisodeRetryLimit:   1,
 	}
 
-	mockHTTP := &mockQBitHTTPClient{}
-	ts := torrents.NewTorrentService(mockHTTP, "http://localhost:8080", "/save", "")
+	backend := torrents.NewFakeBackend()
 
-	result := processAnimeEpisodes(configs, ts, anime, dlTorrents, savedEpisodes, map[int]bool{}, "", nil, mockSearcher)
+	result := processAnimeEpisodes(configs, backend, anime, dlTorrents, savedEpisodes, map[int]bool{}, "", nil, mockSearcher)
 
 	if searchBatchCalled {
-		t.Error("searchBatch não deve ser chamado: todos os episódios já estão no qBittorrent pelo hash")
+		t.Error("searchBatch não deve ser chamado: todos os episódios já estão no cliente pelo hash")
 	}
-	if mockHTTP.addCallCount > 0 {
-		t.Errorf("POST /add não deve ser chamado, mas foi chamado %d vez(es)", mockHTTP.addCallCount)
+	if len(backend.List()) > 0 {
+		t.Errorf("Add não deve ser chamado, mas o cliente tem %d torrent(s)", len(backend.List()))
 	}
 	if len(result.newEpisodes) > 0 {
 		t.Errorf("newEpisodes deve estar vazio, obteve %d episódio(s)", len(result.newEpisodes))

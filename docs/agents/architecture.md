@@ -7,29 +7,32 @@ src/cmd/daemon/      → Daemon binary entry point (embeds frontend build, start
 src/cmd/cli/         → CLI binary for managing the daemon via REST API
 src/internal/
   api/               → HTTP server, REST handlers, WebSocket, middleware, Swagger docs
-  daemon/            → Verification loop: Anilist → Nyaa → qBittorrent → track episodes
-  files/             → Config and episode tracking (JSON files on local filesystem)
+  daemon/            → Verification loop: Anilist → Nyaa → embedded torrent client → track episodes
+  files/             → Config, episode tracking (JSON files), and library hardlinking (Librarian)
   anilist/           → GraphQL client for Anilist API
   nyaa/              → HTML scraper for Nyaa torrent site
-  torrents/          → qBittorrent WebUI HTTP client
+  torrents/          → Embedded BitTorrent client (github.com/cenkalti/rain/v2) behind a TorrentBackend interface
   frontend/          → Svelte 5 + Vite + Tailwind web UI (compiled to Go embed)
-  notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on NewEpisode/DownloadFailed; by job queue on QBittorrentDownloadCompleted.
+  notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on NewEpisode/DownloadFailed; by job queue on DownloadCompleted.
   logger/            → zerolog-based structured logger (console + rotating file)
   tray/              → System tray icon (fyne/systray)
   version/           → Build-time version injection via ldflags
 src/tests/
   unit/              → Unit tests with mocks
   integration/       → Docker-based end-to-end tests
-  mocks/             → Mock servers for Anilist, Nyaa, qBittorrent
+  mocks/             → Mock servers for Anilist and Nyaa
 ```
+
+The daemon ships as a single self-contained binary — the BitTorrent client is embedded (`github.com/cenkalti/rain/v2`), so there is no external qBittorrent to install, configure, or connect to.
 
 ## Key Data Flow
 
 1. **Verification loop** (periodic, configurable interval):
    - Fetch watch list from Anilist GraphQL API
    - Per anime: scrape Nyaa for matching torrents (filter by resolution/fansub)
-   - Add new episodes to qBittorrent via WebUI API
+   - Add new episodes to the embedded torrent client (`TorrentBackend.Add`)
    - Record downloaded episodes in `episodes.json` — skip re-downloads
+   - Torrents download to `save_path` and keep **seeding** there; on completion an `organize` job hardlinks the video files into `completed_anime_path` (the Jellyfin library)
 
 2. **Frontend embedding**: `bun run build` → `src/internal/frontend/dist/`, Go embeds via `//go:embed dist` in API server. Daemon serves SPA at `/`, proxies `/api/` to REST handlers.
 
@@ -39,14 +42,22 @@ src/tests/
 
 | File | Location (Linux) | Purpose |
 |------|-----------------|---------|
-| `config.json` | `~/.autoAnimeDownloader/` | User settings (qBittorrent URL, Anilist username, intervals) |
+| `config.json` | `~/.autoAnimeDownloader/` | User settings (Anilist usernames, paths, intervals) |
 | `downloaded_episodes` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL, no extension) |
 | `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of IDs, no extension) |
 | `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList MediaList ID (JSON map, no extension) |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
-| `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (rename/move ops) |
+| `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
+| `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** `save_path` so it survives a `save_path` change |
 
-Windows uses `%APPDATA%\AutoAnimeDownloader\` instead.
+Windows uses `%APPDATA%\AutoAnimeDownloader\` for the config/state files above, **except** `session.db`, which lives at `%APPDATA%\.autoAnimeDownloader\session.db` (note the leading dot — see `getSessionDBPath` in `cmd/daemon/main.go`).
+
+## On-Disk Layout
+
+- **Download / seeding:** torrents live at `<save_path>/<torrent-id>/...` (rain's `DataDir` with `DataDirIncludesTorrentID`). Files are **never renamed here** — renaming would break seeding. Torrents keep seeding after completion.
+- **Library (Jellyfin):** when a torrent completes, its video files are **hardlinked** into `<completed_anime_path>/<AnimeName>/` (folder name has season/cour markers stripped by `sanitizeFolderName`). Single episodes with `RenameFilesForJellyfin` get the Jellyfin name `"Anime Name - E05.mkv"`; batches/movies keep their raw filenames. The hardlink shares bytes with the seeded copy, so no space is duplicated.
+- **Same volume required:** `save_path` and `completed_anime_path` must be on the same filesystem because hardlinks cannot cross devices. The config-save endpoint validates this with a hardlink probe (`Librarian.ProbePaths`) and rejects cross-device paths with HTTP 400.
+- **Deletion** frees space by removing **both** links: the library hardlink (`Librarian.RemoveFromLibrary`) and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). A batch torrent shared by multiple episodes is only removed once **all** its episodes are deleted (batch guard).
 
 ## API
 
@@ -98,7 +109,7 @@ Main verification orchestrator. Key functions:
 | Function | Purpose |
 |----------|---------|
 | `StartLoop(p)` | Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
-| `AnimeVerification(ctx, fm, state, jobQueue)` | Main check: fetches Anilist → Nyaa → qBittorrent |
+| `AnimeVerification(ctx, fm, state, jobQueue)` | Main check: fetches Anilist → Nyaa → embedded torrent client |
 | `processAnimeEpisodes(...)` | Per-anime: decide download/delete per episode, execute download strategy |
 | `checkEpisode(...)` | Returns `(shouldDownload, shouldDelete)` per episode |
 | `shouldSkipEpisode(...)` | Skip if: excluded list, already watched, not yet aired |
@@ -111,7 +122,8 @@ Main verification orchestrator. Key functions:
 | `searchNyaaForMultipleEpisodes(titles, synonyms, episodes, customQuery)` | Multi-episode search for airing animes (priority 3) |
 | `ExtractAnimeSeasonPart(title, synonyms)` | Exported: reads english→romaji→synonyms, returns `(season, part *int)` — first non-nil wins independently |
 | `ComputeEpisodeOffset(relations, part)` | Exported: returns PREQUEL episode count when `part >= 2`; 0 otherwise (gate prevents spurious offsets on non-split seasons) |
-| `enqueueOrMoveToCompletedFolder(...)` | Enqueues `move_to_completed` job (or runs sync if no queue) |
+| `RemoveEpisodesWithLinks(fm, backend, librarian, ids)` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`) |
+| `reconcileLibrary(downloaded, saved, jobQueue)` | Startup/periodic reconciliation: enqueues an `organize` job for any completed torrent whose episode isn't yet in the library (`verification.go`) |
 | `ManualDownloadEpisode(animeId, episodeId, cfg)` | Used by API for manual download — calls Anilist then Nyaa |
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
 | `ManualDownloadAnimeWithMagnet(...)` | Used by API for replace-with-magnet for full anime batch |
@@ -124,7 +136,7 @@ Main verification orchestrator. Key functions:
 
 ### `src/internal/daemon/debug.go`
 
-One-shot diagnostic for a single anime, driven by the `--debug-anime` flag on the daemon binary (see `cmd/daemon/main.go`). No qBittorrent or episodes.json involved. Output goes to `.debug_<animeId>_<N>/` in the invoker's cwd, not `~/.autoAnimeDownloader`.
+One-shot diagnostic for a single anime, driven by the `--debug-anime` flag on the daemon binary (see `cmd/daemon/main.go`). No torrent backend or episodes.json involved. Output goes to `.debug_<animeId>_<N>/` in the invoker's cwd, not `~/.autoAnimeDownloader`.
 
 | Symbol | Purpose |
 |--------|---------|
@@ -136,35 +148,34 @@ One-shot diagnostic for a single anime, driven by the `--debug-anime` flag on th
 
 ### `src/internal/daemon/jobs.go`
 
-Deferred job queue for async qBittorrent operations. Decouples slow/unreliable qBit calls from the main verification loop by persisting jobs to disk and retrying them on a background ticker.
+Deferred job queue for async library organization. Decouples the hardlink-into-library + webhook step from the main verification loop by persisting jobs to disk and retrying them on a background ticker. The former poll-based `rename_file` / `move_to_completed` / `notify_on_complete` jobs were replaced by a single idempotent `organize` job.
 
-**Lifecycle**: Created in `main.go` before `NewServer`, passed to `Server.JobQueue`, threaded into every `AnimeVerification` call via `StartLoopPayload.JobQueue`. Starts on daemon boot, stops on shutdown.
+**Lifecycle**: Created in `main.go` before `NewServer`, wired with the torrent backend + librarian via `SetOrchestration`, passed to `Server.JobQueue`, threaded into every `AnimeVerification` call via `StartLoopPayload.JobQueue`. Starts on daemon boot, stops on shutdown.
 
-**Tick interval**: 15 seconds.
+**Tick interval**: 5 seconds.
 
 **Backoff**: `30s * 2^(attempts-1)`, capped at 10 minutes.
 
 | Symbol | Purpose |
 |--------|---------|
-| `JobQueue` struct | Background processor; loads/saves `pending_jobs.json` |
+| `JobType` / `JobOrganize` | The single job type (`"organize"`) |
+| `JobQueue` struct | Background processor; loads/saves `pending_jobs.json`; holds `backend` + `librarian` |
 | `NewJobQueue(fm, jobsPath)` | Constructor — takes FileManager (for config) and file path |
+| `JobQueue.SetOrchestration(backend, librarian)` | Injects the torrent backend + `files.Librarian` used by `JobOrganize` |
 | `JobQueue.Start()` | Loads persisted jobs, starts background goroutine |
 | `JobQueue.Stop()` | Signals goroutine to stop and waits |
-| `JobQueue.EnqueueRenameFile(hash, animeName, epNum)` | Schedule Jellyfin rename; max 20 retries |
-| `JobQueue.EnqueueMoveToCompleted(hashes, animeName)` | Schedule move to completed folder; max 10 retries |
-| `JobQueue.EnqueueNotifyOnComplete(hash, animeName, episode)` | Poll until torrent reaches a seeding state, then fire `QBittorrentDownloadCompleted` webhook; max 100 retries (~25 min) |
+| `JobQueue.EnqueueOrganize(hash)` | Schedule organizing a completed torrent into the library; no-op if one is already pending for the same hash; max 20 retries |
+| `organizeTorrent(hash, backend, librarian, fm, configs)` | Package func executing the job: hardlinks completed video files into the library, writes back `LibraryPaths` (the "organized" marker), then fires the `DownloadCompleted` webhook exactly once. Idempotent across restarts |
 
-**Job types**:
+**Job type**:
 
 | Type | Payload | Trigger |
 |------|---------|---------|
-| `rename_file` | `hash`, `anime_name`, `episode_number` | After successful torrent add when `RenameFilesForJellyfin=true` |
-| `move_to_completed` | `hashes[]`, `anime_name` | After all episodes of a finished anime are downloaded |
-| `notify_on_complete` | `hash`, `anime_name`, `episode` | After successful torrent add — polls until qBit state is a seeding state, then fires `QBittorrentDownloadCompleted` webhook |
+| `organize` | `hash` | Torrent completion event, or `reconcileLibrary` finding a completed-but-unorganized torrent |
 
 **Persistence**: `~/.autoAnimeDownloader/pending_jobs.json` (Windows: `%APPDATA%\AutoAnimeDownloader\pending_jobs.json`). Written after every enqueue and after every tick that changes queue state. Jobs survive daemon restarts.
 
-**Nil-safety**: All callers check `jobQueue != nil` and fall back to the old synchronous / goroutine behavior when the queue is absent (e.g., in unit tests).
+**Idempotency**: `organizeTorrent` treats an episode whose `LibraryPaths` is already set as done — no re-link, no re-fired webhook — so completion events and reconciliation passes can both enqueue safely.
 
 ### `src/internal/daemon/state.go`
 
@@ -185,11 +196,12 @@ All persistence. Key types:
 | Symbol | Purpose |
 |--------|---------|
 | `Config` struct | All user settings — maps to `config.json` |
-| `EpisodeStruct` struct | `EpisodeID`, `AnimeID`, `EpisodeHash`, `EpisodeName`, `DownloadDate`, `ManuallyManaged` |
+| `EpisodeStruct` struct | `EpisodeID`, `AnimeID`, `EpisodeHash`, `EpisodeName`, `DownloadDate`, `ManuallyManaged`, `EpisodeNumber int`, `IsBatch bool`, `LibraryPaths []string` (hardlink paths in the library, set once organized) |
 | `FileManagerInterface` | Interface used by daemon + API — mock in tests |
 | `FileManager.LoadConfigs()` | Reads `config.json`; creates with defaults if missing |
 | `FileManager.LoadSavedEpisodes()` | Reads `episodes.json` (JSONL), migrates old format |
 | `FileManager.SaveEpisodesToFile(eps)` | Appends only new episodes (deduped by ID) |
+| `FileManager.UpsertEpisodes(eps)` | Inserts or updates episodes by ID — used to write back `LibraryPaths` after a torrent is organized |
 | `FileManager.DeleteEpisodesFromFile(ids)` | Removes episodes by ID from JSONL |
 | `FileManager.BlockEpisode(id)` | Appends ID to `blocked_episodes` |
 | `FileManager.UnblockEpisode(id)` | Removes ID from `blocked_episodes` |
@@ -201,13 +213,30 @@ All persistence. Key types:
 
 `AnimeSettings` struct fields: `CustomSearchQuery string` — overrides Nyaa search query for this anime.
 
-Config defaults: `CheckInterval=10`, `MaxEpisodesPerAnime=12`, `EpisodeRetryLimit=5`, `QBittorrentUrl="http://127.0.0.1:8080"`.
+Config defaults: `CheckInterval=10`, `MaxEpisodesPerAnime=12`, `EpisodeRetryLimit=5`. (There is no `qbittorrent_url` field — the torrent client is embedded.)
 
 | `DiskSpace(path)` | Cross-platform total/free bytes for the filesystem containing `path` (`diskspace_unix.go` for Linux/Darwin via `syscall.Statfs`, `diskspace_windows.go` via `golang.org/x/sys/windows.GetDiskFreeSpaceEx`) |
 
 ### `src/internal/files/filesystem.go`
 
-`FileSystem` interface + `OSFileSystem` implementation. Used for testability — tests inject `MockFileSystem`.
+`FileSystem` interface + `OSFileSystem` implementation. Used for testability — tests inject `MockFileSystem`. The interface includes a `Link(oldname, newname)` method (`os.Link`) used by the `Librarian` for hardlinking into the library.
+
+### `src/internal/files/librarian.go`
+
+Hardlinks completed torrent files into the Jellyfin library. The seeded copy stays in place; the library holds a second name pointing at the same bytes.
+
+| Symbol | Purpose |
+|--------|---------|
+| `Librarian` interface | `Organize`, `RemoveFromLibrary`, `ProbePaths` |
+| `NewLibrarian(fs)` | Constructor — `link` defaults to `fs.Link`, shared by `Organize` and `ProbePaths` so they never disagree |
+| `OrganizeRequest` struct | `TorrentDataDir`, `AnimeName`, `CompletedPath`, `EpisodeNumber *int`, `IsBatch`, `RenameJellyfin` |
+| `Librarian.Organize(req)` | Hardlinks video files into `<CompletedPath>/<AnimeName>/`; Jellyfin name for a single episode (when `RenameJellyfin` and not a batch and exactly one video file), raw filename otherwise. Idempotent — returns paths of created/existing links |
+| `Librarian.RemoveFromLibrary(path)` | Deletes one library hardlink; missing file is not an error |
+| `Librarian.ProbePaths(save, completed)` | Config-save validation: writes a probe file and hardlinks it across the two paths; returns an error if they are on different volumes |
+
+### `src/internal/files/crossdevice_unix.go` / `crossdevice_windows.go`
+
+`isCrossDevice(err) bool` — platform-specific detection of the "cross-device link" error (`EXDEV` on Unix), used by `Librarian` to turn a failed hardlink into a clear same-volume error message.
 
 ### `src/internal/files/parser.go`
 
@@ -217,7 +246,7 @@ Config defaults: `CheckInterval=10`, `MaxEpisodesPerAnime=12`, `EpisodeRetryLimi
 
 | Symbol | Purpose |
 |--------|---------|
-| `Server` struct | Wraps `http.Server` + `State`, `FileManager`, `WSManager`, `currentLoopControl` |
+| `Server` struct | Wraps `http.Server` + `State`, `FileManager`, `WSManager`, `currentLoopControl`, `JobQueue`, `Torrents` (`torrents.TorrentBackend`), `Librarian` (`files.Librarian`) |
 | `NewServer(port, state, fm, startLoopFunc)` | Constructor — wires WebSocket state getter |
 | `Server.SetupRoutes()` | Registers all routes on `http.ServeMux` |
 | `Server.StartDaemonLoop()` | Loads config → calls `StartLoopFunc` → stores `LoopControl` |
@@ -257,8 +286,8 @@ Middleware stack (API routes): CORS → JSON Content-Type → Logging. Static fi
 All episode mutation endpoints. Each shares same pattern:
 1. Parse path params
 2. Load config + saved episodes
-3. Create `TorrentService`
-4. Call `daemon.ManualDownload*` or direct `torrentsService` operation
+3. Use the shared `server.Torrents` (`TorrentBackend`) and `server.Librarian` — no per-request client construction
+4. Call `daemon.ManualDownload*`, or `daemon.RemoveEpisodesWithLinks(fm, backend, librarian, ids)` for deletes (removes library hardlinks + seeding torrents)
 5. Update `FileManager` (save/delete/block/unblock)
 
 Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unmanage), `replace` (per episode magnet), `replaceAnime` (full anime magnet).
@@ -366,35 +395,54 @@ Title-matching logic for filtering Nyaa search results.
 | `titleMatchesQuery(torrentName, query)` | Two-pass: (1) all query tokens present in torrent title; (2) Jaccard ≥ 0.8. Prevents partial-title and spinoff false positives |
 | `TitleMatchesQuery(torrentName, query)` | Exported alias for tests |
 
-### `src/internal/torrents/torrents.go`
+### `src/internal/torrents/`
+
+Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBackend` interface. The daemon and tests share one seam: production uses the rain-backed `SessionManager`/`Session`; tests use the in-memory `FakeBackend`.
+
+**`backend.go`**
 
 | Symbol | Purpose |
 |--------|---------|
-| `TorrentService` struct | `httpClient`, `baseURL`, `savePath`, `completedPath` |
-| `Torrent` struct | `Hash`, `Magnet`, `Name`, `SavePath`, `ContentPath`, `State` |
-| `IsTorrentCompleted(state)` | Returns true for any seeding state (`"uploading"` or states ending in `"UP"`) |
-| `NewTorrentService(client, url, save, completed)` | Constructor |
-| `TorrentService.GetDownloadedTorrents()` | Lists torrents in `autoAnimeDownloader` category |
-| `TorrentService.DownloadTorrent(magnet, animeName, epName, isCompleted)` | Adds torrent, waits for hash, returns hash |
-| `TorrentService.DownloadTorrentWithOptions(..., skipSubfolder)` | Like above but `skipSubfolder=true` saves directly in savePath |
-| `TorrentService.DeleteTorrents(hashes[])` | Deletes torrents + files |
-| `TorrentService.RenameEpisodeFile(hash, animeName, epNum)` | Renames file to Jellyfin-compatible name; single attempt, returns bool (job queue retries on false) |
-| `TorrentService.MoveToCompletedFolder(hash)` | Sets torrent location to `completedPath` |
-| `HTTPClient` interface | `Get(url)`, `PostForm(url, data)` — `DefaultHTTPClient` wraps std lib |
-| `CATEGORY` const | `"autoAnimeDownloader"` — used to tag/filter torrents |
+| `TorrentBackend` interface | `Ensure(savePath)`, `Add(magnet)`, `List()`, `Get(hash)`, `Remove(hash, keepData)`, `SetCallbacks(onComplete, onFailed)`, `Close()` |
+| `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<save_path>/<id>`), `Completed` |
+
+**`session.go`** — rain-backed implementation.
+
+| Symbol | Purpose |
+|--------|---------|
+| `Session` struct | Wraps a `torrent.Session`; `DataDir=save_path`, `Database=session.db`, `DataDirIncludesTorrentID=true`, RPC disabled |
+| `NewSession(savePath, databasePath)` | Creates the embedded client |
+| `Session.Add/List/Get/Remove/SetCallbacks/Close` | Implement `TorrentBackend` |
+| `parseInfoHash(magnet)` | Extracts the lowercase-hex info hash from a magnet link |
+
+**`sessionmanager.go`** — lifecycle owner.
+
+| Symbol | Purpose |
+|--------|---------|
+| `SessionManager` struct | Owns the current `Session`; recreates it when `save_path` changes; keeps `session.db` stable across changes |
+| `NewSessionManager(dbPath)` | Constructor |
+| `SessionManager.Ensure(savePath)` | Creates/recreates the session; returns `true` when a new session was made (caller reconciles); `ErrSessionNotReady` if `savePath==""` |
+| `ErrSessionNotReady` | Returned when no session exists yet (incomplete config — no `save_path`) |
+
+**`fakebackend.go`** — in-memory test double.
+
+| Symbol | Purpose |
+|--------|---------|
+| `FakeBackend` struct + `NewFakeBackend()` | Implements `TorrentBackend` with an in-memory map |
+| `FakeBackend.AddCompleted(hash, dataDir)` / `CompleteTorrent(hash, dataDir)` / `FailTorrent(hash, err)` | Test helpers to drive completion/failure callbacks |
 
 ### `src/internal/notifications/notifications.go`
 
 | Symbol | Purpose |
 |--------|---------|
-| `Event` type | `NewEpisode`, `DownloadFailed`, `QBittorrentDownloadCompleted` |
-| `Notify(cfg, event, animeName, episode)` | Fires all configured webhooks for an event in background goroutines. No-op if cfg is nil or has no webhooks |
+| `Event` type | `NewEpisode`, `DownloadFailed`, `DownloadCompleted` (the webhook event key string for the last one is still `download_completed` — only the Go constant was renamed from `QBittorrentDownloadCompleted`) |
+| `Notify(cfg, event, animeName, episode int, reason string)` | Fires all configured webhooks for an event in background goroutines. No-op if cfg is nil or has no webhooks |
 | `FireTestWebhook(cfg, name)` | Fires one named webhook with sample variables. Returns error if not found |
 | `interpolate(template, vars)` | Replaces `{{var}}` placeholders — missing vars become empty string |
-| `buildVars(animeName, episode, event)` | Builds the template variable map from event data |
+| `buildVars(animeName, episode, event, reason)` | Builds the template variable map from event data |
 | `fireWebhook(preset, vars)` | Sends HTTP request; logs error/warn on failure but never panics |
 
-**Template variables available in URL, headers, and body**: `{{title}}`, `{{message}}`, `{{anime_name}}`, `{{episode}}`, `{{quality}}` (always empty), `{{file_path}}` (always empty), `{{timestamp}}` (formatted `2006-01-02 15:04`).
+**Template variables available in URL, headers, and body**: `{{title}}`, `{{message}}`, `{{anime_name}}`, `{{episode}}`, `{{reason}}` (failure reason, empty for non-failure events), `{{quality}}` (always empty), `{{file_path}}` (always empty), `{{timestamp}}` (formatted `2006-01-02 15:04`).
 
 ### `src/internal/stringutil/stringutil.go`
 
@@ -449,7 +497,7 @@ Connects to `/api/v1/ws`, updates `wsState` store on messages.
 
 ## Implemented Features (notable)
 
-**Manual magnet paste**: `AnimeDetail.svelte` exposes a magnet input UI that calls `/api/v1/animes/{id}/episodes/{episodeId}/replace` (per-episode) or `/api/v1/animes/{id}/replace` (full anime/batch). Allows bypassing Nyaa search and sending any magnet link directly to qBittorrent.
+**Manual magnet paste**: `AnimeDetail.svelte` exposes a magnet input UI that calls `/api/v1/animes/{id}/episodes/{episodeId}/replace` (per-episode) or `/api/v1/animes/{id}/replace` (full anime/batch). Allows bypassing Nyaa search and adding any magnet link directly to the embedded torrent client.
 
 **Multi-account Anilist**: `Config.AnilistUsernames []string` — the verification loop (`verification.go`) and `mergeCurrentAniListAnimes` (`endpoint_animes.go`) both iterate over every configured username. Episode tracking is not per-account; all accounts share the same `episodes.json`. See [Config Reference](config.md) for the legacy singular-field migration.
 

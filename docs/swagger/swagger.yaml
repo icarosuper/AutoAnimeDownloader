@@ -162,8 +162,6 @@ definitions:
         $ref: '#/definitions/files.NotificationsConfig'
       priorities:
         $ref: '#/definitions/nyaa.Priorities'
-      qbittorrent_url:
-        type: string
       rename_files_for_jellyfin:
         type: boolean
       save_path:
@@ -320,8 +318,8 @@ paths:
     delete:
       consumes:
       - application/json
-      description: Deletes a downloaded episode from qBittorrent and blocks it from
-        being re-downloaded automatically
+      description: Deletes a downloaded episode (library hardlink + torrent) and blocks
+        it from being re-downloaded automatically
       parameters:
       - description: Anime ID (AniList MediaList ID)
         in: path

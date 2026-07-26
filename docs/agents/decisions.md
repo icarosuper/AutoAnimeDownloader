@@ -205,7 +205,7 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 **What it looks like:** `main()` parses a flag and, if set, runs a completely different code path (`runDebugAnime`) and returns — skipping the PID file, API server, tray, and daemon loop entirely. Looks like a debug hack that snuck into production entry point.
 
-**Why it's right:** It's a deliberate one-shot diagnostic mode (`make debug-anime ID=<anilistId>` / `go run ./src/cmd/daemon --debug-anime <id>`) for the recurring "why didn't this anime download" problem. It reuses real production functions (`daemon.RunAnimeDebug` → `checkEpisode`, `resolveSearchStrategy`) so the debug output can't drift from actual verification-loop behavior, and it deliberately avoids touching qBittorrent so it can run without the daemon or qBittorrent up. See `docs/agents/troubleshooting-downloads.md` Step 0 and `daemon/debug.go`.
+**Why it's right:** It's a deliberate one-shot diagnostic mode (`make debug-anime ID=<anilistId>` / `go run ./src/cmd/daemon --debug-anime <id>`) for the recurring "why didn't this anime download" problem. It reuses real production functions (`daemon.RunAnimeDebug` → `checkEpisode`, `resolveSearchStrategy`) so the debug output can't drift from actual verification-loop behavior, and it deliberately avoids touching the torrent client so it can run without the daemon up (the torrent client is embedded, so there is nothing external to start either way). See `docs/agents/troubleshooting-downloads.md` Step 0 and `daemon/debug.go`.
 
 **Don't "fix" by:** moving this behind the HTTP API (it exists specifically to work without a running daemon) or deleting it as dead code (it's the primary entry point for the fast-path troubleshooting flow).
 
@@ -223,15 +223,17 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ---
 
-### 19. Disk space is read via OS stat on `SavePath`, not qBittorrent's API
+### 19. Disk space is read via OS stat on `SavePath`
 
 **Location:** `internal/files/diskspace_unix.go`, `internal/files/diskspace_windows.go`; `internal/api/endpoint_status.go` (`handleStatus`).
 
-**What it looks like:** Reading disk space with a raw filesystem syscall on a local path, when qBittorrent's WebUI already exposes `free_space_on_disk` via `/api/v2/sync/maindata` — reaching for a platform-specific syscall pair looks like reinventing something the existing HTTP dependency already provides.
+**What it looks like:** Reading disk space with a raw platform-specific filesystem syscall on a local path, when a portable Go library might seem cleaner.
 
-**Why it's right:** qBittorrent's endpoint only reports free space, not total capacity — the dashboard needs both ("tamanho total, tamanho disponível" per `docs/TODO.md`). The syscall approach is the only one of the two that can answer that. The known trade-off: if qBittorrent's actual save directory isn't the same filesystem the daemon process sees (e.g. daemon and qBittorrent split across hosts/containers with misaligned mounts), the numbers reflect the daemon's view of `SavePath`, not necessarily qBittorrent's real disk. Accepted for now since this project targets the common single-box setup; `handleStatus` swallows stat errors (empty/unreadable `SavePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
+**Why it's right:** The dashboard needs both total capacity **and** free space ("tamanho total, tamanho disponível" per `docs/TODO.md`); the syscall pair (`Statfs` / `GetDiskFreeSpaceEx`) is the direct way to get both. `handleStatus` swallows stat errors (empty/unreadable `SavePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
 
-**Don't "fix" by:** switching to qBittorrent's `free_space_on_disk` alone (loses total capacity) or trying to detect cross-host mount mismatches — no reliable way to do that from the daemon's side without an out-of-band signal from qBittorrent itself.
+> **Revision (embedded-client refactor):** The original rationale compared this against qBittorrent's `free_space_on_disk` API (which only reported free space, not total). That comparison is now moot — the torrent client is embedded and there is no qBittorrent API to read from. Since the embedded client's `DataDir` **is** `SavePath` (same process, same filesystem view), the old cross-host mount-mismatch caveat no longer applies either. The OS-stat approach stands as the only and correct source.
+
+**Don't "fix" by:** trying to route disk stats through the torrent library — it has no such API, and `SavePath` is exactly the filesystem the daemon writes to.
 
 ---
 
@@ -244,3 +246,48 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 **Why it's right:** Some sequels are titled with only a roman numeral (e.g. Anilist id 194829, "Katainaka no Ossan, Kensei ni Naru II") — no "Season 2"/"S2" appears anywhere in the AniList title, and fansub groups (Erai-raws, Ironclad) release episodes using that exact title verbatim, with no separate season marker either. Before this fix, `extractSeason("...Naru II - 01 [1080p]...")` returned `nil` while `ExtractAnimeSeasonPart` (via the `"...2nd Season"` synonym) correctly resolved `requestedSeason=2`, so every real torrent got rejected by the hard season filter in `ScrapNyaaForMultipleEpisodes` (`season == nil` vs `requestedSeason=2`) even though `titleMatchesQuery` already matched the full title including "II" — the anime failed to download every cycle. `reSeasonPatterns` is also used by `truncateAtFirstMarker` (decision 18) to decide where to cut a torrent name before tokenizing; if the roman-numeral pattern were merged into that slice, it would truncate `"...Naru II"` right before "II", dropping it from the Jaccard title tokens and silently changing match behavior for every title ending in a numeral. Keeping it as a separate, lower-priority fallback used only by `extractSeason` avoids that cross-effect.
 
 **Don't "fix" by:** merging `reRomanSeason` into `reSeasonPatterns`, or matching lowercase roman numerals — lowercase risks false positives from unrelated fansub/codec tokens, and uppercase-only matches how anime titles actually format them.
+
+---
+
+### 21. Embedded torrent client + hardlink-into-library model (replaces qBittorrent)
+
+**Location:** `internal/torrents/` (`TorrentBackend`, `Session`/`SessionManager`, `FakeBackend`); `internal/files/librarian.go`; `internal/daemon/jobs.go` (`JobOrganize`), `episodes.go`, `verification.go`.
+
+**What it looks like:** The app embeds a full BitTorrent client (`github.com/cenkalti/rain/v2`) and hardlinks completed files into a second directory, instead of the more familiar "talk to a running qBittorrent over its WebUI and let it manage files."
+
+**Why it's right:** Embedding makes the daemon a single self-contained binary — no external qBittorrent to install, run, secure, or keep reachable, and no `qbittorrent_url`/`QBITTORRENT_URL` to configure. Torrents download to `save_path` and keep **seeding** there; on completion the video files are **hardlinked** into `completed_anime_path` (the Jellyfin library). Hardlinking (not copy/move) means:
+- No wasted space — the library name and the seeded file share the same bytes.
+- Seeding is never interrupted — the seeded file is never moved or renamed (renaming would break the torrent). The Jellyfin name (`"Anime Name - E05.mkv"` for single episodes; raw filenames for batches/movies) lives only on the library hardlink.
+- The hard constraint: `save_path` and `completed_anime_path` **must be on the same filesystem/volume** (hardlinks can't cross devices). `completed_anime_path` is therefore now **required**, and the config-save endpoint validates the pair with a real hardlink probe (`Librarian.ProbePaths`), rejecting cross-device paths with HTTP 400.
+
+Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Remove`/`Ensure`/`SetCallbacks`/`Close`) so the daemon injects one uniform backend — rain-backed `SessionManager` in production, in-memory `FakeBackend` in tests (the qBittorrent mock server is gone). Resume data lives in a bbolt DB at `~/.autoAnimeDownloader/session.db`, deliberately **outside** `save_path` so it survives a `save_path` change. rain listens on a default port range (20000–30000) with no UPnP/NAT-PMP; inbound peers may need manual forwarding, but DHT+PEX work without it.
+
+**Don't "fix" by:** re-introducing an external torrent client or `qbittorrent_url`; renaming the seeded file to the Jellyfin name (breaks seeding); copying/moving into the library instead of hardlinking (wastes space, stops seeding); or moving `session.db` into `save_path` (loses resume data on a path change). Note the webhook event key string is still `download_completed` — the Go constant was renamed `QBittorrentDownloadCompleted → DownloadCompleted`, but that is not user-visible; don't "fix" a webhook that isn't broken.
+
+---
+
+### 22. Organize everything to `completed_anime_path`, and the batch-hygiene deletion limitation
+
+**Location:** `internal/daemon/jobs.go` (`organizeTorrent`), `internal/daemon/episodes.go` (`removeEpisodesAndLinks`, `allEpisodesInDeleteSet`).
+
+**What it looks like:** (a) *Every* completed torrent — ongoing or finished — is hardlinked into `completed_anime_path`, not just finished animes. (b) When deleting a watched episode that belongs to a **batch** torrent, its library hardlink is **kept** until the entire batch is deleted, which looks like a leak.
+
+**Why it's right (behavior change):** Previously only FINISHED animes were moved to `completed_anime_path`, while ongoing episodes were renamed in place inside `save_path`. Now `save_path` is purely the download/seeding working directory and `completed_anime_path` is the Jellyfin library — so *every* completed torrent gets organized into the library, uniformly, via the single idempotent `organize` job. This removes the ongoing-vs-finished special case and gives Jellyfin one consistent library path to watch.
+
+**Why it's right (batch guard):** Deletion frees space by removing both the library hardlink and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). For a **single-episode** torrent that maps cleanly to one library file, both links are removed. For a **batch** torrent shared by many episodes, the raw batch filenames can't be safely mapped back to one specific episode — removing "the file for episode 5" risks deleting the wrong file. So per-episode library removal is **skipped for batches**; the batch's library files (and the seeding torrent) are only removed once **all** of that torrent's episodes are in the delete set (`allEpisodesInDeleteSet`). While any sibling episode survives, the batch torrent and its library links stay. The small space cost of keeping a shared batch around a bit longer is preferred over the correctness risk of deleting the wrong episode's file.
+
+**Don't "fix" by:** trying to delete individual episode files out of a batch torrent's library folder (raw filenames aren't reliably episode-addressable), or removing a batch torrent while siblings still reference it (breaks the survivors' library links and stops seeding for episodes still wanted).
+
+---
+
+### 23. Integration tests skip unless `DAEMON_URL` is set explicitly
+
+**Location:** `src/tests/integration/integration_test.go` (`requireDaemon`, `defaultTestPath`, `testSavePath`/`testCompletedPath`); `docker/docker-compose.test.yml` (`test` service env).
+
+**What it looks like:** `go test ./...` reports the entire integration suite as SKIP on a developer machine, even when a daemon *is* running on `localhost:8091`. The obvious-looking "fix" is to drop the `DAEMON_URL` check and let `probeDaemon()` decide, since a reachable daemon seems like exactly the condition the tests want.
+
+**Why it's right:** These tests are not read-only. `TestAPIEndpoints` and `TestFullDownloadFlow` both `PUT /api/v1/config`, overwriting `save_path`, `completed_anime_path`, `anilist_username`, `check_interval` and `excluded_lists` on whatever daemon answers. Gating on reachability alone meant that following `CLAUDE.md`'s "run `go test ./...` after any change" silently reconfigured the developer's own daemon: the save path became `/tmp/test`, and on distros where `/tmp` is a tmpfs the daemon then downloaded real torrents into RAM until the filesystem filled. A live daemon is not consent to reconfigure it, so the opt-in is an explicit env var. `docker-compose.test.yml` sets `DAEMON_URL=http://daemon:8091`, so Docker and CI runs are unaffected.
+
+The paths written into the config are likewise no longer hardcoded: they come from `TEST_SAVE_PATH`/`TEST_COMPLETED_PATH`, defaulting to `~/aad-test/downloads` and `~/aad-test/library`. Two constraints shape that default — it must not be under `/tmp` (tmpfs), and both paths must share one filesystem, because the config endpoint runs a real hardlink probe (`Librarian.ProbePaths`) and rejects cross-volume pairs with HTTP 400. Docker overrides both to `/app/data/aad-test/*`, inside the daemon container's mounted volume; note the strings are interpreted by the **daemon** container, not the test container.
+
+**Don't "fix" by:** removing the `DAEMON_URL` gate so the tests "work" during `go test ./...`; hardcoding the config paths again; putting the default paths back under `/tmp`; or splitting save and completed paths across different volumes (the hardlink probe rejects it).

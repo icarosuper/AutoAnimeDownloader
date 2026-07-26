@@ -11,7 +11,7 @@ COPY src/internal/frontend/ ./
 RUN bun run build
 
 # Stage 2: Build Go daemon (frontend is embedded)
-FROM golang:1.24-alpine AS go-builder
+FROM golang:1.25-alpine AS go-builder
 
 WORKDIR /build
 

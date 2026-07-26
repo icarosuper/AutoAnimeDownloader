@@ -14,9 +14,8 @@ export const baseConfig = {
   data: {
     anilist_usernames: ['testuser'],
     save_path: '/downloads',
-    completed_anime_path: '',
+    completed_anime_path: '/completed',
     check_interval: 60,
-    qbittorrent_url: 'http://localhost:8080',
     max_episodes_per_anime: 12,
     episode_retry_limit: 3,
     delete_watched_episodes: false,

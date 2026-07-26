@@ -20,9 +20,9 @@ type handleEpisodesData struct {
 
 func processAnimeEpisodes(
 	configs *files.Config,
-	torrentsService *torrents.TorrentService,
+	backend torrents.TorrentBackend,
 	anime anilist.MediaList,
-	dlTorrents []torrents.Torrent,
+	dlTorrents []torrents.TorrentInfo,
 	savedEpisodes []files.EpisodeStruct,
 	blockedMap map[int]bool,
 	customQuery string,
@@ -62,7 +62,6 @@ func processAnimeEpisodes(
 	}
 
 	magnetsForEpisodes := resolveSearchStrategy(anime, animeTitle, episodesToDownload, customQuery, searcher)
-	notifiedHashes := make(map[string]bool)
 
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
@@ -83,7 +82,7 @@ func processAnimeEpisodes(
 
 		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
 
-		hash := attemptDownloadWithRetries(configs, torrentsService, magnets, anime, epName, skipSubfolder)
+		hash := attemptDownloadWithRetries(configs, backend, magnets, epName)
 
 		if hash != "" {
 			totalEpisodes := 0
@@ -97,23 +96,15 @@ func processAnimeEpisodes(
 				AnimeName:          animeTitle,
 				EpisodeHash:        hash,
 				EpisodeName:        epName,
+				EpisodeNumber:      ep.Episode,
+				IsBatch:            skipSubfolder,
 				DownloadDate:       time.Now(),
 			})
-
-			if configs.RenameFilesForJellyfin && !skipSubfolder {
-				if jobQueue != nil {
-					jobQueue.EnqueueRenameFile(hash, animeTitle, ep.Episode)
-				} else {
-					go func() { torrentsService.RenameEpisodeFile(hash, animeTitle, ep.Episode) }()
-				}
-			}
-
-			if jobQueue != nil && !notifiedHashes[hash] {
-				jobQueue.EnqueueNotifyOnComplete(hash, animeTitle, ep.Episode)
-				notifiedHashes[hash] = true
-			}
+			// Completion is handled event-driven: the session's onComplete callback (and
+			// the reconciliation pass as a safety net) enqueue JobOrganize, which hardlinks
+			// the finished files into the library and fires the completion webhook.
 		} else {
-			reason := notifications.ReasonQbitRejected
+			reason := notifications.ReasonDownloadRejected
 			if len(magnets) == 0 {
 				reason = notifications.ReasonNotFound
 			}
@@ -121,7 +112,6 @@ func processAnimeEpisodes(
 		}
 	}
 
-	enqueueOrMoveToCompletedFolder(torrentsService, anime, configs, savedEpisodes, jobQueue)
 	return result
 }
 
@@ -324,7 +314,7 @@ func handleAlreadySavedEpisode(configs *files.Config, downloadedEpisodes *int, i
 	return true, false
 }
 
-func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents.TorrentService, magnets []string, anime anilist.MediaList, fileName string, skipSubfolder bool) (hash string) {
+func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentBackend, magnets []string, fileName string) (hash string) {
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 
 	for i := range maxAttempts {
@@ -332,16 +322,19 @@ func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents
 			Str("episode", fileName).
 			Int("attempt", i+1).
 			Int("max_attempts", configs.EpisodeRetryLimit).
-			Bool("skip_subfolder", skipSubfolder).
 			Msg("Attempting to download episode")
 
-		hash := torrentsService.DownloadTorrentWithOptions(magnets[i], getAnimeTitleSafe(anime), fileName, anime.Media.Status == anilist.MediaStatusFinished, skipSubfolder)
-		if hash != "" {
+		h, err := backend.Add(magnets[i])
+		if err != nil {
+			logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Failed to add torrent to embedded client")
+			continue
+		}
+		if h != "" {
 			logger.Logger.Info().
 				Str("episode", fileName).
-				Str("hash", hash).
-				Msg("Successfully added episode to qBittorrent")
-			return hash
+				Str("hash", h).
+				Msg("Successfully added episode to embedded torrent client")
+			return h
 		}
 	}
 
@@ -352,8 +345,23 @@ func attemptDownloadWithRetries(configs *files.Config, torrentsService *torrents
 	return ""
 }
 
+// RemoveEpisodesWithLinks removes the given episodes from the saved-episodes file and frees
+// their disk space (library hardlink + seeding torrent, with the batch guard applied).
+// Exposed for API handlers (manual delete / redownload / replace).
+func RemoveEpisodesWithLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, ids []int) {
+	if len(ids) == 0 {
+		return
+	}
+	saved, err := fm.LoadSavedEpisodes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("RemoveEpisodesWithLinks: failed to load saved episodes")
+		return
+	}
+	removeEpisodesAndLinks(fm, backend, librarian, ids, saved)
+}
+
 // deleteEpisodesByStatus deletes episodes for animes in the delete-status list.
-func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager FileManagerInterface, torrentsService *torrents.TorrentService, savedEpisodes []files.EpisodeStruct) {
+func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, savedEpisodes []files.EpisodeStruct) {
 	if deleteResp == nil {
 		return
 	}
@@ -365,11 +373,6 @@ func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager Fil
 	for _, anime := range deleteResp.Data.Page.MediaList {
 		deleteAnimeIDs[anime.Id] = true
 	}
-
-	logger.Logger.Debug().
-		Int("anilist_entries", len(deleteResp.Data.Page.MediaList)).
-		Int("saved_episodes", len(savedEpisodes)).
-		Msg("Status-based deletion: fetched AniList entries")
 
 	var idsToDelete []int
 	for _, ep := range savedEpisodes {
@@ -387,40 +390,92 @@ func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager Fil
 		Int("count", len(idsToDelete)).
 		Msg("Deleting episodes for animes with delete statuses")
 
-	if err := fileManager.DeleteEpisodesFromFile(idsToDelete); err != nil {
-		logger.Logger.Warn().Err(err).Msg("Failed to delete episodes by status from file")
-	}
-
-	hashesToDelete := extractEpisodesHashes(savedEpisodes, idsToDelete)
-	if len(hashesToDelete) > 0 {
-		if err := torrentsService.DeleteTorrents(hashesToDelete); err != nil {
-			logger.Logger.Warn().Err(err).Msg("Failed to delete torrents by status")
-		} else {
-			logger.Logger.Info().Int("count", len(hashesToDelete)).Msg("Deleted torrents by status")
-		}
-	}
+	removeEpisodesAndLinks(fileManager, backend, librarian, idsToDelete, savedEpisodes)
 }
 
-func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config, torrentsService *torrents.TorrentService, data handleEpisodesData) {
+func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config, backend torrents.TorrentBackend, librarian files.Librarian, data handleEpisodesData) {
 	episodesNotInWatching := identifyEpisodesNotInWatching(data.savedEpisodes, data.checkedEpisodes)
 
 	saveEpisodesToFile(fileManager, data.newEpisodes)
 
 	if configs.DeleteWatchedEpisodes {
-		if err := fileManager.DeleteEpisodesFromFile(data.idsToDelete); err != nil {
-			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
-		}
+		allIds := append(append([]int{}, data.idsToDelete...), episodesNotInWatching...)
+		removeEpisodesAndLinks(fileManager, backend, librarian, allIds, data.savedEpisodes)
+	}
+}
 
-		allHashIds := append(data.idsToDelete, episodesNotInWatching...)
-		hashesToDelete := extractEpisodesHashes(data.savedEpisodes, allHashIds)
-		if len(hashesToDelete) > 0 {
-			if err := torrentsService.DeleteTorrents(hashesToDelete); err != nil {
-				logger.Logger.Warn().Err(err).Int("count", len(hashesToDelete)).Msg("Failed to delete torrents")
-			} else {
-				logger.Logger.Info().Int("count", len(hashesToDelete)).Msg("Deleted torrents")
+// removeEpisodesAndLinks deletes episodes and frees their disk space by removing BOTH links:
+// the library hardlink and the seeding copy (via the torrent). A torrent is only removed
+// when every one of its saved episodes is being deleted (batch guard) — a torrent with
+// surviving siblings is kept, and for batches its library files are only removed when the
+// whole torrent goes (raw filenames can't be safely mapped to a single episode).
+func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, idsToDelete []int, savedEpisodes []files.EpisodeStruct) {
+	if len(idsToDelete) == 0 {
+		return
+	}
+	deleteSet := make(map[int]bool, len(idsToDelete))
+	for _, id := range idsToDelete {
+		deleteSet[id] = true
+	}
+
+	byHash := make(map[string][]files.EpisodeStruct)
+	for _, ep := range savedEpisodes {
+		if ep.EpisodeHash != "" {
+			byHash[ep.EpisodeHash] = append(byHash[ep.EpisodeHash], ep)
+		}
+	}
+
+	// Remove library hardlinks.
+	for _, ep := range savedEpisodes {
+		if !deleteSet[ep.EpisodeID] {
+			continue
+		}
+		removingTorrent := ep.EpisodeHash == "" || allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet)
+		if ep.IsBatch && !removingTorrent {
+			// Keep batch library files while siblings survive (can't identify a single
+			// episode's raw-named file safely). Freed only when the whole torrent goes.
+			continue
+		}
+		for _, p := range ep.LibraryPaths {
+			if err := librarian.RemoveFromLibrary(p); err != nil {
+				logger.Logger.Warn().Err(err).Str("path", p).Msg("Failed to remove library hardlink")
 			}
 		}
 	}
+
+	// Remove torrents (seeding copy) with no surviving siblings.
+	removedHashes := make(map[string]bool)
+	for _, ep := range savedEpisodes {
+		if !deleteSet[ep.EpisodeID] || ep.EpisodeHash == "" || removedHashes[ep.EpisodeHash] {
+			continue
+		}
+		if allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet) {
+			if err := backend.Remove(ep.EpisodeHash, false); err != nil {
+				logger.Logger.Warn().Err(err).Str("hash", ep.EpisodeHash).Msg("Failed to remove torrent")
+			} else {
+				logger.Logger.Info().Str("hash", ep.EpisodeHash).Msg("Removed torrent (seeding copy)")
+			}
+			removedHashes[ep.EpisodeHash] = true
+		}
+	}
+
+	if err := fm.DeleteEpisodesFromFile(idsToDelete); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
+	}
+}
+
+// allEpisodesInDeleteSet reports whether every episode in the group is in the delete set
+// (i.e. no sibling survives, so the shared torrent can be removed).
+func allEpisodesInDeleteSet(group []files.EpisodeStruct, deleteSet map[int]bool) bool {
+	if len(group) == 0 {
+		return true
+	}
+	for _, ep := range group {
+		if !deleteSet[ep.EpisodeID] {
+			return false
+		}
+	}
+	return true
 }
 
 func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedEpisodes []int) []int {
@@ -439,22 +494,6 @@ func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedE
 	return episodesToDelete
 }
 
-func extractEpisodesHashes(savedEpisodes []files.EpisodeStruct, episodeIDs []int) []string {
-	hashMap := make(map[int]string)
-	for _, savedEp := range savedEpisodes {
-		hashMap[savedEp.EpisodeID] = savedEp.EpisodeHash
-	}
-
-	var hashes []string
-	for _, id := range episodeIDs {
-		if hash, exists := hashMap[id]; exists {
-			hashes = append(hashes, hash)
-		}
-	}
-
-	return hashes
-}
-
 func saveEpisodesToFile(fileManager FileManagerInterface, newEpisodes []files.EpisodeStruct) {
 	if err := fileManager.SaveEpisodesToFile(newEpisodes); err != nil {
 		logger.Logger.Warn().Err(err).Int("count", len(newEpisodes)).Msg("Failed to save episodes to file")
@@ -463,57 +502,3 @@ func saveEpisodesToFile(fileManager FileManagerInterface, newEpisodes []files.Ep
 	}
 }
 
-// enqueueOrMoveToCompletedFolder schedules a move-to-completed job when a job queue is
-// available, otherwise executes the move synchronously (fallback for tests / nil queue).
-func enqueueOrMoveToCompletedFolder(torrentsService *torrents.TorrentService, anime anilist.MediaList, configs *files.Config, savedEpisodes []files.EpisodeStruct, jobQueue *JobQueue) {
-	completeAnimePathIsSet := configs.CompletedAnimePath != "" && configs.CompletedAnimePath != configs.SavePath
-	animeIsFinished := anime.Media.Status == anilist.MediaStatusFinished
-
-	if !animeIsFinished || !completeAnimePathIsSet {
-		return
-	}
-
-	savedEpisodesMap := make(map[int]string)
-	for _, ep := range savedEpisodes {
-		savedEpisodesMap[ep.EpisodeID] = ep.EpisodeHash
-	}
-
-	var animeHashes []string
-	for _, ep := range anime.Media.AiringSchedule.Nodes {
-		if hash, exists := savedEpisodesMap[ep.ID]; exists {
-			animeHashes = append(animeHashes, hash)
-		}
-	}
-
-	if len(animeHashes) == 0 {
-		return
-	}
-
-	animeName := getAnimeTitleSafe(anime)
-
-	if jobQueue != nil {
-		logger.Logger.Info().
-			Str("anime", animeName).
-			Int("torrents_count", len(animeHashes)).
-			Msg("Scheduling move of completed anime to completed folder")
-		jobQueue.EnqueueMoveToCompleted(animeHashes, animeName)
-		return
-	}
-
-	logger.Logger.Info().
-		Str("anime", animeName).
-		Int("torrents_count", len(animeHashes)).
-		Msg("Moving completed anime to completed folder")
-
-	if err := torrentsService.SendAnimeToCompletedFolder(animeHashes, animeName); err != nil {
-		logger.Logger.Error().Err(err).Stack().
-			Str("anime", animeName).
-			Int("torrents_count", len(animeHashes)).
-			Msg("Failed to move torrents to completed folder")
-	} else {
-		logger.Logger.Info().
-			Str("anime", animeName).
-			Int("torrents_count", len(animeHashes)).
-			Msg("Successfully moved torrents to completed folder")
-	}
-}

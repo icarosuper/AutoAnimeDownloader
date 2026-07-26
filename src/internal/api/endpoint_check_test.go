@@ -2,6 +2,8 @@ package api
 
 import (
 	"AutoAnimeDownloader/src/internal/daemon"
+	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,8 @@ func TestHandleCheck(t *testing.T) {
 	server := &Server{
 		State:       state,
 		FileManager: mockFM,
+		Torrents:    torrents.NewFakeBackend(),
+		Librarian:   files.NewLibrarian(files.NewOSFileSystem()),
 	}
 
 	handler := handleCheck(server)

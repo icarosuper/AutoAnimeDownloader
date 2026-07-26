@@ -89,9 +89,18 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		if config.QBittorrentUrl == "" {
-			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "qBittorrent URL is required")
+		if config.CompletedAnimePath == "" {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Completed anime path is required")
 			return
+		}
+
+		// The library is built from hardlinks, which cannot cross filesystems. Verify at
+		// save time that save path and completed path live on the same volume.
+		if server.Librarian != nil {
+			if err := server.Librarian.ProbePaths(config.SavePath, config.CompletedAnimePath); err != nil {
+				JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+				return
+			}
 		}
 
 		// Validate numeric values
