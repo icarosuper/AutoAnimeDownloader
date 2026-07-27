@@ -133,6 +133,26 @@ export interface LogsResponse {
   lines: string[]
 }
 
+export interface TorrentInfo {
+  hash: string
+  name: string
+  status: string
+  completed: boolean
+  anime_name?: string
+  anime_id?: number
+  episode_number: number | null
+  is_batch: boolean
+  bytes_completed: number
+  bytes_total: number
+  bytes_uploaded: number
+  progress: number
+  download_speed: number
+  upload_speed: number
+  peers_total: number
+  eta_seconds: number | null
+  seeded_for_seconds: number
+}
+
 export async function getStatus(): Promise<StatusResponse> {
   return apiRequest<StatusResponse>('GET', '/status')
 }
@@ -229,6 +249,22 @@ export async function stopDaemon(): Promise<void> {
 export async function getLogs(lines?: number): Promise<LogsResponse> {
   const endpoint = lines ? `/logs?lines=${lines}` : '/logs'
   return apiRequest<LogsResponse>('GET', endpoint)
+}
+
+export async function getTorrents(): Promise<TorrentInfo[]> {
+  return apiRequest<TorrentInfo[]>('GET', '/torrents')
+}
+
+export async function pauseTorrent(hash: string): Promise<void> {
+  return apiRequest<void>('POST', `/torrents/${hash}/pause`)
+}
+
+export async function resumeTorrent(hash: string): Promise<void> {
+  return apiRequest<void>('POST', `/torrents/${hash}/resume`)
+}
+
+export async function announceTorrent(hash: string): Promise<void> {
+  return apiRequest<void>('POST', `/torrents/${hash}/announce`)
 }
 
 export async function testWebhook(name: string): Promise<void> {

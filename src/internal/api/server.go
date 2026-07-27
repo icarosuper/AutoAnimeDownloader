@@ -94,6 +94,10 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))
 	apiMux.HandleFunc("/api/v1/logs", handleLogs(s))
+	apiMux.HandleFunc("/api/v1/torrents", handleTorrents(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/pause", handleTorrentPause(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/resume", handleTorrentResume(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/announce", handleTorrentAnnounce(s))
 	apiMux.HandleFunc("/api/v1/notifications/webhooks/{name}/test", handleNotificationWebhookTest(s))
 
 	// WebSocket route (no JSON middleware)

@@ -121,6 +121,33 @@ func (m *SessionManager) Remove(hash string, keepData bool) error {
 	return m.session.Remove(hash, keepData)
 }
 
+func (m *SessionManager) Pause(hash string) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
+		return ErrSessionNotReady
+	}
+	return m.session.Pause(hash)
+}
+
+func (m *SessionManager) Resume(hash string) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
+		return ErrSessionNotReady
+	}
+	return m.session.Resume(hash)
+}
+
+func (m *SessionManager) Announce(hash string) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
+		return ErrSessionNotReady
+	}
+	return m.session.Announce(hash)
+}
+
 func (m *SessionManager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

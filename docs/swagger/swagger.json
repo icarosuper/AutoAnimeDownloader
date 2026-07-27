@@ -994,6 +994,200 @@
                     }
                 }
             }
+        },
+        "/torrents": {
+            "get": {
+                "description": "Returns a live snapshot of every torrent in the embedded client — progress, speed, ETA, peers and status — joined with the anime/episode it belongs to. Batch torrents appear once, with a null episode_number. Responds with an empty list (not an error) when no session exists yet, i.e. before save_path is configured.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "List torrents",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/api.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/api.TorrentResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/torrents/{hash}/announce": {
+            "post": {
+                "description": "Re-announces the torrent to all trackers and DHT — the way out of \"stuck at 0 peers\". It does not override the trackers' minimum interval, so repeated calls have no extra effect.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "Force a torrent re-announce",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Torrent info hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/torrents/{hash}/pause": {
+            "post": {
+                "description": "Stops a torrent. Does not block: the torrent enters the \"stopping\" state and only reaches \"stopped\" up to ~5s later, once the stop event reaches the trackers. The paused state is persisted and survives a daemon restart.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "Pause a torrent",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Torrent info hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/torrents/{hash}/resume": {
+            "post": {
+                "description": "Restarts a paused torrent and re-arms its completion listener.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "Resume a torrent",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Torrent info hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1171,6 +1365,83 @@
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "api.TorrentResponse": {
+            "type": "object",
+            "properties": {
+                "anime_id": {
+                    "type": "integer",
+                    "example": 154587
+                },
+                "anime_name": {
+                    "type": "string",
+                    "example": "Sousou no Frieren"
+                },
+                "bytes_completed": {
+                    "type": "integer",
+                    "example": 524288000
+                },
+                "bytes_total": {
+                    "description": "BytesTotal is 0 until the torrent's metadata arrives.",
+                    "type": "integer",
+                    "example": 1073741824
+                },
+                "bytes_uploaded": {
+                    "type": "integer",
+                    "example": 104857600
+                },
+                "completed": {
+                    "description": "Completed is piece-derived (TorrentInfo.Completed), not Status-derived — it stays true\nfor a torrent paused after finishing, which Status alone cannot tell apart from a\npaused, unfinished one. Used to key the list sort instead of Status.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "download_speed": {
+                    "type": "integer",
+                    "example": 2097152
+                },
+                "episode_number": {
+                    "description": "EpisodeNumber is null for batch torrents (they map to several episodes).",
+                    "type": "integer"
+                },
+                "eta_seconds": {
+                    "description": "EtaSeconds is null when unknown or infinite.",
+                    "type": "integer",
+                    "example": 240
+                },
+                "hash": {
+                    "type": "string",
+                    "example": "0123456789abcdef0123456789abcdef01234567"
+                },
+                "is_batch": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "name": {
+                    "type": "string",
+                    "example": "[SubsPlease] Frieren - 07 (1080p).mkv"
+                },
+                "peers_total": {
+                    "type": "integer",
+                    "example": 14
+                },
+                "progress": {
+                    "description": "Progress is 0..1: BytesCompleted/BytesTotal normally, falling back to the piece ratio\n(PiecesHave/PiecesTotal) when BytesCompleted reads 0 with a paused torrent — see\nbuildTorrentResponse. 0 while BytesTotal and PiecesTotal are both unknown.",
+                    "type": "number",
+                    "example": 0.48
+                },
+                "seeded_for_seconds": {
+                    "type": "integer",
+                    "example": 3600
+                },
+                "status": {
+                    "type": "string",
+                    "example": "downloading"
+                },
+                "upload_speed": {
+                    "type": "integer",
+                    "example": 524288
                 }
             }
         },

@@ -84,6 +84,10 @@ Key endpoints:
 | `POST` | `/api/v1/daemon/stop` | `handleDaemonStop` | `endpoint_daemon_stop.go` |
 | `GET` | `/api/v1/logs` | `handleLogs` | `endpoint_logs.go` |
 | `POST` | `/api/v1/notifications/webhooks/{name}/test` | `handleNotificationWebhookTest` | `endpoint_notifications.go` |
+| `GET` | `/api/v1/torrents` | `handleTorrents` | `endpoint_torrents.go` |
+| `POST` | `/api/v1/torrents/{hash}/pause` | `handleTorrentPause` | `endpoint_torrents.go` |
+| `POST` | `/api/v1/torrents/{hash}/resume` | `handleTorrentResume` | `endpoint_torrents.go` |
+| `POST` | `/api/v1/torrents/{hash}/announce` | `handleTorrentAnnounce` | `endpoint_torrents.go` |
 | `WS` | `/api/v1/ws` | `handleWebSocket` | `websocket.go` |
 
 ## Version Injection
@@ -292,6 +296,14 @@ All episode mutation endpoints. Each shares same pattern:
 
 Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unmanage), `replace` (per episode magnet), `replaceAnime` (full anime magnet).
 
+### `src/internal/api/endpoint_torrents.go`
+
+- `TorrentResponse` struct — one row per torrent: live progress (`bytes_completed/total/uploaded`, `progress` 0..1, `download_speed`, `upload_speed`, `peers_total`, `eta_seconds`, `seeded_for_seconds`), a piece-derived `completed` flag, joined with the anime/episode that shares its info hash. A **batch** torrent covers several episodes but is still one torrent, so it appears **once**, with `episode_number: null` and `is_batch: true`. `handleTorrents` returns an **empty list, not an error**, when no session exists yet (`save_path` not configured) — `TorrentBackend.List()` returns `nil` in that case and that is treated as the normal empty state. `completed` comes straight from `TorrentInfo.Completed` (piece-derived, see decisions.md #30) rather than `Status == "seeding"`, because pausing takes a finished torrent out of `Seeding` — the list sort keys on `completed` for the same reason.
+- `handleTorrents` — lists `server.Torrents.List()`, joins each entry against `episodes.json` by `Hash == EpisodeHash` (best-effort: a `LoadSavedEpisodes` failure logs a warning and falls back to torrents with no anime metadata rather than failing the request), sorts unfinished torrents first (keyed on `Completed`, not the status slug) then alphabetically.
+- `buildTorrentResponse(t, eps)` — the join + batch-collapse logic described above. `Progress` normally comes from `BytesCompleted/BytesTotal`, but falls back to the piece ratio (`PiecesHave/PiecesTotal`) whenever `BytesCompleted` reads 0 with a nonzero total — pausing frees rain's piece data and zeroes `Bytes.Completed` while the bitfield backing `PiecesHave/PiecesTotal` survives, so without the fallback a paused torrent's progress bar would collapse to 0%.
+- `torrentAction(server, action)` — shared shape for `pause`/`resume`/`announce`: POST only, hash from the path, 404 when `Get(hash)` misses, backend call last.
+- `handleTorrentPause` / `handleTorrentResume` / `handleTorrentAnnounce` — thin wrappers over `torrentAction` calling `Torrents.Pause/Resume/Announce`.
+
 ### `src/internal/api/websocket.go`
 
 - `WebSocketManager` — manages connected clients, broadcasts state changes
@@ -403,8 +415,15 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | Symbol | Purpose |
 |--------|---------|
-| `TorrentBackend` interface | `Ensure(savePath)`, `Add(magnet)`, `List()`, `Get(hash)`, `Remove(hash, keepData)`, `SetCallbacks(onComplete, onFailed)`, `Close()` |
-| `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<save_path>/<id>`), `Completed` |
+| `TorrentBackend` interface | `Ensure(savePath)`, `Add(magnet)`, `List()`, `Get(hash)`, `Remove(hash, keepData)`, `Pause(hash)`, `Resume(hash)`, `Announce(hash)`, `SetCallbacks(onComplete, onFailed)`, `Close()` |
+| `TorrentBackend.Pause/Resume/Announce(hash)` | Per-torrent controls. `Pause` stops the torrent (non-blocking — `stopping` for up to ~5s before `stopped`); `Resume` re-arms the completion listener that pausing consumed; `Announce` forces a tracker/DHT re-announce without overriding the trackers' minimum interval |
+| `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<save_path>/<id>`), `Completed`, `Status` (API slug from `statusSlug`), plus progress fields (`BytesCompleted/Total/Uploaded`, `DownloadSpeed`, `UploadSpeed`, `PeersTotal`, `PiecesHave/Total`, `ETASeconds`, `SeededForSeconds`) — all filled from a single `Stats()` call per torrent in `toInfo` |
+
+**`status.go`**
+
+| Symbol | Purpose |
+|--------|---------|
+| `statusSlug(torrent.Status)` | Maps rain's status enum to the stable API slug (`stopped`, `downloading_metadata`, `allocating`, `verifying`, `downloading`, `seeding`, `stopping`, `unknown`) — never `Status.String()`, which is display text (`"Downloading Metadata"`) and can be reworded by a library upgrade |
 
 **`session.go`** — rain-backed implementation.
 
@@ -412,7 +431,9 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 |--------|---------|
 | `Session` struct | Wraps a `torrent.Session`; `DataDir=save_path`, `Database=session.db`, `DataDirIncludesTorrentID=true`, RPC disabled |
 | `NewSession(savePath, databasePath)` | Creates the embedded client |
-| `Session.Add/List/Get/Remove/SetCallbacks/Close` | Implement `TorrentBackend` |
+| `Session.Add/List/Get/Remove/Pause/Resume/Announce/SetCallbacks/Close` | Implement `TorrentBackend` |
+| `toInfo(t)` | Builds a `TorrentInfo` from one `t.Stats()` call; `Completed` comes from `completedFromStats`, not from `Status` |
+| `completedFromStats(st)` | `st.Pieces.Total > 0 && st.Pieces.Have >= st.Pieces.Total` — deliberately independent of `Status`, because pausing a finished torrent takes it out of `Seeding` (see decision 30) |
 | `parseInfoHash(magnet)` | Extracts the lowercase-hex info hash from a magnet link |
 
 **`sessionmanager.go`** — lifecycle owner.
@@ -422,6 +443,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `SessionManager` struct | Owns the current `Session`; recreates it when `save_path` changes; keeps `session.db` stable across changes |
 | `NewSessionManager(dbPath)` | Constructor |
 | `SessionManager.Ensure(savePath)` | Creates/recreates the session; returns `true` when a new session was made (caller reconciles); `ErrSessionNotReady` if `savePath==""` |
+| `SessionManager.Pause/Resume/Announce(hash)` | Delegate to the current `Session` under the read lock; `ErrSessionNotReady` if no session exists |
 | `ErrSessionNotReady` | Returned when no session exists yet (incomplete config — no `save_path`) |
 
 **`fakebackend.go`** — in-memory test double.
@@ -429,6 +451,9 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | Symbol | Purpose |
 |--------|---------|
 | `FakeBackend` struct + `NewFakeBackend()` | Implements `TorrentBackend` with an in-memory map |
+| `FakeBackend.Pause/Resume(hash)` | Set `Status` to `"stopped"`/`"downloading"`; error if the hash is absent |
+| `FakeBackend.Announce(hash)` | Records the call in `announceCalls`; error if the hash is absent |
+| `FakeBackend.AnnounceCalls()` | Returns the hashes passed to `Announce`, in order — for test assertions |
 | `FakeBackend.AddCompleted(hash, dataDir)` / `CompleteTorrent(hash, dataDir)` / `FailTorrent(hash, err)` | Test helpers to drive completion/failure callbacks |
 
 ### `src/internal/notifications/notifications.go`
@@ -459,7 +484,8 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | File | Route | Purpose |
 |------|-------|---------|
-| `routes/Status.svelte` | `#/` | Daemon status, start/stop, anime list |
+| `routes/Status.svelte` | `#/` | Daemon status, start/stop, anime list, global speed card (aggregate download/upload across all torrents) |
+| `routes/Downloads.svelte` | `#/downloads` | Live torrent list — progress, speed, ETA, peers, status per torrent, joined with anime/episode; pause/resume/announce buttons. Polls `GET /api/v1/torrents` every 2s while mounted, stops polling on unmount |
 | `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions |
 | `routes/Config.svelte` | `#/config` | Edit all config fields |
 | `routes/Priorities.svelte` | `#/priorities` | Reorder/add/remove torrent priority lists (fansubs, resolutions, source, codec, audio, criteria order, ignore list); reset per-list or all, via `GET/PUT /api/v1/config` + `GET /api/v1/config/priorities/defaults` |

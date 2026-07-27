@@ -92,6 +92,47 @@ func (s *Session) Remove(hash string, keepData bool) error {
 	return nil
 }
 
+func (s *Session) Pause(hash string) error {
+	t := s.ses.GetTorrent(hash)
+	if t == nil {
+		return fmt.Errorf("torrent %s not found", hash)
+	}
+	if err := t.Stop(); err != nil {
+		return fmt.Errorf("failed to pause torrent %s: %w", hash, err)
+	}
+	logger.Logger.Info().Str("hash", hash).Msg("Paused torrent")
+	return nil
+}
+
+func (s *Session) Resume(hash string) error {
+	t := s.ses.GetTorrent(hash)
+	if t == nil {
+		return fmt.Errorf("torrent %s not found", hash)
+	}
+	if err := t.Start(); err != nil {
+		return fmt.Errorf("failed to resume torrent %s: %w", hash, err)
+	}
+	// Pausing made NotifyStop fire (with a nil error), which ended the one-shot listener
+	// goroutine armed by Add/SetCallbacks. Without re-arming, this torrent would finish
+	// downloading without ever enqueuing JobOrganize — the episode would never be
+	// hardlinked into the library. Re-arming may leave two listeners on a
+	// pause/resume/pause/resume torrent; that is safe, because JobOrganize is idempotent.
+	s.armListener(t)
+	logger.Logger.Info().Str("hash", hash).Msg("Resumed torrent")
+	return nil
+}
+
+func (s *Session) Announce(hash string) error {
+	t := s.ses.GetTorrent(hash)
+	if t == nil {
+		return fmt.Errorf("torrent %s not found", hash)
+	}
+	// rain's Announce returns nothing — it queues the announce and returns immediately.
+	t.Announce()
+	logger.Logger.Info().Str("hash", hash).Msg("Forced torrent re-announce")
+	return nil
+}
+
 func (s *Session) SetCallbacks(onComplete func(hash string), onFailed func(hash string, err error)) {
 	s.mu.Lock()
 	s.onComplete = onComplete
@@ -147,12 +188,39 @@ func (s *Session) armListener(t *torrent.Torrent) {
 	}()
 }
 
+// completedFromStats reports whether every piece is on disk. It is deliberately not
+// derived from Status: pausing takes a finished torrent out of Seeding, and organize/
+// reconcile gate on this field.
+func completedFromStats(st torrent.Stats) bool {
+	return st.Pieces.Total > 0 && st.Pieces.Have >= st.Pieces.Total
+}
+
 func toInfo(t *torrent.Torrent) TorrentInfo {
+	// Um Stats() só: é round-trip bloqueante para dentro da goroutine do torrent, não getter.
+	st := t.Stats()
+
+	var eta *int64
+	if st.ETA != nil {
+		secs := int64(st.ETA.Seconds())
+		eta = &secs
+	}
+
 	return TorrentInfo{
-		Hash:      t.InfoHash().String(),
-		Name:      t.Name(),
-		DataDir:   t.Dir(),
-		Completed: t.Stats().Status == torrent.Seeding,
+		Hash:             t.InfoHash().String(),
+		Name:             t.Name(),
+		DataDir:          t.Dir(),
+		Completed:        completedFromStats(st),
+		Status:           statusSlug(st.Status),
+		BytesCompleted:   st.Bytes.Completed,
+		BytesTotal:       st.Bytes.Total,
+		BytesUploaded:    st.Bytes.Uploaded,
+		DownloadSpeed:    st.Speed.Download,
+		UploadSpeed:      st.Speed.Upload,
+		PeersTotal:       st.Peers.Total,
+		PiecesHave:       st.Pieces.Have,
+		PiecesTotal:      st.Pieces.Total,
+		ETASeconds:       eta,
+		SeededForSeconds: int64(st.SeededFor.Seconds()),
 	}
 }
 

@@ -25,5 +25,6 @@
 - Windows
 	- Instalar ao invés de rodar separado
 	- Dar detach e rodar no background
-- Torrent imbutido
 - Adicionar modal com opções de torrents de animes / episódios
+	- Progresso e pause/resume/announce já implementados (tela `#/downloads`)
+	- Falta: progresso por arquivo, peers/trackers

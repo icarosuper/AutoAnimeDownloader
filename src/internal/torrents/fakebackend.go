@@ -19,6 +19,8 @@ type FakeBackend struct {
 	// NextHash overrides the hash returned by Add for the next call (for magnets whose
 	// hash the test does not control). When empty, the hash is derived from the magnet.
 	NextHash string
+	// announceCalls records every Announce(hash) for assertions.
+	announceCalls []string
 }
 
 var _ TorrentBackend = (*FakeBackend)(nil)
@@ -46,7 +48,12 @@ func (f *FakeBackend) Add(magnet string) (string, error) {
 		}
 	}
 	if _, ok := f.torrents[hash]; !ok {
-		f.torrents[hash] = &TorrentInfo{Hash: hash, Name: magnet, DataDir: "/fake/" + hash}
+		f.torrents[hash] = &TorrentInfo{
+			Hash:    hash,
+			Name:    magnet,
+			DataDir: "/fake/" + hash,
+			Status:  "downloading",
+		}
 	}
 	return hash, nil
 }
@@ -82,6 +89,45 @@ func (f *FakeBackend) Remove(hash string, keepData bool) error {
 	return nil
 }
 
+func (f *FakeBackend) Pause(hash string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t, ok := f.torrents[hash]
+	if !ok {
+		return fmt.Errorf("fake: torrent %s not found", hash)
+	}
+	t.Status = "stopped"
+	return nil
+}
+
+func (f *FakeBackend) Resume(hash string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t, ok := f.torrents[hash]
+	if !ok {
+		return fmt.Errorf("fake: torrent %s not found", hash)
+	}
+	t.Status = "downloading"
+	return nil
+}
+
+func (f *FakeBackend) Announce(hash string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.torrents[hash]; !ok {
+		return fmt.Errorf("fake: torrent %s not found", hash)
+	}
+	f.announceCalls = append(f.announceCalls, hash)
+	return nil
+}
+
+// AnnounceCalls returns the hashes passed to Announce, in order.
+func (f *FakeBackend) AnnounceCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.announceCalls...)
+}
+
 func (f *FakeBackend) SetCallbacks(onComplete func(hash string), onFailed func(hash string, err error)) {
 	f.mu.Lock()
 	f.onComplete = onComplete
@@ -97,7 +143,27 @@ func (f *FakeBackend) Close() error { return nil }
 func (f *FakeBackend) AddCompleted(hash, dataDir string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.torrents[hash] = &TorrentInfo{Hash: hash, DataDir: dataDir, Completed: true}
+	f.torrents[hash] = &TorrentInfo{Hash: hash, DataDir: dataDir, Completed: true, Status: "seeding"}
+}
+
+// AddPaused injects a torrent already in the paused ("stopped") state, with piece counts and
+// Completed set directly — independent of Status. This is the state real Pause() leaves
+// behind on a finished torrent: rain frees Bytes.Completed on Stop, but Completed is
+// piece-derived and the piece bitfield survives, so a paused-but-complete torrent still
+// reports Completed: true. Tests use this to build that fixture without needing a real
+// Pause() call (which this fake models only as a status flip, per Pause/Resume's existing
+// semantics — see TestFakeBackendPauseSetsStoppedStatus).
+func (f *FakeBackend) AddPaused(hash, name string, piecesHave, piecesTotal uint32, completed bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.torrents[hash] = &TorrentInfo{
+		Hash:        hash,
+		Name:        name,
+		Status:      "stopped",
+		PiecesHave:  piecesHave,
+		PiecesTotal: piecesTotal,
+		Completed:   completed,
+	}
 }
 
 // CompleteTorrent marks a torrent seeding and fires the onComplete callback.
@@ -105,6 +171,7 @@ func (f *FakeBackend) CompleteTorrent(hash, dataDir string) {
 	f.mu.Lock()
 	if t, ok := f.torrents[hash]; ok {
 		t.Completed = true
+		t.Status = "seeding"
 		if dataDir != "" {
 			t.DataDir = dataDir
 		}
