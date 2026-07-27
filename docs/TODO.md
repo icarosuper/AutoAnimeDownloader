@@ -1,30 +1,33 @@
-- Download de animes
+> Versão atual: v1.3.3
+> Cada task indica o bump que deve gerar na versão do app (semver).
+
+- Download de animes — **+0.1.0**
 	- Animes completos
 		- Ajustar download em batch
 		- Contar episódios
-- Renomear arquivos de batch
-- Nova tela de prioridades dos torrents
+- Renomear arquivos de batch — **+0.1.0**
+- Nova tela de prioridades dos torrents — **+0.1.0**
 	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
 	- Usuário por reordenar, adicionar e excluir itens
 	- Botão pra voltar pro default
-- Baixar animes avulsos
+- Baixar animes avulsos — **+0.1.0**
 	- Nova tela de baixar animes avulsos.
 	- Nessa tela vai ter uma barra de pesquisa.
 	- Ao pesquisar vai buscar animes no anilist.
 	- Ao selecionar um anime vai adicionar anime aos animes trackeados
 	- Vai ter que implementar um gerenciamento de tracking do anime
-- Fontes alternativas de torrent
+- Fontes alternativas de torrent — **+0.1.0**
 	- Fallback pra AnimeTosho quando Nyaa não retorna resultado
 	- Abstrair interface TorrentSource com múltiplas implementações
-- Integração Jellyfin/Plex
+- Integração Jellyfin/Plex — **+0.1.0**
 	- Trigger de library scan após download concluído
-- Dashboard de estatísticas
+- Dashboard de estatísticas — **+0.1.0**
 	- Episódios baixados por semana/anime
 	- Fansubs mais usados
 	- Dados já disponíveis no downloaded_episodes JSONL
-- Windows
+- Windows — **+0.1.0**
 	- Instalar ao invés de rodar separado
 	- Dar detach e rodar no background
-- Adicionar modal com opções de torrents de animes / episódios
+- Adicionar modal com opções de torrents de animes / episódios — **+0.1.0**
 	- Progresso e pause/resume/announce já implementados (tela `#/downloads`)
 	- Falta: progresso por arquivo, peers/trackers

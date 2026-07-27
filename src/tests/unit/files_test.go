@@ -153,6 +153,9 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 		if cfg.CheckInterval != 10 {
 			t.Fatalf("expected CheckInterval 10, got %d", cfg.CheckInterval)
 		}
+		if len(cfg.DownloadMediaStatuses) != 2 || cfg.DownloadMediaStatuses[0] != "RELEASING" || cfg.DownloadMediaStatuses[1] != "FINISHED" {
+			t.Fatalf("expected default DownloadMediaStatuses [RELEASING FINISHED], got %v", cfg.DownloadMediaStatuses)
+		}
 
 		// modify and save
 		cfg.CheckInterval = 42

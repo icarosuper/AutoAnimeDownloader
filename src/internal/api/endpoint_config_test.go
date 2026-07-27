@@ -46,6 +46,7 @@ func (m *mockFileManager) LoadConfigs() (*files.Config, error) {
 			DeleteWatchedEpisodes: true,
 			ExcludedLists:         []string{},
 			DownloadStatuses:      []string{"CURRENT", "REPEATING"},
+			DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
 			DeleteStatuses:        []string{},
 		}, nil
 	}

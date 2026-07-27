@@ -1483,6 +1483,12 @@ const docTemplate = `{
                 "delete_watched_episodes": {
                     "type": "boolean"
                 },
+                "download_media_statuses": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "download_statuses": {
                     "type": "array",
                     "items": {
