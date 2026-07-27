@@ -24,6 +24,7 @@ export const baseConfig = {
     excluded_lists: [],
     rename_files_for_jellyfin: false,
     download_statuses: ['CURRENT', 'REPEATING'],
+    download_media_statuses: ['RELEASING', 'FINISHED'],
     delete_statuses: [],
     notifications: { webhooks: [] },
   },

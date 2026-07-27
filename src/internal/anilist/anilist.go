@@ -79,6 +79,15 @@ const (
 	MediaStatusHiatus         MediaStatus = "HIATUS"
 )
 
+func MediaStatusAllowed(allowedStatuses []string, status MediaStatus) bool {
+	for _, s := range allowedStatuses {
+		if s == string(status) {
+			return true
+		}
+	}
+	return false
+}
+
 type CoverImage struct {
 	Large  string `json:"large"`
 	Medium string `json:"medium"`
@@ -134,10 +143,11 @@ type MediaListDetailResponse struct {
 }
 
 type MediaListDetail struct {
-	Id       int             `json:"id"`
-	Status   MediaListStatus `json:"status"`
-	Progress int             `json:"progress"`
-	Media    struct {
+	Id          int             `json:"id"`
+	Status      MediaListStatus `json:"status"`
+	Progress    int             `json:"progress"`
+	CustomLists CustomLists     `json:"customLists"`
+	Media       struct {
 		Id             int            `json:"id"`
 		Episodes       int            `json:"episodes"`
 		Format         MediaFormat    `json:"format"`
@@ -378,6 +388,7 @@ func GetAnimeInfo(mediaListId int) (*MediaListDetailResponse, error) {
 				id
 				status
 				progress
+				customLists
 				media {
 					id
 					episodes

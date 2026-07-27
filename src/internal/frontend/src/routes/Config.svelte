@@ -43,6 +43,8 @@
     hintExcludedList: m.config_hint_excluded_list(),
     labelDownloadStatuses: m.config_label_download_statuses(),
     hintDownloadStatuses: m.config_hint_download_statuses(),
+    labelDownloadMediaStatuses: m.config_label_download_media_statuses(),
+    hintDownloadMediaStatuses: m.config_hint_download_media_statuses(),
     labelDeleteStatuses: m.config_label_delete_statuses(),
     hintDeleteStatuses: m.config_hint_delete_statuses(),
     statusLabels: {
@@ -52,6 +54,10 @@
       PAUSED:    m.config_status_paused(),
       DROPPED:   m.config_status_dropped(),
       COMPLETED: m.config_status_completed(),
+      RELEASING: m.config_status_releasing(),
+      FINISHED:  m.config_status_finished(),
+      CANCELLED: m.config_status_cancelled(),
+      HIATUS:    m.config_status_hiatus(),
     } as Record<string, string>,
     btnRunCheck: m.config_btn_run_check(),
     btnSave: m.config_btn_save(),
@@ -59,6 +65,7 @@
   }
 
   const ALL_STATUSES = ["CURRENT", "REPEATING", "PLANNING", "PAUSED", "DROPPED", "COMPLETED"];
+  const ALL_MEDIA_STATUSES = ["RELEASING", "FINISHED", "CANCELLED", "HIATUS"];
 
   let config: Config = {
     anilist_usernames: [],
@@ -73,6 +80,7 @@
     excluded_lists: [],
     rename_files_for_jellyfin: false,
     download_statuses: ["CURRENT", "REPEATING"],
+    download_media_statuses: ["RELEASING", "FINISHED"],
     delete_statuses: [],
     notifications: { webhooks: [] },
     priorities: {
@@ -93,6 +101,15 @@
     } else {
       config.download_statuses = [...(config.download_statuses ?? []), status];
       config.delete_statuses = (config.delete_statuses ?? []).filter(s => s !== status);
+    }
+  }
+
+  function toggleDownloadMediaStatus(status: string) {
+    const active = (config.download_media_statuses ?? []).includes(status);
+    if (active) {
+      config.download_media_statuses = (config.download_media_statuses ?? []).filter(s => s !== status);
+    } else {
+      config.download_media_statuses = [...(config.download_media_statuses ?? []), status];
     }
   }
 
@@ -272,6 +289,26 @@
                 <button
                   type="button"
                   on:click={() => toggleDownloadStatus(status)}
+                  title={status}
+                  class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none transition-colors
+                    {active
+                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'}"
+                >
+                  {T ? T.statusLabels[status] : status}
+                </button>
+              {/each}
+            </div>
+          </div>
+          <div class="flex flex-col gap-2">
+            <label class="text-sm font-medium text-base-content">{T && T.labelDownloadMediaStatuses}</label>
+            <p class="text-xs text-base-content/50">{T && T.hintDownloadMediaStatuses}</p>
+            <div class="flex flex-wrap gap-2">
+              {#each ALL_MEDIA_STATUSES as status}
+                {@const active = (config.download_media_statuses ?? []).includes(status)}
+                <button
+                  type="button"
+                  on:click={() => toggleDownloadMediaStatus(status)}
                   title={status}
                   class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none transition-colors
                     {active

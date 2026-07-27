@@ -156,6 +156,9 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 		if cfg.QBittorrentUrl != "http://127.0.0.1:8080" {
 			t.Fatalf("unexpected default QBittorrentUrl: %s", cfg.QBittorrentUrl)
 		}
+		if len(cfg.DownloadMediaStatuses) != 2 || cfg.DownloadMediaStatuses[0] != "RELEASING" || cfg.DownloadMediaStatuses[1] != "FINISHED" {
+			t.Fatalf("expected default DownloadMediaStatuses [RELEASING FINISHED], got %v", cfg.DownloadMediaStatuses)
+		}
 
 		// modify and save
 		cfg.CheckInterval = 42

@@ -58,6 +58,7 @@ type Config struct {
 	ExcludedLists          []string            `json:"excluded_lists"`
 	RenameFilesForJellyfin bool                `json:"rename_files_for_jellyfin"`
 	DownloadStatuses       []string            `json:"download_statuses"`
+	DownloadMediaStatuses  []string            `json:"download_media_statuses"`
 	DeleteStatuses         []string            `json:"delete_statuses"`
 	Notifications          NotificationsConfig `json:"notifications"`
 	Priorities             nyaa.Priorities     `json:"priorities"`
@@ -88,6 +89,7 @@ func getDefaultConfig() *Config {
 		WatchedEpisodesToKeep: 0,
 		ExcludedLists:         []string{},
 		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
+		DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
 		DeleteStatuses:        []string{},
 		Notifications:         NotificationsConfig{Webhooks: []WebhookPreset{}},
 		Priorities:            nyaa.DefaultPriorities(),

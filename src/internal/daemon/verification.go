@@ -290,12 +290,22 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 			continue
 		}
 
+		var filtered []anilist.MediaList
 		for i := range resp.Data.Page.MediaList {
 			ml := &resp.Data.Page.MediaList[i]
+			if !anilist.MediaStatusAllowed(configs.DownloadMediaStatuses, ml.Media.Status) {
+				logger.Logger.Debug().
+					Int("anime_id", ml.Id).
+					Str("media_status", string(ml.Media.Status)).
+					Msg("Skipping anime: media status not in DownloadMediaStatuses")
+				continue
+			}
 			if cl, ok := clMap[ml.Id]; ok && len(cl) > 0 {
 				ml.CustomLists = cl
 			}
+			filtered = append(filtered, *ml)
 		}
+		resp.Data.Page.MediaList = filtered
 
 		count := len(resp.Data.Page.MediaList)
 		logger.Logger.Debug().

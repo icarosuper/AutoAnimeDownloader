@@ -120,6 +120,44 @@ func TestAniListModule_GetAnimeInfo_ParsesMediaID(t *testing.T) {
 	}
 }
 
+func TestAniListModule_GetAnimeInfo_ParsesCustomLists(t *testing.T) {
+	json := `{"data": {"MediaList": {"id": 1, "status": "CURRENT", "progress": 2, "customLists": {"Blacklist": true}, "media": {
+		"episodes": 12, "format": "TV", "status": "RELEASING",
+		"title": {"english": "My Anime", "romaji": "Boku no Anime"},
+		"airingSchedule": {"nodes": []}
+	}}}}`
+	restore := mockAniListResponse(json, 200)
+	defer restore()
+
+	resp, err := anilist.GetAnimeInfo(1)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !resp.Data.MediaList.CustomLists["Blacklist"] {
+		t.Fatalf("expected CustomLists[Blacklist]=true, got %v", resp.Data.MediaList.CustomLists)
+	}
+}
+
+func TestMediaStatusAllowed_AllowedStatusPasses(t *testing.T) {
+	allowed := []string{"RELEASING", "FINISHED"}
+	if !anilist.MediaStatusAllowed(allowed, anilist.MediaStatusReleasing) {
+		t.Error("expected RELEASING to be allowed")
+	}
+}
+
+func TestMediaStatusAllowed_DisallowedStatusSkipped(t *testing.T) {
+	allowed := []string{"RELEASING", "FINISHED"}
+	if anilist.MediaStatusAllowed(allowed, anilist.MediaStatusNotYetReleased) {
+		t.Error("expected NOT_YET_RELEASED to be disallowed")
+	}
+}
+
+func TestMediaStatusAllowed_EmptySliceAllowsNothing(t *testing.T) {
+	if anilist.MediaStatusAllowed([]string{}, anilist.MediaStatusReleasing) {
+		t.Error("expected empty allowed list to allow nothing")
+	}
+}
+
 func TestAniListModule_SearchAnimes_EmptyStatuses(t *testing.T) {
 	resp, err := anilist.GetAllCurrentAnime("icarosuper", nil)
 	if err != nil {
