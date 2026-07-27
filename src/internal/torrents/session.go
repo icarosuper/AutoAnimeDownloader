@@ -49,15 +49,17 @@ func (s *Session) Add(magnet string) (string, error) {
 		return "", fmt.Errorf("invalid magnet: %w", err)
 	}
 
+	// The torrent may already be in the session (e.g. loaded from resume, or re-added by
+	// the loop). Check up front instead of matching rain's "duplicate torrent id" error
+	// string, which would break silently on any library upgrade that rewords it.
+	if s.ses.GetTorrent(hash) != nil {
+		logger.Logger.Debug().Str("hash", hash).Msg("Torrent already present, reusing")
+		s.armListenerFor(hash)
+		return hash, nil
+	}
+
 	t, err := s.ses.AddURI(magnet, &torrent.AddTorrentOptions{ID: hash})
 	if err != nil {
-		// The torrent is already in the session (e.g. loaded from resume, or re-added by
-		// the loop). Treat as success and return the existing hash.
-		if strings.Contains(err.Error(), "duplicate torrent id") {
-			logger.Logger.Debug().Str("hash", hash).Msg("Torrent already present, reusing")
-			s.armListenerFor(hash)
-			return hash, nil
-		}
 		return "", fmt.Errorf("failed to add torrent: %w", err)
 	}
 
@@ -154,9 +156,15 @@ func toInfo(t *torrent.Torrent) TorrentInfo {
 	}
 }
 
-// parseInfoHash extracts the BitTorrent info hash from a magnet link and returns it as
-// lowercase hex (40 chars), matching torrent.InfoHash.String(). It mirrors rain's own
-// magnet parsing so the ID we set equals the hash rain reports.
+// parseInfoHash extracts the BitTorrent v1 info hash from a magnet link and returns it as
+// lowercase hex (40 chars), matching torrent.InfoHash.String(). The result is used as the
+// torrent's ID in rain, so it is kept compatible with rain's own magnet parsing
+// (internal/magnet): same hex/base32 accepted forms, same case-sensitive base32 decode.
+//
+// It is deliberately not a full clone of rain's parser: rain only looks at the first xt
+// param, while this scans all of them and prefers `urn:btih:`. That makes hybrid v1/v2
+// magnets that list `urn:btmh:` first parse here instead of being rejected outright.
+// Only `urn:btih:` (v1) is supported — a magnet with no btih xt is an error.
 func parseInfoHash(magnet string) (string, error) {
 	u, err := url.Parse(magnet)
 	if err != nil {
@@ -169,17 +177,27 @@ func parseInfoHash(magnet string) (string, error) {
 	if len(xts) == 0 {
 		return "", fmt.Errorf("missing xt param")
 	}
-	xt := xts[0]
-	if !strings.HasPrefix(xt, "urn:btih:") {
-		return "", fmt.Errorf("unsupported xt param: %s", xt)
+
+	const btihPrefix = "urn:btih:"
+	raw := ""
+	for _, xt := range xts {
+		if strings.HasPrefix(xt, btihPrefix) {
+			raw = xt[len(btihPrefix):]
+			break
+		}
 	}
-	raw := xt[len("urn:btih:"):]
+	if raw == "" {
+		return "", fmt.Errorf("unsupported xt param(s): %s", strings.Join(xts, ", "))
+	}
+
 	var b []byte
 	switch len(raw) {
 	case 40:
 		b, err = hex.DecodeString(raw)
 	case 32:
-		b, err = base32.StdEncoding.DecodeString(strings.ToUpper(raw))
+		// Uppercase-only, like rain's base32.StdEncoding.DecodeString — normalizing the
+		// case here would accept magnets that rain itself rejects at AddURI time.
+		b, err = base32.StdEncoding.DecodeString(raw)
 	default:
 		return "", fmt.Errorf("info hash must be 32 or 40 characters, got %d", len(raw))
 	}

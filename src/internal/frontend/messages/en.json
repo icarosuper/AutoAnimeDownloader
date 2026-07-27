@@ -78,7 +78,6 @@
   "config_hint_delete_statuses": "AniList statuses that trigger deletion of downloaded episodes",
   "config_label_save_path": "Save Path",
   "config_hint_save_path": "Where releasing anime episodes will be saved",
-  "config_label_use_completed_path": "Use a separate folder for completed anime",
   "config_label_completed_path": "Completed Anime Path",
   "config_hint_completed_path": "Where completed episodes are hardlinked (Jellyfin library). Must be on the same volume as the save path.",
   "config_label_delete_watched": "Delete watched episodes automatically",

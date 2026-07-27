@@ -61,3 +61,7 @@ single self-contained process — you no longer install, run, or configure qBitt
 
 - Webhook notifications are unchanged. The completion event still uses the key
   `download_completed` — existing webhook configurations keep working.
+- One nuance: the **event keys** are unchanged, but the `{{reason}}` value of `download_failed`
+  when the client rejects a torrent changed from `"qBittorrent rejeitou o torrent"` to
+  `"torrent rejeitado"` (`notifications/notifications.go`). Only relevant if you string-match
+  on `{{reason}}` downstream; the event key and the payload shape are the same.

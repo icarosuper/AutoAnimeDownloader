@@ -78,7 +78,6 @@
   "config_hint_delete_statuses": "Status do AniList que disparam a exclusão dos episódios baixados",
   "config_label_save_path": "Pasta de Download",
   "config_hint_save_path": "Onde os episódios em andamento serão salvos",
-  "config_label_use_completed_path": "Usar pasta separada para animes completos",
   "config_label_completed_path": "Pasta de Animes Completos",
   "config_hint_completed_path": "Onde os episódios completos são vinculados (hardlink) para a biblioteca Jellyfin. Deve estar no mesmo volume da pasta de download.",
   "config_label_delete_watched": "Deletar episódios assistidos automaticamente",

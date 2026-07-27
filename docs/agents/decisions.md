@@ -268,7 +268,7 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 
 ### 22. Organize everything to `completed_anime_path`, and the batch-hygiene deletion limitation
 
-**Location:** `internal/daemon/jobs.go` (`organizeTorrent`), `internal/daemon/episodes.go` (`removeEpisodesAndLinks`, `allEpisodesInDeleteSet`).
+**Location:** `internal/daemon/jobs.go` (`organizeTorrent`), `internal/daemon/episodes.go` (`removeEpisodesAndLinks`, `allEpisodesInDeleteSet`). Pinned with real files on disk by `TestRemoveEpisodesAndLinks_RealHardlinks` (`internal/daemon/orchestration_test.go`), whose subtests separate the batch asymmetry (torrent *and* library files kept while a sibling survives) from the non-batch shared-hash case (library link removed, torrent kept).
 
 **What it looks like:** (a) *Every* completed torrent — ongoing or finished — is hardlinked into `completed_anime_path`, not just finished animes. (b) When deleting a watched episode that belongs to a **batch** torrent, its library hardlink is **kept** until the entire batch is deleted, which looks like a leak.
 
@@ -291,3 +291,95 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 The paths written into the config are likewise no longer hardcoded: they come from `TEST_SAVE_PATH`/`TEST_COMPLETED_PATH`, defaulting to `~/aad-test/downloads` and `~/aad-test/library`. Two constraints shape that default — it must not be under `/tmp` (tmpfs), and both paths must share one filesystem, because the config endpoint runs a real hardlink probe (`Librarian.ProbePaths`) and rejects cross-volume pairs with HTTP 400. Docker overrides both to `/app/data/aad-test/*`, inside the daemon container's mounted volume; note the strings are interpreted by the **daemon** container, not the test container.
 
 **Don't "fix" by:** removing the `DAEMON_URL` gate so the tests "work" during `go test ./...`; hardcoding the config paths again; putting the default paths back under `/tmp`; or splitting save and completed paths across different volumes (the hardlink probe rejects it).
+
+---
+
+### 24. A failed torrent is dropped from the session and re-added by the next pass — no blacklist
+
+**Location:** `internal/daemon/helpers.go` — `HandleTorrentFailure`; wired as the `onFailed` callback in `cmd/daemon/main.go`.
+
+**What it looks like:** When the embedded client stops a torrent with an error, we fire the `download_failed` webhook and then **remove the torrent from the session** (`Remove(hash, false)`, discarding partial data). Since nothing records that the hash failed, the very next verification pass finds the episode missing from the session and re-adds the same magnet. For a torrent that is genuinely dead (no seeds at all) this is an unbounded re-add loop, one attempt per `check_interval`. That looks like a bug we forgot to guard.
+
+**Why it's right:** The alternative is worse. rain leaves a failed torrent in state Stopped **inside** the session and never restarts it, and the per-torrent listener goroutine exits after `NotifyStop` and is not re-armed (`torrents/session.go`). If we only logged, `episodeInTorrents` (`daemon/helpers.go`) would keep seeing the hash and the daemon would believe the episode was downloaded — forever. No retry, no organize, no notification, and the episode silently never reaches the library. Dropping the torrent converts a permanent silent failure into an automatic retry that reuses the machinery already in place (the loop re-searches Nyaa and may pick a *different*, healthier release the second time). `EpisodeRetryLimit` does not bound this, because it resets each pass.
+
+**Cost of the accepted risk:** a dead torrent costs one Nyaa search plus one magnet add per `check_interval` — cheap, visible in the logs, and each retry fires a `download_failed` webhook so the user is not left guessing.
+
+**Don't "fix" by:** adding a speculative per-hash blacklist with a TTL. That is the correct fix *if* the re-add churn is ever observed to be a real problem, but it introduces new state to persist, expire, and expose in the UI (otherwise a permanently blacklisted episode becomes the new silent failure). Build it against a real report, not preemptively. Also don't go back to log-only in `onFailed`, and don't pass `keepData=true` — partial data from a torrent that errored out is not reusable and only occupies the save path.
+
+---
+
+### 25. Seeding is created at startup and is independent of the daemon loop
+
+**Location:** `cmd/daemon/main.go` — `ensureStartupSession`, called right after `jobQueue.Start()`; `internal/daemon/verification.go` — the `backend.Ensure(configs.SavePath)` call inside the verification pass.
+
+**What it looks like:** `Ensure` is called from **two** places — once at startup and once on every verification pass — which reads like a redundant call that could be dropped from one side.
+
+**Why it's right:** The two calls serve different purposes and both are needed.
+
+- **Startup call:** torrents keep **seeding** from `save_path` after they complete. If the session were created only by the verification pass, stopping the daemon loop from the WebUI (or booting with the loop stopped) would mean no session at all, i.e. **seeding stops** — a behavior regression against the external-qBittorrent setup, which kept seeding regardless of what the daemon was doing. That matters for private trackers with ratio requirements. Creating the session at startup makes seeding a property of the *process*, not of the loop.
+- **Verification-pass call:** the daemon must be able to boot with an incomplete config (no `save_path`). In that case the startup call deliberately does nothing and the session stays lazy; the pass's `Ensure` is what creates it once the user saves a config. It also handles a `save_path` changed at runtime (recreate) and is where the `created == true` return feeds startup reconciliation.
+
+Ordering detail: `ensureStartupSession` runs **after** `jobQueue.Start()`. Creating the session arms the resume listeners, which can fire a completion immediately, and `Start()` loads the persisted job list *over* whatever is in memory — enqueueing before it would silently discard the job. The shutdown defers keep their LIFO order (`jobQueue.Stop()` drains organize jobs that still need the session, then `torrentManager.Close()` flushes bbolt); do not reorder them.
+
+**Don't "fix" by:** removing the `Ensure` from the verification pass (breaks the incomplete-config boot and the save-path change), removing the startup call (stops seeding whenever the loop is stopped), moving startup reconciliation out of the verification pass, or calling `ensureStartupSession` before `jobQueue.Start()`.
+
+---
+
+### 26. The hardlink probe runs on every verification pass, not just on config save
+
+**Location:** `internal/daemon/verification.go` — the `librarian.ProbePaths` gate right after `isConfigComplete`; also `internal/api/endpoint_config.go` (`PUT /config`).
+
+**What it looks like:** Every pass writes a probe file to `save_path`, hardlinks it into `completed_anime_path` and deletes both — real disk I/O on a hot loop, duplicating a validation the config endpoint already performs.
+
+**Why it's right:** `isConfigComplete` only checks that the fields are non-empty, and the endpoint probe only covers configs saved **through the API after** the embedded-client upgrade. Two populations bypass it entirely: users who configured a `completed_anime_path` on a different volume back when the app *moved* files (perfectly legal then — `rename` crosses devices, `link` does not), and any deployment where `docker/entrypoint.sh` writes `config.json` straight from env vars. For them the daemon would download happily while every `JobOrganize` failed with `EXDEV`, retried 20 times over ~2.5h, and was dropped — with `LastCheckError` never set, so the WebUI showed a healthy daemon and an empty library.
+
+The probe aborts the pass instead of merely warning: downloading episodes that provably cannot be organized only fills the disk. It reuses `Librarian.ProbePaths`, so the message the user sees in the UI is identical to the one `PUT /config` returns. Cost is one small file write, one link and two unlinks per `check_interval` (default 10 min) — negligible next to the Anilist and Nyaa requests in the same pass.
+
+**Don't "fix" by:** removing the gate because "the endpoint already validates it" (it does not, for pre-upgrade and entrypoint-written configs), or downgrading it to a warning that lets the pass continue. Caching the result per path pair is a legitimate optimization if the I/O ever shows up in a profile — but it must be invalidated on config change, and the current cost does not justify the extra state.
+
+---
+
+### 27. `saveEpisodesToFile` merges by hand — it uses neither `SaveEpisodesToFile` nor a bare `UpsertEpisodes`
+
+**Location:** `internal/daemon/episodes.go` — `saveEpisodesToFile` and `mergeSavedEpisode`; the two `FileManager` primitives in `internal/files/filemanager.go`.
+
+**What it looks like:** The daemon loads every saved episode, merges field by field, and only then calls `UpsertEpisodes` — when the `FileManager` already exposes two perfectly good one-liners. Either `SaveEpisodesToFile(eps)` or `UpsertEpisodes(eps)` would compile and look cleaner.
+
+**Why it's right:** The three functions have genuinely different semantics and each is wrong on its own here.
+
+- `SaveEpisodesToFile` is **append-only with dedupe by `EpisodeID`**: for an ID that already exists it drops the incoming record *entirely*. That was the original bug. On the upgrade path to the embedded client, the rain session boots empty, so `episodeInTorrents` is false for every saved episode and the loop re-downloads all of them — and every one of those updates was silently discarded. The stale record kept `EpisodeNumber: 0` (a field that did not exist before the upgrade, so it deserialises as zero for all pre-existing records) and the stale `EpisodeHash`. The first caused every episode of an anime to be organized as `Anime - E00.mkv`; the second broke `JobOrganize`'s saved-episode ↔ torrent join by hash, so the job retried 20 times over ~2.5h and gave up, forever.
+- `UpsertEpisodes` **replaces the record wholesale**. That is exactly what `organizeTorrent` needs when writing `LibraryPaths` back, and it is what makes it wrong here: it would clobber `ManuallyManaged`, a user flag the automatic loop must never clear (clearing it lets the loop delete an episode the user pinned).
+
+The merge is the only place that knows which fields belong to *this* download (hash, number, `IsBatch`, names, totals, date — all taken from the new record), which belongs to the *user* (`ManuallyManaged`, OR-ed so a manual download can still set it), and which is *derived* (`LibraryPaths`, reset to nil because the old hardlinks point at the previous release — leaving it set would make `organizeTorrent` think the episode was already organized and never create the new link).
+
+The API handlers in `endpoint_episode_actions.go` reach the same requirement by a shorter route: they call `UpsertEpisodes` directly, never `SaveEpisodesToFile`. Wholesale replacement is safe there — and only there — because every `daemon.ManualDownload*` constructor returns a record with `ManuallyManaged: true` and `LibraryPaths` unset, so the record already carries what `mergeSavedEpisode` would have computed. `handleDownloadEpisode` is the call site that actually needed this: unlike redownload and replace, it does **not** delete the old record first, so append-only dedupe silently dropped the whole update whenever a record already existed. Pinned by `TestHandleDownloadEpisode_UpdatesExistingRecord`, which uses a real `FileManager` over a temp dir — the api package's `mockFileManager` implements both primitives identically and cannot see the difference.
+
+**Don't "fix" by:** collapsing the daemon's merge into either primitive; "simplifying" `mergeSavedEpisode` to `merged.ManuallyManaged = existing.ManuallyManaged` (breaks manual download setting the flag on a fresh record); or switching the API handlers to `SaveEpisodesToFile` "for consistency with the daemon". If a future `ManualDownload*` variant stops setting `ManuallyManaged`, the handlers must move to the daemon's merge rather than keep the bare upsert.
+
+---
+
+### 28. `Organize` replaces a library file that has the same name but different bytes
+
+**Location:** `internal/files/librarian.go` — the `os.SameFile` branch in `Organize`; the `*req.EpisodeNumber > 0` term in the `useJellyfin` condition.
+
+**What it looks like:** When the destination path already exists, `Organize` deletes it and creates a fresh hardlink. Destroying a file that is already in the user's library looks reckless — the safe-looking options are to skip it (as the code originally did, on a bare `Stat(dest) == nil`) or to fail loudly.
+
+**Why it's right:** A bare existence check cannot tell "our hardlink, already created" from "a different file that happens to collide on name", and treating the second as the first is silent data loss: the caller is told the episode was organized, `LibraryPaths` is written pointing at someone else's bytes, and the `download_completed` webhook fires. `os.SameFile` (inode on Unix, file index on Windows — both `Stat` calls go through the injectable `FileSystem`, so fakes still work) splits the two cases. Same file is a true no-op, which is what reconciliation and job retries need. Different file only arises from redownload and replace-episode, where the user explicitly asked for the swap, so the new release wins; the replacement is logged at `Info` with source and destination so it stays auditable. Failing instead would deadlock those flows in `JobOrganize` retries. The seeded file is never touched — only the library name is recycled — so seeding is unaffected.
+
+The related `*req.EpisodeNumber > 0` guard is defence in depth for the same failure: AniList has no episode 0, so a zero unambiguously means *missing data* rather than a real episode. Falling back to the raw filename (unique per release) is strictly better than emitting `Anime - E00.mkv`, which collides across every episode of the anime and, before the `SameFile` fix, made them all resolve to the same destination. Decision 27 fixes the cause; this guard makes sure no future path reintroduces it.
+
+**Don't "fix" by:** restoring the bare `Stat`-and-skip, turning the different-inode case into an error, or dropping the `> 0` term because "the persistence layer guarantees a real episode number now" — the guard exists precisely because that guarantee is not enforceable at this layer.
+
+---
+
+### 29. Startup reconciliation keys off empty `LibraryPaths`, not off the hardlink missing from disk
+
+**Location:** `internal/daemon/verification.go` — `reconcileLibrary`, called at the top of every verification pass. Pinned by `TestReconcileLibrary_Marker` in `internal/daemon/orchestration_test.go`.
+
+**What it looks like:** Reconciliation decides whether an episode still needs organizing by looking only at the **record** (`LibraryPaths` empty → enqueue `JobOrganize`). It never stats the paths, so a record whose `LibraryPaths` point at files the user has since deleted is treated as already organized and skipped. The embedded-client design (§2) actually specified the opposite — check whether the hardlink exists on disk — so this reads like an unfinished implementation.
+
+**Why it's right:** Statting the paths would turn every pass into a repair loop that **resurrects files the user deleted on purpose**. Deleting from the library is a legitimate user action (freeing the library while leaving the torrent seeding, or pruning something they no longer want), and the seeded file is still there for the hardlink to be recreated from — so a disk-based check would recreate it on the next pass, every pass, forever, with no way to opt out short of deleting the episode record too. The record is the daemon's own statement of "I have organized this"; the disk belongs to the user. Keeping them separate means reconciliation only ever fixes work the daemon failed to finish (a crash between torrent completion and organize, or a session restarted before `JobOrganize` ran), which is exactly its purpose.
+
+The deviation is intentional and better than the design. It is also what makes reconciliation idempotent and cheap: `EnqueueOrganize` dedupes by hash, so three consecutive passes over the same unorganized torrent produce one job.
+
+**Don't "fix" by:** adding a `Stat` on `LibraryPaths` to "detect" missing library files, or clearing `LibraryPaths` when the paths no longer resolve — both reintroduce the resurrection loop. A user who wants the link back should redownload or replace the episode, which resets `LibraryPaths` through the merge in decision 27.

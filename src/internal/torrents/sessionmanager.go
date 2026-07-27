@@ -18,8 +18,15 @@ var ErrSessionNotReady = errors.New("torrent session not ready (incomplete confi
 // The daemon can start without a complete config (no SavePath), in which case no session
 // exists until Ensure is first called with a valid SavePath. Changing SavePath at runtime
 // closes the old session and opens a new one at the new DataDir.
+//
+// The mutex is an RWMutex and is held for the whole duration of every delegated call
+// (Add/List/Get/Remove), not just while reading the session pointer. Releasing it early
+// would let a concurrent Ensure/Close tear the session down between the read and the
+// delegated call — rain's Close() clears its internal torrent map, so the delegated call
+// could panic on a nil map. Ensure/Close take the write lock; the delegating readers take
+// the read lock, so concurrent Add/Get/List still run in parallel.
 type SessionManager struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	dbPath     string
 	savePath   string
 	session    *Session
@@ -68,51 +75,50 @@ func (m *SessionManager) Ensure(savePath string) (bool, error) {
 // SetCallbacks stores completion/failure handlers and applies them to the current session.
 func (m *SessionManager) SetCallbacks(onComplete func(hash string), onFailed func(hash string, err error)) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.onComplete = onComplete
 	m.onFailed = onFailed
-	s := m.session
-	m.mu.Unlock()
-	if s != nil {
-		s.SetCallbacks(onComplete, onFailed)
+	if m.session != nil {
+		// Same as in Ensure: delegate under the lock so the session cannot be swapped or
+		// closed between the pointer read and the call.
+		m.session.SetCallbacks(onComplete, onFailed)
 	}
-}
-
-func (m *SessionManager) current() *Session {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.session
 }
 
 func (m *SessionManager) Add(magnet string) (string, error) {
-	s := m.current()
-	if s == nil {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
 		return "", ErrSessionNotReady
 	}
-	return s.Add(magnet)
+	return m.session.Add(magnet)
 }
 
 func (m *SessionManager) List() []TorrentInfo {
-	s := m.current()
-	if s == nil {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
 		return nil
 	}
-	return s.List()
+	return m.session.List()
 }
 
 func (m *SessionManager) Get(hash string) (TorrentInfo, bool) {
-	s := m.current()
-	if s == nil {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
 		return TorrentInfo{}, false
 	}
-	return s.Get(hash)
+	return m.session.Get(hash)
 }
 
 func (m *SessionManager) Remove(hash string, keepData bool) error {
-	s := m.current()
-	if s == nil {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
 		return ErrSessionNotReady
 	}
-	return s.Remove(hash, keepData)
+	return m.session.Remove(hash, keepData)
 }
 
 func (m *SessionManager) Close() error {

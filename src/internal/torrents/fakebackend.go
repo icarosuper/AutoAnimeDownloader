@@ -71,12 +71,13 @@ func (f *FakeBackend) Get(hash string) (TorrentInfo, bool) {
 	return *t, true
 }
 
+// Remove drops the torrent. Removing a hash that is not in the session is NOT an error,
+// matching the real Session.Remove: rain's Session.RemoveTorrent looks the id up in its
+// map and returns (nil, nil) when it is absent, so the error is nil. Returning an error
+// here would make tests assert on behaviour production never produces.
 func (f *FakeBackend) Remove(hash string, keepData bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if _, ok := f.torrents[hash]; !ok {
-		return fmt.Errorf("fake: torrent %s not found", hash)
-	}
 	delete(f.torrents, hash)
 	return nil
 }

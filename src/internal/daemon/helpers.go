@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"fmt"
@@ -28,6 +29,52 @@ type FileManagerInterface interface {
 	LoadAllAnimeSettings() (map[int]files.AnimeSettings, error)
 	LoadAnimeSettings(animeID int) (*files.AnimeSettings, error)
 	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
+}
+
+// HandleTorrentFailure reacts to a torrent the embedded client stopped with an error.
+//
+// rain leaves a failed torrent Stopped *inside* the session and never restarts it, and the
+// per-torrent listener goroutine exits after NotifyStop. Left alone, episodeInTorrents would
+// keep seeing the hash and the daemon would believe the episode was downloaded forever. So:
+// fire the download_failed webhook (the anime name/episode come from the saved record joined
+// by infohash) and drop the torrent from the session, which makes episodeInTorrents false on
+// the next pass so the verification loop re-adds the magnet — retry with the machinery that
+// already exists. See decisions.md for the accepted re-add-loop risk on a genuinely dead torrent.
+func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBackend, fileManager FileManagerInterface) {
+	logger.Logger.Warn().Err(cause).Str("hash", hash).Msg("Torrent stopped with error")
+
+	animeName := ""
+	episodeNumber := 0
+	if saved, err := fileManager.LoadSavedEpisodes(); err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load saved episodes for the webhook")
+	} else {
+		for _, ep := range saved {
+			if ep.EpisodeHash == hash {
+				animeName = ep.AnimeName
+				episodeNumber = ep.EpisodeNumber
+				break
+			}
+		}
+	}
+
+	reason := notifications.ReasonDownloadRejected
+	if cause != nil {
+		reason = cause.Error()
+	}
+
+	if configs, err := fileManager.LoadConfigs(); err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load configs, skipping webhook")
+	} else {
+		notifications.Notify(configs, notifications.DownloadFailed, animeName, episodeNumber, reason)
+	}
+
+	if backend == nil {
+		return
+	}
+	// keepData=false: the partial data is useless and the loop will re-download from scratch.
+	if err := backend.Remove(hash, false); err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to remove the failed torrent from the session")
+	}
 }
 
 func getWebUiURL() string {

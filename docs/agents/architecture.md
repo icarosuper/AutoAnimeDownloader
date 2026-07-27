@@ -50,7 +50,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** `save_path` so it survives a `save_path` change |
 
-Windows uses `%APPDATA%\AutoAnimeDownloader\` for the config/state files above, **except** `session.db`, which lives at `%APPDATA%\.autoAnimeDownloader\session.db` (note the leading dot — see `getSessionDBPath` in `cmd/daemon/main.go`).
+Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). See `configsFolder` in `files/filemanager.go` and `getJobsFilePath` / `getSessionDBPath` / `getPIDFilePath` in `cmd/daemon/main.go`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
 
 ## On-Disk Layout
 
@@ -109,7 +109,7 @@ Main verification orchestrator. Key functions:
 | Function | Purpose |
 |----------|---------|
 | `StartLoop(p)` | Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
-| `AnimeVerification(ctx, fm, state, jobQueue)` | Main check: fetches Anilist → Nyaa → embedded torrent client |
+| `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`) |
 | `processAnimeEpisodes(...)` | Per-anime: decide download/delete per episode, execute download strategy |
 | `checkEpisode(...)` | Returns `(shouldDownload, shouldDelete)` per episode |
 | `shouldSkipEpisode(...)` | Skip if: excluded list, already watched, not yet aired |
@@ -122,9 +122,9 @@ Main verification orchestrator. Key functions:
 | `searchNyaaForMultipleEpisodes(titles, synonyms, episodes, customQuery)` | Multi-episode search for airing animes (priority 3) |
 | `ExtractAnimeSeasonPart(title, synonyms)` | Exported: reads english→romaji→synonyms, returns `(season, part *int)` — first non-nil wins independently |
 | `ComputeEpisodeOffset(relations, part)` | Exported: returns PREQUEL episode count when `part >= 2`; 0 otherwise (gate prevents spurious offsets on non-split seasons) |
-| `RemoveEpisodesWithLinks(fm, backend, librarian, ids)` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`) |
+| `RemoveEpisodesWithLinks(fm, backend, librarian, ids) error` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`). Returns an error when the record could not be removed from the JSONL (load/delete failure); freeing disk space is best-effort and only logged |
 | `reconcileLibrary(downloaded, saved, jobQueue)` | Startup/periodic reconciliation: enqueues an `organize` job for any completed torrent whose episode isn't yet in the library (`verification.go`) |
-| `ManualDownloadEpisode(animeId, episodeId, cfg)` | Used by API for manual download — calls Anilist then Nyaa |
+| `ManualDownloadEpisode(backend, animeId, episodeId, cfg, customQuery)` | Used by API for manual download — calls Anilist then Nyaa (`manual_download.go`) |
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
 | `ManualDownloadAnimeWithMagnet(...)` | Used by API for replace-with-magnet for full anime batch |
 
@@ -173,7 +173,7 @@ Deferred job queue for async library organization. Decouples the hardlink-into-l
 |------|---------|---------|
 | `organize` | `hash` | Torrent completion event, or `reconcileLibrary` finding a completed-but-unorganized torrent |
 
-**Persistence**: `~/.autoAnimeDownloader/pending_jobs.json` (Windows: `%APPDATA%\AutoAnimeDownloader\pending_jobs.json`). Written after every enqueue and after every tick that changes queue state. Jobs survive daemon restarts.
+**Persistence**: `~/.autoAnimeDownloader/pending_jobs.json` (Windows: `%APPDATA%\.autoAnimeDownloader\pending_jobs.json`). Written after every enqueue and after every tick that changes queue state. Jobs survive daemon restarts.
 
 **Idempotency**: `organizeTorrent` treats an episode whose `LibraryPaths` is already set as done — no re-link, no re-fired webhook — so completion events and reconciliation passes can both enqueue safely.
 
@@ -200,8 +200,8 @@ All persistence. Key types:
 | `FileManagerInterface` | Interface used by daemon + API — mock in tests |
 | `FileManager.LoadConfigs()` | Reads `config.json`; creates with defaults if missing |
 | `FileManager.LoadSavedEpisodes()` | Reads `episodes.json` (JSONL), migrates old format |
-| `FileManager.SaveEpisodesToFile(eps)` | Appends only new episodes (deduped by ID) |
-| `FileManager.UpsertEpisodes(eps)` | Inserts or updates episodes by ID — used to write back `LibraryPaths` after a torrent is organized |
+| `FileManager.SaveEpisodesToFile(eps)` | Appends only new episodes (deduped by ID) — **silently discards updates to existing IDs**; see decision 27 |
+| `FileManager.UpsertEpisodes(eps)` | Inserts or **fully replaces** episodes by ID — used to write back `LibraryPaths` after a torrent is organized |
 | `FileManager.DeleteEpisodesFromFile(ids)` | Removes episodes by ID from JSONL |
 | `FileManager.BlockEpisode(id)` | Appends ID to `blocked_episodes` |
 | `FileManager.UnblockEpisode(id)` | Removes ID from `blocked_episodes` |
@@ -287,7 +287,7 @@ All episode mutation endpoints. Each shares same pattern:
 1. Parse path params
 2. Load config + saved episodes
 3. Use the shared `server.Torrents` (`TorrentBackend`) and `server.Librarian` — no per-request client construction
-4. Call `daemon.ManualDownload*`, or `daemon.RemoveEpisodesWithLinks(fm, backend, librarian, ids)` for deletes (removes library hardlinks + seeding torrents)
+4. Call `daemon.ManualDownload*`, or `daemon.RemoveEpisodesWithLinks(fm, backend, librarian, ids)` for deletes (removes library hardlinks + seeding torrents). It returns an `error`: handlers must answer 500 via `JSONInternalError` and, on redownload/replace, **abort before adding the new torrent** — otherwise the new torrent is untracked while the stale record survives
 5. Update `FileManager` (save/delete/block/unblock)
 
 Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unmanage), `replace` (per episode magnet), `replaceAnime` (full anime magnet).

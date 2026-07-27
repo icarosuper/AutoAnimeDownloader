@@ -16,7 +16,10 @@ type TorrentInfo struct {
 }
 
 // TorrentBackend abstracts the embedded BitTorrent client so the daemon and the tests
-// share one seam. The rain-backed Session and the in-memory FakeBackend both implement it.
+// share one seam. In production it is implemented by SessionManager, which owns the
+// lazily-created rain-backed Session and delegates every method to it (Session itself has
+// no Ensure — session creation/recreation is the manager's job). Tests use the in-memory
+// FakeBackend.
 type TorrentBackend interface {
 	// Ensure creates the underlying session if needed (or recreates it if savePath
 	// changed). Returns true when a new session was created (caller should reconcile).

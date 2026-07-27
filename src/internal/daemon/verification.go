@@ -43,6 +43,24 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		return
 	}
 
+	// The library is built from hardlinks, which cannot cross filesystems. The config-save
+	// endpoint probes this, but configs written before the embedded-client upgrade (or
+	// straight to config.json by docker/entrypoint.sh) never went through it. Without this
+	// gate a cross-volume pair downloads happily and every JobOrganize dies with EXDEV while
+	// the UI shows a healthy daemon. Probing here surfaces the same actionable message the
+	// endpoint returns, and aborts the pass: downloading what we cannot organize just fills
+	// the disk.
+	if librarian != nil {
+		if err := librarian.ProbePaths(configs.SavePath, configs.CompletedAnimePath); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("save_path", configs.SavePath).
+				Str("completed_anime_path", configs.CompletedAnimePath).
+				Msg("Save path and completed anime path failed the hardlink probe; skipping verification")
+			state.SetLastCheckError(err)
+			return
+		}
+	}
+
 	if backend == nil {
 		logger.Logger.Error().Msg("Torrent backend not initialized; skipping verification")
 		state.SetLastCheckError(fmt.Errorf("torrent backend not initialized"))
@@ -205,7 +223,7 @@ outer:
 			default:
 			}
 
-			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, blockedMap, q, jobQueue, defaultNyaaSearcher())
+			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, blockedMap, q, defaultNyaaSearcher())
 		}(anime, customQuery)
 	}
 

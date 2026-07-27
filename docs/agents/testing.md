@@ -74,7 +74,9 @@ backend.CompleteTorrent("abcd...hash", "/save/abcd") // fires onComplete
 backend.FailTorrent("abcd...hash", err)              // fires onFailed
 ```
 
-Library hardlinking is likewise tested through the `files.Librarian` interface (`NewLibrarian`) backed by a `MockFileSystem`, so `Organize`/`ProbePaths` can be exercised without touching a real disk.
+`FakeBackend.Remove` on an unknown hash is a **no-op returning `nil`**, deliberately mirroring rain's `RemoveTorrent` (which returns `(nil, nil)` for an id absent from its map). Don't assert an error there — the fake used to return one, and since `removeEpisodesAndLinks` and `HandleTorrentFailure` both log a `Warn` when `Remove` fails, that made tests observe warnings production never emits.
+
+Library hardlinking is likewise tested through the `files.Librarian` interface (`NewLibrarian`) backed by a `MockFileSystem`, so `Organize`/`ProbePaths` can be exercised without touching a real disk. Two cases need a **real** disk instead (`t.TempDir()` + `OSFileSystem`), because they turn on file identity and link counts that an in-memory fake cannot model: `Organize`'s same-inode vs. different-inode branch (decision 28), and "deleting an episode removes both links" (`TestRemoveEpisodesAndLinks_RealHardlinks`).
 
 ### 3. In-Memory FileSystem
 

@@ -67,7 +67,15 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile([]files.EpisodeStruct{ep}); err != nil {
+		// UpsertEpisodes, never SaveEpisodesToFile: the latter is append-only with dedupe by
+		// EpisodeID, so an already-saved record makes it discard this one entirely — the new
+		// hash would be lost (breaking JobOrganize's saved-episode ↔ torrent join by hash) and
+		// the stale LibraryPaths would survive, making organizeTorrent think the episode was
+		// already organized. Wholesale replacement is correct here because
+		// ManualDownloadEpisode always returns ManuallyManaged: true and LibraryPaths nil, so
+		// the record already carries what the daemon's mergeSavedEpisode would compute
+		// (decision 27).
+		if err := server.FileManager.UpsertEpisodes([]files.EpisodeStruct{ep}); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episode to file")
 			JSONInternalError(w, err)
 			return
@@ -132,7 +140,11 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 
 		// Remove both links (library hardlink + seeding torrent, batch guard applied) and
 		// delete the episode from the saved file.
-		daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId})
+		if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
+			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode")
+			JSONInternalError(w, err)
+			return
+		}
 
 		if err := server.FileManager.BlockEpisode(episodeId); err != nil {
 			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to block episode")
@@ -245,7 +257,13 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 
 		if alreadyDownloaded {
 			// Remove both links (library hardlink + seeding torrent) and delete from file.
-			daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId})
+			// Abort on failure: adding a new torrent while the stale record survives would
+			// leave the new download untracked (JobOrganize joins saved episodes by hash).
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode before redownload")
+				JSONInternalError(w, err)
+				return
+			}
 		}
 
 		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
@@ -265,7 +283,11 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile([]files.EpisodeStruct{ep}); err != nil {
+		// UpsertEpisodes so the write does not depend on RemoveEpisodesWithLinks having deleted
+		// the old record first: append-only SaveEpisodesToFile would silently drop this update if
+		// any record survived. Replacement is safe — ManualDownloadEpisode sets
+		// ManuallyManaged: true and leaves LibraryPaths nil (decision 27).
+		if err := server.FileManager.UpsertEpisodes([]files.EpisodeStruct{ep}); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episode to file")
 			JSONInternalError(w, err)
 			return
@@ -341,7 +363,12 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 
 		if alreadyDownloaded {
 			// Remove both links (library hardlink + seeding torrent) and delete from file.
-			daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId})
+			// Abort on failure: the replacement torrent would otherwise be untracked.
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode before replacement")
+				JSONInternalError(w, err)
+				return
+			}
 		}
 
 		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
@@ -355,7 +382,10 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile([]files.EpisodeStruct{ep}); err != nil {
+		// UpsertEpisodes: same reasoning as the redownload handler — the update must not depend
+		// on the old record having been deleted. ManualDownloadEpisodeWithMagnet sets
+		// ManuallyManaged: true and leaves LibraryPaths nil (decision 27).
+		if err := server.FileManager.UpsertEpisodes([]files.EpisodeStruct{ep}); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episode to file")
 			JSONInternalError(w, err)
 			return
@@ -422,7 +452,12 @@ func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 		}
 
 		if len(idsToDelete) > 0 {
-			daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, idsToDelete)
+			// Abort on failure: the replacement batch torrent would otherwise be untracked.
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, idsToDelete); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Msg("Failed to remove episodes before replacement")
+				JSONInternalError(w, err)
+				return
+			}
 		}
 
 		episodes, err := daemon.ManualDownloadAnimeWithMagnet(server.Torrents, animeId, body.Magnet, configs)
@@ -432,7 +467,11 @@ func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile(episodes); err != nil {
+		// UpsertEpisodes: the batch covers every aired episode of the anime, so a single record
+		// that survived the removal above would otherwise be left pointing at the old torrent
+		// hash. ManualDownloadAnimeWithMagnet sets ManuallyManaged: true on every record and
+		// leaves LibraryPaths nil (decision 27).
+		if err := server.FileManager.UpsertEpisodes(episodes); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episodes to file")
 			JSONInternalError(w, err)
 			return

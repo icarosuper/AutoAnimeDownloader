@@ -3,10 +3,41 @@ package files
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
 func intPtr(i int) *int { return &i }
+
+// linkCount reports the hardlink count of path. The syscall struct behind FileInfo.Sys()
+// is platform-specific (and has no Nlink at all on Windows), so it is read reflectively:
+// ok == false means "this platform does not expose it" and the caller should skip.
+func linkCount(t *testing.T, path string) (int, bool) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	sys := info.Sys()
+	if sys == nil {
+		return 0, false
+	}
+	v := reflect.Indirect(reflect.ValueOf(sys))
+	if v.Kind() != reflect.Struct {
+		return 0, false
+	}
+	field := v.FieldByName("Nlink")
+	if !field.IsValid() {
+		return 0, false
+	}
+	switch field.Kind() {
+	case reflect.Uint, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int(field.Uint()), true
+	case reflect.Int, reflect.Int16, reflect.Int32, reflect.Int64:
+		return int(field.Int()), true
+	}
+	return 0, false
+}
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -141,6 +172,162 @@ func TestOrganizeIdempotent(t *testing.T) {
 	}
 	if len(first) != 1 || len(second) != 1 || first[0] != second[0] {
 		t.Errorf("idempotent mismatch: first=%v second=%v", first, second)
+	}
+}
+
+// Destination exists and is the very same file (already hardlinked): true no-op, the
+// path is still reported, and the link count does not grow.
+func TestOrganizeSameFileIsNoOp(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "id")
+	completed := filepath.Join(tmp, "completed")
+	src := filepath.Join(dataDir, "ep.mkv")
+	writeFile(t, src, "video-bytes")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	req := OrganizeRequest{
+		TorrentDataDir: dataDir, AnimeName: "A", CompletedPath: completed,
+		EpisodeNumber: intPtr(1), RenameJellyfin: true,
+	}
+	first, err := lib.Organize(req)
+	if err != nil {
+		t.Fatalf("first Organize: %v", err)
+	}
+	dest := filepath.Join(completed, "A", "A - E01.mkv")
+	if len(first) != 1 || first[0] != dest {
+		t.Fatalf("created = %v, want [%s]", first, dest)
+	}
+	before, ok := linkCount(t, src)
+	if ok && before != 2 {
+		t.Fatalf("link count after first Organize = %d, want 2", before)
+	}
+
+	second, err := lib.Organize(req)
+	if err != nil {
+		t.Fatalf("second Organize: %v", err)
+	}
+	if len(second) != 1 || second[0] != dest {
+		t.Fatalf("second created = %v, want [%s]", second, dest)
+	}
+	if after, ok2 := linkCount(t, src); ok && ok2 && after != before {
+		t.Errorf("link count changed on no-op: %d -> %d", before, after)
+	}
+
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		t.Fatalf("source missing: %v", err)
+	}
+	destInfo, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("dest missing: %v", err)
+	}
+	if !os.SameFile(srcInfo, destInfo) {
+		t.Errorf("dest should still be the same file as src")
+	}
+}
+
+// Destination exists but points at different bytes (redownload/replace): the new file
+// wins, and the seeded source keeps exactly one extra link.
+func TestOrganizeReplacesDifferentFileAtDestination(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "newid")
+	completed := filepath.Join(tmp, "completed")
+	src := filepath.Join(dataDir, "new release.mkv")
+	writeFile(t, src, "new-bytes")
+
+	// A stale, unrelated file already sitting at the destination name.
+	dest := filepath.Join(completed, "A", "A - E01.mkv")
+	writeFile(t, dest, "stale-bytes")
+	staleInfo, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("stat stale dest: %v", err)
+	}
+
+	lib := NewLibrarian(NewOSFileSystem())
+	created, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir, AnimeName: "A", CompletedPath: completed,
+		EpisodeNumber: intPtr(1), RenameJellyfin: true,
+	})
+	if err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	if len(created) != 1 || created[0] != dest {
+		t.Fatalf("created = %v, want [%s]", created, dest)
+	}
+
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		t.Fatalf("source missing after replacement: %v", err)
+	}
+	destInfo, err := os.Stat(dest)
+	if err != nil {
+		t.Fatalf("dest missing after replacement: %v", err)
+	}
+	if !os.SameFile(srcInfo, destInfo) {
+		t.Errorf("dest was not relinked to src")
+	}
+	if os.SameFile(staleInfo, destInfo) {
+		t.Errorf("dest still points at the stale file")
+	}
+	content, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read dest: %v", err)
+	}
+	if string(content) != "new-bytes" {
+		t.Errorf("dest content = %q, want %q", content, "new-bytes")
+	}
+	// The seeded file must survive with exactly one extra name (seeding not broken).
+	if n, ok := linkCount(t, src); ok && n != 2 {
+		t.Errorf("source link count = %d, want 2", n)
+	}
+}
+
+// An empty CompletedPath must fail loudly instead of hardlinking into the process CWD.
+func TestOrganizeEmptyCompletedPath(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "save", "id")
+	writeFile(t, filepath.Join(dataDir, "ep.mkv"), "x")
+
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+
+	lib := NewLibrarian(NewOSFileSystem())
+	created, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir, AnimeName: "My Anime", CompletedPath: "",
+		EpisodeNumber: intPtr(1), RenameJellyfin: true,
+	})
+	if err == nil {
+		t.Fatalf("expected error for empty completed path, created = %v", created)
+	}
+	entries, readErr := os.ReadDir(cwd)
+	if readErr != nil {
+		t.Fatalf("read cwd: %v", readErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Organize wrote %d entries into the working directory: %v", len(entries), entries)
+	}
+}
+
+// EpisodeNumber == 0 is missing data, never a real episode: fall back to the raw name.
+func TestOrganizeEpisodeNumberZeroKeepsRawName(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "id")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "raw episode name.mkv"), "x")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	created, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir, AnimeName: "A", CompletedPath: completed,
+		EpisodeNumber: intPtr(0), RenameJellyfin: true,
+	})
+	if err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	want := filepath.Join(completed, "A", "raw episode name.mkv")
+	if len(created) != 1 || created[0] != want {
+		t.Fatalf("created = %v, want [%s]", created, want)
+	}
+	if _, err := os.Stat(filepath.Join(completed, "A", "A - E00.mkv")); err == nil {
+		t.Errorf("episode 0 must never produce an E00 name")
 	}
 }
 

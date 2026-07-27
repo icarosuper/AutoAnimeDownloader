@@ -24,6 +24,9 @@ jobs:
           bun-version: latest
 
       - name: Build frontend
+        # bash on both legs: the default pwsh on windows-latest only propagates the exit code
+        # of the LAST command, so a failing `bun install` would not fail the step.
+        shell: bash
         run: |
           cd src/internal/frontend
           bun install --frozen-lockfile

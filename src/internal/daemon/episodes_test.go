@@ -5,6 +5,8 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
+	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -28,20 +30,22 @@ type mockFileManagerForEpisodes struct {
 	deletedEpisodeIDs []int
 }
 
-func (m *mockFileManagerForEpisodes) LoadConfigs() (*files.Config, error)               { return nil, nil }
-func (m *mockFileManagerForEpisodes) SaveConfigs(*files.Config) error                   { return nil }
-func (m *mockFileManagerForEpisodes) LoadSavedEpisodes() ([]files.EpisodeStruct, error) { return nil, nil }
-func (m *mockFileManagerForEpisodes) SaveEpisodesToFile([]files.EpisodeStruct) error    { return nil }
-func (m *mockFileManagerForEpisodes) UpsertEpisodes([]files.EpisodeStruct) error        { return nil }
+func (m *mockFileManagerForEpisodes) LoadConfigs() (*files.Config, error) { return nil, nil }
+func (m *mockFileManagerForEpisodes) SaveConfigs(*files.Config) error     { return nil }
+func (m *mockFileManagerForEpisodes) LoadSavedEpisodes() ([]files.EpisodeStruct, error) {
+	return nil, nil
+}
+func (m *mockFileManagerForEpisodes) SaveEpisodesToFile([]files.EpisodeStruct) error { return nil }
+func (m *mockFileManagerForEpisodes) UpsertEpisodes([]files.EpisodeStruct) error     { return nil }
 func (m *mockFileManagerForEpisodes) DeleteEpisodesFromFile(ids []int) error {
 	m.deletedEpisodeIDs = append(m.deletedEpisodeIDs, ids...)
 	return nil
 }
-func (m *mockFileManagerForEpisodes) DeleteEmptyFolders(string, string) error                   { return nil }
-func (m *mockFileManagerForEpisodes) LoadBlockedEpisodes() ([]int, error)                       { return nil, nil }
-func (m *mockFileManagerForEpisodes) BlockEpisode(int) error                                    { return nil }
-func (m *mockFileManagerForEpisodes) UnblockEpisode(int) error                                  { return nil }
-func (m *mockFileManagerForEpisodes) UnmanageEpisode(int) error                                 { return nil }
+func (m *mockFileManagerForEpisodes) DeleteEmptyFolders(string, string) error { return nil }
+func (m *mockFileManagerForEpisodes) LoadBlockedEpisodes() ([]int, error)     { return nil, nil }
+func (m *mockFileManagerForEpisodes) BlockEpisode(int) error                  { return nil }
+func (m *mockFileManagerForEpisodes) UnblockEpisode(int) error                { return nil }
+func (m *mockFileManagerForEpisodes) UnmanageEpisode(int) error               { return nil }
 func (m *mockFileManagerForEpisodes) LoadAllAnimeSettings() (map[int]files.AnimeSettings, error) {
 	return nil, nil
 }
@@ -285,7 +289,7 @@ func TestProcessAnimeEpisodes_BlacklistedAnime_PopulatesIdsToDelete(t *testing.T
 
 	backend := torrents.NewFakeBackend()
 
-	result := processAnimeEpisodes(configs, backend, anime, nil, savedEpisodes, map[int]bool{}, "", nil, defaultNyaaSearcher())
+	result := processAnimeEpisodes(configs, backend, anime, nil, savedEpisodes, map[int]bool{}, "", defaultNyaaSearcher())
 
 	if !containsID(result.idsToDelete, episodeID) {
 		t.Errorf("esperava episode ID %d em idsToDelete, obteve %v", episodeID, result.idsToDelete)
@@ -363,10 +367,10 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 	savedEpisodes := make([]files.EpisodeStruct, 12)
 	for i := range savedEpisodes {
 		savedEpisodes[i] = files.EpisodeStruct{
-			EpisodeID:   1000 + i,
-			AnimeID:     animeID,
-			EpisodeHash: batchHash,
-			AnimeName:   englishTitle,
+			EpisodeID:    1000 + i,
+			AnimeID:      animeID,
+			EpisodeHash:  batchHash,
+			AnimeName:    englishTitle,
 			DownloadDate: time.Now(),
 		}
 	}
@@ -404,7 +408,7 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 
 	backend := torrents.NewFakeBackend()
 
-	result := processAnimeEpisodes(configs, backend, anime, dlTorrents, savedEpisodes, map[int]bool{}, "", nil, mockSearcher)
+	result := processAnimeEpisodes(configs, backend, anime, dlTorrents, savedEpisodes, map[int]bool{}, "", mockSearcher)
 
 	if searchBatchCalled {
 		t.Error("searchBatch não deve ser chamado: todos os episódios já estão no cliente pelo hash")
@@ -465,5 +469,298 @@ func TestDedupeAnimesByMedia_NoMediaID(t *testing.T) {
 
 	if len(got) != 2 {
 		t.Errorf("entradas sem media id não devem ser colapsadas, esperava 2, obteve %d", len(got))
+	}
+}
+
+// --- saveEpisodesToFile: selective merge on re-download (P1.1 / P1.2) ---
+
+const (
+	oldHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	newHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+)
+
+// tempFileManager returns a real files.FileManager over a temp dir, so the merge tests
+// exercise the actual JSONL round-trip instead of a mock's in-memory slice.
+func tempFileManager(t *testing.T) *files.FileManager {
+	t.Helper()
+	dir := t.TempDir()
+	return files.NewManager(
+		files.NewOSFileSystem(),
+		filepath.Join(dir, "config.json"),
+		filepath.Join(dir, "downloaded_episodes"),
+		filepath.Join(dir, "blocked_episodes"),
+		filepath.Join(dir, "anime_settings"),
+	)
+}
+
+// loadEpisodeByID reads the persisted episodes back and returns the one with the given ID.
+func loadEpisodeByID(t *testing.T, fm FileManagerInterface, id int) files.EpisodeStruct {
+	t.Helper()
+	all, err := fm.LoadSavedEpisodes()
+	if err != nil {
+		t.Fatalf("LoadSavedEpisodes: %v", err)
+	}
+	for _, ep := range all {
+		if ep.EpisodeID == id {
+			return ep
+		}
+	}
+	t.Fatalf("episode %d not found in saved episodes %+v", id, all)
+	return files.EpisodeStruct{}
+}
+
+// TestSaveEpisodesToFile_RedownloadUpdatesRecord cobre o caminho de upgrade: um registro salvo
+// antes do campo EpisodeNumber existir (número 0) e com hash antigo é re-baixado. O registro
+// persistido deve ficar com o EpisodeNumber e o EpisodeHash NOVOS — sem isso o JobOrganize não
+// acha o torrent pelo hash e o hardlink sai como "Anime - E00.mkv".
+func TestSaveEpisodesToFile_RedownloadUpdatesRecord(t *testing.T) {
+	fm := tempFileManager(t)
+	old := time.Now().Add(-48 * time.Hour)
+	if err := fm.SaveEpisodesToFile([]files.EpisodeStruct{{
+		EpisodeID:    42,
+		AnimeID:      7,
+		AnimeName:    "My Anime",
+		EpisodeHash:  oldHash,
+		EpisodeName:  "My Anime - Episode 5",
+		DownloadDate: old,
+	}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	saveEpisodesToFile(fm, []files.EpisodeStruct{{
+		EpisodeID:          42,
+		AnimeID:            7,
+		AnimeTotalEpisodes: 12,
+		AnimeName:          "My Anime",
+		EpisodeHash:        newHash,
+		EpisodeName:        "My Anime - Episode 5",
+		EpisodeNumber:      5,
+		IsBatch:            true,
+		DownloadDate:       time.Now(),
+	}})
+
+	all, err := fm.LoadSavedEpisodes()
+	if err != nil {
+		t.Fatalf("LoadSavedEpisodes: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("esperava 1 registro (merge, não duplicata), obteve %d: %+v", len(all), all)
+	}
+
+	got := all[0]
+	if got.EpisodeNumber != 5 {
+		t.Errorf("EpisodeNumber: esperava 5, obteve %d", got.EpisodeNumber)
+	}
+	if got.EpisodeHash != newHash {
+		t.Errorf("EpisodeHash: esperava %s, obteve %s", newHash, got.EpisodeHash)
+	}
+	if !got.IsBatch {
+		t.Error("IsBatch deve ser atualizado para true")
+	}
+	if got.AnimeTotalEpisodes != 12 {
+		t.Errorf("AnimeTotalEpisodes: esperava 12, obteve %d", got.AnimeTotalEpisodes)
+	}
+	if !got.DownloadDate.After(old) {
+		t.Errorf("DownloadDate deve ser atualizada no re-download, obteve %v", got.DownloadDate)
+	}
+}
+
+// TestSaveEpisodesToFile_PreservesManuallyManaged garante que o merge não apaga a flag do
+// usuário — senão o loop automático passaria a poder deletar um episódio gerenciado à mão.
+func TestSaveEpisodesToFile_PreservesManuallyManaged(t *testing.T) {
+	fm := tempFileManager(t)
+	if err := fm.SaveEpisodesToFile([]files.EpisodeStruct{{
+		EpisodeID:       42,
+		AnimeID:         7,
+		EpisodeHash:     oldHash,
+		ManuallyManaged: true,
+	}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// O loop automático nunca marca ManuallyManaged.
+	saveEpisodesToFile(fm, []files.EpisodeStruct{{
+		EpisodeID:     42,
+		AnimeID:       7,
+		EpisodeHash:   newHash,
+		EpisodeNumber: 5,
+	}})
+
+	got := loadEpisodeByID(t, fm, 42)
+	if !got.ManuallyManaged {
+		t.Error("ManuallyManaged deve sobreviver a um re-download automático")
+	}
+	if got.EpisodeHash != newHash {
+		t.Errorf("EpisodeHash deve ser atualizado mesmo preservando ManuallyManaged, obteve %s", got.EpisodeHash)
+	}
+}
+
+// TestSaveEpisodesToFile_ResetsLibraryPaths garante que os caminhos da biblioteca do release
+// ANTIGO são zerados: LibraryPaths vazio é o marcador de "ainda não organizado" que faz o
+// JobOrganize criar o hardlink novo e disparar o webhook.
+func TestSaveEpisodesToFile_ResetsLibraryPaths(t *testing.T) {
+	fm := tempFileManager(t)
+	if err := fm.SaveEpisodesToFile([]files.EpisodeStruct{{
+		EpisodeID:    42,
+		AnimeID:      7,
+		EpisodeHash:  oldHash,
+		LibraryPaths: []string{"/library/My Anime/My Anime - E05.mkv"},
+	}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	saveEpisodesToFile(fm, []files.EpisodeStruct{{
+		EpisodeID:     42,
+		AnimeID:       7,
+		EpisodeHash:   newHash,
+		EpisodeNumber: 5,
+	}})
+
+	got := loadEpisodeByID(t, fm, 42)
+	if len(got.LibraryPaths) != 0 {
+		t.Errorf("LibraryPaths deve ser zerado no re-download, obteve %v", got.LibraryPaths)
+	}
+}
+
+// TestSaveEpisodesToFile_AppendsNewEpisode garante que o merge não regride o comportamento
+// atual: episódio genuinamente novo continua sendo apendado sem tocar nos existentes.
+func TestSaveEpisodesToFile_AppendsNewEpisode(t *testing.T) {
+	fm := tempFileManager(t)
+	if err := fm.SaveEpisodesToFile([]files.EpisodeStruct{{
+		EpisodeID:       1,
+		AnimeID:         7,
+		EpisodeHash:     oldHash,
+		EpisodeNumber:   1,
+		ManuallyManaged: true,
+		LibraryPaths:    []string{"/library/My Anime/My Anime - E01.mkv"},
+	}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	saveEpisodesToFile(fm, []files.EpisodeStruct{{
+		EpisodeID:     2,
+		AnimeID:       7,
+		EpisodeHash:   newHash,
+		EpisodeNumber: 2,
+	}})
+
+	all, err := fm.LoadSavedEpisodes()
+	if err != nil {
+		t.Fatalf("LoadSavedEpisodes: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("esperava 2 registros, obteve %d: %+v", len(all), all)
+	}
+
+	untouched := loadEpisodeByID(t, fm, 1)
+	if !untouched.ManuallyManaged || len(untouched.LibraryPaths) != 1 || untouched.EpisodeHash != oldHash {
+		t.Errorf("registro não relacionado foi alterado: %+v", untouched)
+	}
+	added := loadEpisodeByID(t, fm, 2)
+	if added.EpisodeHash != newHash || added.EpisodeNumber != 2 {
+		t.Errorf("episódio novo não foi apendado corretamente: %+v", added)
+	}
+}
+
+// --- error propagation on removal (P1.3) ---
+
+// failingFM is a FileManager mock whose load/delete can be made to fail.
+type failingFM struct {
+	mockFileManagerForEpisodes
+	saved     []files.EpisodeStruct
+	loadErr   error
+	deleteErr error
+	deleted   []int
+}
+
+func (m *failingFM) LoadSavedEpisodes() ([]files.EpisodeStruct, error) {
+	if m.loadErr != nil {
+		return nil, m.loadErr
+	}
+	return m.saved, nil
+}
+
+func (m *failingFM) DeleteEpisodesFromFile(ids []int) error {
+	m.deleted = append(m.deleted, ids...)
+	return m.deleteErr
+}
+
+// TestRemoveEpisodesWithLinks_PropagatesLoadError: falha ao ler o arquivo de episódios deve
+// virar erro para o chamador (a API responde 500) em vez de "sucesso" silencioso.
+func TestRemoveEpisodesWithLinks_PropagatesLoadError(t *testing.T) {
+	fm := &failingFM{loadErr: errors.New("disk on fire")}
+	err := RemoveEpisodesWithLinks(fm, torrents.NewFakeBackend(), testLibrarian(), []int{1})
+	if err == nil {
+		t.Fatal("esperava erro quando LoadSavedEpisodes falha")
+	}
+}
+
+// TestRemoveEpisodesWithLinks_PropagatesDeleteError: falha ao remover do arquivo deve virar erro.
+func TestRemoveEpisodesWithLinks_PropagatesDeleteError(t *testing.T) {
+	const hash = "cccccccccccccccccccccccccccccccccccccccc"
+	fm := &failingFM{
+		saved:     []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: hash}},
+		deleteErr: errors.New("write failed"),
+	}
+	backend := fakeWithTorrents(hash)
+
+	err := RemoveEpisodesWithLinks(fm, backend, testLibrarian(), []int{1})
+	if err == nil {
+		t.Fatal("esperava erro quando DeleteEpisodesFromFile falha")
+	}
+	// Liberar espaço é best-effort e acontece antes: o torrent sai mesmo assim.
+	if _, ok := backend.Get(hash); ok {
+		t.Error("torrent deve ser removido mesmo quando a escrita do arquivo falha")
+	}
+}
+
+// TestRemoveEpisodesWithLinks_SuccessReturnsNil garante que o caminho feliz continua sem erro.
+func TestRemoveEpisodesWithLinks_SuccessReturnsNil(t *testing.T) {
+	const hash = "dddddddddddddddddddddddddddddddddddddddd"
+	fm := &failingFM{saved: []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: hash}}}
+	if err := RemoveEpisodesWithLinks(fm, fakeWithTorrents(hash), testLibrarian(), []int{1}); err != nil {
+		t.Fatalf("esperava sucesso, obteve %v", err)
+	}
+	if !containsID(fm.deleted, 1) {
+		t.Errorf("esperava episódio 1 deletado do arquivo, obteve %v", fm.deleted)
+	}
+}
+
+// TestHandleSavedEpisodes_DeleteErrorIsTolerated: o loop automático continua best-effort —
+// uma falha ao deletar do arquivo é logada, não aborta o passe nem impede a liberação de espaço.
+func TestHandleSavedEpisodes_DeleteErrorIsTolerated(t *testing.T) {
+	const hash = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	saved := []files.EpisodeStruct{{EpisodeID: 55, AnimeID: 300, EpisodeHash: hash}}
+	fm := &failingFM{saved: saved, deleteErr: errors.New("write failed")}
+	backend := fakeWithTorrents(hash)
+
+	handleSavedEpisodes(fm, &files.Config{DeleteWatchedEpisodes: true, MaxEpisodesPerAnime: 12}, backend, testLibrarian(), handleEpisodesData{
+		savedEpisodes:   saved,
+		idsToDelete:     []int{55},
+		checkedEpisodes: []int{55},
+	})
+
+	if _, ok := backend.Get(hash); ok {
+		t.Error("o passe deve continuar e remover o torrent mesmo com falha na escrita do arquivo")
+	}
+	if !containsID(fm.deleted, 55) {
+		t.Errorf("a deleção deve ter sido tentada, obteve %v", fm.deleted)
+	}
+}
+
+// TestDeleteEpisodesByStatus_DeleteErrorIsTolerated: idem para a deleção por status.
+func TestDeleteEpisodesByStatus_DeleteErrorIsTolerated(t *testing.T) {
+	const hash = "ffffffffffffffffffffffffffffffffffffffff"
+	deleteResp := &anilist.AniListResponse{}
+	deleteResp.Data.Page.MediaList = []anilist.MediaList{{Id: 100}}
+
+	saved := []files.EpisodeStruct{{EpisodeID: 42, AnimeID: 100, EpisodeHash: hash}}
+	fm := &failingFM{saved: saved, deleteErr: errors.New("write failed")}
+	backend := fakeWithTorrents(hash)
+
+	deleteEpisodesByStatus(deleteResp, fm, backend, testLibrarian(), saved)
+
+	if _, ok := backend.Get(hash); ok {
+		t.Error("torrent deve ser removido mesmo com falha na escrita do arquivo")
 	}
 }

@@ -1,7 +1,10 @@
 package files
 
 import (
+	"AutoAnimeDownloader/src/internal/logger"
+
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -15,8 +18,10 @@ type Librarian interface {
 	// library. For a single episode with RenameJellyfin it uses the Jellyfin name
 	// ("Anime - E05.mkv"); for a batch (or without the flag) it keeps the raw filename.
 	// It returns the absolute paths of the library links it created (or that already
-	// existed) so the caller can record them for later removal. It is idempotent:
-	// links that already exist are reported and skipped.
+	// existed) so the caller can record them for later removal. It is idempotent: a
+	// destination that is already the same file (same inode) is reported and skipped.
+	// A destination holding a *different* file is replaced by the new hardlink, which
+	// is what the redownload/replace flows want.
 	Organize(req OrganizeRequest) ([]string, error)
 	// RemoveFromLibrary deletes a single library hardlink. A missing file is not an error.
 	RemoveFromLibrary(path string) error
@@ -96,6 +101,12 @@ func jellyfinName(animeName string, episodeNumber int, ext string) string {
 }
 
 func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
+	// Guard first: with an empty CompletedPath, filepath.Join below yields a relative
+	// path and MkdirAll would create the library folder in the process' working dir.
+	if req.CompletedPath == "" {
+		return nil, fmt.Errorf("completed anime path is not configured")
+	}
+
 	videoFiles, err := o.collectVideoFiles(req.TorrentDataDir)
 	if err != nil {
 		return nil, err
@@ -117,7 +128,10 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 	}
 
 	// Jellyfin naming only applies to a genuine single episode with one video file.
-	useJellyfin := !req.IsBatch && req.RenameJellyfin && req.EpisodeNumber != nil && len(videoFiles) == 1
+	// EpisodeNumber == 0 means "missing data" (AniList numbers episodes from 1), so we
+	// fall back to the raw filename instead of colliding every episode on "Anime - E00".
+	useJellyfin := !req.IsBatch && req.RenameJellyfin && req.EpisodeNumber != nil &&
+		*req.EpisodeNumber > 0 && len(videoFiles) == 1
 
 	var created []string
 	for _, rel := range videoFiles {
@@ -131,10 +145,26 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		}
 		dest := filepath.Join(destDir, destName)
 
-		if _, statErr := o.fs.Stat(dest); statErr == nil {
-			// Idempotent: already linked.
-			created = append(created, dest)
-			continue
+		if destInfo, statErr := o.fs.Stat(dest); statErr == nil {
+			srcInfo, srcErr := o.fs.Stat(src)
+			if srcErr != nil {
+				return nil, fmt.Errorf("failed to stat source %s: %w", src, srcErr)
+			}
+			if os.SameFile(srcInfo, destInfo) {
+				// Idempotent: this exact file is already linked (reconciliation/retry).
+				created = append(created, dest)
+				continue
+			}
+			// Different bytes under the same name (redownload/replace): the user asked
+			// for the swap, so the new file wins.
+			logger.Logger.Info().
+				Str("source", src).
+				Str("destination", dest).
+				Msg("Replacing existing library file with the newly downloaded one")
+			if err := o.fs.Remove(dest); err != nil {
+				o.cleanupIfEmpty(destDir, dirExisted)
+				return nil, fmt.Errorf("failed to replace existing library file %s: %w", dest, err)
+			}
 		}
 
 		if err := o.link(src, dest); err != nil {

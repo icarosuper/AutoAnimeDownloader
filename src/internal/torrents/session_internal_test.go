@@ -89,8 +89,10 @@ func TestFakeBackendLifecycle(t *testing.T) {
 	if _, ok := fb.Get(hash); ok {
 		t.Errorf("torrent should be gone after Remove")
 	}
-	if err := fb.Remove(hash, false); err == nil {
-		t.Errorf("Remove of missing torrent should error")
+	// Removing an absent hash is a no-op, mirroring rain's RemoveTorrent (which returns nil
+	// for an unknown id) and therefore the real Session.Remove.
+	if err := fb.Remove(hash, false); err != nil {
+		t.Errorf("Remove of a missing torrent should be a no-op, got %v", err)
 	}
 }
 

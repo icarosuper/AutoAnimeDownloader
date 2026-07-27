@@ -26,7 +26,6 @@ func processAnimeEpisodes(
 	savedEpisodes []files.EpisodeStruct,
 	blockedMap map[int]bool,
 	customQuery string,
-	jobQueue *JobQueue,
 	searcher nyaaSearcher,
 ) animeProcessResult {
 	var result animeProcessResult
@@ -347,17 +346,18 @@ func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentB
 
 // RemoveEpisodesWithLinks removes the given episodes from the saved-episodes file and frees
 // their disk space (library hardlink + seeding torrent, with the batch guard applied).
-// Exposed for API handlers (manual delete / redownload / replace).
-func RemoveEpisodesWithLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, ids []int) {
+// Exposed for API handlers (manual delete / redownload / replace): it returns an error when the
+// record could not actually leave the saved-episodes file, so the handler can answer 500 and
+// abort instead of adding a new torrent that the stale record would shadow.
+func RemoveEpisodesWithLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, ids []int) error {
 	if len(ids) == 0 {
-		return
+		return nil
 	}
 	saved, err := fm.LoadSavedEpisodes()
 	if err != nil {
-		logger.Logger.Warn().Err(err).Msg("RemoveEpisodesWithLinks: failed to load saved episodes")
-		return
+		return fmt.Errorf("failed to load saved episodes: %w", err)
 	}
-	removeEpisodesAndLinks(fm, backend, librarian, ids, saved)
+	return removeEpisodesAndLinks(fm, backend, librarian, ids, saved)
 }
 
 // deleteEpisodesByStatus deletes episodes for animes in the delete-status list.
@@ -390,7 +390,10 @@ func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager Fil
 		Int("count", len(idsToDelete)).
 		Msg("Deleting episodes for animes with delete statuses")
 
-	removeEpisodesAndLinks(fileManager, backend, librarian, idsToDelete, savedEpisodes)
+	// Best-effort: a failure here must not abort the verification pass.
+	if err := removeEpisodesAndLinks(fileManager, backend, librarian, idsToDelete, savedEpisodes); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Status-based deletion: failed to delete episodes from file")
+	}
 }
 
 func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config, backend torrents.TorrentBackend, librarian files.Librarian, data handleEpisodesData) {
@@ -400,7 +403,10 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 
 	if configs.DeleteWatchedEpisodes {
 		allIds := append(append([]int{}, data.idsToDelete...), episodesNotInWatching...)
-		removeEpisodesAndLinks(fileManager, backend, librarian, allIds, data.savedEpisodes)
+		// Best-effort: a failure here must not abort the verification pass.
+		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allIds, data.savedEpisodes); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
+		}
 	}
 }
 
@@ -409,9 +415,13 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 // when every one of its saved episodes is being deleted (batch guard) — a torrent with
 // surviving siblings is kept, and for batches its library files are only removed when the
 // whole torrent goes (raw filenames can't be safely mapped to a single episode).
-func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, idsToDelete []int, savedEpisodes []files.EpisodeStruct) {
+//
+// Freeing disk space is best-effort (a failed hardlink/torrent removal is logged and skipped),
+// but a failure to drop the records from the saved-episodes file is returned: the caller decides
+// whether that is fatal (API handlers) or merely logged (the automatic loop).
+func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, idsToDelete []int, savedEpisodes []files.EpisodeStruct) error {
 	if len(idsToDelete) == 0 {
-		return
+		return nil
 	}
 	deleteSet := make(map[int]bool, len(idsToDelete))
 	for _, id := range idsToDelete {
@@ -460,8 +470,10 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 	}
 
 	if err := fm.DeleteEpisodesFromFile(idsToDelete); err != nil {
-		logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
+		return fmt.Errorf("failed to delete episodes from file: %w", err)
 	}
+
+	return nil
 }
 
 // allEpisodesInDeleteSet reports whether every episode in the group is in the delete set
@@ -494,11 +506,53 @@ func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedE
 	return episodesToDelete
 }
 
+// saveEpisodesToFile persists freshly downloaded episodes, merging over any existing record
+// with the same EpisodeID. FileManager.SaveEpisodesToFile dedupes by EpisodeID and silently
+// discards updates, which would leave a re-downloaded episode with its stale hash (breaking the
+// JobOrganize join) and a stale EpisodeNumber (producing "Anime - E00.mkv" for records saved
+// before EpisodeNumber existed). UpsertEpisodes alone would clobber ManuallyManaged, so the
+// merge is done here: download metadata is refreshed, LibraryPaths is reset (the file on disk
+// is a new one and must be organized again) and ManuallyManaged — a user flag — is preserved.
 func saveEpisodesToFile(fileManager FileManagerInterface, newEpisodes []files.EpisodeStruct) {
-	if err := fileManager.SaveEpisodesToFile(newEpisodes); err != nil {
-		logger.Logger.Warn().Err(err).Int("count", len(newEpisodes)).Msg("Failed to save episodes to file")
-	} else if len(newEpisodes) > 0 {
-		logger.Logger.Info().Int("count", len(newEpisodes)).Msg("Saved episodes to file")
+	if len(newEpisodes) == 0 {
+		return
 	}
+
+	existing, err := fileManager.LoadSavedEpisodes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load saved episodes before merge, falling back to append-only save")
+		if err := fileManager.SaveEpisodesToFile(newEpisodes); err != nil {
+			logger.Logger.Warn().Err(err).Int("count", len(newEpisodes)).Msg("Failed to save episodes to file")
+			return
+		}
+		logger.Logger.Info().Int("count", len(newEpisodes)).Msg("Saved episodes to file")
+		return
+	}
+
+	existingByID := make(map[int]files.EpisodeStruct, len(existing))
+	for _, ep := range existing {
+		existingByID[ep.EpisodeID] = ep
+	}
+
+	merged := make([]files.EpisodeStruct, 0, len(newEpisodes))
+	for _, ep := range newEpisodes {
+		merged = append(merged, mergeSavedEpisode(existingByID[ep.EpisodeID], ep))
+	}
+
+	if err := fileManager.UpsertEpisodes(merged); err != nil {
+		logger.Logger.Warn().Err(err).Int("count", len(merged)).Msg("Failed to save episodes to file")
+		return
+	}
+	logger.Logger.Info().Int("count", len(merged)).Msg("Saved episodes to file")
 }
 
+// mergeSavedEpisode merges a freshly downloaded record over the existing saved one (zero value
+// when the episode is new). Every download field comes from the new record; only LibraryPaths
+// (reset — the old hardlinks point at the previous release) and ManuallyManaged (a user flag the
+// automatic loop must never clear) get special treatment.
+func mergeSavedEpisode(existing, updated files.EpisodeStruct) files.EpisodeStruct {
+	merged := updated
+	merged.LibraryPaths = nil
+	merged.ManuallyManaged = updated.ManuallyManaged || existing.ManuallyManaged
+	return merged
+}

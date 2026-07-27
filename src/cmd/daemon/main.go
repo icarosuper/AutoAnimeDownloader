@@ -36,8 +36,8 @@ import (
 	"AutoAnimeDownloader/src/internal/api"
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
-	"AutoAnimeDownloader/src/internal/torrents"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"AutoAnimeDownloader/src/internal/tray"
 	"context"
 	"flag"
@@ -215,6 +215,27 @@ func runDebugAnime(animeId int) {
 	os.Exit(0)
 }
 
+// ensureStartupSession creates the embedded torrent session at boot when a save path is
+// already configured, so seeding starts with the process instead of waiting for the first
+// verification pass. An incomplete config is not an error here — the session stays lazy and
+// the verification pass creates it once the config is saved.
+func ensureStartupSession(manager *torrents.SessionManager, fileManager *files.FileManager) {
+	configs, err := fileManager.LoadConfigs()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load configs at startup; torrent session will be created on the first verification pass")
+		return
+	}
+	if configs == nil || configs.SavePath == "" {
+		logger.Logger.Info().Msg("Save path not configured; torrent session will be created once the configuration is saved")
+		return
+	}
+	if _, err := manager.Ensure(configs.SavePath); err != nil {
+		logger.Logger.Error().Err(err).Str("save_path", configs.SavePath).Msg("Failed to create the embedded torrent session at startup; the verification pass will retry")
+		return
+	}
+	logger.Logger.Info().Str("save_path", configs.SavePath).Msg("Embedded torrent session started; seeding is active independently of the daemon loop")
+}
+
 func main() {
 	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList MediaList ID and exit (no daemon, no downloads)")
 	flag.Parse()
@@ -264,11 +285,12 @@ func main() {
 	torrentManager := torrents.NewSessionManager(sessionDBPath)
 	librarian := files.NewLibrarian(files.NewOSFileSystem())
 
-	// Completion events enqueue a durable JobOrganize; failures fire a webhook.
+	// Completion events enqueue a durable JobOrganize; failures notify and drop the torrent
+	// so the next verification pass re-adds it.
 	torrentManager.SetCallbacks(
 		func(hash string) { jobQueue.EnqueueOrganize(hash) },
 		func(hash string, err error) {
-			logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent stopped with error")
+			daemon.HandleTorrentFailure(hash, err, torrentManager, fileManager)
 		},
 	)
 	jobQueue.SetOrchestration(torrentManager, librarian)
@@ -281,6 +303,15 @@ func main() {
 		}
 	}()
 	defer jobQueue.Stop()
+
+	// Create the session at startup when the config is already complete, so seeding resumes
+	// with the process and is independent of the daemon loop (stopping the loop from the
+	// WebUI must not stop seeding). Runs after jobQueue.Start() because arming the resume
+	// listeners can fire a completion immediately, and Start() reloads jobs from disk over
+	// whatever is in memory. With no save path configured the session stays lazy: the Ensure
+	// in the verification pass creates it once the config is saved. Startup reconciliation
+	// stays in the verification pass (safety net) and runs on its first tick.
+	ensureStartupSession(torrentManager, fileManager)
 
 	state := daemon.NewState()
 

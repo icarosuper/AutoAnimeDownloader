@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -80,7 +81,7 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 
 	// Create a mock FileManager that succeeds on LoadConfigs but fails on LoadSavedEpisodes
 	mockFS := &mockFileSystemForDaemon{
-		configContent:     createValidConfigJSON(),
+		configContent:     createValidConfigJSON(t),
 		loadEpisodesError: &testError{msg: "episodes load error"},
 	}
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
@@ -140,7 +141,7 @@ func TestAnimeVerification_ContextCancellation(t *testing.T) {
 
 	// Create a mock FileManager with valid config
 	mockFS := &mockFileSystemForDaemon{
-		configContent:   createValidConfigJSON(),
+		configContent:   createValidConfigJSON(t),
 		episodesContent: []byte("[]"), // Empty episodes
 	}
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
@@ -318,7 +319,7 @@ func TestStartLoop_StatusCheckingDuringVerification(t *testing.T) {
 	// This test specifically verifies that the status changes to "checking"
 	// during AnimeVerification execution
 	mockFS := &mockFileSystemForDaemon{
-		configContent:   createValidConfigJSON(),
+		configContent:   createValidConfigJSON(t),
 		episodesContent: []byte("[]"),
 	}
 	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
@@ -494,10 +495,17 @@ func (m *mockFileInfoForDaemon) ModTime() time.Time { return time.Now() }
 func (m *mockFileInfoForDaemon) IsDir() bool        { return m.isDir }
 func (m *mockFileInfoForDaemon) Sys() interface{}   { return nil }
 
-func createValidConfigJSON() []byte {
+// createValidConfigJSON returns a config whose save/completed paths are two real
+// directories under one temp dir. They must be real and on the same volume because
+// AnimeVerification now runs Librarian.ProbePaths (a real hardlink probe) as part of its
+// config gate and aborts the pass when it fails — bogus paths like "/test/save" would make
+// every verification test stop at the gate instead of exercising what it is testing.
+func createValidConfigJSON(t *testing.T) []byte {
+	t.Helper()
+	base := t.TempDir()
 	config := &files.Config{
-		SavePath:              "/test/save",
-		CompletedAnimePath:    "/test/completed",
+		SavePath:              filepath.Join(base, "save"),
+		CompletedAnimePath:    filepath.Join(base, "completed"),
 		AnilistUsername:       "testuser",
 		AnilistUsernames:      []string{"testuser"},
 		CheckInterval:         10,
