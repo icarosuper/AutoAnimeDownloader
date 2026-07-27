@@ -38,7 +38,6 @@ export const baseConfig = {
   success: true,
   data: {
     anilist_usernames: ['testuser'],
-    save_path: '/downloads',
     completed_anime_path: '/completed',
     check_interval: 60,
     max_episodes_per_anime: 12,

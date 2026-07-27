@@ -43,7 +43,7 @@ type TorrentResponse struct {
 }
 
 // @Summary      List torrents
-// @Description  Returns a live snapshot of every torrent in the embedded client — progress, speed, ETA, peers and status — joined with the anime/episode it belongs to. Batch torrents appear once, with a null episode_number. Responds with an empty list (not an error) when no session exists yet, i.e. before save_path is configured.
+// @Description  Returns a live snapshot of every torrent in the embedded client — progress, speed, ETA, peers and status — joined with the anime/episode it belongs to. Batch torrents appear once, with a null episode_number. Responds with an empty list (not an error) when no session exists yet, i.e. before completed_anime_path is configured.
 // @Tags         torrents
 // @Accept       json
 // @Produce      json
@@ -57,7 +57,7 @@ func handleTorrents(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// List returns nil when there is no session yet (no save_path configured). That is a
+		// List returns nil when there is no session yet (no completed_anime_path configured). That is a
 		// normal, empty state — not an error.
 		list := server.Torrents.List()
 

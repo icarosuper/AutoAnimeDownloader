@@ -21,8 +21,8 @@ docker compose -f docker/docker-compose.test.yml up --build --abort-on-container
 
 - `src/tests/unit/` — unit tests (`package unit`)
 - `src/tests/integration/` — Docker-based end-to-end HTTP tests. Gated on `DAEMON_URL`; the
-  save/library paths it writes into the daemon's config come from `TEST_SAVE_PATH` /
-  `TEST_COMPLETED_PATH` (default `~/aad-test/downloads` and `~/aad-test/library`)
+  library path it writes into the daemon's config comes from
+  `TEST_COMPLETED_PATH` (default `~/aad-test/library`)
 - `src/tests/mocks/` — standalone mock HTTP servers (Docker images, **not** Go test imports)
 - `src/internal/api/*_test.go` — handler-level tests
 

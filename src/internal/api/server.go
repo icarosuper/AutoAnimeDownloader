@@ -26,7 +26,7 @@ type FileManagerInterface interface {
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
 	UpsertEpisodes(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
-	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+	DeleteEmptyFolders(completedAnimeSaveFolder string) error
 	LoadBlockedEpisodes() ([]int, error)
 	BlockEpisode(episodeID int) error
 	UnblockEpisode(episodeID int) error

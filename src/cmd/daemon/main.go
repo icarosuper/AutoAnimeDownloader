@@ -225,15 +225,16 @@ func ensureStartupSession(manager *torrents.SessionManager, fileManager *files.F
 		logger.Logger.Warn().Err(err).Msg("Failed to load configs at startup; torrent session will be created on the first verification pass")
 		return
 	}
-	if configs == nil || configs.SavePath == "" {
-		logger.Logger.Info().Msg("Save path not configured; torrent session will be created once the configuration is saved")
+	if configs == nil || configs.DownloadPath() == "" {
+		logger.Logger.Info().Msg("Completed anime path not configured; torrent session will be created once the configuration is saved")
 		return
 	}
-	if _, err := manager.Ensure(configs.SavePath); err != nil {
-		logger.Logger.Error().Err(err).Str("save_path", configs.SavePath).Msg("Failed to create the embedded torrent session at startup; the verification pass will retry")
+	downloadPath := configs.DownloadPath()
+	if _, err := manager.Ensure(downloadPath); err != nil {
+		logger.Logger.Error().Err(err).Str("download_path", downloadPath).Msg("Failed to create the embedded torrent session at startup; the verification pass will retry")
 		return
 	}
-	logger.Logger.Info().Str("save_path", configs.SavePath).Msg("Embedded torrent session started; seeding is active independently of the daemon loop")
+	logger.Logger.Info().Str("download_path", downloadPath).Msg("Embedded torrent session started; seeding is active independently of the daemon loop")
 }
 
 func main() {
@@ -295,6 +296,19 @@ func main() {
 	)
 	jobQueue.SetOrchestration(torrentManager, librarian)
 	jobQueue.Start()
+	// Converte uma instalacao antiga (save_path configurado) para o modelo de pasta unica,
+	// movendo os dados. Roda DEPOIS de jobQueue.Start(), entao Start() ja carregou a lista
+	// de jobs persistida antes da sessao temporaria de migracao existir: se essa sessao
+	// disparar uma conclusao espuria, ela NAO e descartada por Start(). O risco e limitado
+	// e se autocorrige: um job de organize afetado bate em ErrSessionNotReady ou num DataDir
+	// obsoleto, falha, e o passe de verificacao tenta de novo. Uma falha na migracao em si
+	// tambem nao e fatal aqui — mas o boot so pode abrir a sessao real (ensureStartupSession)
+	// no caminho derivado se a migracao teve sucesso; caso contrario os dados ainda estao no
+	// caminho antigo e abrir a sessao no novo caminho reverificaria tudo a 0%.
+	migrationErr := daemon.MigrateSavePath(files.NewOSFileSystem(), fileManager, torrentManager)
+	if migrationErr != nil {
+		logger.Logger.Error().Err(migrationErr).Msg("Failed to migrate the legacy save path; the verification pass will retry")
+	}
 	// Defers run LIFO: register Close first so jobQueue.Stop() (which may run organize jobs
 	// that use the session) runs before the session is closed.
 	defer func() {
@@ -311,7 +325,15 @@ func main() {
 	// whatever is in memory. With no save path configured the session stays lazy: the Ensure
 	// in the verification pass creates it once the config is saved. Startup reconciliation
 	// stays in the verification pass (safety net) and runs on its first tick.
-	ensureStartupSession(torrentManager, fileManager)
+	//
+	// Skipped when the migration above failed: the data may still be sitting at the legacy
+	// save path, so opening rain at the derived DownloadPath() now would resume every
+	// torrent against an empty directory and re-download the whole library. Leaving the
+	// session lazy here keeps the verification pass retrying the migration on each tick
+	// until it succeeds (see decisions.md #31).
+	if migrationErr == nil {
+		ensureStartupSession(torrentManager, fileManager)
+	}
 
 	state := daemon.NewState()
 

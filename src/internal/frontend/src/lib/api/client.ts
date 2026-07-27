@@ -98,7 +98,6 @@ export interface Priorities {
 export interface Config {
   anilist_username?: string
   anilist_usernames: string[]
-  save_path: string
   completed_anime_path: string
   check_interval: number
   max_episodes_per_anime: number

@@ -21,7 +21,7 @@ type FileManagerInterface interface {
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
 	UpsertEpisodes(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
-	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+	DeleteEmptyFolders(completedAnimeSaveFolder string) error
 	LoadBlockedEpisodes() ([]int, error)
 	BlockEpisode(episodeID int) error
 	UnblockEpisode(episodeID int) error
@@ -88,7 +88,9 @@ func getWebUiURL() string {
 }
 
 func isConfigComplete(config *files.Config) bool {
-	return len(config.AnilistUsernames) > 0 && config.SavePath != "" && config.CompletedAnimePath != ""
+	// SavePath e legado: uma instalacao migrada tem esse campo zerado, entao a checagem
+	// usa o caminho de download derivado (Config.DownloadPath), nao SavePath diretamente.
+	return len(config.AnilistUsernames) > 0 && config.DownloadPath() != ""
 }
 
 func openBrowserToConfig(webUIURL string) error {

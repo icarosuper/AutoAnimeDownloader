@@ -52,7 +52,10 @@ type NotificationsConfig struct {
 }
 
 type Config struct {
-	SavePath               string              `json:"save_path"`
+	// SavePath e um campo LEGADO, lido apenas por daemon.MigrateSavePath. O diretorio de
+	// download deixou de ser configuravel e passou a ser derivado (ver DownloadPath). O
+	// omitempty faz o campo sumir do config.json assim que a migracao o zera.
+	SavePath               string              `json:"save_path,omitempty" swaggerignore:"true"`
 	CompletedAnimePath     string              `json:"completed_anime_path"`
 	AnilistUsername        string              `json:"anilist_username,omitempty"`
 	AnilistUsernames       []string            `json:"anilist_usernames"`
@@ -68,6 +71,26 @@ type Config struct {
 	DeleteStatuses         []string            `json:"delete_statuses"`
 	Notifications          NotificationsConfig `json:"notifications"`
 	Priorities             nyaa.Priorities     `json:"priorities"`
+}
+
+// downloadDirName e o nome do diretorio de download dentro da biblioteca. O ponto o
+// esconde do scanner do Jellyfin no Linux; o arquivo .ignore criado por
+// Librarian.ProbePath cobre as demais plataformas.
+const downloadDirName = ".autoAnimeDownloader"
+
+// DownloadPath e o diretorio onde os torrents baixam e continuam semeando. Ele e derivado
+// de CompletedAnimePath, nunca armazenado: assim a restricao de hardlink (origem e destino
+// no mesmo filesystem) fica impossivel de violar por configuracao.
+//
+// Devolve "" quando a biblioteca nao esta configurada. Essa guarda e obrigatoria: sem ela
+// filepath.Join produziria o caminho relativo ".autoAnimeDownloader" e a sessao da rain
+// seria criada no diretorio de trabalho do processo. Com "", SessionManager.Ensure devolve
+// ErrSessionNotReady, que e o comportamento atual para config incompleta.
+func (c *Config) DownloadPath() string {
+	if c.CompletedAnimePath == "" {
+		return ""
+	}
+	return filepath.Join(c.CompletedAnimePath, downloadDirName)
 }
 
 type AnimeSettings struct {
@@ -437,19 +460,17 @@ func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
 	return nil
 }
 
-func (m *FileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error {
-	if savePath == "" {
-		return fmt.Errorf("save path cannot be empty")
+// DeleteEmptyFolders remove os diretorios de anime que ficaram vazios na biblioteca depois
+// de uma exclusao. O diretorio de download vive dentro dela (ver Config.DownloadPath), e a
+// rain aloca <download>/<id> antes de escrever qualquer byte — por isso a varredura o pula
+// explicitamente, senao apagaria torrents recem-adicionados.
+func (m *FileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error {
+	if completedAnimeSaveFolder == "" {
+		return fmt.Errorf("completed anime path cannot be empty")
 	}
 
-	if err := m.deleteEmptyFolders(savePath); err != nil {
-		return fmt.Errorf("failed to delete empty folders in save path: %w", err)
-	}
-
-	if completedAnimeSaveFolder != "" {
-		if err := m.deleteEmptyFolders(completedAnimeSaveFolder); err != nil {
-			return fmt.Errorf("failed to delete empty folders in completed anime save folder: %w", err)
-		}
+	if err := m.deleteEmptyFolders(completedAnimeSaveFolder); err != nil {
+		return fmt.Errorf("failed to delete empty folders in completed anime save folder: %w", err)
 	}
 
 	return nil
@@ -623,6 +644,10 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+
+		if entry.Name() == downloadDirName {
 			continue
 		}
 

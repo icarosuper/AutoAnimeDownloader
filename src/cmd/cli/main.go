@@ -126,7 +126,6 @@ func main() {
 						ArgsUsage: "<key> <value>",
 						Description: `Set a configuration value. Available keys:
   - anilist_usernames (comma-separated strings)
-  - save_path (string)
   - completed_anime_path (string)
   - check_interval (int, in minutes)
   - max_episodes_per_anime (int)
@@ -135,7 +134,7 @@ func main() {
   - excluded_lists (comma-separated strings)`,
 						Action: func(c *cli.Context) error {
 							if c.NArg() != 2 {
-								return fmt.Errorf("usage: config set <key> <value>\n\nAvailable keys:\n  - anilist_usernames\n  - save_path\n  - completed_anime_path\n  - check_interval\n  - max_episodes_per_anime\n  - episode_retry_limit\n  - delete_watched_episodes\n  - excluded_lists")
+								return fmt.Errorf("usage: config set <key> <value>\n\nAvailable keys:\n  - anilist_usernames\n  - completed_anime_path\n  - check_interval\n  - max_episodes_per_anime\n  - episode_retry_limit\n  - delete_watched_episodes\n  - excluded_lists")
 							}
 							return handleConfigSet(c.Args().Get(0), c.Args().Get(1))
 						},
@@ -305,7 +304,6 @@ func handleConfigGet() error {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Field", "Value"})
 		t.AppendRow(table.Row{"Anilist Usernames", strings.Join(config.AnilistUsernames, ", ")})
-		t.AppendRow(table.Row{"Save Path", config.SavePath})
 		t.AppendRow(table.Row{"Completed Anime Path", config.CompletedAnimePath})
 		t.AppendRow(table.Row{"Check Interval", fmt.Sprintf("%d minutes", config.CheckInterval)})
 		t.AppendRow(table.Row{"Max Episodes Per Anime", config.MaxEpisodesPerAnime})
@@ -335,8 +333,6 @@ func handleConfigSet(key, value string) error {
 			}
 		}
 		config.AnilistUsernames = usernames
-	case "save_path", "savepath":
-		config.SavePath = value
 	case "completed_anime_path", "completedanimepath":
 		config.CompletedAnimePath = value
 	case "check_interval", "checkinterval":

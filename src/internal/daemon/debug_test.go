@@ -22,7 +22,7 @@ func (m *debugMockFileManager) LoadSavedEpisodes() ([]files.EpisodeStruct, error
 func (m *debugMockFileManager) SaveEpisodesToFile(episodes []files.EpisodeStruct) error { return nil }
 func (m *debugMockFileManager) UpsertEpisodes(episodes []files.EpisodeStruct) error     { return nil }
 func (m *debugMockFileManager) DeleteEpisodesFromFile(ids []int) error                  { return nil }
-func (m *debugMockFileManager) DeleteEmptyFolders(a, b string) error                    { return nil }
+func (m *debugMockFileManager) DeleteEmptyFolders(a string) error                       { return nil }
 func (m *debugMockFileManager) LoadBlockedEpisodes() ([]int, error)                     { return nil, nil }
 func (m *debugMockFileManager) BlockEpisode(id int) error                               { return nil }
 func (m *debugMockFileManager) UnblockEpisode(id int) error                             { return nil }

@@ -25,10 +25,13 @@ type Librarian interface {
 	Organize(req OrganizeRequest) ([]string, error)
 	// RemoveFromLibrary deletes a single library hardlink. A missing file is not an error.
 	RemoveFromLibrary(path string) error
-	// ProbePaths validates, at config-save time, that savePath and completedPath live on
-	// the same volume (hardlinks cannot cross filesystems). It uses the exact same link
-	// function the runtime uses, so it can never disagree with Organize.
-	ProbePaths(savePath, completedPath string) error
+	// ProbePath valida, no save da config e a cada passe de verificacao, que a biblioteca
+	// suporta hardlinks. O cheque de volume cruzado deixou de ser necessario (o diretorio
+	// de download e derivado da biblioteca, entao estao sempre no mesmo filesystem), mas
+	// existem filesystems sem hardlink nenhum: exFAT, FAT32, alguns mounts SMB/NFS. Usa a
+	// mesma funcao de link que Organize usa, entao nunca discorda dele. Tambem cria o
+	// diretorio de download e o marcador .ignore.
+	ProbePath(completedPath string) error
 }
 
 // OrganizeRequest describes one torrent to organize into the library.
@@ -52,7 +55,7 @@ type organizer struct {
 }
 
 // NewLibrarian returns a Librarian backed by the given FileSystem. The link function
-// defaults to fs.Link; both Organize and ProbePaths use it, so they never diverge.
+// defaults to fs.Link; both Organize and ProbePath use it, so they never diverge.
 func NewLibrarian(fs FileSystem) *organizer {
 	return &organizer{fs: fs, link: fs.Link}
 }
@@ -194,34 +197,43 @@ func (o *organizer) RemoveFromLibrary(path string) error {
 	return nil
 }
 
-func (o *organizer) ProbePaths(savePath, completedPath string) error {
-	if savePath == "" || completedPath == "" {
-		return fmt.Errorf("save path and completed path must both be set")
-	}
-	if err := o.fs.MkdirAll(savePath, 0755); err != nil {
-		return fmt.Errorf("cannot access save path %s: %w", savePath, err)
+func (o *organizer) ProbePath(completedPath string) error {
+	if completedPath == "" {
+		return fmt.Errorf("completed anime path must be set")
 	}
 	if err := o.fs.MkdirAll(completedPath, 0755); err != nil {
 		return fmt.Errorf("cannot access completed path %s: %w", completedPath, err)
 	}
 
-	probeSrc := filepath.Join(savePath, ".aad_link_probe")
+	downloadPath := filepath.Join(completedPath, downloadDirName)
+	if err := o.fs.MkdirAll(downloadPath, 0755); err != nil {
+		return fmt.Errorf("cannot create download folder %s: %w", downloadPath, err)
+	}
+
+	// O prefixo com ponto esconde a pasta do scanner do Jellyfin no Linux; o .ignore cobre
+	// as plataformas onde o ponto nao marca oculto. As duas defesas juntas, porque a
+	// pasta de download agora vive dentro da pasta que o Jellyfin varre.
+	ignorePath := filepath.Join(downloadPath, ".ignore")
+	if _, err := o.fs.Stat(ignorePath); err != nil {
+		if err := o.fs.WriteFile(ignorePath, nil, 0644); err != nil {
+			return fmt.Errorf("cannot write ignore marker %s: %w", ignorePath, err)
+		}
+	}
+
+	probeSrc := filepath.Join(downloadPath, ".aad_link_probe")
 	probeDst := filepath.Join(completedPath, ".aad_link_probe")
 
-	// Clean up any leftovers from a previous probe.
+	// Limpa sobras de uma sonda anterior.
 	_ = o.fs.Remove(probeSrc)
 	_ = o.fs.Remove(probeDst)
 
 	if err := o.fs.WriteFile(probeSrc, []byte("probe"), 0644); err != nil {
-		return fmt.Errorf("cannot write to save path %s: %w", savePath, err)
+		return fmt.Errorf("cannot write to download path %s: %w", downloadPath, err)
 	}
 	defer func() { _ = o.fs.Remove(probeSrc) }()
 
 	if err := o.link(probeSrc, probeDst); err != nil {
-		if isCrossDevice(err) {
-			return fmt.Errorf("save path and completed path are on different volumes; hardlinks require the same filesystem")
-		}
-		return fmt.Errorf("failed to verify hardlink support between save and completed paths: %w", err)
+		return fmt.Errorf("this filesystem does not support hardlinks, which the library requires: %w", err)
 	}
 	_ = o.fs.Remove(probeDst)
 

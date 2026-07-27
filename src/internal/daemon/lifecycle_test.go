@@ -197,8 +197,8 @@ func TestHandleTorrentFailure_NoWebhookStillRemoves(t *testing.T) {
 	}
 }
 
-// exdevFS is an OSFileSystem whose Link always fails with EXDEV, simulating a save path and
-// a completed path on different volumes (legal before the embedded-client upgrade).
+// exdevFS is an OSFileSystem whose Link always fails with EXDEV, simulating a filesystem
+// that does not support hardlinks (exFAT, FAT32, some SMB/NFS mounts).
 type exdevFS struct {
 	*files.OSFileSystem
 }
@@ -221,9 +221,10 @@ func mockEmptyAniList(t *testing.T) {
 	t.Cleanup(restore)
 }
 
-// P3.3 — cross-volume save/completed paths must abort the pass with an actionable
-// LastCheckError instead of downloading episodes that can never be hardlinked.
-func TestAnimeVerification_CrossDevicePathsAbortPass(t *testing.T) {
+// P3.3 — a completed path whose filesystem does not support hardlinks must abort the pass
+// with an actionable LastCheckError instead of downloading episodes that can never be
+// hardlinked.
+func TestAnimeVerification_NoHardlinkSupportAbortsPass(t *testing.T) {
 	mockEmptyAniList(t)
 
 	fm := &lifecycleFM{configs: &files.Config{
@@ -239,9 +240,9 @@ func TestAnimeVerification_CrossDevicePathsAbortPass(t *testing.T) {
 
 	err := state.GetLastCheckError()
 	if err == nil {
-		t.Fatal("expected LastCheckError to be set for cross-device paths")
+		t.Fatal("expected LastCheckError to be set when the filesystem does not support hardlinks")
 	}
-	if !strings.Contains(err.Error(), "different volumes") {
+	if !strings.Contains(err.Error(), "does not support hardlinks") {
 		t.Errorf("LastCheckError should carry the same message the config endpoint returns, got %q", err)
 	}
 	if fm.passRan() {

@@ -369,27 +369,58 @@ func TestRemoveFromLibrary(t *testing.T) {
 	}
 }
 
-func TestProbePathsSameVolume(t *testing.T) {
-	tmp := t.TempDir()
-	save := filepath.Join(tmp, "save")
-	completed := filepath.Join(tmp, "completed")
+func TestProbePath(t *testing.T) {
+	t.Run("cria biblioteca, diretorio de download e .ignore", func(t *testing.T) {
+		completed := filepath.Join(t.TempDir(), "library")
+		lib := NewLibrarian(NewOSFileSystem())
 
-	lib := NewLibrarian(NewOSFileSystem())
-	if err := lib.ProbePaths(save, completed); err != nil {
-		t.Fatalf("ProbePaths same volume: %v", err)
-	}
-	// No probe leftovers.
-	if _, err := os.Stat(filepath.Join(save, ".aad_link_probe")); err == nil {
-		t.Errorf("probe source not cleaned up")
-	}
-	if _, err := os.Stat(filepath.Join(completed, ".aad_link_probe")); err == nil {
-		t.Errorf("probe dest not cleaned up")
-	}
-}
+		if err := lib.ProbePath(completed); err != nil {
+			t.Fatalf("ProbePath: %v", err)
+		}
 
-func TestProbePathsEmpty(t *testing.T) {
-	lib := NewLibrarian(NewOSFileSystem())
-	if err := lib.ProbePaths("", "/x"); err == nil {
-		t.Errorf("expected error for empty save path")
-	}
+		downloadDir := filepath.Join(completed, ".autoAnimeDownloader")
+		if _, err := os.Stat(downloadDir); err != nil {
+			t.Errorf("diretorio de download nao foi criado: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(downloadDir, ".ignore")); err != nil {
+			t.Errorf(".ignore nao foi criado: %v", err)
+		}
+	})
+
+	t.Run("nao deixa arquivos de sonda para tras", func(t *testing.T) {
+		completed := filepath.Join(t.TempDir(), "library")
+		lib := NewLibrarian(NewOSFileSystem())
+
+		if err := lib.ProbePath(completed); err != nil {
+			t.Fatalf("ProbePath: %v", err)
+		}
+
+		for _, p := range []string{
+			filepath.Join(completed, ".aad_link_probe"),
+			filepath.Join(completed, ".autoAnimeDownloader", ".aad_link_probe"),
+		} {
+			if _, err := os.Stat(p); err == nil {
+				t.Errorf("sobrou arquivo de sonda em %s", p)
+			}
+		}
+	})
+
+	t.Run("rejeita biblioteca vazia", func(t *testing.T) {
+		lib := NewLibrarian(NewOSFileSystem())
+		if err := lib.ProbePath(""); err == nil {
+			t.Error("quero erro para caminho vazio, veio nil")
+		}
+	})
+
+	t.Run("e idempotente", func(t *testing.T) {
+		completed := filepath.Join(t.TempDir(), "library")
+		lib := NewLibrarian(NewOSFileSystem())
+
+		if err := lib.ProbePath(completed); err != nil {
+			t.Fatalf("primeira chamada: %v", err)
+		}
+		if err := lib.ProbePath(completed); err != nil {
+			t.Fatalf("segunda chamada: %v", err)
+		}
+	})
 }

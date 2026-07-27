@@ -41,7 +41,7 @@ func (m *mockFileManagerForEpisodes) DeleteEpisodesFromFile(ids []int) error {
 	m.deletedEpisodeIDs = append(m.deletedEpisodeIDs, ids...)
 	return nil
 }
-func (m *mockFileManagerForEpisodes) DeleteEmptyFolders(string, string) error { return nil }
+func (m *mockFileManagerForEpisodes) DeleteEmptyFolders(string) error { return nil }
 func (m *mockFileManagerForEpisodes) LoadBlockedEpisodes() ([]int, error)     { return nil, nil }
 func (m *mockFileManagerForEpisodes) BlockEpisode(int) error                  { return nil }
 func (m *mockFileManagerForEpisodes) UnblockEpisode(int) error                { return nil }

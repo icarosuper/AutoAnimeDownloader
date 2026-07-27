@@ -39,23 +39,36 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			}
 		}()
 
-		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username, save path or completed anime path)"))
+		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username or completed anime path)"))
 		return
 	}
 
-	// The library is built from hardlinks, which cannot cross filesystems. The config-save
-	// endpoint probes this, but configs written before the embedded-client upgrade (or
-	// straight to config.json by docker/entrypoint.sh) never went through it. Without this
-	// gate a cross-volume pair downloads happily and every JobOrganize dies with EXDEV while
-	// the UI shows a healthy daemon. Probing here surfaces the same actionable message the
-	// endpoint returns, and aborts the pass: downloading what we cannot organize just fills
-	// the disk.
+	// Converte instalacoes antigas antes de qualquer coisa tocar o caminho de download.
+	// Abortar aqui e deliberado: seguir para o caminho novo com os dados no antigo faria
+	// a rain reverificar, achar nada e rebaixar tudo.
+	if err := MigrateSavePath(files.NewOSFileSystem(), fileManager, backend); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to migrate the legacy save path; skipping verification")
+		state.SetLastCheckError(err)
+		return
+	}
+	configs, err = fileManager.LoadConfigs()
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to reload configs after migration; skipping verification")
+		state.SetLastCheckError(err)
+		return
+	}
+
+	// A biblioteca e montada com hardlinks. O endpoint de save da config sonda isso, mas
+	// configs escritos antes deste upgrade (ou direto no config.json pelo
+	// docker/entrypoint.sh) nunca passaram por ele. Sem esta porta um filesystem sem
+	// suporte a hardlink baixa alegremente enquanto todo JobOrganize morre, e a UI mostra
+	// um daemon saudavel. Sondar aqui devolve a mesma mensagem acionavel do endpoint, e
+	// aborta o passe: baixar o que nao da para organizar so enche o disco.
 	if librarian != nil {
-		if err := librarian.ProbePaths(configs.SavePath, configs.CompletedAnimePath); err != nil {
+		if err := librarian.ProbePath(configs.CompletedAnimePath); err != nil {
 			logger.Logger.Error().Err(err).
-				Str("save_path", configs.SavePath).
 				Str("completed_anime_path", configs.CompletedAnimePath).
-				Msg("Save path and completed anime path failed the hardlink probe; skipping verification")
+				Msg("Completed anime path failed the hardlink probe; skipping verification")
 			state.SetLastCheckError(err)
 			return
 		}
@@ -69,7 +82,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	// Ensure the embedded torrent session exists for the current save path (created lazily,
 	// recreated if the save path changed).
-	if _, err := backend.Ensure(configs.SavePath); err != nil {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to initialize embedded torrent session")
 		state.SetLastCheckError(err)
 		return
@@ -260,7 +273,7 @@ outer:
 	state.SetLastCheck(time.Now())
 	state.SetLastCheckError(nil)
 
-	if err := fileManager.DeleteEmptyFolders(configs.SavePath, configs.CompletedAnimePath); err != nil {
+	if err := fileManager.DeleteEmptyFolders(configs.CompletedAnimePath); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to delete empty folders")
 	}
 
@@ -313,13 +326,13 @@ func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.E
 }
 
 func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
-	if len(configs.AnilistUsernames) == 0 || configs.SavePath == "" {
-		err := fmt.Errorf("missing required configuration: Anilist username or save path")
+	if len(configs.AnilistUsernames) == 0 || configs.DownloadPath() == "" {
+		err := fmt.Errorf("missing required configuration: Anilist username or completed anime path")
 		logger.Logger.Error().
 			Err(err).
 			Strs("anilist_usernames", configs.AnilistUsernames).
-			Str("save_path", configs.SavePath).
-			Msg("Missing required configuration: Anilist usernames or save path")
+			Str("download_path", configs.DownloadPath()).
+			Msg("Missing required configuration: Anilist usernames or completed anime path")
 		return nil, err
 	}
 

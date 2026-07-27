@@ -48,7 +48,7 @@ func findEpisodeNode(nodes []anilist.AiringNode, episodeId int) *anilist.AiringN
 // ManualDownloadEpisodeWithMagnet downloads a specific episode using a user-supplied magnet link.
 // Skips Nyaa search entirely. Returns the saved EpisodeStruct with ManuallyManaged=true on success.
 func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId int, episodeId int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
-	if _, err := backend.Ensure(configs.SavePath); err != nil {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
 
@@ -83,7 +83,7 @@ func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId in
 // ManualDownloadAnimeWithMagnet downloads an entire anime using a user-supplied batch magnet link.
 // Marks all aired episodes as downloaded sharing the same torrent hash.
 func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int, magnet string, configs *files.Config) ([]files.EpisodeStruct, error) {
-	if _, err := backend.Ensure(configs.SavePath); err != nil {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +127,7 @@ func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int,
 // ManualDownloadEpisode downloads a specific episode manually (called from API).
 // Returns the saved EpisodeStruct with ManuallyManaged=true on success.
 func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episodeId int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
-	if _, err := backend.Ensure(configs.SavePath); err != nil {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
 

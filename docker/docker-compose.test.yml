@@ -73,7 +73,6 @@ services:
       # Paths the daemon container writes to. Both under /app/data (the mounted volume) so
       # they share a filesystem — the config endpoint rejects cross-volume paths because
       # completed episodes are hardlinked into the library.
-      - TEST_SAVE_PATH=/app/data/aad-test/downloads
       - TEST_COMPLETED_PATH=/app/data/aad-test/library
     command: >
       sh -c "

@@ -50,17 +50,17 @@ func TestOrganizeCrossDeviceCleansUp(t *testing.T) {
 	}
 }
 
-func TestProbePathsCrossDevice(t *testing.T) {
+func TestProbePathFailsWhenLinkUnsupported(t *testing.T) {
 	tmp := t.TempDir()
-	save := filepath.Join(tmp, "save")
 	completed := filepath.Join(tmp, "completed")
 
 	lib := &organizer{fs: NewOSFileSystem(), link: exdevLink}
-	if err := lib.ProbePaths(save, completed); err == nil {
-		t.Fatalf("expected cross-device error from ProbePaths")
+	if err := lib.ProbePath(completed); err == nil {
+		t.Fatalf("expected error from ProbePath when the link func fails")
 	}
 	// Probe source cleaned up despite the failure.
-	if _, statErr := os.Stat(filepath.Join(save, ".aad_link_probe")); statErr == nil {
-		t.Errorf("probe source not cleaned up after cross-device failure")
+	downloadDir := filepath.Join(completed, downloadDirName)
+	if _, statErr := os.Stat(filepath.Join(downloadDir, ".aad_link_probe")); statErr == nil {
+		t.Errorf("probe source not cleaned up after failure")
 	}
 }

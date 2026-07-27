@@ -496,10 +496,10 @@ func (m *mockFileInfoForDaemon) IsDir() bool        { return m.isDir }
 func (m *mockFileInfoForDaemon) Sys() interface{}   { return nil }
 
 // createValidConfigJSON returns a config whose save/completed paths are two real
-// directories under one temp dir. They must be real and on the same volume because
-// AnimeVerification now runs Librarian.ProbePaths (a real hardlink probe) as part of its
-// config gate and aborts the pass when it fails — bogus paths like "/test/save" would make
-// every verification test stop at the gate instead of exercising what it is testing.
+// directories under one temp dir. They must be real because AnimeVerification now runs
+// Librarian.ProbePath (a real hardlink probe) as part of its config gate and aborts the
+// pass when it fails — bogus paths like "/test/save" would make every verification test
+// stop at the gate instead of exercising what it is testing.
 func createValidConfigJSON(t *testing.T) []byte {
 	t.Helper()
 	base := t.TempDir()

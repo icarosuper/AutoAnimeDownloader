@@ -997,7 +997,7 @@
         },
         "/torrents": {
             "get": {
-                "description": "Returns a live snapshot of every torrent in the embedded client — progress, speed, ETA, peers and status — joined with the anime/episode it belongs to. Batch torrents appear once, with a null episode_number. Responds with an empty list (not an error) when no session exists yet, i.e. before save_path is configured.",
+                "description": "Returns a live snapshot of every torrent in the embedded client — progress, speed, ETA, peers and status — joined with the anime/episode it belongs to. Batch torrents appear once, with a null episode_number. Responds with an empty list (not an error) when no session exists yet, i.e. before completed_anime_path is configured.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1509,9 +1509,6 @@
                 },
                 "rename_files_for_jellyfin": {
                     "type": "boolean"
-                },
-                "save_path": {
-                    "type": "string"
                 },
                 "watched_episodes_to_keep": {
                     "type": "integer"

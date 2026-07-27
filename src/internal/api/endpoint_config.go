@@ -78,14 +78,15 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			config.AnilistUsername = ""
 		}
 
+		// save_path deixou de ser configuravel: o diretorio de download e derivado da
+		// biblioteca. Zerar aqui e a vedacao que impede a API de reintroduzir o campo e
+		// re-armar daemon.MigrateSavePath a cada boot. A migracao so pode ser disparada
+		// por um config.json escrito por uma versao anterior, que e o caso de uso.
+		config.SavePath = ""
+
 		// Validate required fields
 		if len(config.AnilistUsernames) == 0 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "At least one Anilist username is required")
-			return
-		}
-
-		if config.SavePath == "" {
-			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Save path is required")
 			return
 		}
 
@@ -94,10 +95,10 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// The library is built from hardlinks, which cannot cross filesystems. Verify at
-		// save time that save path and completed path live on the same volume.
+		// A biblioteca e montada com hardlinks; nem todo filesystem suporta. Verifica no
+		// momento do save, com a mesma funcao que o runtime usa.
 		if server.Librarian != nil {
-			if err := server.Librarian.ProbePaths(config.SavePath, config.CompletedAnimePath); err != nil {
+			if err := server.Librarian.ProbePath(config.CompletedAnimePath); err != nil {
 				JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 				return
 			}

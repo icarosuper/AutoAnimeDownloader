@@ -21,6 +21,8 @@ type FakeBackend struct {
 	NextHash string
 	// announceCalls records every Announce(hash) for assertions.
 	announceCalls []string
+	// ensureCalls records every Ensure(savePath) for assertions.
+	ensureCalls []string
 }
 
 var _ TorrentBackend = (*FakeBackend)(nil)
@@ -29,8 +31,22 @@ func NewFakeBackend() *FakeBackend {
 	return &FakeBackend{torrents: make(map[string]*TorrentInfo)}
 }
 
-// Ensure is a no-op for the fake (no real session to create).
-func (f *FakeBackend) Ensure(savePath string) (bool, error) { return false, nil }
+// Ensure is a no-op for the fake (no real session to create), but records the path so tests
+// can assert which save path a caller opened the session at — MigrateSavePath opens the OLD
+// path before moving the data, and that ordering is the whole point of the migration.
+func (f *FakeBackend) Ensure(savePath string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ensureCalls = append(f.ensureCalls, savePath)
+	return false, nil
+}
+
+// EnsureCalls returns the save paths passed to Ensure, in order.
+func (f *FakeBackend) EnsureCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.ensureCalls...)
+}
 
 func (f *FakeBackend) Add(magnet string) (string, error) {
 	f.mu.Lock()

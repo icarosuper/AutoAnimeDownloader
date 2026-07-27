@@ -17,12 +17,9 @@ var (
 	daemonURL = getEnvOrDefault("DAEMON_URL", "http://localhost:8091")
 	apiBase   = daemonURL + "/api/v1"
 
-	// testSavePath / testCompletedPath are the paths these tests write into the daemon's
-	// config. They are interpreted by the *daemon*, not by the test process, so Docker
-	// overrides them to a path inside the daemon container (see docker-compose.test.yml).
-	// Both must live under the same directory: the config endpoint rejects a save path and
-	// completed path on different volumes (episodes are hardlinked into the library).
-	testSavePath      = getEnvOrDefault("TEST_SAVE_PATH", defaultTestPath("downloads"))
+	// testCompletedPath is the path these tests write into the daemon's config. It is interpreted
+	// by the *daemon*, not by the test process, so Docker overrides it to a path inside the daemon
+	// container (see docker-compose.test.yml).
 	testCompletedPath = getEnvOrDefault("TEST_COMPLETED_PATH", defaultTestPath("library"))
 )
 
@@ -124,7 +121,6 @@ func TestAPIEndpoints(t *testing.T) {
 	t.Run("PUT /api/v1/config", func(t *testing.T) {
 		config := map[string]interface{}{
 			"anilist_username":        "testuser",
-			"save_path":               testSavePath,
 			"completed_anime_path":    testCompletedPath,
 			"check_interval":          10,
 			"max_episodes_per_anime":  12,
@@ -324,7 +320,6 @@ func TestFullDownloadFlow(t *testing.T) {
 	// Set up config with mock URLs
 	config := map[string]interface{}{
 		"anilist_username":        "testuser",
-		"save_path":               testSavePath,
 		"completed_anime_path":    testCompletedPath,
 		"check_interval":          10,
 		"max_episodes_per_anime":  12,

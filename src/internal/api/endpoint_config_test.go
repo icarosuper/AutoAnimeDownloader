@@ -11,14 +11,14 @@ import (
 	"testing"
 )
 
-// stubLibrarian is a files.Librarian for testing config validation (ProbePaths behavior).
+// stubLibrarian is a files.Librarian for testing config validation (ProbePath behavior).
 type stubLibrarian struct {
 	probeErr error
 }
 
 func (s *stubLibrarian) Organize(files.OrganizeRequest) ([]string, error) { return nil, nil }
 func (s *stubLibrarian) RemoveFromLibrary(string) error                   { return nil }
-func (s *stubLibrarian) ProbePaths(savePath, completedPath string) error  { return s.probeErr }
+func (s *stubLibrarian) ProbePath(completedPath string) error             { return s.probeErr }
 
 type mockFileManager struct {
 	configs           *files.Config
@@ -105,7 +105,7 @@ func (m *mockFileManager) DeleteEpisodesFromFile(ids []int) error {
 	return nil
 }
 
-func (m *mockFileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error {
+func (m *mockFileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error {
 	return nil
 }
 
@@ -401,6 +401,66 @@ func TestHandleConfig(t *testing.T) {
 
 		if w.Code != http.StatusMethodNotAllowed {
 			t.Errorf("Expected status code %d, got %d", http.StatusMethodNotAllowed, w.Code)
+		}
+	})
+}
+
+func TestHandleUpdateConfig_SavePath(t *testing.T) {
+	// save_path deixou de ser exigido: o diretorio de download e derivado da biblioteca.
+	t.Run("PUT sem save_path e aceito", func(t *testing.T) {
+		mockFM := &mockFileManager{}
+		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
+
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			CompletedAnimePath:  "/tmp/completed",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+			EpisodeRetryLimit:   5,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+		}
+	})
+
+	// A vedacao: um cliente antigo mandando save_path nao pode reintroduzir o campo, senao
+	// daemon.MigrateSavePath re-arma a cada boot.
+	t.Run("PUT com save_path persiste o campo vazio", func(t *testing.T) {
+		mockFM := &mockFileManager{}
+		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
+
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			SavePath:            "/tmp/legado",
+			CompletedAnimePath:  "/tmp/completed",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+			EpisodeRetryLimit:   5,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status code %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+		}
+		if mockFM.configs == nil {
+			t.Fatal("o config nao foi persistido")
+		}
+		if mockFM.configs.SavePath != "" {
+			t.Errorf("SavePath deveria ter sido zerado, veio %q", mockFM.configs.SavePath)
 		}
 	})
 }

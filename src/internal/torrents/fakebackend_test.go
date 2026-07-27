@@ -66,3 +66,19 @@ func TestFakeBackendActionsOnUnknownHashError(t *testing.T) {
 		t.Error("Announce on unknown hash should error")
 	}
 }
+
+func TestFakeBackendRecordsEnsureCalls(t *testing.T) {
+	f := NewFakeBackend()
+
+	if _, err := f.Ensure("/velho"); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if _, err := f.Ensure("/novo"); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+
+	got := f.EnsureCalls()
+	if len(got) != 2 || got[0] != "/velho" || got[1] != "/novo" {
+		t.Errorf("EnsureCalls() = %v, quero [/velho /novo]", got)
+	}
+}

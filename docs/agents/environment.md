@@ -19,6 +19,8 @@ These override values from `config.json`. Useful for Docker/CI:
 
 > The former `QBITTORRENT_URL` override was removed along with the external qBittorrent dependency — the BitTorrent client is now embedded (`github.com/cenkalti/rain/v2`).
 
+> `docker/entrypoint.sh` no longer reads a `SAVE_PATH` env var to template the initial `config.json` — the download directory is derived from `COMPLETED_ANIME_PATH` (see `docs/agents/config.md` — Download Path). If `SAVE_PATH` is still set in a Docker Compose file or `.env`, the entrypoint simply ignores it; it no longer appears in the generated config.
+
 ## OS / Path
 
 | Variable | Where | Description |
@@ -31,8 +33,7 @@ These override values from `config.json`. Useful for Docker/CI:
 | Variable | Default | Where | Description |
 |----------|---------|-------|-------------|
 | `DAEMON_URL` | — (unset = skip) | `tests/integration/integration_test.go` | Daemon base URL for integration tests. **Must be set explicitly or every integration test skips** — the suite overwrites the config of whatever daemon answers, so it must never find a developer's daemon by accident. Set to `http://daemon:8091` by `docker-compose.test.yml`. When set but empty/unreachable, tests also skip. The `http://localhost:8091` fallback is only used to build the URL once the gate has passed |
-| `TEST_SAVE_PATH` | `~/aad-test/downloads` | `tests/integration/integration_test.go` | `save_path` the integration tests write into the daemon's config. Interpreted by the **daemon**, not the test process. Docker overrides it to `/app/data/aad-test/downloads` |
-| `TEST_COMPLETED_PATH` | `~/aad-test/library` | `tests/integration/integration_test.go` | `completed_anime_path` the integration tests write. Must share a filesystem with `TEST_SAVE_PATH` (hardlinks). Docker overrides it to `/app/data/aad-test/library` |
+| `TEST_COMPLETED_PATH` | `~/aad-test/library` | `tests/integration/integration_test.go` | `completed_anime_path` the integration tests write. Docker overrides it to `/app/data/aad-test/library` |
 | `SCENARIO` | — | `tests/mocks/anilist/`, `tests/mocks/nyaa/` | `"empty"` = mock returns empty data |
 | `PORT` | `8080`/`8081` | `tests/mocks/*/mock_server.go` | Listen port for each mock server (Anilist, Nyaa) |
 | `TEST_LOGGER_INIT` | — | `logger/logger_test.go` | When empty, auto-inits logger for tests |

@@ -23,8 +23,6 @@
     sectionFilters: m.config_section_filters(),
     labelUsername: m.config_label_username(),
     hintAnilistUsernames: m.config_hint_anilist_usernames(),
-    labelSavePath: m.config_label_save_path(),
-    hintSavePath: m.config_hint_save_path(),
     labelCompletedPath: m.config_label_completed_path(),
     hintCompletedPath: m.config_hint_completed_path(),
     labelDeleteWatched: m.config_label_delete_watched(),
@@ -58,7 +56,6 @@
 
   let config: Config = {
     anilist_usernames: [],
-    save_path: "",
     completed_anime_path: "",
     check_interval: 10,
     max_episodes_per_anime: 12,
@@ -169,7 +166,6 @@
       saving = true;
 
       if ((config.anilist_usernames ?? []).length === 0) throw new Error(m.config_val_username());
-      if (!config.save_path?.trim()) throw new Error(m.config_val_save_path());
       if (!config.completed_anime_path?.trim()) throw new Error(m.config_val_completed_path());
       if (config.check_interval <= 0) throw new Error(m.config_val_interval());
       if (config.max_episodes_per_anime <= 0) throw new Error(m.config_val_max_episodes());
@@ -303,15 +299,6 @@
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-5 gap-4">
           <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionDownloads}</h2>
-          <Input
-            id="save_path"
-            label={T && T.labelSavePath || ""}
-            subtitle={T && T.hintSavePath || ""}
-            type="text"
-            bind:value={config.save_path}
-            placeholder="/path/to/downloads"
-            required={true}
-          />
           <Input
             id="completed_anime_path"
             label={T && T.labelCompletedPath || ""}

@@ -9,7 +9,6 @@ mkdir -p "$CONFIG_DIR"
 
 # Valores padrão
 ANILIST_USERNAME="${ANILIST_USERNAME:-}"
-SAVE_PATH="${SAVE_PATH:-/app/downloads}"
 COMPLETED_ANIME_PATH="${COMPLETED_ANIME_PATH:-/app/downloads/completed}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-10}"
 MAX_EPISODES_PER_ANIME="${MAX_EPISODES_PER_ANIME:-12}"
@@ -28,7 +27,6 @@ fi
 if [ ! -f "$CONFIG_FILE" ] || [ -n "$FORCE_CONFIG_UPDATE" ]; then
     cat > "$CONFIG_FILE" <<EOF
 {
-  "save_path": "$SAVE_PATH",
   "completed_anime_path": "$COMPLETED_ANIME_PATH",
   "anilist_username": "$ANILIST_USERNAME",
   "check_interval": $CHECK_INTERVAL,

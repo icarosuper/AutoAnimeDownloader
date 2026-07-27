@@ -56,7 +56,7 @@ Look for:
 **`attempts: 0`** → search returned zero magnets. The download loop never ran. Root cause is upstream in the Nyaa search or result filtering.
 
 **`attempts > 0`** → magnets were found but the embedded torrent client rejected all of them. With the embedded client the usual causes are:
-- **`ErrSessionNotReady`** — `save_path` is empty/unset, so no torrent session exists yet. Complete the config.
+- **`ErrSessionNotReady`** — `completed_anime_path` is empty/unset, so the download path (`Config.DownloadPath()`, derived from it) is empty and no torrent session exists yet. Complete the config.
 - **Magnet parse failure** — a malformed magnet (`parseInfoHash` couldn't extract the info hash).
 
 A separate, new failure class is **"the torrent downloaded but nothing shows up in the library"** — the download succeeded but the `organize` job (hardlink into `completed_anime_path` + webhook) is failing or retrying. See the embedded-client section below.
@@ -67,7 +67,7 @@ A separate, new failure class is **"the torrent downloaded but nothing shows up 
 
 The BitTorrent client is embedded (`github.com/cenkalti/rain/v2`) — there is no external qBittorrent to connect to, and no `qbittorrent_url` config. A few things to know when downloads misbehave:
 
-- **Resume database:** rain stores resume data (piece bitfields) in a bbolt DB at `~/.autoAnimeDownloader/session.db` (Windows: `%APPDATA%\.autoAnimeDownloader\session.db`), kept outside `save_path` so it survives a `save_path` change. If torrents don't resume after a restart, check this file exists and is writable.
+- **Resume database:** rain stores resume data (piece bitfields) in a bbolt DB at `~/.autoAnimeDownloader/session.db` (Windows: `%APPDATA%\.autoAnimeDownloader\session.db`), kept outside the download path so it survives a `completed_anime_path` change (which moves the derived download path along with it). If torrents don't resume after a restart, check this file exists and is writable.
 - **Ports / connectivity:** rain listens on a default port range (20000–30000). There is **no UPnP/NAT-PMP** — inbound peers may require manual port forwarding. This is optional: DHT + PEX still find peers without it. If a well-seeded torrent gets zero peers, suspect a firewall blocking that range (or no outbound connectivity at all). There is no `torrent_port` config in this version.
 - **"Downloaded but not in the library":** completion triggers an `organize` job that **hardlinks** the video files into `completed_anime_path`. Diagnose with:
 
@@ -76,7 +76,7 @@ The BitTorrent client is embedded (`github.com/cenkalti/rain/v2`) — there is n
   cat ~/.autoAnimeDownloader/pending_jobs.json   # a stuck organize job sits here, retrying
   ```
 
-  Most common cause: `save_path` and `completed_anime_path` are on **different volumes** (hardlinks can't cross devices — the log/error says "must be on the same volume"). The config-save endpoint probes this and returns 400, but a config edited on disk bypasses that check. Second most common: `"no video files found in <dir>"` — the torrent has no recognized video file to link.
+  The download path is derived from `completed_anime_path` (a hidden subfolder inside it), so the two are always on the same volume by construction — the old "different volumes" cross-device hardlink failure is no longer possible. The most common cause today is `"no video files found in <dir>"` — the torrent has no recognized video file to link.
 
 ---
 

@@ -223,17 +223,19 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ---
 
-### 19. Disk space is read via OS stat on `SavePath`
+### 19. Disk space is read via OS stat on `CompletedAnimePath`
 
 **Location:** `internal/files/diskspace_unix.go`, `internal/files/diskspace_windows.go`; `internal/api/endpoint_status.go` (`handleStatus`).
 
 **What it looks like:** Reading disk space with a raw platform-specific filesystem syscall on a local path, when a portable Go library might seem cleaner.
 
-**Why it's right:** The dashboard needs both total capacity **and** free space ("tamanho total, tamanho disponível" per `docs/TODO.md`); the syscall pair (`Statfs` / `GetDiskFreeSpaceEx`) is the direct way to get both. `handleStatus` swallows stat errors (empty/unreadable `SavePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
+**Why it's right:** The dashboard needs both total capacity **and** free space ("tamanho total, tamanho disponível" per `docs/TODO.md`); the syscall pair (`Statfs` / `GetDiskFreeSpaceEx`) is the direct way to get both. `handleStatus` swallows stat errors (empty/unreadable `CompletedAnimePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
 
-> **Revision (embedded-client refactor):** The original rationale compared this against qBittorrent's `free_space_on_disk` API (which only reported free space, not total). That comparison is now moot — the torrent client is embedded and there is no qBittorrent API to read from. Since the embedded client's `DataDir` **is** `SavePath` (same process, same filesystem view), the old cross-host mount-mismatch caveat no longer applies either. The OS-stat approach stands as the only and correct source.
+> **Revision (embedded-client refactor):** The original rationale compared this against qBittorrent's `free_space_on_disk` API (which only reported free space, not total). That comparison is now moot — the torrent client is embedded and there is no qBittorrent API to read from. The old cross-host mount-mismatch caveat no longer applies either. The OS-stat approach stands as the only and correct source.
 
-**Don't "fix" by:** trying to route disk stats through the torrent library — it has no such API, and `SavePath` is exactly the filesystem the daemon writes to.
+> **Amendment (see #31):** disk space is now measured on `CompletedAnimePath`, not the legacy `save_path` field. Since the download directory is derived from `CompletedAnimePath` (`Config.DownloadPath`), the two are always on the same filesystem by construction, so measuring the library path also correctly reports free space for downloads-in-progress.
+
+**Don't "fix" by:** trying to route disk stats through the torrent library — it has no such API, and `CompletedAnimePath` is on the same filesystem as the download directory the daemon writes to.
 
 ---
 
@@ -264,6 +266,8 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 
 **Don't "fix" by:** re-introducing an external torrent client or `qbittorrent_url`; renaming the seeded file to the Jellyfin name (breaks seeding); copying/moving into the library instead of hardlinking (wastes space, stops seeding); or moving `session.db` into `save_path` (loses resume data on a path change). Note the webhook event key string is still `download_completed` — the Go constant was renamed `QBittorrentDownloadCompleted → DownloadCompleted`, but that is not user-visible; don't "fix" a webhook that isn't broken.
 
+**Amendment (see #31):** `save_path` is no longer a user-configured field — the download directory is now derived from `completed_anime_path` (`Config.DownloadPath`). What was previously a constraint on the user's configuration ("these two fields must be on the same filesystem, and the endpoint validates it") is now an architectural invariant that holds by construction: there is only one path, so there is nothing to be on a different filesystem from. `Librarian.ProbePaths` (two arguments) is gone; the surviving probe is `Librarian.ProbePath` (one argument, #26).
+
 ---
 
 ### 22. Organize everything to `completed_anime_path`, and the batch-hygiene deletion limitation
@@ -277,6 +281,8 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 **Why it's right (batch guard):** Deletion frees space by removing both the library hardlink and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). For a **single-episode** torrent that maps cleanly to one library file, both links are removed. For a **batch** torrent shared by many episodes, the raw batch filenames can't be safely mapped back to one specific episode — removing "the file for episode 5" risks deleting the wrong file. So per-episode library removal is **skipped for batches**; the batch's library files (and the seeding torrent) are only removed once **all** of that torrent's episodes are in the delete set (`allEpisodesInDeleteSet`). While any sibling episode survives, the batch torrent and its library links stay. The small space cost of keeping a shared batch around a bit longer is preferred over the correctness risk of deleting the wrong episode's file.
 
 **Don't "fix" by:** trying to delete individual episode files out of a batch torrent's library folder (raw filenames aren't reliably episode-addressable), or removing a batch torrent while siblings still reference it (breaks the survivors' library links and stops seeding for episodes still wanted).
+
+**Amendment (see #31):** `save_path` no longer exists as a config field; "everything organizes to `completed_anime_path`" now also covers the download/seeding directory itself, which lives at `<completed_anime_path>/.autoAnimeDownloader` (`Config.DownloadPath`).
 
 ---
 
@@ -336,6 +342,8 @@ Ordering detail: `ensureStartupSession` runs **after** `jobQueue.Start()`. Creat
 The probe aborts the pass instead of merely warning: downloading episodes that provably cannot be organized only fills the disk. It reuses `Librarian.ProbePaths`, so the message the user sees in the UI is identical to the one `PUT /config` returns. Cost is one small file write, one link and two unlinks per `check_interval` (default 10 min) — negligible next to the Anilist and Nyaa requests in the same pass.
 
 **Don't "fix" by:** removing the gate because "the endpoint already validates it" (it does not, for pre-upgrade and entrypoint-written configs), or downgrading it to a warning that lets the pass continue. Caching the result per path pair is a legitimate optimization if the I/O ever shows up in a profile — but it must be invalidated on config change, and the current cost does not justify the extra state.
+
+**Amendment (see #31):** the probe is now single-path. `Librarian.ProbePaths(save, completed)` was replaced by `Librarian.ProbePath(completedPath)`, which writes a probe file directly under `<completedPath>/.autoAnimeDownloader` and hardlinks it in place — there is no second user-supplied path to compare against, since the download directory is derived, not configured. The check still exists for the same reason: exFAT/FAT32 and some SMB shares don't support hardlinks at all, so the invariant "the download dir and the library share a filesystem" is guaranteed by construction, but "the filesystem supports hardlinks" is not.
 
 ---
 
@@ -426,3 +434,15 @@ rain's piece data (`closeData` nils `t.pieces`), which zeroes `Bytes.Completed` 
 `Bytes.Total` survives, so `buildTorrentResponse` falls back to the piece ratio
 (`PiecesHave`/`PiecesTotal`) whenever `BytesCompleted` reads 0 — otherwise a torrent paused
 mid-download renders an empty progress bar for its whole paused lifetime.
+
+---
+
+### 31. Diretório de download derivado da biblioteca
+
+**Location:** `internal/files/filemanager.go` (`Config.DownloadPath`), `internal/files/librarian.go` (`ProbePath`), `internal/daemon/migration.go`.
+
+**What it looks like:** `save_path` sumiu da configuração; o diretório de download é `<completed_anime_path>/.autoAnimeDownloader`, calculado a cada uso.
+
+**Why it's right:** a restrição de mesmo-filesystem do `#21` era uma armadilha que só aparecia como erro no save; derivando o caminho ela vira invariante. Dois campos obrigatórios sem diferença clara confundiam o usuário, para quem só a biblioteca importa. `ProbePath` continua existindo porque exFAT/FAT32/alguns SMB não têm hardlink nenhum. O `.ignore` + o prefixo com ponto mantêm o Jellyfin fora da pasta de download.
+
+**Don't "fix" by:** reintroduzir `save_path` como campo de config ou variável de ambiente (re-arma a migração a cada boot); tirar a zeragem de `SavePath` no `PUT /config`; deixar `MigrateSavePath` seguir em frente quando o rename falha (rebaixa tudo em silêncio); tirar a guarda que faz `DeleteEmptyFolders` pular `.autoAnimeDownloader`.

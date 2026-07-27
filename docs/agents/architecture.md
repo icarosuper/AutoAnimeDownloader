@@ -32,7 +32,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
    - Per anime: scrape Nyaa for matching torrents (filter by resolution/fansub)
    - Add new episodes to the embedded torrent client (`TorrentBackend.Add`)
    - Record downloaded episodes in `episodes.json` — skip re-downloads
-   - Torrents download to `save_path` and keep **seeding** there; on completion an `organize` job hardlinks the video files into `completed_anime_path` (the Jellyfin library)
+   - Torrents download to the derived download path (`Config.DownloadPath()`, `<completed_anime_path>/.autoAnimeDownloader`) and keep **seeding** there; on completion an `organize` job hardlinks the video files into `completed_anime_path` (the Jellyfin library)
 
 2. **Frontend embedding**: `bun run build` → `src/internal/frontend/dist/`, Go embeds via `//go:embed dist` in API server. Daemon serves SPA at `/`, proxies `/api/` to REST handlers.
 
@@ -48,16 +48,17 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList MediaList ID (JSON map, no extension) |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
-| `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** `save_path` so it survives a `save_path` change |
+| `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
 
 Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). See `configsFolder` in `files/filemanager.go` and `getJobsFilePath` / `getSessionDBPath` / `getPIDFilePath` in `cmd/daemon/main.go`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
 
 ## On-Disk Layout
 
-- **Download / seeding:** torrents live at `<save_path>/<torrent-id>/...` (rain's `DataDir` with `DataDirIncludesTorrentID`). Files are **never renamed here** — renaming would break seeding. Torrents keep seeding after completion.
+- **Download / seeding:** torrents live at `<Config.DownloadPath()>/<torrent-id>/...`, i.e. `<completed_anime_path>/.autoAnimeDownloader/<torrent-id>/...` (rain's `DataDir` with `DataDirIncludesTorrentID`). Files are **never renamed here** — renaming would break seeding. Torrents keep seeding after completion. The download directory is **derived**, not user-configured — see decisions.md #31.
 - **Library (Jellyfin):** when a torrent completes, its video files are **hardlinked** into `<completed_anime_path>/<AnimeName>/` (folder name has season/cour markers stripped by `sanitizeFolderName`). Single episodes with `RenameFilesForJellyfin` get the Jellyfin name `"Anime Name - E05.mkv"`; batches/movies keep their raw filenames. The hardlink shares bytes with the seeded copy, so no space is duplicated.
-- **Same volume required:** `save_path` and `completed_anime_path` must be on the same filesystem because hardlinks cannot cross devices. The config-save endpoint validates this with a hardlink probe (`Librarian.ProbePaths`) and rejects cross-device paths with HTTP 400.
+- **Same volume, by construction:** the download directory lives inside `completed_anime_path`, so the old cross-filesystem failure mode is now structurally impossible. `Librarian.ProbePath(completedPath)` still validates that the filesystem supports hardlinks at all (exFAT/FAT32/some SMB shares don't) — it runs on config save and on every verification pass (decisions.md #26).
 - **Deletion** frees space by removing **both** links: the library hardlink (`Librarian.RemoveFromLibrary`) and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). A batch torrent shared by multiple episodes is only removed once **all** its episodes are deleted (batch guard).
+- **Migration:** an installation upgrading from a version with a configured `save_path` has its torrent data folders moved (renamed, same filesystem) into the derived download path by `daemon.MigrateSavePath` (`internal/daemon/migration.go`), then `SavePath` is cleared. Idempotent — runs at boot (`cmd/daemon/main.go`) and at the top of every verification pass (`verification.go`), so a config saved mid-migration is picked up on the next pass.
 
 ## API
 
@@ -181,6 +182,17 @@ Deferred job queue for async library organization. Decouples the hardlink-into-l
 
 **Idempotency**: `organizeTorrent` treats an episode whose `LibraryPaths` is already set as done — no re-link, no re-fired webhook — so completion events and reconciliation passes can both enqueue safely.
 
+### `src/internal/daemon/migration.go`
+
+One-time, idempotent migration off the legacy `save_path` field. See decisions.md #31 for the full "why".
+
+| Symbol | Purpose |
+|--------|---------|
+| `MigrateSavePath(fs, fm, backend)` | No-op if `Config.SavePath` is empty. Otherwise: opens a temporary torrent session at the **old** `save_path`, lists its `DataDir`s, renames each one into `Config.DownloadPath()`, then clears `SavePath` and saves the config. Renames (not copies) — same filesystem is guaranteed because the old hardlink probe always required it. Aborts without clearing `SavePath` if any rename fails, so a retry (next boot / next verification pass) picks up where it left off |
+| `isAncestorOrEqual(dir, child)` | Guards against renaming a directory into itself — relevant for Docker's default layout, where the library nested inside the old save path |
+
+Called from `cmd/daemon/main.go` (boot, before the verification loop starts) and from the top of `AnimeVerification` (`verification.go`) on every pass, before the hardlink probe. `verification.go` reloads the config immediately after calling it, since migration persists a changed config that the rest of the pass must see.
+
 ### `src/internal/daemon/state.go`
 
 Thread-safe daemon state. Key types:
@@ -199,7 +211,8 @@ All persistence. Key types:
 
 | Symbol | Purpose |
 |--------|---------|
-| `Config` struct | All user settings — maps to `config.json` |
+| `Config` struct | All user settings — maps to `config.json`. `SavePath` is a **legacy** field (`omitempty`), read only by `daemon.MigrateSavePath`; it is zeroed as soon as migration runs or `PUT /config` is called |
+| `Config.DownloadPath()` | Derives the download/seeding directory: `filepath.Join(CompletedAnimePath, ".autoAnimeDownloader")` (`downloadDirName` const). Computed on every call, not stored |
 | `EpisodeStruct` struct | `EpisodeID`, `AnimeID`, `EpisodeHash`, `EpisodeName`, `DownloadDate`, `ManuallyManaged`, `EpisodeNumber int`, `IsBatch bool`, `LibraryPaths []string` (hardlink paths in the library, set once organized) |
 | `FileManagerInterface` | Interface used by daemon + API — mock in tests |
 | `FileManager.LoadConfigs()` | Reads `config.json`; creates with defaults if missing |
@@ -213,7 +226,7 @@ All persistence. Key types:
 | `FileManager.LoadAnimeSettings(animeID)` | Returns `*AnimeSettings` for one anime (empty struct if not set) |
 | `FileManager.SaveAnimeSettings(animeID, settings)` | Persists `AnimeSettings` for one anime to `anime_settings` |
 | `FileManager.LoadAllAnimeSettings()` | Returns full `map[int]AnimeSettings` — used by daemon loop |
-| `FileManager.DeleteEmptyFolders(...)` | Removes empty dirs in `savePath` and `completedPath` |
+| `FileManager.DeleteEmptyFolders(completedAnimeSaveFolder)` | Removes empty dirs under the single `completed_anime_path` tree (single argument now that download and library share a root); skips the `.autoAnimeDownloader` download folder itself |
 
 `AnimeSettings` struct fields: `CustomSearchQuery string` — overrides Nyaa search query for this anime.
 
@@ -231,12 +244,12 @@ Hardlinks completed torrent files into the Jellyfin library. The seeded copy sta
 
 | Symbol | Purpose |
 |--------|---------|
-| `Librarian` interface | `Organize`, `RemoveFromLibrary`, `ProbePaths` |
-| `NewLibrarian(fs)` | Constructor — `link` defaults to `fs.Link`, shared by `Organize` and `ProbePaths` so they never disagree |
+| `Librarian` interface | `Organize`, `RemoveFromLibrary`, `ProbePath` |
+| `NewLibrarian(fs)` | Constructor — `link` defaults to `fs.Link`, shared by `Organize` and `ProbePath` so they never disagree |
 | `OrganizeRequest` struct | `TorrentDataDir`, `AnimeName`, `CompletedPath`, `EpisodeNumber *int`, `IsBatch`, `RenameJellyfin` |
 | `Librarian.Organize(req)` | Hardlinks video files into `<CompletedPath>/<AnimeName>/`; Jellyfin name for a single episode (when `RenameJellyfin` and not a batch and exactly one video file), raw filename otherwise. Idempotent — returns paths of created/existing links |
 | `Librarian.RemoveFromLibrary(path)` | Deletes one library hardlink; missing file is not an error |
-| `Librarian.ProbePaths(save, completed)` | Config-save validation: writes a probe file and hardlinks it across the two paths; returns an error if they are on different volumes |
+| `Librarian.ProbePath(completedPath)` | Single-path validation (replaced the two-path `ProbePaths`): writes a probe file under `<completedPath>/.autoAnimeDownloader` and hardlinks it in place; returns an error if the filesystem doesn't support hardlinks at all (exFAT/FAT32/some SMB shares). Called on config save and on every verification pass (decisions.md #26, #31) |
 
 ### `src/internal/files/crossdevice_unix.go` / `crossdevice_windows.go`
 
@@ -298,7 +311,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 
 ### `src/internal/api/endpoint_torrents.go`
 
-- `TorrentResponse` struct — one row per torrent: live progress (`bytes_completed/total/uploaded`, `progress` 0..1, `download_speed`, `upload_speed`, `peers_total`, `eta_seconds`, `seeded_for_seconds`), a piece-derived `completed` flag, joined with the anime/episode that shares its info hash. A **batch** torrent covers several episodes but is still one torrent, so it appears **once**, with `episode_number: null` and `is_batch: true`. `handleTorrents` returns an **empty list, not an error**, when no session exists yet (`save_path` not configured) — `TorrentBackend.List()` returns `nil` in that case and that is treated as the normal empty state. `completed` comes straight from `TorrentInfo.Completed` (piece-derived, see decisions.md #30) rather than `Status == "seeding"`, because pausing takes a finished torrent out of `Seeding` — the list sort keys on `completed` for the same reason.
+- `TorrentResponse` struct — one row per torrent: live progress (`bytes_completed/total/uploaded`, `progress` 0..1, `download_speed`, `upload_speed`, `peers_total`, `eta_seconds`, `seeded_for_seconds`), a piece-derived `completed` flag, joined with the anime/episode that shares its info hash. A **batch** torrent covers several episodes but is still one torrent, so it appears **once**, with `episode_number: null` and `is_batch: true`. `handleTorrents` returns an **empty list, not an error**, when no session exists yet (`completed_anime_path` not configured, so the derived download path can't be computed) — `TorrentBackend.List()` returns `nil` in that case and that is treated as the normal empty state. `completed` comes straight from `TorrentInfo.Completed` (piece-derived, see decisions.md #30) rather than `Status == "seeding"`, because pausing takes a finished torrent out of `Seeding` — the list sort keys on `completed` for the same reason.
 - `handleTorrents` — lists `server.Torrents.List()`, joins each entry against `episodes.json` by `Hash == EpisodeHash` (best-effort: a `LoadSavedEpisodes` failure logs a warning and falls back to torrents with no anime metadata rather than failing the request), sorts unfinished torrents first (keyed on `Completed`, not the status slug) then alphabetically.
 - `buildTorrentResponse(t, eps)` — the join + batch-collapse logic described above. `Progress` normally comes from `BytesCompleted/BytesTotal`, but falls back to the piece ratio (`PiecesHave/PiecesTotal`) whenever `BytesCompleted` reads 0 with a nonzero total — pausing frees rain's piece data and zeroes `Bytes.Completed` while the bitfield backing `PiecesHave/PiecesTotal` survives, so without the fallback a paused torrent's progress bar would collapse to 0%.
 - `torrentAction(server, action)` — shared shape for `pause`/`resume`/`announce`: POST only, hash from the path, 404 when `Get(hash)` misses, backend call last.
@@ -444,7 +457,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `NewSessionManager(dbPath)` | Constructor |
 | `SessionManager.Ensure(savePath)` | Creates/recreates the session; returns `true` when a new session was made (caller reconciles); `ErrSessionNotReady` if `savePath==""` |
 | `SessionManager.Pause/Resume/Announce(hash)` | Delegate to the current `Session` under the read lock; `ErrSessionNotReady` if no session exists |
-| `ErrSessionNotReady` | Returned when no session exists yet (incomplete config — no `save_path`) |
+| `ErrSessionNotReady` | Returned when no session exists yet (incomplete config — `completed_anime_path` empty, so `Config.DownloadPath()` can't be derived) |
 
 **`fakebackend.go`** — in-memory test double.
 
@@ -454,6 +467,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `FakeBackend.Pause/Resume(hash)` | Set `Status` to `"stopped"`/`"downloading"`; error if the hash is absent |
 | `FakeBackend.Announce(hash)` | Records the call in `announceCalls`; error if the hash is absent |
 | `FakeBackend.AnnounceCalls()` | Returns the hashes passed to `Announce`, in order — for test assertions |
+| `FakeBackend.EnsureCalls()` | Returns the save paths passed to `Ensure`, in order — used by migration tests to prove a session was opened at the **old** `save_path` |
 | `FakeBackend.AddCompleted(hash, dataDir)` / `CompleteTorrent(hash, dataDir)` / `FailTorrent(hash, err)` | Test helpers to drive completion/failure callbacks |
 
 ### `src/internal/notifications/notifications.go`
