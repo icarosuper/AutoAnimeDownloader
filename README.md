@@ -43,11 +43,11 @@ Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for ma
 ## Requirements
 
 - **Anilist account** (username only, no password needed)
-- A **save path** and a **completed anime path** on the **same filesystem/volume** (completed episodes are hardlinked, which cannot cross volumes)
+- A **completed anime path** (the download/seeding directory is derived from it automatically, so it's the only path you configure)
 
 That's it — the BitTorrent client is built in, so there is no qBittorrent (or any other torrent client) to install or configure.
 
-> **Upgrading from a qBittorrent-based version?** See the [Migration Guide](docs/guides/migration-embedded-torrent.md) — `completed_anime_path` is now required and must share a volume with `save_path`, and in-progress torrents re-download once on first run.
+> **Upgrading from a qBittorrent-based version?** See the [Migration Guide](docs/guides/migration-embedded-torrent.md) — `completed_anime_path` is now required. There is no separate `save_path` field anymore: the download directory lives nested inside `completed_anime_path` (same volume by construction), and any pre-existing torrent data at a legacy `save_path` is migrated into the new location automatically on first boot after upgrading.
 
 > **Ports:** the embedded client listens on a default port range (20000–30000) and finds peers via DHT/PEX. There is no automatic port forwarding (UPnP/NAT-PMP); forwarding a port is optional and only improves inbound connectivity.
 

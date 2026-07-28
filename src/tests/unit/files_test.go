@@ -482,7 +482,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 	}
 }
 
-func TestManager_DeleteEmptyFolders_WithEmptySavePath(t *testing.T) {
+func TestManager_DeleteEmptyFolders_WithEmptyPath(t *testing.T) {
 	mockFS := NewMockFileSystem()
 	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 

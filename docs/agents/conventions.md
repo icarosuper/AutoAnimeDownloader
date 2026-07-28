@@ -110,7 +110,7 @@ import (
 | API endpoint files | `endpoint_<area>.go` | `endpoint_config.go`, `endpoint_episode_actions.go` |
 | API endpoint tests | `endpoint_<area>_test.go` | `endpoint_config_test.go` |
 | Handler functions | `handle` + resource/action | `handleConfig`, `handleDownloadEpisode` |
-| JSON tags | snake_case | `json:"save_path"` |
+| JSON tags | snake_case | `json:"completed_anime_path"` |
 | Go types | PascalCase | `EpisodeStruct`, `SessionManager` |
 
 ## Dual FileManagerInterface

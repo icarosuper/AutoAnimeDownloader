@@ -131,10 +131,9 @@ jobs:
           # DAEMON_URL is also the opt-in gate: without it the suite skips, so that a
           # plain `go test ./...` never reconfigures a daemon it wasn't pointed at.
           DAEMON_URL: http://localhost:8091
-          # These paths are resolved inside the daemon *container*, not on the runner.
-          # Keep them under /app/data (mounted volume) and on one filesystem — the config
-          # endpoint hardlink-probes the pair and rejects cross-volume paths.
-          TEST_SAVE_PATH: /app/data/aad-test/downloads
+          # This path is resolved inside the daemon *container*, not on the runner.
+          # Keep it under /app/data (mounted volume) — the config endpoint hardlink-probes
+          # it and rejects filesystems that don't support hardlinks.
           TEST_COMPLETED_PATH: /app/data/aad-test/library
         run: go test -v ./src/tests/integration/...
 

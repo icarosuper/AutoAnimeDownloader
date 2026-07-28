@@ -298,6 +298,8 @@ The paths written into the config are likewise no longer hardcoded: they come fr
 
 **Don't "fix" by:** removing the `DAEMON_URL` gate so the tests "work" during `go test ./...`; hardcoding the config paths again; putting the default paths back under `/tmp`; or splitting save and completed paths across different volumes (the hardlink probe rejects it).
 
+**Amendment (see #31):** `testSavePath`/`TEST_SAVE_PATH` were removed — the integration test no longer sends `save_path` at all, since the field doesn't exist anymore. `Librarian.ProbePaths` (the two-argument save/completed variant) was replaced by `Librarian.ProbePath(completedPath string)`.
+
 ---
 
 ### 24. A failed torrent is dropped from the session and re-added by the next pass — no blacklist
@@ -316,18 +318,20 @@ The paths written into the config are likewise no longer hardcoded: they come fr
 
 ### 25. Seeding is created at startup and is independent of the daemon loop
 
-**Location:** `cmd/daemon/main.go` — `ensureStartupSession`, called right after `jobQueue.Start()`; `internal/daemon/verification.go` — the `backend.Ensure(configs.SavePath)` call inside the verification pass.
+**Location:** `cmd/daemon/main.go` — `ensureStartupSession`, called right after `jobQueue.Start()`; `internal/daemon/verification.go` — the `backend.Ensure(configs.DownloadPath())` call inside the verification pass.
 
 **What it looks like:** `Ensure` is called from **two** places — once at startup and once on every verification pass — which reads like a redundant call that could be dropped from one side.
 
 **Why it's right:** The two calls serve different purposes and both are needed.
 
-- **Startup call:** torrents keep **seeding** from `save_path` after they complete. If the session were created only by the verification pass, stopping the daemon loop from the WebUI (or booting with the loop stopped) would mean no session at all, i.e. **seeding stops** — a behavior regression against the external-qBittorrent setup, which kept seeding regardless of what the daemon was doing. That matters for private trackers with ratio requirements. Creating the session at startup makes seeding a property of the *process*, not of the loop.
-- **Verification-pass call:** the daemon must be able to boot with an incomplete config (no `save_path`). In that case the startup call deliberately does nothing and the session stays lazy; the pass's `Ensure` is what creates it once the user saves a config. It also handles a `save_path` changed at runtime (recreate) and is where the `created == true` return feeds startup reconciliation.
+- **Startup call:** torrents keep **seeding** from the derived download directory (`Config.DownloadPath()`, nested under `completed_anime_path`) after they complete. If the session were created only by the verification pass, stopping the daemon loop from the WebUI (or booting with the loop stopped) would mean no session at all, i.e. **seeding stops** — a behavior regression against the external-qBittorrent setup, which kept seeding regardless of what the daemon was doing. That matters for private trackers with ratio requirements. Creating the session at startup makes seeding a property of the *process*, not of the loop.
+- **Verification-pass call:** the daemon must be able to boot with an incomplete config (no `completed_anime_path`, and therefore no derivable download path). In that case the startup call deliberately does nothing and the session stays lazy; the pass's `Ensure` is what creates it once the user saves a config. It also handles `completed_anime_path` changing at runtime (recreate, since the derived download path moves with it) and is where the `created == true` return feeds startup reconciliation.
 
 Ordering detail: `ensureStartupSession` runs **after** `jobQueue.Start()`. Creating the session arms the resume listeners, which can fire a completion immediately, and `Start()` loads the persisted job list *over* whatever is in memory — enqueueing before it would silently discard the job. The shutdown defers keep their LIFO order (`jobQueue.Stop()` drains organize jobs that still need the session, then `torrentManager.Close()` flushes bbolt); do not reorder them.
 
-**Don't "fix" by:** removing the `Ensure` from the verification pass (breaks the incomplete-config boot and the save-path change), removing the startup call (stops seeding whenever the loop is stopped), moving startup reconciliation out of the verification pass, or calling `ensureStartupSession` before `jobQueue.Start()`.
+**Don't "fix" by:** removing the `Ensure` from the verification pass (breaks the incomplete-config boot and reacting to `completed_anime_path` changes), removing the startup call (stops seeding whenever the loop is stopped), moving startup reconciliation out of the verification pass, or calling `ensureStartupSession` before `jobQueue.Start()`.
+
+**Amendment (see #31):** `daemon.MigrateSavePath` now runs in `main.go` between `jobQueue.Start()` and `ensureStartupSession`, converting a legacy `save_path` installation to the single-folder model by moving its data under the derived download path. If migration fails, `ensureStartupSession` is **skipped entirely** for that boot: the data may still be sitting at the legacy path, so opening the session at the new derived `DownloadPath()` would resume every torrent against an empty directory and re-download the whole library. The verification pass keeps retrying the migration on each tick until it succeeds; only then does a session get created.
 
 ---
 
