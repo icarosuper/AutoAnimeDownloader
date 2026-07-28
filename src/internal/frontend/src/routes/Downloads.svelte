@@ -412,10 +412,13 @@
                 <td class="whitespace-nowrap text-sm">{formatEta(t.eta_seconds)}</td>
                 <td class="text-sm">{t.peers_total}</td>
                 <td>
+                  <!-- btn-outline em vez do btn sólido default: a linha da tabela tem o mesmo
+                       tom de fundo do btn no tema dark, então só a borda garante que os botões
+                       continuem lendo como botões nos dois temas. -->
                   <div class="flex justify-end gap-1">
                     {#if canResume(t)}
                       <button
-                        class="btn btn-xs"
+                        class="btn btn-xs btn-outline"
                         disabled={busy.has(t.hash)}
                         on:click={() => runAction(t.hash, resumeTorrent)}
                       >
@@ -423,7 +426,7 @@
                       </button>
                     {:else}
                       <button
-                        class="btn btn-xs"
+                        class="btn btn-xs btn-outline"
                         disabled={busy.has(t.hash) || !canPause(t)}
                         on:click={() => runAction(t.hash, pauseTorrent)}
                       >
@@ -431,14 +434,14 @@
                       </button>
                     {/if}
                     <button
-                      class="btn btn-xs btn-ghost"
+                      class="btn btn-xs btn-outline"
                       disabled={busy.has(t.hash)}
                       on:click={() => runAction(t.hash, announceTorrent)}
                     >
                       {T && T.announce}
                     </button>
                     <button
-                      class="btn btn-xs btn-ghost text-error"
+                      class="btn btn-xs btn-outline btn-error"
                       disabled={busy.has(t.hash)}
                       on:click={() => handleDeleteRow(t)}
                     >

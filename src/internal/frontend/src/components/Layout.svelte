@@ -125,8 +125,9 @@
         </button>
 
         <div class="flex items-center gap-3">
-          <div class="tooltip tooltip-bottom">
-            <div class="tooltip-content">{wsTooltip}</div>
+          <!-- daisyUI 4 renders the tooltip from data-tip; the .tooltip-content element is a
+               v5-only API and would render as always-visible inline text here. -->
+          <div class="tooltip tooltip-bottom" data-tip={wsTooltip}>
             <span class="inline-block w-2 h-2 rounded-full {
               $wsConnectionState === 'connected' ? 'bg-success' :
               $wsConnectionState === 'reconnecting' ? 'bg-warning animate-pulse' :

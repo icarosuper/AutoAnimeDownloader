@@ -76,15 +76,18 @@
 </div>
 
 {#if selectedCount > 0}
+  <!-- Barra de lote: as ações neutras são btn-outline (têm borda própria, então continuam
+       legíveis por cima do bg-base-200 da barra, onde um btn sólido default some no tema
+       dark); só a destrutiva é sólida, para destacá-la das demais. -->
   <div class="flex flex-wrap items-center gap-2 bg-base-200 border border-base-300 rounded-lg px-3 py-2">
     <span class="text-sm font-medium text-base-content">{T && T.selected}</span>
-    <button class="btn btn-xs" disabled={bulkBusy} on:click={() => dispatch("bulkPause")}>
+    <button class="btn btn-xs btn-outline" disabled={bulkBusy} on:click={() => dispatch("bulkPause")}>
       {T && T.bulkPause}
     </button>
-    <button class="btn btn-xs" disabled={bulkBusy} on:click={() => dispatch("bulkResume")}>
+    <button class="btn btn-xs btn-outline" disabled={bulkBusy} on:click={() => dispatch("bulkResume")}>
       {T && T.bulkResume}
     </button>
-    <button class="btn btn-xs btn-ghost" disabled={bulkBusy} on:click={() => dispatch("bulkAnnounce")}>
+    <button class="btn btn-xs btn-outline" disabled={bulkBusy} on:click={() => dispatch("bulkAnnounce")}>
       {T && T.bulkAnnounce}
     </button>
     <button class="btn btn-xs btn-error" disabled={bulkBusy} on:click={() => dispatch("bulkDelete")}>

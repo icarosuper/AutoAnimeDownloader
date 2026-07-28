@@ -22,7 +22,7 @@
     "@tsconfig/svelte": "^5.0.0",
     "@types/node": "^25.5.0",
     "autoprefixer": "^10.4.23",
-    "daisyui": "^5.5.19",
+    "daisyui": "^4",
     "jsdom": "^25.0.0",
     "postcss": "^8.4.47",
     "svelte": "^5.0.0",

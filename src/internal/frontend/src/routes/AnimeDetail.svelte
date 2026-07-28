@@ -64,6 +64,14 @@
 
   $: allEpisodes = detail?.episodes ?? [];
   $: torrentsByEpisode = indexTorrentsByEpisode(torrents, allEpisodes);
+
+  // ATENÇÃO ao mexer no inline de progresso lá embaixo: um episódio só ganha `episode_hash`
+  // quando o daemon grava o registro salvo — e ele grava no momento em que o torrent é
+  // *adicionado*, não quando termina (daemon/episodes.go, daemon/manual_download.go). Como
+  // endpoint_anime_episodes.go preenche `is_downloaded` e `episode_hash` no mesmo `if`, vale
+  // `episode_hash != "" ⟺ is_downloaded`. Logo a condição do inline não pode exigir
+  // `!ep.is_downloaded`: essa combinação nunca ocorre na prática e a barra nunca aparecia.
+  // Quem decide é só o torrent ainda estar em voo (`!torrent.completed`).
   $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_id));
   $: someSelected = selectedEpisodes.size > 0 && !allSelected;
 
@@ -686,7 +694,7 @@
                   {formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {#if torrent && !torrent.completed && !ep.is_downloaded}
+                  {#if torrent && !torrent.completed}
                     <div class="min-w-[9rem]">
                       <div class="flex items-center gap-2 mb-1">
                         <span class="badge badge-xs {statusClass(torrent.status)}">{statusLabel(torrent.status)}</span>
@@ -853,7 +861,7 @@
                 {ep.episode_name}
               </p>
             {/if}
-            {#if torrent && !torrent.completed && !ep.is_downloaded}
+            {#if torrent && !torrent.completed}
               <div class="mt-2">
                 <div class="flex items-center gap-2 mb-1">
                   <span class="badge badge-xs {statusClass(torrent.status)}">{statusLabel(torrent.status)}</span>

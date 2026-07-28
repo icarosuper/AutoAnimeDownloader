@@ -105,15 +105,22 @@ test('clicking Download on undownloaded episode calls POST /.../download', async
 })
 
 test('episode row shows a progress bar when an active torrent is joined to it', async ({ page }) => {
-  // Episode 2 (undownloaded) carries episode_hash pointing at an in-flight torrent —
-  // indexTorrentsByEpisode (src/lib/utils/torrentsByEpisode.ts) joins the two on that hash.
+  // Episode 2 carries episode_hash pointing at an in-flight torrent — indexTorrentsByEpisode
+  // (src/lib/utils/torrentsByEpisode.ts) joins the two on that hash.
+  //
+  // is_downloaded is true here on purpose, and that is the realistic shape: the daemon writes
+  // the saved-episode record (which is what produces both is_downloaded and episode_hash in
+  // endpoint_anime_episodes.go) the moment the torrent is *added*, so an episode with a hash
+  // always reports is_downloaded: true even while the download is still running. The old
+  // fixture used is_downloaded: false, a combination the API can never emit, which is what let
+  // the "!ep.is_downloaded" guard in AnimeDetail.svelte hide the bar in production unnoticed.
   const detailWithHash = {
     ...mockDetail,
     data: {
       ...mockDetail.data,
       episodes: mockDetail.data.episodes.map(ep =>
         ep.episode_id === 1002
-          ? { ...ep, episode_hash: 'f'.repeat(40) }
+          ? { ...ep, is_downloaded: true, download_date: '2026-01-02T00:00:00Z', episode_hash: 'f'.repeat(40) }
           : ep
       ),
     },

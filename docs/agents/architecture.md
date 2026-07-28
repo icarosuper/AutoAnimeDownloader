@@ -12,7 +12,8 @@ src/internal/
   anilist/           → GraphQL client for Anilist API
   nyaa/              → HTML scraper for Nyaa torrent site
   torrents/          → Embedded BitTorrent client (github.com/cenkalti/rain/v2) behind a TorrentBackend interface
-  frontend/          → Svelte 5 + Vite + Tailwind web UI (compiled to Go embed)
+  frontend/          → Svelte 5 + Vite + Tailwind 3 + daisyUI 4 web UI (compiled to Go embed)
+                       (o par de versões é obrigatório — ver decisão 33)
   notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on NewEpisode/DownloadFailed; by job queue on DownloadCompleted.
   logger/            → zerolog-based structured logger (console + rotating file)
   tray/              → System tray icon (fyne/systray)

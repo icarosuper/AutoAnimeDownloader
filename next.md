@@ -1,0 +1,3 @@
+- novos botões ficaram bem feios e básicos, melhorar
+- checkbox na tela de downloads ficou invisivel
+- info do torrent inline na tela do anime não existe ou ficou invisivel

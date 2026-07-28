@@ -34,7 +34,9 @@ function detailWith(animeId: number, episodeHash: string | undefined): AnimeDeta
         time_until_airing: 0,
         is_aired: true,
         is_watched: false,
-        is_downloaded: false,
+        // O daemon grava o registro salvo (origem de is_downloaded E de episode_hash) já ao
+        // adicionar o torrent, então ter hash implica is_downloaded: true mesmo em voo.
+        is_downloaded: episodeHash !== undefined,
         episode_hash: episodeHash,
       },
     ],
