@@ -50,6 +50,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
+| `download_root.id` | `~/.autoAnimeDownloader/` | Id of the download folder the session is bound to. Its twin, `.aad_root`, lives **inside** the download folder; the pair is how a moved/trashed/replaced folder is detected — see decisions.md #34 |
 
 Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). See `configsFolder` in `files/filemanager.go` and `getJobsFilePath` / `getSessionDBPath` / `getPIDFilePath` in `cmd/daemon/main.go`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
 
@@ -132,6 +133,7 @@ Main verification orchestrator. Key functions:
 | `RemoveEpisodesWithLinks(fm, backend, librarian, ids) error` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`). Returns an error when the record could not be removed from the JSONL (load/delete failure); freeing disk space is best-effort and only logged |
 | `RemoveTorrentWithEpisodes(fm, backend, librarian, hash, opts) error` | Deletes a torrent and every saved episode sharing its hash as one unit (a batch always leaves together) — used by `DELETE /torrents/{hash}`. `RemoveTorrentOptions{KeepData, Block}`: `Block` marks every episode in the group blocked before removing its record; an orphan hash (no saved episode matches) is removed directly via `backend.Remove` (`episodes.go`) |
 | `reconcileLibrary(downloaded, saved, jobQueue)` | Startup/periodic reconciliation: enqueues an `organize` job for any completed torrent whose episode isn't yet in the library (`verification.go`) |
+| `clearLibraryPathsAfterRootSwap(fileManager, completedPath)` | Runs when `Ensure` reports `RootSwapped`: wipes every `LibraryPaths` so the library is rebuilt at the configured path after the redownloads (`verification.go`) — the one exception to decisions.md #29, see #34 |
 | `ManualDownloadEpisode(backend, animeId, episodeId, cfg, customQuery)` | Used by API for manual download — calls Anilist then Nyaa (`manual_download.go`) |
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
 | `ManualDownloadAnimeWithMagnet(...)` | Used by API for replace-with-magnet for full anime batch |
@@ -435,8 +437,9 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | Symbol | Purpose |
 |--------|---------|
-| `TorrentBackend` interface | `Ensure(savePath)`, `Add(magnet)`, `List()`, `Get(hash)`, `Remove(hash, keepData)`, `Pause(hash)`, `Resume(hash)`, `Announce(hash)`, `SetCallbacks(onComplete, onFailed)`, `Close()` |
+| `TorrentBackend` interface | `Ensure(savePath)`, `ConsumeRootSwap()`, `Add(magnet)`, `List()`, `Get(hash)`, `Remove(hash, keepData)`, `Pause(hash)`, `Resume(hash)`, `Announce(hash)`, `SetCallbacks(onComplete, onFailed)`, `Close()` |
 | `TorrentBackend.Pause/Resume/Announce(hash)` | Per-torrent controls. `Pause` stops the torrent (non-blocking — `stopping` for up to ~5s before `stopped`); `Resume` re-arms the completion listener that pausing consumed; `Announce` forces a tracker/DHT re-announce without overriding the trackers' minimum interval |
+| `TorrentBackend.ConsumeRootSwap()` | Reports **and clears** a swap latched by `Ensure`: the download folder was moved/trashed/replaced. Latched rather than returned by `Ensure` because the manual-download endpoints call `Ensure` too and must not swallow it — only the verification pass consumes it (decisions.md #34) |
 | `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<save_path>/<id>`), `Completed`, `Status` (API slug from `statusSlug`), plus progress fields (`BytesCompleted/Total/Uploaded`, `DownloadSpeed`, `UploadSpeed`, `PeersTotal`, `PiecesHave/Total`, `ETASeconds`, `SeededForSeconds`) — all filled from a single `Stats()` call per torrent in `toInfo` |
 
 **`status.go`**
@@ -460,11 +463,21 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | Symbol | Purpose |
 |--------|---------|
-| `SessionManager` struct | Owns the current `Session`; recreates it when `save_path` changes; keeps `session.db` stable across changes |
-| `NewSessionManager(dbPath)` | Constructor |
-| `SessionManager.Ensure(savePath)` | Creates/recreates the session; returns `true` when a new session was made (caller reconciles); `ErrSessionNotReady` if `savePath==""` |
+| `SessionManager` struct | Owns the current `Session`; recreates it when `save_path` changes **or when the download root was swapped**; keeps `session.db` stable across changes |
+| `NewSessionManager(dbPath)` | Constructor; derives `download_root.id` from `dbPath`'s folder |
+| `SessionManager.Ensure(savePath)` | Creates/recreates the session; returns `true` when a new session was made (caller reconciles); latches `pendingSwap`; `ErrSessionNotReady` if `savePath==""` |
+| `SessionManager.ConsumeRootSwap()` | Reads and clears `pendingSwap` |
+| `SessionManager.checkRoot(savePath)` | Compares `download_root.id` with `<savePath>/.aad_root`; mismatch ⇒ swapped. No id on record (first run/upgrade) is never a swap |
 | `SessionManager.Pause/Resume/Announce(hash)` | Delegate to the current `Session` under the read lock; `ErrSessionNotReady` if no session exists |
 | `ErrSessionNotReady` | Returned when no session exists yet (incomplete config — `completed_anime_path` empty, so `Config.DownloadPath()` can't be derived) |
+
+**`rootmarker.go`** — download-root identity.
+
+| Symbol | Purpose |
+|--------|---------|
+| `RootMarkerName` (`.aad_root`) | Marker written inside the download folder; travels with the folder when the user moves it |
+| `rootIDFileName` (`download_root.id`) | The same id in the config folder, where the user cannot move it |
+| `newRootID` / `readRootID` / `writeRootID` | Generate/read/write the id. A read error other than "not exists" is returned, never silently read as a swap |
 
 **`fakebackend.go`** — in-memory test double.
 
@@ -474,6 +487,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `FakeBackend.Pause/Resume(hash)` | Set `Status` to `"stopped"`/`"downloading"`; error if the hash is absent |
 | `FakeBackend.Announce(hash)` | Records the call in `announceCalls`; error if the hash is absent |
 | `FakeBackend.AnnounceCalls()` | Returns the hashes passed to `Announce`, in order — for test assertions |
+| `FakeBackend.RootSwapped` | Makes `Ensure` report a swapped root, so daemon-side recovery is testable without a real session |
 | `FakeBackend.EnsureCalls()` | Returns the save paths passed to `Ensure`, in order — used by migration tests to prove a session was opened at the **old** `save_path` |
 | `FakeBackend.AddCompleted(hash, dataDir)` / `CompleteTorrent(hash, dataDir)` / `FailTorrent(hash, err)` | Test helpers to drive completion/failure callbacks |
 

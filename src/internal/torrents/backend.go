@@ -51,10 +51,25 @@ type TorrentInfo struct {
 // no Ensure — session creation/recreation is the manager's job). Tests use the in-memory
 // FakeBackend.
 type TorrentBackend interface {
-	// Ensure creates the underlying session if needed (or recreates it if savePath
-	// changed). Returns true when a new session was created (caller should reconcile).
+	// Ensure creates the underlying session if needed, recreates it if savePath changed,
+	// and recreates it when the download root on disk was swapped (see ConsumeRootSwap).
+	// Returns true when a new session was created (caller should reconcile).
 	// For fakes this is a no-op returning (false, nil).
 	Ensure(savePath string) (bool, error)
+	// ConsumeRootSwap reports — and clears — whether Ensure has detected that the download
+	// folder the session was bound to is no longer the folder at the configured path: the
+	// user moved it, trashed it, or replaced it.
+	//
+	// It matters because rain keeps writing through the file descriptors it already holds.
+	// The bytes land in the folder the user moved away while the configured path stays
+	// empty, so every hardlink into the library fails with "no such file or directory".
+	// Ensure recreates the session, which makes rain reopen the files BY PATH, find them
+	// missing and redownload them into the configured folder.
+	//
+	// The flag is latched rather than returned by Ensure because Ensure is also called by
+	// the manual-download endpoints, which have no business reacting to it: the daemon's
+	// verification pass must be the one to consume it and clear the stale library records.
+	ConsumeRootSwap() bool
 	// Add starts downloading/seeding a magnet and returns its info hash. Adding a magnet
 	// that is already present is not an error — it returns the existing info hash.
 	Add(magnet string) (string, error)

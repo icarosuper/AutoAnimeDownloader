@@ -104,6 +104,16 @@ func MigrateSavePath(fs files.FileSystem, fm FileManagerInterface, backend torre
 		moved++
 	}
 
+	// O marcador de raiz vai junto com os dados. Sem isso a migracao pareceria uma pasta
+	// trocada para o proximo Ensure, que zeraria os LibraryPaths de uma biblioteca cujos
+	// hardlinks o rename acabou de preservar.
+	marker := filepath.Join(oldSavePath, torrents.RootMarkerName)
+	if _, err := fs.Stat(marker); err == nil {
+		if err := fs.Rename(marker, filepath.Join(dest, torrents.RootMarkerName)); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Migration: failed to move the download root marker")
+		}
+	}
+
 	configs.SavePath = ""
 	if err := fm.SaveConfigs(configs); err != nil {
 		return fmt.Errorf("migration: moved %d torrent folders but failed to clear the legacy save path: %w", moved, err)

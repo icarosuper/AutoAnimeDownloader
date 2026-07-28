@@ -81,11 +81,16 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	}
 
 	// Ensure the embedded torrent session exists for the current save path (created lazily,
-	// recreated if the save path changed).
+	// recreated if the save path changed or if the download folder was swapped underneath).
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to initialize embedded torrent session")
 		state.SetLastCheckError(err)
 		return
+	}
+	// Latched by Ensure, here or in an earlier manual-download call: the folder the session
+	// was bound to is gone, so the records pointing into it must go too.
+	if backend.ConsumeRootSwap() {
+		clearLibraryPathsAfterRootSwap(fileManager, configs.CompletedAnimePath)
 	}
 
 	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
@@ -289,6 +294,45 @@ outer:
 		Dur("total_time", elapsed).
 		Dur("avg_time_per_episode", avgTime).
 		Msg("Verification completed")
+}
+
+// clearLibraryPathsAfterRootSwap wipes the LibraryPaths of every episode after the download
+// root was swapped, so reconcileLibrary enqueues them again and the library is rebuilt at the
+// configured path once the redownloads finish.
+//
+// This is the documented exception to decision #29 (never clear LibraryPaths because a file
+// is missing from disk). The rule exists so a per-file deletion by the user is not undone on
+// the next pass, forever. A root swap is a different event: the whole folder the records
+// point into is gone, the daemon is already redownloading its contents, and the detection is
+// edge-triggered — Ensure reports the swap once, then rewrites the marker, so this runs a
+// single time per swap and can never become the resurrection loop #29 guards against.
+func clearLibraryPathsAfterRootSwap(fileManager FileManagerInterface, completedPath string) {
+	saved, err := fileManager.LoadSavedEpisodes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Root swap: failed to load saved episodes; library records left untouched")
+		return
+	}
+
+	var stale []files.EpisodeStruct
+	for _, ep := range saved {
+		if len(ep.LibraryPaths) == 0 {
+			continue
+		}
+		ep.LibraryPaths = nil
+		stale = append(stale, ep)
+	}
+	if len(stale) == 0 {
+		return
+	}
+
+	if err := fileManager.UpsertEpisodes(stale); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Root swap: failed to clear the stale library paths")
+		return
+	}
+	logger.Logger.Warn().
+		Int("episodes", len(stale)).
+		Str("completed_anime_path", completedPath).
+		Msg("Root swap: the library folder is gone, cleared the stale library links; episodes will be redownloaded and reorganized at the configured path")
 }
 
 // reconcileLibrary enqueues JobOrganize for completed torrents whose saved episodes have

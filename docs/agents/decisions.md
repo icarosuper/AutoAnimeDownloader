@@ -396,6 +396,8 @@ The deviation is intentional and better than the design. It is also what makes r
 
 **Don't "fix" by:** adding a `Stat` on `LibraryPaths` to "detect" missing library files, or clearing `LibraryPaths` when the paths no longer resolve — both reintroduce the resurrection loop. A user who wants the link back should redownload or replace the episode, which resets `LibraryPaths` through the merge in decision 27.
 
+**One exception, see decision 34:** when the *entire download root* is detected as swapped (moved/trashed/replaced folder), `clearLibraryPathsAfterRootSwap` wipes the records once. That is a different event from a per-file deletion and is edge-triggered, so it cannot become the loop this decision guards against.
+
 ---
 
 ### 30. Progress data comes from one `Stats()` per torrent, pulled only while a screen is open
@@ -490,3 +492,32 @@ mid-download renders an empty progress bar for its whole paused lifetime.
 - **`episode_hash != "" ⟺ is_downloaded`.** `handleAnimeEpisodes` preenche `IsDownloaded` e `EpisodeHash` no mesmo `if` (existe registro salvo para aquele nó), e o daemon grava o registro salvo no instante em que o torrent é **adicionado**, não quando termina (`daemon/episodes.go`, `daemon/manual_download.go`). Ou seja, um episódio baixando **já** vem com `is_downloaded: true`. A condição antiga do inline (`torrent && !torrent.completed && !ep.is_downloaded`) exigia uma combinação que a API nunca emite, então a barra jamais aparecia em produção — e o smoke test não pegou porque a fixture montava justamente esse estado impossível.
 
 **Don't "fix" by:** subir a daisyUI para 5 "porque é a mais nova" sem migrar o Tailwind para 4 junto (volta o bug de layer inteiro, e de forma silenciosa: só componentes cujo preflight conflita quebram); usar `.tooltip-content` no lugar de `data-tip`; reintroduzir classes Tailwind cruas no lugar de `btn` "porque o btn não pinta" — isso era sintoma do problema de layer, não limitação da daisyUI; voltar a filtrar o inline de progresso por `!ep.is_downloaded`; escrever fixture de teste com `is_downloaded: false` + `episode_hash` preenchido.
+
+---
+
+### 34. Troca da pasta de download é detectada por marcador duplo, e derruba a sessão da rain
+
+**Location:** `internal/torrents/rootmarker.go`, `internal/torrents/sessionmanager.go` (`Ensure`, `checkRoot`, `writeRoot`), `internal/daemon/verification.go` (`clearLibraryPathsAfterRootSwap`), `internal/daemon/migration.go` (o marcador viaja junto no rename). Fixado por `TestSessionManagerDetectsRootSwap`, `TestSessionManagerRootSwapReportedOnce`, `TestSessionManagerMovedAndRepointedIsNotASwap`, `TestSessionManagerFirstRunAdoptsExistingFolder` e `TestClearLibraryPathsAfterRootSwap`.
+
+**What it looks like:** existem dois arquivos com o mesmo id aleatório — `.aad_root` **dentro** da pasta de download e `download_root.id` na pasta de config. `Ensure` compara os dois a cada passe e, quando divergem, fecha e recria a sessão da rain.
+
+**Why it's right:** a rain segura *file descriptors* abertos. Quando o usuário move a pasta de download (ou manda pra lixeira) com o daemon rodando, os bytes continuam caindo no inode que foi embora enquanto o caminho configurado fica vazio — a UI mostra tudo semeando e **todo** `JobOrganize` falha com `no such file or directory`, queimando as 20 tentativas em silêncio. Nada no processo percebe, porque o caminho em string não mudou: só o inode por trás dele mudou.
+
+O par de marcadores é o que torna isso detectável sem depender de inode (que não existe no Windows):
+
+- o marcador **de dentro** viaja com a pasta, então some do caminho configurado exatamente quando a pasta é movida;
+- o id **de fora** fica onde o usuário não mexe, então sobrevive para servir de referência — inclusive quando a pasta é movida com o daemon **parado**.
+
+Recriar a sessão é o conserto completo porque a rain já faz a parte difícil: em `torrent_allocation.go`, se os arquivos não existem (`al.HasMissing`), ela **descarta o bitfield do resume** e rebaixa. Não é preciso mexer no resume db nem remover torrent nenhum.
+
+**Por que o sinal é latch e não retorno do `Ensure`:** os endpoints de download manual também chamam `Ensure`. Se a flag viesse no retorno, uma chamada dessas engoliria a troca — a sessão seria recriada, mas os registros de biblioteca órfãos nunca seriam limpos, e a recuperação ficaria pela metade sem nenhum erro visível. `Ensure` marca `pendingSwap`; só `ConsumeRootSwap`, chamado no passe de verificação, limpa. Fixado por `TestSessionManagerRootSwapSurvivesAnotherEnsure`.
+
+Três propriedades que caíram de graça e são intencionais:
+
+- **Mover a pasta E repontar o config** (`completed_anime_path` para o novo lugar) **não** é troca: o marcador viajou junto, os ids batem, nada é rebaixado. É o caminho "certo" de mover a biblioteca.
+- **Primeiro boot / upgrade de uma versão sem marcador** não é troca: sem id de referência não há o que comparar, e adotar a pasta como está é a única leitura segura — a alternativa apaga os registros de uma biblioteca saudável.
+- **É edge-triggered:** `Ensure` reporta a troca uma vez e já regrava o marcador, então o passe seguinte volta ao normal.
+
+**Emenda à decisão 29:** `clearLibraryPathsAfterRootSwap` zera `LibraryPaths` — justamente o que a #29 proíbe. A proibição continua valendo para arquivo faltando: o que ela protege é a exclusão deliberada de **um** episódio da biblioteca, que um cheque por `Stat` a cada passe ressuscitaria para sempre. Uma troca de raiz é outro evento: sumiu a pasta inteira para onde os registros apontam, o daemon já está rebaixando o conteúdo dela, e a detecção dispara **uma vez por troca** — nunca vira o laço de ressurreição da #29. Sem essa limpeza a recuperação fica pela metade: os torrents rebaixam, mas os episódios organizados antes da troca ficam com `LibraryPaths` órfão e nunca voltam para a biblioteca.
+
+**Don't "fix" by:** devolver a flag no retorno do `Ensure` em vez do latch (ver acima); trocar os marcadores por comparação de inode (`syscall.Stat_t.Ino` não existe no Windows); tratar erro de leitura do marcador como "sumiu" (uma falha de permissão passaria a apagar os registros da biblioteca — por isso `readRootID` só engole `IsNotExist`); fazer a limpeza de `LibraryPaths` a cada passe em vez de só na troca (aí sim vira a violação da #29); tirar o rename do marcador em `MigrateSavePath` (a migração preserva os hardlinks por rename e passaria a parecer uma troca).

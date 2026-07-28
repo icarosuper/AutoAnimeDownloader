@@ -23,6 +23,9 @@ type FakeBackend struct {
 	announceCalls []string
 	// ensureCalls records every Ensure(savePath) for assertions.
 	ensureCalls []string
+	// RootSwapped makes ConsumeRootSwap report a swapped download root, so tests can drive
+	// the daemon's recovery without a real session or a real folder move.
+	RootSwapped bool
 	// RemovedKeepData records the keepData argument passed to Remove, keyed by hash, so tests
 	// can assert what the caller actually asked for even though the fake itself ignores it.
 	RemovedKeepData map[string]bool
@@ -45,6 +48,15 @@ func (f *FakeBackend) Ensure(savePath string) (bool, error) {
 	defer f.mu.Unlock()
 	f.ensureCalls = append(f.ensureCalls, savePath)
 	return false, nil
+}
+
+// ConsumeRootSwap reports and clears the flag a test set, mirroring the real latch.
+func (f *FakeBackend) ConsumeRootSwap() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	swapped := f.RootSwapped
+	f.RootSwapped = false
+	return swapped
 }
 
 // EnsureCalls returns the save paths passed to Ensure, in order.

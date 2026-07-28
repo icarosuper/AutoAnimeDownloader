@@ -2,6 +2,7 @@ package torrents
 
 import (
 	"errors"
+	"path/filepath"
 	"sync"
 
 	"AutoAnimeDownloader/src/internal/logger"
@@ -26,24 +27,31 @@ var ErrSessionNotReady = errors.New("torrent session not ready (incomplete confi
 // could panic on a nil map. Ensure/Close take the write lock; the delegating readers take
 // the read lock, so concurrent Add/Get/List still run in parallel.
 type SessionManager struct {
-	mu         sync.RWMutex
-	dbPath     string
-	savePath   string
-	session    *Session
-	onComplete func(hash string)
-	onFailed   func(hash string, err error)
+	mu       sync.RWMutex
+	dbPath   string
+	idPath   string
+	savePath string
+	session  *Session
+	// pendingSwap latches a detected root swap until the daemon consumes it.
+	pendingSwap bool
+	onComplete  func(hash string)
+	onFailed    func(hash string, err error)
 }
 
 var _ TorrentBackend = (*SessionManager)(nil)
 
 // NewSessionManager creates a manager. dbPath is the resume database location, kept stable
-// across SavePath changes so resume data survives.
+// across SavePath changes so resume data survives. The download-root id file lives next to
+// it, for the same reason: it must stay put while the download folder moves.
 func NewSessionManager(dbPath string) *SessionManager {
-	return &SessionManager{dbPath: dbPath}
+	return &SessionManager{
+		dbPath: dbPath,
+		idPath: filepath.Join(filepath.Dir(dbPath), rootIDFileName),
+	}
 }
 
-// Ensure creates the session if absent, or recreates it if savePath changed. It returns
-// true when a new session was created (so the caller can run reconciliation).
+// Ensure creates the session if absent, and recreates it when savePath changed or when the
+// download root was swapped. See ConsumeRootSwap for why the swap forces a new session.
 func (m *SessionManager) Ensure(savePath string) (bool, error) {
 	if savePath == "" {
 		return false, ErrSessionNotReady
@@ -51,11 +59,28 @@ func (m *SessionManager) Ensure(savePath string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.session != nil && m.savePath == savePath {
+	swapped, id, err := m.checkRoot(savePath)
+	if err != nil {
+		// The markers are a recovery aid, not a precondition: a session that cannot be
+		// opened is a worse outcome than a swap that goes undetected for one pass.
+		logger.Logger.Warn().Err(err).Str("save_path", savePath).
+			Msg("Could not read the download root markers; skipping the swap check for this pass")
+	}
+
+	if swapped {
+		m.pendingSwap = true
+	}
+
+	if m.session != nil && m.savePath == savePath && !swapped {
 		return false, nil
 	}
 	if m.session != nil {
-		logger.Logger.Info().Str("old", m.savePath).Str("new", savePath).Msg("SavePath changed, recreating torrent session")
+		if swapped {
+			logger.Logger.Warn().Str("save_path", savePath).
+				Msg("The download folder was moved, trashed or replaced; recreating the torrent session so the files are redownloaded at the configured path")
+		} else {
+			logger.Logger.Info().Str("old", m.savePath).Str("new", savePath).Msg("SavePath changed, recreating torrent session")
+		}
 		if err := m.session.Close(); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Error closing previous torrent session")
 		}
@@ -69,7 +94,61 @@ func (m *SessionManager) Ensure(savePath string) (bool, error) {
 	s.SetCallbacks(m.onComplete, m.onFailed)
 	m.session = s
 	m.savePath = savePath
+
+	m.writeRoot(savePath, id)
+
 	return true, nil
+}
+
+// ConsumeRootSwap reports and clears the latched swap flag. See the interface docs.
+func (m *SessionManager) ConsumeRootSwap() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	swapped := m.pendingSwap
+	m.pendingSwap = false
+	return swapped
+}
+
+// checkRoot compares the id recorded in the config folder with the one inside savePath and
+// reports whether the download root was swapped. It also returns the id to persist.
+//
+// No expected id on record means a first run (or an upgrade from a build without the
+// markers): there is nothing to compare against, so it is never a swap — an install that
+// has downloads is adopted as-is instead of being wiped.
+func (m *SessionManager) checkRoot(savePath string) (swapped bool, id string, err error) {
+	expected, err := readRootID(m.idPath)
+	if err != nil {
+		return false, "", err
+	}
+	actual, err := readRootID(filepath.Join(savePath, RootMarkerName))
+	if err != nil {
+		return false, "", err
+	}
+
+	if expected == "" {
+		fresh, err := newRootID()
+		if err != nil {
+			return false, "", err
+		}
+		return false, fresh, nil
+	}
+	// The marker travels with the folder: a user who moves the library AND repoints the
+	// config at the new location finds their data intact, and nothing is redownloaded.
+	return actual != expected, expected, nil
+}
+
+// writeRoot persists the id on both sides. Failures are logged, not fatal: the session is
+// already up, and the worst case is that the next pass re-reports the same swap.
+func (m *SessionManager) writeRoot(savePath, id string) {
+	if id == "" {
+		return
+	}
+	if err := writeRootID(m.idPath, id); err != nil {
+		logger.Logger.Warn().Err(err).Str("path", m.idPath).Msg("Failed to record the download root id")
+	}
+	if err := writeRootID(filepath.Join(savePath, RootMarkerName), id); err != nil {
+		logger.Logger.Warn().Err(err).Str("save_path", savePath).Msg("Failed to write the download root marker")
+	}
 }
 
 // SetCallbacks stores completion/failure handlers and applies them to the current session.

@@ -586,3 +586,45 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		}
 	})
 }
+
+// TestClearLibraryPathsAfterRootSwap covers the documented exception to decision #29: the
+// records are cleared when the WHOLE download root was swapped, so the library is rebuilt at
+// the configured path instead of staying empty forever with the records claiming otherwise.
+func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
+	t.Run("organized records are cleared and become reconcilable again", func(t *testing.T) {
+		const hash = "7777777777777777777777777777777777777777"
+		gone := filepath.Join(t.TempDir(), "moved-away", "Anime", "E01.mkv")
+		fm := &orchestrationFM{
+			saved: []files.EpisodeStruct{
+				{EpisodeID: 1, EpisodeHash: hash, LibraryPaths: []string{gone}},
+			},
+		}
+
+		clearLibraryPathsAfterRootSwap(fm, t.TempDir())
+
+		if len(fm.upserted) != 1 {
+			t.Fatalf("expected one write-back, got %d", len(fm.upserted))
+		}
+		if paths := fm.saved[0].LibraryPaths; len(paths) != 0 {
+			t.Errorf("LibraryPaths = %v, want empty so reconciliation picks the episode up again", paths)
+		}
+
+		q := NewJobQueue(&orchestrationFM{}, filepath.Join(t.TempDir(), "jobs.json"))
+		reconcileLibrary([]torrents.TorrentInfo{{Hash: hash, Completed: true}}, fm.saved, q)
+		if got := queuedOrganizeHashes(t, q); len(got) != 1 || got[0] != hash {
+			t.Errorf("a cleared record must be re-enqueued for organizing, got %v", got)
+		}
+	})
+
+	t.Run("records with nothing organized are left alone", func(t *testing.T) {
+		fm := &orchestrationFM{
+			saved: []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: "8888888888888888888888888888888888888888"}},
+		}
+
+		clearLibraryPathsAfterRootSwap(fm, t.TempDir())
+
+		if len(fm.upserted) != 0 {
+			t.Errorf("nothing to clear must mean no write to the episodes file, got %v", fm.upserted)
+		}
+	})
+}
