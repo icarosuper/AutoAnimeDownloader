@@ -316,3 +316,178 @@ func TestHandleTorrentActionsRejectEmptyHash(t *testing.T) {
 		t.Errorf("Expected %d, got %d", http.StatusBadRequest, w.Code)
 	}
 }
+
+// --- DELETE /api/v1/torrents/{hash} ---
+
+// trackingLibrarian is a files.Librarian for tests that need to assert whether
+// RemoveFromLibrary was (or was not) called — the stubLibrarian in
+// endpoint_config_test.go doesn't record calls, which is exactly the point of the
+// keep_data=true assertion below.
+type trackingLibrarian struct {
+	removedPaths []string
+}
+
+func (l *trackingLibrarian) Organize(files.OrganizeRequest) ([]string, error) { return nil, nil }
+func (l *trackingLibrarian) RemoveFromLibrary(path string) error {
+	l.removedPaths = append(l.removedPaths, path)
+	return nil
+}
+func (l *trackingLibrarian) ProbePath(string) error { return nil }
+
+func deleteTorrentRequest(hash, query string) *http.Request {
+	url := "/api/v1/torrents/" + hash
+	if query != "" {
+		url += "?" + query
+	}
+	req := httptest.NewRequest(http.MethodDelete, url, nil)
+	req.SetPathValue("hash", hash)
+	return req
+}
+
+func TestHandleTorrentDeleteHappyPath(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	fm := &mockFileManager{episodes: []files.EpisodeStruct{
+		{EpisodeID: 1, AnimeID: 42, EpisodeHash: hashA, LibraryPaths: []string{"/lib/ep1.mkv"}},
+	}}
+	lib := &trackingLibrarian{}
+	server := &Server{Torrents: backend, FileManager: fm, Librarian: lib}
+
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, deleteTorrentRequest(hashA, ""))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+	}
+	if _, ok := backend.Get(hashA); ok {
+		t.Error("torrent should have left the session")
+	}
+	if len(fm.episodes) != 0 {
+		t.Errorf("Expected episode records to be gone, got %v", fm.episodes)
+	}
+}
+
+func TestHandleTorrentDeleteKeepDataSkipsLibraryAndPassesFlagToBackend(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	fm := &mockFileManager{episodes: []files.EpisodeStruct{
+		{EpisodeID: 1, AnimeID: 42, EpisodeHash: hashA, LibraryPaths: []string{"/lib/ep1.mkv"}},
+	}}
+	lib := &trackingLibrarian{}
+	server := &Server{Torrents: backend, FileManager: fm, Librarian: lib}
+
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, deleteTorrentRequest(hashA, "keep_data=true"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+	}
+	if kept, ok := backend.RemovedKeepData[hashA]; !ok || !kept {
+		t.Errorf("RemovedKeepData[%q] = %v, %v; want true, true", hashA, kept, ok)
+	}
+	if len(lib.removedPaths) != 0 {
+		t.Errorf("Expected no library hardlink removal with keep_data=true, got %v", lib.removedPaths)
+	}
+}
+
+func TestHandleTorrentDeleteBlockBlocksEveryEpisodeInGroup(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	fm := &mockFileManager{episodes: []files.EpisodeStruct{
+		{EpisodeID: 1, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
+		{EpisodeID: 2, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
+		{EpisodeID: 3, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
+	}}
+	lib := &trackingLibrarian{}
+	server := &Server{Torrents: backend, FileManager: fm, Librarian: lib}
+
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, deleteTorrentRequest(hashA, "block=true"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+	}
+	wantBlocked := map[int]bool{1: true, 2: true, 3: true}
+	if len(fm.blockedEpisodes) != len(wantBlocked) {
+		t.Fatalf("Expected 3 episodes blocked, got %v", fm.blockedEpisodes)
+	}
+	for _, id := range fm.blockedEpisodes {
+		if !wantBlocked[id] {
+			t.Errorf("Unexpected episode blocked: %d", id)
+		}
+	}
+}
+
+func TestHandleTorrentDeleteOrphanTorrentRemovedWithoutBlocking(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	fm := &mockFileManager{}
+	server := &Server{Torrents: backend, FileManager: fm, Librarian: &trackingLibrarian{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, deleteTorrentRequest(hashA, "block=true"))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+	}
+	if _, ok := backend.Get(hashA); ok {
+		t.Error("orphan torrent should have been removed")
+	}
+	if len(fm.blockedEpisodes) != 0 {
+		t.Errorf("Expected nothing blocked for an orphan torrent, got %v", fm.blockedEpisodes)
+	}
+}
+
+func TestHandleTorrentDeleteUnknownHashReturns404(t *testing.T) {
+	server := &Server{Torrents: torrents.NewFakeBackend(), FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, deleteTorrentRequest("ffffffffffffffffffffffffffffffffffffffff", ""))
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleTorrentDeleteRejectsNonDelete(t *testing.T) {
+	server, _ := newTorrentActionServer(t)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/torrents/"+hashA, nil)
+	req.SetPathValue("hash", hashA)
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleTorrentDeleteRejectsEmptyHash(t *testing.T) {
+	server, _ := newTorrentActionServer(t)
+
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, deleteTorrentRequest("", ""))
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestHandleTorrentDeleteInvalidKeepDataReturns400(t *testing.T) {
+	server, _ := newTorrentActionServer(t)
+
+	w := httptest.NewRecorder()
+	handleTorrentDelete(server)(w, deleteTorrentRequest(hashA, "keep_data=talvez"))
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}

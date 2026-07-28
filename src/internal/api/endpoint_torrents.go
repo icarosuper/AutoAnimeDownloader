@@ -1,11 +1,14 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/torrents"
+	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 )
 
 // TorrentResponse is one row of the downloads screen: a torrent's live progress joined with
@@ -219,4 +222,85 @@ func handleTorrentResume(server *Server) http.HandlerFunc {
 // @Router       /torrents/{hash}/announce [post]
 func handleTorrentAnnounce(server *Server) http.HandlerFunc {
 	return torrentAction(server, func(s *Server, hash string) error { return s.Torrents.Announce(hash) })
+}
+
+// parseBoolQueryParam reads a boolean query parameter, defaulting to false when absent
+// (per the endpoint's contract: keep_data and block both default to false). Any value
+// strconv.ParseBool rejects is reported as an error for the caller to turn into a 400.
+func parseBoolQueryParam(r *http.Request, name string) (bool, error) {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return false, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("invalid value for %s: %q", name, raw)
+	}
+	return v, nil
+}
+
+// @Summary      Delete a torrent
+// @Description  Removes a torrent and every saved episode sharing its hash, as a single unit (the deletion boundary is the torrent, not the episode, so a batch's episodes always leave together). By default this frees both the seeding copy and the library hardlink (same inode); keep_data=true keeps both instead. block=true additionally blocks every episode in the group against automatic re-download.
+// @Tags         torrents
+// @Accept       json
+// @Produce      json
+// @Param        hash       path   string  true   "Torrent info hash"
+// @Param        keep_data  query  bool    false  "Keep the seeding copy and library hardlinks on disk (default false)"
+// @Param        block      query  bool    false  "Block the torrent's episodes against automatic re-download (default false)"
+// @Success      200  {object}  SuccessResponse
+// @Failure      400  {object}  SuccessResponse
+// @Failure      404  {object}  SuccessResponse
+// @Failure      405  {object}  SuccessResponse
+// @Failure      500  {object}  SuccessResponse
+// @Router       /torrents/{hash} [delete]
+//
+// Routing note: this is registered on the same "/api/v1/torrents/{hash}" mux pattern for
+// every HTTP method — a Go 1.22+ ServeMux pattern with no method prefix matches all verbs on
+// that path — so the method check below is what turns a non-DELETE request into a 405
+// instead of letting an unmatched pattern 404. Same shape as handleDeleteEpisode.
+//
+// Deliberate edge case: whether the torrent "exists" is decided only by its presence in the
+// client session (server.Torrents.Get), exactly like torrentAction. If the torrent is not in
+// the session but saved-episode records with that hash still exist, this responds 404 and
+// leaves those records alone — cleaning up an orphaned episode record is the episode flow's
+// job (DELETE /animes/{id}/episodes/{episodeId}), not this route's.
+func handleTorrentDelete(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only DELETE method is allowed")
+			return
+		}
+
+		hash := r.PathValue("hash")
+		if hash == "" {
+			JSONError(w, http.StatusBadRequest, "INVALID_HASH", "Torrent hash is required")
+			return
+		}
+
+		keepData, err := parseBoolQueryParam(r, "keep_data")
+		if err != nil {
+			JSONError(w, http.StatusBadRequest, "INVALID_QUERY_PARAM", err.Error())
+			return
+		}
+
+		block, err := parseBoolQueryParam(r, "block")
+		if err != nil {
+			JSONError(w, http.StatusBadRequest, "INVALID_QUERY_PARAM", err.Error())
+			return
+		}
+
+		if _, ok := server.Torrents.Get(hash); !ok {
+			JSONError(w, http.StatusNotFound, "TORRENT_NOT_FOUND", "Torrent not found")
+			return
+		}
+
+		opts := daemon.RemoveTorrentOptions{KeepData: keepData, Block: block}
+		if err := daemon.RemoveTorrentWithEpisodes(server.FileManager, server.Torrents, server.Librarian, hash, opts); err != nil {
+			logger.Logger.Error().Err(err).Str("hash", hash).Msg("Failed to remove torrent")
+			JSONInternalError(w, err)
+			return
+		}
+
+		JSONSuccess(w, http.StatusOK, nil)
+	}
 }

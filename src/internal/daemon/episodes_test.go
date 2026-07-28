@@ -28,6 +28,8 @@ func fakeWithTorrents(hashes ...string) *torrents.FakeBackend {
 // mockFileManagerForEpisodes implements FileManagerInterface minimally for episode tests.
 type mockFileManagerForEpisodes struct {
 	deletedEpisodeIDs []int
+	blockedEpisodeIDs []int
+	blockErr          error
 }
 
 func (m *mockFileManagerForEpisodes) LoadConfigs() (*files.Config, error) { return nil, nil }
@@ -41,11 +43,14 @@ func (m *mockFileManagerForEpisodes) DeleteEpisodesFromFile(ids []int) error {
 	m.deletedEpisodeIDs = append(m.deletedEpisodeIDs, ids...)
 	return nil
 }
-func (m *mockFileManagerForEpisodes) DeleteEmptyFolders(string) error { return nil }
-func (m *mockFileManagerForEpisodes) LoadBlockedEpisodes() ([]int, error)     { return nil, nil }
-func (m *mockFileManagerForEpisodes) BlockEpisode(int) error                  { return nil }
-func (m *mockFileManagerForEpisodes) UnblockEpisode(int) error                { return nil }
-func (m *mockFileManagerForEpisodes) UnmanageEpisode(int) error               { return nil }
+func (m *mockFileManagerForEpisodes) DeleteEmptyFolders(string) error     { return nil }
+func (m *mockFileManagerForEpisodes) LoadBlockedEpisodes() ([]int, error) { return nil, nil }
+func (m *mockFileManagerForEpisodes) BlockEpisode(id int) error {
+	m.blockedEpisodeIDs = append(m.blockedEpisodeIDs, id)
+	return m.blockErr
+}
+func (m *mockFileManagerForEpisodes) UnblockEpisode(int) error  { return nil }
+func (m *mockFileManagerForEpisodes) UnmanageEpisode(int) error { return nil }
 func (m *mockFileManagerForEpisodes) LoadAllAnimeSettings() (map[int]files.AnimeSettings, error) {
 	return nil, nil
 }
@@ -762,5 +767,160 @@ func TestDeleteEpisodesByStatus_DeleteErrorIsTolerated(t *testing.T) {
 
 	if _, ok := backend.Get(hash); ok {
 		t.Error("torrent deve ser removido mesmo com falha na escrita do arquivo")
+	}
+}
+
+// --- RemoveTorrentWithEpisodes (Task 1.3 / 1.4) ---
+
+// countingBackend wraps FakeBackend to count Remove calls per hash — FakeBackend.RemovedKeepData
+// alone can't distinguish "called once" from "called N times with the same keepData value".
+type countingBackend struct {
+	*torrents.FakeBackend
+	removeCalls map[string]int
+}
+
+func newCountingBackend(hashes ...string) *countingBackend {
+	return &countingBackend{FakeBackend: fakeWithTorrents(hashes...), removeCalls: make(map[string]int)}
+}
+
+func (c *countingBackend) Remove(hash string, keepData bool) error {
+	c.removeCalls[hash]++
+	return c.FakeBackend.Remove(hash, keepData)
+}
+
+// TestRemoveTorrentWithEpisodes_BatchRemovesAllAndCallsBackendOnce verifica que um batch com N
+// episódios do mesmo hash é removido como uma unidade: os N registros saem de uma vez e
+// backend.Remove é chamado exatamente uma vez (não uma vez por episódio).
+func TestRemoveTorrentWithEpisodes_BatchRemovesAllAndCallsBackendOnce(t *testing.T) {
+	const hash = "1111111111111111111111111111111111111111"
+	saved := []files.EpisodeStruct{
+		{EpisodeID: 1, EpisodeHash: hash},
+		{EpisodeID: 2, EpisodeHash: hash},
+		{EpisodeID: 3, EpisodeHash: hash},
+	}
+	fm := &failingFM{saved: saved}
+	backend := newCountingBackend(hash)
+
+	err := RemoveTorrentWithEpisodes(fm, backend, testLibrarian(), hash, RemoveTorrentOptions{})
+	if err != nil {
+		t.Fatalf("esperava sucesso, obteve %v", err)
+	}
+
+	for _, id := range []int{1, 2, 3} {
+		if !containsID(fm.deleted, id) {
+			t.Errorf("esperava episódio %d removido do arquivo, obteve %v", id, fm.deleted)
+		}
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("esperava torrent removido do cliente")
+	}
+	if got := backend.removeCalls[hash]; got != 1 {
+		t.Fatalf("esperava backend.Remove chamado exatamente 1 vez para o batch, obteve %d", got)
+	}
+	if kd, ok := backend.RemovedKeepData[hash]; !ok || kd {
+		t.Errorf("esperava backend.Remove chamado com keepData=false para %s, obteve %v (ok=%v)", hash, kd, ok)
+	}
+}
+
+// TestRemoveTorrentWithEpisodes_KeepDataSkipsLibraryRemoval verifica que keepData=true não
+// chama librarian.RemoveFromLibrary e que o valor chega ao backend como keepData=true
+// (via FakeBackend.RemovedKeepData).
+func TestRemoveTorrentWithEpisodes_KeepDataSkipsLibraryRemoval(t *testing.T) {
+	const hash = "2222222222222222222222222222222222222222"
+	tmp := t.TempDir()
+	libPath := filepath.Join(tmp, "library", "ep.mkv")
+
+	saved := []files.EpisodeStruct{
+		{EpisodeID: 1, EpisodeHash: hash, LibraryPaths: []string{libPath}},
+	}
+	fm := &failingFM{saved: saved}
+	backend := fakeWithTorrents(hash)
+
+	// spyLibrarian records whether RemoveFromLibrary was called.
+	spy := &spyLibrarian{}
+
+	err := RemoveTorrentWithEpisodes(fm, backend, spy, hash, RemoveTorrentOptions{KeepData: true})
+	if err != nil {
+		t.Fatalf("esperava sucesso, obteve %v", err)
+	}
+
+	if spy.called {
+		t.Error("keepData=true não deve chamar librarian.RemoveFromLibrary")
+	}
+	if kd, ok := backend.RemovedKeepData[hash]; !ok || !kd {
+		t.Errorf("esperava backend.Remove chamado com keepData=true, obteve %v (ok=%v)", kd, ok)
+	}
+}
+
+// spyLibrarian is a minimal files.Librarian that only records whether RemoveFromLibrary was
+// invoked, so tests can assert it was skipped without touching a real filesystem.
+type spyLibrarian struct {
+	called bool
+}
+
+func (s *spyLibrarian) Organize(files.OrganizeRequest) ([]string, error) { return nil, nil }
+func (s *spyLibrarian) RemoveFromLibrary(string) error {
+	s.called = true
+	return nil
+}
+func (s *spyLibrarian) ProbePath(string) error { return nil }
+
+// TestRemoveTorrentWithEpisodes_OrphanTorrentCallsBackendOnly verifica o caso de torrent órfão
+// (nenhum episódio salvo casa com o hash): backend.Remove é chamado, nada é bloqueado, sem erro.
+func TestRemoveTorrentWithEpisodes_OrphanTorrentCallsBackendOnly(t *testing.T) {
+	const hash = "3333333333333333333333333333333333333333"
+	fm := &failingFM{saved: nil}
+	backend := fakeWithTorrents(hash)
+
+	err := RemoveTorrentWithEpisodes(fm, backend, testLibrarian(), hash, RemoveTorrentOptions{Block: true})
+	if err != nil {
+		t.Fatalf("esperava sucesso para torrent órfão, obteve %v", err)
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("esperava torrent órfão removido do cliente")
+	}
+	if len(fm.blockedEpisodeIDs) != 0 {
+		t.Errorf("torrent órfão não tem episódio para bloquear, obteve %v", fm.blockedEpisodeIDs)
+	}
+	if len(fm.deleted) != 0 {
+		t.Errorf("torrent órfão não deve tentar deletar registros, obteve %v", fm.deleted)
+	}
+}
+
+// TestRemoveTorrentWithEpisodes_BlockBlocksAllIDsInGroup verifica que Block=true bloqueia
+// todos os ids do grupo antes de remover os registros.
+func TestRemoveTorrentWithEpisodes_BlockBlocksAllIDsInGroup(t *testing.T) {
+	const hash = "4444444444444444444444444444444444444444"
+	saved := []files.EpisodeStruct{
+		{EpisodeID: 10, EpisodeHash: hash},
+		{EpisodeID: 20, EpisodeHash: hash},
+	}
+	fm := &failingFM{saved: saved}
+	backend := fakeWithTorrents(hash)
+
+	err := RemoveTorrentWithEpisodes(fm, backend, testLibrarian(), hash, RemoveTorrentOptions{Block: true})
+	if err != nil {
+		t.Fatalf("esperava sucesso, obteve %v", err)
+	}
+	for _, id := range []int{10, 20} {
+		if !containsID(fm.blockedEpisodeIDs, id) {
+			t.Errorf("esperava episódio %d bloqueado, obteve %v", id, fm.blockedEpisodeIDs)
+		}
+	}
+}
+
+// TestRemoveTorrentWithEpisodes_LoadErrorAbortsWithoutRemoving verifica que uma falha em
+// LoadSavedEpisodes retorna erro e não chama backend.Remove.
+func TestRemoveTorrentWithEpisodes_LoadErrorAbortsWithoutRemoving(t *testing.T) {
+	const hash = "5555555555555555555555555555555555555555"
+	fm := &failingFM{loadErr: errors.New("disk on fire")}
+	backend := fakeWithTorrents(hash)
+
+	err := RemoveTorrentWithEpisodes(fm, backend, testLibrarian(), hash, RemoveTorrentOptions{})
+	if err == nil {
+		t.Fatal("esperava erro quando LoadSavedEpisodes falha")
+	}
+	if _, ok := backend.Get(hash); !ok {
+		t.Error("backend.Remove não deve ser chamado quando LoadSavedEpisodes falha")
 	}
 }

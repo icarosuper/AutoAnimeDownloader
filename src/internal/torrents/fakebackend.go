@@ -23,12 +23,18 @@ type FakeBackend struct {
 	announceCalls []string
 	// ensureCalls records every Ensure(savePath) for assertions.
 	ensureCalls []string
+	// RemovedKeepData records the keepData argument passed to Remove, keyed by hash, so tests
+	// can assert what the caller actually asked for even though the fake itself ignores it.
+	RemovedKeepData map[string]bool
 }
 
 var _ TorrentBackend = (*FakeBackend)(nil)
 
 func NewFakeBackend() *FakeBackend {
-	return &FakeBackend{torrents: make(map[string]*TorrentInfo)}
+	return &FakeBackend{
+		torrents:        make(map[string]*TorrentInfo),
+		RemovedKeepData: make(map[string]bool),
+	}
 }
 
 // Ensure is a no-op for the fake (no real session to create), but records the path so tests
@@ -101,6 +107,10 @@ func (f *FakeBackend) Get(hash string) (TorrentInfo, bool) {
 func (f *FakeBackend) Remove(hash string, keepData bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.RemovedKeepData == nil {
+		f.RemovedKeepData = make(map[string]bool)
+	}
+	f.RemovedKeepData[hash] = keepData
 	delete(f.torrents, hash)
 	return nil
 }

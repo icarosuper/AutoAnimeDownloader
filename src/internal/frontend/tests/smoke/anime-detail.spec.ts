@@ -103,3 +103,52 @@ test('clicking Download on undownloaded episode calls POST /.../download', async
   await page.getByRole('button', { name: /^download$/i }).first().click()
   await downloadRequest
 })
+
+test('episode row shows a progress bar when an active torrent is joined to it', async ({ page }) => {
+  // Episode 2 (undownloaded) carries episode_hash pointing at an in-flight torrent —
+  // indexTorrentsByEpisode (src/lib/utils/torrentsByEpisode.ts) joins the two on that hash.
+  const detailWithHash = {
+    ...mockDetail,
+    data: {
+      ...mockDetail.data,
+      episodes: mockDetail.data.episodes.map(ep =>
+        ep.episode_id === 1002
+          ? { ...ep, episode_hash: 'f'.repeat(40) }
+          : ep
+      ),
+    },
+  }
+  await page.route('**/api/v1/animes/123/episodes', route => route.fulfill({ json: detailWithHash }))
+  await page.route('**/api/v1/torrents', route =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: [
+          {
+            hash: 'f'.repeat(40),
+            name: 'Test Anime - 02',
+            status: 'downloading',
+            completed: false,
+            is_batch: false,
+            anime_name: 'Test Anime',
+            episode_number: 2,
+            bytes_completed: 100,
+            bytes_total: 1000,
+            bytes_uploaded: 0,
+            progress: 0.4,
+            download_speed: 2048,
+            upload_speed: 0,
+            peers_total: 3,
+            eta_seconds: 120,
+            seeded_for_seconds: 0,
+          },
+        ],
+      },
+    })
+  )
+
+  await page.goto('/#/status/123')
+
+  await expect(page.getByRole('progressbar', { name: 'Download progress' })).toBeVisible()
+  await expect(page.locator('table tbody tr').filter({ hasText: '40%' })).toBeVisible()
+})

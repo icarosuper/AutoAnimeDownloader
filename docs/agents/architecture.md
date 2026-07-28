@@ -89,6 +89,7 @@ Key endpoints:
 | `POST` | `/api/v1/torrents/{hash}/pause` | `handleTorrentPause` | `endpoint_torrents.go` |
 | `POST` | `/api/v1/torrents/{hash}/resume` | `handleTorrentResume` | `endpoint_torrents.go` |
 | `POST` | `/api/v1/torrents/{hash}/announce` | `handleTorrentAnnounce` | `endpoint_torrents.go` |
+| `DELETE` | `/api/v1/torrents/{hash}?keep_data=<bool>&block=<bool>` | `handleTorrentDelete` | `endpoint_torrents.go` |
 | `WS` | `/api/v1/ws` | `handleWebSocket` | `websocket.go` |
 
 ## Version Injection
@@ -128,6 +129,7 @@ Main verification orchestrator. Key functions:
 | `ExtractAnimeSeasonPart(title, synonyms)` | Exported: reads english→romaji→synonyms, returns `(season, part *int)` — first non-nil wins independently |
 | `ComputeEpisodeOffset(relations, part)` | Exported: returns PREQUEL episode count when `part >= 2`; 0 otherwise (gate prevents spurious offsets on non-split seasons) |
 | `RemoveEpisodesWithLinks(fm, backend, librarian, ids) error` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`). Returns an error when the record could not be removed from the JSONL (load/delete failure); freeing disk space is best-effort and only logged |
+| `RemoveTorrentWithEpisodes(fm, backend, librarian, hash, opts) error` | Deletes a torrent and every saved episode sharing its hash as one unit (a batch always leaves together) — used by `DELETE /torrents/{hash}`. `RemoveTorrentOptions{KeepData, Block}`: `Block` marks every episode in the group blocked before removing its record; an orphan hash (no saved episode matches) is removed directly via `backend.Remove` (`episodes.go`) |
 | `reconcileLibrary(downloaded, saved, jobQueue)` | Startup/periodic reconciliation: enqueues an `organize` job for any completed torrent whose episode isn't yet in the library (`verification.go`) |
 | `ManualDownloadEpisode(backend, animeId, episodeId, cfg, customQuery)` | Used by API for manual download — calls Anilist then Nyaa (`manual_download.go`) |
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
@@ -296,7 +298,7 @@ Middleware stack (API routes): CORS → JSON Content-Type → Logging. Static fi
 
 ### `src/internal/api/endpoint_anime_episodes.go`
 
-- `AnimeEpisodeInfo` struct — per-episode detail (aired, watched, downloaded, blocked, manually managed)
+- `AnimeEpisodeInfo` struct — per-episode detail (aired, watched, downloaded, blocked, manually managed). `EpisodeHash` (`episode_hash`, `omitempty`) is the info hash of the torrent that downloaded it, if any — the frontend uses it to join the episode against `GET /torrents` (see `torrentsByEpisode.ts`) to show live progress inline before the episode finishes.
 - `AnimeDetailResponse` struct — `{animeId, anilistId, totalEpisodes, progress, status, episodes[]}` — `animeId` is the AniList MediaList entry ID (used as primary key everywhere else); `anilistId` is the actual AniList media ID, only useful for building `anilist.co/anime/{id}` links
 - `handleAnimeEpisodes` — fetches `GetAnimeInfo(id)` from AniList + saved episodes + blocked list → merges
 
@@ -318,6 +320,8 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 - `buildTorrentResponse(t, eps)` — the join + batch-collapse logic described above. `Progress` normally comes from `BytesCompleted/BytesTotal`, but falls back to the piece ratio (`PiecesHave/PiecesTotal`) whenever `BytesCompleted` reads 0 with a nonzero total — pausing frees rain's piece data and zeroes `Bytes.Completed` while the bitfield backing `PiecesHave/PiecesTotal` survives, so without the fallback a paused torrent's progress bar would collapse to 0%.
 - `torrentAction(server, action)` — shared shape for `pause`/`resume`/`announce`: POST only, hash from the path, 404 when `Get(hash)` misses, backend call last.
 - `handleTorrentPause` / `handleTorrentResume` / `handleTorrentAnnounce` — thin wrappers over `torrentAction` calling `Torrents.Pause/Resume/Announce`.
+- `parseBoolQueryParam(r, name)` — reads a boolean query param, defaulting to `false` when absent; an unparseable value becomes a 400 (`INVALID_QUERY_PARAM`).
+- `handleTorrentDelete` — `DELETE /torrents/{hash}?keep_data=<bool>&block=<bool>`. Registered on the same `/api/v1/torrents/{hash}` mux pattern as pause/resume/announce (a Go 1.22+ pattern with no method prefix matches every verb), so the method check turns non-DELETE requests into a 405. 404 is decided the same way as `torrentAction` — only by `server.Torrents.Get(hash)` — so an orphaned saved-episode record with no matching live torrent is left alone; cleaning that up is `DELETE /animes/{id}/episodes/{episodeId}`'s job, not this route's. Delegates to `daemon.RemoveTorrentWithEpisodes` with `daemon.RemoveTorrentOptions{KeepData: keep_data, Block: block}`. See decisions.md for the default (delete + block) and why `keep_data` can't split the library copy from the seeding copy.
 
 ### `src/internal/api/websocket.go`
 
@@ -501,8 +505,8 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | File | Route | Purpose |
 |------|-------|---------|
 | `routes/Status.svelte` | `#/` | Daemon status, start/stop, anime list, global speed card (aggregate download/upload across all torrents) |
-| `routes/Downloads.svelte` | `#/downloads` | Live torrent list — progress, speed, ETA, peers, status per torrent, joined with anime/episode; pause/resume/announce buttons. Polls `GET /api/v1/torrents` every 2s while mounted, stops polling on unmount |
-| `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions |
+| `routes/Downloads.svelte` | `#/downloads` | Live torrent list — progress, speed, ETA, peers, status per torrent, joined with anime/episode; search/status-filter/sort (`torrentFilters.ts`, view state round-tripped through the URL querystring, not localStorage), select-all/bulk pause/resume/announce/delete (`DownloadsToolbar.svelte`), per-row and bulk delete (`TorrentDeleteDialog.svelte`) calling `DELETE /torrents/{hash}`. Polls `GET /api/v1/torrents` every 2s while mounted, stops polling on unmount |
+| `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions; joins each episode against the live torrent list via `episode_hash` (`torrentsByEpisode.ts`) to show an inline progress bar/status badge while an aired-but-undownloaded episode has an active torrent. Adaptive poll of `GET /api/v1/torrents`: 2s while this anime has an active torrent, 15s otherwise |
 | `routes/Config.svelte` | `#/config` | Edit all config fields |
 | `routes/Priorities.svelte` | `#/priorities` | Reorder/add/remove torrent priority lists (fansubs, resolutions, source, codec, audio, criteria order, ignore list); reset per-list or all, via `GET/PUT /api/v1/config` + `GET /api/v1/config/priorities/defaults` |
 | `routes/Logs.svelte` | `#/logs` | Tail daemon logs |
@@ -514,7 +518,9 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 |------|---------|
 | `Layout.svelte` | Shell with nav |
 | `StatusBadge.svelte` | Colored badge for daemon/episode status |
-| `ConfirmDialog.svelte` | Modal confirmation dialog |
+| `ConfirmDialog.svelte` | Modal confirmation dialog. Binds the native `open` attribute on `<dialog>` (needed so a closed dialog is out of the a11y tree/role queries even with the daisyUI `.modal-open` class applied) and exposes an optional `<slot />` for callers that need extra content between the message and the action buttons |
+| `TorrentDeleteDialog.svelte` | Wraps `ConfirmDialog` for the Downloads delete flow (single row or bulk selection). Two checkboxes — delete files, block re-download — both default checked; emits `confirm` with `{keepData, block}` |
+| `DownloadsToolbar.svelte` | Search input + status multi-select filter + bulk action bar (pause/resume/announce/delete/deselect) for `Downloads.svelte`. Controlled: holds no state of its own, just relays events — the view state lives in `Downloads.svelte` via `torrentFilters.ts` |
 | `Toasts.svelte` | Toast notification container |
 | `ErrorMessage.svelte` | Inline error display |
 | `Input.svelte` | Styled input field |
@@ -529,9 +535,17 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `theme.ts` | `theme` | Dark/light theme |
 | `locale.ts` | `locale` | i18n locale |
 
+**Utils** (`src/lib/utils/`, torrent-related additions):
+
+| File | Export | Purpose |
+|------|--------|---------|
+| `torrentFilters.ts` | `ViewState`, `filterTorrents`, `sortTorrents`, `encodeViewState`, `decodeViewState`, `DEFAULT_VIEW_STATE` | Downloads screen search/status-filter/sort, and its round-trip to/from the URL querystring (`decodeViewState` is tolerant of garbage — unknown values fall back to defaults) |
+| `torrentsByEpisode.ts` | `indexTorrentsByEpisode(torrents, episodes)` | Joins torrents onto episodes by `episode.episode_hash === torrent.hash`; a batch torrent's hash appears under each episode it covers. Used by `AnimeDetail.svelte` |
+| `torrentStatus.ts` | `STATUS_SLUGS`, `statusLabel`, `statusClass` | Shared status-badge label/class for a torrent's `status` slug (must be kept in sync by hand with `statusSlug()` in `src/internal/torrents/status.go`); used by `Downloads.svelte`, `DownloadsToolbar.svelte`, and `AnimeDetail.svelte` |
+
 **API client** (`src/lib/api/client.ts`):
 
-Exports typed fetch wrappers for every endpoint. Uses `window.location.origin` as base URL (works with reverse proxies). All errors surface via `toasts.add(message)`.
+Exports typed fetch wrappers for every endpoint. Uses `window.location.origin` as base URL (works with reverse proxies). All errors surface via `toasts.add(message)` — except when the caller passes the 4th `ApiRequestOptions` argument `{ silent: true }`, which suppresses the toast (error is still logged and rethrown). `getTorrents()` always passes `silent: true`, since it's polled on a short interval (2-15s) by Downloads/Status/AnimeDetail and a transient failure must degrade silently rather than toast on every tick.
 
 **WebSocket client** (`src/lib/websocket/client.ts`):
 

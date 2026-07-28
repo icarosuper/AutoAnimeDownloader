@@ -1042,6 +1042,74 @@ const docTemplate = `{
                 }
             }
         },
+        "/torrents/{hash}": {
+            "delete": {
+                "description": "Removes a torrent and every saved episode sharing its hash, as a single unit (the deletion boundary is the torrent, not the episode, so a batch's episodes always leave together). By default this frees both the seeding copy and the library hardlink (same inode); keep_data=true keeps both instead. block=true additionally blocks every episode in the group against automatic re-download.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "Delete a torrent",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Torrent info hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Keep the seeding copy and library hardlinks on disk (default false)",
+                        "name": "keep_data",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Block the torrent's episodes against automatic re-download (default false)",
+                        "name": "block",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/torrents/{hash}/announce": {
             "post": {
                 "description": "Re-announces the torrent to all trackers and DHT — the way out of \"stuck at 0 peers\". It does not override the trackers' minimum interval, so repeated calls have no extra effect.",
@@ -1234,6 +1302,10 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "download_date": {
+                    "type": "string"
+                },
+                "episode_hash": {
+                    "description": "EpisodeHash is the saved episode's torrent info hash. It is what lets the anime detail\nscreen join in live torrent progress exactly: a batch torrent's saved episodes all carry\nthe same hash but episode_number is meaningless for matching a torrent to them (the\ntorrent itself has no single episode number), so joining by number would miss batches\nentirely. Joining by hash instead, single and batch episodes use the same path. Empty\n(and omitted via omitempty) when the episode has no saved record.",
                     "type": "string"
                 },
                 "episode_id": {

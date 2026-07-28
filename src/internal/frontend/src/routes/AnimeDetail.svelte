@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import {
     getAnimeDetail,
     getAnimes,
+    getTorrents,
     downloadEpisode,
     deleteEpisode,
     releaseEpisode,
@@ -12,11 +14,15 @@
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
+    type TorrentInfo,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
+  import { indexTorrentsByEpisode } from "../lib/utils/torrentsByEpisode.js";
+  import { statusLabel, statusClass } from "../lib/utils/torrentStatus.js";
+  import { formatSpeed, formatEta, formatPercent } from "../lib/utils/torrents.js";
 
   export let params: { id?: string } = {};
 
@@ -48,7 +54,16 @@
   let customSearchQuery = "";
   let searchQuerySaving = false;
 
+  // Live torrent progress, joined onto episodes below. Fetch failures degrade silently:
+  // this is accessory data (mirrors the best-effort join the backend already does in
+  // handleTorrents), so the page must never break because of it.
+  let torrents: TorrentInfo[] = [];
+  let torrentPollTimer: ReturnType<typeof setTimeout> | null = null;
+  let torrentPollStarted = false;
+  let torrentPollAnimeId: number | null = null;
+
   $: allEpisodes = detail?.episodes ?? [];
+  $: torrentsByEpisode = indexTorrentsByEpisode(torrents, allEpisodes);
   $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_id));
   $: someSelected = selectedEpisodes.size > 0 && !allSelected;
 
@@ -302,6 +317,63 @@
   }
 
   $: loadData(animeId);
+
+  // Adaptive polling for /torrents: 2s while this anime has an active (non-completed)
+  // torrent, 15s otherwise. Re-scheduled (not a bare setInterval) so the delay can change
+  // between ticks without ever running two timers at once.
+  async function pollTorrents() {
+    try {
+      torrents = await getTorrents();
+    } catch (err) {
+      // Best-effort accessory data — no toast, keep the last known snapshot.
+      console.error("Failed to load torrents:", err);
+    } finally {
+      scheduleNextTorrentPoll();
+    }
+  }
+
+  function scheduleNextTorrentPoll() {
+    if (torrentPollTimer) clearTimeout(torrentPollTimer);
+    const map = indexTorrentsByEpisode(torrents, allEpisodes);
+    const hasActiveTorrent = Array.from(map.values()).some((t) => !t.completed);
+    torrentPollTimer = setTimeout(pollTorrents, hasActiveTorrent ? 2000 : 15000);
+  }
+
+  // svelte-spa-router reuses this component instance rather than remounting it when
+  // navigating between two /status/:id routes (e.g. anime A -> anime B), so onDestroy never
+  // runs on that transition and a plain "started once" flag would stay latched forever from
+  // anime A. Re-arm the gate whenever animeId changes, and cancel the pending timer right
+  // away rather than letting it fire on anime A's old cadence: without this, the page could
+  // sit on anime A's 15s interval for up to ~15s after landing on anime B even though B has
+  // an active download that should be polled every 2s.
+  $: if (animeId !== torrentPollAnimeId) {
+    torrentPollAnimeId = animeId;
+    if (torrentPollTimer) {
+      clearTimeout(torrentPollTimer);
+      torrentPollTimer = null;
+    }
+    torrentPollStarted = false;
+  }
+
+  // Gate the very first poll (per anime) on `detail` actually belonging to the anime we're
+  // now viewing — not just being non-null. Right after an animeId change (including the very
+  // first mount), `$: loadData(animeId)` is still an in-flight promise; until it resolves,
+  // `detail` either is null (first mount) or still holds the *previous* anime's episodes
+  // (same-component switch, since svelte-spa-router reuses the instance). Firing on mere
+  // non-null-ness would let this anime's first poll run against the wrong anime's episode
+  // list — `indexTorrentsByEpisode` would join torrents against stale `episode_hash` values
+  // and could pick the wrong cadence (reproduced by a component test that raced
+  // getAnimeDetail() against getTorrents()). Comparing `detail.anime_id` to `animeId` ensures
+  // the poll only ever starts once the episode list actually matches the anime being viewed,
+  // so the very first cadence decision for a newly-selected anime is correct from the start.
+  $: if (detail && detail.anime_id === animeId && !torrentPollStarted) {
+    torrentPollStarted = true;
+    pollTorrents();
+  }
+
+  onDestroy(() => {
+    if (torrentPollTimer) clearTimeout(torrentPollTimer);
+  });
 </script>
 
 <ConfirmDialog
@@ -555,6 +627,7 @@
             {#each detail.episodes as ep}
               {@const isLoading = !!actionLoading[ep.episode_id]}
               {@const isSelected = selectedEpisodes.has(ep.episode_id)}
+              {@const torrent = torrentsByEpisode.get(ep.episode_number)}
               <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
                 <td class="px-4 py-4 w-10">
                   <input
@@ -613,7 +686,24 @@
                   {formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {ep.is_downloaded ? formatDate(ep.download_date) : "—"}
+                  {#if torrent && !torrent.completed && !ep.is_downloaded}
+                    <div class="min-w-[9rem]">
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="badge badge-xs {statusClass(torrent.status)}">{statusLabel(torrent.status)}</span>
+                      </div>
+                      <progress
+                        class="progress progress-primary w-full h-1.5"
+                        aria-label={m.detail_torrent_progress_aria()}
+                        value={torrent.progress}
+                        max="1"
+                      ></progress>
+                      <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                        {formatPercent(torrent.progress)} · ↓ {formatSpeed(torrent.download_speed)} · {m.downloads_col_eta()} {formatEta(torrent.eta_seconds)}
+                      </div>
+                    </div>
+                  {:else}
+                    {ep.is_downloaded ? formatDate(ep.download_date) : "—"}
+                  {/if}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <div class="flex items-center justify-center gap-1.5">
@@ -706,6 +796,7 @@
         {#each detail.episodes as ep}
           {@const isLoading = !!actionLoading[ep.episode_id]}
           {@const isSelected = selectedEpisodes.has(ep.episode_id)}
+          {@const torrent = torrentsByEpisode.get(ep.episode_number)}
           <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
             <div class="flex items-start justify-between mb-2">
               <div class="flex items-start gap-3">
@@ -761,6 +852,22 @@
               <p class="text-xs text-gray-400 dark:text-gray-500 mb-2 break-words">
                 {ep.episode_name}
               </p>
+            {/if}
+            {#if torrent && !torrent.completed && !ep.is_downloaded}
+              <div class="mt-2">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="badge badge-xs {statusClass(torrent.status)}">{statusLabel(torrent.status)}</span>
+                </div>
+                <progress
+                  class="progress progress-primary w-full h-1.5"
+                  aria-label={m.detail_torrent_progress_aria()}
+                  value={torrent.progress}
+                  max="1"
+                ></progress>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  {formatPercent(torrent.progress)} · ↓ {formatSpeed(torrent.download_speed)} · {m.downloads_col_eta()} {formatEta(torrent.eta_seconds)}
+                </div>
+              </div>
             {/if}
             <div class="grid grid-cols-2 gap-4 mt-2">
               <div>

@@ -125,7 +125,7 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	backend.AddCompleted(hash, t.TempDir())
 	fm := &orchestrationFM{saved: saved}
-	removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved)
+	removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false)
 	if _, ok := backend.Get(hash); !ok {
 		t.Error("torrent should be kept while a batch sibling survives")
 	}
@@ -134,7 +134,7 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	backend2 := torrents.NewFakeBackend()
 	backend2.AddCompleted(hash, t.TempDir())
 	fm2 := &orchestrationFM{saved: saved}
-	removeEpisodesAndLinks(fm2, backend2, lib, []int{1, 2}, saved)
+	removeEpisodesAndLinks(fm2, backend2, lib, []int{1, 2}, saved, false)
 	if _, ok := backend2.Get(hash); ok {
 		t.Error("torrent should be removed when all batch siblings are deleted")
 	}
@@ -346,7 +346,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -380,7 +380,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -413,7 +413,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -441,7 +441,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1, 2}, saved); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1, 2}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 

@@ -357,7 +357,63 @@ func RemoveEpisodesWithLinks(fm FileManagerInterface, backend torrents.TorrentBa
 	if err != nil {
 		return fmt.Errorf("failed to load saved episodes: %w", err)
 	}
-	return removeEpisodesAndLinks(fm, backend, librarian, ids, saved)
+	return removeEpisodesAndLinks(fm, backend, librarian, ids, saved, false)
+}
+
+// RemoveTorrentOptions configures RemoveTorrentWithEpisodes.
+type RemoveTorrentOptions struct {
+	// KeepData, when true, keeps both the library hardlink and the seeding copy (see
+	// removeEpisodesAndLinks — they share an inode, so keeping only one frees no space).
+	KeepData bool
+	// Block, when true, blocks every episode in the group before removing its records, so the
+	// automatic loop does not re-download it on the next pass.
+	Block bool
+}
+
+// RemoveTorrentWithEpisodes removes a torrent by hash and every saved episode sharing that hash,
+// as a single unit: the deletion boundary here is the torrent, not the episode, so a batch's
+// episodes always leave together. Exposed for the manual "delete torrent" API handler.
+//
+// An orphan torrent (no saved episode matches the hash — added by hand, or its record already
+// gone) is removed directly via backend.Remove and that call's error is returned as-is; Block is
+// meaningless there since there is no episode id to block.
+func RemoveTorrentWithEpisodes(
+	fm FileManagerInterface,
+	backend torrents.TorrentBackend,
+	librarian files.Librarian,
+	hash string,
+	opts RemoveTorrentOptions,
+) error {
+	saved, err := fm.LoadSavedEpisodes()
+	if err != nil {
+		return fmt.Errorf("failed to load saved episodes: %w", err)
+	}
+
+	var group []files.EpisodeStruct
+	for _, ep := range saved {
+		if ep.EpisodeHash == hash {
+			group = append(group, ep)
+		}
+	}
+
+	if len(group) == 0 {
+		return backend.Remove(hash, opts.KeepData)
+	}
+
+	if opts.Block {
+		for _, ep := range group {
+			if err := fm.BlockEpisode(ep.EpisodeID); err != nil {
+				logger.Logger.Warn().Err(err).Int("episode_id", ep.EpisodeID).Msg("Failed to block episode before torrent removal")
+			}
+		}
+	}
+
+	ids := make([]int, 0, len(group))
+	for _, ep := range group {
+		ids = append(ids, ep.EpisodeID)
+	}
+
+	return removeEpisodesAndLinks(fm, backend, librarian, ids, saved, opts.KeepData)
 }
 
 // deleteEpisodesByStatus deletes episodes for animes in the delete-status list.
@@ -391,7 +447,7 @@ func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager Fil
 		Msg("Deleting episodes for animes with delete statuses")
 
 	// Best-effort: a failure here must not abort the verification pass.
-	if err := removeEpisodesAndLinks(fileManager, backend, librarian, idsToDelete, savedEpisodes); err != nil {
+	if err := removeEpisodesAndLinks(fileManager, backend, librarian, idsToDelete, savedEpisodes, false); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Status-based deletion: failed to delete episodes from file")
 	}
 }
@@ -404,7 +460,7 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 	if configs.DeleteWatchedEpisodes {
 		allIds := append(append([]int{}, data.idsToDelete...), episodesNotInWatching...)
 		// Best-effort: a failure here must not abort the verification pass.
-		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allIds, data.savedEpisodes); err != nil {
+		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allIds, data.savedEpisodes, false); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
 		}
 	}
@@ -419,7 +475,11 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 // Freeing disk space is best-effort (a failed hardlink/torrent removal is logged and skipped),
 // but a failure to drop the records from the saved-episodes file is returned: the caller decides
 // whether that is fatal (API handlers) or merely logged (the automatic loop).
-func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, idsToDelete []int, savedEpisodes []files.EpisodeStruct) error {
+//
+// keepData, when true, skips the library-hardlink removal loop entirely and is passed through to
+// backend.Remove. Library files and the seeding copy are the same inode (hardlinks), so keeping
+// one but not the other frees no disk space — keep_data is honestly binary: both stay or both go.
+func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, idsToDelete []int, savedEpisodes []files.EpisodeStruct, keepData bool) error {
 	if len(idsToDelete) == 0 {
 		return nil
 	}
@@ -435,20 +495,23 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 		}
 	}
 
-	// Remove library hardlinks.
-	for _, ep := range savedEpisodes {
-		if !deleteSet[ep.EpisodeID] {
-			continue
-		}
-		removingTorrent := ep.EpisodeHash == "" || allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet)
-		if ep.IsBatch && !removingTorrent {
-			// Keep batch library files while siblings survive (can't identify a single
-			// episode's raw-named file safely). Freed only when the whole torrent goes.
-			continue
-		}
-		for _, p := range ep.LibraryPaths {
-			if err := librarian.RemoveFromLibrary(p); err != nil {
-				logger.Logger.Warn().Err(err).Str("path", p).Msg("Failed to remove library hardlink")
+	// Remove library hardlinks (skipped when keepData: keeping the library copy while the
+	// torrent is removed anyway does not double as "keep everything" since it's the same inode).
+	if !keepData {
+		for _, ep := range savedEpisodes {
+			if !deleteSet[ep.EpisodeID] {
+				continue
+			}
+			removingTorrent := ep.EpisodeHash == "" || allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet)
+			if ep.IsBatch && !removingTorrent {
+				// Keep batch library files while siblings survive (can't identify a single
+				// episode's raw-named file safely). Freed only when the whole torrent goes.
+				continue
+			}
+			for _, p := range ep.LibraryPaths {
+				if err := librarian.RemoveFromLibrary(p); err != nil {
+					logger.Logger.Warn().Err(err).Str("path", p).Msg("Failed to remove library hardlink")
+				}
 			}
 		}
 	}
@@ -460,7 +523,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 			continue
 		}
 		if allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet) {
-			if err := backend.Remove(ep.EpisodeHash, false); err != nil {
+			if err := backend.Remove(ep.EpisodeHash, keepData); err != nil {
 				logger.Logger.Warn().Err(err).Str("hash", ep.EpisodeHash).Msg("Failed to remove torrent")
 			} else {
 				logger.Logger.Info().Str("hash", ep.EpisodeHash).Msg("Removed torrent (seeding copy)")

@@ -21,6 +21,13 @@ type AnimeEpisodeInfo struct {
 	EpisodeName       string `json:"episode_name,omitempty"`
 	IsManuallyManaged bool   `json:"is_manually_managed,omitempty"`
 	IsBlocked         bool   `json:"is_blocked,omitempty"`
+	// EpisodeHash is the saved episode's torrent info hash. It is what lets the anime detail
+	// screen join in live torrent progress exactly: a batch torrent's saved episodes all carry
+	// the same hash but episode_number is meaningless for matching a torrent to them (the
+	// torrent itself has no single episode number), so joining by number would miss batches
+	// entirely. Joining by hash instead, single and batch episodes use the same path. Empty
+	// (and omitted via omitempty) when the episode has no saved record.
+	EpisodeHash string `json:"episode_hash,omitempty"`
 }
 
 type AnimeDetailResponse struct {
@@ -88,6 +95,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			date            string
 			name            string
 			manuallyManaged bool
+			hash            string
 		}
 		downloadedByNodeID := make(map[int]downloadedInfo)
 		for _, ep := range allEpisodes {
@@ -96,6 +104,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 					date:            ep.DownloadDate.Format(time.RFC3339),
 					name:            ep.EpisodeName,
 					manuallyManaged: ep.ManuallyManaged,
+					hash:            ep.EpisodeHash,
 				}
 			}
 		}
@@ -119,6 +128,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 				info.DownloadDate = downloaded.date
 				info.EpisodeName = downloaded.name
 				info.IsManuallyManaged = downloaded.manuallyManaged
+				info.EpisodeHash = downloaded.hash
 			}
 
 			episodes = append(episodes, info)
