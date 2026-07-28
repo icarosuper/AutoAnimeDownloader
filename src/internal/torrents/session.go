@@ -24,16 +24,37 @@ type Session struct {
 	onFailed   func(hash string, err error)
 }
 
+// sessionOptions carries the deviations from the production rain config. It exists for the
+// tests, which open real sessions and must not depend on the machine being otherwise idle.
+type sessionOptions struct {
+	// disableDHT turns rain's DHT node off. Creating a session is the only thing that binds a
+	// FIXED port — DefaultConfig.DHTPort (7246/udp) — so with DHT on, every test that opens a
+	// session fails with "address already in use" whenever the user's daemon (or a second test
+	// binary) is already running. Turning it off also keeps the tests off the network, since a
+	// DHT node starts talking to the bootstrap routers as soon as it comes up.
+	//
+	// Production always leaves DHT on: for a Nyaa magnet whose trackers are down, it is the
+	// only way left to find peers.
+	disableDHT bool
+}
+
 // NewSession creates the embedded client. savePath is where torrent files live and keep
 // seeding (rain's DataDir); databasePath is the resume database (bbolt), kept outside
 // savePath on purpose so resume survives a savePath change.
 func NewSession(savePath, databasePath string) (*Session, error) {
+	return newSession(savePath, databasePath, sessionOptions{})
+}
+
+func newSession(savePath, databasePath string, opts sessionOptions) (*Session, error) {
 	cfg := torrent.DefaultConfig
 	cfg.DataDir = savePath
 	cfg.Database = databasePath
 	cfg.DataDirIncludesTorrentID = true
 	// The app does not expose rain's RPC server; disable it to avoid binding a port.
 	cfg.RPCEnabled = false
+	if opts.disableDHT {
+		cfg.DHTEnabled = false
+	}
 
 	rs, err := torrent.NewSession(cfg)
 	if err != nil {

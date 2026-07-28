@@ -1,19 +1,50 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
+// waitForChecks blocks until every manual-check goroutine started through handleCheck has
+// returned. It is declared here, not in server.go, because only the tests need it: the
+// endpoint's whole contract is that it answers before the verification finishes.
+//
+// Every test that POSTs to /check must call this before returning. See Server.checks.
+func (s *Server) waitForChecks() { s.checks.Wait() }
+
 func TestHandleCheck(t *testing.T) {
+	// handleCheck runs a REAL AnimeVerification in the background: without these two guards it
+	// resolves "testuser" against the live AniList API and lets files.Librarian probe (and
+	// create) the configured paths on the developer's actual disk.
+	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"Page":{"mediaList":[]}}}`)),
+		}, nil
+	})()
+
+	tmp := t.TempDir()
 	state := daemon.NewState()
 	state.SetStatus(daemon.StatusStopped)
-	mockFM := &mockFileManager{}
+	mockFM := &mockFileManager{configs: &files.Config{
+		AnilistUsernames:      []string{"testuser"},
+		SavePath:              filepath.Join(tmp, "downloads"),
+		CompletedAnimePath:    filepath.Join(tmp, "completed"),
+		CheckInterval:         10,
+		MaxEpisodesPerAnime:   12,
+		EpisodeRetryLimit:     5,
+		DownloadStatuses:      []string{"CURRENT"},
+		DownloadMediaStatuses: []string{"RELEASING"},
+	}}
 	server := &Server{
 		State:       state,
 		FileManager: mockFM,
@@ -28,6 +59,10 @@ func TestHandleCheck(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		handler(w, req)
+		// The response is asserted while the verification is still in flight — that is the
+		// point of the endpoint. Waiting is deferred so the goroutine cannot outlive the
+		// test even when an assertion below calls t.Fatal.
+		defer server.waitForChecks()
 
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, w.Code)
@@ -62,4 +97,7 @@ func TestHandleCheck(t *testing.T) {
 			t.Errorf("Expected status code %d, got %d", http.StatusMethodNotAllowed, w.Code)
 		}
 	})
+
+	// A rejected request must not have started anything in the background.
+	server.waitForChecks()
 }

@@ -120,14 +120,44 @@ handler(rec, req)
 
 ### 5. Logger Capture
 
-Replace `logger.Logger` with a `zerolog` writing to `bytes.Buffer` to assert log output:
+Use the `captureLogs` helper (`src/tests/unit/logcapture_test.go`) rather than swapping `logger.Logger` by hand:
 
 ```go
-var buf bytes.Buffer
-logger.Logger = zerolog.New(&buf)
+logBuf := captureLogs(t, zerolog.ErrorLevel)
 // ... run code ...
-assert(strings.Contains(buf.String(), "expected message"))
+assert(strings.Contains(logBuf.String(), "expected message"))
 ```
+
+It writes into a **mutex-guarded** buffer and restores the previous logger from `t.Cleanup`. Both matter, and a plain `zerolog.New(&bytes.Buffer{})` gets both wrong:
+
+- `AnimeVerification` fans out into goroutines that all log through the package-level logger, so an unsynchronized `bytes.Buffer` is a real data race. `-race` reports it from inside zerolog's writer, several frames away from the test that caused it.
+- Restoring the logger on the last line of the test body is skipped by any `t.Fatal` above it, leaving the global logger writing into a dead test's buffer — which silently swallows the output every later test in the package asserts on.
+
+### 6. Real rain Sessions (`torrents` package)
+
+`SessionManager`'s own tests open **real** rain sessions, with DHT turned off via the unexported `sessionOptions{disableDHT: true}` seam (`newTestManager` sets it; production's `NewSession` always leaves DHT on).
+
+Creating a session is the only thing that binds a **fixed** port — rain's `DefaultConfig.DHTPort`, 7246/udp — so with DHT on, the whole package failed with `address already in use` whenever the user's daemon was running, and every test run started chatting with the public DHT bootstrap routers. Turning it off makes the package hermetic and cut its runtime from ~0.5s to ~0.02s. Peer ports (20000–30000) are only bound when a torrent is actually added, which these tests never do.
+
+Run this package with `-race`: `TestSessionManagerConcurrentEnsureAndDelegation` exists specifically to exercise the window where `Ensure`/`Close` could swap the session out from under a delegated call.
+
+## Never Let Background Work Outlive Its Test
+
+Two entry points start work in a goroutine and return immediately: `handleCheck` (POST `/check`) and `daemon.StartLoop`. **A test that triggers either must wait for it to finish before returning.**
+
+| Entry point | How to wait |
+|---|---|
+| `handleCheck` | `defer server.waitForChecks()` (backed by `Server.checks`, a `sync.WaitGroup`) |
+| `daemon.StartLoop` | `stopLoop(t, loopControl, state, done)` — cancels and waits |
+
+A leaked goroutine keeps running `AnimeVerification` for the rest of the package's execution: real AniList HTTP calls, real disk writes under the configured paths, and reads of package-level globals (`logger.Logger`, anilist's `httpDo`, `nyaa`'s active priorities) that later tests are busy replacing. The symptoms land far from the cause:
+
+- `-race` blames whichever unrelated test happened to swap a global at that moment.
+- The `nyaa` sorting and `priorities` tests fail under `-count=5` because a phantom verification loop called `nyaa.SetPriorities` in the middle of them — `ActivePriorities().Fansubs[0]` even panicked on an empty slice.
+
+Pass `daemon.LoopControl.Done` read **before** any `UpdateInterval` call: the field is a snapshot taken at construction, and `UpdateInterval` starts a fresh goroutine with a fresh channel while the field still points at the original.
+
+Any test that lets `AnimeVerification` run to completion must also stub AniList — `t.Cleanup(anilist.MockAniListDo(...))`, registered **before** the goroutine's own cleanup so it is undone last — and point `SavePath`/`CompletedAnimePath` at `t.TempDir()`. Otherwise the pass hits the live API and creates the configured folders on the developer's real disk.
 
 ## Docker Mock Servers
 

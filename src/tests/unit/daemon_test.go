@@ -1,14 +1,15 @@
 package unit
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
-	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/torrents"
-	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,16 +20,7 @@ import (
 )
 
 func TestAnimeVerification_ErrorHandling_ConfigLoadError(t *testing.T) {
-	// Save original logger
-	originalLogger := logger.Logger
-
-	// Setup logger to capture output
-	var logBuf bytes.Buffer
-	logger.Logger = zerolog.New(&logBuf).
-		With().
-		Timestamp().
-		Logger().
-		Level(zerolog.ErrorLevel)
+	logBuf := captureLogs(t, zerolog.ErrorLevel)
 
 	// Create a mock FileManager that returns error on LoadConfigs
 	mockFS := &mockFileSystemForDaemon{
@@ -62,22 +54,10 @@ func TestAnimeVerification_ErrorHandling_ConfigLoadError(t *testing.T) {
 	if !strings.Contains(logOutput, "Failed to load configs") {
 		t.Error("Expected log to contain 'Failed to load configs'")
 	}
-
-	// Restore original logger
-	logger.Logger = originalLogger
 }
 
 func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
-	// Save original logger
-	originalLogger := logger.Logger
-
-	// Setup logger to capture output
-	var logBuf bytes.Buffer
-	logger.Logger = zerolog.New(&logBuf).
-		With().
-		Timestamp().
-		Logger().
-		Level(zerolog.ErrorLevel)
+	logBuf := captureLogs(t, zerolog.ErrorLevel)
 
 	// Create a mock FileManager that succeeds on LoadConfigs but fails on LoadSavedEpisodes
 	mockFS := &mockFileSystemForDaemon{
@@ -122,22 +102,10 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 			t.Error("Expected log to contain 'Failed to load saved episodes'")
 		}
 	}
-
-	// Restore original logger
-	logger.Logger = originalLogger
 }
 
 func TestAnimeVerification_ContextCancellation(t *testing.T) {
-	// Save original logger
-	originalLogger := logger.Logger
-
-	// Setup logger to capture output
-	var logBuf bytes.Buffer
-	logger.Logger = zerolog.New(&logBuf).
-		With().
-		Timestamp().
-		Logger().
-		Level(zerolog.InfoLevel)
+	captureLogs(t, zerolog.InfoLevel)
 
 	// Create a mock FileManager with valid config
 	mockFS := &mockFileSystemForDaemon{
@@ -176,22 +144,10 @@ func TestAnimeVerification_ContextCancellation(t *testing.T) {
 	// 1. The cancellation check exists in the code
 	// 2. When cancellation happens, error is cleared
 	// The actual cancellation during loop processing would require mocking external services.
-
-	// Restore original logger
-	logger.Logger = originalLogger
 }
 
 func TestAnimeVerification_LogsGenerated(t *testing.T) {
-	// Save original logger
-	originalLogger := logger.Logger
-
-	// Setup logger to capture output
-	var logBuf bytes.Buffer
-	logger.Logger = zerolog.New(&logBuf).
-		With().
-		Timestamp().
-		Logger().
-		Level(zerolog.DebugLevel)
+	logBuf := captureLogs(t, zerolog.DebugLevel)
 
 	// Create a mock FileManager that returns error to trigger error logging
 	mockFS := &mockFileSystemForDaemon{
@@ -214,9 +170,6 @@ func TestAnimeVerification_LogsGenerated(t *testing.T) {
 	if !strings.Contains(logOutput, "Failed to load configs") {
 		t.Error("Expected log to contain 'Failed to load configs'")
 	}
-
-	// Restore original logger
-	logger.Logger = originalLogger
 }
 
 func TestAnimeVerification_StatusResetOnError(t *testing.T) {
@@ -246,6 +199,41 @@ func TestAnimeVerification_StatusResetOnError(t *testing.T) {
 	// recorded in the state.
 }
 
+// stopLoop cancels a verification loop and waits for it to actually finish.
+//
+// Every test that calls daemon.StartLoop must end with this. StartLoop's goroutine loops
+// forever, so a test that just returns leaves it running for the rest of the package's
+// execution — calling AnimeVerification over and over against the package-level logger and
+// AniList client that later tests replace. -race reports the collision against whichever
+// test happens to be swapping a global at that moment, which is never the one that leaked it.
+//
+// done must be the LoopControl.Done channel read BEFORE any UpdateInterval call: the field is
+// a snapshot taken at construction, and UpdateInterval starts a fresh goroutine with a fresh
+// channel while the field keeps pointing at the original one.
+func stopLoop(t *testing.T, control *daemon.LoopControl, state *daemon.State, done <-chan struct{}) {
+	t.Helper()
+
+	control.Cancel()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Error("the verification loop did not shut down within 5s; its goroutine is leaking into the tests that follow")
+		return
+	}
+
+	// SetStatus(StatusStopped) is the goroutine's last action before returning, so this also
+	// covers a goroutine restarted by UpdateInterval, whose channel the caller cannot reach.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if state.GetStatus() == daemon.StatusStopped {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Errorf("the loop did not settle on %s (still %s)", daemon.StatusStopped, state.GetStatus())
+}
+
 func TestStartLoop_StatusTransitions(t *testing.T) {
 	// Create a mock FileManager that will cause AnimeVerification to fail quickly
 	// so we can test status transitions
@@ -267,6 +255,9 @@ func TestStartLoop_StatusTransitions(t *testing.T) {
 		Backend:     torrents.NewFakeBackend(),
 		Librarian:   files.NewLibrarian(files.NewOSFileSystem()),
 	})
+	// Captured before UpdateInterval below replaces the running goroutine — see stopLoop.
+	firstDone := loopControl.Done
+	t.Cleanup(func() { stopLoop(t, loopControl, state, firstDone) })
 
 	// Wait a bit for the loop to start and set status to running
 	time.Sleep(50 * time.Millisecond)
@@ -316,6 +307,17 @@ func TestStartLoop_StatusTransitions(t *testing.T) {
 }
 
 func TestStartLoop_StatusCheckingDuringVerification(t *testing.T) {
+	// Unlike the test above, this one feeds the loop a COMPLETE config, so every pass runs a
+	// full AnimeVerification — which resolves the configured user against the live AniList API
+	// unless the client is stubbed. Registered before the loop's own cleanup so that it is
+	// undone last (t.Cleanup is LIFO): the stub has to outlive the goroutine using it.
+	t.Cleanup(anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"Page":{"mediaList":[]}}}`)),
+		}, nil
+	}))
+
 	// This test specifically verifies that the status changes to "checking"
 	// during AnimeVerification execution
 	mockFS := &mockFileSystemForDaemon{
@@ -389,9 +391,7 @@ func TestStartLoop_StatusCheckingDuringVerification(t *testing.T) {
 		}
 	}
 
-	// Clean up - stop the loop
-	_ = loopControl
-	time.Sleep(100 * time.Millisecond)
+	stopLoop(t, loopControl, state, loopControl.Done)
 }
 
 // mockFileSystemForDaemon is a mock filesystem for testing daemon functions

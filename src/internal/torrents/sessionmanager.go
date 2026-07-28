@@ -36,6 +36,9 @@ type SessionManager struct {
 	pendingSwap bool
 	onComplete  func(hash string)
 	onFailed    func(hash string, err error)
+	// sessionOpts is the config the manager builds its sessions with. The zero value is
+	// production; only the tests set it (see newTestManager).
+	sessionOpts sessionOptions
 }
 
 var _ TorrentBackend = (*SessionManager)(nil)
@@ -87,7 +90,7 @@ func (m *SessionManager) Ensure(savePath string) (bool, error) {
 		m.session = nil
 	}
 
-	s, err := NewSession(savePath, m.dbPath)
+	s, err := newSession(savePath, m.dbPath, m.sessionOpts)
 	if err != nil {
 		return false, err
 	}

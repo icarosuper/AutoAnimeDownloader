@@ -9,10 +9,17 @@ import (
 
 // newTestManager returns a SessionManager whose resume database lives in a temp dir, plus a
 // pair of distinct save paths to exercise the recreate-on-change branch.
+//
+// The sessions it opens are real rain sessions, with one deviation: DHT is off. It is the
+// only thing that binds a fixed port (7246/udp), so leaving it on made every test here fail
+// with "address already in use" while the daemon was running — and put the test run on the
+// network. Nothing these tests assert on (session lifecycle, root markers, delegation)
+// involves peer discovery.
 func newTestManager(t *testing.T) (*SessionManager, string, string) {
 	t.Helper()
 	base := t.TempDir()
 	m := NewSessionManager(filepath.Join(base, "session.db"))
+	m.sessionOpts = sessionOptions{disableDHT: true}
 	t.Cleanup(func() { _ = m.Close() })
 	return m, filepath.Join(base, "downloads-a"), filepath.Join(base, "downloads-b")
 }

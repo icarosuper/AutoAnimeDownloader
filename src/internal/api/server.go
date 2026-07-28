@@ -48,6 +48,14 @@ type Server struct {
 
 	mu                 sync.Mutex
 	currentLoopControl *daemon.LoopControl
+
+	// checks tracks the manual-verification goroutines started by handleCheck. The endpoint
+	// is fire-and-forget by design, so production never waits on it — the tests do
+	// (waitForChecks). A verification that outlives its test keeps calling into package-level
+	// globals the next test is busy replacing (anilist's httpDo swap, the logger), and it
+	// keeps hitting the network and the real disk; -race then reports the collision against
+	// whichever test happens to run next, far from the one that actually leaked it.
+	checks sync.WaitGroup
 }
 
 func NewServer(port string, state *daemon.State, fileManager FileManagerInterface, startLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl) *Server {

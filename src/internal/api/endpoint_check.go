@@ -23,7 +23,10 @@ func handleCheck(server *Server) http.HandlerFunc {
 		}
 
 		// Execute verification in separate goroutine
+		server.checks.Add(1)
 		go func() {
+			defer server.checks.Done()
+
 			// Save current status to restore it after verification
 			currentStatus := server.State.GetStatus()
 
