@@ -11,7 +11,7 @@ import (
 )
 
 // MigrateSavePath converte uma instalacao que ainda tem save_path configurado para o modelo
-// de pasta unica: os dados dos torrents sao movidos para <completed_anime_path>/.autoAnimeDownloader
+// de pasta unica: os dados dos torrents sao movidos para <completed_anime_path>/.torrents
 // e o campo legado e zerado.
 //
 // Por que MOVER e nao so repontar: a rain resolve o diretorio de cada torrent como

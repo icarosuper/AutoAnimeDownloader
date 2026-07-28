@@ -7,6 +7,9 @@
 	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
 	- Usuário por reordenar, adicionar e excluir itens
 	- Botão pra voltar pro default
+- Substituir torrent de um anime ou episódio **+0.1.0**
+	- Hoje vc tem que trazer um torrent de fora e inserir no campo
+	- Quero um botão que abre a listagem do nyaa dentro do app
 - Baixar animes avulsos — **+0.1.0**
 	- Nova tela de baixar animes avulsos.
 	- Nessa tela vai ter uma barra de pesquisa.

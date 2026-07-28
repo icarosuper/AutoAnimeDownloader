@@ -387,7 +387,7 @@ func TestProbePath(t *testing.T) {
 			t.Fatalf("ProbePath: %v", err)
 		}
 
-		downloadDir := filepath.Join(completed, ".autoAnimeDownloader")
+		downloadDir := filepath.Join(completed, ".torrents")
 		if _, err := os.Stat(downloadDir); err != nil {
 			t.Errorf("diretorio de download nao foi criado: %v", err)
 		}
@@ -406,7 +406,7 @@ func TestProbePath(t *testing.T) {
 
 		for _, p := range []string{
 			filepath.Join(completed, ".aad_link_probe"),
-			filepath.Join(completed, ".autoAnimeDownloader", ".aad_link_probe"),
+			filepath.Join(completed, ".torrents", ".aad_link_probe"),
 		} {
 			if _, err := os.Stat(p); err == nil {
 				t.Errorf("sobrou arquivo de sonda em %s", p)

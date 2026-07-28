@@ -39,7 +39,7 @@ func TestDeleteEmptyFolders(t *testing.T) {
 	// da biblioteca apagaria diretorios de torrent recem-criados.
 	t.Run("nunca entra no diretorio de download", func(t *testing.T) {
 		completed := t.TempDir()
-		torrentDir := filepath.Join(completed, ".autoAnimeDownloader", "abc123")
+		torrentDir := filepath.Join(completed, ".torrents", "abc123")
 		if err := os.MkdirAll(torrentDir, 0755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}

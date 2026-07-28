@@ -77,7 +77,7 @@ type Config struct {
 // downloadDirName e o nome do diretorio de download dentro da biblioteca. O ponto o
 // esconde do scanner do Jellyfin no Linux; o arquivo .ignore criado por
 // Librarian.ProbePath cobre as demais plataformas.
-const downloadDirName = ".autoAnimeDownloader"
+const downloadDirName = ".torrents"
 
 // DownloadPath e o diretorio onde os torrents baixam e continuam semeando. Ele e derivado
 // de CompletedAnimePath, nunca armazenado: assim a restricao de hardlink (origem e destino

@@ -282,7 +282,7 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 
 **Don't "fix" by:** trying to delete individual episode files out of a batch torrent's library folder (raw filenames aren't reliably episode-addressable), or removing a batch torrent while siblings still reference it (breaks the survivors' library links and stops seeding for episodes still wanted).
 
-**Amendment (see #31):** `save_path` no longer exists as a config field; "everything organizes to `completed_anime_path`" now also covers the download/seeding directory itself, which lives at `<completed_anime_path>/.autoAnimeDownloader` (`Config.DownloadPath`).
+**Amendment (see #31):** `save_path` no longer exists as a config field; "everything organizes to `completed_anime_path`" now also covers the download/seeding directory itself, which lives at `<completed_anime_path>/.torrents` (`Config.DownloadPath`).
 
 ---
 
@@ -347,7 +347,7 @@ The probe aborts the pass instead of merely warning: downloading episodes that p
 
 **Don't "fix" by:** removing the gate because "the endpoint already validates it" (it does not, for pre-upgrade and entrypoint-written configs), or downgrading it to a warning that lets the pass continue. Caching the result per path pair is a legitimate optimization if the I/O ever shows up in a profile — but it must be invalidated on config change, and the current cost does not justify the extra state.
 
-**Amendment (see #31):** the probe is now single-path. `Librarian.ProbePaths(save, completed)` was replaced by `Librarian.ProbePath(completedPath)`, which writes a probe file directly under `<completedPath>/.autoAnimeDownloader` and hardlinks it in place — there is no second user-supplied path to compare against, since the download directory is derived, not configured. The check still exists for the same reason: exFAT/FAT32 and some SMB shares don't support hardlinks at all, so the invariant "the download dir and the library share a filesystem" is guaranteed by construction, but "the filesystem supports hardlinks" is not.
+**Amendment (see #31):** the probe is now single-path. `Librarian.ProbePaths(save, completed)` was replaced by `Librarian.ProbePath(completedPath)`, which writes a probe file directly under `<completedPath>/.torrents` and hardlinks it in place — there is no second user-supplied path to compare against, since the download directory is derived, not configured. The check still exists for the same reason: exFAT/FAT32 and some SMB shares don't support hardlinks at all, so the invariant "the download dir and the library share a filesystem" is guaranteed by construction, but "the filesystem supports hardlinks" is not.
 
 ---
 
@@ -447,11 +447,11 @@ mid-download renders an empty progress bar for its whole paused lifetime.
 
 **Location:** `internal/files/filemanager.go` (`Config.DownloadPath`), `internal/files/librarian.go` (`ProbePath`), `internal/daemon/migration.go`.
 
-**What it looks like:** `save_path` sumiu da configuração; o diretório de download é `<completed_anime_path>/.autoAnimeDownloader`, calculado a cada uso.
+**What it looks like:** `save_path` sumiu da configuração; o diretório de download é `<completed_anime_path>/.torrents`, calculado a cada uso.
 
 **Why it's right:** a restrição de mesmo-filesystem do `#21` era uma armadilha que só aparecia como erro no save; derivando o caminho ela vira invariante. Dois campos obrigatórios sem diferença clara confundiam o usuário, para quem só a biblioteca importa. `ProbePath` continua existindo porque exFAT/FAT32/alguns SMB não têm hardlink nenhum. O `.ignore` + o prefixo com ponto mantêm o Jellyfin fora da pasta de download.
 
-**Don't "fix" by:** reintroduzir `save_path` como campo de config ou variável de ambiente (re-arma a migração a cada boot); tirar a zeragem de `SavePath` no `PUT /config`; deixar `MigrateSavePath` seguir em frente quando o rename falha (rebaixa tudo em silêncio); tirar a guarda que faz `DeleteEmptyFolders` pular `.autoAnimeDownloader`.
+**Don't "fix" by:** reintroduzir `save_path` como campo de config ou variável de ambiente (re-arma a migração a cada boot); tirar a zeragem de `SavePath` no `PUT /config`; deixar `MigrateSavePath` seguir em frente quando o rename falha (rebaixa tudo em silêncio); tirar a guarda que faz `DeleteEmptyFolders` pular `.torrents`.
 
 ---
 

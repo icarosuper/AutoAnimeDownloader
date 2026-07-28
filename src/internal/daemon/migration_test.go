@@ -53,7 +53,7 @@ func TestMigrateSavePath_MovesTorrentDirs(t *testing.T) {
 		t.Fatalf("MigrateSavePath: %v", err)
 	}
 
-	dest := filepath.Join(completed, ".autoAnimeDownloader")
+	dest := filepath.Join(completed, ".torrents")
 	for _, id := range []string{"aaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbb"} {
 		moved := filepath.Join(dest, id, "episode.mkv")
 		if _, err := os.Stat(moved); err != nil {
@@ -98,7 +98,7 @@ func TestMigrateSavePath_PreservesHardlinks(t *testing.T) {
 		t.Fatalf("MigrateSavePath: %v", err)
 	}
 
-	moved := filepath.Join(completed, ".autoAnimeDownloader", "aaaaaaaaaaaaaaaaaaaaaa", "episode.mkv")
+	moved := filepath.Join(completed, ".torrents", "aaaaaaaaaaaaaaaaaaaaaa", "episode.mkv")
 	movedInfo, err := os.Stat(moved)
 	if err != nil {
 		t.Fatalf("stat arquivo movido: %v", err)
@@ -157,7 +157,7 @@ func TestMigrateSavePath_SkipsAncestorOfDest(t *testing.T) {
 		t.Fatalf("MigrateSavePath: %v", err)
 	}
 
-	moved := filepath.Join(completed, ".autoAnimeDownloader", "aaaaaaaaaaaaaaaaaaaaaa", "episode.mkv")
+	moved := filepath.Join(completed, ".torrents", "aaaaaaaaaaaaaaaaaaaaaa", "episode.mkv")
 	if _, err := os.Stat(moved); err != nil {
 		t.Errorf("o torrent normal deveria ter sido movido: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestMigrateSavePath_AbortsOnFailure(t *testing.T) {
 	if err := os.MkdirAll(completed, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(completed, ".autoAnimeDownloader"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(completed, ".torrents"), []byte("x"), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -221,7 +221,7 @@ func TestMigrateSavePath_NoOpWhenNothingToDo(t *testing.T) {
 	t.Run("save_path ja igual ao derivado: so limpa o campo", func(t *testing.T) {
 		completed := t.TempDir()
 		fm := &migrationFM{configs: &files.Config{
-			SavePath:           filepath.Join(completed, ".autoAnimeDownloader"),
+			SavePath:           filepath.Join(completed, ".torrents"),
 			CompletedAnimePath: completed,
 		}}
 		backend := torrents.NewFakeBackend()

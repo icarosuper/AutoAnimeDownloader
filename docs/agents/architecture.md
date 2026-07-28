@@ -33,7 +33,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
    - Per anime: scrape Nyaa for matching torrents (filter by resolution/fansub)
    - Add new episodes to the embedded torrent client (`TorrentBackend.Add`)
    - Record downloaded episodes in `episodes.json` — skip re-downloads
-   - Torrents download to the derived download path (`Config.DownloadPath()`, `<completed_anime_path>/.autoAnimeDownloader`) and keep **seeding** there; on completion an `organize` job hardlinks the video files into `completed_anime_path` (the Jellyfin library)
+   - Torrents download to the derived download path (`Config.DownloadPath()`, `<completed_anime_path>/.torrents`) and keep **seeding** there; on completion an `organize` job hardlinks the video files into `completed_anime_path` (the Jellyfin library)
 
 2. **Frontend embedding**: `bun run build` → `src/internal/frontend/dist/`, Go embeds via `//go:embed dist` in API server. Daemon serves SPA at `/`, proxies `/api/` to REST handlers.
 
@@ -56,7 +56,7 @@ Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state file
 
 ## On-Disk Layout
 
-- **Download / seeding:** torrents live at `<Config.DownloadPath()>/<torrent-id>/...`, i.e. `<completed_anime_path>/.autoAnimeDownloader/<torrent-id>/...` (rain's `DataDir` with `DataDirIncludesTorrentID`). Files are **never renamed here** — renaming would break seeding. Torrents keep seeding after completion. The download directory is **derived**, not user-configured — see decisions.md #31.
+- **Download / seeding:** torrents live at `<Config.DownloadPath()>/<torrent-id>/...`, i.e. `<completed_anime_path>/.torrents/<torrent-id>/...` (rain's `DataDir` with `DataDirIncludesTorrentID`). Files are **never renamed here** — renaming would break seeding. Torrents keep seeding after completion. The download directory is **derived**, not user-configured — see decisions.md #31.
 - **Library (Jellyfin):** when a torrent completes, its video files are **hardlinked** into `<completed_anime_path>/<AnimeName>/` (folder name has season/cour markers stripped by `sanitizeFolderName`). Single episodes with `RenameFilesForJellyfin` get the Jellyfin name `"Anime Name - E05.mkv"`; batches/movies keep their raw filenames. The hardlink shares bytes with the seeded copy, so no space is duplicated.
 - **Same volume, by construction:** the download directory lives inside `completed_anime_path`, so the old cross-filesystem failure mode is now structurally impossible. `Librarian.ProbePath(completedPath)` still validates that the filesystem supports hardlinks at all (exFAT/FAT32/some SMB shares don't) — it runs on config save and on every verification pass (decisions.md #26).
 - **Deletion** frees space by removing **both** links: the library hardlink (`Librarian.RemoveFromLibrary`) and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). A batch torrent shared by multiple episodes is only removed once **all** its episodes are deleted (batch guard).
@@ -217,7 +217,7 @@ All persistence. Key types:
 | Symbol | Purpose |
 |--------|---------|
 | `Config` struct | All user settings — maps to `config.json`. `SavePath` is a **legacy** field (`omitempty`), read only by `daemon.MigrateSavePath`; it is zeroed as soon as migration runs or `PUT /config` is called |
-| `Config.DownloadPath()` | Derives the download/seeding directory: `filepath.Join(CompletedAnimePath, ".autoAnimeDownloader")` (`downloadDirName` const). Computed on every call, not stored |
+| `Config.DownloadPath()` | Derives the download/seeding directory: `filepath.Join(CompletedAnimePath, ".torrents")` (`downloadDirName` const). Computed on every call, not stored |
 | `EpisodeStruct` struct | `EpisodeID`, `AnimeID`, `EpisodeHash`, `EpisodeName`, `DownloadDate`, `ManuallyManaged`, `EpisodeNumber int`, `IsBatch bool`, `LibraryPaths []string` (hardlink paths in the library, set once organized) |
 | `FileManagerInterface` | Interface used by daemon + API — mock in tests |
 | `FileManager.LoadConfigs()` | Reads `config.json`; creates with defaults if missing |
@@ -231,7 +231,7 @@ All persistence. Key types:
 | `FileManager.LoadAnimeSettings(animeID)` | Returns `*AnimeSettings` for one anime (empty struct if not set) |
 | `FileManager.SaveAnimeSettings(animeID, settings)` | Persists `AnimeSettings` for one anime to `anime_settings` |
 | `FileManager.LoadAllAnimeSettings()` | Returns full `map[int]AnimeSettings` — used by daemon loop |
-| `FileManager.DeleteEmptyFolders(completedAnimeSaveFolder)` | Removes empty dirs under the single `completed_anime_path` tree (single argument now that download and library share a root); skips the `.autoAnimeDownloader` download folder itself |
+| `FileManager.DeleteEmptyFolders(completedAnimeSaveFolder)` | Removes empty dirs under the single `completed_anime_path` tree (single argument now that download and library share a root); skips the `.torrents` download folder itself |
 
 `AnimeSettings` struct fields: `CustomSearchQuery string` — overrides Nyaa search query for this anime.
 
@@ -254,7 +254,7 @@ Hardlinks completed torrent files into the Jellyfin library. The seeded copy sta
 | `OrganizeRequest` struct | `TorrentDataDir`, `AnimeName`, `CompletedPath`, `EpisodeNumber *int`, `IsBatch`, `RenameJellyfin` |
 | `Librarian.Organize(req)` | Hardlinks video files into `<CompletedPath>/<AnimeName>/`; Jellyfin name for a single episode (when `RenameJellyfin` and not a batch and exactly one video file), raw filename otherwise. Idempotent — returns paths of created/existing links |
 | `Librarian.RemoveFromLibrary(path)` | Deletes one library hardlink; missing file is not an error |
-| `Librarian.ProbePath(completedPath)` | Single-path validation (replaced the two-path `ProbePaths`): writes a probe file under `<completedPath>/.autoAnimeDownloader` and hardlinks it in place; returns an error if the filesystem doesn't support hardlinks at all (exFAT/FAT32/some SMB shares). Called on config save and on every verification pass (decisions.md #26, #31) |
+| `Librarian.ProbePath(completedPath)` | Single-path validation (replaced the two-path `ProbePaths`): writes a probe file under `<completedPath>/.torrents` and hardlinks it in place; returns an error if the filesystem doesn't support hardlinks at all (exFAT/FAT32/some SMB shares). Called on config save and on every verification pass (decisions.md #26, #31) |
 
 ### `src/internal/files/crossdevice_unix.go` / `crossdevice_windows.go`
 

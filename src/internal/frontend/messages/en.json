@@ -84,7 +84,7 @@
   "config_label_delete_statuses": "Delete Statuses",
   "config_hint_delete_statuses": "AniList statuses that trigger deletion of downloaded episodes",
   "config_label_completed_path": "Completed Anime Path",
-  "config_hint_completed_path": "Your Jellyfin library. Completed episodes are hardlinked here, and in-progress downloads live in a hidden .autoAnimeDownloader folder inside it.",
+  "config_hint_completed_path": "Your Jellyfin library. Completed episodes are hardlinked here, and in-progress downloads live in a hidden .torrents folder inside it.",
   "config_label_delete_watched": "Delete watched episodes automatically",
   "config_label_watched_keep": "Watched Episodes to Keep",
   "config_hint_watched_keep": "Set to 0 to delete all watched episodes",

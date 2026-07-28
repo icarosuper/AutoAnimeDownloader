@@ -44,7 +44,7 @@ Items absent from a list rank worst (sent to the end). Edited via the `#/priorit
 There is no `save_path` field. The download/seeding working directory is **derived** from `completed_anime_path` at every use, via `Config.DownloadPath()` (`internal/files/filemanager.go`):
 
 ```
-<completed_anime_path>/.autoAnimeDownloader
+<completed_anime_path>/.torrents
 ```
 
 Torrents download and keep seeding there (rain's `DataDir`, layout `<DownloadPath()>/<torrent-id>/...`); on completion, video files are hardlinked out into `completed_anime_path` itself (the Jellyfin library). Because the download directory is a subfolder of the library, the two are guaranteed to share a filesystem — the old "must be on the same volume" requirement is now an architectural invariant rather than something the user can misconfigure. `Librarian.ProbePath(completed_anime_path)` still runs (on config save and on every verification pass) to catch filesystems that don't support hardlinks at all (exFAT/FAT32, some SMB shares), unrelated to the cross-volume case.
