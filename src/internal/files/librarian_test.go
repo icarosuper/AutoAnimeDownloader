@@ -238,9 +238,14 @@ func TestOrganizeReplacesDifferentFileAtDestination(t *testing.T) {
 	// A stale, unrelated file already sitting at the destination name.
 	dest := filepath.Join(completed, "A", "A - E01.mkv")
 	writeFile(t, dest, "stale-bytes")
-	staleInfo, err := os.Stat(dest)
-	if err != nil {
-		t.Fatalf("stat stale dest: %v", err)
+	// Keep a second name for the stale file so its identity outlives the replacement.
+	// On Windows os.Stat records only the path and os.SameFile resolves the file id
+	// lazily by reopening it, so a FileInfo taken from dest before the swap would
+	// compare equal to whatever sits at dest afterwards. Statting the alias instead
+	// pins the original file on every platform.
+	staleAlias := filepath.Join(tmp, "stale-alias.mkv")
+	if err := os.Link(dest, staleAlias); err != nil {
+		t.Fatalf("link stale alias: %v", err)
 	}
 
 	lib := NewLibrarian(NewOSFileSystem())
@@ -265,6 +270,10 @@ func TestOrganizeReplacesDifferentFileAtDestination(t *testing.T) {
 	}
 	if !os.SameFile(srcInfo, destInfo) {
 		t.Errorf("dest was not relinked to src")
+	}
+	staleInfo, err := os.Stat(staleAlias)
+	if err != nil {
+		t.Fatalf("stale alias missing after replacement: %v", err)
 	}
 	if os.SameFile(staleInfo, destInfo) {
 		t.Errorf("dest still points at the stale file")

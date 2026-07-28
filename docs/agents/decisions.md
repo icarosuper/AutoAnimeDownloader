@@ -521,3 +521,17 @@ Três propriedades que caíram de graça e são intencionais:
 **Emenda à decisão 29:** `clearLibraryPathsAfterRootSwap` zera `LibraryPaths` — justamente o que a #29 proíbe. A proibição continua valendo para arquivo faltando: o que ela protege é a exclusão deliberada de **um** episódio da biblioteca, que um cheque por `Stat` a cada passe ressuscitaria para sempre. Uma troca de raiz é outro evento: sumiu a pasta inteira para onde os registros apontam, o daemon já está rebaixando o conteúdo dela, e a detecção dispara **uma vez por troca** — nunca vira o laço de ressurreição da #29. Sem essa limpeza a recuperação fica pela metade: os torrents rebaixam, mas os episódios organizados antes da troca ficam com `LibraryPaths` órfão e nunca voltam para a biblioteca.
 
 **Don't "fix" by:** devolver a flag no retorno do `Ensure` em vez do latch (ver acima); trocar os marcadores por comparação de inode (`syscall.Stat_t.Ino` não existe no Windows); tratar erro de leitura do marcador como "sumiu" (uma falha de permissão passaria a apagar os registros da biblioteca — por isso `readRootID` só engole `IsNotExist`); fazer a limpeza de `LibraryPaths` a cada passe em vez de só na troca (aí sim vira a violação da #29); tirar o rename do marcador em `MigrateSavePath` (a migração preserva os hardlinks por rename e passaria a parecer uma troca).
+
+---
+
+### 35. `os.SameFile` no Windows resolve o arquivo tarde, então FileInfo não é snapshot em teste
+
+**Location:** `internal/files/librarian_test.go` (`TestOrganizeReplacesDifferentFileAtDestination`, o `staleAlias`). O uso em produção fica em `internal/files/librarian.go:156`.
+
+**What it looks like:** o teste cria um hardlink extra (`staleAlias`) para o arquivo velho **antes** de chamar `Organize`, e depois compara `os.Stat(staleAlias)` contra o destino — em vez de guardar um `os.Stat(dest)` antes da troca, que seria o jeito óbvio.
+
+**Why it's right:** no Linux `os.Stat` grava dev+inode na hora, então um `FileInfo` é um retrato do arquivo daquele instante. No Windows não: `saveInfoFromPath` (`os/types_windows.go`) guarda **só o caminho**, e `SameFile` chama `loadFileId`, que abre esse caminho de novo no momento da comparação. Um `FileInfo` tirado de `dest` antes da substituição passa a apontar para o arquivo **novo** depois dela, e `os.SameFile(staleInfo, destInfo)` vira sempre `true` — o teste falhava só no job `test-backend-windows`, com o código de produção correto. Manter um segundo nome para o arquivo velho fixa a identidade dele em qualquer plataforma, porque `Organize` substitui com `Remove(dest)` + `link(src, dest)` e o hardlink alternativo sobrevive ao `Remove`.
+
+Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são feitos na hora da comparação, com os dois caminhos existindo.
+
+**Don't "fix" by:** trocar o alias por um `os.Stat(dest)` guardado antes da troca ("é a mesma coisa e lê melhor" — não é, e só quebra no Windows); marcar o teste como `t.Skip` no Windows (era exatamente o cross-device/hardlink que esse job existe para cobrir); apagar a asserção do arquivo velho por parecer redundante com a de conteúdo (uma mutação que pula a substituição faz as duas falharem, mas a de identidade é a que distingue "relinkou" de "sobrescreveu por cima").
