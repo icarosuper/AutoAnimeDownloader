@@ -26,8 +26,16 @@ type EpisodeStruct struct {
 	AnimeName          string    `json:"anime_name,omitempty"`
 	EpisodeHash        string    `json:"episode_hash"`
 	EpisodeName        string    `json:"episode_name"`
+	EpisodeNumber      int       `json:"episode_number,omitempty"`
 	DownloadDate       time.Time `json:"download_date"`
 	ManuallyManaged    bool      `json:"manually_managed,omitempty"`
+	// IsBatch marks episodes that came from a batch/movie torrent (multiple episodes share
+	// one EpisodeHash; library files keep raw names, never Jellyfin-renamed).
+	IsBatch bool `json:"is_batch,omitempty"`
+	// LibraryPaths are the hardlink paths created in the completed-anime library by
+	// JobOrganize. Empty means "not yet organized" — the marker JobOrganize uses to fire
+	// the completion webhook and write-back exactly once (idempotent across restarts).
+	LibraryPaths []string `json:"library_paths,omitempty"`
 }
 
 type WebhookPreset struct {
@@ -44,12 +52,14 @@ type NotificationsConfig struct {
 }
 
 type Config struct {
-	SavePath               string              `json:"save_path"`
+	// SavePath e um campo LEGADO, lido apenas por daemon.MigrateSavePath. O diretorio de
+	// download deixou de ser configuravel e passou a ser derivado (ver DownloadPath). O
+	// omitempty faz o campo sumir do config.json assim que a migracao o zera.
+	SavePath               string              `json:"save_path,omitempty" swaggerignore:"true"`
 	CompletedAnimePath     string              `json:"completed_anime_path"`
 	AnilistUsername        string              `json:"anilist_username,omitempty"`
 	AnilistUsernames       []string            `json:"anilist_usernames"`
 	CheckInterval          int                 `json:"check_interval"`
-	QBittorrentUrl         string              `json:"qbittorrent_url"`
 	MaxEpisodesPerAnime    int                 `json:"max_episodes_per_anime"`
 	EpisodeRetryLimit      int                 `json:"episode_retry_limit"`
 	DeleteWatchedEpisodes  bool                `json:"delete_watched_episodes"`
@@ -62,6 +72,26 @@ type Config struct {
 	DeleteStatuses         []string            `json:"delete_statuses"`
 	Notifications          NotificationsConfig `json:"notifications"`
 	Priorities             nyaa.Priorities     `json:"priorities"`
+}
+
+// downloadDirName e o nome do diretorio de download dentro da biblioteca. O ponto o
+// esconde do scanner do Jellyfin no Linux; o arquivo .ignore criado por
+// Librarian.ProbePath cobre as demais plataformas.
+const downloadDirName = ".torrents"
+
+// DownloadPath e o diretorio onde os torrents baixam e continuam semeando. Ele e derivado
+// de CompletedAnimePath, nunca armazenado: assim a restricao de hardlink (origem e destino
+// no mesmo filesystem) fica impossivel de violar por configuracao.
+//
+// Devolve "" quando a biblioteca nao esta configurada. Essa guarda e obrigatoria: sem ela
+// filepath.Join produziria o caminho relativo ".autoAnimeDownloader" e a sessao da rain
+// seria criada no diretorio de trabalho do processo. Com "", SessionManager.Ensure devolve
+// ErrSessionNotReady, que e o comportamento atual para config incompleta.
+func (c *Config) DownloadPath() string {
+	if c.CompletedAnimePath == "" {
+		return ""
+	}
+	return filepath.Join(c.CompletedAnimePath, downloadDirName)
 }
 
 type AnimeSettings struct {
@@ -82,7 +112,6 @@ func getDefaultConfig() *Config {
 		SavePath:              "",
 		AnilistUsernames:      []string{},
 		CheckInterval:         10,
-		QBittorrentUrl:        "http://127.0.0.1:8080",
 		MaxEpisodesPerAnime:   12,
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: true,
@@ -338,6 +367,45 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 	return m.saveEpisodesToFileJSON(allEpisodes)
 }
 
+// UpsertEpisodes updates existing saved episodes (matched by EpisodeID) in place and
+// appends any that are new. Unlike SaveEpisodesToFile, it overwrites existing records —
+// used to write back LibraryPaths after a torrent is organized into the library.
+func (m *FileManager) UpsertEpisodes(episodes []EpisodeStruct) error {
+	if len(episodes) == 0 {
+		return nil
+	}
+
+	existing, err := m.LoadSavedEpisodes()
+	if err != nil {
+		return fmt.Errorf("failed to load existing episodes: %w", err)
+	}
+
+	updates := make(map[int]EpisodeStruct, len(episodes))
+	for _, ep := range episodes {
+		updates[ep.EpisodeID] = ep
+	}
+
+	result := make([]EpisodeStruct, 0, len(existing)+len(episodes))
+	seen := make(map[int]bool, len(existing))
+	for _, ep := range existing {
+		if updated, ok := updates[ep.EpisodeID]; ok {
+			result = append(result, updated)
+			seen[ep.EpisodeID] = true
+		} else {
+			result = append(result, ep)
+		}
+	}
+	// Append updates that did not correspond to an existing record.
+	for _, ep := range episodes {
+		if !seen[ep.EpisodeID] {
+			result = append(result, ep)
+			seen[ep.EpisodeID] = true
+		}
+	}
+
+	return m.saveEpisodesToFileJSON(result)
+}
+
 // saveEpisodesToFileJSON saves episodes in JSONL format
 func (m *FileManager) saveEpisodesToFileJSON(episodes []EpisodeStruct) error {
 	content, err := SerializeEpisodes(episodes)
@@ -394,19 +462,17 @@ func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
 	return nil
 }
 
-func (m *FileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error {
-	if savePath == "" {
-		return fmt.Errorf("save path cannot be empty")
+// DeleteEmptyFolders remove os diretorios de anime que ficaram vazios na biblioteca depois
+// de uma exclusao. O diretorio de download vive dentro dela (ver Config.DownloadPath), e a
+// rain aloca <download>/<id> antes de escrever qualquer byte — por isso a varredura o pula
+// explicitamente, senao apagaria torrents recem-adicionados.
+func (m *FileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error {
+	if completedAnimeSaveFolder == "" {
+		return fmt.Errorf("completed anime path cannot be empty")
 	}
 
-	if err := m.deleteEmptyFolders(savePath); err != nil {
-		return fmt.Errorf("failed to delete empty folders in save path: %w", err)
-	}
-
-	if completedAnimeSaveFolder != "" {
-		if err := m.deleteEmptyFolders(completedAnimeSaveFolder); err != nil {
-			return fmt.Errorf("failed to delete empty folders in completed anime save folder: %w", err)
-		}
+	if err := m.deleteEmptyFolders(completedAnimeSaveFolder); err != nil {
+		return fmt.Errorf("failed to delete empty folders in completed anime save folder: %w", err)
 	}
 
 	return nil
@@ -580,6 +646,10 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+
+		if entry.Name() == downloadDirName {
 			continue
 		}
 

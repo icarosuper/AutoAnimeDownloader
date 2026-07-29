@@ -4,10 +4,10 @@ For contributors working on AutoAnimeDownloader itself (as opposed to just runni
 
 ## Prerequisites
 
-- **Go** 1.24+
+- **Go** 1.25+
 - **Bun** (frontend package manager/build tool — not npm)
 - **Docker** (for integration tests and cross-platform builds)
-- **qBittorrent** with WebUI enabled, and an **Anilist account** (for manual testing)
+- An **Anilist account** (for manual testing). No external torrent client is needed — the BitTorrent client is embedded.
 
 ## Project Structure
 
@@ -24,14 +24,14 @@ AutoAnimeDownloader/
 │   │   ├── logger/           # Logging system
 │   │   ├── anilist/          # Anilist API client
 │   │   ├── nyaa/             # Nyaa scraper and torrent priority/matching
-│   │   ├── torrents/         # qBittorrent client
+│   │   ├── torrents/         # Embedded BitTorrent client (rain/v2) behind TorrentBackend
 │   │   ├── notifications/    # Webhook notifications
 │   │   ├── tray/             # System tray icon
 │   │   └── frontend/         # Svelte frontend (embedded into the daemon binary)
 │   └── tests/
 │       ├── integration/     # Integration tests (Docker + mock servers)
-│       ├── unit/            # Unit tests
-│       └── mocks/           # Mock servers (Anilist, Nyaa, qBittorrent)
+│       ├── unit/            # Unit tests (use torrents.FakeBackend, not a mock qBittorrent)
+│       └── mocks/           # Mock servers (Anilist, Nyaa)
 ├── docs/                     # Documentation
 ├── scripts/                  # Build, dev, and test scripts
 ├── infra/                    # systemd/NSSM service files and installers
@@ -87,7 +87,7 @@ For mock patterns and how to write new tests, see [Testing](../agents/testing.md
 make debug-anime ID=123   # ID is the AniList MediaList ID
 ```
 
-Runs a one-shot search/match pass against Nyaa without touching qBittorrent or the daemon state. See [Commands](../agents/commands.md#debugging-a-specific-anime) and [Troubleshooting Downloads](../agents/troubleshooting-downloads.md) for details.
+Runs a one-shot search/match pass against Nyaa without downloading anything or touching the daemon state. See [Commands](../agents/commands.md#debugging-a-specific-anime) and [Troubleshooting Downloads](../agents/troubleshooting-downloads.md) for details.
 
 ## Regenerating Swagger Docs
 

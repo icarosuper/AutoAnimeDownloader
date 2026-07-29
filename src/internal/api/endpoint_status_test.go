@@ -17,7 +17,7 @@ func TestHandleStatus(t *testing.T) {
 	state.SetLastCheckError(nil)
 
 	tmpDir := t.TempDir()
-	fileManager := &mockFileManager{configs: &files.Config{SavePath: tmpDir}}
+	fileManager := &mockFileManager{configs: &files.Config{CompletedAnimePath: tmpDir}}
 	server := &Server{
 		State:       state,
 		FileManager: fileManager,

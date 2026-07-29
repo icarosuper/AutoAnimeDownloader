@@ -126,17 +126,15 @@ func main() {
 						ArgsUsage: "<key> <value>",
 						Description: `Set a configuration value. Available keys:
   - anilist_usernames (comma-separated strings)
-  - save_path (string)
   - completed_anime_path (string)
   - check_interval (int, in minutes)
-  - qbittorrent_url (string)
   - max_episodes_per_anime (int)
   - episode_retry_limit (int)
   - delete_watched_episodes (bool: true/false)
   - excluded_lists (comma-separated strings)`,
 						Action: func(c *cli.Context) error {
 							if c.NArg() != 2 {
-								return fmt.Errorf("usage: config set <key> <value>\n\nAvailable keys:\n  - anilist_usernames\n  - save_path\n  - completed_anime_path\n  - check_interval\n  - qbittorrent_url\n  - max_episodes_per_anime\n  - episode_retry_limit\n  - delete_watched_episodes\n  - excluded_lists")
+								return fmt.Errorf("usage: config set <key> <value>\n\nAvailable keys:\n  - anilist_usernames\n  - completed_anime_path\n  - check_interval\n  - max_episodes_per_anime\n  - episode_retry_limit\n  - delete_watched_episodes\n  - excluded_lists")
 							}
 							return handleConfigSet(c.Args().Get(0), c.Args().Get(1))
 						},
@@ -306,10 +304,8 @@ func handleConfigGet() error {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Field", "Value"})
 		t.AppendRow(table.Row{"Anilist Usernames", strings.Join(config.AnilistUsernames, ", ")})
-		t.AppendRow(table.Row{"Save Path", config.SavePath})
 		t.AppendRow(table.Row{"Completed Anime Path", config.CompletedAnimePath})
 		t.AppendRow(table.Row{"Check Interval", fmt.Sprintf("%d minutes", config.CheckInterval)})
-		t.AppendRow(table.Row{"qBittorrent URL", config.QBittorrentUrl})
 		t.AppendRow(table.Row{"Max Episodes Per Anime", config.MaxEpisodesPerAnime})
 		t.AppendRow(table.Row{"Episode Retry Limit", config.EpisodeRetryLimit})
 		t.AppendRow(table.Row{"Delete Watched Episodes", config.DeleteWatchedEpisodes})
@@ -337,8 +333,6 @@ func handleConfigSet(key, value string) error {
 			}
 		}
 		config.AnilistUsernames = usernames
-	case "save_path", "savepath":
-		config.SavePath = value
 	case "completed_anime_path", "completedanimepath":
 		config.CompletedAnimePath = value
 	case "check_interval", "checkinterval":
@@ -347,8 +341,6 @@ func handleConfigSet(key, value string) error {
 			return fmt.Errorf("invalid check interval: %w", err)
 		}
 		config.CheckInterval = interval
-	case "qbittorrent_url", "qbittorrenturl":
-		config.QBittorrentUrl = value
 	case "max_episodes_per_anime", "maxepisodesperanime":
 		var max int
 		if _, err := fmt.Sscanf(value, "%d", &max); err != nil {

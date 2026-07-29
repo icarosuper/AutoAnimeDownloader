@@ -1,14 +1,15 @@
-> Versão atual: v1.3.3
-> Cada task indica o bump que deve gerar na versão do app (semver).
-
 - Download de animes — **+0.1.0**
 	- Animes completos
 		- Ajustar download em batch
 		- Contar episódios
+- Renomear arquivos de batch — **+0.1.0**
 - Nova tela de prioridades dos torrents — **+0.1.0**
 	- Nessa tela vai aparecer a ordem de prioridades da pesquisa no nyaa
 	- Usuário por reordenar, adicionar e excluir itens
 	- Botão pra voltar pro default
+- Substituir torrent de um anime ou episódio **+0.1.0**
+	- Hoje vc tem que trazer um torrent de fora e inserir no campo
+	- Quero um botão que abre a listagem do nyaa dentro do app
 - Baixar animes avulsos — **+0.1.0**
 	- Nova tela de baixar animes avulsos.
 	- Nessa tela vai ter uma barra de pesquisa.
@@ -20,12 +21,6 @@
 	- Abstrair interface TorrentSource com múltiplas implementações
 - Integração Jellyfin/Plex — **+0.1.0**
 	- Trigger de library scan após download concluído
-- Dashboard de estatísticas — **+0.1.0**
-	- Episódios baixados por semana/anime
-	- Fansubs mais usados
-	- Dados já disponíveis no downloaded_episodes JSONL
 - Windows — **+0.1.0**
 	- Instalar ao invés de rodar separado
 	- Dar detach e rodar no background
-- Torrent imbutido — **+1.0.0**
-- Adicionar modal com opções de torrents de animes / episódios — **+0.1.0**

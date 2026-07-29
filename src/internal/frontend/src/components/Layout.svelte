@@ -12,6 +12,7 @@
 
   $: T = $locale && {
     navStatus: m.nav_status(),
+    navDownloads: m.nav_downloads(),
     navConfig: m.nav_config(),
     navPriorities: m.nav_priorities(),
     navLogs: m.nav_logs(),
@@ -65,6 +66,14 @@
             {T && T.navStatus}
           </a>
           <a
+            href="#/downloads"
+            class="inline-flex items-center px-1 pt-4 pb-4 border-b-2 text-sm font-medium transition-colors {currentPath === '/downloads'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'}"
+          >
+            {T && T.navDownloads}
+          </a>
+          <a
             href="#/config"
             class="inline-flex items-center px-1 pt-4 pb-4 border-b-2 text-sm font-medium transition-colors {currentPath === '/config'
               ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -116,8 +125,9 @@
         </button>
 
         <div class="flex items-center gap-3">
-          <div class="tooltip tooltip-bottom">
-            <div class="tooltip-content">{wsTooltip}</div>
+          <!-- daisyUI 4 renders the tooltip from data-tip; the .tooltip-content element is a
+               v5-only API and would render as always-visible inline text here. -->
+          <div class="tooltip tooltip-bottom" data-tip={wsTooltip}>
             <span class="inline-block w-2 h-2 rounded-full {
               $wsConnectionState === 'connected' ? 'bg-success' :
               $wsConnectionState === 'reconnecting' ? 'bg-warning animate-pulse' :
@@ -165,6 +175,14 @@
               : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
           >
             {T && T.navStatus}
+          </a>
+          <a
+            href="#/downloads"
+            class="block px-3 py-2 rounded-md text-base font-medium transition-colors {currentPath === '/downloads'
+              ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+          >
+            {T && T.navDownloads}
           </a>
           <a
             href="#/config"

@@ -14,6 +14,7 @@ type FileSystem interface {
 	ReadDir(dirname string) ([]fs.DirEntry, error)
 	Remove(filename string) error
 	Rename(oldpath, newpath string) error
+	Link(oldname, newname string) error
 	Mkdir(dirname string, perm fs.FileMode) error
 	MkdirAll(dirname string, perm fs.FileMode) error
 }
@@ -54,6 +55,10 @@ func (osfs *OSFileSystem) Remove(filename string) error {
 
 func (osfs *OSFileSystem) Rename(oldpath, newpath string) error {
 	return os.Rename(oldpath, newpath)
+}
+
+func (osfs *OSFileSystem) Link(oldname, newname string) error {
+	return os.Link(oldname, newname)
 }
 
 func (osfs *OSFileSystem) Mkdir(dirname string, perm fs.FileMode) error {

@@ -20,13 +20,9 @@
     sectionAnilist: m.config_section_anilist(),
     sectionDownloads: m.config_section_downloads(),
     sectionAutomation: m.config_section_automation(),
-    sectionQbit: m.config_section_qbittorrent(),
     sectionFilters: m.config_section_filters(),
     labelUsername: m.config_label_username(),
     hintAnilistUsernames: m.config_hint_anilist_usernames(),
-    labelSavePath: m.config_label_save_path(),
-    hintSavePath: m.config_hint_save_path(),
-    labelUseCompletedPath: m.config_label_use_completed_path(),
     labelCompletedPath: m.config_label_completed_path(),
     hintCompletedPath: m.config_hint_completed_path(),
     labelDeleteWatched: m.config_label_delete_watched(),
@@ -35,8 +31,6 @@
     labelCheckInterval: m.config_label_check_interval(),
     labelMaxEpisodes: m.config_label_max_episodes(),
     labelRetryLimit: m.config_label_retry_limit(),
-    labelQbitUrl: m.config_label_qbit_url(),
-    hintQbitUrl: m.config_hint_qbit_url(),
     labelRenameJellyfin: m.config_label_rename_jellyfin(),
     hintRenameJellyfin: m.config_hint_rename_jellyfin(),
     labelExcludedList: m.config_label_excluded_list(),
@@ -69,10 +63,8 @@
 
   let config: Config = {
     anilist_usernames: [],
-    save_path: "",
     completed_anime_path: "",
     check_interval: 10,
-    qbittorrent_url: "http://127.0.0.1:8080",
     max_episodes_per_anime: 12,
     episode_retry_limit: 5,
     delete_watched_episodes: true,
@@ -154,7 +146,6 @@
   let loading = true;
   let saving = false;
   let showMissingConfigBanner = false;
-  let useCompletedPath = false;
 
   function checkQueryParams() {
     if (typeof window === "undefined") return;
@@ -180,7 +171,6 @@
       }
       if (!config.notifications) config.notifications = { webhooks: [] };
       if (!Array.isArray(config.notifications.webhooks)) config.notifications.webhooks = [];
-      useCompletedPath = !!config.completed_anime_path;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.config_error_load());
     } finally {
@@ -193,8 +183,7 @@
       saving = true;
 
       if ((config.anilist_usernames ?? []).length === 0) throw new Error(m.config_val_username());
-      if (!config.save_path?.trim()) throw new Error(m.config_val_save_path());
-      if (!config.qbittorrent_url?.trim()) throw new Error(m.config_val_qbit_url());
+      if (!config.completed_anime_path?.trim()) throw new Error(m.config_val_completed_path());
       if (config.check_interval <= 0) throw new Error(m.config_val_interval());
       if (config.max_episodes_per_anime <= 0) throw new Error(m.config_val_max_episodes());
       if (config.episode_retry_limit < 0) throw new Error(m.config_val_retry());
@@ -348,40 +337,14 @@
         <div class="card-body p-5 gap-4">
           <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionDownloads}</h2>
           <Input
-            id="save_path"
-            label={T && T.labelSavePath || ""}
-            subtitle={T && T.hintSavePath || ""}
+            id="completed_anime_path"
+            label={T && T.labelCompletedPath || ""}
+            subtitle={T && T.hintCompletedPath || ""}
             type="text"
-            bind:value={config.save_path}
-            placeholder="/path/to/downloads"
+            bind:value={config.completed_anime_path}
+            placeholder="/path/to/completed"
             required={true}
           />
-          <div class="space-y-3">
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="use_completed_path"
-                bind:checked={useCompletedPath}
-                on:change={() => { if (!useCompletedPath) config.completed_anime_path = ""; }}
-                class="checkbox checkbox-sm"
-              />
-              <label for="use_completed_path" class="text-sm text-base-content cursor-pointer">
-                {T && T.labelUseCompletedPath}
-              </label>
-            </div>
-            {#if useCompletedPath}
-              <div class="pl-6">
-                <Input
-                  id="completed_anime_path"
-                  label={T && T.labelCompletedPath || ""}
-                  subtitle={T && T.hintCompletedPath || ""}
-                  type="text"
-                  bind:value={config.completed_anime_path}
-                  placeholder="/path/to/completed"
-                />
-              </div>
-            {/if}
-          </div>
           <div class="space-y-3">
             <div class="flex items-center gap-2">
               <input
@@ -456,22 +419,6 @@
               required={true}
             />
           </div>
-        </div>
-      </div>
-
-      <!-- qBittorrent -->
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionQbit}</h2>
-          <Input
-            id="qbittorrent_url"
-            label={T && T.labelQbitUrl || ""}
-            subtitle={T && T.hintQbitUrl || ""}
-            type="url"
-            bind:value={config.qbittorrent_url}
-            placeholder="http://127.0.0.1:8080"
-            required={true}
-          />
         </div>
       </div>
 

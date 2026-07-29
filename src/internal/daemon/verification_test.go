@@ -33,7 +33,7 @@ func TestSearchAnilist_FiltersByMediaStatus(t *testing.T) {
 
 	config := &files.Config{
 		AnilistUsernames:      []string{"user1"},
-		SavePath:              "/tmp/save",
+		CompletedAnimePath:    "/tmp/completed",
 		DownloadStatuses:      []string{"CURRENT"},
 		DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
 	}
@@ -68,7 +68,7 @@ func TestSearchAnilist_EmptyMediaStatusesAllowsNothing(t *testing.T) {
 
 	config := &files.Config{
 		AnilistUsernames:      []string{"user1"},
-		SavePath:              "/tmp/save",
+		CompletedAnimePath:    "/tmp/completed",
 		DownloadStatuses:      []string{"CURRENT"},
 		DownloadMediaStatuses: []string{},
 	}

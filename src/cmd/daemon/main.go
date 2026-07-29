@@ -37,6 +37,7 @@ import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"AutoAnimeDownloader/src/internal/tray"
 	"context"
 	"flag"
@@ -88,6 +89,24 @@ func getJobsFilePath() (string, error) {
 	}
 
 	return filepath.Join(baseFolder, ".autoAnimeDownloader", "pending_jobs.json"), nil
+}
+
+// getSessionDBPath returns the embedded torrent client's resume database path. It lives in
+// the config folder (not the data dir) so resume data survives a save-path change.
+func getSessionDBPath() (string, error) {
+	var baseFolder string
+
+	if runtime.GOOS == "windows" {
+		baseFolder = os.Getenv("APPDATA")
+	} else {
+		baseFolder = os.Getenv("HOME")
+	}
+
+	if baseFolder == "" {
+		return "", fmt.Errorf("unable to determine home directory")
+	}
+
+	return filepath.Join(baseFolder, ".autoAnimeDownloader", "session.db"), nil
 }
 
 func getPIDFilePath() (string, error) {
@@ -196,8 +215,30 @@ func runDebugAnime(animeId int) {
 	os.Exit(0)
 }
 
+// ensureStartupSession creates the embedded torrent session at boot when a save path is
+// already configured, so seeding starts with the process instead of waiting for the first
+// verification pass. An incomplete config is not an error here — the session stays lazy and
+// the verification pass creates it once the config is saved.
+func ensureStartupSession(manager *torrents.SessionManager, fileManager *files.FileManager) {
+	configs, err := fileManager.LoadConfigs()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load configs at startup; torrent session will be created on the first verification pass")
+		return
+	}
+	if configs == nil || configs.DownloadPath() == "" {
+		logger.Logger.Info().Msg("Completed anime path not configured; torrent session will be created once the configuration is saved")
+		return
+	}
+	downloadPath := configs.DownloadPath()
+	if _, err := manager.Ensure(downloadPath); err != nil {
+		logger.Logger.Error().Err(err).Str("download_path", downloadPath).Msg("Failed to create the embedded torrent session at startup; the verification pass will retry")
+		return
+	}
+	logger.Logger.Info().Str("download_path", downloadPath).Msg("Embedded torrent session started; seeding is active independently of the daemon loop")
+}
+
 func main() {
-	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList MediaList ID and exit (no daemon, no qBittorrent needed)")
+	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList MediaList ID and exit (no daemon, no downloads)")
 	flag.Parse()
 
 	if *debugAnimeID > 0 {
@@ -234,8 +275,65 @@ func main() {
 		logger.Logger.Fatal().Err(err).Msg("Failed to determine jobs file path")
 	}
 	jobQueue := daemon.NewJobQueue(fileManager, jobsFilePath)
+
+	// Embedded torrent client (rain) and the library organizer (hardlinks into the
+	// completed-anime folder). The session is created lazily by SessionManager once the
+	// save path is known (config may be incomplete at startup).
+	sessionDBPath, err := getSessionDBPath()
+	if err != nil {
+		logger.Logger.Fatal().Err(err).Msg("Failed to determine session database path")
+	}
+	torrentManager := torrents.NewSessionManager(sessionDBPath)
+	librarian := files.NewLibrarian(files.NewOSFileSystem())
+
+	// Completion events enqueue a durable JobOrganize; failures notify and drop the torrent
+	// so the next verification pass re-adds it.
+	torrentManager.SetCallbacks(
+		func(hash string) { jobQueue.EnqueueOrganize(hash) },
+		func(hash string, err error) {
+			daemon.HandleTorrentFailure(hash, err, torrentManager, fileManager)
+		},
+	)
+	jobQueue.SetOrchestration(torrentManager, librarian)
 	jobQueue.Start()
+	// Converte uma instalacao antiga (save_path configurado) para o modelo de pasta unica,
+	// movendo os dados. Roda DEPOIS de jobQueue.Start(), entao Start() ja carregou a lista
+	// de jobs persistida antes da sessao temporaria de migracao existir: se essa sessao
+	// disparar uma conclusao espuria, ela NAO e descartada por Start(). O risco e limitado
+	// e se autocorrige: um job de organize afetado bate em ErrSessionNotReady ou num DataDir
+	// obsoleto, falha, e o passe de verificacao tenta de novo. Uma falha na migracao em si
+	// tambem nao e fatal aqui — mas o boot so pode abrir a sessao real (ensureStartupSession)
+	// no caminho derivado se a migracao teve sucesso; caso contrario os dados ainda estao no
+	// caminho antigo e abrir a sessao no novo caminho reverificaria tudo a 0%.
+	migrationErr := daemon.MigrateSavePath(files.NewOSFileSystem(), fileManager, torrentManager)
+	if migrationErr != nil {
+		logger.Logger.Error().Err(migrationErr).Msg("Failed to migrate the legacy save path; the verification pass will retry")
+	}
+	// Defers run LIFO: register Close first so jobQueue.Stop() (which may run organize jobs
+	// that use the session) runs before the session is closed.
+	defer func() {
+		if err := torrentManager.Close(); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Error closing torrent session")
+		}
+	}()
 	defer jobQueue.Stop()
+
+	// Create the session at startup when the config is already complete, so seeding resumes
+	// with the process and is independent of the daemon loop (stopping the loop from the
+	// WebUI must not stop seeding). Runs after jobQueue.Start() because arming the resume
+	// listeners can fire a completion immediately, and Start() reloads jobs from disk over
+	// whatever is in memory. With no save path configured the session stays lazy: the Ensure
+	// in the verification pass creates it once the config is saved. Startup reconciliation
+	// stays in the verification pass (safety net) and runs on its first tick.
+	//
+	// Skipped when the migration above failed: the data may still be sitting at the legacy
+	// save path, so opening rain at the derived DownloadPath() now would resume every
+	// torrent against an empty directory and re-download the whole library. Leaving the
+	// session lazy here keeps the verification pass retrying the migration on each tick
+	// until it succeeds (see decisions.md #31).
+	if migrationErr == nil {
+		ensureStartupSession(torrentManager, fileManager)
+	}
 
 	state := daemon.NewState()
 
@@ -244,6 +342,8 @@ func main() {
 		return daemon.StartLoop(p)
 	})
 	apiServer.JobQueue = jobQueue
+	apiServer.Torrents = torrentManager
+	apiServer.Librarian = librarian
 
 	// Set WebSocket manager as state notifier
 	state.SetNotifier(apiServer.WSManager)

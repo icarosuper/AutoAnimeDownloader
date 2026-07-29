@@ -8,15 +8,21 @@ go test -v ./src/tests/unit/                     # verbose unit tests
 go test -v -run TestName ./src/tests/unit/       # single test
 
 # integration (requires Docker)
+make test-backend-integration
+# or directly:
 docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit
 ```
 
 **Always run `go test ./...` after any code change.**
 
+`go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions.md). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
+
 ## Test Structure
 
 - `src/tests/unit/` — unit tests (`package unit`)
-- `src/tests/integration/` — Docker-based end-to-end HTTP tests
+- `src/tests/integration/` — Docker-based end-to-end HTTP tests. Gated on `DAEMON_URL`; the
+  library path it writes into the daemon's config comes from
+  `TEST_COMPLETED_PATH` (default `~/aad-test/library`)
 - `src/tests/mocks/` — standalone mock HTTP servers (Docker images, **not** Go test imports)
 - `src/internal/api/*_test.go` — handler-level tests
 
@@ -45,21 +51,32 @@ defer restore()
 
 Same pattern for Nyaa: `nyaa.MockNyaaHttpGet(fn) (restore func())`.
 
-### 2. Interface Injection (qBittorrent / Torrents)
+### 2. Interface Injection (Torrent backend)
 
-`torrents.HTTPClient` interface — tests pass a `MockHTTPClient` with URL-keyed responses:
+Torrent logic sits behind the `torrents.TorrentBackend` interface. Production uses the rain-backed `SessionManager`/`Session`; tests use the in-memory `torrents.FakeBackend` instead of a mock qBittorrent HTTP server:
 
 ```go
-type HTTPClient interface {
-    Get(url string) (*http.Response, error)
-    PostForm(url string, data url.Values) (*http.Response, error)
+type TorrentBackend interface {
+    Ensure(savePath string) (bool, error)
+    Add(magnet string) (string, error)
+    List() []TorrentInfo
+    Get(hash string) (TorrentInfo, bool)
+    Remove(hash string, keepData bool) error
+    SetCallbacks(onComplete func(hash string), onFailed func(hash string, err error))
+    Close() error
 }
 
 // Test:
-mock := NewMockHTTPClient()
-mock.AddResponse("/api/v2/torrents/info", 200, torrentsJSON)
-service := torrents.NewTorrentService(mock, "http://localhost:8080", "/save", "/completed")
+backend := torrents.NewFakeBackend()
+backend.AddCompleted("abcd...hash", "/save/abcd")   // seed a completed torrent
+// or drive callbacks:
+backend.CompleteTorrent("abcd...hash", "/save/abcd") // fires onComplete
+backend.FailTorrent("abcd...hash", err)              // fires onFailed
 ```
+
+`FakeBackend.Remove` on an unknown hash is a **no-op returning `nil`**, deliberately mirroring rain's `RemoveTorrent` (which returns `(nil, nil)` for an id absent from its map). Don't assert an error there — the fake used to return one, and since `removeEpisodesAndLinks` and `HandleTorrentFailure` both log a `Warn` when `Remove` fails, that made tests observe warnings production never emits.
+
+Library hardlinking is likewise tested through the `files.Librarian` interface (`NewLibrarian`) backed by a `MockFileSystem`, so `Organize`/`ProbePaths` can be exercised without touching a real disk. Two cases need a **real** disk instead (`t.TempDir()` + `OSFileSystem`), because they turn on file identity and link counts that an in-memory fake cannot model: `Organize`'s same-inode vs. different-inode branch (decision 28), and "deleting an episode removes both links" (`TestRemoveEpisodesAndLinks_RealHardlinks`).
 
 ### 3. In-Memory FileSystem
 
@@ -103,14 +120,44 @@ handler(rec, req)
 
 ### 5. Logger Capture
 
-Replace `logger.Logger` with a `zerolog` writing to `bytes.Buffer` to assert log output:
+Use the `captureLogs` helper (`src/tests/unit/logcapture_test.go`) rather than swapping `logger.Logger` by hand:
 
 ```go
-var buf bytes.Buffer
-logger.Logger = zerolog.New(&buf)
+logBuf := captureLogs(t, zerolog.ErrorLevel)
 // ... run code ...
-assert(strings.Contains(buf.String(), "expected message"))
+assert(strings.Contains(logBuf.String(), "expected message"))
 ```
+
+It writes into a **mutex-guarded** buffer and restores the previous logger from `t.Cleanup`. Both matter, and a plain `zerolog.New(&bytes.Buffer{})` gets both wrong:
+
+- `AnimeVerification` fans out into goroutines that all log through the package-level logger, so an unsynchronized `bytes.Buffer` is a real data race. `-race` reports it from inside zerolog's writer, several frames away from the test that caused it.
+- Restoring the logger on the last line of the test body is skipped by any `t.Fatal` above it, leaving the global logger writing into a dead test's buffer — which silently swallows the output every later test in the package asserts on.
+
+### 6. Real rain Sessions (`torrents` package)
+
+`SessionManager`'s own tests open **real** rain sessions, with DHT turned off via the unexported `sessionOptions{disableDHT: true}` seam (`newTestManager` sets it; production's `NewSession` always leaves DHT on).
+
+Creating a session is the only thing that binds a **fixed** port — rain's `DefaultConfig.DHTPort`, 7246/udp — so with DHT on, the whole package failed with `address already in use` whenever the user's daemon was running, and every test run started chatting with the public DHT bootstrap routers. Turning it off makes the package hermetic and cut its runtime from ~0.5s to ~0.02s. Peer ports (20000–30000) are only bound when a torrent is actually added, which these tests never do.
+
+Run this package with `-race`: `TestSessionManagerConcurrentEnsureAndDelegation` exists specifically to exercise the window where `Ensure`/`Close` could swap the session out from under a delegated call.
+
+## Never Let Background Work Outlive Its Test
+
+Two entry points start work in a goroutine and return immediately: `handleCheck` (POST `/check`) and `daemon.StartLoop`. **A test that triggers either must wait for it to finish before returning.**
+
+| Entry point | How to wait |
+|---|---|
+| `handleCheck` | `defer server.waitForChecks()` (backed by `Server.checks`, a `sync.WaitGroup`) |
+| `daemon.StartLoop` | `stopLoop(t, loopControl, state, done)` — cancels and waits |
+
+A leaked goroutine keeps running `AnimeVerification` for the rest of the package's execution: real AniList HTTP calls, real disk writes under the configured paths, and reads of package-level globals (`logger.Logger`, anilist's `httpDo`, `nyaa`'s active priorities) that later tests are busy replacing. The symptoms land far from the cause:
+
+- `-race` blames whichever unrelated test happened to swap a global at that moment.
+- The `nyaa` sorting and `priorities` tests fail under `-count=5` because a phantom verification loop called `nyaa.SetPriorities` in the middle of them — `ActivePriorities().Fansubs[0]` even panicked on an empty slice.
+
+Pass `daemon.LoopControl.Done` read **before** any `UpdateInterval` call: the field is a snapshot taken at construction, and `UpdateInterval` starts a fresh goroutine with a fresh channel while the field still points at the original.
+
+Any test that lets `AnimeVerification` run to completion must also stub AniList — `t.Cleanup(anilist.MockAniListDo(...))`, registered **before** the goroutine's own cleanup so it is undone last — and point `SavePath`/`CompletedAnimePath` at `t.TempDir()`. Otherwise the pass hits the live API and creates the configured folders on the developer's real disk.
 
 ## Docker Mock Servers
 
@@ -120,9 +167,8 @@ assert(strings.Contains(buf.String(), "expected message"))
 |------|-------------|-------------|
 | `anilist/mock_server.go` | 8080 | `SCENARIO=empty` → empty media list |
 | `nyaa/mock_server.go` | 8081 | `SCENARIO=empty` → no results |
-| `qbittorrent/mock_server.go` | 8082 | In-memory torrent store |
 
-`docker-compose.test.yml` wires daemon env vars (`ANILIST_API_URL`, `NYAA_URL`, `QBITTORRENT_URL`) to point at these mocks.
+There is no qBittorrent mock server anymore — `src/tests/mocks/` contains the Anilist and Nyaa mocks only (the torrent client is embedded). `docker-compose.test.yml` wires daemon env vars `ANILIST_API_URL` and `NYAA_URL` to point at these mocks.
 
 ## Frontend Tests
 

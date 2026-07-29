@@ -34,7 +34,7 @@ Per-anime episode list, opened by clicking an anime on the Status page:
 
 ### Config (`/config`)
 
-Daemon configuration, grouped into sections: Anilist, Downloads, Automation, qBittorrent, Filters. Covers paths, check interval, qBittorrent URL, episode limits/retries, and download/delete rules. See [Config Reference](../agents/config.md) for the full field list and defaults.
+Daemon configuration, grouped into sections: Anilist, Downloads, Automation, Filters. Covers paths, check interval, episode limits/retries, and download/delete rules. The **Completed Anime Path** is required and must be on the same volume as the Save Path (completed episodes are hardlinked into it) — saving a cross-volume pair is rejected. There is no qBittorrent setting: the torrent client is embedded. See [Config Reference](../agents/config.md) for the full field list and defaults.
 
 If required config is missing, the daemon opens this page automatically with a `?missingConfig=true` banner.
 

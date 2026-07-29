@@ -21,7 +21,7 @@ type animeProcessResult struct {
 // maxConcurrentAnimes limits simultaneous Nyaa HTTP searches to avoid rate limiting.
 const maxConcurrentAnimes = 5
 
-func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State, jobQueue *JobQueue) {
+func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State, jobQueue *JobQueue, backend torrents.TorrentBackend, librarian files.Librarian) {
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
@@ -39,34 +39,76 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			}
 		}()
 
-		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username, save path or qBittorrent URL)"))
+		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username or completed anime path)"))
 		return
 	}
 
-	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
-	torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
+	// Converte instalacoes antigas antes de qualquer coisa tocar o caminho de download.
+	// Abortar aqui e deliberado: seguir para o caminho novo com os dados no antigo faria
+	// a rain reverificar, achar nada e rebaixar tudo.
+	if err := MigrateSavePath(files.NewOSFileSystem(), fileManager, backend); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to migrate the legacy save path; skipping verification")
+		state.SetLastCheckError(err)
+		return
+	}
+	configs, err = fileManager.LoadConfigs()
+	if err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to reload configs after migration; skipping verification")
+		state.SetLastCheckError(err)
+		return
+	}
+
+	// A biblioteca e montada com hardlinks. O endpoint de save da config sonda isso, mas
+	// configs escritos antes deste upgrade (ou direto no config.json pelo
+	// docker/entrypoint.sh) nunca passaram por ele. Sem esta porta um filesystem sem
+	// suporte a hardlink baixa alegremente enquanto todo JobOrganize morre, e a UI mostra
+	// um daemon saudavel. Sondar aqui devolve a mesma mensagem acionavel do endpoint, e
+	// aborta o passe: baixar o que nao da para organizar so enche o disco.
+	if librarian != nil {
+		if err := librarian.ProbePath(configs.CompletedAnimePath); err != nil {
+			logger.Logger.Error().Err(err).
+				Str("completed_anime_path", configs.CompletedAnimePath).
+				Msg("Completed anime path failed the hardlink probe; skipping verification")
+			state.SetLastCheckError(err)
+			return
+		}
+	}
+
+	if backend == nil {
+		logger.Logger.Error().Msg("Torrent backend not initialized; skipping verification")
+		state.SetLastCheckError(fmt.Errorf("torrent backend not initialized"))
+		return
+	}
+
+	// Ensure the embedded torrent session exists for the current save path (created lazily,
+	// recreated if the save path changed or if the download folder was swapped underneath).
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to initialize embedded torrent session")
+		state.SetLastCheckError(err)
+		return
+	}
+	// Latched by Ensure, here or in an earlier manual-download call: the folder the session
+	// was bound to is gone, so the records pointing into it must go too.
+	if backend.ConsumeRootSwap() {
+		clearLibraryPathsAfterRootSwap(fileManager, configs.CompletedAnimePath)
+	}
+
+	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
+	downloadedTorrents := backend.List()
 
 	// Phase 1: fetch all independent data sources in parallel.
 	var (
-		downloadedTorrents []torrents.Torrent
 		anilistResponse    *anilist.AniListResponse
 		savedEpisodes      []files.EpisodeStruct
 		blockedEpisodes    []int
 		animeSettingsMap   map[int]files.AnimeSettings
 		deleteListResponse *anilist.AniListResponse
 
-		errTorrents error
 		errAnilist  error
 		errEpisodes error
 	)
 
 	var fetchWg sync.WaitGroup
-
-	fetchWg.Add(1)
-	go func() {
-		defer fetchWg.Done()
-		downloadedTorrents, errTorrents = fetchDownloadedTorrents(torrentsService)
-	}()
 
 	fetchWg.Add(1)
 	go func() {
@@ -131,10 +173,6 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	fetchWg.Wait()
 
-	if errTorrents != nil {
-		state.SetLastCheckError(errTorrents)
-		return
-	}
 	if errAnilist != nil {
 		state.SetLastCheckError(errAnilist)
 		return
@@ -143,6 +181,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		state.SetLastCheckError(errEpisodes)
 		return
 	}
+
+	// Reconciliation (durable safety net): enqueue JobOrganize for any completed torrent
+	// whose episodes are not yet in the library. Covers completions missed while the daemon
+	// was down and a save-path change. JobOrganize is idempotent, so re-runs are no-ops.
+	reconcileLibrary(downloadedTorrents, savedEpisodes, jobQueue)
 
 	blockedMap := make(map[int]bool, len(blockedEpisodes))
 	for _, id := range blockedEpisodes {
@@ -198,7 +241,7 @@ outer:
 			default:
 			}
 
-			resultCh <- processAnimeEpisodes(configs, torrentsService, a, downloadedTorrents, savedEpisodes, blockedMap, q, jobQueue, defaultNyaaSearcher())
+			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, blockedMap, q, defaultNyaaSearcher())
 		}(anime, customQuery)
 	}
 
@@ -223,9 +266,9 @@ outer:
 	}
 
 	// Phase 3: sequential cleanup (file writes must not overlap).
-	deleteEpisodesByStatus(deleteListResponse, fileManager, torrentsService, savedEpisodes)
+	deleteEpisodesByStatus(deleteListResponse, fileManager, backend, librarian, savedEpisodes)
 
-	handleSavedEpisodes(fileManager, configs, torrentsService, handleEpisodesData{
+	handleSavedEpisodes(fileManager, configs, backend, librarian, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
 		idsToDelete:     idsToDelete,
 		checkedEpisodes: checkedEpisodes,
@@ -235,7 +278,7 @@ outer:
 	state.SetLastCheck(time.Now())
 	state.SetLastCheckError(nil)
 
-	if err := fileManager.DeleteEmptyFolders(configs.SavePath, configs.CompletedAnimePath); err != nil {
+	if err := fileManager.DeleteEmptyFolders(configs.CompletedAnimePath); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to delete empty folders")
 	}
 
@@ -253,25 +296,87 @@ outer:
 		Msg("Verification completed")
 }
 
-func fetchDownloadedTorrents(torrentsService *torrents.TorrentService) ([]torrents.Torrent, error) {
-	downloadedTorrents, err := torrentsService.GetDownloadedTorrents()
+// clearLibraryPathsAfterRootSwap wipes the LibraryPaths of every episode after the download
+// root was swapped, so reconcileLibrary enqueues them again and the library is rebuilt at the
+// configured path once the redownloads finish.
+//
+// This is the documented exception to decision #29 (never clear LibraryPaths because a file
+// is missing from disk). The rule exists so a per-file deletion by the user is not undone on
+// the next pass, forever. A root swap is a different event: the whole folder the records
+// point into is gone, the daemon is already redownloading its contents, and the detection is
+// edge-triggered — Ensure reports the swap once, then rewrites the marker, so this runs a
+// single time per swap and can never become the resurrection loop #29 guards against.
+func clearLibraryPathsAfterRootSwap(fileManager FileManagerInterface, completedPath string) {
+	saved, err := fileManager.LoadSavedEpisodes()
 	if err != nil {
-		logger.Logger.Error().Err(err).Stack().Msg("Failed to connect to qBittorrent")
-		return nil, fmt.Errorf("failed to connect to qBittorrent: %w", err)
+		logger.Logger.Warn().Err(err).Msg("Root swap: failed to load saved episodes; library records left untouched")
+		return
 	}
 
-	logger.Logger.Debug().Int("count", len(downloadedTorrents)).Msg("Fetched downloaded torrents")
-	return downloadedTorrents, nil
+	var stale []files.EpisodeStruct
+	for _, ep := range saved {
+		if len(ep.LibraryPaths) == 0 {
+			continue
+		}
+		ep.LibraryPaths = nil
+		stale = append(stale, ep)
+	}
+	if len(stale) == 0 {
+		return
+	}
+
+	if err := fileManager.UpsertEpisodes(stale); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Root swap: failed to clear the stale library paths")
+		return
+	}
+	logger.Logger.Warn().
+		Int("episodes", len(stale)).
+		Str("completed_anime_path", completedPath).
+		Msg("Root swap: the library folder is gone, cleared the stale library links; episodes will be redownloaded and reorganized at the configured path")
+}
+
+// reconcileLibrary enqueues JobOrganize for completed torrents whose saved episodes have
+// not yet been hardlinked into the library (empty LibraryPaths). Enqueue is deduped, so
+// repeated passes are cheap.
+func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.EpisodeStruct, jobQueue *JobQueue) {
+	if jobQueue == nil {
+		return
+	}
+	byHash := make(map[string][]files.EpisodeStruct)
+	for _, ep := range savedEpisodes {
+		if ep.EpisodeHash != "" {
+			byHash[ep.EpisodeHash] = append(byHash[ep.EpisodeHash], ep)
+		}
+	}
+	for _, t := range downloaded {
+		if !t.Completed {
+			continue
+		}
+		eps := byHash[t.Hash]
+		if len(eps) == 0 {
+			continue // orphan torrent with no episode record; nothing to organize
+		}
+		needs := false
+		for _, ep := range eps {
+			if len(ep.LibraryPaths) == 0 {
+				needs = true
+				break
+			}
+		}
+		if needs {
+			jobQueue.EnqueueOrganize(t.Hash)
+		}
+	}
 }
 
 func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
-	if len(configs.AnilistUsernames) == 0 || configs.SavePath == "" {
-		err := fmt.Errorf("missing required configuration: Anilist username or save path")
+	if len(configs.AnilistUsernames) == 0 || configs.DownloadPath() == "" {
+		err := fmt.Errorf("missing required configuration: Anilist username or completed anime path")
 		logger.Logger.Error().
 			Err(err).
 			Strs("anilist_usernames", configs.AnilistUsernames).
-			Str("save_path", configs.SavePath).
-			Msg("Missing required configuration: Anilist usernames or save path")
+			Str("download_path", configs.DownloadPath()).
+			Msg("Missing required configuration: Anilist usernames or completed anime path")
 		return nil, err
 	}
 

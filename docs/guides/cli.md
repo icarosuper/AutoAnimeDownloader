@@ -112,9 +112,8 @@ autoanimedownloader config get
 **Shows all configuration values:**
 - Anilist usernames (supports more than one, comma-separated)
 - Save path
-- Completed anime path
+- Completed anime path (required; must be on the same volume as the save path)
 - Check interval (minutes)
-- qBittorrent URL
 - Max episodes per anime
 - Episode retry limit
 - Delete watched episodes (true/false)
@@ -134,10 +133,8 @@ autoanimedownloader config set delete_watched_episodes true
 
 **Available keys:**
 - `anilist_username` (string) - Anilist username(s). Comma-separated for multiple accounts
-- `save_path` (string) - Path where episodes are saved
-- `completed_anime_path` (string) - Path for completed anime
+- `completed_anime_path` (string) - Jellyfin library path; required. The download/seeding working directory is derived from this path (a hidden subfolder inside it), so it's always on the same volume automatically
 - `check_interval` (int) - Check interval in minutes
-- `qbittorrent_url` (string) - qBittorrent WebUI URL
 - `max_episodes_per_anime` (int) - Maximum episodes to download per anime
 - `episode_retry_limit` (int) - Maximum retry attempts for episodes
 - `delete_watched_episodes` (bool) - Delete episodes after watching (true/false)
@@ -151,9 +148,6 @@ autoanimedownloader config set anilist_username myusername,secondaccount
 
 # Set check interval to 15 minutes
 autoanimedownloader config set check_interval 15
-
-# Set save path
-autoanimedownloader config set save_path /path/to/downloads
 
 # Enable deletion of watched episodes
 autoanimedownloader config set delete_watched_episodes true
@@ -305,19 +299,16 @@ autoanimedownloader start
 # 2. Configure Anilist username
 autoanimedownloader config set anilist_username myusername
 
-# 3. Configure qBittorrent URL
-autoanimedownloader config set qbittorrent_url http://localhost:8080
+# 3. Set completed anime path (Jellyfin library; the download/seeding dir is derived from this)
+autoanimedownloader config set completed_anime_path /path/to/library
 
-# 4. Set save path
-autoanimedownloader config set save_path /path/to/downloads
-
-# 5. Start the verification loop
+# 4. Start the verification loop
 autoanimedownloader loop start
 
-# 6. Check status
+# 5. Check status
 autoanimedownloader status
 
-# 7. View monitored animes
+# 6. View monitored animes
 autoanimedownloader animes
 ```
 

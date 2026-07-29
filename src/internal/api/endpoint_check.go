@@ -23,7 +23,10 @@ func handleCheck(server *Server) http.HandlerFunc {
 		}
 
 		// Execute verification in separate goroutine
+		server.checks.Add(1)
 		go func() {
+			defer server.checks.Done()
+
 			// Save current status to restore it after verification
 			currentStatus := server.State.GetStatus()
 
@@ -31,7 +34,7 @@ func handleCheck(server *Server) http.HandlerFunc {
 			server.State.SetStatus(daemon.StatusChecking)
 
 			ctx := context.Background()
-			daemon.AnimeVerification(ctx, server.FileManager, server.State, server.JobQueue)
+			daemon.AnimeVerification(ctx, server.FileManager, server.State, server.JobQueue, server.Torrents, server.Librarian)
 
 			// Restore status after verification completes
 			// Only restore to running if it was running before, otherwise keep it as is

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 )
@@ -17,35 +16,20 @@ import (
 type JobType string
 
 const (
-	JobRenameFile        JobType = "rename_file"
-	JobMoveToCompleted   JobType = "move_to_completed"
-	JobNotifyOnComplete  JobType = "notify_on_complete"
+	// JobOrganize hardlinks a completed torrent's files into the library and fires the
+	// completion webhook. It is idempotent and replaces the former poll-based
+	// rename/move/notify jobs.
+	JobOrganize JobType = "organize"
 )
 
 const (
-	jobTickInterval         = 5 * time.Second
-	maxRetriesRenameFile    = 20
-	maxRetriesMoveCompleted = 10
+	jobTickInterval    = 5 * time.Second
+	maxRetriesOrganize = 20
 )
 
-// RenameFilePayload carries the data needed to rename a torrent file for Jellyfin.
-type RenameFilePayload struct {
-	Hash          string `json:"hash"`
-	AnimeName     string `json:"anime_name"`
-	EpisodeNumber int    `json:"episode_number"`
-}
-
-// MoveToCompletedPayload carries the data needed to move an anime to the completed folder.
-type MoveToCompletedPayload struct {
-	Hashes    []string `json:"hashes"`
-	AnimeName string   `json:"anime_name"`
-}
-
-// NotifyOnCompletePayload carries the data needed to fire a webhook when a torrent finishes.
-type NotifyOnCompletePayload struct {
-	Hash      string `json:"hash"`
-	AnimeName string `json:"anime_name"`
-	Episode   int    `json:"episode"`
+// OrganizePayload carries the torrent hash to organize into the library.
+type OrganizePayload struct {
+	Hash string `json:"hash"`
 }
 
 // Job is a single unit of deferred work.
@@ -59,19 +43,23 @@ type Job struct {
 	CreatedAt  time.Time       `json:"created_at"`
 }
 
-// JobQueue runs a background goroutine that processes deferred qBittorrent operations
-// every 15 seconds with exponential backoff on failure. State is persisted to disk so
-// jobs survive daemon restarts.
+// JobQueue runs a background goroutine that processes deferred library-organization work
+// every few seconds with exponential backoff on failure. State is persisted to disk so
+// jobs survive daemon restarts (the durable work-list; torrent completion events only
+// trigger enqueueing, they are not the source of truth).
 type JobQueue struct {
 	mu          sync.Mutex
 	jobs        []*Job
 	jobsPath    string
 	fileManager FileManagerInterface
+	backend     torrents.TorrentBackend
+	librarian   files.Librarian
 	stopCh      chan struct{}
 	done        chan struct{}
 }
 
-// NewJobQueue creates a JobQueue. Call Start() to begin processing.
+// NewJobQueue creates a JobQueue. Call SetOrchestration to inject the torrent backend and
+// librarian, then Start() to begin processing.
 func NewJobQueue(fileManager FileManagerInterface, jobsPath string) *JobQueue {
 	return &JobQueue{
 		fileManager: fileManager,
@@ -79,6 +67,14 @@ func NewJobQueue(fileManager FileManagerInterface, jobsPath string) *JobQueue {
 		stopCh:      make(chan struct{}),
 		done:        make(chan struct{}),
 	}
+}
+
+// SetOrchestration injects the torrent backend and librarian used by JobOrganize.
+func (q *JobQueue) SetOrchestration(backend torrents.TorrentBackend, librarian files.Librarian) {
+	q.mu.Lock()
+	q.backend = backend
+	q.librarian = librarian
+	q.mu.Unlock()
 }
 
 // Start loads persisted jobs and begins the background processing ticker.
@@ -93,30 +89,22 @@ func (q *JobQueue) Stop() {
 	<-q.done
 }
 
-// EnqueueRenameFile schedules a Jellyfin file rename for the given torrent hash.
-func (q *JobQueue) EnqueueRenameFile(hash, animeName string, episodeNumber int) {
-	q.enqueue(JobRenameFile, RenameFilePayload{
-		Hash:          hash,
-		AnimeName:     animeName,
-		EpisodeNumber: episodeNumber,
-	}, maxRetriesRenameFile)
-}
-
-// EnqueueNotifyOnComplete schedules a webhook notification once the torrent finishes in qBittorrent.
-func (q *JobQueue) EnqueueNotifyOnComplete(hash, animeName string, episode int) {
-	q.enqueue(JobNotifyOnComplete, NotifyOnCompletePayload{
-		Hash:      hash,
-		AnimeName: animeName,
-		Episode:   episode,
-	}, 100)
-}
-
-// EnqueueMoveToCompleted schedules moving an anime's torrents to the completed folder.
-func (q *JobQueue) EnqueueMoveToCompleted(hashes []string, animeName string) {
-	q.enqueue(JobMoveToCompleted, MoveToCompletedPayload{
-		Hashes:    hashes,
-		AnimeName: animeName,
-	}, maxRetriesMoveCompleted)
+// EnqueueOrganize schedules organizing a completed torrent into the library. It is a no-op
+// if a JobOrganize for the same hash is already pending (avoids pile-up when both the
+// completion event and the reconciliation pass enqueue).
+func (q *JobQueue) EnqueueOrganize(hash string) {
+	q.mu.Lock()
+	for _, j := range q.jobs {
+		if j.Type == JobOrganize {
+			var p OrganizePayload
+			if json.Unmarshal(j.Payload, &p) == nil && p.Hash == hash {
+				q.mu.Unlock()
+				return
+			}
+		}
+	}
+	q.mu.Unlock()
+	q.enqueue(JobOrganize, OrganizePayload{Hash: hash}, maxRetriesOrganize)
 }
 
 func (q *JobQueue) enqueue(jobType JobType, payload any, maxRetries int) {
@@ -168,16 +156,19 @@ func (q *JobQueue) processDueJobs() {
 		q.mu.Unlock()
 		return
 	}
+	backend := q.backend
+	librarian := q.librarian
 	q.mu.Unlock()
+
+	if backend == nil || librarian == nil {
+		return // orchestration not wired yet
+	}
 
 	configs, err := q.fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Job queue: failed to load configs, skipping tick")
 		return
 	}
-
-	qURL := getQBittorrentURL(configs.QBittorrentUrl)
-	ts := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qURL, configs.SavePath, configs.CompletedAnimePath)
 
 	now := time.Now()
 
@@ -198,7 +189,7 @@ func (q *JobQueue) processDueJobs() {
 
 	changed := false
 	for _, job := range due {
-		success := q.executeJob(job, ts, configs)
+		success := q.executeJob(job, backend, librarian, configs)
 
 		q.mu.Lock()
 		if success {
@@ -249,61 +240,17 @@ func retryBackoff(attempts int) time.Duration {
 	return backoff
 }
 
-func (q *JobQueue) executeJob(job *Job, ts *torrents.TorrentService, configs *files.Config) bool {
+// executeJob runs one job. Returns true when the job is done (remove it) or should be
+// dropped; false to retry with backoff.
+func (q *JobQueue) executeJob(job *Job, backend torrents.TorrentBackend, librarian files.Librarian, configs *files.Config) bool {
 	switch job.Type {
-	case JobRenameFile:
-		var p RenameFilePayload
+	case JobOrganize:
+		var p OrganizePayload
 		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			logger.Logger.Error().Err(err).Str("id", job.ID).Msg("Job queue: failed to unmarshal rename payload")
-			return false
-		}
-		return ts.RenameEpisodeFile(p.Hash, p.AnimeName, p.EpisodeNumber)
-
-	case JobMoveToCompleted:
-		var p MoveToCompletedPayload
-		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			logger.Logger.Error().Err(err).Str("id", job.ID).Msg("Job queue: failed to unmarshal move payload")
-			return false
-		}
-		if err := ts.SendAnimeToCompletedFolder(p.Hashes, p.AnimeName); err != nil {
-			logger.Logger.Warn().Err(err).Str("anime", p.AnimeName).Msg("Job queue: failed to move anime to completed folder")
-			return false
-		}
-		return true
-
-	case JobNotifyOnComplete:
-		var p NotifyOnCompletePayload
-		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			logger.Logger.Error().Err(err).Str("id", job.ID).Msg("Job queue: failed to unmarshal notify payload")
+			logger.Logger.Error().Err(err).Str("id", job.ID).Msg("Job queue: failed to unmarshal organize payload")
 			return true // drop malformed job
 		}
-
-		allTorrents, err := ts.GetDownloadedTorrents()
-		if err != nil {
-			logger.Logger.Warn().Err(err).Msg("Job queue: failed to get torrents for notify check")
-			return false // retry
-		}
-
-		for _, t := range allTorrents {
-			if strings.EqualFold(t.Hash, p.Hash) {
-				if t.State == "error" {
-					logger.Logger.Warn().
-						Str("hash", p.Hash).
-						Str("anime", p.AnimeName).
-						Msg("Job queue: torrent in error state, dropping notify job")
-					return true
-				}
-				if torrents.IsTorrentCompleted(t.State) {
-					notifications.Notify(configs, notifications.QBittorrentDownloadCompleted, p.AnimeName, p.Episode, "")
-					return true
-				}
-				return false // not complete yet, retry on next tick
-			}
-		}
-
-		// Torrent not found — likely deleted
-		logger.Logger.Debug().Str("hash", p.Hash).Msg("Job queue: torrent not found, dropping notify job")
-		return true
+		return organizeTorrent(p.Hash, backend, librarian, q.fileManager, configs)
 
 	default:
 		logger.Logger.Warn().Str("type", string(job.Type)).Msg("Job queue: unknown job type, dropping")
@@ -356,4 +303,86 @@ func (q *JobQueue) loadFromDisk() {
 	q.mu.Unlock()
 
 	logger.Logger.Info().Int("count", len(jobs)).Msg("Job queue: loaded pending jobs from disk")
+}
+
+// organizeTorrent hardlinks a completed torrent's files into the library and, exactly once,
+// writes back the created LibraryPaths and fires the completion webhook. Idempotent across
+// restarts: episodes whose LibraryPaths are already set are treated as done (no webhook,
+// no re-link). Shared by JobOrganize and directly testable.
+//
+// Returns true when done/dropped; false to retry with backoff.
+func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian files.Librarian, fm FileManagerInterface, configs *files.Config) bool {
+	info, ok := backend.Get(hash)
+	if !ok {
+		logger.Logger.Debug().Str("hash", hash).Msg("Organize: torrent no longer present, dropping")
+		return true
+	}
+	if !info.Completed {
+		return false // not seeding yet, retry
+	}
+
+	saved, err := fm.LoadSavedEpisodes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Organize: failed to load saved episodes")
+		return false
+	}
+
+	var matched []files.EpisodeStruct
+	for _, ep := range saved {
+		if ep.EpisodeHash == hash {
+			matched = append(matched, ep)
+		}
+	}
+	if len(matched) == 0 {
+		// The episode record may not be persisted yet (fast-completing torrent). Retry;
+		// bounded by MaxRetries.
+		logger.Logger.Debug().Str("hash", hash).Msg("Organize: no saved episode matches hash yet, retrying")
+		return false
+	}
+
+	// The webhook + write-back run only when at least one matched episode is not yet
+	// organized (empty LibraryPaths). This makes reconciliation re-runs no-ops.
+	needsOrganize := false
+	for _, ep := range matched {
+		if len(ep.LibraryPaths) == 0 {
+			needsOrganize = true
+			break
+		}
+	}
+	if !needsOrganize {
+		return true // already organized on a previous run
+	}
+
+	isBatch := matched[0].IsBatch || len(matched) > 1
+	req := files.OrganizeRequest{
+		TorrentDataDir: info.DataDir,
+		AnimeName:      matched[0].AnimeName,
+		CompletedPath:  configs.CompletedAnimePath,
+		IsBatch:        isBatch,
+		RenameJellyfin: configs.RenameFilesForJellyfin,
+	}
+	if !isBatch {
+		ep := matched[0].EpisodeNumber
+		req.EpisodeNumber = &ep
+	}
+
+	created, err := librarian.Organize(req)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).Str("anime", matched[0].AnimeName).Msg("Organize: failed to hardlink into library")
+		return false // retry with backoff; permanent errors drop after MaxRetries
+	}
+
+	// Write back LibraryPaths (the "organized" marker) before firing the webhook, so a
+	// crash after the webhook can't re-fire it, and a crash before write-back re-runs once.
+	for i := range matched {
+		matched[i].LibraryPaths = created
+	}
+	if err := fm.UpsertEpisodes(matched); err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Organize: failed to persist library paths")
+		return false // retry; hardlinks already exist so Organize will no-op next time
+	}
+
+	notifications.Notify(configs, notifications.DownloadCompleted, matched[0].AnimeName, matched[0].EpisodeNumber, "")
+	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", len(created)).Msg("Organized torrent into library")
+	return true
 }

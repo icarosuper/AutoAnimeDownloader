@@ -29,7 +29,23 @@ interface ApiResponse<T> {
   }
 }
 
-async function apiRequest<T>(method: string, endpoint: string, body: unknown = null): Promise<T> {
+interface ApiRequestOptions {
+  /**
+   * Suppresses the automatic error toast on failure. For endpoints polled on a short interval
+   * (e.g. getTorrents(), hit every 2-15s by Downloads/Status/AnimeDetail) a transient failure
+   * must not spam a toast on every tick — the caller degrades silently and shows nothing instead.
+   * The error is still logged and still rethrown, so callers that DO want to surface it (their
+   * own try/catch + toast.error) keep working exactly as before.
+   */
+  silent?: boolean
+}
+
+async function apiRequest<T>(
+  method: string,
+  endpoint: string,
+  body: unknown = null,
+  opts: ApiRequestOptions = {},
+): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`
   const options: RequestInit = {
     method,
@@ -55,14 +71,16 @@ async function apiRequest<T>(method: string, endpoint: string, body: unknown = n
     return data.data
   } catch (error) {
     console.error('API request failed:', error)
-    const isAnilistEndpoint = /\/animes\/\d+\/episodes$/.test(endpoint)
-    const message =
-      isAnilistEndpoint && (responseStatus === 500 || responseStatus === 0)
-        ? 'Falha na comunicação com o AniList'
-        : error instanceof Error
-          ? error.message
-          : 'Erro desconhecido'
-    toasts.add(message)
+    if (!opts.silent) {
+      const isAnilistEndpoint = /\/animes\/\d+\/episodes$/.test(endpoint)
+      const message =
+        isAnilistEndpoint && (responseStatus === 500 || responseStatus === 0)
+          ? 'Falha na comunicação com o AniList'
+          : error instanceof Error
+            ? error.message
+            : 'Erro desconhecido'
+      toasts.add(message)
+    }
     throw error
   }
 }
@@ -98,10 +116,8 @@ export interface Priorities {
 export interface Config {
   anilist_username?: string
   anilist_usernames: string[]
-  save_path: string
   completed_anime_path: string
   check_interval: number
-  qbittorrent_url: string
   max_episodes_per_anime: number
   episode_retry_limit: number
   delete_watched_episodes: boolean
@@ -133,6 +149,26 @@ export interface AnimeInfo {
 
 export interface LogsResponse {
   lines: string[]
+}
+
+export interface TorrentInfo {
+  hash: string
+  name: string
+  status: string
+  completed: boolean
+  anime_name?: string
+  anime_id?: number
+  episode_number: number | null
+  is_batch: boolean
+  bytes_completed: number
+  bytes_total: number
+  bytes_uploaded: number
+  progress: number
+  download_speed: number
+  upload_speed: number
+  peers_total: number
+  eta_seconds: number | null
+  seeded_for_seconds: number
 }
 
 export async function getStatus(): Promise<StatusResponse> {
@@ -167,6 +203,7 @@ export interface AnimeEpisodeInfo {
   episode_name?: string
   is_manually_managed?: boolean
   is_blocked?: boolean
+  episode_hash?: string
 }
 
 export interface AnimeDetailResponse {
@@ -231,6 +268,36 @@ export async function stopDaemon(): Promise<void> {
 export async function getLogs(lines?: number): Promise<LogsResponse> {
   const endpoint = lines ? `/logs?lines=${lines}` : '/logs'
   return apiRequest<LogsResponse>('GET', endpoint)
+}
+
+export async function getTorrents(): Promise<TorrentInfo[]> {
+  // Polled on a short interval by Downloads.svelte (2s), Status.svelte (5s), and
+  // AnimeDetail.svelte (2s/15s adaptive) — a transient failure must degrade silently rather
+  // than toast on every tick.
+  return apiRequest<TorrentInfo[]>('GET', '/torrents', null, { silent: true })
+}
+
+export async function pauseTorrent(hash: string): Promise<void> {
+  return apiRequest<void>('POST', `/torrents/${hash}/pause`)
+}
+
+export async function resumeTorrent(hash: string): Promise<void> {
+  return apiRequest<void>('POST', `/torrents/${hash}/resume`)
+}
+
+export async function announceTorrent(hash: string): Promise<void> {
+  return apiRequest<void>('POST', `/torrents/${hash}/announce`)
+}
+
+export async function deleteTorrent(
+  hash: string,
+  opts: { keepData: boolean; block: boolean },
+): Promise<void> {
+  const params = new URLSearchParams({
+    keep_data: String(opts.keepData),
+    block: String(opts.block),
+  })
+  return apiRequest<void>('DELETE', `/torrents/${hash}?${params.toString()}`)
 }
 
 export async function testWebhook(name: string): Promise<void> {

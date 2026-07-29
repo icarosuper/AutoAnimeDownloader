@@ -34,8 +34,9 @@ func handleStatus(server *Server) http.HandlerFunc {
 		status, lastCheck, hasError := server.State.GetAll()
 
 		var diskTotal, diskFree uint64
-		if cfg, err := server.FileManager.LoadConfigs(); err == nil && cfg.SavePath != "" {
-			diskTotal, diskFree, _ = files.DiskSpace(cfg.SavePath)
+		// Mesmo volume que o diretorio de download, por construcao (ver Config.DownloadPath).
+		if cfg, err := server.FileManager.LoadConfigs(); err == nil && cfg.CompletedAnimePath != "" {
+			diskTotal, diskFree, _ = files.DiskSpace(cfg.CompletedAnimePath)
 		}
 
 		response := StatusResponse{

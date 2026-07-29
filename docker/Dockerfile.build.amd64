@@ -2,7 +2,7 @@
 # This can be used for consistent builds or when local dependencies are missing
 # Frontend is expected to be already built in src/internal/frontend/dist
 
-FROM golang:1.24
+FROM golang:1.25
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \

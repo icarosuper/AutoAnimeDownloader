@@ -128,7 +128,7 @@ func TestFilesModule_CanDeleteEmptyFolders_WithMixedFolders(t *testing.T) {
 		}
 		_ = f.Close()
 
-		if err := manager.DeleteEmptyFolders(saveRoot, ""); err != nil {
+		if err := manager.DeleteEmptyFolders(saveRoot); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -152,9 +152,6 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 		// defaults from implementation
 		if cfg.CheckInterval != 10 {
 			t.Fatalf("expected CheckInterval 10, got %d", cfg.CheckInterval)
-		}
-		if cfg.QBittorrentUrl != "http://127.0.0.1:8080" {
-			t.Fatalf("unexpected default QBittorrentUrl: %s", cfg.QBittorrentUrl)
 		}
 		if len(cfg.DownloadMediaStatuses) != 2 || cfg.DownloadMediaStatuses[0] != "RELEASING" || cfg.DownloadMediaStatuses[1] != "FINISHED" {
 			t.Fatalf("expected default DownloadMediaStatuses [RELEASING FINISHED], got %v", cfg.DownloadMediaStatuses)
@@ -193,9 +190,6 @@ func TestManager_LoadConfigs_WithNonExistentFile(t *testing.T) {
 	// Deve retornar configuração padrão
 	if config.CheckInterval != 10 {
 		t.Errorf("expected default CheckInterval 10, got %d", config.CheckInterval)
-	}
-	if config.QBittorrentUrl != "http://127.0.0.1:8080" {
-		t.Errorf("expected default QBittorrentUrl, got %s", config.QBittorrentUrl)
 	}
 
 	// Deve ter salvado a configuração padrão
@@ -273,7 +267,6 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 		SavePath:              "/test",
 		AnilistUsernames:      []string{"user123"},
 		CheckInterval:         15,
-		QBittorrentUrl:        "http://test:8080",
 		MaxEpisodesPerAnime:   10,
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: true,
@@ -473,7 +466,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 
 	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
-	err := manager.DeleteEmptyFolders("/save", "")
+	err := manager.DeleteEmptyFolders("/save")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -489,11 +482,11 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 	}
 }
 
-func TestManager_DeleteEmptyFolders_WithEmptySavePath(t *testing.T) {
+func TestManager_DeleteEmptyFolders_WithEmptyPath(t *testing.T) {
 	mockFS := NewMockFileSystem()
 	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
 
-	err := manager.DeleteEmptyFolders("", "")
+	err := manager.DeleteEmptyFolders("")
 	if err == nil {
 		t.Fatal("expected error with empty save path")
 	}

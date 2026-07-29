@@ -9,7 +9,10 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     steps:
@@ -21,6 +24,9 @@ jobs:
           bun-version: latest
 
       - name: Build frontend
+        # bash on both legs: the default pwsh on windows-latest only propagates the exit code
+        # of the LAST command, so a failing `bun install` would not fail the step.
+        shell: bash
         run: |
           cd src/internal/frontend
           bun install --frozen-lockfile
@@ -29,10 +35,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: true
 
       - name: Build project
+        run: go build -v ./...
+
+      - name: Assert CGO-free build (single static binary)
+        env:
+          CGO_ENABLED: 0
         run: go build -v ./...
 
   test-backend-unit:
@@ -45,7 +56,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: true
 
       - name: Create fake frontend dist
@@ -55,6 +66,24 @@ jobs:
 
       - name: Run unit tests
         run: go test -v ./src/tests/unit/... ./src/internal/...
+
+  # Confirms the Windows cross-device (ERROR_NOT_SAME_DEVICE) errno mapping and hardlink
+  # behavior, which can only be verified by actually running on Windows.
+  test-backend-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run torrent + files package tests
+        run: go test -v ./src/internal/files/... ./src/internal/torrents/...
 
   test-backend-integration:
     runs-on: ubuntu-latest
@@ -85,16 +114,10 @@ jobs:
             --tag test-mock-nyaa --load \
             src/tests/mocks/nyaa
 
-          docker buildx build \
-            --cache-from type=gha,scope=integration-mock-qbittorrent \
-            --cache-to type=gha,mode=max,scope=integration-mock-qbittorrent \
-            --tag test-mock-qbittorrent --load \
-            src/tests/mocks/qbittorrent
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: true
 
       - name: Start services
@@ -105,7 +128,13 @@ jobs:
 
       - name: Run integration tests
         env:
+          # DAEMON_URL is also the opt-in gate: without it the suite skips, so that a
+          # plain `go test ./...` never reconfigures a daemon it wasn't pointed at.
           DAEMON_URL: http://localhost:8091
+          # This path is resolved inside the daemon *container*, not on the runner.
+          # Keep it under /app/data (mounted volume) — the config endpoint hardlink-probes
+          # it and rejects filesystems that don't support hardlinks.
+          TEST_COMPLETED_PATH: /app/data/aad-test/library
         run: go test -v ./src/tests/integration/...
 
       - name: Cleanup

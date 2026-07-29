@@ -2,7 +2,7 @@
 <service>
     <id>AutoAnimeDownloader</id>
     <name>AutoAnimeDownloader</name>
-    <description>Auto Anime Downloader - Automatically downloads anime from Anilist via qBittorrent</description>
+    <description>Auto Anime Downloader - Automatically downloads anime from Anilist (embedded BitTorrent client)</description>
     <executable>%BASE%\autoanimedownloader-daemon.exe</executable>
     <logpath>%BASE%\logs</logpath>
     <logmode>rotate</logmode>

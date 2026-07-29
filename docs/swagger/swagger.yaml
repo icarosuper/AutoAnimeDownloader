@@ -28,6 +28,15 @@ definitions:
         type: integer
       download_date:
         type: string
+      episode_hash:
+        description: |-
+          EpisodeHash is the saved episode's torrent info hash. It is what lets the anime detail
+          screen join in live torrent progress exactly: a batch torrent's saved episodes all carry
+          the same hash but episode_number is meaningless for matching a torrent to them (the
+          torrent itself has no single episode number), so joining by number would miss batches
+          entirely. Joining by hash instead, single and batch episodes use the same path. Empty
+          (and omitted via omitempty) when the episode has no saved record.
+        type: string
       episode_id:
         type: integer
       episode_name:
@@ -121,6 +130,71 @@ definitions:
       success:
         type: boolean
     type: object
+  api.TorrentResponse:
+    properties:
+      anime_id:
+        example: 154587
+        type: integer
+      anime_name:
+        example: Sousou no Frieren
+        type: string
+      bytes_completed:
+        example: 524288000
+        type: integer
+      bytes_total:
+        description: BytesTotal is 0 until the torrent's metadata arrives.
+        example: 1073741824
+        type: integer
+      bytes_uploaded:
+        example: 104857600
+        type: integer
+      completed:
+        description: |-
+          Completed is piece-derived (TorrentInfo.Completed), not Status-derived — it stays true
+          for a torrent paused after finishing, which Status alone cannot tell apart from a
+          paused, unfinished one. Used to key the list sort instead of Status.
+        example: false
+        type: boolean
+      download_speed:
+        example: 2097152
+        type: integer
+      episode_number:
+        description: EpisodeNumber is null for batch torrents (they map to several
+          episodes).
+        type: integer
+      eta_seconds:
+        description: EtaSeconds is null when unknown or infinite.
+        example: 240
+        type: integer
+      hash:
+        example: 0123456789abcdef0123456789abcdef01234567
+        type: string
+      is_batch:
+        example: false
+        type: boolean
+      name:
+        example: '[SubsPlease] Frieren - 07 (1080p).mkv'
+        type: string
+      peers_total:
+        example: 14
+        type: integer
+      progress:
+        description: |-
+          Progress is 0..1: BytesCompleted/BytesTotal normally, falling back to the piece ratio
+          (PiecesHave/PiecesTotal) when BytesCompleted reads 0 with a paused torrent — see
+          buildTorrentResponse. 0 while BytesTotal and PiecesTotal are both unknown.
+        example: 0.48
+        type: number
+      seeded_for_seconds:
+        example: 3600
+        type: integer
+      status:
+        example: downloading
+        type: string
+      upload_speed:
+        example: 524288
+        type: integer
+    type: object
   api.animeSettingsRequest:
     properties:
       custom_search_query:
@@ -166,12 +240,8 @@ definitions:
         $ref: '#/definitions/files.NotificationsConfig'
       priorities:
         $ref: '#/definitions/nyaa.Priorities'
-      qbittorrent_url:
-        type: string
       rename_files_for_jellyfin:
         type: boolean
-      save_path:
-        type: string
       watched_episodes_to_keep:
         type: integer
     type: object
@@ -324,8 +394,8 @@ paths:
     delete:
       consumes:
       - application/json
-      description: Deletes a downloaded episode from qBittorrent and blocks it from
-        being re-downloaded automatically
+      description: Deletes a downloaded episode (library hardlink + torrent) and blocks
+        it from being re-downloaded automatically
       parameters:
       - description: Anime ID (AniList MediaList ID)
         in: path
@@ -887,6 +957,191 @@ paths:
       summary: Get daemon status
       tags:
       - status
+  /torrents:
+    get:
+      consumes:
+      - application/json
+      description: Returns a live snapshot of every torrent in the embedded client
+        — progress, speed, ETA, peers and status — joined with the anime/episode it
+        belongs to. Batch torrents appear once, with a null episode_number. Responds
+        with an empty list (not an error) when no session exists yet, i.e. before
+        completed_anime_path is configured.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/api.TorrentResponse'
+                  type: array
+              type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: List torrents
+      tags:
+      - torrents
+  /torrents/{hash}:
+    delete:
+      consumes:
+      - application/json
+      description: Removes a torrent and every saved episode sharing its hash, as
+        a single unit (the deletion boundary is the torrent, not the episode, so a
+        batch's episodes always leave together). By default this frees both the seeding
+        copy and the library hardlink (same inode); keep_data=true keeps both instead.
+        block=true additionally blocks every episode in the group against automatic
+        re-download.
+      parameters:
+      - description: Torrent info hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      - description: Keep the seeding copy and library hardlinks on disk (default
+          false)
+        in: query
+        name: keep_data
+        type: boolean
+      - description: Block the torrent's episodes against automatic re-download (default
+          false)
+        in: query
+        name: block
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Delete a torrent
+      tags:
+      - torrents
+  /torrents/{hash}/announce:
+    post:
+      consumes:
+      - application/json
+      description: Re-announces the torrent to all trackers and DHT — the way out
+        of "stuck at 0 peers". It does not override the trackers' minimum interval,
+        so repeated calls have no extra effect.
+      parameters:
+      - description: Torrent info hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Force a torrent re-announce
+      tags:
+      - torrents
+  /torrents/{hash}/pause:
+    post:
+      consumes:
+      - application/json
+      description: 'Stops a torrent. Does not block: the torrent enters the "stopping"
+        state and only reaches "stopped" up to ~5s later, once the stop event reaches
+        the trackers. The paused state is persisted and survives a daemon restart.'
+      parameters:
+      - description: Torrent info hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Pause a torrent
+      tags:
+      - torrents
+  /torrents/{hash}/resume:
+    post:
+      consumes:
+      - application/json
+      description: Restarts a paused torrent and re-arms its completion listener.
+      parameters:
+      - description: Torrent info hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Resume a torrent
+      tags:
+      - torrents
 schemes:
 - http
 swagger: "2.0"

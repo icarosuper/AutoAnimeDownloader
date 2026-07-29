@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -15,6 +16,11 @@ var (
 	// Defaults to localhost for local testing, but should be "http://daemon:8091" in Docker
 	daemonURL = getEnvOrDefault("DAEMON_URL", "http://localhost:8091")
 	apiBase   = daemonURL + "/api/v1"
+
+	// testCompletedPath is the path these tests write into the daemon's config. It is interpreted
+	// by the *daemon*, not by the test process, so Docker overrides it to a path inside the daemon
+	// container (see docker-compose.test.yml).
+	testCompletedPath = getEnvOrDefault("TEST_COMPLETED_PATH", defaultTestPath("library"))
 )
 
 func getEnvOrDefault(key, defaultValue string) string {
@@ -24,13 +30,42 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-func TestAPIEndpoints(t *testing.T) {
+// defaultTestPath returns ~/aad-test/<leaf>, falling back to the temp dir when there is no
+// home directory. Deliberately not /tmp: on distros where /tmp is a tmpfs, a daemon
+// downloading real torrents there fills up RAM.
+func defaultTestPath(leaf string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return filepath.Join(os.TempDir(), "aad-test", leaf)
+	}
+	return filepath.Join(home, "aad-test", leaf)
+}
+
+// requireDaemon skips unless integration testing was explicitly opted into via DAEMON_URL,
+// then waits for that daemon to become ready.
+//
+// The opt-in is the point: these tests PUT a throwaway config into whatever daemon answers.
+// Without the gate, `go test ./...` on a dev machine finds the developer's own daemon on
+// localhost:8091 and silently overwrites its save path, AniList username and excluded
+// lists. docker-compose.test.yml sets DAEMON_URL, so Docker and CI runs are unaffected.
+func requireDaemon(t *testing.T) {
+	t.Helper()
+	if os.Getenv("DAEMON_URL") == "" {
+		t.Skip("DAEMON_URL not set — skipping integration tests (they overwrite the config of the daemon they connect to). Run them via `make test-backend-integration`.")
+	}
+	// probeDaemon before waitForDaemon is deliberate, not redundant: it separates "nothing
+	// is listening" (skip immediately) from "listening but not ready" (worth waiting 30s
+	// for). Without it, a typo'd DAEMON_URL costs 30 seconds per test.
 	if !probeDaemon() {
 		t.Skip("Daemon not available at " + daemonURL)
 	}
 	if !waitForDaemon(t, 30*time.Second) {
 		t.Skip("Daemon did not become ready in time")
 	}
+}
+
+func TestAPIEndpoints(t *testing.T) {
+	requireDaemon(t)
 
 	t.Run("GET /api/v1/status", func(t *testing.T) {
 		resp, err := http.Get(apiBase + "/status")
@@ -86,10 +121,8 @@ func TestAPIEndpoints(t *testing.T) {
 	t.Run("PUT /api/v1/config", func(t *testing.T) {
 		config := map[string]interface{}{
 			"anilist_username":        "testuser",
-			"save_path":               "/tmp/test",
-			"completed_anime_path":    "/tmp/completed",
+			"completed_anime_path":    testCompletedPath,
 			"check_interval":          10,
-			"qbittorrent_url":         "http://mock-qbittorrent:8082",
 			"max_episodes_per_anime":  12,
 			"episode_retry_limit":     5,
 			"delete_watched_episodes": true,
@@ -217,12 +250,7 @@ func TestAPIEndpoints(t *testing.T) {
 }
 
 func TestDaemonLifecycle(t *testing.T) {
-	if !probeDaemon() {
-		t.Skip("Daemon not available at " + daemonURL)
-	}
-	if !waitForDaemon(t, 30*time.Second) {
-		t.Skip("Daemon did not become ready in time")
-	}
+	requireDaemon(t)
 
 	// Start daemon
 	t.Run("Start daemon", func(t *testing.T) {
@@ -287,20 +315,13 @@ func TestDaemonLifecycle(t *testing.T) {
 }
 
 func TestFullDownloadFlow(t *testing.T) {
-	if !probeDaemon() {
-		t.Skip("Daemon not available at " + daemonURL)
-	}
-	if !waitForDaemon(t, 30*time.Second) {
-		t.Skip("Daemon did not become ready in time")
-	}
+	requireDaemon(t)
 
 	// Set up config with mock URLs
 	config := map[string]interface{}{
 		"anilist_username":        "testuser",
-		"save_path":               "/tmp/test",
-		"completed_anime_path":    "/tmp/completed",
+		"completed_anime_path":    testCompletedPath,
 		"check_interval":          10,
-		"qbittorrent_url":         "http://mock-qbittorrent:8082",
 		"max_episodes_per_anime":  12,
 		"episode_retry_limit":     5,
 		"delete_watched_episodes": true,

@@ -7,8 +7,10 @@
     triggerCheck,
     startDaemon,
     stopDaemon,
+    getTorrents,
     type StatusResponse,
     type AnimeInfo,
+    type TorrentInfo,
   } from "../lib/api/client.js";
   import { WebSocketClient } from "../lib/websocket/client.js";
   import Loading from "../components/Loading.svelte";
@@ -18,6 +20,7 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
   import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes, isDiskSpaceLow, type SortKey, type SortDir } from "../lib/utils/status.js";
+  import { totalSpeeds, formatSpeed } from "../lib/utils/torrents.js";
 
   // Reactive translations — re-evaluated when $locale changes, no remount needed
   $: T = $locale && {
@@ -28,6 +31,7 @@
     cardNextCheck: m.status_card_next_check(),
     cardLibrary: m.status_card_library(),
     cardDisk: m.status_card_disk(),
+    cardSpeed: m.status_card_speed(),
     checking: m.status_checking(),
     never: m.common_never(),
     errorAlert: m.status_error_alert(),
@@ -53,6 +57,7 @@
 
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
+  let torrents: TorrentInfo[] = [];
   let checkInterval = 0;
   let loading = true;
   let actionLoading = false;
@@ -74,6 +79,9 @@
 
   $: diskSpaceLow = status ? isDiskSpaceLow(status.disk_free, status.disk_total) : false;
 
+  $: speeds = totalSpeeds(torrents);
+  $: hasTraffic = speeds.download > 0 || speeds.upload > 0;
+
   function handleSort(key: SortKey) {
     if (sortKey === key) {
       sortDir = sortDir === "desc" ? "asc" : "desc";
@@ -86,12 +94,21 @@
   let wsClient: WebSocketClient | null = null;
   let animesPollInterval: ReturnType<typeof setInterval> | null = null;
   let tickInterval: ReturnType<typeof setInterval> | null = null;
+  let torrentsPollInterval: ReturnType<typeof setInterval> | null = null;
 
   async function loadAnimes() {
     try {
       animes = await getAnimes();
     } catch (err) {
       console.error("Failed to load animes:", err);
+    }
+  }
+
+  async function loadTorrents() {
+    try {
+      torrents = await getTorrents();
+    } catch (err) {
+      console.error("Failed to load torrents:", err);
     }
   }
 
@@ -186,6 +203,8 @@
 
   onMount(() => {
     loadInitialData();
+    loadTorrents();
+    torrentsPollInterval = setInterval(loadTorrents, 5000);
     wsClient = new WebSocketClient();
     wsClient.connect(handleWebSocketStatus, (state) => wsConnectionState.set(state));
     animesPollInterval = setInterval(loadAnimes, 30000);
@@ -197,6 +216,7 @@
     wsClient = null;
     if (animesPollInterval) clearInterval(animesPollInterval);
     if (tickInterval) clearInterval(tickInterval);
+    if (torrentsPollInterval) clearInterval(torrentsPollInterval);
   });
 </script>
 
@@ -211,7 +231,7 @@
     <Loading message="Loading status..." />
   {:else if status}
     <!-- Stat Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+    <div class="grid grid-cols-2 lg:grid-cols-6 gap-3">
       <!-- Daemon status -->
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-4 gap-1">
@@ -274,6 +294,19 @@
           </div>
         </div>
       {/if}
+
+      <!-- Global speed -->
+      <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-4 gap-1">
+          <span class="text-xs text-base-content/50 uppercase tracking-wider">{T && T.cardSpeed}</span>
+          <span class="text-base font-medium {hasTraffic ? 'text-base-content' : 'text-base-content/40'}">
+            ↓ {formatSpeed(speeds.download)}
+          </span>
+          <span class="text-xs text-base-content/40">
+            {$locale && m.status_speed_up({ speed: formatSpeed(speeds.upload) })}
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- Error warning -->

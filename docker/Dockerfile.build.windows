@@ -2,7 +2,7 @@
 # Uses mingw-w64 for cross-compilation from Linux
 # Frontend is expected to be already built in src/internal/frontend/dist
 
-FROM golang:1.24
+FROM golang:1.25
 
 # Install mingw-w64 for Windows cross-compilation with CGO
 RUN apt-get update && apt-get install -y \

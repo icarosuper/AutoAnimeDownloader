@@ -4,20 +4,11 @@ import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
-	"AutoAnimeDownloader/src/internal/torrents"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 )
-
-func getQBittorrentURLForAPI(configURL string) string {
-	if envURL := os.Getenv("QBITTORRENT_URL"); envURL != "" {
-		return envURL
-	}
-	return configURL
-}
 
 // @Summary      Manually download an episode
 // @Description  Triggers an immediate download for an aired episode and marks it as manually managed
@@ -69,14 +60,22 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(animeId, episodeId, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeId, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to manually download episode")
 			JSONError(w, http.StatusInternalServerError, "DOWNLOAD_FAILED", err.Error())
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile([]files.EpisodeStruct{ep}); err != nil {
+		// UpsertEpisodes, never SaveEpisodesToFile: the latter is append-only with dedupe by
+		// EpisodeID, so an already-saved record makes it discard this one entirely — the new
+		// hash would be lost (breaking JobOrganize's saved-episode ↔ torrent join by hash) and
+		// the stale LibraryPaths would survive, making organizeTorrent think the episode was
+		// already organized. Wholesale replacement is correct here because
+		// ManualDownloadEpisode always returns ManuallyManaged: true and LibraryPaths nil, so
+		// the record already carries what the daemon's mergeSavedEpisode would compute
+		// (decision 27).
+		if err := server.FileManager.UpsertEpisodes([]files.EpisodeStruct{ep}); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episode to file")
 			JSONInternalError(w, err)
 			return
@@ -88,7 +87,7 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 }
 
 // @Summary      Manually delete a downloaded episode
-// @Description  Deletes a downloaded episode from qBittorrent and blocks it from being re-downloaded automatically
+// @Description  Deletes a downloaded episode (library hardlink + torrent) and blocks it from being re-downloaded automatically
 // @Tags         animes
 // @Accept       json
 // @Produce      json
@@ -119,13 +118,6 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		configs, err := server.FileManager.LoadConfigs()
-		if err != nil {
-			logger.Logger.Error().Err(err).Msg("Failed to load configs")
-			JSONInternalError(w, err)
-			return
-		}
-
 		savedEpisodes, err := server.FileManager.LoadSavedEpisodes()
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to load saved episodes")
@@ -133,28 +125,23 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		var targetHash string
+		found := false
 		for _, ep := range savedEpisodes {
 			if ep.EpisodeID == episodeId && ep.AnimeID == animeId {
-				targetHash = ep.EpisodeHash
+				found = true
 				break
 			}
 		}
 
-		if targetHash == "" {
+		if !found {
 			JSONError(w, http.StatusNotFound, "EPISODE_NOT_FOUND", "Episode not found in downloaded list")
 			return
 		}
 
-		qBittorrentURL := getQBittorrentURLForAPI(configs.QBittorrentUrl)
-		torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
-
-		if err := torrentsService.DeleteTorrents([]string{targetHash}); err != nil {
-			logger.Logger.Warn().Err(err).Str("hash", targetHash).Msg("Failed to delete torrent from qBittorrent")
-		}
-
-		if err := server.FileManager.DeleteEpisodesFromFile([]int{episodeId}); err != nil {
-			logger.Logger.Error().Err(err).Int("episode_id", episodeId).Msg("Failed to remove episode from file")
+		// Remove both links (library hardlink + seeding torrent, batch guard applied) and
+		// delete the episode from the saved file.
+		if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
+			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode")
 			JSONInternalError(w, err)
 			return
 		}
@@ -260,23 +247,20 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		var existingHash string
+		alreadyDownloaded := false
 		for _, ep := range savedEpisodes {
 			if ep.EpisodeID == episodeId && ep.AnimeID == animeId {
-				existingHash = ep.EpisodeHash
+				alreadyDownloaded = true
 				break
 			}
 		}
 
-		qBittorrentURL := getQBittorrentURLForAPI(configs.QBittorrentUrl)
-		torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
-
-		if existingHash != "" {
-			if err := torrentsService.DeleteTorrents([]string{existingHash}); err != nil {
-				logger.Logger.Warn().Err(err).Str("hash", existingHash).Msg("Failed to delete existing torrent")
-			}
-			if err := server.FileManager.DeleteEpisodesFromFile([]int{episodeId}); err != nil {
-				logger.Logger.Error().Err(err).Int("episode_id", episodeId).Msg("Failed to remove episode from file")
+		if alreadyDownloaded {
+			// Remove both links (library hardlink + seeding torrent) and delete from file.
+			// Abort on failure: adding a new torrent while the stale record survives would
+			// leave the new download untracked (JobOrganize joins saved episodes by hash).
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode before redownload")
 				JSONInternalError(w, err)
 				return
 			}
@@ -292,14 +276,18 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(animeId, episodeId, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeId, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to redownload episode")
 			JSONError(w, http.StatusInternalServerError, "REDOWNLOAD_FAILED", err.Error())
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile([]files.EpisodeStruct{ep}); err != nil {
+		// UpsertEpisodes so the write does not depend on RemoveEpisodesWithLinks having deleted
+		// the old record first: append-only SaveEpisodesToFile would silently drop this update if
+		// any record survived. Replacement is safe — ManualDownloadEpisode sets
+		// ManuallyManaged: true and leaves LibraryPaths nil (decision 27).
+		if err := server.FileManager.UpsertEpisodes([]files.EpisodeStruct{ep}); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episode to file")
 			JSONInternalError(w, err)
 			return
@@ -365,23 +353,19 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		var existingHash string
+		alreadyDownloaded := false
 		for _, ep := range savedEpisodes {
 			if ep.EpisodeID == episodeId && ep.AnimeID == animeId {
-				existingHash = ep.EpisodeHash
+				alreadyDownloaded = true
 				break
 			}
 		}
 
-		qBittorrentURL := getQBittorrentURLForAPI(configs.QBittorrentUrl)
-		torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
-
-		if existingHash != "" {
-			if err := torrentsService.DeleteTorrents([]string{existingHash}); err != nil {
-				logger.Logger.Warn().Err(err).Str("hash", existingHash).Msg("Failed to delete existing torrent")
-			}
-			if err := server.FileManager.DeleteEpisodesFromFile([]int{episodeId}); err != nil {
-				logger.Logger.Error().Err(err).Int("episode_id", episodeId).Msg("Failed to remove episode from file")
+		if alreadyDownloaded {
+			// Remove both links (library hardlink + seeding torrent) and delete from file.
+			// Abort on failure: the replacement torrent would otherwise be untracked.
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode before replacement")
 				JSONInternalError(w, err)
 				return
 			}
@@ -391,14 +375,17 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
 		}
 
-		ep, err := daemon.ManualDownloadEpisodeWithMagnet(animeId, episodeId, body.Magnet, configs)
+		ep, err := daemon.ManualDownloadEpisodeWithMagnet(server.Torrents, animeId, episodeId, body.Magnet, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to replace episode with magnet")
 			JSONError(w, http.StatusInternalServerError, "REPLACE_FAILED", err.Error())
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile([]files.EpisodeStruct{ep}); err != nil {
+		// UpsertEpisodes: same reasoning as the redownload handler — the update must not depend
+		// on the old record having been deleted. ManualDownloadEpisodeWithMagnet sets
+		// ManuallyManaged: true and leaves LibraryPaths nil (decision 27).
+		if err := server.FileManager.UpsertEpisodes([]files.EpisodeStruct{ep}); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episode to file")
 			JSONInternalError(w, err)
 			return
@@ -456,44 +443,35 @@ func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Collect hashes and IDs for all existing episodes of this anime
-		var hashesToDelete []string
+		// Collect IDs for all existing episodes of this anime and remove both links.
 		var idsToDelete []int
-		seenHashes := make(map[string]bool)
 		for _, ep := range savedEpisodes {
 			if ep.AnimeID == animeId {
 				idsToDelete = append(idsToDelete, ep.EpisodeID)
-				if !seenHashes[ep.EpisodeHash] {
-					seenHashes[ep.EpisodeHash] = true
-					hashesToDelete = append(hashesToDelete, ep.EpisodeHash)
-				}
 			}
 		}
 
-		qBittorrentURL := getQBittorrentURLForAPI(configs.QBittorrentUrl)
-		torrentsService := torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
-
-		if len(hashesToDelete) > 0 {
-			if err := torrentsService.DeleteTorrents(hashesToDelete); err != nil {
-				logger.Logger.Warn().Err(err).Msg("Failed to delete existing anime torrents")
-			}
-		}
 		if len(idsToDelete) > 0 {
-			if err := server.FileManager.DeleteEpisodesFromFile(idsToDelete); err != nil {
-				logger.Logger.Error().Err(err).Int("anime_id", animeId).Msg("Failed to remove anime episodes from file")
+			// Abort on failure: the replacement batch torrent would otherwise be untracked.
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, idsToDelete); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Msg("Failed to remove episodes before replacement")
 				JSONInternalError(w, err)
 				return
 			}
 		}
 
-		episodes, err := daemon.ManualDownloadAnimeWithMagnet(animeId, body.Magnet, configs)
+		episodes, err := daemon.ManualDownloadAnimeWithMagnet(server.Torrents, animeId, body.Magnet, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Msg("Failed to replace anime with magnet")
 			JSONError(w, http.StatusInternalServerError, "REPLACE_FAILED", err.Error())
 			return
 		}
 
-		if err := server.FileManager.SaveEpisodesToFile(episodes); err != nil {
+		// UpsertEpisodes: the batch covers every aired episode of the anime, so a single record
+		// that survived the removal above would otherwise be left pointing at the old torrent
+		// hash. ManualDownloadAnimeWithMagnet sets ManuallyManaged: true on every record and
+		// leaves LibraryPaths nil (decision 27).
+		if err := server.FileManager.UpsertEpisodes(episodes); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save episodes to file")
 			JSONInternalError(w, err)
 			return

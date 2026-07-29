@@ -45,15 +45,12 @@ func findEpisodeNode(nodes []anilist.AiringNode, episodeId int) *anilist.AiringN
 	return nil
 }
 
-func newTorrentServiceFromConfig(configs *files.Config) *torrents.TorrentService {
-	qBittorrentURL := getQBittorrentURL(configs.QBittorrentUrl)
-	return torrents.NewTorrentService(&torrents.DefaultHTTPClient{}, qBittorrentURL, configs.SavePath, configs.CompletedAnimePath)
-}
-
 // ManualDownloadEpisodeWithMagnet downloads a specific episode using a user-supplied magnet link.
 // Skips Nyaa search entirely. Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisodeWithMagnet(animeId int, episodeId int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
-	ts := newTorrentServiceFromConfig(configs)
+func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId int, episodeId int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
+		return files.EpisodeStruct{}, err
+	}
 
 	details, err := resolveAnimeDetails(animeId)
 	if err != nil {
@@ -66,16 +63,18 @@ func ManualDownloadEpisodeWithMagnet(animeId int, episodeId int, magnet string, 
 	}
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
-	hash := ts.DownloadTorrentWithOptions(magnet, details.title, epName, details.isFinished, false)
-	if hash == "" {
-		return files.EpisodeStruct{}, fmt.Errorf("failed to add torrent to qBittorrent")
+	hash, err := backend.Add(magnet)
+	if err != nil || hash == "" {
+		return files.EpisodeStruct{}, fmt.Errorf("failed to add torrent to embedded client: %w", err)
 	}
 
 	return files.EpisodeStruct{
 		EpisodeID:       episodeId,
 		AnimeID:         animeId,
+		AnimeName:       details.title,
 		EpisodeHash:     hash,
 		EpisodeName:     epName,
+		EpisodeNumber:   targetNode.Episode,
 		DownloadDate:    time.Now(),
 		ManuallyManaged: true,
 	}, nil
@@ -83,17 +82,19 @@ func ManualDownloadEpisodeWithMagnet(animeId int, episodeId int, magnet string, 
 
 // ManualDownloadAnimeWithMagnet downloads an entire anime using a user-supplied batch magnet link.
 // Marks all aired episodes as downloaded sharing the same torrent hash.
-func ManualDownloadAnimeWithMagnet(animeId int, magnet string, configs *files.Config) ([]files.EpisodeStruct, error) {
-	ts := newTorrentServiceFromConfig(configs)
+func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int, magnet string, configs *files.Config) ([]files.EpisodeStruct, error) {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
+		return nil, err
+	}
 
 	details, err := resolveAnimeDetails(animeId)
 	if err != nil {
 		return nil, err
 	}
 
-	hash := ts.DownloadTorrentWithOptions(magnet, details.title, details.title, details.isFinished, false)
-	if hash == "" {
-		return nil, fmt.Errorf("failed to add torrent to qBittorrent")
+	hash, err := backend.Add(magnet)
+	if err != nil || hash == "" {
+		return nil, fmt.Errorf("failed to add torrent to embedded client: %w", err)
 	}
 
 	now := time.Now()
@@ -106,8 +107,11 @@ func ManualDownloadAnimeWithMagnet(animeId int, magnet string, configs *files.Co
 		episodes = append(episodes, files.EpisodeStruct{
 			EpisodeID:       node.ID,
 			AnimeID:         animeId,
+			AnimeName:       details.title,
 			EpisodeHash:     hash,
 			EpisodeName:     epName,
+			EpisodeNumber:   node.Episode,
+			IsBatch:         true,
 			DownloadDate:    now,
 			ManuallyManaged: true,
 		})
@@ -122,8 +126,10 @@ func ManualDownloadAnimeWithMagnet(animeId int, magnet string, configs *files.Co
 
 // ManualDownloadEpisode downloads a specific episode manually (called from API).
 // Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
-	ts := newTorrentServiceFromConfig(configs)
+func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episodeId int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
+		return files.EpisodeStruct{}, err
+	}
 
 	details, err := resolveAnimeDetails(animeId)
 	if err != nil {
@@ -150,8 +156,8 @@ func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config, cu
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 	var hash string
 	for i := range maxAttempts {
-		h := ts.DownloadTorrentWithOptions(magnets[i], details.title, epName, details.isFinished, false)
-		if h != "" {
+		h, err := backend.Add(magnets[i])
+		if err == nil && h != "" {
 			hash = h
 			break
 		}
@@ -167,6 +173,7 @@ func ManualDownloadEpisode(animeId int, episodeId int, configs *files.Config, cu
 		AnimeName:       details.title,
 		EpisodeHash:     hash,
 		EpisodeName:     epName,
+		EpisodeNumber:   targetNode.Episode,
 		DownloadDate:    time.Now(),
 		ManuallyManaged: true,
 	}, nil

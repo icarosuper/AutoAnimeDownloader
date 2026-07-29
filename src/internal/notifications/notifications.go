@@ -14,15 +14,15 @@ import (
 type Event int
 
 const (
-	NewEpisode                  Event = iota
+	NewEpisode Event = iota
 	DownloadFailed
-	QBittorrentDownloadCompleted
+	DownloadCompleted
 )
 
 // Motivos de falha de download, usados como {{reason}} e na mensagem padrão.
 const (
-	ReasonNotFound     = "nenhum torrent encontrado"
-	ReasonQbitRejected = "qBittorrent rejeitou o torrent"
+	ReasonNotFound         = "nenhum torrent encontrado"
+	ReasonDownloadRejected = "torrent rejeitado"
 )
 
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
@@ -33,7 +33,7 @@ func eventString(e Event) string {
 		return "new_episode"
 	case DownloadFailed:
 		return "download_failed"
-	case QBittorrentDownloadCompleted:
+	case DownloadCompleted:
 		return "download_completed"
 	}
 	return ""
@@ -71,7 +71,7 @@ func eventStrings(animeName string, episode int, event Event, reason string) (ti
 		}
 		return "Erro no download",
 			fmt.Sprintf("%s EP %d falhou: %s", animeName, episode, reason)
-	case QBittorrentDownloadCompleted:
+	case DownloadCompleted:
 		return "Download concluído",
 			fmt.Sprintf("%s EP %d foi baixado com sucesso", animeName, episode)
 	}
@@ -129,7 +129,7 @@ func Notify(cfg *files.Config, event Event, animeName string, episode int, reaso
 func FireTestWebhook(cfg *files.Config, name string) error {
 	for _, preset := range cfg.Notifications.Webhooks {
 		if preset.Name == name {
-			vars := buildVars("Frieren Beyond Journey's End", 5, QBittorrentDownloadCompleted, "")
+			vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "")
 			fireWebhook(preset, vars)
 			return nil
 		}

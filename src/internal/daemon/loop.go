@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
 	"sync"
 	"time"
@@ -12,6 +14,8 @@ type StartLoopPayload struct {
 	Interval    time.Duration
 	State       *State
 	JobQueue    *JobQueue
+	Backend     torrents.TorrentBackend
+	Librarian   files.Librarian
 }
 
 type LoopControl struct {
@@ -46,7 +50,7 @@ func createStartFunc(p StartLoopPayload) func(d time.Duration, c context.Context
 
 				p.State.SetStatus(StatusChecking)
 
-				AnimeVerification(c, p.FileManager, p.State, p.JobQueue)
+				AnimeVerification(c, p.FileManager, p.State, p.JobQueue, p.Backend, p.Librarian)
 
 				select {
 				case <-c.Done():

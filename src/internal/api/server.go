@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/frontend"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
 	"io"
 	"io/fs"
@@ -23,8 +24,9 @@ type FileManagerInterface interface {
 	SaveConfigs(config *files.Config) error
 	LoadSavedEpisodes() ([]files.EpisodeStruct, error)
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
+	UpsertEpisodes(episodes []files.EpisodeStruct) error
 	DeleteEpisodesFromFile(episodeIds []int) error
-	DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error
+	DeleteEmptyFolders(completedAnimeSaveFolder string) error
 	LoadBlockedEpisodes() ([]int, error)
 	BlockEpisode(episodeID int) error
 	UnblockEpisode(episodeID int) error
@@ -41,9 +43,19 @@ type Server struct {
 	StartLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl
 	WSManager     *WebSocketManager
 	JobQueue      *daemon.JobQueue
+	Torrents      torrents.TorrentBackend
+	Librarian     files.Librarian
 
 	mu                 sync.Mutex
 	currentLoopControl *daemon.LoopControl
+
+	// checks tracks the manual-verification goroutines started by handleCheck. The endpoint
+	// is fire-and-forget by design, so production never waits on it — the tests do
+	// (waitForChecks). A verification that outlives its test keeps calling into package-level
+	// globals the next test is busy replacing (anilist's httpDo swap, the logger), and it
+	// keeps hitting the network and the real disk; -race then reports the collision against
+	// whichever test happens to run next, far from the one that actually leaked it.
+	checks sync.WaitGroup
 }
 
 func NewServer(port string, state *daemon.State, fileManager FileManagerInterface, startLoopFunc func(daemon.StartLoopPayload) *daemon.LoopControl) *Server {
@@ -90,6 +102,17 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))
 	apiMux.HandleFunc("/api/v1/logs", handleLogs(s))
+	apiMux.HandleFunc("/api/v1/torrents", handleTorrents(s))
+	// Single pattern for every method on this path: Go 1.22+ ServeMux patterns without a
+	// method prefix match all verbs, so handleTorrentDelete's own method check is what turns
+	// a non-DELETE request into a 405 instead of the mux ever seeing an unmatched pattern.
+	// This does not collide with "/api/v1/torrents" (different segment count) nor with the
+	// "/pause", "/resume", "/announce" sub-paths below (a bare "{hash}" pattern only matches
+	// a single path segment).
+	apiMux.HandleFunc("/api/v1/torrents/{hash}", handleTorrentDelete(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/pause", handleTorrentPause(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/resume", handleTorrentResume(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/announce", handleTorrentAnnounce(s))
 	apiMux.HandleFunc("/api/v1/notifications/webhooks/{name}/test", handleNotificationWebhookTest(s))
 
 	// WebSocket route (no JSON middleware)
@@ -210,6 +233,8 @@ func (s *Server) StartDaemonLoop() error {
 		Interval:    interval,
 		State:       s.State,
 		JobQueue:    s.JobQueue,
+		Backend:     s.Torrents,
+		Librarian:   s.Librarian,
 	})
 	s.currentLoopControl = loopControl
 	s.mu.Unlock()

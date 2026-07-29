@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { getStatus, getAnimes } from '../../src/lib/api/client.js'
+import { get } from 'svelte/store'
+import { getStatus, getAnimes, getTorrents } from '../../src/lib/api/client.js'
+import { toasts } from '../../src/lib/stores/toasts.js'
 
 describe('api client', () => {
   const mockFetch = vi.fn()
@@ -48,5 +50,27 @@ describe('api client', () => {
     })
     const result = await getAnimes()
     expect(result).toEqual([])
+  })
+
+  it('getStatus failure still pushes an error toast (non-polling endpoints unaffected)', async () => {
+    const before = get(toasts).length
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ success: false, error: { code: 'ERR', message: 'Internal error' } }),
+    })
+    await expect(getStatus()).rejects.toThrow('Internal error')
+    expect(get(toasts).length).toBe(before + 1)
+  })
+
+  it('getTorrents failure does NOT push an error toast (silent poll, still rejects)', async () => {
+    const before = get(toasts).length
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ success: false, error: { code: 'ERR', message: 'torrents down' } }),
+    })
+    await expect(getTorrents()).rejects.toThrow('torrents down')
+    expect(get(toasts).length).toBe(before)
   })
 })

@@ -5,10 +5,20 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+// stubLibrarian is a files.Librarian for testing config validation (ProbePath behavior).
+type stubLibrarian struct {
+	probeErr error
+}
+
+func (s *stubLibrarian) Organize(files.OrganizeRequest) ([]string, error) { return nil, nil }
+func (s *stubLibrarian) RemoveFromLibrary(string) error                   { return nil }
+func (s *stubLibrarian) ProbePath(completedPath string) error             { return s.probeErr }
 
 type mockFileManager struct {
 	configs           *files.Config
@@ -31,7 +41,6 @@ func (m *mockFileManager) LoadConfigs() (*files.Config, error) {
 			SavePath:              "/tmp/test",
 			CompletedAnimePath:    "/tmp/completed",
 			CheckInterval:         10,
-			QBittorrentUrl:        "http://localhost:8080",
 			MaxEpisodesPerAnime:   12,
 			EpisodeRetryLimit:     5,
 			DeleteWatchedEpisodes: true,
@@ -67,6 +76,14 @@ func (m *mockFileManager) SaveEpisodesToFile(episodes []files.EpisodeStruct) err
 	return nil
 }
 
+func (m *mockFileManager) UpsertEpisodes(episodes []files.EpisodeStruct) error {
+	if m.saveEpisodesErr != nil {
+		return m.saveEpisodesErr
+	}
+	m.episodes = episodes
+	return nil
+}
+
 func (m *mockFileManager) DeleteEpisodesFromFile(ids []int) error {
 	if m.deleteEpisodesErr != nil {
 		return m.deleteEpisodesErr
@@ -89,7 +106,7 @@ func (m *mockFileManager) DeleteEpisodesFromFile(ids []int) error {
 	return nil
 }
 
-func (m *mockFileManager) DeleteEmptyFolders(savePath string, completedAnimeSaveFolder string) error {
+func (m *mockFileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error {
 	return nil
 }
 
@@ -192,7 +209,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 			SavePath:              "/tmp/newpath",
 			CompletedAnimePath:    "/tmp/newcompleted",
 			CheckInterval:         15,
-			QBittorrentUrl:        "http://localhost:8080",
 			MaxEpisodesPerAnime:   20,
 			EpisodeRetryLimit:     3,
 			DeleteWatchedEpisodes: false,
@@ -223,7 +239,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 	t.Run("PUT with missing anilist_username returns 400", func(t *testing.T) {
 		config := files.Config{
 			SavePath:            "/tmp/test",
-			QBittorrentUrl:      "http://localhost:8080",
 			CheckInterval:       10,
 			MaxEpisodesPerAnime: 12,
 		}
@@ -257,7 +272,7 @@ func TestHandleUpdateConfig(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:    []string{"testuser"},
 			SavePath:            "/tmp/test",
-			QBittorrentUrl:      "http://localhost:8080",
+			CompletedAnimePath:  "/tmp/completed",
 			CheckInterval:       0,
 			MaxEpisodesPerAnime: 12,
 		}
@@ -268,6 +283,54 @@ func TestHandleUpdateConfig(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		handler(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
+		}
+	})
+
+	t.Run("PUT with missing completed_anime_path returns 400", func(t *testing.T) {
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			SavePath:            "/tmp/test",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
+		}
+	})
+
+	t.Run("PUT with cross-device paths returns 400", func(t *testing.T) {
+		crossDeviceServer := &Server{
+			State:       state,
+			FileManager: mockFM,
+			Librarian:   &stubLibrarian{probeErr: fmt.Errorf("save path and completed path are on different volumes")},
+		}
+		crossHandler := handleUpdateConfig(crossDeviceServer)
+
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			SavePath:            "/vol1/save",
+			CompletedAnimePath:  "/vol2/completed",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		crossHandler(w, req)
 
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
@@ -312,7 +375,7 @@ func TestHandleConfig(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:      []string{"testuser"},
 			SavePath:              "/tmp/test",
-			QBittorrentUrl:        "http://localhost:8080",
+			CompletedAnimePath:    "/tmp/completed",
 			CheckInterval:         10,
 			MaxEpisodesPerAnime:   12,
 			EpisodeRetryLimit:     5,
@@ -339,6 +402,66 @@ func TestHandleConfig(t *testing.T) {
 
 		if w.Code != http.StatusMethodNotAllowed {
 			t.Errorf("Expected status code %d, got %d", http.StatusMethodNotAllowed, w.Code)
+		}
+	})
+}
+
+func TestHandleUpdateConfig_SavePath(t *testing.T) {
+	// save_path deixou de ser exigido: o diretorio de download e derivado da biblioteca.
+	t.Run("PUT sem save_path e aceito", func(t *testing.T) {
+		mockFM := &mockFileManager{}
+		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
+
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			CompletedAnimePath:  "/tmp/completed",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+			EpisodeRetryLimit:   5,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+		}
+	})
+
+	// A vedacao: um cliente antigo mandando save_path nao pode reintroduzir o campo, senao
+	// daemon.MigrateSavePath re-arma a cada boot.
+	t.Run("PUT com save_path persiste o campo vazio", func(t *testing.T) {
+		mockFM := &mockFileManager{}
+		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
+
+		config := files.Config{
+			AnilistUsernames:    []string{"testuser"},
+			SavePath:            "/tmp/legado",
+			CompletedAnimePath:  "/tmp/completed",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+			EpisodeRetryLimit:   5,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status code %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+		}
+		if mockFM.configs == nil {
+			t.Fatal("o config nao foi persistido")
+		}
+		if mockFM.configs.SavePath != "" {
+			t.Errorf("SavePath deveria ter sido zerado, veio %q", mockFM.configs.SavePath)
 		}
 	})
 }
