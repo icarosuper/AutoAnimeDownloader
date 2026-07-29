@@ -1,7 +1,23 @@
 <script lang="ts">
+  // Logs — spec §9.5 (Fase 7). O visualizador vira um grid de 4 colunas
+  // (82px 60px 90px 1fr: horário · nível · origem · mensagem) sobre --bg-sunken, mais escuro
+  // que os cards ao redor, para ler como um terminal.
+  //
+  // A coluna ORIGEM é derivada do `caller` do zerolog por `logSourceFromCaller` — aproximação
+  // deliberada (o backend não tem campo `component` estruturado; isso é backlog, §3 do spec).
+  //
+  // Preservado da tela antiga: filtro por nível (agora em pills COM CONTAGEM, era um <select>
+  // sem contagem), busca com destaque do trecho, seletor de número de linhas, recarga
+  // automática com intervalo escolhível, acompanhar-o-fim, botão de voltar ao topo com o
+  // contador de linhas novas, cópia de linha e o estado da view na querystring.
   import { onMount, onDestroy, tick } from "svelte";
+  import { ArrowUp, Copy, Search, X } from "@lucide/svelte";
   import { getLogs, type LogsResponse } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
+  import Checkbox from "../components/ui/Checkbox.svelte";
+  import PulseDot from "../components/ui/PulseDot.svelte";
+  import { countByLevel, parseLogLine, type LogLevel, type ParsedLogLine } from "../lib/domain/logLine.js";
+  import { logSourceFromCaller } from "../lib/domain/logSource.js";
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
@@ -10,11 +26,17 @@
     title: m.logs_title(),
     subtitle: m.logs_subtitle(),
     labelLines: m.logs_label_lines(),
-    labelLevel: m.logs_label_level(),
+    filtersLabel: m.logs_filters_label(),
     searchPlaceholder: m.logs_search_placeholder(),
+    clearSearch: m.logs_clear_search(),
     labelAutoscroll: m.logs_label_autoscroll(),
     labelLive: m.logs_label_live(),
     btnReload: m.logs_btn_reload(),
+    colTime: m.logs_col_time(),
+    colLevel: m.logs_col_level(),
+    colSource: m.logs_col_source(),
+    colMessage: m.logs_col_message(),
+    copyLine: m.logs_copy_line(),
     levelAll: m.logs_level_all(),
     levelDebug: m.logs_level_debug(),
     levelInfo: m.logs_level_info(),
@@ -28,10 +50,12 @@
     newLogs: (count: number) => m.logs_new_logs({ count }),
   };
 
+  type LevelFilter = LogLevel | "all";
+
   let logs: string[] = [];
   let loading = true;
   let linesToLoad = 1000;
-  let filterLevel = "all";
+  let filterLevel: LevelFilter = "all";
   let searchQuery = "";
   let autoScroll = true;
   let initialized = false;
@@ -42,14 +66,6 @@
   let liveReloadSeconds = 5;
   let liveInterval: ReturnType<typeof setInterval> | null = null;
 
-  type ParsedLogLine = {
-    level: string;
-    timestamp: string;
-    message: string;
-    raw: string;
-    extras?: string;
-  };
-
   function escapeHtml(text: string): string {
     return text
       .replace(/&/g, "&amp;")
@@ -58,68 +74,61 @@
       .replace(/"/g, "&quot;");
   }
 
+  // Escapa ANTES de injetar o <mark>: o conteúdo vem do log do daemon, que carrega nomes de
+  // torrent arbitrários. É por isso que a busca destaca via {@html} sem abrir XSS.
   function highlightMatch(text: string, query: string): string {
     const safe = escapeHtml(text);
     if (!query.trim()) return safe;
     const escapedQuery = escapeHtml(query.trim()).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return safe.replace(
       new RegExp(`(${escapedQuery})`, "gi"),
-      '<mark class="bg-warning text-warning-content rounded px-0.5">$1</mark>'
+      '<mark class="rounded-[3px] bg-warn-tint/28 px-0.5 text-heading">$1</mark>'
     );
   }
 
-  function parseLogLine(line: string): ParsedLogLine {
-    if (line.startsWith("{")) {
-      try {
-        const json = JSON.parse(line);
-        const { level, time, message, ...rest } = json;
-        const extras: Record<string, string> = {};
-        for (const [key, value] of Object.entries(rest)) {
-          extras[key] = typeof value === "object" ? JSON.stringify(value) : String(value);
-        }
-        const extrasString = Object.keys(extras).length > 0
-          ? Object.entries(extras).map(([k, v]) => `"${k}"="${v}"`).join(" ")
-          : undefined;
-        return { level: level || "info", timestamp: time || "", message: message || line, raw: line, extras: extrasString };
-      } catch { /* fall through */ }
-    }
+  const LEVEL_TEXT: Record<LogLevel, string> = {
+    error: "text-danger",
+    warn: "text-warn",
+    debug: "text-subtle",
+    info: "text-accent",
+  };
 
-    const levelMatch = line.match(/\b(DBG|INF|WRN|ERR|FAT)\b/);
-    if (levelMatch) {
-      const levelMap: Record<string, string> = { DBG: "debug", INF: "info", WRN: "warn", ERR: "error", FAT: "error" };
-      return { level: levelMap[levelMatch[1]] || "info", timestamp: "", message: line, raw: line };
-    }
+  const LEVEL_BADGE: Record<LogLevel, string> = {
+    error: "border-danger-tint/28 bg-danger-tint/12 text-danger",
+    warn: "border-warn-tint/28 bg-warn-tint/12 text-warn",
+    debug: "border-default bg-control text-subtle",
+    info: "border-accent-tint/28 bg-accent-tint/12 text-accent",
+  };
 
-    const lower = line.toLowerCase();
-    const level = lower.includes("error") || lower.includes("err") ? "error"
-      : lower.includes("warn") ? "warn"
-      : lower.includes("debug") || lower.includes("dbg") ? "debug"
-      : "info";
-    return { level, timestamp: "", message: line, raw: line };
-  }
+  /**
+   * A busca corre sobre a linha CRUA (acha também o que está em extras/caller, não só na
+   * mensagem); o filtro de nível corre sobre a linha já parseada. As contagens das pills são
+   * tiradas do resultado da busca, antes do filtro de nível — senão, escolher "Error" zeraria
+   * a contagem de todas as outras pills e o filtro viraria um caminho sem volta visível.
+   */
+  $: searched = [...logs].slice(0, linesToLoad).reverse().filter(
+    (l) => !searchQuery.trim() || l.toLowerCase().includes(searchQuery.toLowerCase().trim())
+  );
+  $: searchedParsed = searched.map(parseLogLine);
+  $: levelCounts = countByLevel(searchedParsed);
+  $: parsedLogs = filterLevel === "all"
+    ? searchedParsed
+    : searchedParsed.filter((p) => p.level === filterLevel);
 
-  function getLevelColor(level: string): string {
-    switch (level) {
-      case "error": return "text-error";
-      case "warn":  return "text-warning";
-      case "debug": return "text-base-content/40";
-      default:      return "text-info";
-    }
-  }
+  $: levelPills = ($locale && [
+    { id: "all" as LevelFilter, label: m.logs_level_all(), count: levelCounts.all },
+    { id: "error" as LevelFilter, label: m.logs_level_error(), count: levelCounts.error },
+    { id: "warn" as LevelFilter, label: m.logs_level_warn(), count: levelCounts.warn },
+    { id: "info" as LevelFilter, label: m.logs_level_info(), count: levelCounts.info },
+    { id: "debug" as LevelFilter, label: m.logs_level_debug(), count: levelCounts.debug },
+  ]) || [];
 
-  function filterLogs(logs: string[], linesToLoad: number, filterLevel: string, searchQuery: string): string[] {
-    let filtered = [...logs].slice(0, linesToLoad).reverse();
-    if (filterLevel !== "all") filtered = filtered.filter(l => parseLogLine(l).level === filterLevel);
-    if (searchQuery.trim()) filtered = filtered.filter(l => l.toLowerCase().includes(searchQuery.toLowerCase().trim()));
-    return filtered;
-  }
-
-  $: filteredLogs = filterLogs(logs, linesToLoad, filterLevel, searchQuery);
-  $: parsedLogs = filteredLogs.map(parseLogLine);
   $: updateUrlQuery(linesToLoad, filterLevel, searchQuery);
   $: if (parsedLogs && autoScroll) scrollToTop();
   $: if (liveReload) startLiveReload(); else stopLiveReload();
 
+  // A lista é renderizada do mais novo para o mais antigo, então "acompanhar o fim" é rolar
+  // para o TOPO. Nome preservado da tela antiga para não confundir quem conhece o código.
   async function scrollToTop() {
     await tick();
     if (logContainer) logContainer.scrollTop = 0;
@@ -189,9 +198,17 @@
     const linesParam = params.get("lines");
     if (linesParam) { const p = parseInt(linesParam, 10); if (!isNaN(p)) linesToLoad = p; }
     const levelParam = params.get("level");
-    if (levelParam && ["all","debug","info","warn","error"].includes(levelParam)) filterLevel = levelParam;
+    if (levelParam && ["all","debug","info","warn","error"].includes(levelParam)) {
+      filterLevel = levelParam as LevelFilter;
+    }
     const q = params.get("q") ?? params.get("search");
     if (q) searchQuery = q;
+  }
+
+  // A origem só é interessante quando existe: uma linha do formato console não tem `caller`,
+  // e "other" em toda linha seria ruído numa coluna fixa.
+  function sourceOf(parsed: ParsedLogLine): string {
+    return parsed.caller ? logSourceFromCaller(parsed.caller) : "";
   }
 
   onMount(() => {
@@ -204,141 +221,194 @@
 </script>
 
 <div class="flex flex-col" style="height: calc(100vh - 8rem)">
-  <!-- Header -->
   <div class="mb-4 flex-none">
-    <h1 class="text-2xl font-semibold text-base-content">{T && T.title}</h1>
-    <p class="text-sm text-base-content/50 mt-0.5">{T && T.subtitle}</p>
+    <h1 class="text-screen-title text-heading">{T && T.title}</h1>
+    <p class="mt-0.5 text-caption text-subtle">{T && T.subtitle}</p>
   </div>
 
-  <!-- Controls -->
-  <div class="card bg-base-200 border border-base-300 mb-4 flex-none">
-    <div class="card-body p-3">
-      <div class="flex flex-wrap items-center gap-3">
-        <label class="flex items-center gap-2 text-sm text-base-content/70">
-          {T && T.labelLines}
-          <input
-            type="number" min="100" max="10000" step="100"
-            bind:value={linesToLoad}
-            on:change={loadLogs}
-            class="input input-xs input-bordered w-24"
-          />
-        </label>
+  <!-- Controles -->
+  <div class="mb-3 flex-none rounded-card border border-default bg-card">
+    <div class="flex flex-col gap-3 border-b border-divider p-3 sm:flex-row sm:items-center">
+      <label class="flex w-full shrink-0 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-1.5 sm:w-64">
+        <Search size={16} strokeWidth={2} class="shrink-0 text-subtle" />
+        <input
+          type="search"
+          placeholder={(T && T.searchPlaceholder) || ""}
+          bind:value={searchQuery}
+          class="w-full min-w-0 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
+        />
+        {#if searchQuery}
+          <button
+            type="button"
+            class="shrink-0 text-subtle hover:text-body"
+            aria-label={(T && T.clearSearch) || ""}
+            on:click={() => (searchQuery = "")}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
+        {/if}
+      </label>
 
-        <label class="flex items-center gap-2 text-sm text-base-content/70">
-          {T && T.labelLevel}
-          <select bind:value={filterLevel} class="select select-xs select-bordered">
-            <option value="all">{T && T.levelAll}</option>
-            <option value="debug">{T && T.levelDebug}</option>
-            <option value="info">{T && T.levelInfo}</option>
-            <option value="warn">{T && T.levelWarn}</option>
-            <option value="error">{T && T.levelError}</option>
-          </select>
-        </label>
-
-        <label class="input input-xs input-bordered flex items-center gap-2 flex-1 min-w-40">
-          <svg class="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-          <input type="text" placeholder={T && T.searchPlaceholder || ""} bind:value={searchQuery} class="grow" />
-          {#if searchQuery}
-            <button class="opacity-50 hover:opacity-100" on:click={() => searchQuery = ""}>✕</button>
-          {/if}
-        </label>
-
-        <label class="flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
-          <input type="checkbox" bind:checked={autoScroll} class="checkbox checkbox-xs" />
-          {T && T.labelAutoscroll}
-        </label>
-
-        <label class="flex items-center gap-2 text-sm text-base-content/70 cursor-pointer">
-          <input type="checkbox" bind:checked={liveReload} class="checkbox checkbox-xs" />
-          {T && T.labelLive}
-          {#if liveReload}
-            <select bind:value={liveReloadSeconds} on:change={startLiveReload} class="select select-xs select-bordered w-16">
-              <option value={3}>3s</option>
-              <option value={5}>5s</option>
-              <option value={10}>10s</option>
-              <option value={30}>30s</option>
-            </select>
-          {/if}
-        </label>
-
-        <button class="btn btn-xs btn-outline ml-auto" on:click={loadLogs}>{T && T.btnReload}</button>
+      <div class="flex items-center gap-2 overflow-x-auto" role="group" aria-label={(T && T.filtersLabel) || ""}>
+        {#each levelPills as pill (pill.id)}
+          <button
+            type="button"
+            aria-pressed={filterLevel === pill.id}
+            on:click={() => (filterLevel = pill.id)}
+            class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {filterLevel ===
+            pill.id
+              ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
+              : 'border-default bg-control text-subtle hover:text-body'}"
+          >
+            {pill.label}
+            <span class="font-mono text-[12px] opacity-70">{pill.count}</span>
+          </button>
+        {/each}
       </div>
     </div>
-  </div>
 
-  <!-- Log container -->
-  {#if loading}
-    <div class="flex-1 flex items-center justify-center">
-      <Loading message={T && T.loading || ""} />
-    </div>
-  {:else}
-    <div class="flex-1 relative min-h-0">
-      <div
-        bind:this={logContainer}
-        on:scroll={handleScroll}
-        class="absolute inset-0 overflow-y-auto font-mono text-xs bg-base-300 rounded-lg border border-base-300 p-2 space-y-0.5"
-      >
-        {#if parsedLogs.length === 0}
-          <div class="flex items-center justify-center h-full">
-            <p class="text-base-content/40">
-              {filterLevel !== "all" || searchQuery ? (T && T.emptyFiltered) : (T && T.empty)}
-            </p>
-          </div>
-        {:else}
-          {#each parsedLogs as parsed}
-            <div class="group flex items-start gap-2 px-2 py-1 rounded hover:bg-base-content/5">
-              <span class="{getLevelColor(parsed.level)} font-semibold w-10 shrink-0 select-none">
-                {parsed.level.slice(0, 4).toUpperCase()}
-              </span>
-              {#if parsed.timestamp}
-                <span class="text-base-content/30 shrink-0">{parsed.timestamp}</span>
-              {/if}
-              <span class="text-base-content/80 break-all flex-1">
-                {@html highlightMatch(parsed.message, searchQuery)}
-                {#if parsed.extras}
-                  <span class="text-base-content/40 ml-1">{@html highlightMatch(parsed.extras, searchQuery)}</span>
-                {/if}
-              </span>
-              <button
-                class="opacity-0 group-hover:opacity-60 hover:!opacity-100 shrink-0 text-base-content/50 transition-opacity"
-                title="Copy"
-                on:click={() => copyLine(parsed.raw)}
-              >
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                </svg>
-              </button>
-            </div>
-          {/each}
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
+      <label class="flex items-center gap-2 text-caption text-subtle">
+        {T && T.labelLines}
+        <input
+          type="number" min="100" max="10000" step="100"
+          bind:value={linesToLoad}
+          on:change={loadLogs}
+          class="w-20 rounded-control border border-default bg-control px-2 py-1 font-mono text-caption text-heading outline-none focus:border-accent"
+        />
+      </label>
+
+      <Checkbox bind:checked={autoScroll} label={(T && T.labelAutoscroll) || ""} />
+
+      <div class="flex items-center gap-2">
+        <Checkbox bind:checked={liveReload} label={(T && T.labelLive) || ""} />
+        {#if liveReload}
+          <!-- PulseDot só onde há algo realmente vivo (§6): o poll ligado. -->
+          <PulseDot variant="ok" size={7} />
+          <select
+            bind:value={liveReloadSeconds}
+            on:change={startLiveReload}
+            aria-label={(T && T.labelLive) || ""}
+            class="rounded-control border border-default bg-control px-1.5 py-1 font-mono text-caption text-heading outline-none focus:border-accent"
+          >
+            <option value={3}>3s</option>
+            <option value={5}>5s</option>
+            <option value={10}>10s</option>
+            <option value={30}>30s</option>
+          </select>
         {/if}
       </div>
 
-      <!-- Scroll to top button -->
+      <button
+        type="button"
+        class="ml-auto rounded-control border border-default px-3 py-1.5 text-caption font-semibold text-body transition-colors hover:bg-control"
+        on:click={loadLogs}
+      >
+        {T && T.btnReload}
+      </button>
+    </div>
+  </div>
+
+  <!-- Corpo -->
+  {#if loading}
+    <div class="flex flex-1 items-center justify-center">
+      <Loading message={T && T.loading || ""} />
+    </div>
+  {:else}
+    <div class="relative min-h-0 flex-1">
+      <div class="absolute inset-0 flex flex-col overflow-hidden rounded-card border border-default bg-sunken">
+        <!-- Cabeçalho de coluna: mesmo grid das linhas, para as colunas não desalinharem.
+             Escondido no mobile, onde as linhas empilham e não há colunas para rotular. -->
+        <div
+          class="hidden flex-none grid-cols-[82px_60px_90px_1fr] gap-2 border-b border-divider px-3 py-2 font-mono text-mono-label uppercase text-subtle md:grid"
+        >
+          <span>{T && T.colTime}</span>
+          <span>{T && T.colLevel}</span>
+          <span>{T && T.colSource}</span>
+          <span>{T && T.colMessage}</span>
+        </div>
+
+        <div bind:this={logContainer} on:scroll={handleScroll} class="min-h-0 flex-1 overflow-y-auto">
+          {#if parsedLogs.length === 0}
+            <div class="flex h-full items-center justify-center">
+              <p class="text-copy text-subtle">
+                {filterLevel !== "all" || searchQuery ? (T && T.emptyFiltered) : (T && T.empty)}
+              </p>
+            </div>
+          {:else}
+            <!-- <ul>/<li> e não <div>: as linhas SÃO uma lista, e isso dá a leitores de tela e
+                 aos smoke tests uma âncora de papel (`listitem`) em vez de uma classe CSS —
+                 que aqui mudaria com o breakpoint, já que o grid só existe a partir de `md`. -->
+            <ul>
+            {#each parsedLogs as parsed}
+              <!-- O grid de 4 colunas só vale de `md` para cima. Abaixo disso as três colunas
+                   fixas (82+60+90px) deixariam ~130px para a mensagem numa tela de 390px, e ela
+                   quebraria em uma palavra por linha; no mobile os metadados ficam numa linha e
+                   a mensagem embaixo, em largura total. Mesma razão do E11 em Downloads. -->
+              <li
+                class="group flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-divider px-3 py-1.5 hover:bg-control/60 md:grid md:grid-cols-[82px_60px_90px_1fr] md:items-start"
+              >
+                <span class="select-none font-mono text-[12.5px] text-subtle">{parsed.time}</span>
+
+                <span
+                  class="inline-flex justify-center rounded-badge border px-1 py-0.5 font-mono text-[11px] font-bold uppercase leading-none {LEVEL_BADGE[
+                    parsed.level
+                  ]}"
+                >
+                  <!-- Nível inteiro: a tela antiga cortava em 4 caracteres ("DEBU", "ERRO")
+                       para caber numa coluna de 40px; a coluna de 60px do §9.5 comporta a
+                       palavra completa em mono 10px. -->
+                  {parsed.level}
+                </span>
+
+                <span class="select-none truncate font-mono text-[12.5px] text-tertiary" title={parsed.caller ?? ""}>
+                  {sourceOf(parsed)}
+                </span>
+
+                <span class="flex w-full min-w-0 items-start gap-2 md:w-auto">
+                  <span class="min-w-0 flex-1 break-words font-mono text-[13.5px] {LEVEL_TEXT[parsed.level]}">
+                    {@html highlightMatch(parsed.message, searchQuery)}
+                    {#if parsed.extras}
+                      <span class="text-subtle">{@html highlightMatch(parsed.extras, searchQuery)}</span>
+                    {/if}
+                  </span>
+                  <button
+                    type="button"
+                    class="shrink-0 text-subtle opacity-0 transition-opacity hover:text-body group-hover:opacity-100"
+                    aria-label={(T && T.copyLine) || ""}
+                    on:click={() => copyLine(parsed.raw)}
+                  >
+                    <Copy size={13} strokeWidth={2} />
+                  </button>
+                </span>
+              </li>
+            {/each}
+            </ul>
+          {/if}
+        </div>
+      </div>
+
       {#if !atTop}
         <button
-          class="absolute bottom-4 right-4 btn btn-circle btn-sm btn-neutral shadow-lg opacity-80 hover:opacity-100"
-          title={T && T.scrollTop || "Scroll to top"}
+          type="button"
+          class="absolute bottom-4 right-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-default bg-menu text-body shadow-elevation transition-colors hover:bg-control"
+          aria-label={(T && T.scrollTop) || "Scroll to top"}
           on:click={scrollToTop}
         >
           {#if newLogsCount > 0}
-            <span class="absolute -top-2 -right-2 badge badge-warning badge-xs text-xs font-bold px-1 min-w-fit">
+            <span
+              class="absolute -right-1.5 -top-1.5 rounded-pill bg-warn px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-on-warn"
+            >
               {T && T.newLogs(newLogsCount)}
             </span>
           {/if}
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
-          </svg>
+          <ArrowUp size={16} strokeWidth={2} />
         </button>
       {/if}
     </div>
 
-    <!-- Footer -->
-    <div class="flex-none pt-2 text-xs text-base-content/40">
-      {$locale && m.logs_x_of_y({ shown: filteredLogs.length, total: logs.length })}
+    <div class="flex-none pt-2 font-mono text-[12px] text-subtle">
+      {$locale && m.logs_x_of_y({ shown: parsedLogs.length, total: logs.length })}
       {#if filterLevel !== "all" || searchQuery}{T && T.filteredSuffix}{/if}
     </div>
   {/if}

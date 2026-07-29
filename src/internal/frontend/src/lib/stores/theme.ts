@@ -31,10 +31,10 @@ function applyTheme(themeValue: Theme): void {
 
   if (effectiveTheme === 'dark') {
     root.classList.add('dark')
-    root.setAttribute('data-theme', 'dark')
+    root.setAttribute('data-theme', 'aad-dark')
   } else {
     root.classList.remove('dark')
-    root.setAttribute('data-theme', 'light')
+    root.setAttribute('data-theme', 'aad-light')
   }
 }
 

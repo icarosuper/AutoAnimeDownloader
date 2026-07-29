@@ -55,16 +55,16 @@
   on:confirm={handleConfirm}
   on:cancel={handleCancel}
 >
-  <div class="space-y-3">
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" class="checkbox checkbox-sm mt-0.5" bind:checked={deleteFiles} />
-      <span class="text-sm text-base-content">{T && T.checkboxFiles}</span>
+  <div class="space-y-3.5">
+    <label class="flex items-start gap-2.5 cursor-pointer">
+      <input type="checkbox" class="checkbox checkbox-sm mt-px" bind:checked={deleteFiles} />
+      <span class="text-copy leading-snug text-base-content">{T && T.checkboxFiles}</span>
     </label>
-    <label class="flex items-start gap-2 cursor-pointer">
-      <input type="checkbox" class="checkbox checkbox-sm mt-0.5" bind:checked={blockRedownload} />
-      <span class="text-sm text-base-content">{T && T.checkboxBlock}</span>
+    <label class="flex items-start gap-2.5 cursor-pointer">
+      <input type="checkbox" class="checkbox checkbox-sm mt-px" bind:checked={blockRedownload} />
+      <span class="text-copy leading-snug text-base-content">{T && T.checkboxBlock}</span>
     </label>
-    <p class="text-xs {blockRedownload ? 'text-base-content/50' : 'text-warning'}">
+    <p class="!mt-4 text-caption leading-snug {blockRedownload ? 'text-base-content/50' : 'text-warning'}">
       {consequence}
     </p>
   </div>

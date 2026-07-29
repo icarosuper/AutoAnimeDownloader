@@ -59,6 +59,10 @@ const mockDetail = {
   },
 }
 
+// Desktop and mobile render the same row definition; at the desktop viewport only the desktop
+// block is displayed, so `:visible` is what keeps these counts from double-counting.
+const rows = '[data-episode-row]:visible'
+
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/animes', route => route.fulfill({ json: mockAnimes }))
   await page.route('**/api/v1/animes/123/episodes', route => route.fulfill({ json: mockDetail }))
@@ -67,8 +71,7 @@ test.beforeEach(async ({ page }) => {
 
 test('anime detail page loads episode list', async ({ page }) => {
   await page.goto('/#/status/123')
-  // 2 episodes in mock data → 2 rows in the desktop table
-  await expect(page.locator('table tbody tr')).toHaveCount(2)
+  await expect(page.locator(rows)).toHaveCount(2)
 })
 
 test('anime title links to its AniList page', async ({ page }) => {
@@ -80,13 +83,10 @@ test('anime title links to its AniList page', async ({ page }) => {
 })
 
 test('anime detail shows Download button for undownloaded aired episode', async ({ page }) => {
-  await page.route('**/api/v1/animes/123/episodes/1002/download', route =>
-    route.fulfill({ json: { success: true, data: null } })
-  )
-
   await page.goto('/#/status/123')
-  // Episode 2 is aired but not downloaded — Download button should be visible
-  await expect(page.getByRole('button', { name: /download/i }).first()).toBeVisible()
+  // Episode 2 is aired but not downloaded -> episodeActions() gives it `download` as the
+  // principal action, rendered with text in the fixed actions column.
+  await expect(page.getByRole('button', { name: /^download$/i }).first()).toBeVisible()
 })
 
 test('clicking Download on undownloaded episode calls POST /.../download', async ({ page }) => {
@@ -99,9 +99,74 @@ test('clicking Download on undownloaded episode calls POST /.../download', async
   const downloadRequest = page.waitForRequest(
     req => req.url().includes('/episodes/1002/download') && req.method() === 'POST'
   )
-  // Click the Download button for Episode 2 (first visible Download button)
   await page.getByRole('button', { name: /^download$/i }).first().click()
   await downloadRequest
+})
+
+// The downloaded episode gets `redownload` as its principal action, not `download` — the two
+// used to be adjacent icon-only buttons whose meaning was only in a `title` attribute.
+test('downloaded episode offers Redownload as its principal action', async ({ page }) => {
+  await page.goto('/#/status/123')
+  await expect(page.getByRole('button', { name: /^redownload$/i }).first()).toBeVisible()
+})
+
+// Fase 4's core deliverable: one action definition (episodeActions) feeding a labelled menu,
+// instead of the same five icon buttons written out twice.
+test('the row overflow menu lists the remaining actions with text labels', async ({ page }) => {
+  await page.goto('/#/status/123')
+
+  await page.getByRole('button', { name: /more actions for episode 2/i }).first().click()
+
+  const menu = page.getByRole('menu').first()
+  await expect(menu.getByRole('menuitem', { name: /^replace$/i })).toBeVisible()
+
+  // Only one menu open at a time, and Escape closes it (ActionMenu contract, spec §6).
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
+})
+
+// Regression: `title="Soltar episódio"` was hardcoded Portuguese in BOTH copies of the action
+// list (AnimeDetail.svelte:785 and :956), outside i18n. It is now a message key, so an
+// English session must read "Release episode".
+test('the release action is translated, not hardcoded Portuguese', async ({ page }) => {
+  await page.route('**/api/v1/animes/123/episodes', route =>
+    route.fulfill({
+      json: {
+        ...mockDetail,
+        data: {
+          ...mockDetail.data,
+          episodes: [{ ...mockDetail.data.episodes[1], is_blocked: true }],
+        },
+      },
+    })
+  )
+
+  await page.goto('/#/status/123')
+  await expect(page.getByRole('button', { name: /^release episode$/i }).first()).toBeVisible()
+  await expect(page.getByText('Soltar episódio')).toHaveCount(0)
+})
+
+// The custom Nyaa search query (custom_search_query / updateAnimeSettings) is a real feature
+// the design handoff forgot about; spec §9.2 keeps it in a collapsible block.
+test('custom search query is present in a collapsible block and saves', async ({ page }) => {
+  await page.route('**/api/v1/animes/123/settings', route =>
+    route.fulfill({ json: { success: true, data: null } })
+  )
+
+  await page.goto('/#/status/123')
+
+  const input = page.getByLabel(/custom nyaa search query/i)
+  await expect(input).toBeHidden()
+
+  await page.getByRole('button', { name: /custom nyaa search query/i }).click()
+  await expect(input).toBeVisible()
+
+  const saveRequest = page.waitForRequest(
+    req => req.url().includes('/animes/123/settings') && req.method() === 'PUT'
+  )
+  await input.fill('custom query')
+  await page.getByRole('button', { name: /^save$/i }).click()
+  await saveRequest
 })
 
 test('episode row shows a progress bar when an active torrent is joined to it', async ({ page }) => {
@@ -156,6 +221,6 @@ test('episode row shows a progress bar when an active torrent is joined to it', 
 
   await page.goto('/#/status/123')
 
-  await expect(page.getByRole('progressbar', { name: 'Download progress' })).toBeVisible()
-  await expect(page.locator('table tbody tr').filter({ hasText: '40%' })).toBeVisible()
+  await expect(page.getByRole('progressbar', { name: 'Download progress' }).first()).toBeVisible()
+  await expect(page.locator(rows).filter({ hasText: '40%' })).toBeVisible()
 })

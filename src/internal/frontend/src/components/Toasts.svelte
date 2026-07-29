@@ -29,7 +29,7 @@
       <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         {@html icon(t.type)}
       </svg>
-      <span class="text-sm">{t.message}</span>
+      <span class="text-copy">{t.message}</span>
     </div>
   {/each}
 </div>

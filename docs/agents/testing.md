@@ -183,3 +183,29 @@ Frontend tests live in `src/internal/frontend/tests/`:
 All layers mock the backend — no daemon needed. Config: `vitest.config.ts`, `playwright.config.ts`.
 
 Run `bun install` in `src/internal/frontend/` and `bunx playwright install chromium` before first use.
+
+**Asserting on a captured request body:** wait for the *route handler*, not for `page.waitForRequest`. The latter resolves on the request event, which can land before the handler that records the body — with the suite on parallel workers that read `undefined` intermittently. `config.spec.ts`'s `captureSave()` exposes a `whenSaved` promise resolved inside the handler; `await saved.whenSaved` before touching `saved.body`.
+
+### Layout regressions (`tests/smoke/layout.spec.ts`)
+
+Separate from the per-screen specs, which assert **content**. A broken layout does not fail those: the element is still in the DOM and still "visible" to Playwright — it is just off-screen. `layout.spec.ts` asserts geometry instead:
+
+| Assertion | Guards against |
+|---|---|
+| `documentElement.scrollWidth <= clientWidth` on every screen at 768/1024/1280/1440px | any fixed-track grid whose columns no longer fit — the tables in `Status`/`Downloads`/`AnimeDetail` all switch to stacked cards below `lg` for exactly this reason |
+| the active-downloads strip has `scrollWidth > clientWidth` | the strip degrading from "scrolls" back to "stretches its card", which is what a missing `min-w-0` on the grid item does |
+| the nav rail's `boundingBox().y` is `0` before and after scrolling to the bottom | the rail losing `sticky top-0` and scrolling off with the page |
+| `elementFromPoint` over a MoreMenu item returns the menu, not page content (on `#/priorities`, whose daisyUI `.card`s are `position: relative`) | the rail losing `z-30`: `position: sticky` creates a stacking context, so the panel's `z-50` only orders things *inside* the rail |
+| `elementFromPoint` over the delete dialog returns the dialog | the counterpart — something (Modal/Toasts at root `z-50`) ending up *below* the rail's `z-30` |
+| the Downloads header subtitle wraps into ≤2 line boxes at 375–1280px | the title block going back to `min-w-0 flex-1`: with flex-basis 0 and no min-width floor, `flex-wrap` never moves the speed box to its own line and the subtitle collapses to one word per line |
+| all four Downloads filter pills pass `toBeInViewport({ ratio: 1 })` and their row has `scrollWidth <= clientWidth` at 375/414/640px | the pill row going back to `overflow-x-auto`, which hid "Seeding"/"Problems" behind a horizontal scroll |
+
+Two things make these tests worth their runtime: they need **volume** (the fixtures build 24 torrents and 30 animes — with the two-row fixtures the other specs use, nothing overflows and every assertion passes vacuously), and the rail test asserts `window.scrollY > 200` first, so it cannot pass on a page that never scrolled.
+
+Two techniques recur here and are worth reusing:
+
+- **Line counting** — `range.selectNodeContents(el)` + `getClientRects().length` gives one rect per line box, i.e. the real wrap count. Asserting `clientHeight` in px would need a hardcoded line-height.
+- **Stacking** — `document.elementFromPoint` at an element's center, then `el.contains(top)`. A `locator.click()` timeout would also catch it, but 30s later and without naming the covering element. When the covering element is the one that *should* intercept (the MoreMenu backdrop), drive the click with `page.mouse.click(x, y)` — `locator.click()` refuses a covered target, which is the behaviour under test.
+- The Priorities screen needs **two** mocks the shared `baseConfig` doesn't provide: `config.priorities` and `GET /config/priorities/defaults`. Without them `load()` throws, no card renders, and any stacking assertion passes vacuously.
+
+When adding a fixed-px column to any of the three grids, re-check the arithmetic in the comment above that grid's constant — usable width is `viewport − 92px rail − main padding`.

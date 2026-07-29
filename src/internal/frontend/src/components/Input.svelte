@@ -1,4 +1,13 @@
 <script lang="ts">
+    // Input — mantido e reestilizado na Fase 6 (spec §6: os componentes existentes são
+    // reestilizados, não substituídos). A API pública não mudou; só as classes saíram dos
+    // hexes literais do Tailwind (`bg-white dark:bg-gray-700`, `focus:ring-blue-500`) para os
+    // tokens semânticos do §4.1.
+    //
+    // A anatomia agora é a do campo do §9.4: rótulo 13.5px/700, controle, e uma linha de ajuda
+    // 12px em --text-subtle. O `subtitle` era renderizado como um SEGUNDO <label> apontando
+    // para o mesmo input — dois rótulos para um controle. Virou <p>, que é o que ele sempre
+    // foi semanticamente, e o input passa a referenciá-lo por aria-describedby.
     export let id: string = "";
     export let label: string = "";
     export let subtitle: string = "";
@@ -11,46 +20,65 @@
     export let disabled: boolean = false;
     export let error: string = "";
 
-    $: inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+    $: inputId = id || `input-${Math.random().toString(36).slice(2, 11)}`;
+    $: hintId = `${inputId}-hint`;
+    $: errorId = `${inputId}-error`;
+    // Só descreve o que existe: um id apontando para um elemento ausente é uma referência
+    // quebrada na árvore de acessibilidade.
+    $: describedBy = [subtitle ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
 </script>
 
-<div class="w-full">
+<div class="flex w-full flex-col gap-1.5">
     {#if label}
-        <label
-            for={inputId}
-            class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-        >
+        <label for={inputId} class="text-[14.5px] font-bold text-heading">
             {label}
             {#if required}
-                <span class="text-red-500 dark:text-red-400">*</span>
+                <span class="text-danger" aria-hidden="true">*</span>
             {/if}
         </label>
     {/if}
 
-    {#if subtitle}
-        <label
-            for={inputId}
-            class="block text-xs font-medium text-gray-500 mb-1"
-        >
-            {subtitle}
-        </label>
+    <!-- `type` não pode ser passado como atributo dinâmico junto de bind:value no Svelte, daí
+         os dois ramos abaixo em vez de um <input {type} bind:value>. -->
+    {#if type === "number"}
+        <input
+            id={inputId}
+            type="number"
+            {placeholder}
+            {required}
+            {min}
+            {max}
+            {disabled}
+            aria-describedby={describedBy}
+            aria-invalid={error ? "true" : undefined}
+            bind:value
+            class="w-full rounded-field border bg-control px-3 py-2 font-mono text-copy text-heading outline-none transition-colors placeholder:font-sans placeholder:font-normal placeholder:text-subtle focus:border-accent disabled:cursor-not-allowed disabled:opacity-50 {error
+                ? 'border-danger'
+                : 'border-default'}"
+        />
+    {:else}
+        <input
+            id={inputId}
+            {type}
+            {placeholder}
+            {required}
+            {min}
+            {max}
+            {disabled}
+            aria-describedby={describedBy}
+            aria-invalid={error ? "true" : undefined}
+            bind:value
+            class="w-full rounded-field border bg-control px-3 py-2 text-copy text-heading outline-none transition-colors placeholder:font-normal placeholder:text-subtle focus:border-accent disabled:cursor-not-allowed disabled:opacity-50 {error
+                ? 'border-danger'
+                : 'border-default'}"
+        />
     {/if}
 
-    <input
-        {id}
-        {type}
-        {placeholder}
-        {required}
-        {min}
-        {max}
-        {disabled}
-        bind:value
-        class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3 py-2 {error
-            ? 'border-red-300 dark:border-red-600 focus:border-red-500 focus:ring-red-500'
-            : ''}"
-    />
+    {#if subtitle}
+        <p id={hintId} class="text-caption text-subtle">{subtitle}</p>
+    {/if}
 
     {#if error}
-        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p id={errorId} class="text-caption text-danger">{error}</p>
     {/if}
 </div>

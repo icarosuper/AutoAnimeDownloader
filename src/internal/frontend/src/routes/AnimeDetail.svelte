@@ -1,5 +1,14 @@
 <script lang="ts">
+  // AnimeDetail — spec §9.2 (Fase 4). A tela de maior ganho do redesenho: a versão anterior
+  // tinha 971 linhas em boa parte porque a lista de ações estava escrita DUAS VEZES (tabela
+  // desktop + cards mobile), com os mesmos cinco botões só-ícone cujo `title` era a única
+  // pista textual e que trocavam de posição entre linhas conforme apareciam e sumiam.
+  //
+  // Agora existe UMA definição de ações — `episodeActions()` (lib/domain/), dado puro — que
+  // desktop e mobile renderizam pelo mesmo `ActionMenu`. A ação principal tem texto e fica
+  // sempre na mesma coluna; o resto vive no `⋯`, também rotulado.
   import { onDestroy } from "svelte";
+  import { ChevronDown, ChevronRight } from "@lucide/svelte";
   import {
     getAnimeDetail,
     getAnimes,
@@ -18,15 +27,33 @@
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
+  import ActionMenu, { type ActionMenuItem } from "../components/ui/ActionMenu.svelte";
+  import Button from "../components/ui/Button.svelte";
+  import Checkbox from "../components/ui/Checkbox.svelte";
+  import Chip from "../components/ui/Chip.svelte";
+  import Cover from "../components/ui/Cover.svelte";
+  import Modal from "../components/ui/Modal.svelte";
+  import ProgressBar from "../components/ui/ProgressBar.svelte";
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
+  import { locale } from "../lib/stores/locale.js";
   import { indexTorrentsByEpisode } from "../lib/utils/torrentsByEpisode.js";
-  import { statusLabel, statusClass } from "../lib/utils/torrentStatus.js";
-  import { formatSpeed, formatEta, formatPercent } from "../lib/utils/torrents.js";
+  import { statusLabel } from "../lib/utils/torrentStatus.js";
+  import { episodeActions, type Action, type EpisodeActionId } from "../lib/domain/episodeActions.js";
+  import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
+  import {
+    formatDate as formatDateDomain,
+    formatEta,
+    formatPercent,
+    formatSpeed,
+    type FormatLocale,
+  } from "../lib/domain/format.js";
+  import { stallTracker } from "../lib/stores/stallTracker.js";
 
   export let params: { id?: string } = {};
 
   $: animeId = parseInt(params.id || "0");
+  $: fmtLocale = ($locale ?? "en") as FormatLocale;
 
   let anime: AnimeInfo | null = null;
   let detail: AnimeDetailResponse | null = null;
@@ -50,9 +77,12 @@
   let replaceAnimeMagnet = "";
   let replaceLoading = false;
 
-  // Custom search query state
+  // Custom search query state. O handoff esqueceu deste campo; o spec §9.2 pede que ele volte
+  // num bloco recolhível logo abaixo do cabeçalho — recolhido por padrão porque é ajuste fino,
+  // não o que se vem fazer nesta tela.
   let customSearchQuery = "";
   let searchQuerySaving = false;
+  let searchQueryOpen = false;
 
   // Live torrent progress, joined onto episodes below. Fetch failures degrade silently:
   // this is accessory data (mirrors the best-effort join the backend already does in
@@ -61,6 +91,10 @@
   let torrentPollTimer: ReturnType<typeof setTimeout> | null = null;
   let torrentPollStarted = false;
   let torrentPollAnimeId: number | null = null;
+  // Carimbo do último poll bem-sucedido. `deriveAnimeChip` só usa `now` para o limiar de "sem
+  // seeds"; atualizar por tick de relógio faria a tela inteira recalcular de segundo em
+  // segundo sem que nenhum dado tivesse mudado.
+  let lastPollAt = Date.now();
 
   $: allEpisodes = detail?.episodes ?? [];
   $: torrentsByEpisode = indexTorrentsByEpisode(torrents, allEpisodes);
@@ -79,6 +113,9 @@
   $: canBulkDownload = selectedList.some(ep => ep.is_aired && !ep.is_downloaded);
   $: canBulkDelete = selectedList.some(ep => ep.is_downloaded);
   $: canBulkRelease = selectedList.some(ep => ep.is_manually_managed || ep.is_blocked);
+
+  // Chip do anime no cabeçalho — mesma cascata da lista de Status, mesmo componente.
+  $: animeChip = anime ? deriveAnimeChip(anime, torrents, lastPollAt, $stallTracker) : null;
 
   function toggleSelectAll() {
     if (allSelected) {
@@ -100,13 +137,11 @@
 
   function formatDate(dateString: string | undefined) {
     if (!dateString) return m.common_na();
-    return new Date(dateString).toLocaleString();
+    return formatDateDomain(dateString, fmtLocale);
   }
 
-
-
   function formatTimeUntilAiring(seconds: number, isAired: boolean): string {
-    if (isAired || seconds <= 0) return "Released";
+    if (isAired || seconds <= 0) return "—";
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -114,6 +149,109 @@
     if (hours > 0) return `${hours}h ${minutes}m`;
     return `${minutes}m`;
   }
+
+  function chipLabel(state: AnimeChipState): string {
+    switch (state.key) {
+      case "blacklisted": return m.chip_blacklisted();
+      case "downloading":
+        return state.episodeNumber === undefined
+          ? m.chip_downloading_no_episode({ percent: state.percent ?? 0 })
+          : m.chip_downloading({ episode: state.episodeNumber, percent: state.percent ?? 0 });
+      case "noSeeds": return m.chip_no_seeds();
+      case "paused": return m.chip_paused();
+      case "awaitingPremiere": return m.chip_awaiting_premiere();
+      case "upToDate": return m.chip_up_to_date();
+      case "behind": return m.chip_behind({ count: state.behindCount ?? 0 });
+    }
+  }
+
+  /**
+   * Estado de UM episódio, para o `Chip` da coluna "Estado". Um torrent em voo vence tudo —
+   * é a informação mais volátil e a única que o usuário está acompanhando ativamente — e o
+   * rótulo vem de `statusLabel`, que já traduz os slugs crus do rain (spec §7: estados nunca
+   * aparecem como identificador).
+   */
+  function episodeChip(ep: AnimeEpisodeInfo, torrent: TorrentInfo | undefined) {
+    if (torrent && !torrent.completed) {
+      return { variant: "accent" as const, label: statusLabel(torrent.status) };
+    }
+    if (ep.is_blocked) return { variant: "danger" as const, label: m.detail_chip_blocked() };
+    if (ep.is_manually_managed) return { variant: "neutral" as const, label: m.detail_chip_manual() };
+    if (ep.is_downloaded) return { variant: "ok" as const, label: m.detail_badge_downloaded() };
+    if (ep.is_aired) return { variant: "warn" as const, label: m.detail_chip_aired() };
+    return { variant: "neutral" as const, label: m.detail_badge_upcoming() };
+  }
+
+  /** Nota secundária sob o título: flags do episódio, na forma de frase, não de ícone mudo. */
+  function episodeNotes(ep: AnimeEpisodeInfo): string {
+    const notes: string[] = [];
+    if (ep.is_watched) notes.push(m.detail_badge_watched());
+    if (ep.is_manually_managed) notes.push(m.detail_flag_no_delete_short());
+    if (ep.is_blocked) notes.push(m.detail_flag_no_download_short());
+    return notes.join(" · ");
+  }
+
+  /** Metadado da linha: o dado mais informativo para o estado atual do episódio. */
+  function episodeMeta(ep: AnimeEpisodeInfo, torrent: TorrentInfo | undefined): string {
+    if (torrent && !torrent.completed) {
+      return `${formatPercent(torrent.progress, fmtLocale)} · ↓ ${formatSpeed(torrent.download_speed, fmtLocale)} · ${formatEta(torrent.eta_seconds, fmtLocale)}`;
+    }
+    if (ep.is_downloaded) return formatDate(ep.download_date);
+    if (!ep.is_aired) return formatTimeUntilAiring(ep.time_until_airing, ep.is_aired);
+    return "—";
+  }
+
+  // `episodeActions` devolve `labelKey`, um identificador — nunca texto. Esta é a única
+  // tradução dele na tela, compartilhada pela ação principal e pelos itens do `⋯`.
+  const ACTION_LABEL: Record<string, () => string> = {
+    download: m.detail_btn_download,
+    redownload: m.detail_btn_redownload,
+    delete: m.detail_btn_delete,
+    release: m.detail_btn_release,
+    replace: m.detail_btn_replace,
+  };
+
+  function actionLabel(action: Action): string {
+    return (ACTION_LABEL[action.labelKey] ?? (() => action.labelKey))();
+  }
+
+  function menuItems(actions: Action[]): ActionMenuItem[] {
+    return actions.map((a) => ({ id: a.id, label: actionLabel(a), destructive: a.destructive }));
+  }
+
+  /**
+   * Único ponto de despacho das cinco ações. `delete` e `redownload` continuam passando pelos
+   * diálogos de confirmação que já existiam — spec §7 é explícito: exclusão nunca é um clique
+   * só, e `episodeActions` marca as duas como `destructive` justamente para sinalizar isso.
+   */
+  function runAction(id: EpisodeActionId, ep: AnimeEpisodeInfo) {
+    switch (id) {
+      case "download": return handleDownload(ep);
+      case "redownload": return handleRedownload(ep);
+      case "delete": return handleDelete(ep);
+      case "release": return handleRelease(ep);
+      case "replace": return handleReplace(ep);
+    }
+  }
+
+  // Uma passada monta tudo que cada linha precisa, para desktop e mobile lerem a MESMA
+  // estrutura — é isso que impede as duas cópias de divergirem de novo.
+  $: rows =
+    $locale && allEpisodes.map((ep) => {
+      const torrent = torrentsByEpisode.get(ep.episode_number);
+      const actions = episodeActions(ep, torrent);
+      return {
+        ep,
+        torrent,
+        inFlight: !!torrent && !torrent.completed,
+        chip: episodeChip(ep, torrent),
+        notes: episodeNotes(ep),
+        meta: episodeMeta(ep, torrent),
+        principal: actions.principal,
+        menu: menuItems(actions.menu),
+        title: ep.episode_name || m.detail_ep_title({ number: ep.episode_number }),
+      };
+    });
 
   async function loadData(id: number) {
     if (!id || id <= 0) {
@@ -332,6 +470,8 @@
   async function pollTorrents() {
     try {
       torrents = await getTorrents();
+      lastPollAt = Date.now();
+      stallTracker.sync(torrents, lastPollAt);
     } catch (err) {
       // Best-effort accessory data — no toast, keep the last known snapshot.
       console.error("Failed to load torrents:", err);
@@ -382,6 +522,23 @@
   onDestroy(() => {
     if (torrentPollTimer) clearTimeout(torrentPollTimer);
   });
+
+  // Grid compartilhado pelo cabeçalho e pelas linhas (desktop), definido uma vez para que não
+  // possam sair de alinhamento.
+  //
+  // A coluna de ações tem largura FIXA, não `auto`: cada linha é um grid independente, então
+  // uma trilha `auto` mediria o conteúdo daquela linha só — e como as linhas têm ações
+  // diferentes (principal + ⋯ / só ⋯ / nenhuma), o `1fr` sobrava diferente em cada uma e as
+  // colunas ficavam desalinhadas entre si. Com todas as trilhas determinísticas, o `1fr`
+  // resolve igual em toda linha. 200px comporta o rótulo mais longo ("Release episode" /
+  // "Soltar episódio") mais o botão de 32px do menu.
+  //
+  // A tabela só existe a partir de `lg` (1024px): as trilhas fixas + gaps somam ~710px e em
+  // `md` (768px) sobram ~628px depois do rail e do padding do main, o que jogava a página
+  // inteira em rolagem horizontal. Mesmo critério da lista de animes (Status.svelte, LIST_GRID)
+  // e das linhas de torrent (Downloads.svelte, ROW_GRID).
+  const EP_GRID =
+    "grid grid-cols-[28px_52px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
 </script>
 
 <ConfirmDialog
@@ -411,93 +568,66 @@
   on:confirm={confirmBulkDelete}
 />
 
-<!-- Replace Episode with Magnet Modal -->
-{#if replaceEpOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" on:click|self={() => { replaceEpOpen = false; }}>
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {m.detail_replace_ep_title({ number: pendingReplaceEp?.episode_number ?? "" })}
-      </h3>
-      <input
-        type="text"
-        bind:value={replaceEpMagnet}
-        placeholder={m.detail_replace_magnet_placeholder()}
-        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        on:keydown={(e) => { if (e.key === 'Enter') confirmReplaceEp(); if (e.key === 'Escape') replaceEpOpen = false; }}
-      />
-      <div class="mt-4 flex justify-end gap-2">
-        <button
-          on:click={() => { replaceEpOpen = false; }}
-          class="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-        >
-          {m.common_cancel()}
-        </button>
-        <button
-          on:click={confirmReplaceEp}
-          disabled={replaceLoading}
-          class="px-3 py-1.5 text-sm rounded border border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {replaceLoading ? "..." : m.detail_btn_replace()}
-        </button>
-      </div>
-    </div>
+<!-- Os dois diálogos de magnet agora usam o primitivo Modal (foco preso, Esc, clique fora),
+     no lugar das duas overlays feitas à mão que não prendiam foco nem fechavam com Esc. -->
+<Modal open={replaceEpOpen} labelledBy="replace-ep-title" on:close={() => (replaceEpOpen = false)}>
+  <h3 id="replace-ep-title" class="text-card-title text-heading">
+    {m.detail_replace_ep_title({ number: pendingReplaceEp?.episode_number ?? "" })}
+  </h3>
+  <input
+    type="text"
+    bind:value={replaceEpMagnet}
+    placeholder={m.detail_replace_magnet_placeholder()}
+    class="mt-4 w-full rounded-field border border-default bg-control px-3 py-2 text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle focus:border-accent"
+    on:keydown={(e) => { if (e.key === 'Enter') confirmReplaceEp(); }}
+  />
+  <div class="mt-4 flex justify-end gap-2">
+    <Button variant="ghost" on:click={() => (replaceEpOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="solid" disabled={replaceLoading} on:click={confirmReplaceEp}>
+      {replaceLoading ? "..." : m.detail_btn_replace()}
+    </Button>
   </div>
-{/if}
+</Modal>
 
-<!-- Replace Anime with Magnet Modal -->
-{#if replaceAnimeOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" on:click|self={() => { replaceAnimeOpen = false; }}>
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-        {m.detail_replace_anime_title()}
-      </h3>
-      <input
-        type="text"
-        bind:value={replaceAnimeMagnet}
-        placeholder={m.detail_replace_magnet_placeholder()}
-        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        on:keydown={(e) => { if (e.key === 'Enter') confirmReplaceAnime(); if (e.key === 'Escape') replaceAnimeOpen = false; }}
-      />
-      <div class="mt-4 flex justify-end gap-2">
-        <button
-          on:click={() => { replaceAnimeOpen = false; }}
-          class="px-3 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-        >
-          {m.common_cancel()}
-        </button>
-        <button
-          on:click={confirmReplaceAnime}
-          disabled={replaceLoading}
-          class="px-3 py-1.5 text-sm rounded border border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {replaceLoading ? "..." : m.detail_btn_replace()}
-        </button>
-      </div>
-    </div>
+<Modal open={replaceAnimeOpen} labelledBy="replace-anime-title" on:close={() => (replaceAnimeOpen = false)}>
+  <h3 id="replace-anime-title" class="text-card-title text-heading">
+    {m.detail_replace_anime_title()}
+  </h3>
+  <input
+    type="text"
+    bind:value={replaceAnimeMagnet}
+    placeholder={m.detail_replace_magnet_placeholder()}
+    class="mt-4 w-full rounded-field border border-default bg-control px-3 py-2 text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle focus:border-accent"
+    on:keydown={(e) => { if (e.key === 'Enter') confirmReplaceAnime(); }}
+  />
+  <div class="mt-4 flex justify-end gap-2">
+    <Button variant="ghost" on:click={() => (replaceAnimeOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="solid" disabled={replaceLoading} on:click={confirmReplaceAnime}>
+      {replaceLoading ? "..." : m.detail_btn_replace()}
+    </Button>
   </div>
-{/if}
+</Modal>
 
-<div>
-  <div class="mb-6">
-    <a
-      href="#/status"
-      class="inline-flex items-center text-sm text-blue-600 dark:text-blue-400 hover:underline mb-3"
-    >
-      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-      </svg>
-      {m.detail_back()}
-    </a>
-    <div class="flex gap-4">
-      {#if detail?.cover_image}
-        <img
-          src={detail.cover_image}
-          alt={anime?.name ?? ""}
-          class="w-24 h-36 sm:w-28 sm:h-40 object-cover rounded-lg shadow-md shrink-0"
-        />
-      {/if}
-      <div class="flex-1 min-w-0">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+<div class="space-y-4.5">
+  <!-- Cabeçalho -->
+  <div>
+    <nav class="flex items-center gap-1 text-caption text-subtle" aria-label={m.detail_back()}>
+      <a href="#/status" class="hover:text-body">{$locale && m.nav_status()}</a>
+      <ChevronRight size={13} strokeWidth={2} aria-hidden="true" />
+      <span class="truncate text-body">{anime?.name ?? ($locale && m.detail_title_fallback())}</span>
+    </nav>
+
+    <div class="mt-3 flex flex-wrap items-start gap-4">
+      <div class="h-[110px] w-[78px] shrink-0 overflow-hidden">
+        <Cover src={detail?.cover_image} alt={anime?.name ?? ""} radiusClass="rounded-card" />
+      </div>
+
+      <!-- `min-w-[200px]`, não `min-w-0`: com `flex-wrap`, uma coluna que pode encolher até
+           zero nunca empurra o botão para a linha de baixo — no mobile o título espremia em
+           três linhas e o "Replace Anime with Magnet" ficava por cima dele. Com um piso de
+           largura, o botão quebra para a própria linha quando não cabe. -->
+      <div class="min-w-[200px] flex-1">
+        <h1 class="text-[24px] font-bold leading-tight text-heading">
           {#if anime && detail?.anilist_id}
             <a
               href="https://anilist.co/anime/{detail.anilist_id}"
@@ -508,464 +638,260 @@
               {anime.name}
             </a>
           {:else}
-            {anime ? anime.name : m.detail_title_fallback()}
+            {anime ? anime.name : ($locale && m.detail_title_fallback())}
           {/if}
         </h1>
-        {#if detail}
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            {m.detail_progress({ progress: detail.progress, total: detail.total_episodes || "?", status: detail.status })}
-          </p>
-          <div class="mt-2 flex items-center gap-2 flex-wrap">
-            <button
-              on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}
-              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-            >
-              {m.detail_replace_btn_anime()}
-            </button>
+
+        {#if animeChip}
+          <div class="mt-2">
+            <Chip variant={animeChip.variant} dimmed={animeChip.dimmed}>{$locale && chipLabel(animeChip)}</Chip>
           </div>
-          <div class="mt-3 flex items-center gap-2 max-w-xl">
-            <label class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0">
-              {m.detail_search_query_label()}
-            </label>
+        {/if}
+
+        {#if anime}
+          <p class="mt-2 font-mono text-caption text-subtle">
+            {$locale && m.detail_counts({
+              downloaded: anime.episodes_downloaded,
+              total: anime.total_episodes || "?",
+              watched: anime.episodes_watched,
+            })}
+            {#if detail?.status}
+              · {m.detail_anilist_status({ status: detail.status })}
+            {/if}
+          </p>
+        {/if}
+      </div>
+
+      <Button variant="ghost" on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}>
+        {$locale && m.detail_replace_btn_anime()}
+      </Button>
+    </div>
+  </div>
+
+  <!-- Busca customizada do anime — recolhível (spec §9.2) -->
+  {#if detail}
+    <section class="rounded-card border border-default bg-card">
+      <button
+        type="button"
+        class="flex w-full items-center gap-2 px-4 py-3 text-left text-copy text-body transition-colors hover:bg-control"
+        aria-expanded={searchQueryOpen}
+        on:click={() => (searchQueryOpen = !searchQueryOpen)}
+      >
+        <ChevronDown
+          size={16}
+          strokeWidth={2}
+          class="shrink-0 transition-transform {searchQueryOpen ? '' : '-rotate-90'}"
+        />
+        {$locale && m.detail_search_query_label()}
+        {#if customSearchQuery}
+          <span class="truncate font-mono text-caption text-subtle">{customSearchQuery}</span>
+        {/if}
+      </button>
+
+      {#if searchQueryOpen}
+        <div class="border-t border-divider p-4">
+          <label for="custom-search-query" class="mb-1.5 block text-copy text-body">
+            {$locale && m.detail_search_query_label()}
+          </label>
+          <div class="flex flex-wrap items-center gap-2">
             <input
+              id="custom-search-query"
               type="text"
               bind:value={customSearchQuery}
               placeholder={m.detail_search_query_placeholder()}
-              class="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              class="min-w-0 flex-1 rounded-field border border-default bg-control px-3 py-2 text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle focus:border-accent"
               on:keydown={(e) => { if (e.key === 'Enter') handleSaveSearchQuery(); }}
             />
-            <button
-              on:click={handleSaveSearchQuery}
-              disabled={searchQuerySaving}
-              class="shrink-0 px-3 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {searchQuerySaving ? "..." : "Save"}
-            </button>
+            <Button variant="ghost" disabled={searchQuerySaving} on:click={handleSaveSearchQuery}>
+              {searchQuerySaving ? "..." : ($locale && m.common_save())}
+            </Button>
           </div>
-        {/if}
-      </div>
-    </div>
-  </div>
+          <p class="mt-1.5 text-caption text-subtle">{$locale && m.detail_search_query_placeholder()}</p>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   {#if loading}
     <Loading message={m.detail_loading()} />
   {:else if !detail || detail.episodes.length === 0}
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-      <p class="text-sm text-gray-500 dark:text-gray-400">{m.detail_empty()}</p>
+    <div class="rounded-card border border-default bg-card p-6">
+      <p class="text-copy text-subtle">{$locale && m.detail_empty()}</p>
     </div>
   {:else}
-    <!-- Bulk action bar -->
-    {#if selectedEpisodes.size > 0}
-      <div class="mb-3 flex items-center gap-2 flex-wrap bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2.5">
-        <span class="text-sm font-medium text-blue-700 dark:text-blue-300 mr-1">
-          {m.detail_bulk_selected({ count: selectedEpisodes.size })}
-        </span>
-        {#if canBulkDownload}
-          <button
-            on:click={handleBulkDownload}
-            disabled={bulkLoading}
-            class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {m.detail_bulk_download()}
-          </button>
-        {/if}
-        {#if canBulkDelete}
-          <button
-            on:click={handleBulkDelete}
-            disabled={bulkLoading}
-            class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {m.detail_bulk_delete()}
-          </button>
-        {/if}
-        {#if canBulkRelease}
-          <button
-            on:click={handleBulkRelease}
-            disabled={bulkLoading}
-            class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-gray-400 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {m.detail_bulk_release()}
-          </button>
-        {/if}
-        <button
-          on:click={() => { selectedEpisodes = new Set(); }}
-          class="ml-auto inline-flex items-center px-2.5 py-1 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50"
-        >
-          {m.detail_bulk_deselect_all()}
-        </button>
-      </div>
-    {/if}
+    <section class="rounded-card border border-default bg-card">
+      <!-- Barra de seleção múltipla. Só as três ações em lote que EXISTEM hoje: Baixar,
+           Soltar, Excluir. "Rebaixar" em lote não é adicionado — seria funcionalidade nova
+           (spec §9.2), não redesenho. -->
+      {#if selectedEpisodes.size > 0}
+        <div class="flex flex-wrap items-center gap-2 border-b border-accent bg-accent-tint/[.09] px-4 py-2.5">
+          <span class="mr-auto text-copy text-accent">
+            {$locale && m.detail_bulk_selected({ count: selectedEpisodes.size })}
+          </span>
+          {#if canBulkDownload}
+            <Button variant="solid" disabled={bulkLoading} on:click={handleBulkDownload}>
+              {$locale && m.detail_bulk_download()}
+            </Button>
+          {/if}
+          {#if canBulkRelease}
+            <Button variant="ghost" disabled={bulkLoading} on:click={handleBulkRelease}>
+              {$locale && m.detail_bulk_release()}
+            </Button>
+          {/if}
+          {#if canBulkDelete}
+            <Button variant="warn" disabled={bulkLoading} on:click={handleBulkDelete}>
+              {$locale && m.detail_bulk_delete()}
+            </Button>
+          {/if}
+          <Button variant="ghost" on:click={() => (selectedEpisodes = new Set())}>
+            {$locale && m.detail_bulk_deselect_all()}
+          </Button>
+        </div>
+      {/if}
 
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-      <!-- Desktop Table View -->
-      <div class="hidden md:block overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead class="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th class="px-4 py-3 w-10">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  indeterminate={someSelected}
-                  on:change={toggleSelectAll}
-                  class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer"
-                />
-              </th>
-              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                {m.detail_col_episode()}
-              </th>
-              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                {m.detail_col_anilist()}
-              </th>
-              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                {m.detail_col_downloaded()}
-              </th>
-              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                {m.detail_col_next_ep()}
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                {m.detail_col_download_date()}
-              </th>
-              <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                {m.detail_col_actions()}
-              </th>
-            </tr>
-          </thead>
-          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {#each detail.episodes as ep}
-              {@const isLoading = !!actionLoading[ep.episode_id]}
-              {@const isSelected = selectedEpisodes.has(ep.episode_id)}
-              {@const torrent = torrentsByEpisode.get(ep.episode_number)}
-              <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
-                <td class="px-4 py-4 w-10">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    on:change={() => toggleEpisode(ep.episode_id)}
-                    class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer"
+      <!-- Desktop -->
+      <div class="hidden lg:block">
+        <div class="{EP_GRID} border-b border-divider px-4 py-2.5">
+          <Checkbox
+            checked={allSelected}
+            indeterminate={someSelected}
+            label={$locale ? m.detail_select_all() : ""}
+            labelHidden
+            on:change={toggleSelectAll}
+          />
+          <span class="font-mono text-mono-label uppercase text-subtle">#</span>
+          <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_episode()}</span>
+          <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_state()}</span>
+          <!-- "Detalhes", não "Data de download": esta coluna mostra o dado mais informativo
+               para o estado da linha (progresso em voo / data de download / falta X para
+               estrear), então um cabeçalho que nomeasse só um dos três estaria errado nos
+               outros dois. -->
+          <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_info()}</span>
+          <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_actions()}</span>
+        </div>
+
+        {#each rows || [] as row (row.ep.episode_id)}
+          {@const isLoading = !!actionLoading[row.ep.episode_id]}
+          {@const isSelected = selectedEpisodes.has(row.ep.episode_id)}
+          <div
+            data-episode-row
+            class="{EP_GRID} border-b border-divider px-4 py-3 last:border-b-0 {isSelected ? 'bg-accent-tint/[.06]' : ''}"
+          >
+            <Checkbox
+              checked={isSelected}
+              label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
+              labelHidden
+              on:change={() => toggleEpisode(row.ep.episode_id)}
+            />
+
+            <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
+
+            <div class="min-w-0">
+              <p class="truncate text-copy text-heading" title={row.title}>{row.title}</p>
+              {#if row.notes}
+                <p class="truncate text-caption text-subtle">{row.notes}</p>
+              {/if}
+            </div>
+
+            <div class="min-w-0">
+              <Chip variant={row.chip.variant}>{row.chip.label}</Chip>
+              <!-- Barra fina só enquanto o torrent está em voo. A condição é APENAS
+                   `!torrent.completed` — ver o comentário grande no topo do script sobre
+                   `episode_hash != "" ⟺ is_downloaded`. -->
+              {#if row.inFlight && row.torrent}
+                <div class="mt-1.5">
+                  <ProgressBar
+                    value={row.torrent.progress}
+                    thickness={4}
+                    label={m.detail_torrent_progress_aria()}
                   />
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white text-center">
-                  {ep.episode_number}
-                  {#if ep.is_manually_managed}
-                    <span class="block text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_delete()}</span>
-                  {/if}
-                  {#if ep.is_blocked}
-                    <span class="block text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_download()}</span>
-                  {/if}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-center">
-                  {#if ep.is_watched}
-                    <!-- Watched: eye icon -->
-                    <svg class="w-4 h-4 text-blue-500 inline-block" aria-label={m.detail_badge_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                  {:else if ep.is_aired}
-                    <!-- Aired but not watched: eye-off icon -->
-                    <svg class="w-4 h-4 text-yellow-500 inline-block" aria-label={m.detail_badge_not_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
-                    </svg>
-                  {:else}
-                    <!-- Upcoming: clock icon -->
-                    <svg class="w-4 h-4 text-gray-400 inline-block" aria-label={m.detail_badge_upcoming()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10"/>
-                      <polyline points="12 6 12 12 16 14"/>
-                    </svg>
-                  {/if}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-center">
-                  {#if ep.is_downloaded}
-                    <!-- Downloaded: check circle -->
-                    <svg class="w-4 h-4 text-green-500 inline-block" aria-label={m.detail_badge_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-                      <polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                  {:else}
-                    <!-- Not downloaded: dash -->
-                    <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 inline-block" aria-label={m.detail_badge_not_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="8" y1="12" x2="16" y2="12"/>
-                    </svg>
-                  {/if}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-center">
-                  {formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {#if torrent && !torrent.completed}
-                    <div class="min-w-[9rem]">
-                      <div class="flex items-center gap-2 mb-1">
-                        <span class="badge badge-xs {statusClass(torrent.status)}">{statusLabel(torrent.status)}</span>
-                      </div>
-                      <progress
-                        class="progress progress-primary w-full h-1.5"
-                        aria-label={m.detail_torrent_progress_aria()}
-                        value={torrent.progress}
-                        max="1"
-                      ></progress>
-                      <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                        {formatPercent(torrent.progress)} · ↓ {formatSpeed(torrent.download_speed)} · {m.downloads_col_eta()} {formatEta(torrent.eta_seconds)}
-                      </div>
-                    </div>
-                  {:else}
-                    {ep.is_downloaded ? formatDate(ep.download_date) : "—"}
-                  {/if}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="flex items-center justify-center gap-1.5">
-                    {#if ep.is_aired && !ep.is_downloaded}
-                      <!-- Download -->
-                      <button
-                        on:click={() => handleDownload(ep)}
-                        disabled={isLoading}
-                        title={m.detail_btn_download()}
-                        class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {#if isLoading}
-                          <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0110 10" stroke-linecap="round"/></svg>
-                        {:else}
-                          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                          </svg>
-                        {/if}
-                      </button>
-                    {:else if ep.is_downloaded}
-                      <!-- Delete -->
-                      <button
-                        on:click={() => handleDelete(ep)}
-                        disabled={isLoading}
-                        title={m.detail_btn_delete()}
-                        class="inline-flex items-center p-1.5 rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="3 6 5 6 21 6"/>
-                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-                          <path d="M10 11v6M14 11v6"/>
-                          <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-                        </svg>
-                      </button>
-                      <!-- Redownload -->
-                      <button
-                        on:click={() => handleRedownload(ep)}
-                        disabled={isLoading}
-                        title={m.detail_btn_redownload()}
-                        class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="23 4 23 10 17 10"/>
-                          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-                        </svg>
-                      </button>
-                    {/if}
-                    {#if ep.is_aired}
-                      <!-- Replace -->
-                      <button
-                        on:click={() => handleReplace(ep)}
-                        disabled={isLoading}
-                        title={m.detail_btn_replace()}
-                        class="inline-flex items-center p-1.5 rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <polyline points="17 1 21 5 17 9"/>
-                          <path d="M3 11V9a4 4 0 014-4h14"/>
-                          <polyline points="7 23 3 19 7 15"/>
-                          <path d="M21 13v2a4 4 0 01-4 4H3"/>
-                        </svg>
-                      </button>
-                    {/if}
-                    {#if ep.is_manually_managed || ep.is_blocked}
-                      <!-- Release -->
-                      <button
-                        on:click={() => handleRelease(ep)}
-                        disabled={isLoading}
-                        title="Soltar episódio"
-                        class="inline-flex items-center p-1.5 rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line>
-                          <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                      </button>
-                    {/if}
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              {/if}
+            </div>
 
-      <!-- Mobile Card View -->
-      <div class="md:hidden divide-y divide-gray-200 dark:divide-gray-700">
-        {#each detail.episodes as ep}
-          {@const isLoading = !!actionLoading[ep.episode_id]}
-          {@const isSelected = selectedEpisodes.has(ep.episode_id)}
-          {@const torrent = torrentsByEpisode.get(ep.episode_number)}
-          <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 {isSelected ? 'bg-blue-50 dark:bg-blue-900/10' : ''}">
-            <div class="flex items-start justify-between mb-2">
-              <div class="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  on:change={() => toggleEpisode(ep.episode_id)}
-                  class="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 cursor-pointer flex-shrink-0"
+            <span class="truncate font-mono text-[12px] text-subtle" title={row.meta}>{row.meta}</span>
+
+            <!-- Coluna de ações: a principal SEMPRE na mesma posição, com texto; o resto no ⋯,
+                 também rotulado. Desktop e mobile leem esta mesma definição. -->
+            <div class="flex items-center justify-end gap-1.5">
+              {#if row.principal}
+                <Button
+                  variant={row.principal.variant}
+                  disabled={isLoading}
+                  on:click={() => row.principal && runAction(row.principal.id, row.ep)}
+                >
+                  {actionLabel(row.principal)}
+                </Button>
+              {/if}
+              {#if row.menu.length > 0}
+                <ActionMenu
+                  items={row.menu}
+                  triggerLabel={m.detail_actions_menu({ number: row.ep.episode_number })}
+                  on:select={(e) => runAction(e.detail as EpisodeActionId, row.ep)}
                 />
-                <div>
-                  <p class="text-sm font-medium text-gray-900 dark:text-white">
-                    {m.detail_col_episode()} {ep.episode_number}
-                  </p>
-                  {#if ep.is_manually_managed}
-                    <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_delete_short()}</p>
-                  {/if}
-                  {#if ep.is_blocked}
-                    <p class="text-xs text-gray-400 dark:text-gray-500">{m.detail_flag_no_download_short()}</p>
-                  {/if}
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                {#if ep.is_watched}
-                  <svg class="w-4 h-4 text-blue-500" aria-label={m.detail_badge_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                {:else if ep.is_aired}
-                  <svg class="w-4 h-4 text-yellow-500" aria-label={m.detail_badge_not_watched()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
-                  </svg>
-                {:else}
-                  <svg class="w-4 h-4 text-gray-400" aria-label={m.detail_badge_upcoming()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                {/if}
-                {#if ep.is_downloaded}
-                  <svg class="w-4 h-4 text-green-500" aria-label={m.detail_badge_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-                    <polyline points="22 4 12 14.01 9 11.01"/>
-                  </svg>
-                {:else}
-                  <svg class="w-4 h-4 text-gray-300 dark:text-gray-600" aria-label={m.detail_badge_not_downloaded()} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="8" y1="12" x2="16" y2="12"/>
-                  </svg>
-                {/if}
-              </div>
-            </div>
-            {#if ep.episode_name}
-              <p class="text-xs text-gray-400 dark:text-gray-500 mb-2 break-words">
-                {ep.episode_name}
-              </p>
-            {/if}
-            {#if torrent && !torrent.completed}
-              <div class="mt-2">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="badge badge-xs {statusClass(torrent.status)}">{statusLabel(torrent.status)}</span>
-                </div>
-                <progress
-                  class="progress progress-primary w-full h-1.5"
-                  aria-label={m.detail_torrent_progress_aria()}
-                  value={torrent.progress}
-                  max="1"
-                ></progress>
-                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  {formatPercent(torrent.progress)} · ↓ {formatSpeed(torrent.download_speed)} · {m.downloads_col_eta()} {formatEta(torrent.eta_seconds)}
-                </div>
-              </div>
-            {/if}
-            <div class="grid grid-cols-2 gap-4 mt-2">
-              <div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{m.detail_col_next_ep()}</p>
-                <p class="text-sm text-gray-900 dark:text-white">{formatTimeUntilAiring(ep.time_until_airing, ep.is_aired)}</p>
-              </div>
-              {#if ep.is_downloaded}
-                <div>
-                  <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">{m.detail_col_download_date()}</p>
-                  <p class="text-sm text-gray-900 dark:text-white">{formatDate(ep.download_date)}</p>
-                </div>
-              {/if}
-            </div>
-            <div class="mt-3 flex items-center gap-1.5">
-              {#if ep.is_aired && !ep.is_downloaded}
-                <!-- Download -->
-                <button
-                  on:click={() => handleDownload(ep)}
-                  disabled={isLoading}
-                  title={m.detail_btn_download()}
-                  class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                </button>
-              {:else if ep.is_downloaded}
-                <!-- Delete -->
-                <button
-                  on:click={() => handleDelete(ep)}
-                  disabled={isLoading}
-                  title={m.detail_btn_delete()}
-                  class="inline-flex items-center p-1.5 rounded border border-red-500 text-red-600 dark:text-red-400 dark:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-                    <path d="M10 11v6M14 11v6"/>
-                    <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-                  </svg>
-                </button>
-                <!-- Redownload -->
-                <button
-                  on:click={() => handleRedownload(ep)}
-                  disabled={isLoading}
-                  title={m.detail_btn_redownload()}
-                  class="inline-flex items-center p-1.5 rounded border border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"/>
-                    <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/>
-                  </svg>
-                </button>
-              {/if}
-              {#if ep.is_aired}
-                <!-- Replace -->
-                <button
-                  on:click={() => handleReplace(ep)}
-                  disabled={isLoading}
-                  title={m.detail_btn_replace()}
-                  class="inline-flex items-center p-1.5 rounded border border-orange-400 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="17 1 21 5 17 9"/>
-                    <path d="M3 11V9a4 4 0 014-4h14"/>
-                    <polyline points="7 23 3 19 7 15"/>
-                    <path d="M21 13v2a4 4 0 01-4 4H3"/>
-                  </svg>
-                </button>
-              {/if}
-              {#if ep.is_manually_managed || ep.is_blocked}
-                <!-- Release -->
-                <button
-                  on:click={() => handleRelease(ep)}
-                  disabled={isLoading}
-                  title="Soltar episódio"
-                  class="inline-flex items-center p-1.5 rounded border border-gray-400 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
               {/if}
             </div>
           </div>
         {/each}
       </div>
-    </div>
+
+      <!-- Mobile: mesma definição de linha, empilhada -->
+      <div class="divide-y divide-divider lg:hidden">
+        {#each rows || [] as row (row.ep.episode_id)}
+          {@const isLoading = !!actionLoading[row.ep.episode_id]}
+          {@const isSelected = selectedEpisodes.has(row.ep.episode_id)}
+          <div data-episode-row class="p-4 {isSelected ? 'bg-accent-tint/[.06]' : ''}">
+            <div class="flex items-start gap-3">
+              <Checkbox
+                checked={isSelected}
+                label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
+                labelHidden
+                on:change={() => toggleEpisode(row.ep.episode_id)}
+              />
+              <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-copy text-heading">{row.title}</p>
+                {#if row.notes}
+                  <p class="truncate text-caption text-subtle">{row.notes}</p>
+                {/if}
+              </div>
+            </div>
+
+            <div class="mt-2.5">
+              <Chip variant={row.chip.variant}>{row.chip.label}</Chip>
+              {#if row.inFlight && row.torrent}
+                <div class="mt-1.5">
+                  <ProgressBar
+                    value={row.torrent.progress}
+                    thickness={4}
+                    label={m.detail_torrent_progress_aria()}
+                  />
+                </div>
+              {/if}
+              <p class="mt-1.5 font-mono text-[12px] text-subtle">{row.meta}</p>
+            </div>
+
+            <div class="mt-3 flex items-center gap-1.5">
+              {#if row.principal}
+                <Button
+                  variant={row.principal.variant}
+                  disabled={isLoading}
+                  on:click={() => row.principal && runAction(row.principal.id, row.ep)}
+                >
+                  {actionLabel(row.principal)}
+                </Button>
+              {/if}
+              {#if row.menu.length > 0}
+                <ActionMenu
+                  items={row.menu}
+                  triggerLabel={m.detail_actions_menu({ number: row.ep.episode_number })}
+                  on:select={(e) => runAction(e.detail as EpisodeActionId, row.ep)}
+                />
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
   {/if}
 </div>
