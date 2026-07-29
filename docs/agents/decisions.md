@@ -535,3 +535,15 @@ Três propriedades que caíram de graça e são intencionais:
 Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são feitos na hora da comparação, com os dois caminhos existindo.
 
 **Don't "fix" by:** trocar o alias por um `os.Stat(dest)` guardado antes da troca ("é a mesma coisa e lê melhor" — não é, e só quebra no Windows); marcar o teste como `t.Skip` no Windows (era exatamente o cross-device/hardlink que esse job existe para cobrir); apagar a asserção do arquivo velho por parecer redundante com a de conteúdo (uma mutação que pula a substituição faz as duas falharem, mas a de identidade é a que distingue "relinkou" de "sobrescreveu por cima").
+
+---
+
+### 36. `AppShell` escolhe rail vs tab bar em JS (`matchMedia`), não com `hidden md:flex`/`md:hidden`
+
+**Location:** `frontend/src/components/shell/AppShell.svelte`, `NavRail.svelte`, `NavTabBar.svelte`, `MoreMenu.svelte` (Fase 1 do redesign de UI, spec §5).
+
+**What it looks like:** `AppShell` guarda um booleano `isDesktop` (inicializado sincronamente de `window.matchMedia('(min-width: 768px)')`, atualizado por um listener de `change`) e monta `{#if isDesktop}<NavRail>{:else}<NavTabBar>{/if}` — só um dos dois existe no DOM a qualquer momento. O padrão Tailwind mais comum para "rail no desktop, tab bar no mobile" seria montar os dois sempre e escondê-los por classe (`hidden md:flex` / `md:hidden`), como o `Layout.svelte` antigo fazia para seu bloco desktop/mobile.
+
+**Why it's right:** `NavRail` e `NavTabBar` cada um monta seu próprio `MoreMenu`, que no mobile hospeda um `<select id="theme-select-mobile">` (o desktop tem o seu próprio `<select id="theme-select">`, sempre visível no rodapé do rail). Com os dois blocos sempre no DOM e só escondidos por CSS, ambos existiriam ao mesmo tempo — dois elementos com o mesmo propósito de controle, potencialmente dois ids duplicados se algum dia convergirem, e dois menus "Mais" interativos simultâneos para ferramentas que não respeitam `display:none` puramente por visibilidade (ex. `getByLabelText`/`getByRole` do Testing Library encontram elementos ocultos por CSS a menos que a query filtre por `hidden: true`, e podem falhar com "found multiple elements"). Montar só um dos dois em JS elimina a classe inteira desse problema, ao custo de um listener de `matchMedia` — inicializado de forma síncrona no `<script>` do componente (antes do primeiro render), então não há flash de layout errado.
+
+**Don't "fix" by:** voltar para `hidden md:flex`/`md:hidden` "porque é mais simples e é o padrão Tailwind" — funciona visualmente, mas reintroduz o duplo-DOM que motivou a decisão; inicializar `isDesktop` só dentro de `onMount` (mostraria o layout errado por um frame antes do primeiro paint, já que a leitura síncrona de `matchMedia` no `<script>` é o que evita isso).

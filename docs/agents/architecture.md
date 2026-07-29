@@ -519,19 +519,29 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | File | Route | Purpose |
 |------|-------|---------|
-| `routes/Status.svelte` | `#/` | Daemon status, start/stop, anime list, global speed card (aggregate download/upload across all torrents) |
+| `routes/Status.svelte` | `#/` | Daemon status **and** anime list — one screen, not two (redesign decision D4; there is no separate "Biblioteca" route). Header holds the daemon pill (`PulseDot` + label + relative last-check) and start/stop/force-check; a hero card shows aggregate download speed (`formatSpeedParts`, split number/unit), a `Sparkline` fed by `speedHistory`, and one `ProgressRing` per active download; the right column has the library `TripleProgressBar` and disk/next-check cards; the anime list renders a derived `Chip` per row (`deriveAnimeChip`) with search, unwatched filter and sortable name/watched/last-download headers. Polls `GET /api/v1/torrents` every 5s — a failed poll sets a `stale` flag that switches the "polling 5s" note to a frozen-values warning and stops feeding `speedHistory` (never extrapolates) |
 | `routes/Downloads.svelte` | `#/downloads` | Live torrent list — progress, speed, ETA, peers, status per torrent, joined with anime/episode; search/status-filter/sort (`torrentFilters.ts`, view state round-tripped through the URL querystring, not localStorage), select-all/bulk pause/resume/announce/delete (`DownloadsToolbar.svelte`), per-row and bulk delete (`TorrentDeleteDialog.svelte`) calling `DELETE /torrents/{hash}`. Polls `GET /api/v1/torrents` every 2s while mounted, stops polling on unmount |
-| `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions; joins each episode against the live torrent list via `episode_hash` (`torrentsByEpisode.ts`) to show an inline progress bar/status badge while an aired-but-undownloaded episode has an active torrent. Adaptive poll of `GET /api/v1/torrents`: 2s while this anime has an active torrent, 15s otherwise |
+| `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions. **One** action definition — `episodeActions()` (`lib/domain/`) — drives both the desktop grid and the mobile stack, replacing the five icon-only buttons that used to be written out twice; each row shows a labelled principal action in a fixed column plus an `ActionMenu` (`⋯`) holding the rest, also labelled. `delete`/`redownload` still go through `ConfirmDialog` — deletion is never one click. Header carries a breadcrumb, cover, the derived `deriveAnimeChip` chip and the magnet-paste button; the custom Nyaa search query (`custom_search_query`) lives in a collapsible block. Joins each episode against the live torrent list via `episode_hash` (`torrentsByEpisode.ts`) to show an inline 4px `ProgressBar` while a torrent is in flight. Adaptive poll of `GET /api/v1/torrents`: 2s while this anime has an active torrent, 15s otherwise |
 | `routes/Config.svelte` | `#/config` | Edit all config fields |
 | `routes/Priorities.svelte` | `#/priorities` | Reorder/add/remove torrent priority lists (fansubs, resolutions, source, codec, audio, criteria order, ignore list); reset per-list or all, via `GET/PUT /api/v1/config` + `GET /api/v1/config/priorities/defaults` |
 | `routes/Logs.svelte` | `#/logs` | Tail daemon logs |
 | `routes/Notifications.svelte` | `#/notifications` | Webhook configuration CRUD |
 
+**Shell** (`src/components/shell/` — Fase 1 of the UI redesign, spec §5): `App.svelte` wraps the router in `AppShell`, not the old `Layout.svelte` (deleted; it wrote the six nav links twice — a desktop block and a mobile block — with the active-state classes repeated in each):
+
+| File | Purpose |
+|------|---------|
+| `AppShell.svelte` | Grid rail + content; picks `NavRail` vs `NavTabBar` via a `(min-width: 768px)` `matchMedia` listener (JS, not `hidden md:flex`/`md:hidden` — that would keep both mounted, duplicating ids like `#theme-select`); hosts `<Toasts />` |
+| `NavRail.svelte` | 74px vertical rail (desktop): Status/Downloads, a divider, Configurações, then "Mais" (opens `MoreMenu`); footer holds the theme select, locale toggle, WS dot, app version |
+| `NavTabBar.svelte` | 4-column bottom tab bar (mobile): Status, Downloads, Config, Mais; fixed, safe-area padding |
+| `MoreMenu.svelte` | Local dropdown (no generic primitive yet — that's Fase 2's `ActionMenu`) listing Notificações/Prioridades/Logs. Two call sites, one component: from `NavRail` (`showFooterControls={false}`) and from `NavTabBar` (`showFooterControls={true}`, so it also hosts theme/locale/WS/version — the tab bar has nowhere else to put them). Closes on Escape, outside click, or navigation |
+
+`lib/navItems.ts` is the single source of the nav item list (route, icon, i18n message function, which group) that `NavRail`/`NavTabBar`/`MoreMenu` all read instead of each declaring the six items themselves; also exports `isNavItemActive`/`isMoreMenuActive` for active-state highlighting.
+
 **Shared components** (`src/components/`):
 
 | File | Purpose |
 |------|---------|
-| `Layout.svelte` | Shell with nav |
 | `StatusBadge.svelte` | Colored badge for daemon/episode status |
 | `ConfirmDialog.svelte` | Modal confirmation dialog. Binds the native `open` attribute on `<dialog>` (needed so a closed dialog is out of the a11y tree/role queries even with the daisyUI `.modal-open` class applied) and exposes an optional `<slot />` for callers that need extra content between the message and the action buttons |
 | `TorrentDeleteDialog.svelte` | Wraps `ConfirmDialog` for the Downloads delete flow (single row or bulk selection). Two checkboxes — delete files, block re-download — both default checked; emits `confirm` with `{keepData, block}` |
@@ -541,14 +551,42 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `Input.svelte` | Styled input field |
 | `Loading.svelte` | Loading spinner |
 
+**UI primitives** (`src/components/ui/` — Fase 2 of the UI redesign, spec §6). All consume the semantic Tailwind names backed by `src/lib/design/tokens.css`; **no component contains a literal hex**:
+
+| File | Purpose |
+|------|---------|
+| `Chip.svelte` | Tinted badge, five variants (accent/ok/warn/danger/neutral) mapping 1:1 onto `deriveAnimeChip`'s `variant`. Takes rendered text via slot, never an i18n key |
+| `Button.svelte` | `solid` (the accent primary), `ghost`, `warn` (destructive/attention — tinted, not a solid red fill). There is intentionally **no `ok`/green variant**: spec §4.1 reserves the solid green for "Iniciar daemon", which `Status.svelte` writes inline so the style can't be reused elsewhere |
+| `ProgressBar.svelte` | Single-segment bar, `transition: width .9s linear`; `stale` kills the transition and dims the fill (the screen owns staleness detection, not this component) |
+| `TripleProgressBar.svelte` | Three **adjacent, summed** segments (watched/downloaded/released) over one track. `legend` is a required prop — the spec forbids showing this bar without a textual legend |
+| `ProgressRing.svelte` | 46px `conic-gradient` ring + 34px inner disc with the percentage in mono |
+| `Sparkline.svelte` | 20 bars × 7px, right-aligned so the newest sample is always rightmost; unfilled slots render as empty track |
+| `PulseDot.svelte` | 2.4s pulse keyframe. **Only** for "alive" indicators, never decoration |
+| `Modal.svelte` | Focus trap, Escape and outside-click close |
+| `ActionMenu.svelte` | `⋯` dropdown on desktop / action sheet on mobile — one component, two layouts, one item definition |
+| `Cover.svelte` | AniList cover with a hatched `repeating-linear-gradient` fallback |
+| `Toggle.svelte`, `Checkbox.svelte` | Form controls in the redesign's styling. `Checkbox` wraps a real `<input type="checkbox">` (native keyboard behaviour, associated label); `label` is required even with `labelHidden`, so an unlabelled checkbox can't be shipped, and `indeterminate` works because it reaches that real input (it's a DOM property with no attribute form) |
+
+**Pure domain logic** (`src/lib/domain/` — Fase 2, spec §7). No Svelte imports, no store reads, covered by vitest:
+
+| File | Export | Purpose |
+|------|--------|---------|
+| `animeState.ts` | `deriveAnimeChip(anime, torrents, now, stalledSince)` | Ordered cascade → one chip state: blacklisted → downloading → no-seeds (≥10min at 0 peers) → paused → awaiting-premiere → up-to-date → behind. Returns a **key plus raw numbers**, never rendered text, so it stays locale-free; the screen translates the key |
+| `episodeActions.ts` | `episodeActions(ep, torrent)` | The episode action model **as data** (`{ principal?, menu[] }`), so desktop and mobile render one definition instead of two copies. Covers only the five actions that exist |
+| `format.ts` | `formatSpeed`, `formatSpeedParts`, `formatBytes`, `formatPercent`, `formatEta`, `formatDate` | Locale-aware formatting (pt-BR comma decimal / dot thousands). Takes `locale` as an argument rather than reading the store, which is the dependency this directory isn't allowed to have. `formatSpeedParts` returns number and unit separately for the Status hero, and `formatSpeed` re-joins it. Overlaps `utils/torrents.ts`/`utils/status.ts`; each call site migrates in the phase that redesigns its screen (Status already has) |
+| `logSource.ts` | — | Maps zerolog's `caller` to a displayed origin (scheduler/anilist/rss/torrent/api). A deliberate approximation — a structured `component` field is backlog, not backend work for this redesign |
+
 **Stores** (`src/lib/stores/`):
 
 | File | Export | Purpose |
 |------|--------|---------|
-| `wsState.ts` | `wsState` | Svelte store for WebSocket daemon state (`status`, `lastCheck`, `hasError`) |
+| `wsState.ts` | `wsConnectionState` | Svelte store for the WebSocket connection state (`connected`/`reconnecting`/`disconnected`) |
 | `toasts.ts` | `toasts` | Toast queue store |
 | `theme.ts` | `theme` | Dark/light theme |
 | `locale.ts` | `locale` | i18n locale |
+| `speedHistory.ts` | `speedHistory` | Last 20 aggregate download-speed samples for the Status hero `Sparkline`. Does **not** poll — the owning screen calls `push()` once per *successful* torrent poll. There is deliberately no `fail()`/`freeze()`: freezing is the *absence* of a push, so a failed poll can never be papered over with an extrapolated sample |
+| `stallTracker.ts` | `stallTracker` | Per torrent hash, the timestamp since which `peers_total === 0`. Bookkeeping only (`sync()` per poll tick); the 10-minute "sem seeds" threshold is a chip rule and lives in `deriveAnimeChip`. In-memory, resets on reload |
+| `activeTorrents.ts` | `activeTorrentCount` | Count of active torrents (`downloading`/`downloading_metadata`/`verifying`/`allocating`) for the NavRail/NavTabBar Downloads badge (Fase 1, spec §5). Custom `writable` start/stop function polls `GET /torrents` every 10s, paused while `document.visibilityState === 'hidden'`; a failed poll clears the count to 0 (ambient indicator, no toast). Separate from `Downloads.svelte`'s own 2s poll — consolidating the two is out of scope for Fase 1 |
 
 **Utils** (`src/lib/utils/`, torrent-related additions):
 

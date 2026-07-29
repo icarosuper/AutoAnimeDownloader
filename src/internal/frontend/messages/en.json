@@ -1,28 +1,23 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-
   "nav_status": "Status",
   "nav_config": "Configuration",
   "nav_priorities": "Priorities",
   "nav_logs": "Logs",
   "nav_downloads": "Downloads",
-
+  "nav_more": "More",
   "theme_light": "Light",
   "theme_dark": "Dark",
   "theme_system": "System",
-
   "ws_connected": "Real-time updates active",
   "ws_reconnecting": "Reconnecting...",
   "ws_disconnected": "Disconnected",
-
   "common_never": "Never",
   "common_cancel": "Cancel",
   "common_na": "N/A",
-
   "badge_running": "Running",
   "badge_checking": "Checking",
   "badge_stopped": "Stopped",
-
   "status_title": "Status",
   "status_subtitle": "Daemon monitoring and control",
   "status_card_daemon": "Daemon",
@@ -56,7 +51,6 @@
   "status_go_to_config": "Go to Config",
   "status_no_results": "No animes match \"{search}\"",
   "status_filter_unwatched": "Unwatched",
-
   "config_title": "Configuration",
   "config_subtitle": "Configure daemon behavior",
   "config_missing_banner": "There are missing configurations — please fill them in to continue.",
@@ -108,7 +102,6 @@
   "config_val_max_episodes": "Max episodes per anime must be greater than 0",
   "config_val_retry": "Episode retry limit must be non-negative",
   "config_val_watched_keep": "Watched episodes to keep must be non-negative",
-
   "logs_title": "Logs",
   "logs_subtitle": "Daemon logs and system messages",
   "logs_label_lines": "Lines",
@@ -132,7 +125,6 @@
   "logs_scroll_top": "Scroll to top",
   "logs_label_live": "Live",
   "logs_new_logs": "+{count} new",
-
   "detail_back": "Back to Status",
   "detail_title_fallback": "Anime Detail",
   "detail_progress": "Progress: {progress} / {total} episodes · {status}",
@@ -200,7 +192,6 @@
   "detail_search_query_saved": "Search query saved",
   "detail_search_query_error": "Failed to save search query",
   "detail_torrent_progress_aria": "Download progress",
-
   "nav_notifications": "Notifications",
   "notifications_title": "Notifications",
   "notifications_subtitle": "Configure webhook integrations for download notifications",
@@ -225,7 +216,6 @@
   "notifications_event_download_failed": "Download failed",
   "notifications_event_download_completed": "Download completed",
   "notifications_btn_edit": "Edit",
-
   "downloads_title": "Downloads",
   "downloads_subtitle": "Live progress of the embedded torrent client",
   "downloads_empty_title": "No active torrents",
@@ -280,5 +270,39 @@
   "downloads_delete_toast_done": "Torrent deleted",
   "downloads_delete_toast_error": "Failed to delete torrent",
   "status_card_speed": "Speed",
-  "status_speed_up": "{speed} up"
+  "status_speed_up": "{speed} up",
+  "chip_blacklisted": "Blacklisted",
+  "chip_downloading": "Downloading ep. {episode} · {percent}%",
+  "chip_downloading_no_episode": "Downloading · {percent}%",
+  "chip_no_seeds": "No seeds",
+  "chip_paused": "Paused",
+  "chip_awaiting_premiere": "Awaiting premiere",
+  "chip_up_to_date": "Up to date",
+  "chip_behind": "{count} ep behind",
+  "status_hero_speed_label": "Total speed",
+  "status_hero_summary": "{downloading} downloading · {seeding} seeding · {upload} up",
+  "status_hero_no_downloads": "No active downloads",
+  "status_hero_ring_meta": "ep. {episode} · {eta}",
+  "status_hero_ring_meta_batch": "batch · {eta}",
+  "status_active_downloads_label": "Active downloads",
+  "status_polling_note": "polling {seconds}s",
+  "status_stale_note": "Last poll failed — values frozen",
+  "status_library_legend": "{watched} watched · {downloaded} downloaded · {released} released of {total}",
+  "status_col_state": "State",
+  "status_clear_search": "Clear search",
+  "status_sort_asc": "sorted ascending",
+  "status_sort_desc": "sorted descending",
+  "common_save": "Save",
+  "detail_btn_release": "Release episode",
+  "detail_actions_menu": "More actions for episode {number}",
+  "detail_counts": "{downloaded} / {total} · {watched} watched",
+  "detail_ep_title": "Episode {number}",
+  "detail_col_state": "State",
+  "detail_chip_aired": "Aired",
+  "detail_chip_blocked": "Blocked",
+  "detail_chip_manual": "Manual",
+  "detail_select_all": "Select all episodes",
+  "detail_select_episode": "Select episode {number}",
+  "detail_anilist_status": "AniList: {status}",
+  "detail_col_info": "Details"
 }

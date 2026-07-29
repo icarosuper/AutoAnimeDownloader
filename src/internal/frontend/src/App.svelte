@@ -1,6 +1,6 @@
 <script lang="ts">
   import Router from "svelte-spa-router";
-  import Layout from "./components/Layout.svelte";
+  import AppShell from "./components/shell/AppShell.svelte";
   import Status from "./routes/Status.svelte";
   import AnimeDetail from "./routes/AnimeDetail.svelte";
   import Config from "./routes/Config.svelte";
@@ -21,6 +21,6 @@
   };
 </script>
 
-<Layout>
+<AppShell>
   <Router {routes} />
-</Layout>
+</AppShell>

@@ -1,0 +1,153 @@
+/*
+ * Design tokens — Fase 0 do redesign de UI.
+ *
+ * Duas escalas de cor (aad-dark / aad-light), selecionadas via
+ * [data-theme="aad-dark" | "aad-light"] no <html> (ver src/lib/stores/theme.ts).
+ * Estes tokens alimentam:
+ *   1. Os temas custom do daisyUI (tailwind.config.js `daisyui.themes`), que repintam
+ *      todos os componentes daisyUI existentes (btn, badge, card, alert, progress, ...)
+ *      sem reescrevê-los.
+ *   2. As cores semânticas do Tailwind (tailwind.config.js `theme.extend.colors`), que as
+ *      telas novas (fase 1+) consomem via classes como `bg-card`, `border-default`,
+ *      `text-subtle`, `text-accent`, `bg-ok/12`.
+ *
+ * Convenção de nomes de variável: `--<grupo>-<papel>`. Os valores em si são verbatim do
+ * handoff de design (spec §4.1), exceto onde marcado "CORRIGIDO" abaixo — qualquer desvio de
+ * um valor do spec está documentado no relatório da Fase 0.
+ *
+ * Tokens com sufixo `-rgb` guardam o mesmo valor como tripla "R G B" (sem `rgb()`), para
+ * habilitar o modificador de opacidade do Tailwind (`bg-ok/12`), que exige
+ * `rgb(var(--x-rgb) / <alpha-value>)` em vez de um hex fixo.
+ */
+
+[data-theme='aad-dark'] {
+  color-scheme: dark;
+
+  /* Fundos */
+  --bg-window: #07080b;
+  --bg-surface: #0c0e13;
+  --bg-card: #101218;
+  --bg-sunken: #0a0c11;
+  --bg-control: #171a22;
+  --bg-menu: #161922;
+
+  /* Bordas */
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-divider: rgba(255, 255, 255, 0.045);
+
+  /* Texto */
+  --text-primary: #e8eaf0;
+  --text-secondary: #c3c9d6;
+  --text-tertiary: #9aa1b2;
+  --text-subtle: #7c8494;
+
+  /* Acento e status — usados como texto/borda/fill sólido (regra: no máximo um acento
+     sólido por tela; roxo = ação primária, verde = exclusivo de "Iniciar daemon") */
+  --accent: #8272ee;
+  --ok: #4bd4a2;
+  --warn: #eeb14b;
+  --danger: #f27575;
+  --neutral: #8d93a3;
+  --accent-rgb: 130 114 238;
+  --ok-rgb: 75 212 162;
+  --warn-rgb: 238 177 75;
+  --danger-rgb: 242 117 117;
+  --neutral-rgb: 141 147 163;
+
+  /* §5 (Fase 1) — texto do item ativo do NavRail/NavTabBar/MoreMenu. Valor literal do spec
+     (#c5bcfa) só existe como token aqui; componentes referenciam --nav-active-text, nunca o
+     hex. No escuro é um lilás mais claro que --accent (contraste maior sobre o fundo do
+     acento a 16% de opacidade); no claro o par é o próprio --accent (ver tokens.css bloco
+     aad-light). */
+  --nav-active-text: #c5bcfa;
+
+  /* Texto sobre acento/status sólido. No escuro o acento já é claro, então o texto por cima
+     é escuro. */
+  --on-accent: #12111a;
+  --on-ok: #0d1b16;
+  --on-warn: #1e1a10;
+  --on-danger: #1e1414;
+
+  /* Fundos/bordas tingidos (7–16% / 22–32% de opacidade, aplicada pelo componente via
+     Tailwind, ex. bg-accent-tint/12, border-ok-tint/28). No escuro o tom "tingido" é o
+     próprio acento — não há uma segunda cor. */
+  --accent-tint: var(--accent);
+  --ok-tint: var(--ok);
+  --warn-tint: var(--warn);
+  --danger-tint: var(--danger);
+  --accent-tint-rgb: var(--accent-rgb);
+  --ok-tint-rgb: var(--ok-rgb);
+  --warn-tint-rgb: var(--warn-rgb);
+  --danger-tint-rgb: var(--danger-rgb);
+
+  /* §4.2 — trilho de progresso e elevação variam por tema */
+  --progress-track: rgba(255, 255, 255, 0.07);
+  --elevation-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.95);
+}
+
+[data-theme='aad-light'] {
+  color-scheme: light;
+
+  /* Fundos (superfícies invertem em relação ao escuro) */
+  --bg-window: #f5f6f9;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-sunken: #eef0f5;
+  --bg-control: #eef0f5;
+  --bg-menu: #ffffff;
+
+  /* Bordas */
+  --border-default: rgba(16, 18, 24, 0.1);
+  --border-divider: rgba(16, 18, 24, 0.06);
+
+  /* Texto */
+  --text-primary: #14161d;
+  --text-secondary: #3d4351;
+  --text-tertiary: #5c6273;
+  /* --text-subtle CORRIGIDO de #7c8494 (valor do spec) para #636a76 — ver relatório da
+     Fase 0: #7c8494 rende só 3.30–3.76:1 contra os fundos claros (--bg-sunken/--bg-control
+     é o pior caso, 3.30:1), abaixo do piso de 4.5:1 do §4.1 para texto <18px. #636a76 mantém
+     o mesmo matiz, escurecido o suficiente para 4.53–5.29:1 em todos os fundos claros. */
+  --text-subtle: #636a76;
+
+  /* Acento e status — no claro, --accent/--ok/--warn/--danger passam a ser a variante
+     ESCURECIDA (texto/borda/fill sólido); o hex original (mais vivo) vira o token *-tint,
+     usado só em fundos tingidos de baixa opacidade, que continuam legíveis nessa faixa. */
+  --accent: #6a55d6;
+  --ok: #0e7a58;
+  --warn: #8a5d0b;
+  --danger: #c53b3b;
+  --neutral: #6f7788;
+  --accent-rgb: 106 85 214;
+  --ok-rgb: 14 122 88;
+  --warn-rgb: 138 93 11;
+  --danger-rgb: 197 59 59;
+  --neutral-rgb: 111 119 136;
+
+  /* §5 (Fase 1) — par claro do texto do item ativo do nav: o spec só fixa o hex escuro
+     (#c5bcfa), pedindo --accent como par claro (ver tokens.css bloco aad-dark). */
+  --nav-active-text: var(--accent);
+
+  /* Texto sobre acento/status sólido. No claro o acento sólido é a variante escurecida, então
+     o texto por cima inverte para branco. */
+  --on-accent: #ffffff;
+  --on-ok: #ffffff;
+  --on-warn: #ffffff;
+  --on-danger: #ffffff;
+
+  /* Fundos/bordas tingidos usam o hex ORIGINAL (mais vivo), não a variante escurecida acima —
+     ver §4.1 do brief. Em 7–16%/22–32% de opacidade esses tons continuam legíveis mesmo sendo
+     "muito claros para texto pequeno" em opacidade 100%. */
+  --accent-tint: #8272ee;
+  --ok-tint: #4bd4a2;
+  --warn-tint: #eeb14b;
+  --danger-tint: #f27575;
+  --accent-tint-rgb: 130 114 238;
+  --ok-tint-rgb: 75 212 162;
+  --warn-tint-rgb: 238 177 75;
+  --danger-tint-rgb: 242 117 117;
+
+  /* §4.2 — trilho de progresso e elevação variam por tema */
+  --progress-track: rgba(16, 18, 24, 0.08);
+  --elevation-shadow: 0 16px 40px -18px rgba(16, 18, 24, 0.28);
+}

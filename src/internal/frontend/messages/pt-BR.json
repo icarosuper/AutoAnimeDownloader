@@ -1,28 +1,23 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-
   "nav_status": "Status",
   "nav_config": "Configurações",
   "nav_priorities": "Prioridades",
   "nav_logs": "Logs",
   "nav_downloads": "Downloads",
-
+  "nav_more": "Mais",
   "theme_light": "Claro",
   "theme_dark": "Escuro",
   "theme_system": "Sistema",
-
   "ws_connected": "Atualização em tempo real ativa",
   "ws_reconnecting": "Reconectando...",
   "ws_disconnected": "Desconectado",
-
   "common_never": "Nunca",
   "common_cancel": "Cancelar",
   "common_na": "N/D",
-
   "badge_running": "Rodando",
   "badge_checking": "Verificando",
   "badge_stopped": "Parado",
-
   "status_title": "Status",
   "status_subtitle": "Monitoramento e controle do daemon",
   "status_card_daemon": "Daemon",
@@ -56,7 +51,6 @@
   "status_go_to_config": "Ir para Configurações",
   "status_no_results": "Nenhum anime corresponde a \"{search}\"",
   "status_filter_unwatched": "Não vistos",
-
   "config_title": "Configurações",
   "config_subtitle": "Configure o comportamento do daemon",
   "config_missing_banner": "Há configurações faltando — preencha-as para continuar.",
@@ -108,7 +102,6 @@
   "config_val_max_episodes": "Máx. episódios por anime deve ser maior que 0",
   "config_val_retry": "Limite de tentativas não pode ser negativo",
   "config_val_watched_keep": "Episódios a manter não pode ser negativo",
-
   "logs_title": "Logs",
   "logs_subtitle": "Logs do daemon e mensagens do sistema",
   "logs_label_lines": "Linhas",
@@ -132,7 +125,6 @@
   "logs_scroll_top": "Ir ao início",
   "logs_label_live": "Ao vivo",
   "logs_new_logs": "+{count} novo(s)",
-
   "detail_back": "Voltar ao Status",
   "detail_title_fallback": "Detalhes do Anime",
   "detail_progress": "Progresso: {progress} / {total} episódios · {status}",
@@ -200,7 +192,6 @@
   "detail_search_query_saved": "Busca salva",
   "detail_search_query_error": "Erro ao salvar busca",
   "detail_torrent_progress_aria": "Progresso do download",
-
   "nav_notifications": "Notificações",
   "notifications_title": "Notificações",
   "notifications_subtitle": "Configure integrações de webhook para notificações de download",
@@ -225,7 +216,6 @@
   "notifications_event_download_failed": "Falha no download",
   "notifications_event_download_completed": "Download concluído",
   "notifications_btn_edit": "Editar",
-
   "downloads_title": "Downloads",
   "downloads_subtitle": "Progresso ao vivo do cliente de torrent embutido",
   "downloads_empty_title": "Nenhum torrent ativo",
@@ -280,5 +270,39 @@
   "downloads_delete_toast_done": "Torrent excluído",
   "downloads_delete_toast_error": "Falha ao excluir torrent",
   "status_card_speed": "Velocidade",
-  "status_speed_up": "{speed} de envio"
+  "status_speed_up": "{speed} de envio",
+  "chip_blacklisted": "Na blacklist",
+  "chip_downloading": "Baixando ep. {episode} · {percent}%",
+  "chip_downloading_no_episode": "Baixando · {percent}%",
+  "chip_no_seeds": "Sem seeds",
+  "chip_paused": "Pausado",
+  "chip_awaiting_premiere": "Aguardando estreia",
+  "chip_up_to_date": "Em dia",
+  "chip_behind": "Atrasado {count} ep",
+  "status_hero_speed_label": "Velocidade total",
+  "status_hero_summary": "{downloading} baixando · {seeding} seeding · {upload} de envio",
+  "status_hero_no_downloads": "Nenhum download ativo",
+  "status_hero_ring_meta": "ep. {episode} · {eta}",
+  "status_hero_ring_meta_batch": "lote · {eta}",
+  "status_active_downloads_label": "Downloads ativos",
+  "status_polling_note": "polling {seconds}s",
+  "status_stale_note": "Falha no último poll — valores congelados",
+  "status_library_legend": "{watched} vistos · {downloaded} baixados · {released} lançados de {total}",
+  "status_col_state": "Estado",
+  "status_clear_search": "Limpar busca",
+  "status_sort_asc": "ordenado crescente",
+  "status_sort_desc": "ordenado decrescente",
+  "common_save": "Salvar",
+  "detail_btn_release": "Soltar episódio",
+  "detail_actions_menu": "Mais ações do episódio {number}",
+  "detail_counts": "{downloaded} / {total} · {watched} assistidos",
+  "detail_ep_title": "Episódio {number}",
+  "detail_col_state": "Estado",
+  "detail_chip_aired": "No ar",
+  "detail_chip_blocked": "Bloqueado",
+  "detail_chip_manual": "Manual",
+  "detail_select_all": "Selecionar todos os episódios",
+  "detail_select_episode": "Selecionar episódio {number}",
+  "detail_anilist_status": "AniList: {status}",
+  "detail_col_info": "Detalhes"
 }
