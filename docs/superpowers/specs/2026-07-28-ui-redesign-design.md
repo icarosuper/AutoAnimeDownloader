@@ -4,6 +4,10 @@ Data: 2026-07-28
 Branch alvo: `feature/ui-redesign`
 Handoff de origem: `design_handoff_ui_redesign/`
 
+> **Continuando este trabalho?** Vá direto para a [§10.1 — Estado da implementação](#101-estado-da-implementação-atualizado-em-2026-07-29):
+> **as sete fases estão feitas**, tudo ainda sem commit. Lá estão os comandos de verificação com
+> os números esperados e as decisões tomadas fora do spec.
+
 ## 1. Enquadramento
 
 O handoff em `design_handoff_ui_redesign/` é um pacote de artboards HTML gerado sem acesso ao
@@ -413,16 +417,81 @@ segue acessível pelo menu "Mais".
 
 Uma fase por commit, na branch `feature/ui-redesign`, merge no fim.
 
-| Fase | Escopo | Entregável verificável |
+| Fase | Escopo | Entregável verificável | Status |
+|---|---|---|---|
+| 0 | `tokens.css`, temas `aad-dark`/`aad-light`, `theme.ts` apontando para eles, fontes, ícones | App inteiro repintado com layout antigo; **validação visual dos dois temas, com o claro conferido contra o critério de contraste da §4.1** | ✅ feito |
+| 1 | `AppShell`, `NavRail`, `NavTabBar`, `MoreMenu`, `navItems.ts`; `Layout.svelte` desmontado | Navegação nova em desktop e mobile; nenhuma rota quebrada | ✅ feito |
+| 2 | Primitivos de `components/ui/` + `lib/domain/` + `lib/stores/` novos | Testes vitest da lógica pura passando; nenhuma tela alterada | ✅ feito |
+| 3 | Status (§9.1) | Busca, ordenação e filtro preservados e cobertos por smoke test | ✅ feito |
+| 4 | Anime (§9.2) | Duas cópias de ação colapsadas em uma; busca customizada presente; `title` hardcoded corrigido | ✅ feito |
+| 5 | Downloads (§9.3) | Estado da view ainda na URL; seleção ainda podada ao visível | ✅ feito |
+| 6 | Config (§9.4) | Salvar funciona; inputs multi-valor com as cinco regras de teclado | ✅ feito |
+| 7 | Logs (§9.5) | Filtro, busca e follow preservados | ✅ feito |
+
+### 10.1 Estado da implementação (atualizado em 2026-07-29)
+
+**As sete fases (0 a 7) estão feitas.** O redesign está completo conforme o escopo do §10.
+
+**Estado do versionamento** (a nota anterior, "nada foi commitado", estava desatualizada):
+as fases 0–4 saíram no commit `512d198 feat: redesenhar telas` e a fase 5 no `4bd1809
+feat: redesign tela downloads` — dois commits, não um por fase como a D6 previa. As **fases 6 e
+7 estão no working tree**, sem commit. Quem for fechar o trabalho decide como agrupá-las antes
+do merge.
+
+Baseline verde no fim da Fase 7 — rodar em `src/internal/frontend/`:
+
+| Comando | Esperado |
+|---|---|
+| `bun run check` | 0 erros, 8 warnings |
+| `bun run test:unit` | 174 passed |
+| `bun run test:component` | 36 passed |
+| `bun run test:smoke` | 48 passed |
+| `go test ./...` (na raiz) | verde |
+
+As 8 warnings restantes do `svelte-check` estão todas **fora do escopo deste trabalho**: 6
+`a11y_label_has_associated_control` em `Notifications.svelte` (§3 — a tela não recebe trabalho
+dedicado) e 2 em `ConfirmDialog.svelte`. As 5 que existiam em `Config.svelte` foram zeradas
+pela Fase 6, como previsto.
+
+#### Decisões tomadas durante a execução que o spec não previa
+
+Todas estão comentadas no código, no ponto onde importam; a lista aqui é só o índice.
+
+| # | Onde | Decisão |
 |---|---|---|
-| 0 | `tokens.css`, temas `aad-dark`/`aad-light`, `theme.ts` apontando para eles, fontes, ícones | App inteiro repintado com layout antigo; **validação visual dos dois temas, com o claro conferido contra o critério de contraste da §4.1** |
-| 1 | `AppShell`, `NavRail`, `NavTabBar`, `MoreMenu`, `navItems.ts`; `Layout.svelte` desmontado | Navegação nova em desktop e mobile; nenhuma rota quebrada |
-| 2 | Primitivos de `components/ui/` + `lib/domain/` + `lib/stores/` novos | Testes vitest da lógica pura passando; nenhuma tela alterada |
-| 3 | Status (§9.1) | Busca, ordenação e filtro preservados e cobertos por smoke test |
-| 4 | Anime (§9.2) | Duas cópias de ação colapsadas em uma; busca customizada presente; `title` hardcoded corrigido |
-| 5 | Downloads (§9.3) | Estado da view ainda na URL; seleção ainda podada ao visível |
-| 6 | Config (§9.4) | Salvar funciona; inputs multi-valor com as cinco regras de teclado |
-| 7 | Logs (§9.5) | Filtro, busca e follow preservados |
+| E1 | `lib/domain/format.ts` | `formatSpeedParts` novo: o herói do Status precisa do número e da unidade em tamanhos diferentes, e refazer o split parseando a string localizada de volta seria frágil. `formatSpeed` passou a ser a junção dos dois. |
+| E2 | `Status.svelte` | O verde sólido de "Iniciar daemon" é escrito inline, **não** como variante do `Button`. Uma variante `ok` no primitivo seria convite a reusar e quebrar a regra de "no máximo um acento sólido por tela" (§4.1). |
+| E3 | `components/ui/Checkbox.svelte` | Ganhou `labelHidden` (label continua obrigatório, só vira `sr-only`) e `indeterminate`, para os checkboxes de linha e de "selecionar todos". |
+| E4 | `AnimeDetail.svelte` | A coluna de metadado se chama "Detalhes", não "Data de download": ela mostra progresso **ou** data de download **ou** falta-X-para-estrear conforme o estado, e o nome antigo estaria errado em dois dos três casos. |
+| E5 | `AnimeDetail.svelte` | Além do `title="Soltar episódio"` que o §3 cita, havia mais duas strings hardcoded: o botão `"Save"` da busca customizada e o `"Released"` dentro de `formatTimeUntilAiring`. As três viraram chave de mensagem. |
+| E6 | `torrentFilters.ts` | A pill "Problemas" **não** é um conjunto de slugs de status — virou dimensão própria (`?problems=1`), definida como *transferindo ativamente, não pausado, não concluído, zero peers*. Pausar é decisão do usuário, não falha. As outras três pills são presets sobre o `statuses` que já existia, então deep links antigos (`?status=<slug>`) continuam filtrando igual. |
+| E7 | `torrentFilters.ts` | A URL guarda os grupos **fechados** (`?closed=`), não os abertos. É a mesma informação, mas assim "tudo expandido" — o default útil — serializa para querystring vazia. |
+| E8 | `Downloads.svelte` | A tela abre o **próprio** `WebSocketClient`. Antes só o Status abria, então quem entrasse direto em `/downloads` via o store parado no valor inicial `disconnected` e o banner do §9.3 apareceria sempre. |
+| E9 | `Downloads.svelte` | Ordem dos grupos é a regra de severidade do §9.3 (problemas → baixando → resto); a ordenação escolhida pelo usuário vale **dentro** de cada grupo. Chaves sem coluna própria no accordion (nome/velocidade/ETA) viraram uma faixa "Ordenar por" — nenhuma chave de ordenação foi perdida. |
+| E10 | `DownloadsToolbar.svelte` | Mantido conforme §6, mas reescrito: agora é dono das **duas** faixas da toolbar (busca + pills, e a barra de seleção), que ficaram adjacentes no layout novo. O dropdown de multi-seleção de status foi substituído pelas quatro pills. |
+| E11 | `Downloads.svelte` | O grid de sete colunas das linhas só vale de `md` para cima; abaixo disso vira `flex-wrap`. Com o grid ativo no mobile, a **página inteira** entrava em rolagem horizontal. |
+| E12 | `docs/agents/architecture.md` | A Fase 2 não tinha documentado `components/ui/`, `lib/domain/` nem os stores `speedHistory`/`stallTracker`. Preenchido junto com a Fase 3. |
+| E13 | `components/ui/ChipsInput.svelte` | Além das cinco regras do §9.4, o campo **confirma o rascunho no `blur`**. Sem isso, digitar um usuário e clicar direto em Salvar descartava o texto em silêncio — o botão "+" que sumiu era, na tela antiga, o aviso visual de que faltava confirmar. |
+| E14 | `Config.svelte` | As seis validações viraram `firstValidationError()`, que devolve **a mensagem e o grupo** do campo reprovado, e o `save` troca o grupo visível antes de mostrar o toast. Exigência do layout novo, não regra nova: com um grupo por vez, "pasta é obrigatória" enquanto o usuário olha "Automação" não seria acionável. |
+| E15 | `Config.svelte` | Os blocos de pills usam `<fieldset>`/`<legend>` (dá o `role="group"` e o nome acessível que os smoke tests ancoram), mas o `<legend>` nativo **recorta a borda superior** do fieldset — o divisor de 1px atravessava a linha do rótulo. Resolvido com `float-left w-full` no legend. Pego por screenshot, não por teste. |
+| E16 | `lib/domain/logLine.ts` | `parseLogLine` saiu de `Logs.svelte` para `lib/domain/` com testes de vitest. Motivo concreto, não estético: o parser enterrava `caller` no meio do blob `extras`, e extrair `caller` como campo próprio é o que **torna a coluna de origem possível**. Ganhou junto `formatLogTime` e `countByLevel`. |
+| E17 | `Logs.svelte` | As contagens das pills de nível saem da lista **buscada**, antes do filtro de nível. Se saíssem da lista já filtrada, escolher "Error" zeraria as outras quatro pills e o filtro viraria um caminho sem volta visível. Mesma regra que o E10 aplicou às pills de Downloads. |
+| E18 | `Logs.svelte` | O grid de 4 colunas só vale de `md` para cima; abaixo disso as linhas empilham. Com as três colunas fixas (82+60+90px) ativas em 390px sobravam ~130px para a mensagem, que quebrava em **uma palavra por linha**. Mesma causa do E11. Pego por screenshot. |
+| E19 | `Logs.svelte` | As linhas viraram `<ul>`/`<li>`. Elas são uma lista, e o papel `listitem` dá aos smoke tests uma âncora que **não depende de classe CSS** — o que importa aqui porque, com o E18, a classe `grid` deixou de existir abaixo de `md` e um seletor por classe passaria a depender do viewport do teste. |
+| E20 | `Logs.svelte` | O badge mostra o nível **inteiro**; a tela antiga cortava em 4 caracteres ("DEBU", "ERRO") para caber numa coluna estreita, e a coluna de 60px do §9.5 comporta a palavra toda em mono 10px. Os nomes de origem (`scheduler`, `rss`, `api`, …) **não** são traduzidos: são nomes de subsistema em mono minúsculo, não estado cru voltado ao usuário como os status de torrent do §7. |
+| E21 | `tests/smoke/logs.spec.ts` | Criado do zero — Logs era a única tela redesenhada sem smoke (o §11 lista os cinco specs que já existiam, e Logs não estava entre eles). Cobre o entregável da fase: contagem nas pills, filtro, busca com destaque, deep link e o toggle de follow. |
+| E22 | `components/Input.svelte` | Reestilizado (§6), com uma correção de acessibilidade junto: o `subtitle` era um **segundo `<label>`** apontando para o mesmo input — dois rótulos para um controle. Virou `<p>` referenciado por `aria-describedby`. |
+
+#### Método usado nas sete fases
+
+1. Ler a tela atual inteira antes de mexer — as listas de "preservar" do §9 são o checklist.
+2. Reescrever a tela, atualizar o smoke da própria tela **na mesma fase** (§11).
+3. Rodar `check` + `test:unit` + `test:component` + `test:smoke` + `go test ./...`.
+4. **Tirar screenshot da tela nos dois temas e no mobile (390px) e olhar.** Isso pegou coisas que
+   nenhum teste pegaria: colunas desalinhadas entre linhas, botão sobrepondo título no mobile,
+   barra agregada com a cor errada, rolagem horizontal da página. Um spec temporário em
+   `tests/smoke/zz-shot.spec.ts` com `page.screenshot({ fullPage: true })` resolve; apagar depois.
+5. Atualizar `docs/agents/architecture.md` (exigência do CLAUDE.md).
 
 ## 11. Testes
 

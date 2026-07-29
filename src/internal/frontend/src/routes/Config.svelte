@@ -1,5 +1,14 @@
 <script lang="ts">
+  // Config — spec §9.4 (Fase 6). Re-skin puro: NENHUMA mudança de comportamento (decisão D5).
+  // O botão Salvar continua sendo o único caminho de escrita — sem autosave, sem debounce —
+  // porque `PUT /config` valida tudo de uma vez e faz I/O de filesystem (`Librarian.ProbePath`),
+  // então salvar no meio da digitação renderia 400 a cada tecla.
+  //
+  // O layout novo é o índice lateral de 196px com UM grupo visível por vez. Os campos de
+  // lista (anilist_usernames, excluded_lists) trocaram o par "input + botão +" pelo
+  // ChipsInput do artboard 1e.
   import { onMount } from "svelte";
+  import { Check } from "@lucide/svelte";
   import {
     getConfig,
     updateConfig,
@@ -8,15 +17,22 @@
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import Input from "../components/Input.svelte";
+  import Button from "../components/ui/Button.svelte";
+  import ChipsInput from "../components/ui/ChipsInput.svelte";
+  import Toggle from "../components/ui/Toggle.svelte";
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
+
+  type GroupId = "anilist" | "downloads" | "automation" | "filters";
 
   $: T = $locale && {
     title: m.config_title(),
     subtitle: m.config_subtitle(),
     missingBanner: m.config_missing_banner(),
     loading: m.config_loading(),
+    navLabel: m.config_nav_label(),
+    chipsPlaceholder: m.config_chips_placeholder(),
     sectionAnilist: m.config_section_anilist(),
     sectionDownloads: m.config_section_downloads(),
     sectionAutomation: m.config_section_automation(),
@@ -58,6 +74,15 @@
     btnSaving: m.config_btn_saving(),
   }
 
+  $: groups = ($locale && [
+    { id: "anilist" as GroupId, label: m.config_section_anilist() },
+    { id: "downloads" as GroupId, label: m.config_section_downloads() },
+    { id: "automation" as GroupId, label: m.config_section_automation() },
+    { id: "filters" as GroupId, label: m.config_section_filters() },
+  ]) || [];
+
+  let activeGroup: GroupId = "anilist";
+
   const ALL_STATUSES = ["CURRENT", "REPEATING", "PLANNING", "PAUSED", "DROPPED", "COMPLETED"];
   const ALL_MEDIA_STATUSES = ["RELEASING", "FINISHED", "CANCELLED", "HIATUS"];
 
@@ -86,6 +111,8 @@
     },
   };
 
+  // Um status não pode estar em "baixar" e "deletar" ao mesmo tempo — ligar um sempre desliga
+  // o outro. Regra pré-existente, preservada verbatim.
   function toggleDownloadStatus(status: string) {
     const active = (config.download_statuses ?? []).includes(status);
     if (active) {
@@ -115,32 +142,11 @@
     }
   }
 
-  let newAnilistUsername = "";
-
-  function addAnilistUsername() {
-    const trimmed = newAnilistUsername.trim();
-    if (trimmed && !(config.anilist_usernames ?? []).includes(trimmed)) {
-      config.anilist_usernames = [...(config.anilist_usernames ?? []), trimmed];
-    }
-    newAnilistUsername = "";
-  }
-
-  function removeAnilistUsername(item: string) {
-    config.anilist_usernames = (config.anilist_usernames ?? []).filter(i => i !== item);
-  }
-
-  let newExcludedItem = "";
-
-  function addExcludedList() {
-    const trimmed = newExcludedItem.trim();
-    if (trimmed && !(config.excluded_lists ?? []).includes(trimmed)) {
-      config.excluded_lists = [...(config.excluded_lists ?? []), trimmed];
-    }
-    newExcludedItem = "";
-  }
-
-  function removeExcludedList(item: string) {
-    config.excluded_lists = (config.excluded_lists ?? []).filter(i => i !== item);
+  function statusPillClass(active: boolean, variant: "accent" | "danger"): string {
+    if (!active) return "border-default bg-control text-subtle hover:text-body";
+    return variant === "danger"
+      ? "border-danger-tint/28 bg-danger-tint/12 text-danger"
+      : "border-accent-tint/28 bg-accent-tint/12 text-accent";
   }
 
   let loading = true;
@@ -178,17 +184,37 @@
     }
   }
 
+  /**
+   * Mesmas seis validações de antes, na mesma ordem — só que cada uma agora sabe em que grupo
+   * mora o campo que ela reprova. Isso é exigência do layout novo, não uma regra nova: com um
+   * grupo visível por vez, um toast dizendo "pasta é obrigatória" enquanto o usuário olha para
+   * "Automação" não teria como ser acionável. A validação que falha traz o grupo dela à tela.
+   */
+  function firstValidationError(): { message: string; group: GroupId } | null {
+    if ((config.anilist_usernames ?? []).length === 0)
+      return { message: m.config_val_username(), group: "anilist" };
+    if (!config.completed_anime_path?.trim())
+      return { message: m.config_val_completed_path(), group: "downloads" };
+    if (config.check_interval <= 0)
+      return { message: m.config_val_interval(), group: "automation" };
+    if (config.max_episodes_per_anime <= 0)
+      return { message: m.config_val_max_episodes(), group: "automation" };
+    if (config.episode_retry_limit < 0)
+      return { message: m.config_val_retry(), group: "automation" };
+    if (config.delete_watched_episodes && config.watched_episodes_to_keep < 0)
+      return { message: m.config_val_watched_keep(), group: "downloads" };
+    return null;
+  }
+
   async function saveConfig() {
     try {
       saving = true;
 
-      if ((config.anilist_usernames ?? []).length === 0) throw new Error(m.config_val_username());
-      if (!config.completed_anime_path?.trim()) throw new Error(m.config_val_completed_path());
-      if (config.check_interval <= 0) throw new Error(m.config_val_interval());
-      if (config.max_episodes_per_anime <= 0) throw new Error(m.config_val_max_episodes());
-      if (config.episode_retry_limit < 0) throw new Error(m.config_val_retry());
-      if (config.delete_watched_episodes && config.watched_episodes_to_keep < 0)
-        throw new Error(m.config_val_watched_keep());
+      const invalid = firstValidationError();
+      if (invalid) {
+        activeGroup = invalid.group;
+        throw new Error(invalid.message);
+      }
 
       await updateConfig(config);
       toast.success(m.config_saved());
@@ -205,19 +231,18 @@
   });
 </script>
 
-<div class="space-y-6">
+<div class="space-y-4.5">
   <div>
-    <h1 class="text-2xl font-semibold text-base-content">{T && T.title}</h1>
-    <p class="text-sm text-base-content/50 mt-0.5">{T && T.subtitle}</p>
+    <h1 class="text-screen-title text-heading">{T && T.title}</h1>
+    <p class="mt-0.5 text-caption text-subtle">{T && T.subtitle}</p>
   </div>
 
   {#if showMissingConfigBanner}
-    <div role="alert" class="alert alert-warning">
-      <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-      </svg>
-      <span class="text-sm">{T && T.missingBanner}</span>
+    <div
+      role="alert"
+      class="flex items-center gap-2 rounded-field border border-warn-tint/28 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
+    >
+      {T && T.missingBanner}
     </div>
   {/if}
 
@@ -225,269 +250,221 @@
     <Loading message={T && T.loading || ""} />
   {:else}
     <form on:submit|preventDefault={saveConfig} class="space-y-4">
+      <div class="grid gap-3.5 md:grid-cols-[196px_1fr] md:items-start">
+        <!-- Índice: coluna de 196px no desktop; no mobile vira faixa rolável horizontal, com
+             `shrink-0` nos itens para a faixa rolar em vez de espremer os rótulos. -->
+        <nav
+          aria-label={(T && T.navLabel) || ""}
+          class="flex gap-1 overflow-x-auto md:flex-col md:overflow-x-visible"
+        >
+          {#each groups as group (group.id)}
+            <button
+              type="button"
+              aria-current={activeGroup === group.id ? "true" : undefined}
+              on:click={() => (activeGroup = group.id)}
+              class="shrink-0 rounded-field px-3 py-2 text-left text-copy transition-colors md:w-full {activeGroup ===
+              group.id
+                ? 'bg-accent-tint/16 font-bold text-nav-active'
+                : 'font-semibold text-subtle hover:text-body'}"
+            >
+              {group.label}
+            </button>
+          {/each}
+        </nav>
 
-      <!-- Anilist -->
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionAnilist}</h2>
-          <div class="flex flex-col gap-2">
-            <label class="text-sm font-medium text-base-content">{T && T.labelUsername}</label>
-            <p class="text-xs text-base-content/50">{T && T.hintAnilistUsernames}</p>
-            {#if (config.anilist_usernames ?? []).length > 0}
-              <div class="flex flex-wrap gap-2">
-                {#each config.anilist_usernames ?? [] as item}
-                  <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                    {item}
-                    <button
-                      type="button"
-                      on:click={() => removeAnilistUsername(item)}
-                      class="ml-0.5 text-gray-400 hover:text-red-500 transition-colors"
-                      aria-label="Remove {item}"
-                    >
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                      </svg>
-                    </button>
-                  </span>
+        <!-- `divide-y` desenha os divisores de 1px ENTRE os campos, sem borda sobrando na
+             primeira nem na última linha do card. -->
+        <div class="divide-y divide-divider rounded-card border border-default bg-card">
+          {#if activeGroup === "anilist"}
+            <div class="p-4.5">
+              <ChipsInput
+                id="anilist_usernames"
+                bind:values={config.anilist_usernames}
+                label={(T && T.labelUsername) || ""}
+                hint={(T && T.hintAnilistUsernames) || ""}
+                placeholder={(T && T.chipsPlaceholder) || ""}
+                removeLabel={(item) => m.config_chips_remove({ item })}
+              />
+            </div>
+
+            <fieldset class="p-4.5">
+              <legend class="float-left w-full text-[13.5px] font-bold text-heading">{T && T.labelDownloadStatuses}</legend>
+              <p class="text-caption text-subtle">{T && T.hintDownloadStatuses}</p>
+              <div class="mt-2.5 flex flex-wrap gap-2">
+                {#each ALL_STATUSES as status}
+                  {@const active = (config.download_statuses ?? []).includes(status)}
+                  <button
+                    type="button"
+                    aria-pressed={active}
+                    on:click={() => toggleDownloadStatus(status)}
+                    title={status}
+                    class="inline-flex items-center gap-1 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {statusPillClass(
+                      active,
+                      'accent'
+                    )}"
+                  >
+                    {#if active}<Check size={13} strokeWidth={3} />{/if}
+                    {T ? T.statusLabels[status] : status}
+                  </button>
                 {/each}
               </div>
-            {/if}
-            <div class="flex gap-2">
-              <input
-                type="text"
-                bind:value={newAnilistUsername}
-                placeholder="Anilist username"
-                class="flex-1 block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
-                on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAnilistUsername(); } }}
-              />
-              <button
-                type="button"
-                on:click={addAnilistUsername}
-                class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
-              >
-                +
-              </button>
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label class="text-sm font-medium text-base-content">{T && T.labelDownloadStatuses}</label>
-            <p class="text-xs text-base-content/50">{T && T.hintDownloadStatuses}</p>
-            <div class="flex flex-wrap gap-2">
-              {#each ALL_STATUSES as status}
-                {@const active = (config.download_statuses ?? []).includes(status)}
-                <button
-                  type="button"
-                  on:click={() => toggleDownloadStatus(status)}
-                  title={status}
-                  class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none transition-colors
-                    {active
-                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'}"
-                >
-                  {T ? T.statusLabels[status] : status}
-                </button>
-              {/each}
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label class="text-sm font-medium text-base-content">{T && T.labelDownloadMediaStatuses}</label>
-            <p class="text-xs text-base-content/50">{T && T.hintDownloadMediaStatuses}</p>
-            <div class="flex flex-wrap gap-2">
-              {#each ALL_MEDIA_STATUSES as status}
-                {@const active = (config.download_media_statuses ?? []).includes(status)}
-                <button
-                  type="button"
-                  on:click={() => toggleDownloadMediaStatus(status)}
-                  title={status}
-                  class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none transition-colors
-                    {active
-                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'}"
-                >
-                  {T ? T.statusLabels[status] : status}
-                </button>
-              {/each}
-            </div>
-          </div>
-          <div class="flex flex-col gap-2">
-            <label class="text-sm font-medium text-base-content">{T && T.labelDeleteStatuses}</label>
-            <p class="text-xs text-base-content/50">{T && T.hintDeleteStatuses}</p>
-            <div class="flex flex-wrap gap-2">
-              {#each ALL_STATUSES as status}
-                {@const active = (config.delete_statuses ?? []).includes(status)}
-                <button
-                  type="button"
-                  on:click={() => toggleDeleteStatus(status)}
-                  title={status}
-                  class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium cursor-pointer select-none transition-colors
-                    {active
-                      ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500'}"
-                >
-                  {T ? T.statusLabels[status] : status}
-                </button>
-              {/each}
-            </div>
-          </div>
-        </div>
-      </div>
+            </fieldset>
 
-      <!-- Downloads -->
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionDownloads}</h2>
-          <Input
-            id="completed_anime_path"
-            label={T && T.labelCompletedPath || ""}
-            subtitle={T && T.hintCompletedPath || ""}
-            type="text"
-            bind:value={config.completed_anime_path}
-            placeholder="/path/to/completed"
-            required={true}
-          />
-          <div class="space-y-3">
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
+            <fieldset class="p-4.5">
+              <legend class="float-left w-full text-[13.5px] font-bold text-heading">{T && T.labelDownloadMediaStatuses}</legend>
+              <p class="text-caption text-subtle">{T && T.hintDownloadMediaStatuses}</p>
+              <div class="mt-2.5 flex flex-wrap gap-2">
+                {#each ALL_MEDIA_STATUSES as status}
+                  {@const active = (config.download_media_statuses ?? []).includes(status)}
+                  <button
+                    type="button"
+                    aria-pressed={active}
+                    on:click={() => toggleDownloadMediaStatus(status)}
+                    title={status}
+                    class="inline-flex items-center gap-1 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {statusPillClass(
+                      active,
+                      'accent'
+                    )}"
+                  >
+                    {#if active}<Check size={13} strokeWidth={3} />{/if}
+                    {T ? T.statusLabels[status] : status}
+                  </button>
+                {/each}
+              </div>
+            </fieldset>
+
+            <fieldset class="p-4.5">
+              <legend class="float-left w-full text-[13.5px] font-bold text-heading">{T && T.labelDeleteStatuses}</legend>
+              <p class="text-caption text-subtle">{T && T.hintDeleteStatuses}</p>
+              <div class="mt-2.5 flex flex-wrap gap-2">
+                {#each ALL_STATUSES as status}
+                  {@const active = (config.delete_statuses ?? []).includes(status)}
+                  <button
+                    type="button"
+                    aria-pressed={active}
+                    on:click={() => toggleDeleteStatus(status)}
+                    title={status}
+                    class="inline-flex items-center gap-1 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {statusPillClass(
+                      active,
+                      'danger'
+                    )}"
+                  >
+                    {#if active}<Check size={13} strokeWidth={3} />{/if}
+                    {T ? T.statusLabels[status] : status}
+                  </button>
+                {/each}
+              </div>
+            </fieldset>
+          {/if}
+
+          {#if activeGroup === "downloads"}
+            <div class="p-4.5">
+              <Input
+                id="completed_anime_path"
+                label={T && T.labelCompletedPath || ""}
+                subtitle={T && T.hintCompletedPath || ""}
+                type="text"
+                bind:value={config.completed_anime_path}
+                placeholder="/path/to/completed"
+                required={true}
+              />
+            </div>
+
+            <div class="space-y-3 p-4.5">
+              <Toggle
                 id="delete_watched_episodes"
                 bind:checked={config.delete_watched_episodes}
-                class="checkbox checkbox-sm"
+                label={(T && T.labelDeleteWatched) || ""}
               />
-              <label for="delete_watched_episodes" class="text-sm text-base-content cursor-pointer">
-                {T && T.labelDeleteWatched}
-              </label>
+              {#if config.delete_watched_episodes}
+                <div class="pl-11">
+                  <Input
+                    id="watched_episodes_to_keep"
+                    label={T && T.labelWatchedKeep || ""}
+                    subtitle={T && T.hintWatchedKeep || ""}
+                    type="number"
+                    bind:value={config.watched_episodes_to_keep}
+                    min="0"
+                  />
+                </div>
+              {/if}
             </div>
-            {#if config.delete_watched_episodes}
-              <div class="pl-6">
-                <Input
-                  id="watched_episodes_to_keep"
-                  label={T && T.labelWatchedKeep || ""}
-                  subtitle={T && T.hintWatchedKeep || ""}
-                  type="number"
-                  bind:value={config.watched_episodes_to_keep}
-                  min="0"
-                />
-              </div>
-            {/if}
-          </div>
-          <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-2">
-              <input
-                type="checkbox"
+
+            <div class="space-y-1.5 p-4.5">
+              <Toggle
                 id="rename_files_for_jellyfin"
                 bind:checked={config.rename_files_for_jellyfin}
-                class="checkbox checkbox-sm"
+                label={(T && T.labelRenameJellyfin) || ""}
               />
-              <label for="rename_files_for_jellyfin" class="text-sm text-base-content cursor-pointer">
-                {T && T.labelRenameJellyfin}
-              </label>
+              {#if config.rename_files_for_jellyfin}
+                <p class="pl-11 text-caption text-subtle">{T && T.hintRenameJellyfin}</p>
+              {/if}
             </div>
-            {#if config.rename_files_for_jellyfin}
-              <p class="text-xs text-base-content/50 pl-6">{T && T.hintRenameJellyfin}</p>
-            {/if}
-          </div>
-        </div>
-      </div>
+          {/if}
 
-      <!-- Automation -->
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionAutomation}</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Input
-              id="check_interval"
-              label={T && T.labelCheckInterval || ""}
-              type="number"
-              bind:value={config.check_interval}
-              min="1"
-              required={true}
-            />
-            <Input
-              id="max_episodes_per_anime"
-              label={T && T.labelMaxEpisodes || ""}
-              type="number"
-              bind:value={config.max_episodes_per_anime}
-              min="1"
-              required={true}
-            />
-            <Input
-              id="episode_retry_limit"
-              label={T && T.labelRetryLimit || ""}
-              type="number"
-              bind:value={config.episode_retry_limit}
-              min="0"
-              required={true}
-            />
-          </div>
-        </div>
-      </div>
-
-      <!-- Filters -->
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionFilters}</h2>
-          <div class="flex flex-col gap-2">
-            <label class="text-sm font-medium text-base-content">{T && T.labelExcludedList}</label>
-            <p class="text-xs text-base-content/50">{T && T.hintExcludedList}</p>
-            {#if (config.excluded_lists ?? []).length > 0}
-              <div class="flex flex-wrap gap-2">
-                {#each config.excluded_lists ?? [] as item}
-                  <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                    {item}
-                    <button
-                      type="button"
-                      on:click={() => removeExcludedList(item)}
-                      class="ml-0.5 text-gray-400 hover:text-red-500 transition-colors"
-                      aria-label="Remove {item}"
-                    >
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                      </svg>
-                    </button>
-                  </span>
-                {/each}
-              </div>
-            {/if}
-            <div class="flex gap-2">
-              <input
-                type="text"
-                bind:value={newExcludedItem}
-                placeholder="Name of excluded list"
-                class="flex-1 block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
-                on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addExcludedList(); } }}
+          {#if activeGroup === "automation"}
+            <div class="p-4.5">
+              <Input
+                id="check_interval"
+                label={T && T.labelCheckInterval || ""}
+                type="number"
+                bind:value={config.check_interval}
+                min="1"
+                required={true}
               />
-              <button
-                type="button"
-                on:click={addExcludedList}
-                class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
-              >
-                +
-              </button>
             </div>
-          </div>
+            <div class="p-4.5">
+              <Input
+                id="max_episodes_per_anime"
+                label={T && T.labelMaxEpisodes || ""}
+                type="number"
+                bind:value={config.max_episodes_per_anime}
+                min="1"
+                required={true}
+              />
+            </div>
+            <div class="p-4.5">
+              <Input
+                id="episode_retry_limit"
+                label={T && T.labelRetryLimit || ""}
+                type="number"
+                bind:value={config.episode_retry_limit}
+                min="0"
+                required={true}
+              />
+            </div>
+          {/if}
+
+          {#if activeGroup === "filters"}
+            <div class="p-4.5">
+              <ChipsInput
+                id="excluded_lists"
+                bind:values={config.excluded_lists}
+                label={(T && T.labelExcludedList) || ""}
+                hint={(T && T.hintExcludedList) || ""}
+                placeholder={(T && T.chipsPlaceholder) || ""}
+                removeLabel={(item) => m.config_chips_remove({ item })}
+              />
+            </div>
+          {/if}
         </div>
       </div>
 
-      <!-- Actions -->
-      <div class="flex justify-end gap-3 pt-2">
-        <button
-          type="button"
+      <!-- Ações. `solid` só no Salvar: é o único acento sólido da tela (§4.1). -->
+      <div class="flex flex-wrap justify-end gap-2.5">
+        <Button
+          variant="ghost"
+          disabled={saving}
           on:click={async () => {
             await triggerCheck();
             window.location.hash = "#/status";
           }}
-          disabled={saving}
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {T && T.btnRunCheck}
-        </button>
-        <button
-          type="submit"
-          disabled={saving}
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        </Button>
+        <Button type="submit" variant="solid" disabled={saving}>
           {saving ? (T && T.btnSaving) : (T && T.btnSave)}
-        </button>
+        </Button>
       </div>
     </form>
   {/if}
