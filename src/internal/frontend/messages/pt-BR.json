@@ -56,6 +56,8 @@
   "config_missing_banner": "Há configurações faltando — preencha-as para continuar.",
   "config_loading": "Carregando configurações...",
   "config_nav_label": "Seções de configuração",
+  "config_required_legend": "Campo obrigatório",
+  "config_group_missing": "configuração obrigatória faltando",
   "config_chips_placeholder": "Digite e aperte Enter",
   "config_chips_remove": "Remover {item}",
   "config_section_anilist": "Anilist",

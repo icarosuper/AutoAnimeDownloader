@@ -261,7 +261,7 @@
               : 'border-default bg-control text-subtle hover:text-body'}"
           >
             {pill.label}
-            <span class="font-mono text-[11px] opacity-70">{pill.count}</span>
+            <span class="font-mono text-[12px] opacity-70">{pill.count}</span>
           </button>
         {/each}
       </div>
@@ -348,10 +348,10 @@
               <li
                 class="group flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-divider px-3 py-1.5 hover:bg-control/60 md:grid md:grid-cols-[82px_60px_90px_1fr] md:items-start"
               >
-                <span class="select-none font-mono text-[11.5px] text-subtle">{parsed.time}</span>
+                <span class="select-none font-mono text-[12.5px] text-subtle">{parsed.time}</span>
 
                 <span
-                  class="inline-flex justify-center rounded-badge border px-1 py-0.5 font-mono text-[10px] font-bold uppercase leading-none {LEVEL_BADGE[
+                  class="inline-flex justify-center rounded-badge border px-1 py-0.5 font-mono text-[11px] font-bold uppercase leading-none {LEVEL_BADGE[
                     parsed.level
                   ]}"
                 >
@@ -361,12 +361,12 @@
                   {parsed.level}
                 </span>
 
-                <span class="select-none truncate font-mono text-[11.5px] text-tertiary" title={parsed.caller ?? ""}>
+                <span class="select-none truncate font-mono text-[12.5px] text-tertiary" title={parsed.caller ?? ""}>
                   {sourceOf(parsed)}
                 </span>
 
                 <span class="flex w-full min-w-0 items-start gap-2 md:w-auto">
-                  <span class="min-w-0 flex-1 break-words font-mono text-[12.5px] {LEVEL_TEXT[parsed.level]}">
+                  <span class="min-w-0 flex-1 break-words font-mono text-[13.5px] {LEVEL_TEXT[parsed.level]}">
                     {@html highlightMatch(parsed.message, searchQuery)}
                     {#if parsed.extras}
                       <span class="text-subtle">{@html highlightMatch(parsed.extras, searchQuery)}</span>
@@ -397,7 +397,7 @@
         >
           {#if newLogsCount > 0}
             <span
-              class="absolute -right-1.5 -top-1.5 rounded-pill bg-warn px-1.5 py-0.5 font-mono text-[9px] font-extrabold text-on-warn"
+              class="absolute -right-1.5 -top-1.5 rounded-pill bg-warn px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-on-warn"
             >
               {T && T.newLogs(newLogsCount)}
             </span>
@@ -407,7 +407,7 @@
       {/if}
     </div>
 
-    <div class="flex-none pt-2 font-mono text-[11px] text-subtle">
+    <div class="flex-none pt-2 font-mono text-[12px] text-subtle">
       {$locale && m.logs_x_of_y({ shown: parsedLogs.length, total: logs.length })}
       {#if filterLevel !== "all" || searchQuery}{T && T.filteredSuffix}{/if}
     </div>

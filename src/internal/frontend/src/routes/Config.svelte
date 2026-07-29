@@ -32,6 +32,8 @@
     missingBanner: m.config_missing_banner(),
     loading: m.config_loading(),
     navLabel: m.config_nav_label(),
+    requiredLegend: m.config_required_legend(),
+    groupMissing: m.config_group_missing(),
     chipsPlaceholder: m.config_chips_placeholder(),
     sectionAnilist: m.config_section_anilist(),
     sectionDownloads: m.config_section_downloads(),
@@ -189,21 +191,54 @@
    * mora o campo que ela reprova. Isso é exigência do layout novo, não uma regra nova: com um
    * grupo visível por vez, um toast dizendo "pasta é obrigatória" enquanto o usuário olha para
    * "Automação" não teria como ser acionável. A validação que falha traz o grupo dela à tela.
+   *
+   * Elas viraram uma LISTA (antes era uma cadeia de `if`) porque a tela agora as usa para duas
+   * coisas: o toast do Salvar, como sempre, e a marca de "falta preencher" no índice lateral.
+   * Reescrever as condições no segundo lugar deixaria a marca mentir na primeira vez que uma
+   * regra mudasse — o índice tem de dizer exatamente o que barra o Salvar, nada mais.
+   *
+   * `message` guarda a REFERÊNCIA da função do paraglide, não o texto: assim a mensagem é
+   * resolvida no idioma vigente no momento do clique, como era quando cada `if` a chamava.
    */
+  $: requiredChecks = [
+    {
+      group: "anilist" as GroupId,
+      ok: (config.anilist_usernames ?? []).length > 0,
+      message: m.config_val_username,
+    },
+    {
+      group: "downloads" as GroupId,
+      ok: !!config.completed_anime_path?.trim(),
+      message: m.config_val_completed_path,
+    },
+    {
+      group: "automation" as GroupId,
+      ok: config.check_interval > 0,
+      message: m.config_val_interval,
+    },
+    {
+      group: "automation" as GroupId,
+      ok: config.max_episodes_per_anime > 0,
+      message: m.config_val_max_episodes,
+    },
+    {
+      group: "automation" as GroupId,
+      ok: config.episode_retry_limit >= 0,
+      message: m.config_val_retry,
+    },
+    {
+      group: "downloads" as GroupId,
+      ok: !(config.delete_watched_episodes && config.watched_episodes_to_keep < 0),
+      message: m.config_val_watched_keep,
+    },
+  ];
+
+  /** Grupos com alguma pendência — alimenta o ponto no índice lateral. */
+  $: pendingGroups = new Set(requiredChecks.filter((c) => !c.ok).map((c) => c.group));
+
   function firstValidationError(): { message: string; group: GroupId } | null {
-    if ((config.anilist_usernames ?? []).length === 0)
-      return { message: m.config_val_username(), group: "anilist" };
-    if (!config.completed_anime_path?.trim())
-      return { message: m.config_val_completed_path(), group: "downloads" };
-    if (config.check_interval <= 0)
-      return { message: m.config_val_interval(), group: "automation" };
-    if (config.max_episodes_per_anime <= 0)
-      return { message: m.config_val_max_episodes(), group: "automation" };
-    if (config.episode_retry_limit < 0)
-      return { message: m.config_val_retry(), group: "automation" };
-    if (config.delete_watched_episodes && config.watched_episodes_to_keep < 0)
-      return { message: m.config_val_watched_keep(), group: "downloads" };
-    return null;
+    const failed = requiredChecks.find((c) => !c.ok);
+    return failed ? { message: failed.message(), group: failed.group } : null;
   }
 
   async function saveConfig() {
@@ -250,9 +285,20 @@
     <Loading message={T && T.loading || ""} />
   {:else}
     <form on:submit|preventDefault={saveConfig} class="space-y-4">
+      <!-- Legenda do asterisco. Sem ela o `*` é convenção implícita; com um grupo por vez, vale
+           dizer em texto o que a marca significa. -->
+      <p class="text-caption text-subtle">
+        <span class="text-danger" aria-hidden="true">*</span>
+        {T && T.requiredLegend}
+      </p>
+
       <div class="grid gap-3.5 md:grid-cols-[196px_1fr] md:items-start">
         <!-- Índice: coluna de 196px no desktop; no mobile vira faixa rolável horizontal, com
-             `shrink-0` nos itens para a faixa rolar em vez de espremer os rótulos. -->
+             `shrink-0` nos itens para a faixa rolar em vez de espremer os rótulos.
+             O ponto de pendência entra AQUI porque só um grupo fica na tela por vez: o asterisco
+             no campo resolve o grupo aberto, e este ponto é o que conta ao usuário que ainda
+             falta algo nos outros três. O texto sr-only entra no nome acessível do botão
+             ("Anilist, configuração obrigatória faltando"); o ponto em si é decorativo. -->
         <nav
           aria-label={(T && T.navLabel) || ""}
           class="flex gap-1 overflow-x-auto md:flex-col md:overflow-x-visible"
@@ -262,12 +308,16 @@
               type="button"
               aria-current={activeGroup === group.id ? "true" : undefined}
               on:click={() => (activeGroup = group.id)}
-              class="shrink-0 rounded-field px-3 py-2 text-left text-copy transition-colors md:w-full {activeGroup ===
+              class="flex shrink-0 items-center gap-1.5 rounded-field px-3 py-2 text-left text-copy transition-colors md:w-full {activeGroup ===
               group.id
                 ? 'bg-accent-tint/16 font-bold text-nav-active'
                 : 'font-semibold text-subtle hover:text-body'}"
             >
               {group.label}
+              {#if pendingGroups.has(group.id)}
+                <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" aria-hidden="true"></span>
+                <span class="sr-only">{T && T.groupMissing}</span>
+              {/if}
             </button>
           {/each}
         </nav>
@@ -281,6 +331,7 @@
                 id="anilist_usernames"
                 bind:values={config.anilist_usernames}
                 label={(T && T.labelUsername) || ""}
+                required={true}
                 hint={(T && T.hintAnilistUsernames) || ""}
                 placeholder={(T && T.chipsPlaceholder) || ""}
                 removeLabel={(item) => m.config_chips_remove({ item })}
@@ -288,7 +339,7 @@
             </div>
 
             <fieldset class="p-4.5">
-              <legend class="float-left w-full text-[13.5px] font-bold text-heading">{T && T.labelDownloadStatuses}</legend>
+              <legend class="float-left w-full text-[14.5px] font-bold text-heading">{T && T.labelDownloadStatuses}</legend>
               <p class="text-caption text-subtle">{T && T.hintDownloadStatuses}</p>
               <div class="mt-2.5 flex flex-wrap gap-2">
                 {#each ALL_STATUSES as status}
@@ -311,7 +362,7 @@
             </fieldset>
 
             <fieldset class="p-4.5">
-              <legend class="float-left w-full text-[13.5px] font-bold text-heading">{T && T.labelDownloadMediaStatuses}</legend>
+              <legend class="float-left w-full text-[14.5px] font-bold text-heading">{T && T.labelDownloadMediaStatuses}</legend>
               <p class="text-caption text-subtle">{T && T.hintDownloadMediaStatuses}</p>
               <div class="mt-2.5 flex flex-wrap gap-2">
                 {#each ALL_MEDIA_STATUSES as status}
@@ -334,7 +385,7 @@
             </fieldset>
 
             <fieldset class="p-4.5">
-              <legend class="float-left w-full text-[13.5px] font-bold text-heading">{T && T.labelDeleteStatuses}</legend>
+              <legend class="float-left w-full text-[14.5px] font-bold text-heading">{T && T.labelDeleteStatuses}</legend>
               <p class="text-caption text-subtle">{T && T.hintDeleteStatuses}</p>
               <div class="mt-2.5 flex flex-wrap gap-2">
                 {#each ALL_STATUSES as status}

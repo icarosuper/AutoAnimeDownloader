@@ -532,6 +532,11 @@
   // colunas ficavam desalinhadas entre si. Com todas as trilhas determinísticas, o `1fr`
   // resolve igual em toda linha. 200px comporta o rótulo mais longo ("Release episode" /
   // "Soltar episódio") mais o botão de 32px do menu.
+  //
+  // A tabela só existe a partir de `lg` (1024px): as trilhas fixas + gaps somam ~710px e em
+  // `md` (768px) sobram ~628px depois do rail e do padding do main, o que jogava a página
+  // inteira em rolagem horizontal. Mesmo critério da lista de animes (Status.svelte, LIST_GRID)
+  // e das linhas de torrent (Downloads.svelte, ROW_GRID).
   const EP_GRID =
     "grid grid-cols-[28px_52px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
 </script>
@@ -622,7 +627,7 @@
            três linhas e o "Replace Anime with Magnet" ficava por cima dele. Com um piso de
            largura, o botão quebra para a própria linha quando não cabe. -->
       <div class="min-w-[200px] flex-1">
-        <h1 class="text-[22px] font-bold leading-tight text-heading">
+        <h1 class="text-[24px] font-bold leading-tight text-heading">
           {#if anime && detail?.anilist_id}
             <a
               href="https://anilist.co/anime/{detail.anilist_id}"
@@ -745,7 +750,7 @@
       {/if}
 
       <!-- Desktop -->
-      <div class="hidden md:block">
+      <div class="hidden lg:block">
         <div class="{EP_GRID} border-b border-divider px-4 py-2.5">
           <Checkbox
             checked={allSelected}
@@ -779,7 +784,7 @@
               on:change={() => toggleEpisode(row.ep.episode_id)}
             />
 
-            <span class="font-mono text-[14px] font-bold text-heading">{row.ep.episode_number}</span>
+            <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
 
             <div class="min-w-0">
               <p class="truncate text-copy text-heading" title={row.title}>{row.title}</p>
@@ -804,7 +809,7 @@
               {/if}
             </div>
 
-            <span class="truncate font-mono text-[11px] text-subtle" title={row.meta}>{row.meta}</span>
+            <span class="truncate font-mono text-[12px] text-subtle" title={row.meta}>{row.meta}</span>
 
             <!-- Coluna de ações: a principal SEMPRE na mesma posição, com texto; o resto no ⋯,
                  também rotulado. Desktop e mobile leem esta mesma definição. -->
@@ -831,7 +836,7 @@
       </div>
 
       <!-- Mobile: mesma definição de linha, empilhada -->
-      <div class="divide-y divide-divider md:hidden">
+      <div class="divide-y divide-divider lg:hidden">
         {#each rows || [] as row (row.ep.episode_id)}
           {@const isLoading = !!actionLoading[row.ep.episode_id]}
           {@const isSelected = selectedEpisodes.has(row.ep.episode_id)}
@@ -843,7 +848,7 @@
                 labelHidden
                 on:change={() => toggleEpisode(row.ep.episode_id)}
               />
-              <span class="font-mono text-[14px] font-bold text-heading">{row.ep.episode_number}</span>
+              <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
               <div class="min-w-0 flex-1">
                 <p class="truncate text-copy text-heading">{row.title}</p>
                 {#if row.notes}
@@ -863,7 +868,7 @@
                   />
                 </div>
               {/if}
-              <p class="mt-1.5 font-mono text-[11px] text-subtle">{row.meta}</p>
+              <p class="mt-1.5 font-mono text-[12px] text-subtle">{row.meta}</p>
             </div>
 
             <div class="mt-3 flex items-center gap-1.5">

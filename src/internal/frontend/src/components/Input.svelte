@@ -30,7 +30,7 @@
 
 <div class="flex w-full flex-col gap-1.5">
     {#if label}
-        <label for={inputId} class="text-[13.5px] font-bold text-heading">
+        <label for={inputId} class="text-[14.5px] font-bold text-heading">
             {label}
             {#if required}
                 <span class="text-danger" aria-hidden="true">*</span>

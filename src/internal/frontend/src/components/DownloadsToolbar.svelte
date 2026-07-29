@@ -76,7 +76,12 @@
     {/if}
   </label>
 
-  <div class="flex items-center gap-2 overflow-x-auto">
+  <!-- `flex-wrap`, não `overflow-x-auto`: as quatro pills existem para responder "tem algo ali?"
+       de bate-pronto, e atrás de um scroll horizontal as últimas ("Seeding", "Problems") ficavam
+       fora da vista em tela estreita. Elas quebram para a linha de baixo quando não couberem.
+       Sem `min-w-0` aqui: o mínimo automático deste flex item é o min-content (a pill mais
+       larga), que é exatamente o piso desejado — com min-w-0 uma pill voltaria a estourar. -->
+  <div class="flex flex-wrap items-center gap-2">
     {#each pills as pill (pill.id)}
       <button
         type="button"
@@ -88,7 +93,7 @@
           : 'border-default bg-control text-subtle hover:text-body'}"
       >
         {pill.label}
-        <span class="font-mono text-[11px] opacity-70">{pill.count}</span>
+        <span class="font-mono text-[12px] opacity-70">{pill.count}</span>
       </button>
     {/each}
   </div>

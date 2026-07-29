@@ -27,8 +27,12 @@
 
   $: moreLabel = $locale && moreTriggerLabel()
 
+  // `min-w-0` + o `truncate` no rótulo (ver markup) impedem uma coluna de invadir a vizinha.
+  // "Configurações" mede ~82px nesta escala tipográfica; em 4 colunas cabe a partir de 375px
+  // (~90px por coluna), mas num aparelho de 320px sobram ~76px e o texto transbordaria por cima
+  // do item ao lado. Com o truncate ele vira reticências, que é o degrade correto.
   function tabItemClass(active: boolean): string {
-    return `flex min-h-[44px] flex-col items-center justify-center gap-[5px] rounded-field text-[10.5px] ${
+    return `flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-[5px] rounded-field px-0.5 text-[11.5px] ${
       active ? 'bg-accent-tint/16 font-bold text-nav-active' : 'font-semibold text-subtle'
     }`
   }
@@ -49,13 +53,13 @@
           <svelte:component this={item.icon} size={20} strokeWidth={2} />
           {#if item.id === 'downloads' && $activeTorrentCount > 0}
             <span
-              class="absolute -right-1.5 -top-1.5 flex h-[15px] w-[15px] items-center justify-center rounded-full bg-ok font-mono text-[9px] font-extrabold text-on-ok"
+              class="absolute -right-1.5 -top-1.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-ok px-1 font-mono text-[10px] font-extrabold text-on-ok"
             >
               {$activeTorrentCount}
             </span>
           {/if}
         </span>
-        {item.label}
+        <span class="w-full truncate text-center">{item.label}</span>
       </a>
     {/each}
 
@@ -68,7 +72,7 @@
         on:click={() => (moreOpen = !moreOpen)}
       >
         <svelte:component this={moreTriggerIcon} size={20} strokeWidth={2} />
-        {moreLabel}
+        <span class="w-full truncate text-center">{moreLabel}</span>
       </button>
 
       <MoreMenu

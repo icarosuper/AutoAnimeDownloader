@@ -21,6 +21,13 @@
   export let placeholder = ''
   export let id: string = `chips-${Math.random().toString(36).slice(2, 9)}`
   export let disabled = false
+  /**
+   * Marca o campo como obrigatório: asterisco no rótulo + `aria-required` no input. Não é o
+   * atributo `required` nativo porque o obrigatório aqui é a LISTA, não o texto em digitação —
+   * com um chip já confirmado o input fica vazio, e `required` nativo reprovaria um campo que
+   * está preenchido.
+   */
+  export let required = false
   /** Nome acessível do × de cada chip; recebe o valor do chip como `{item}`. */
   export let removeLabel: (item: string) => string = (item) => `Remove ${item}`
 
@@ -79,7 +86,14 @@
 </script>
 
 <div class="flex flex-col gap-1.5">
-  <label for={id} class="text-[13.5px] font-bold text-heading">{label}</label>
+  <label for={id} class="text-[14.5px] font-bold text-heading">
+    {label}
+    {#if required}
+      <!-- Mesmo par que o Input.svelte usa: asterisco visual (aria-hidden, o leitor de tela
+           recebe a informação por `aria-required`) na cor de perigo. -->
+      <span class="text-danger" aria-hidden="true">*</span>
+    {/if}
+  </label>
 
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <!-- Clicar na área vazia da caixa foca o input, como num campo de texto comum. O teclado
@@ -113,6 +127,7 @@
       bind:value={draft}
       {placeholder}
       {disabled}
+      aria-required={required ? 'true' : undefined}
       type="text"
       class="min-w-[8rem] flex-1 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle disabled:cursor-not-allowed"
       on:keydown={handleKeydown}

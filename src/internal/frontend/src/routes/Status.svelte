@@ -378,10 +378,18 @@
 
   // Grid compartilhado pelo cabeçalho e pelas linhas da lista (desktop). Definido uma vez para
   // que cabeçalho e conteúdo não possam sair de alinhamento.
-  // A coluna de progresso é a mais larga porque a legenda da TripleProgressBar é uma frase
-  // ("12 assistidos · 12 baixados · 12 lançados de 12"), não um número — abaixo de ~250px ela
-  // quebra em duas linhas e a altura da linha oscila conforme os valores.
-  const LIST_GRID = "grid grid-cols-[44px_minmax(0,1fr)_170px_minmax(250px,320px)_130px] items-center gap-3";
+  //
+  // As larguras fixas foram remedidas depois do aumento da escala tipográfica — cada uma é o
+  // texto mais longo que a coluna pode receber, no idioma mais largo, arredondado para cima:
+  //   estado    190px — chip "Downloading ep. 128 · 100%" = 183px (text-caption + px-2 + borda)
+  //   progresso 290px — legenda "128 watched · 128 downloaded · 128 released of 128" = 287px;
+  //                     é uma frase, não um número, e abaixo disso quebra em duas linhas e a
+  //                     altura da linha passa a oscilar conforme os valores
+  //   último    150px — cabeçalho "ÚLTIMO DOWNLOAD" em text-mono-label (mono + tracking .12em)
+  // A soma das colunas fixas + gaps + padding é ~754px, e é por isso que a tabela só aparece a
+  // partir de `lg` (1024px): em `md` (768px) sobrariam ~628px e as colunas vazariam da tela.
+  // Abaixo disso entram os cards empilhados.
+  const LIST_GRID = "grid grid-cols-[44px_minmax(0,1fr)_190px_minmax(290px,340px)_150px] items-center gap-3";
 </script>
 
 <div class="space-y-4.5">
@@ -405,7 +413,7 @@
         {/if}
         <span class="text-copy {daemonAlive ? 'text-ok' : 'text-body'}">{daemonLabel}</span>
         <span class="h-3.5 w-px bg-default" aria-hidden="true"></span>
-        <span class="font-mono text-[11px] text-subtle">
+        <span class="font-mono text-[12px] text-subtle">
           {formatTimeAgo(status.last_check) || (T && T.never)}
         </span>
       </div>
@@ -453,8 +461,14 @@
     {/if}
 
     <div class="grid gap-3.5 lg:grid-cols-[1.15fr_1fr]">
-      <!-- Card herói: velocidade agregada + sparkline + um anel por download ativo -->
-      <section class="rounded-card border border-default bg-card p-4.5">
+      <!-- Card herói: velocidade agregada + sparkline + um anel por download ativo.
+           `min-w-0` NÃO é decorativo: a faixa de downloads ativos abaixo é larga (um bloco de
+           ~190px por torrent) e um item de grid tem `min-width: auto`, ou seja, seu piso é o
+           tamanho intrínseco do conteúdo. Sem o override o track `1.15fr` estoura — a section
+           cresce até o max-content (medido: 2494px num grid de 1280px), o `overflow-x-auto` da
+           faixa nunca chega a ativar (largura == scrollWidth) e a coluna da direita é empurrada
+           para fora da tela. Com `min-w-0` a section volta a caber no track e a faixa rola. -->
+      <section class="min-w-0 rounded-card border border-default bg-card p-4.5">
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
             <p class="font-mono text-mono-label uppercase text-subtle">{T && T.heroSpeedLabel}</p>
@@ -483,7 +497,7 @@
                 <ProgressRing value={t.progress} label={t.anime_name ?? t.name} />
                 <div class="min-w-0">
                   <p class="max-w-[150px] truncate text-copy text-heading">{t.anime_name ?? t.name}</p>
-                  <p class="font-mono text-[11px] text-subtle">{$locale && ringMeta(t)}</p>
+                  <p class="font-mono text-[12px] text-subtle">{$locale && ringMeta(t)}</p>
                 </div>
               </div>
             {/each}
@@ -494,7 +508,7 @@
 
         <!-- spec §8: a UI declara de onde vem o progresso. O ponto fica âmbar quando o último
              poll falhou, e o texto passa a dizer que os valores estão congelados. -->
-        <p class="mt-3 flex items-center gap-1.5 font-mono text-[11px] {torrentsStale ? 'text-warn' : 'text-subtle'}">
+        <p class="mt-3 flex items-center gap-1.5 font-mono text-[12px] {torrentsStale ? 'text-warn' : 'text-subtle'}">
           <span
             class="inline-block h-1.5 w-1.5 shrink-0 rounded-full {torrentsStale ? 'bg-warn' : 'bg-neutral'}"
             aria-hidden="true"
@@ -504,7 +518,7 @@
       </section>
 
       <!-- Coluna direita: resumo da biblioteca + disco/próxima verificação -->
-      <div class="flex flex-col gap-3.5">
+      <div class="flex min-w-0 flex-col gap-3.5">
         <section class="rounded-card border border-default bg-card p-4.5">
           <p class="font-mono text-mono-label uppercase text-subtle">{T && T.cardLibrary}</p>
           <p class="mt-1.5 font-mono text-card-number text-heading">
@@ -562,7 +576,7 @@
         <h2 class="flex-1 text-card-title text-heading">{T && T.animesHeader}</h2>
 
         {#if search || filterUnwatched}
-          <span class="whitespace-nowrap font-mono text-[11px] text-subtle">
+          <span class="whitespace-nowrap font-mono text-[12px] text-subtle">
             {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
           </span>
         {/if}
@@ -630,7 +644,7 @@
         <!-- Desktop: grid de linhas-link. Não é <table> de propósito — com a linha inteira
              clicável, um <a> por linha dá o alvo grande sem precisar de handler de clique com
              role/tabindex/keydown manuais numa <tr>. -->
-        <div class="hidden md:block">
+        <div class="hidden lg:block">
           <div class="{LIST_GRID} border-b border-divider px-4 py-2.5">
             <span></span>
             <button
@@ -695,7 +709,7 @@
                 total={row.breakdown.total}
                 legend={row.legend}
               />
-              <span class="flex items-center justify-between gap-1 font-mono text-[11px] text-subtle">
+              <span class="flex items-center justify-between gap-1 font-mono text-[12px] text-subtle">
                 {row.lastDownload}
                 {#if row.href}
                   <ChevronRight size={14} strokeWidth={2} class="shrink-0" />
@@ -705,8 +719,9 @@
           {/each}
         </div>
 
-        <!-- Mobile: os mesmos dados empilhados em cards -->
-        <div class="space-y-2 p-3 md:hidden">
+        <!-- Mobile/tablet: os mesmos dados empilhados em cards (ver a nota de larguras em LIST_GRID
+             sobre por que o corte é em `lg` e não em `md`) -->
+        <div class="space-y-2 p-3 lg:hidden">
           {#each rows || [] as row (row.anime.anime_id || row.anime.name)}
             <svelte:element
               this={row.href ? "a" : "div"}
@@ -733,7 +748,7 @@
                       legend={row.legend}
                     />
                   </div>
-                  <p class="mt-1.5 font-mono text-[11px] text-subtle">{row.lastDownload}</p>
+                  <p class="mt-1.5 font-mono text-[12px] text-subtle">{row.lastDownload}</p>
                 </div>
               </div>
             </svelte:element>

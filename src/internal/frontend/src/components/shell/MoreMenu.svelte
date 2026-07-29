@@ -88,7 +88,7 @@
         <a
           role="menuitem"
           href="#{item.path}"
-          class="flex min-h-[44px] items-center gap-2.5 px-3 py-2 text-sm transition-colors {isNavItemActive(
+          class="flex min-h-[44px] items-center gap-2.5 px-3 py-2 text-copy transition-colors {isNavItemActive(
             item,
             currentPath,
           )
@@ -116,13 +116,13 @@
         </div>
 
         {#if appVersion}
-          <span class="text-[10px] text-subtle">v{appVersion}</span>
+          <span class="text-[11px] text-subtle">v{appVersion}</span>
         {/if}
 
         <button
           type="button"
           on:click={toggleLocale}
-          class="min-h-[44px] rounded-control border border-default px-2 py-1 text-xs font-semibold text-body hover:bg-control transition-colors"
+          class="min-h-[44px] rounded-control border border-default px-2 py-1 text-caption font-semibold text-body hover:bg-control transition-colors"
           title={$locale === 'en' ? 'Switch to Português' : 'Mudar para English'}
         >
           {$locale === 'en' ? 'EN' : 'PT'}

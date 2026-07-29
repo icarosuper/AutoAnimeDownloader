@@ -44,7 +44,7 @@
       class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
     />
     {#if checked}
-      <span class="pointer-events-none font-mono text-[10px] leading-none text-on-accent" aria-hidden="true">✓</span>
+      <span class="pointer-events-none font-mono text-[11px] leading-none text-on-accent" aria-hidden="true">✓</span>
     {:else if indeterminate}
       <span class="pointer-events-none h-[2px] w-2 rounded-pill bg-on-accent" aria-hidden="true"></span>
     {/if}

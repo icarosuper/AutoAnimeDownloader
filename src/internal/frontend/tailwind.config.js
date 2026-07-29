@@ -92,29 +92,33 @@ export default {
       boxShadow: {
         elevation: 'var(--elevation-shadow)',
       },
-      // §4.3 — escala tipográfica. Registrada aqui como utilitário `text-*`; nenhuma tela
-      // consome isso ainda (fica para as fases seguintes). O spec dá faixas, não valores
-      // únicos — usamos o limite indicado no comentário de cada entrada. `line-height` não
-      // é dado pelo spec, então é deixado de fora (comportamento padrão do Tailwind) em vez
-      // de inventar um valor. `rótulo mono` também pede maiúsculo — isso é `uppercase`
-      // aplicado pelo consumidor junto com `text-mono-label`, não faz parte do tuple de
-      // font-size do Tailwind.
+      // §4.3 — escala tipográfica. Registrada aqui como utilitário `text-*`. O spec dá faixas,
+      // não valores únicos. `line-height` não é dado pelo spec, então é deixado de fora
+      // (comportamento padrão do Tailwind) em vez de inventar um valor. `rótulo mono` também
+      // pede maiúsculo — isso é `uppercase` aplicado pelo consumidor junto com
+      // `text-mono-label`, não faz parte do tuple de font-size do Tailwind.
+      //
+      // AUMENTADA em ~1px (texto pequeno) a ~2px (números grandes) sobre os valores do spec, a
+      // pedido do usuário: no tamanho anterior a UI inteira lia como pequena demais. Toda a
+      // escala subiu junta, e não só as entradas reclamadas, para as proporções entre título /
+      // corpo / secundário continuarem as mesmas do handoff. Os poucos tamanhos escritos à mão
+      // como `text-[Npx]` nas telas subiram na mesma proporção.
       fontSize: {
-        // título de tela: 20–22px/800, -.01em
-        'screen-title': ['22px', { letterSpacing: '-0.01em', fontWeight: '800' }],
-        // número herói: 46px/600, -.03em
-        'hero-number': ['46px', { letterSpacing: '-0.03em', fontWeight: '600' }],
-        // número de card: 22–30px/650 (650 é literal do spec; não há peso 650 carregado —
+        // título de tela: spec 20–22px/800, -.01em
+        'screen-title': ['24px', { letterSpacing: '-0.01em', fontWeight: '800' }],
+        // número herói: spec 46px/600, -.03em
+        'hero-number': ['48px', { letterSpacing: '-0.03em', fontWeight: '600' }],
+        // número de card: spec 22–30px/650 (650 é literal do spec; não há peso 650 carregado —
         // o navegador casa para o peso mais próximo disponível)
-        'card-number': ['30px', { fontWeight: '650' }],
-        // título de card: 14–15px/700
-        'card-title': ['15px', { fontWeight: '700' }],
-        // corpo: 13–13.5px/600
-        copy: ['13.5px', { fontWeight: '600' }],
-        // secundário: 12–12.5px/500
-        caption: ['12.5px', { fontWeight: '500' }],
-        // rótulo mono: 10.5–11px/600, letter-spacing .10–.12em, maiúsculo
-        'mono-label': ['11px', { letterSpacing: '0.12em', fontWeight: '600' }],
+        'card-number': ['32px', { fontWeight: '650' }],
+        // título de card: spec 14–15px/700
+        'card-title': ['16px', { fontWeight: '700' }],
+        // corpo: spec 13–13.5px/600
+        copy: ['14.5px', { fontWeight: '600' }],
+        // secundário: spec 12–12.5px/500
+        caption: ['13.5px', { fontWeight: '500' }],
+        // rótulo mono: spec 10.5–11px/600, letter-spacing .10–.12em, maiúsculo
+        'mono-label': ['12px', { letterSpacing: '0.12em', fontWeight: '600' }],
       },
     },
   },

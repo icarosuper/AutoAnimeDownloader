@@ -424,13 +424,18 @@
   // Grid das linhas de torrent, compartilhado com o cabeçalho de colunas para que os dois não
   // saiam de alinhamento. O recuo de 66px do spec vem do padding-left, não de uma coluna.
   //
-  // Só a partir de `md`: as sete trilhas somam ~740px, então abaixo disso o grid empurrava a
+  // Só a partir de `lg`: as sete trilhas somam ~740px, então abaixo disso o grid empurrava a
   // PÁGINA INTEIRA para rolagem horizontal e espremia o título do grupo até "D..". No mobile
   // vira `flex-wrap`, e as células fluem em duas ou três linhas dentro da largura disponível.
+  //
+  // O corte era `md` (768px) e não bastava: descontando o rail e o padding do main sobram ~628px
+  // ali, contra os ~740px que as trilhas exigem — a rolagem horizontal que o comentário acima
+  // descreve acontecia exatamente na faixa 768–880px. `lg` (1024px) é o primeiro breakpoint que
+  // realmente cabe. Mesmo critério da lista de animes em Status.svelte (ver LIST_GRID).
   const ROW_GRID =
-    "flex flex-wrap items-center gap-x-3 gap-y-2 md:grid md:grid-cols-[28px_56px_128px_120px_minmax(120px,1fr)_150px_104px] md:items-center md:gap-3";
+    "flex flex-wrap items-center gap-x-3 gap-y-2 lg:grid lg:grid-cols-[28px_56px_128px_120px_minmax(120px,1fr)_150px_104px] lg:items-center lg:gap-3";
   /** Recuo das linhas dentro do grupo — 66px no desktop, só o padding do card no mobile. */
-  const ROW_INDENT = "pl-4 pr-4 md:pl-[66px]";
+  const ROW_INDENT = "pl-4 pr-4 lg:pl-[66px]";
 </script>
 
 <TorrentDeleteDialog
@@ -442,24 +447,37 @@
 />
 
 <div class="space-y-4.5">
-  <!-- Header: título + barra de resumo de banda -->
+  <!-- Header: título + barra de resumo de banda.
+       `min-w-[240px]` no bloco do título, e não `min-w-0`: `flex-1` é flex-basis 0%, e a quebra
+       de linha de um container `flex-wrap` decide pelo tamanho principal HIPOTÉTICO de cada item
+       — com basis 0 e min-width 0 o título contribuía ~0, a caixa de velocidade (433px de
+       max-content) nunca ia para a linha de baixo e o título ficava com as sobras, quebrando o
+       subtítulo em uma palavra por linha (medido: 7 linhas em 500px, 4 em 768px). O min-width
+       ENTRA nesse tamanho hipotético, então ele é o que empurra a caixa para a próxima linha —
+       em qualquer largura, sem depender de breakpoint (um `sm:flex-col` consertaria 375px e
+       deixaria a faixa dos 500–768px igual). -->
   <div class="flex flex-wrap items-center gap-3">
-    <div class="min-w-0 flex-1">
+    <div class="min-w-[240px] flex-1">
       <h1 class="text-screen-title text-heading">{T && T.title}</h1>
       <p class="mt-0.5 text-caption text-subtle">{T && T.subtitle}</p>
     </div>
 
-    <div class="flex items-center gap-3 rounded-[10px] border border-default bg-control px-3 py-2">
-      <span class="font-mono text-[14px] font-bold text-ok">↓ {formatSpeed(speeds.download, fmtLocale)}</span>
+    <!-- `flex-wrap` aqui dentro também: em 375px o conteúdo da caixa mede ~337px contra ~343px
+         disponíveis, então um valor de velocidade mais largo estouraria a linha. -->
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-default bg-control px-3 py-2">
+      <span class="font-mono text-[15px] font-bold text-ok">↓ {formatSpeed(speeds.download, fmtLocale)}</span>
       <span class="h-[14px] w-px bg-default" aria-hidden="true"></span>
-      <span class="font-mono text-[14px] font-bold text-neutral">↑ {formatSpeed(speeds.upload, fmtLocale)}</span>
-      <span class="h-[14px] w-px bg-default" aria-hidden="true"></span>
+      <span class="font-mono text-[15px] font-bold text-neutral">↑ {formatSpeed(speeds.upload, fmtLocale)}</span>
+      <!-- Este divisor sai abaixo de `sm`: é exatamente onde a contagem desce para a segunda
+           linha da caixa, e um separador no fim da linha, sem nada depois dele, lê como sujeira.
+           O `gap-x-3` continua separando os dois blocos quando eles couberem na mesma linha. -->
+      <span class="hidden h-[14px] w-px bg-default sm:inline-block" aria-hidden="true"></span>
       <span class="text-caption text-subtle">
         {$locale && m.downloads_summary_counts({ downloading: counts.downloading, seeding: counts.seeding })}
       </span>
     </div>
 
-    <p class="flex items-center gap-1.5 font-mono text-[11px] text-subtle">
+    <p class="flex items-center gap-1.5 font-mono text-[12px] text-subtle">
       <span class="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-neutral" aria-hidden="true"></span>
       {T && T.pollingNote}
     </p>
@@ -539,7 +557,7 @@
 
         <!-- Cabeçalho de colunas das linhas de torrent. Recuado igual às linhas, e é aqui que
              a ordenação por coluna (preservada do layout anterior) continua vivendo. -->
-        <div class="{ROW_GRID} hidden border-b border-divider py-2.5 {ROW_INDENT} md:grid">
+        <div class="{ROW_GRID} hidden border-b border-divider py-2.5 {ROW_INDENT} lg:grid">
           <span></span>
           <span class="font-mono text-mono-label uppercase text-subtle">{T && T.colEpisode}</span>
           <span class="font-mono text-mono-label uppercase text-subtle">{T && T.colStatus}</span>
@@ -594,7 +612,7 @@
               >
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
-                    <span class="truncate text-[15px] font-extrabold text-heading">{group.name}</span>
+                    <span class="truncate text-[16px] font-extrabold text-heading">{group.name}</span>
                     <Chip variant="neutral">{$locale && m.downloads_group_count({ count: group.torrents.length })}</Chip>
                     {#if group.problemCount > 0}
                       <Chip variant="danger">{$locale && m.downloads_group_problems({ count: group.problemCount })}</Chip>
@@ -609,10 +627,10 @@
                         label={$locale ? m.downloads_group_progress({ name: group.name }) : group.name}
                       />
                     </div>
-                    <span class="shrink-0 font-mono text-[11px] text-subtle">
+                    <span class="shrink-0 font-mono text-[12px] text-subtle">
                       {formatPercent(group.progress, fmtLocale)}
                     </span>
-                    <span class="shrink-0 font-mono text-[11px] text-subtle">
+                    <span class="shrink-0 font-mono text-[12px] text-subtle">
                       ↓ {formatSpeed(group.downloadSpeed, fmtLocale)}
                     </span>
                   </div>
@@ -672,7 +690,7 @@
                     on:change={() => toggleSelect(t.hash)}
                   />
 
-                  <span class="font-mono text-[12px] font-bold text-heading">
+                  <span class="font-mono text-[13px] font-bold text-heading">
                     {#if t.is_batch}
                       {T && T.batch}
                     {:else if t.episode_number !== null}
@@ -684,9 +702,9 @@
 
                   <span><Chip variant={statusVariant(t)}>{$locale && statusLabel(t.status)}</Chip></span>
 
-                  <span class="truncate font-mono text-[11px] text-subtle" title={t.hash}>{shortHash(t.hash)}</span>
+                  <span class="truncate font-mono text-[12px] text-subtle" title={t.hash}>{shortHash(t.hash)}</span>
 
-                  <div class="w-full min-w-0 md:w-auto">
+                  <div class="w-full min-w-0 lg:w-auto">
                     <!-- bytes_total fica em 0 até a metadata chegar; sem ela o percentual não
                          significa nada ainda, então a barra fica no trilho vazio. -->
                     <ProgressBar
@@ -695,7 +713,7 @@
                       variant={statusVariant(t)}
                       label={t.name}
                     />
-                    <p class="mt-1 truncate font-mono text-[11px] text-subtle">
+                    <p class="mt-1 truncate font-mono text-[12px] text-subtle">
                       {#if t.bytes_total === 0}
                         —
                       {:else if t.bytes_completed === 0 && t.progress > 0}
@@ -709,7 +727,7 @@
                     </p>
                   </div>
 
-                  <div class="min-w-0 font-mono text-[11px] text-subtle">
+                  <div class="min-w-0 font-mono text-[12px] text-subtle">
                     <p class="truncate">{$locale && m.downloads_peers_count({ count: t.peers_total })} · {formatEta(t.eta_seconds, fmtLocale)}</p>
                     <p class="truncate">↓ {formatSpeed(t.download_speed, fmtLocale)} · ↑ {formatSpeed(t.upload_speed, fmtLocale)}</p>
                   </div>

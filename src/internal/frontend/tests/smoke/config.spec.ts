@@ -16,12 +16,26 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/ws', route => route.abort())
 })
 
-/** Rota o PUT para dentro do teste e devolve o corpo salvo. */
+/**
+ * Rota o PUT para dentro do teste e devolve o corpo salvo.
+ *
+ * Espere pelo `whenSaved`, não por um `page.waitForRequest`: aquele resolve no EVENTO de request,
+ * que pode chegar antes de o handler da rota rodar — sob carga (a suíte roda em workers
+ * paralelos) dava `saved.body === undefined` e a asserção falhava de forma intermitente.
+ * `whenSaved` resolve depois de o corpo ter sido registrado.
+ */
 async function captureSave(page: import('@playwright/test').Page) {
-  const saved: { body?: Record<string, unknown> } = {}
+  const saved: { body?: Record<string, unknown>; whenSaved: Promise<void> } = {
+    whenSaved: Promise.resolve(),
+  }
+  let markSaved: () => void = () => {}
+  saved.whenSaved = new Promise<void>(resolve => {
+    markSaved = resolve
+  })
   await page.route('**/api/v1/config', async route => {
     if (route.request().method() === 'PUT') {
       saved.body = route.request().postDataJSON()
+      markSaved()
       await route.fulfill({ json: { success: true, data: null } })
     } else {
       await route.fulfill({ json: baseConfig })
@@ -46,11 +60,8 @@ test('clicking Save calls PUT /config', async ({ page }) => {
   await page.goto('/#/config')
   await expect(page.getByRole('button', { name: /^save$/i })).toBeVisible()
 
-  const putRequest = page.waitForRequest(
-    req => req.url().includes('/api/v1/config') && req.method() === 'PUT'
-  )
   await page.getByRole('button', { name: /^save$/i }).click()
-  await putRequest
+  await saved.whenSaved
 
   expect(saved.body).toBeDefined()
 })
@@ -82,11 +93,8 @@ test('the chips input adds a value with Enter and it reaches the PUT body', asyn
   await expect(page.getByRole('button', { name: 'Remove seconduser' })).toBeVisible()
   await expect(usernames).toHaveValue('')
 
-  const putRequest = page.waitForRequest(
-    req => req.url().includes('/api/v1/config') && req.method() === 'PUT'
-  )
   await page.getByRole('button', { name: /^save$/i }).click()
-  await putRequest
+  await saved.whenSaved
 
   expect(saved.body?.anilist_usernames).toEqual(['testuser', 'seconduser'])
 })
@@ -142,12 +150,72 @@ test('status pills toggle and download/delete stay mutually exclusive', async ({
     'false'
   )
 
-  const putRequest = page.waitForRequest(
-    req => req.url().includes('/api/v1/config') && req.method() === 'PUT'
-  )
   await page.getByRole('button', { name: /^save$/i }).click()
-  await putRequest
+  await saved.whenSaved
 
   expect(saved.body?.delete_statuses).toEqual(['CURRENT'])
   expect(saved.body?.download_statuses).toEqual(['REPEATING'])
+})
+
+/**
+ * Marcação de obrigatoriedade. Com UM grupo visível por vez, o asterisco no campo não basta: o
+ * usuário não vê os outros três grupos, então "o que falta preencher" precisa aparecer no índice
+ * lateral. As duas marcas derivam da MESMA lista de validações que barra o Salvar — é isso que
+ * impede o ponto de mentir quando uma regra mudar.
+ */
+const incompleteConfig = {
+  success: true,
+  data: { ...baseConfig.data, anilist_usernames: [], completed_anime_path: '' },
+}
+
+test('required fields are marked and the side index flags the groups still missing data', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/config', route => route.fulfill({ json: incompleteConfig }))
+  await page.goto('/#/config')
+
+  // O campo de usuários é obrigatório (é a primeira validação do Salvar) e agora diz isso.
+  await expect(page.getByLabel(/usernames/i)).toHaveAttribute('aria-required', 'true')
+  // A legenda que explica o asterisco.
+  await expect(page.getByText(/required field/i)).toBeVisible()
+
+  const index = page.getByRole('navigation', { name: /configuration sections/i })
+  // Anilist (usuários vazios) e Downloads (pasta vazia) estão pendentes; Automação e Filtros não.
+  await expect(index.getByRole('button', { name: /anilist.*missing/i })).toBeVisible()
+  await expect(index.getByRole('button', { name: /downloads.*missing/i })).toBeVisible()
+  await expect(index.getByRole('button', { name: /^automation$/i })).toBeVisible()
+  await expect(index.getByRole('button', { name: /^filters$/i })).toBeVisible()
+})
+
+test('the missing mark clears as soon as the field is filled', async ({ page }) => {
+  await page.route('**/api/v1/config', route => route.fulfill({ json: incompleteConfig }))
+  await page.goto('/#/config')
+
+  const index = page.getByRole('navigation', { name: /configuration sections/i })
+  await expect(index.getByRole('button', { name: /anilist.*missing/i })).toBeVisible()
+
+  const usernames = page.getByLabel(/usernames/i)
+  await usernames.fill('testuser')
+  await usernames.press('Enter')
+
+  await expect(index.getByRole('button', { name: /anilist.*missing/i })).toHaveCount(0)
+  // Downloads continua pendente — a marca é por grupo, não global.
+  await expect(index.getByRole('button', { name: /downloads.*missing/i })).toBeVisible()
+})
+
+// O mesmo, mas pelo OUTRO caminho de binding: `Input.svelte` (`bind:value` do componente, que
+// por sua vez faz `bind:value` no <input> interno), e não o ChipsInput do teste acima. Se essa
+// cadeia não invalidasse `config`, `pendingGroups` congelaria e o ponto mentiria — é o grupo que
+// o usuário de fato abre para preencher a pasta.
+test('filling the completed path clears the Downloads mark', async ({ page }) => {
+  await page.route('**/api/v1/config', route => route.fulfill({ json: incompleteConfig }))
+  await page.goto('/#/config')
+
+  const index = page.getByRole('navigation', { name: /configuration sections/i })
+  await index.getByRole('button', { name: /downloads.*missing/i }).click()
+
+  await page.getByLabel(/completed anime path/i).fill('/completed')
+
+  await expect(index.getByRole('button', { name: /downloads.*missing/i })).toHaveCount(0)
+  await expect(index.getByRole('button', { name: /anilist.*missing/i })).toBeVisible()
 })

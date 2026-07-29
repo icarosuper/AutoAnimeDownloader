@@ -547,3 +547,58 @@ Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são f
 **Why it's right:** `NavRail` e `NavTabBar` cada um monta seu próprio `MoreMenu`, que no mobile hospeda um `<select id="theme-select-mobile">` (o desktop tem o seu próprio `<select id="theme-select">`, sempre visível no rodapé do rail). Com os dois blocos sempre no DOM e só escondidos por CSS, ambos existiriam ao mesmo tempo — dois elementos com o mesmo propósito de controle, potencialmente dois ids duplicados se algum dia convergirem, e dois menus "Mais" interativos simultâneos para ferramentas que não respeitam `display:none` puramente por visibilidade (ex. `getByLabelText`/`getByRole` do Testing Library encontram elementos ocultos por CSS a menos que a query filtre por `hidden: true`, e podem falhar com "found multiple elements"). Montar só um dos dois em JS elimina a classe inteira desse problema, ao custo de um listener de `matchMedia` — inicializado de forma síncrona no `<script>` do componente (antes do primeiro render), então não há flash de layout errado.
 
 **Don't "fix" by:** voltar para `hidden md:flex`/`md:hidden` "porque é mais simples e é o padrão Tailwind" — funciona visualmente, mas reintroduz o duplo-DOM que motivou a decisão; inicializar `isDesktop` só dentro de `onMount` (mostraria o layout errado por um frame antes do primeiro paint, já que a leitura síncrona de `matchMedia` no `<script>` é o que evita isso).
+
+---
+
+### 37. Tabelas de largura fixa só a partir de `lg`, e `min-w-0` obrigatório em item de grid que contém faixa rolável
+
+**Location:** `frontend/src/routes/Status.svelte` (`LIST_GRID` e o card herói), `Downloads.svelte` (`ROW_GRID`/`ROW_INDENT`), `AnimeDetail.svelte` (`EP_GRID`). Coberto por `frontend/tests/smoke/layout.spec.ts`.
+
+**What it looks like:** duas coisas que parecem redundantes e não são.
+
+1. A faixa "Downloads ativos" do card herói tem `overflow-x-auto` **e** a `<section>` em volta tem `min-w-0`. Parece cinto e suspensório — o `overflow-x-auto` sozinho deveria bastar para a faixa rolar.
+2. As três tabelas trocam para cards empilhados em `lg` (1024px), não em `md` (768px), mesmo o app inteiro usando `md` como breakpoint desktop/mobile (inclusive o `matchMedia` da decisão 36, que continua em 768px).
+
+**Why it's right:**
+
+1. Item de grid tem `min-width: auto`, ou seja, seu piso é o tamanho intrínseco do conteúdo, não zero. Com muitos downloads a `<section>` era esticada até o max-content e o `overflow-x-auto` **nunca ativava**: medido num grid de 1280px, a section ia a 2494px, a faixa ficava com `clientWidth == scrollWidth` e a coluna da direita saía da tela. Com `min-w-0` a mesma section volta a 677px e a faixa rola de verdade (639px visíveis para 2456px de conteúdo). O `overflow-x-auto` descreve a intenção; o `min-w-0` é o que permite que ela aconteça.
+
+2. É aritmética, não gosto: as trilhas fixas somam ~754px (Status), ~740px (Downloads) e ~710px (AnimeDetail), enquanto a largura útil em `md` é `768 − 92 (rail) − 48 (padding do main) ≈ 628px`. O corte em `md` estava errado desde sempre — a faixa 768–880px caía em rolagem horizontal — e só não incomodava porque ninguém abre o app nessa largura. `lg` é o primeiro breakpoint em que as colunas cabem. O breakpoint rail-vs-tab-bar continua em 768px de propósito: é sobre o **shell**, não sobre a largura que uma tabela exige.
+
+**Don't "fix" by:** tirar o `min-w-0` "porque já tem `overflow-x-auto`" (é a ordem invertida: sem `min-w-0` o overflow é decorativo); tirar o `overflow-x-auto` "porque o `min-w-0` já resolve" (aí a faixa corta o conteúdo em vez de rolar); baixar as tabelas de volta para `md` por consistência com o resto do app (refaça a conta acima antes — a largura útil em `md` não cobre nenhuma das três); acrescentar uma coluna de largura fixa sem revisar o comentário de aritmética que mora junto de cada constante de grid.
+
+---
+
+### 38. Em cabeçalho `flex-wrap`, o item `flex-1` leva `min-w-[240px]` — e não `min-w-0`
+
+**Location:** `frontend/src/routes/Downloads.svelte` (bloco do título, no topo do template). Coberto por `frontend/tests/smoke/layout.spec.ts` ("subtitle is not squeezed to one word per line").
+
+**What it looks like:** o bloco de título/subtítulo é `min-w-[240px] flex-1`, contrariando o `min-w-0` que a decisão 37 exige nos itens de grid/flex do resto do app.
+
+**Why it's right:** são problemas opostos. `min-w-0` serve para item que **contém uma faixa rolável** e por isso precisa poder encolher abaixo do conteúdo. Aqui o item é vizinho de uma caixa larga (a barra de banda ↓/↑, 433px de max-content) dentro de um container `flex-wrap`, e a quebra de linha de um container flex decide pelo **tamanho principal hipotético** de cada item — que para `flex-1` (flex-basis 0%) é ~0, e `min-width` é justamente o que entra nesse cálculo. Com `min-w-0` o título contribuía ~0, a barra nunca ia para a linha de baixo e o título ficava com as sobras: medido, 7 linhas de subtítulo em 500px e 4 em 768px, uma palavra por linha. O piso de 240px empurra a barra para a próxima linha em qualquer largura em que ela não caiba.
+
+**Don't "fix" by:** trocar por `min-w-0` "para ficar igual ao resto do app" (é o bug de volta — a regra da decisão 37 vale para item que hospeda scroll, não para item vizinho de conteúdo largo); resolver com breakpoint (`flex-col sm:flex-row`) — conserta 375px e deixa a faixa dos 500–768px espremida, que é exatamente onde o sintoma era pior; assumir que `flex-wrap` sozinho já quebra a linha (ele quebra pelo tamanho hipotético, não pelo tamanho final depois de flexionar).
+
+---
+
+### 39. As pills de filtro de Downloads quebram linha (`flex-wrap`), ao contrário da faixa do card herói
+
+**Location:** `frontend/src/components/DownloadsToolbar.svelte`. Coberto por `frontend/tests/smoke/layout.spec.ts` ("every downloads filter pill is visible without horizontal scroll").
+
+**What it looks like:** a fileira de pills (Todos/Baixando/Semeando/Problemas) é `flex flex-wrap`, sem `overflow-x-auto` e sem `min-w-0` — enquanto a faixa "Downloads ativos" do card herói (decisão 37) e o índice lateral do Config no mobile continuam sendo faixas roláveis.
+
+**Why it's right:** o que a rolagem esconde muda de peso em cada caso. A pill existe para responder "tem algo ali?" pela **contagem**; com `overflow-x-auto` as duas últimas ("Semeando", "Problemas") ficavam fora da vista em tela estreita e a informação só aparecia depois de arrastar — o usuário nem sabia que havia mais filtros. Já a faixa do herói e o índice do Config são listas longas e homogêneas, onde rolar é o degrade correto. Também não leva `min-w-0`: o mínimo automático deste item é o min-content (a pill mais larga), que é exatamente o piso desejado — com `min-w-0` uma pill voltaria a estourar em vez de quebrar.
+
+**Don't "fix" by:** devolver `overflow-x-auto` "por consistência com a faixa do herói" (as duas faixas resolvem problemas diferentes); tirar o `shrink-0` das pills (elas passariam a encolher e o rótulo quebraria no meio, em vez de a pill inteira descer de linha).
+
+---
+
+### 40. O `z-30` do `NavRail` não é redundante com o `z-50` do painel do `MoreMenu`
+
+**Location:** `frontend/src/components/shell/NavRail.svelte` (classe do `<nav>`), `MoreMenu.svelte` (painel `absolute z-50`, backdrop `fixed inset-0 z-40`). Coberto por `frontend/tests/smoke/layout.spec.ts` ("the More menu paints above the page content", "a modal still paints above the nav rail").
+
+**What it looks like:** o painel do menu já é `z-50`, e ainda assim o `<nav>` em volta precisa de `z-30` — parece número sobrando, e a tentação é remover um dos dois.
+
+**Why it's right:** `position: sticky` cria contexto de empilhamento **sempre**, independente de z-index. Sem z-index no `<nav>`, aquele `z-50` só ordena coisas **dentro** do rail, e o rail inteiro pinta na camada z-auto da raiz, em ordem de árvore — perdendo para qualquer elemento posicionado que venha depois no DOM. Foi o que acontecia na tela de Prioridades, cujos cards usam a classe `.card` do daisyUI (`position: relative`): os cards apareciam na frente do menu aberto. Com `z-30` (o mesmo valor do `NavTabBar`, que é `fixed`), o rail inteiro sobe junto. O `z-40` do backdrop e o `z-50` do painel continuam necessários para ordenar o menu **contra o próprio rail**; Modal e Toasts ficam em `z-50` na raiz e por isso continuam acima dos 30 do rail.
+
+**Don't "fix" by:** subir o rail para `z-50` "para ficar igual ao painel" (empataria com Modal/Toasts e o diálogo passaria a depender de ordem de árvore); tirar o `z-30` porque "sticky já fica na frente" (ele fica na frente do conteúdo **não posicionado** — qualquer `position: relative` depois no DOM ganha dele); tirar o `z-50` do painel achando que o `z-30` do nav basta (dentro do rail o painel precisa vencer o backdrop `z-40`).

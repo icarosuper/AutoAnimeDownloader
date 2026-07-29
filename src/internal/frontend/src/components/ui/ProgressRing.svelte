@@ -32,6 +32,6 @@
   aria-label={label}
 >
   <div class="flex items-center justify-center rounded-full bg-card" style="width:34px; height:34px">
-    <span class="font-mono text-[10px] font-semibold text-heading">{pct}%</span>
+    <span class="font-mono text-[11px] font-semibold text-heading">{pct}%</span>
   </div>
 </div>
