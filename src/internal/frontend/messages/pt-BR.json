@@ -304,5 +304,20 @@
   "detail_select_all": "Selecionar todos os episódios",
   "detail_select_episode": "Selecionar episódio {number}",
   "detail_anilist_status": "AniList: {status}",
-  "detail_col_info": "Detalhes"
+  "detail_col_info": "Detalhes",
+  "downloads_filter_all": "Todos",
+  "downloads_filter_problems": "Problemas",
+  "downloads_summary_counts": "{downloading} baixando · {seeding} seeding",
+  "downloads_ws_banner": "Sem conexão com o daemon — o progresso abaixo pode estar defasado",
+  "downloads_ws_reconnect": "Reconectar",
+  "downloads_group_toggle": "Expandir ou recolher {name}",
+  "downloads_group_select": "Selecionar todos os torrents de {name}",
+  "downloads_group_count": "{count} torrent(s)",
+  "downloads_group_problems": "{count} travados",
+  "downloads_col_hash": "Hash",
+  "downloads_col_status": "Estado",
+  "downloads_col_episode": "Ep.",
+  "downloads_sort_by": "Ordenar por",
+  "downloads_peers_count": "{count} peers",
+  "downloads_group_progress": "Progresso geral de {name}"
 }

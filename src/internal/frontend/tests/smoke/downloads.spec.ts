@@ -57,8 +57,12 @@ const mockTorrents = [
   }),
 ]
 
+// Torrent rows inside an expanded accordion group.
+const ROWS = '[data-torrent-row]'
+
 async function mockCommon(page: Page) {
   await page.route('**/api/v1/status', route => route.fulfill({ json: makeStatusResponse('running') }))
+  await page.route('**/api/v1/animes', route => route.fulfill({ json: { success: true, data: [] } }))
   await page.route('**/api/v1/ws', route => route.abort())
 }
 
@@ -74,11 +78,11 @@ test.beforeEach(async ({ page }) => {
 test('typing in search reduces the visible rows', async ({ page }) => {
   await mockTorrentsList(page)
   await page.goto('/#/downloads')
-  await expect(page.locator('tbody tr')).toHaveCount(4)
+  await expect(page.locator(ROWS)).toHaveCount(4)
 
   await page.getByPlaceholder('Search by name…').fill('bleach')
-  await expect(page.locator('tbody tr')).toHaveCount(1)
-  await expect(page.locator('tbody tr')).toContainText('Bleach')
+  await expect(page.locator(ROWS)).toHaveCount(1)
+  await expect(page.locator('[data-group]')).toContainText('Bleach')
 })
 
 test('select-all marks only the visible rows and shows the bulk action bar', async ({ page }) => {
@@ -88,7 +92,7 @@ test('select-all marks only the visible rows and shows the bulk action bar', asy
   // Narrow to the 3 "Frieren" rows first, so we can assert select-all does NOT also pick up
   // the filtered-out "Bleach" row.
   await page.getByPlaceholder('Search by name…').fill('frieren')
-  await expect(page.locator('tbody tr')).toHaveCount(3)
+  await expect(page.locator(ROWS)).toHaveCount(3)
 
   await page.getByRole('checkbox', { name: 'Select all visible torrents' }).check()
   await expect(page.getByText('3 selected')).toBeVisible()
@@ -104,10 +108,9 @@ test('switching the status filter prunes the selection to what remains visible',
 
   // Filter down to only "seeding" (the Bleach row) — the other 3 selected hashes drop out of
   // view and must be pruned from the selection.
-  await page.getByRole('button', { name: /^Status/ }).click()
-  await page.getByRole('listitem').filter({ hasText: 'Seeding' }).getByRole('checkbox').check()
+  await page.getByRole('button', { name: /^Seeding/ }).click()
 
-  await expect(page.locator('tbody tr')).toHaveCount(1)
+  await expect(page.locator(ROWS)).toHaveCount(1)
   await expect(page.getByText('1 selected')).toBeVisible()
 })
 
@@ -126,8 +129,8 @@ test('delete dialog opens and fires DELETE with keep_data=false&block=true', asy
 
   await page.goto('/#/downloads')
 
-  const firstRow = page.locator('tbody tr').first()
-  await firstRow.getByRole('button', { name: 'Delete' }).click()
+  const firstRow = page.locator(ROWS).first()
+  await firstRow.getByRole('button', { name: /^Delete — / }).click()
 
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
@@ -151,15 +154,97 @@ test('deep link arrives with search, filter and sort already applied', async ({ 
 
   // q=frieren + status=downloading matches exactly the two "downloading" Frieren rows
   // (progress 0.3 and 0.7); the stopped Frieren row and the Bleach row are excluded.
-  await expect(page.locator('tbody tr')).toHaveCount(2)
+  await expect(page.locator(ROWS)).toHaveCount(2)
 
   await expect(page.getByPlaceholder('Search by name…')).toHaveValue('frieren')
-  await expect(page.getByRole('button', { name: /^Status/ })).toContainText('(1)')
 
   // dir=desc on progress: the 70% row (Frieren - 02) sorts before the 30% row (Frieren - 01).
   // (Both rows display as "Frieren" — anime_name wins over the raw torrent name in the Name
   // column — so the percentage is what distinguishes them here.)
-  const rows = page.locator('tbody tr')
+  const rows = page.locator(ROWS)
   await expect(rows.nth(0)).toContainText('70%')
   await expect(rows.nth(1)).toContainText('30%')
+})
+
+// Spec §9.3 keeps the whole view state in the URL — and Fase 5 adds the accordion to it, so a
+// collapsed group survives a reload/share the same way search, filter and sort already did.
+test('collapsing a group is reflected in the querystring and survives a reload', async ({ page }) => {
+  await mockTorrentsList(page)
+  await page.goto('/#/downloads')
+
+  // Frieren has 3 torrents, Bleach 1.
+  await expect(page.locator(ROWS)).toHaveCount(4)
+
+  await page.getByRole('button', { name: /expand or collapse frieren/i }).click()
+  await expect(page.locator(ROWS)).toHaveCount(1)
+  await expect(page).toHaveURL(/closed=n%3AFrieren/)
+
+  await page.reload()
+  await expect(page.locator(ROWS)).toHaveCount(1)
+})
+
+test('the problems pill filters down to torrents that are stuck at zero peers', async ({ page }) => {
+  await mockTorrentsList(page, [
+    torrent({ hash: 'a'.repeat(40), name: 'Healthy', anime_name: 'Healthy', peers_total: 8 }),
+    torrent({ hash: 'b'.repeat(40), name: 'Stuck', anime_name: 'Stuck', peers_total: 0 }),
+    // Paused at zero peers is a user decision, not a problem — it must stay out.
+    torrent({ hash: 'c'.repeat(40), name: 'Paused', anime_name: 'Paused', status: 'stopped', peers_total: 0 }),
+  ])
+  await page.goto('/#/downloads')
+  await expect(page.locator(ROWS)).toHaveCount(3)
+
+  await page.getByRole('button', { name: /^problems/i }).click()
+
+  await expect(page.locator(ROWS)).toHaveCount(1)
+  await expect(page.locator('[data-group]')).toContainText('Stuck')
+  await expect(page).toHaveURL(/problems=1/)
+})
+
+// The bulk group is always present now (dimmed + disabled with an empty selection) instead of
+// appearing and disappearing, which used to shove the list up and down on every click.
+test('bulk actions are visible but disabled until something is selected', async ({ page }) => {
+  await mockTorrentsList(page)
+  await page.goto('/#/downloads')
+
+  const bulkPause = page.getByRole('button', { name: /^pause$/i })
+  await expect(bulkPause).toBeVisible()
+  await expect(bulkPause).toBeDisabled()
+
+  await page.getByRole('checkbox', { name: 'Select all visible torrents' }).check()
+  await expect(bulkPause).toBeEnabled()
+})
+
+// A group's aggregate bar must read its own state: an all-seeded group is not "still working".
+// Asserted on the computed color because the first implementation painted every non-problem
+// group accent-purple, which looked like an in-flight download next to green Seeding chips.
+test('the group bar is colored by the group state, not always accent', async ({ page }) => {
+  await mockTorrentsList(page, [
+    torrent({ hash: 'a'.repeat(40), name: 'DL - 01', anime_name: 'Downloading show', anime_id: 1, status: 'downloading', peers_total: 5 }),
+    torrent({ hash: 'b'.repeat(40), name: 'SEED - 01', anime_name: 'Seeded show', anime_id: 2, status: 'seeding', completed: true, progress: 1, peers_total: 2 }),
+    torrent({ hash: 'c'.repeat(40), name: 'STUCK - 01', anime_name: 'Stalled show', anime_id: 3, status: 'downloading', peers_total: 0 }),
+  ])
+  await page.goto('/#/downloads')
+
+  async function groupBarColor(name: string) {
+    const bar = page.getByRole('progressbar', { name: `Overall progress of ${name}` }).locator('div').first()
+    return bar.evaluate(el => getComputedStyle(el).backgroundColor)
+  }
+
+  const downloading = await groupBarColor('Downloading show')
+  const seeded = await groupBarColor('Seeded show')
+  const stalled = await groupBarColor('Stalled show')
+
+  expect(seeded).not.toBe(downloading)
+  expect(stalled).not.toBe(downloading)
+  expect(stalled).not.toBe(seeded)
+})
+
+// Progress here comes from the 2s HTTP poll, not the WebSocket — so when the socket drops the
+// screen has to say the numbers below may be stale rather than let them read as live.
+test('a dropped daemon connection shows the stale-progress banner', async ({ page }) => {
+  await mockTorrentsList(page)
+  await page.goto('/#/downloads')
+
+  await expect(page.getByRole('alert')).toContainText('progress below may be out of date')
+  await expect(page.getByRole('button', { name: /reconnect/i })).toBeVisible()
 })

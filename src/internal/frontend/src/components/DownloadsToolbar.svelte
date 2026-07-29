@@ -1,19 +1,30 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
+  import { Search, X } from "@lucide/svelte";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
-  import { STATUS_SLUGS, statusLabel } from "../lib/utils/torrentStatus.js";
+  import type { FilterPreset } from "../lib/utils/torrentFilters.js";
+  import Button from "./ui/Button.svelte";
+  import Checkbox from "./ui/Checkbox.svelte";
 
   // Controlado pelo pai (Downloads.svelte é quem guarda o ViewState na URL); este componente
   // só busca busca/filtro/seleção e emite eventos — não faz fetch de dado nenhum.
+  //
+  // Fase 5 (spec §9.3) trocou o dropdown de status por quatro pills com contagem e passou a
+  // barra de seleção a ficar SEMPRE visível (esmaecida e desabilitada quando não há nada
+  // selecionado), em vez de aparecer e sumir empurrando a lista.
   export let query = "";
-  export let statuses: string[] = [];
+  export let preset: FilterPreset | null = "all";
+  export let counts = { all: 0, downloading: 0, seeding: 0, problems: 0 };
   export let selectedCount = 0;
+  export let allSelected = false;
+  export let someSelected = false;
   export let bulkBusy = false;
 
   const dispatch = createEventDispatcher<{
     search: string;
-    statusesChange: string[];
+    presetChange: FilterPreset;
+    selectAll: void;
     bulkPause: void;
     bulkResume: void;
     bulkAnnounce: void;
@@ -23,7 +34,8 @@
 
   $: T = $locale && {
     searchPlaceholder: m.downloads_search_placeholder(),
-    statusFilter: m.downloads_status_filter(),
+    clearSearch: m.status_clear_search(),
+    selectAll: m.downloads_select_all(),
     selected: m.downloads_selected({ count: selectedCount }),
     bulkPause: m.downloads_bulk_pause(),
     bulkResume: m.downloads_bulk_resume(),
@@ -32,69 +44,84 @@
     deselectAll: m.downloads_deselect_all(),
   };
 
-  function onSearchInput(e: Event) {
-    dispatch("search", (e.target as HTMLInputElement).value);
-  }
-
-  function toggleStatus(slug: string) {
-    const next = statuses.includes(slug)
-      ? statuses.filter((s) => s !== slug)
-      : [...statuses, slug];
-    dispatch("statusesChange", next);
-  }
+  // Declarado aqui, e não inline no `{#each}`, para o literal não perder o tipo da união
+  // `FilterPreset` e virar `string` no handler de clique.
+  $: pills = [
+    { id: "all" as FilterPreset, label: $locale && m.downloads_filter_all(), count: counts.all },
+    { id: "downloading" as FilterPreset, label: $locale && m.downloads_status_downloading(), count: counts.downloading },
+    { id: "seeding" as FilterPreset, label: $locale && m.downloads_status_seeding(), count: counts.seeding },
+    { id: "problems" as FilterPreset, label: $locale && m.downloads_filter_problems(), count: counts.problems },
+  ];
 </script>
 
-<div class="flex flex-wrap items-center gap-3">
-  <input
-    type="search"
-    class="input input-sm input-bordered w-full sm:w-64"
-    placeholder={T && T.searchPlaceholder}
-    value={query}
-    on:input={onSearchInput}
-  />
+<div class="flex flex-col gap-3 border-b border-divider p-4 sm:flex-row sm:items-center">
+  <label class="flex w-full shrink-0 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-1.5 sm:w-64">
+    <Search size={16} strokeWidth={2} class="shrink-0 text-subtle" />
+    <input
+      type="search"
+      placeholder={(T && T.searchPlaceholder) || ""}
+      value={query}
+      on:input={(e) => dispatch("search", e.currentTarget.value)}
+      class="w-full min-w-0 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
+    />
+    {#if query}
+      <button
+        type="button"
+        class="shrink-0 text-subtle hover:text-body"
+        aria-label={T && T.clearSearch}
+        on:click={() => dispatch("search", "")}
+      >
+        <X size={14} strokeWidth={2} />
+      </button>
+    {/if}
+  </label>
 
-  <div class="dropdown">
-    <div tabindex="0" role="button" class="btn btn-sm btn-outline">
-      {T && T.statusFilter}{statuses.length > 0 ? ` (${statuses.length})` : ""}
-    </div>
-    <ul class="dropdown-content menu bg-base-100 border border-base-300 rounded-box z-10 w-56 p-2 shadow">
-      {#each STATUS_SLUGS as slug (slug)}
-        <li>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              class="checkbox checkbox-xs"
-              checked={statuses.includes(slug)}
-              on:change={() => toggleStatus(slug)}
-            />
-            <span class="text-sm">{$locale && statusLabel(slug)}</span>
-          </label>
-        </li>
-      {/each}
-    </ul>
+  <div class="flex items-center gap-2 overflow-x-auto">
+    {#each pills as pill (pill.id)}
+      <button
+        type="button"
+        aria-pressed={preset === pill.id}
+        on:click={() => dispatch("presetChange", pill.id)}
+        class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {preset ===
+        pill.id
+          ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
+          : 'border-default bg-control text-subtle hover:text-body'}"
+      >
+        {pill.label}
+        <span class="font-mono text-[11px] opacity-70">{pill.count}</span>
+      </button>
+    {/each}
   </div>
 </div>
 
-{#if selectedCount > 0}
-  <!-- Barra de lote: as ações neutras são btn-outline (têm borda própria, então continuam
-       legíveis por cima do bg-base-200 da barra, onde um btn sólido default some no tema
-       dark); só a destrutiva é sólida, para destacá-la das demais. -->
-  <div class="flex flex-wrap items-center gap-2 bg-base-200 border border-base-300 rounded-lg px-3 py-2">
-    <span class="text-sm font-medium text-base-content">{T && T.selected}</span>
-    <button class="btn btn-xs btn-outline" disabled={bulkBusy} on:click={() => dispatch("bulkPause")}>
+<div class="flex flex-wrap items-center gap-2 border-b border-divider px-4 py-2.5">
+  <Checkbox
+    checked={allSelected}
+    indeterminate={someSelected}
+    label={(T && T.selectAll) || ""}
+    on:change={() => dispatch("selectAll")}
+  />
+
+  <div
+    class="ml-auto flex flex-wrap items-center gap-2 transition-opacity {selectedCount === 0 ? 'opacity-45' : ''}"
+  >
+    {#if selectedCount > 0}
+      <span class="text-copy text-accent">{T && T.selected}</span>
+    {/if}
+    <Button variant="ghost" disabled={bulkBusy || selectedCount === 0} on:click={() => dispatch("bulkPause")}>
       {T && T.bulkPause}
-    </button>
-    <button class="btn btn-xs btn-outline" disabled={bulkBusy} on:click={() => dispatch("bulkResume")}>
+    </Button>
+    <Button variant="ghost" disabled={bulkBusy || selectedCount === 0} on:click={() => dispatch("bulkResume")}>
       {T && T.bulkResume}
-    </button>
-    <button class="btn btn-xs btn-outline" disabled={bulkBusy} on:click={() => dispatch("bulkAnnounce")}>
+    </Button>
+    <Button variant="ghost" disabled={bulkBusy || selectedCount === 0} on:click={() => dispatch("bulkAnnounce")}>
       {T && T.bulkAnnounce}
-    </button>
-    <button class="btn btn-xs btn-error" disabled={bulkBusy} on:click={() => dispatch("bulkDelete")}>
+    </Button>
+    <Button variant="warn" disabled={bulkBusy || selectedCount === 0} on:click={() => dispatch("bulkDelete")}>
       {T && T.bulkDelete}
-    </button>
-    <button class="btn btn-xs btn-ghost ml-auto" on:click={() => dispatch("deselectAll")}>
-      {T && T.deselectAll}
-    </button>
+    </Button>
+    {#if selectedCount > 0}
+      <Button variant="ghost" on:click={() => dispatch("deselectAll")}>{T && T.deselectAll}</Button>
+    {/if}
   </div>
-{/if}
+</div>
