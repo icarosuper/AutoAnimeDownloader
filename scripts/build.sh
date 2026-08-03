@@ -51,6 +51,12 @@ fi
 
 mkdir -p "$BUILD_DIR"
 
+# The Dockerfiles embed src/internal/frontend/dist; CI builds it in its own step.
+if [ -z "$CI" ] && [ -z "$GITHUB_ACTIONS" ]; then
+    echo -e "${YELLOW}Building frontend...${NC}"
+    (cd src/internal/frontend && bun install --frozen-lockfile && bun run build)
+fi
+
 _has_buildx() {
     docker buildx version >/dev/null 2>&1
 }
@@ -106,7 +112,7 @@ elif [ "$PLATFORM" = "linuxarm64" ]; then
         _build_with_buildx
     else
         echo -e "${RED}Error: docker buildx is required for ARM64 builds${NC}" >&2
-        echo -e "${YELLOW}Install with: docker buildx install${NC}" >&2
+        echo -e "${YELLOW}Install the plugin via your package manager (Arch: pacman -S docker-buildx qemu-user-static qemu-user-static-binfmt)${NC}" >&2
         exit 1
     fi
 else
