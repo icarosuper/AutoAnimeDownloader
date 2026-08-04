@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/torrents"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -18,6 +19,10 @@ type TorrentResponse struct {
 	Hash   string `json:"hash" example:"0123456789abcdef0123456789abcdef01234567"`
 	Name   string `json:"name" example:"[SubsPlease] Frieren - 07 (1080p).mkv"`
 	Status string `json:"status" example:"downloading"`
+	// QueuePosition is the 1-based place in the download queue's waiting line; 0 means the
+	// torrent is not waiting (active, completed, or paused by the user). Not a pointer: 0
+	// already says "not queued" without ambiguity — there is no position 0.
+	QueuePosition int `json:"queue_position" example:"3"`
 	// Completed is piece-derived (TorrentInfo.Completed), not Status-derived — it stays true
 	// for a torrent paused after finishing, which Status alone cannot tell apart from a
 	// paused, unfinished one. Used to key the list sort instead of Status.
@@ -105,6 +110,7 @@ func buildTorrentResponse(t torrents.TorrentInfo, eps []files.EpisodeStruct) Tor
 		Hash:             t.Hash,
 		Name:             t.Name,
 		Status:           t.Status,
+		QueuePosition:    t.QueuePosition,
 		Completed:        t.Completed,
 		BytesCompleted:   t.BytesCompleted,
 		BytesTotal:       t.BytesTotal,
@@ -195,7 +201,7 @@ func handleTorrentPause(server *Server) http.HandlerFunc {
 }
 
 // @Summary      Resume a torrent
-// @Description  Restarts a paused torrent and re-arms its completion listener.
+// @Description  Puts a paused torrent at the BACK of the download queue and starts it if a slot is free — with max_concurrent_downloads set, resuming does not mean "start now" (use /prioritize for that). Re-arms the completion listener. A completed (seeding) torrent bypasses the queue.
 // @Tags         torrents
 // @Accept       json
 // @Produce      json
@@ -207,6 +213,65 @@ func handleTorrentPause(server *Server) http.HandlerFunc {
 // @Router       /torrents/{hash}/resume [post]
 func handleTorrentResume(server *Server) http.HandlerFunc {
 	return torrentAction(server, func(s *Server, hash string) error { return s.Torrents.Resume(hash) })
+}
+
+// @Summary      Prioritize a torrent
+// @Description  Moves a torrent to the FRONT of the download queue and starts it immediately, pausing the least-progressed active torrent when that would exceed max_concurrent_downloads. Nothing is lost by the demotion — rain keeps the piece bitfield across a stop. A torrent that is already downloading is a no-op; an already-completed one is a 500.
+// @Tags         torrents
+// @Accept       json
+// @Produce      json
+// @Param        hash  path      string  true  "Torrent info hash"
+// @Success      200   {object}  SuccessResponse
+// @Failure      400   {object}  SuccessResponse
+// @Failure      404   {object}  SuccessResponse
+// @Failure      405   {object}  SuccessResponse
+// @Router       /torrents/{hash}/prioritize [post]
+func handleTorrentPrioritize(server *Server) http.HandlerFunc {
+	return torrentAction(server, func(s *Server, hash string) error { return s.Torrents.Prioritize(hash) })
+}
+
+// PrioritizeRequest is the body of the batch prioritize endpoint.
+type PrioritizeRequest struct {
+	// Hashes is applied IN THE ORDER RECEIVED — the frontend decides the order, because it is
+	// what knows what the user clicked.
+	Hashes []string `json:"hashes" example:"0123456789abcdef0123456789abcdef01234567"`
+}
+
+// @Summary      Prioritize several torrents at once
+// @Description  Moves every listed torrent to the FRONT of the download queue, in the order received, and starts as many as max_concurrent_downloads allows — whatever is pushed past the limit pauses. Unknown or already-completed hashes are ignored rather than rejected: a list of episodes must not fail whole because one of them finished between the render and the click. Use this instead of N calls to /torrents/{hash}/prioritize, which would reverse the batch.
+// @Tags         torrents
+// @Accept       json
+// @Produce      json
+// @Param        request  body      PrioritizeRequest  true  "Info hashes, most important first"
+// @Success      200      {object}  SuccessResponse
+// @Failure      400      {object}  SuccessResponse
+// @Failure      405      {object}  SuccessResponse
+// @Failure      500      {object}  SuccessResponse
+// @Router       /torrents/prioritize [post]
+func handleTorrentsPrioritize(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST method is allowed")
+			return
+		}
+
+		var req PrioritizeRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			JSONError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid JSON body")
+			return
+		}
+		if len(req.Hashes) == 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_BODY", "At least one hash is required")
+			return
+		}
+
+		if err := server.Torrents.PrioritizeAll(req.Hashes); err != nil {
+			JSONInternalError(w, err)
+			return
+		}
+
+		JSONSuccess(w, http.StatusOK, nil)
+	}
 }
 
 // @Summary      Force a torrent re-announce

@@ -125,11 +125,23 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
+		if config.MaxConcurrentDownloads < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Max concurrent downloads must be non-negative")
+			return
+		}
+
 		// Save configurations
 		if err := server.FileManager.SaveConfigs(&config); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save configs")
 			JSONInternalError(w, err)
 			return
+		}
+
+		// Aplica o limite na hora: sem isso, baixar o numero de downloads simultaneos so
+		// valeria no proximo passe de verificacao (10 min por padrao), o que le como o
+		// campo nao ter funcionado.
+		if server.Torrents != nil {
+			server.Torrents.SetMaxActiveDownloads(config.MaxConcurrentDownloads)
 		}
 
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Configuration updated successfully"})

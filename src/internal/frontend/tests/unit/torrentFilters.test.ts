@@ -7,6 +7,8 @@ import {
   groupKey,
   groupTorrents,
   isProblemTorrent,
+  prioritizeOrder,
+  selectionPrioritizeOrder,
   DEFAULT_VIEW_STATE,
 } from '../../src/lib/utils/torrentFilters'
 import type { SortKey, SortDir, ViewState } from '../../src/lib/utils/torrentFilters'
@@ -17,6 +19,7 @@ function makeTorrent(overrides: Partial<TorrentInfo> = {}): TorrentInfo {
     hash: 'h1',
     name: 'Some Torrent',
     status: 'downloading',
+    queue_position: 0,
     completed: false,
     anime_name: undefined,
     anime_id: undefined,
@@ -323,5 +326,47 @@ describe('accordion state in the querystring', () => {
     expect(decodeViewState('problems=1').problems).toBe(true)
     expect(decodeViewState('problems=yes').problems).toBe(false)
     expect(decodeViewState('').problems).toBe(false)
+  })
+})
+
+describe('prioritizeOrder', () => {
+  it('sorts by episode_number regardless of the order shown', () => {
+    const list = [
+      makeTorrent({ hash: 'e3', episode_number: 3 }),
+      makeTorrent({ hash: 'e1', episode_number: 1 }),
+      makeTorrent({ hash: 'e2', episode_number: 2 }),
+    ]
+    expect(prioritizeOrder(list)).toEqual(['e1', 'e2', 'e3'])
+  })
+
+  it('sends batches and numberless torrents last, in display order', () => {
+    const list = [
+      makeTorrent({ hash: 'batch', is_batch: true, episode_number: null }),
+      makeTorrent({ hash: 'e2', episode_number: 2 }),
+      makeTorrent({ hash: 'other', episode_number: null }),
+      makeTorrent({ hash: 'e1', episode_number: 1 }),
+    ]
+    expect(prioritizeOrder(list)).toEqual(['e1', 'e2', 'batch', 'other'])
+  })
+})
+
+describe('selectionPrioritizeOrder', () => {
+  it('keeps the click order, not the display order', () => {
+    const visible = [
+      makeTorrent({ hash: 'a', status: 'stopped' }),
+      makeTorrent({ hash: 'b', status: 'stopped' }),
+      makeTorrent({ hash: 'c', status: 'stopped' }),
+    ]
+    const selected = new Set(['c', 'a'])
+    expect(selectionPrioritizeOrder(selected, visible, () => true)).toEqual(['c', 'a'])
+  })
+
+  it('drops hashes that left the list or cannot be prioritized', () => {
+    const visible = [
+      makeTorrent({ hash: 'a', status: 'stopped' }),
+      makeTorrent({ hash: 'done', status: 'seeding', completed: true }),
+    ]
+    const selected = new Set(['gone', 'done', 'a'])
+    expect(selectionPrioritizeOrder(selected, visible, (t) => !t.completed)).toEqual(['a'])
   })
 })

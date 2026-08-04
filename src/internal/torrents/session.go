@@ -242,6 +242,7 @@ func toInfo(t *torrent.Torrent) TorrentInfo {
 		PiecesTotal:      st.Pieces.Total,
 		ETASeconds:       eta,
 		SeededForSeconds: int64(st.SeededFor.Seconds()),
+		AddedAt:          t.AddedAt(),
 	}
 }
 

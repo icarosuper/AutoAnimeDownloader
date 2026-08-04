@@ -7,12 +7,14 @@
   // grupos estão recolhidos (ver o comentário de `ViewState` em torrentFilters.ts).
   import { onMount, onDestroy } from "svelte";
   import { querystring, replace } from "svelte-spa-router";
-  import { ChevronDown, Pause, Play, RefreshCw, Trash2 } from "@lucide/svelte";
+  import { ChevronDown, ChevronsUp, Pause, Play, RefreshCw, Trash2 } from "@lucide/svelte";
   import {
     getAnimes,
     getTorrents,
     pauseTorrent,
     resumeTorrent,
+    prioritizeTorrent,
+    prioritizeTorrents,
     announceTorrent,
     deleteTorrent,
     type TorrentInfo,
@@ -23,6 +25,8 @@
     sortTorrents,
     groupTorrents,
     isProblemTorrent,
+    prioritizeOrder,
+    selectionPrioritizeOrder,
     applyFilterPreset,
     activeFilterPreset,
     encodeViewState,
@@ -73,7 +77,9 @@
     pause: m.downloads_pause(),
     resume: m.downloads_resume(),
     announce: m.downloads_announce(),
+    prioritize: m.downloads_prioritize(),
     delete: m.downloads_delete(),
+    bulkPrioritize: m.downloads_bulk_prioritize(),
     batch: m.downloads_batch(),
     wsBanner: m.downloads_ws_banner(),
     wsReconnect: m.downloads_ws_reconnect(),
@@ -102,11 +108,22 @@
   let pendingDeleteHashes: string[] = [];
   let pendingDeleteName = "";
 
+  // 'queued' aceita pausar: com `paused` explícito na fila, pausar um enfileirado quer dizer
+  // "não inicie sozinho quando o slot vagar" — antes disso, a única forma de impedir que um
+  // episódio começasse era deletar o torrent.
   function canPause(t: TorrentInfo): boolean {
     return t.status !== "stopped" && t.status !== "stopping";
   }
+  // 'queued' aceita retomar: com limite de downloads simultâneos, retomar significa "volta
+  // para o FIM da fila", então num torrent já enfileirado o botão o desprioriza — que é
+  // exatamente o oposto do Priorizar ao lado, e por isso os dois convivem.
   function canResume(t: TorrentInfo): boolean {
-    return t.status === "stopped";
+    return t.status === "stopped" || t.status === "queued";
+  }
+  // Priorizar é furar a fila. Não faz sentido num torrent que já terminou (o backend
+  // devolve erro) nem num que já está baixando.
+  function canPrioritize(t: TorrentInfo): boolean {
+    return !t.completed && canResume(t);
   }
 
   // Contagens das pills: derivadas da lista só com a BUSCA aplicada, nunca com o filtro atual.
@@ -337,6 +354,30 @@
     await load();
   }
 
+  /**
+   * Priorizar em lote é UMA requisição, não N — N chamadas ao endpoint por hash se atropelam
+   * (cada uma passa na frente da anterior) e inverteriam o lote. Por isso não passa por
+   * `runBulk`/`reportBulk`: não existe sucesso parcial para contar, e o backend ignora em
+   * silêncio o que já completou, então nem dá para verificar o denominador daqui.
+   */
+  async function handlePrioritize(hashes: string[]) {
+    if (hashes.length === 0) {
+      toast.info(m.downloads_bulk_none());
+      return;
+    }
+    bulkBusy = true;
+    try {
+      await prioritizeTorrents(hashes);
+      toast.success(m.downloads_bulk_prioritized({ count: hashes.length }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      bulkBusy = false;
+    }
+    selected = new Set();
+    await load();
+  }
+
   async function handleBulkAnnounce(scope: TorrentInfo[] | null = null) {
     const result = await runBulk(bulkTargets(scope), announceTorrent);
     reportBulk(result, m.downloads_bulk_announced);
@@ -516,6 +557,7 @@
         on:search={(e) => setQuery(e.detail)}
         on:presetChange={(e) => applyPreset(e.detail)}
         on:selectAll={toggleSelectAll}
+        on:bulkPrioritize={() => handlePrioritize(selectionPrioritizeOrder(selected, visibleTorrents, canPrioritize))}
         on:bulkPause={() => handleBulkPause()}
         on:bulkResume={() => handleBulkResume()}
         on:bulkAnnounce={() => handleBulkAnnounce()}
@@ -643,35 +685,56 @@
                 />
               </button>
 
-              <!-- Ações em lote do grupo, quadrados de 32px -->
+              <!-- Ações em lote do grupo, quadrados de 32px.
+                   Os tooltips do daisyUI 4 saem do `data-tip` do wrapper (`.tooltip-content` é
+                   v5), mesmo padrão do NavRail. `tooltip-left` porque estes botões ficam
+                   colados na borda direita do card. O texto é só o RÓTULO DA AÇÃO: o
+                   `aria-label` concatena " — {nome}", que no tooltip seria ruído. -->
               <div class="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body"
-                  aria-label="{T && T.pause} — {group.name}"
-                  disabled={bulkBusy}
-                  on:click={() => handleBulkPause(group.torrents)}
-                >
-                  <Pause size={15} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body"
-                  aria-label="{T && T.resume} — {group.name}"
-                  disabled={bulkBusy}
-                  on:click={() => handleBulkResume(group.torrents)}
-                >
-                  <Play size={15} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  class="flex h-8 w-8 items-center justify-center rounded-control border border-danger-tint/32 text-danger transition-colors hover:bg-danger-tint/12"
-                  aria-label="{T && T.delete} — {group.name}"
-                  disabled={bulkBusy}
-                  on:click={() => handleBulkDeleteRequest(group.torrents, group.name)}
-                >
-                  <Trash2 size={15} strokeWidth={2} />
-                </button>
+                <div class="tooltip tooltip-left" data-tip={T && T.bulkPrioritize}>
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body"
+                    aria-label={$locale ? m.downloads_group_prioritize({ name: group.name }) : ""}
+                    disabled={bulkBusy}
+                    on:click={() => handlePrioritize(prioritizeOrder(group.torrents.filter(canPrioritize)))}
+                  >
+                    <ChevronsUp size={15} strokeWidth={2} />
+                  </button>
+                </div>
+                <div class="tooltip tooltip-left" data-tip={T && T.pause}>
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body"
+                    aria-label="{T && T.pause} — {group.name}"
+                    disabled={bulkBusy}
+                    on:click={() => handleBulkPause(group.torrents)}
+                  >
+                    <Pause size={15} strokeWidth={2} />
+                  </button>
+                </div>
+                <div class="tooltip tooltip-left" data-tip={T && T.resume}>
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body"
+                    aria-label="{T && T.resume} — {group.name}"
+                    disabled={bulkBusy}
+                    on:click={() => handleBulkResume(group.torrents)}
+                  >
+                    <Play size={15} strokeWidth={2} />
+                  </button>
+                </div>
+                <div class="tooltip tooltip-left" data-tip={T && T.delete}>
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control border border-danger-tint/32 text-danger transition-colors hover:bg-danger-tint/12"
+                    aria-label="{T && T.delete} — {group.name}"
+                    disabled={bulkBusy}
+                    on:click={() => handleBulkDeleteRequest(group.torrents, group.name)}
+                  >
+                    <Trash2 size={15} strokeWidth={2} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -700,7 +763,20 @@
                     {/if}
                   </span>
 
-                  <span><Chip variant={statusVariant(t)}>{$locale && statusLabel(t.status)}</Chip></span>
+                  <!-- A posição na fila entra no chip que já existe, sem coluna nova. Ela NÃO
+                       entra em `statusLabel()`: o filtro de status da toolbar chama a mesma
+                       função, e "Na fila #7" não faria sentido nenhum ali.
+                       Os números saem não-contíguos dentro de um grupo (#2, #5, #6) quando
+                       outro anime está intercalado na fila — é justamente o que comunica que
+                       a fila é global; renumerar por grupo destruiria essa informação. -->
+                  <span>
+                    <Chip variant={statusVariant(t)}>
+                      {$locale &&
+                        (t.queue_position > 0
+                          ? m.downloads_queue_position({ position: t.queue_position })
+                          : statusLabel(t.status))}
+                    </Chip>
+                  </span>
 
                   <span class="truncate font-mono text-[12px] text-subtle" title={t.hash}>{shortHash(t.hash)}</span>
 
@@ -732,47 +808,75 @@
                     <p class="truncate">↓ {formatSpeed(t.download_speed, fmtLocale)} · ↑ {formatSpeed(t.upload_speed, fmtLocale)}</p>
                   </div>
 
-                  <!-- Ações individuais, quadrados de 28px -->
+                  <!-- Ações individuais, quadrados de 28px.
+                       Play e Pause são dois `{#if}` INDEPENDENTES, não os dois ramos de um
+                       if/else: um torrent `queued` tem `canResume === true`, então no if/else
+                       ele caía no ramo do Play e o Pause nunca chegava ao DOM. Relaxar
+                       `canPause` sozinho não renderizaria nada. Um enfileirado fica com os três,
+                       cada um numa direção: Priorizar sobe, Play desce para o fim da fila,
+                       Pause tira da rotação. -->
                   <div class="flex items-center justify-end gap-1">
-                    {#if canResume(t)}
-                      <button
-                        type="button"
-                        class="flex h-7 w-7 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body disabled:opacity-50"
-                        aria-label="{T && T.resume} — {t.name}"
-                        disabled={busy.has(t.hash)}
-                        on:click={() => runAction(t.hash, resumeTorrent)}
-                      >
-                        <Play size={14} strokeWidth={2} />
-                      </button>
-                    {:else}
-                      <button
-                        type="button"
-                        class="flex h-7 w-7 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body disabled:opacity-50"
-                        aria-label="{T && T.pause} — {t.name}"
-                        disabled={busy.has(t.hash) || !canPause(t)}
-                        on:click={() => runAction(t.hash, pauseTorrent)}
-                      >
-                        <Pause size={14} strokeWidth={2} />
-                      </button>
+                    {#if canPrioritize(t)}
+                      <div class="tooltip" data-tip={T && T.prioritize}>
+                        <button
+                          type="button"
+                          class="flex h-7 w-7 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body disabled:opacity-50"
+                          aria-label="{T && T.prioritize} — {t.name}"
+                          disabled={busy.has(t.hash)}
+                          on:click={() => runAction(t.hash, prioritizeTorrent)}
+                        >
+                          <ChevronsUp size={14} strokeWidth={2} />
+                        </button>
+                      </div>
                     {/if}
-                    <button
-                      type="button"
-                      class="flex h-7 w-7 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body disabled:opacity-50"
-                      aria-label="{T && T.announce} — {t.name}"
-                      disabled={busy.has(t.hash)}
-                      on:click={() => runAction(t.hash, announceTorrent)}
-                    >
-                      <RefreshCw size={14} strokeWidth={2} />
-                    </button>
-                    <button
-                      type="button"
-                      class="flex h-7 w-7 items-center justify-center rounded-control border border-danger-tint/32 text-danger transition-colors hover:bg-danger-tint/12 disabled:opacity-50"
-                      aria-label="{T && T.delete} — {t.name}"
-                      disabled={busy.has(t.hash)}
-                      on:click={() => handleDeleteRow(t)}
-                    >
-                      <Trash2 size={14} strokeWidth={2} />
-                    </button>
+                    {#if canResume(t)}
+                      <div class="tooltip" data-tip={T && T.resume}>
+                        <button
+                          type="button"
+                          class="flex h-7 w-7 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body disabled:opacity-50"
+                          aria-label="{T && T.resume} — {t.name}"
+                          disabled={busy.has(t.hash)}
+                          on:click={() => runAction(t.hash, resumeTorrent)}
+                        >
+                          <Play size={14} strokeWidth={2} />
+                        </button>
+                      </div>
+                    {/if}
+                    {#if canPause(t)}
+                      <div class="tooltip" data-tip={T && T.pause}>
+                        <button
+                          type="button"
+                          class="flex h-7 w-7 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body disabled:opacity-50"
+                          aria-label="{T && T.pause} — {t.name}"
+                          disabled={busy.has(t.hash)}
+                          on:click={() => runAction(t.hash, pauseTorrent)}
+                        >
+                          <Pause size={14} strokeWidth={2} />
+                        </button>
+                      </div>
+                    {/if}
+                    <div class="tooltip" data-tip={T && T.announce}>
+                      <button
+                        type="button"
+                        class="flex h-7 w-7 items-center justify-center rounded-control border border-default text-subtle transition-colors hover:bg-control hover:text-body disabled:opacity-50"
+                        aria-label="{T && T.announce} — {t.name}"
+                        disabled={busy.has(t.hash)}
+                        on:click={() => runAction(t.hash, announceTorrent)}
+                      >
+                        <RefreshCw size={14} strokeWidth={2} />
+                      </button>
+                    </div>
+                    <div class="tooltip tooltip-left" data-tip={T && T.delete}>
+                      <button
+                        type="button"
+                        class="flex h-7 w-7 items-center justify-center rounded-control border border-danger-tint/32 text-danger transition-colors hover:bg-danger-tint/12 disabled:opacity-50"
+                        aria-label="{T && T.delete} — {t.name}"
+                        disabled={busy.has(t.hash)}
+                        on:click={() => handleDeleteRow(t)}
+                      >
+                        <Trash2 size={14} strokeWidth={2} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               {/each}

@@ -27,10 +27,12 @@ export type ViewState = {
 const SORT_KEYS: SortKey[] = ['default', 'name', 'progress', 'download_speed', 'eta', 'size', 'peers']
 const SORT_DIRS: SortDir[] = ['asc', 'desc']
 
-// Slugs emitted by src/internal/torrents/status.go (statusSlug). Kept in sync by hand —
-// see that file's comment for why it isn't derived from the rain enum.
+// Slugs emitted by src/internal/torrents/status.go (statusSlug), plus 'queued', the one
+// the download queue writes itself (queue.markQueued). Kept in sync by hand — see
+// status.go's comment for why it isn't derived from the rain enum.
 const KNOWN_STATUSES = [
   'stopped',
+  'queued',
   'downloading_metadata',
   'allocating',
   'verifying',
@@ -58,7 +60,10 @@ export const DEFAULT_VIEW_STATE: ViewState = {
  */
 export function isProblemTorrent(t: TorrentInfo): boolean {
   if (t.completed) return false
-  if (t.status === 'stopped' || t.status === 'stopping') return false
+  // 'queued' entra aqui junto com os parados: um torrent que a fila de downloads segurou
+  // tem 0 peers POR DEFINICAO, e sinalizar isso como problema encheria a pill de vermelho
+  // toda vez que o limite de downloads simultaneos fizesse o trabalho dele.
+  if (t.status === 'stopped' || t.status === 'stopping' || t.status === 'queued') return false
   return t.peers_total === 0
 }
 
@@ -320,4 +325,46 @@ export function groupTorrents(list: TorrentInfo[]): TorrentGroup[] {
   }
 
   return groups.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+}
+
+/**
+ * Ordem em que os episódios de um grupo devem ser priorizados: crescente por
+ * `episode_number`, com batch e episódio sem número no fim, preservando a ordem de exibição
+ * entre eles. O backend aplica a lista NA ORDEM RECEBIDA, então quem decide é aqui.
+ *
+ * Nada a ver com `sortTorrents`: aquilo ordena o que a tela mostra, isto ordena o que a
+ * requisição envia — o usuário pode estar ordenando por peers e ainda assim querer o
+ * episódio 1 na frente da fila.
+ */
+export function prioritizeOrder(list: TorrentInfo[]): string[] {
+  const num = (t: TorrentInfo) => (t.episode_number === null || t.episode_number === undefined ? null : t.episode_number)
+  return list
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => {
+      const an = num(a.t)
+      const bn = num(b.t)
+      if (an === null && bn === null) return a.i - b.i
+      if (an === null) return 1
+      if (bn === null) return -1
+      return an - bn || a.i - b.i
+    })
+    .map((x) => x.t.hash)
+}
+
+/**
+ * Alvos do priorizar em lote a partir da SELEÇÃO, na ordem em que o usuário marcou as linhas —
+ * o `Set` preserva ordem de inserção, e é ela que vale aqui, não a ordem de exibição (que é o
+ * que `bulkTargets` daria). Hashes que já saíram da lista ou que não aceitam priorizar caem
+ * fora: o backend os ignoraria de qualquer jeito, e contá-los inflaria a mensagem de resultado.
+ */
+export function selectionPrioritizeOrder(
+  selected: Set<string>,
+  visible: TorrentInfo[],
+  canPrioritize: (t: TorrentInfo) => boolean,
+): string[] {
+  const byHash = new Map(visible.map((t) => [t.hash, t]))
+  return Array.from(selected).filter((h) => {
+    const t = byHash.get(h)
+    return t !== undefined && canPrioritize(t)
+  })
 }

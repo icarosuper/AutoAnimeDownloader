@@ -60,6 +60,7 @@ describe('totalSpeeds', () => {
     hash: 'h' + download,
     name: 'n',
     status: 'downloading',
+    queue_position: 0,
     completed: false,
     episode_number: null,
     is_batch: false,

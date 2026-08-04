@@ -2,6 +2,7 @@ package torrents
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"sync"
 
@@ -39,7 +40,15 @@ type SessionManager struct {
 	// sessionOpts is the config the manager builds its sessions with. The zero value is
 	// production; only the tests set it (see newTestManager).
 	sessionOpts sessionOptions
+	// queue caps how many incomplete torrents run at once. It lives on the manager, not on
+	// the Session, so it survives the session being torn down and rebuilt by Ensure.
+	queue queue
 }
+
+// queue.mu is taken BEFORE m.mu (queue.enforce calls List/pause/resume). Every exported
+// method below therefore releases m.mu before touching the queue — see the ordering note
+// on the queue type.
+var _ queueOps = (*SessionManager)(nil)
 
 var _ TorrentBackend = (*SessionManager)(nil)
 
@@ -47,15 +56,30 @@ var _ TorrentBackend = (*SessionManager)(nil)
 // across SavePath changes so resume data survives. The download-root id file lives next to
 // it, for the same reason: it must stay put while the download folder moves.
 func NewSessionManager(dbPath string) *SessionManager {
-	return &SessionManager{
+	m := &SessionManager{
 		dbPath: dbPath,
 		idPath: filepath.Join(filepath.Dir(dbPath), rootIDFileName),
 	}
+	// queue.json fica ao lado do banco de resume pelo mesmo motivo do download_root.id: e
+	// estado do torrent client, e precisa acompanhar o banco.
+	m.queue.load(filepath.Join(filepath.Dir(dbPath), queueFileName))
+	return m
 }
 
 // Ensure creates the session if absent, and recreates it when savePath changed or when the
 // download root was swapped. See ConsumeRootSwap for why the swap forces a new session.
 func (m *SessionManager) Ensure(savePath string) (bool, error) {
+	created, err := m.ensure(savePath)
+	if created {
+		// Troca de save_path nao zera a fila: os hashes sao os mesmos, e a poda/anexacao do
+		// enforce acerta qualquer diferenca. Fora do lock, que ensure ja soltou (ver a nota
+		// de ordem de lock no tipo).
+		m.queue.enforce(m)
+	}
+	return created, err
+}
+
+func (m *SessionManager) ensure(savePath string) (bool, error) {
 	if savePath == "" {
 		return false, ErrSessionNotReady
 	}
@@ -94,7 +118,7 @@ func (m *SessionManager) Ensure(savePath string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	s.SetCallbacks(m.onComplete, m.onFailed)
+	s.SetCallbacks(m.wrapComplete(m.onComplete), m.onFailed)
 	m.session = s
 	m.savePath = savePath
 
@@ -163,20 +187,51 @@ func (m *SessionManager) SetCallbacks(onComplete func(hash string), onFailed fun
 	if m.session != nil {
 		// Same as in Ensure: delegate under the lock so the session cannot be swapped or
 		// closed between the pointer read and the call.
-		m.session.SetCallbacks(onComplete, onFailed)
+		m.session.SetCallbacks(m.wrapComplete(onComplete), m.onFailed)
+	}
+}
+
+// wrapComplete runs the queue before the caller's completion handler. A torrent finishing
+// is the moment a download slot frees, so it is the queue's main trigger — the caller
+// (which enqueues JobOrganize) neither knows nor needs to know about it. The raw handler
+// stays in m.onComplete so Ensure can re-wrap it for each new session instead of stacking
+// wrappers.
+func (m *SessionManager) wrapComplete(cb func(hash string)) func(hash string) {
+	return func(hash string) {
+		m.queue.enforce(m)
+		if cb != nil {
+			cb(hash)
+		}
 	}
 }
 
 func (m *SessionManager) Add(magnet string) (string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.session == nil {
-		return "", ErrSessionNotReady
+	hash, err := func() (string, error) {
+		m.mu.RLock()
+		defer m.mu.RUnlock()
+		if m.session == nil {
+			return "", ErrSessionNotReady
+		}
+		return m.session.Add(magnet)
+	}()
+	if err != nil {
+		return "", err
 	}
-	return m.session.Add(magnet)
+	m.queue.enforce(m)
+	return hash, nil
 }
 
 func (m *SessionManager) List() []TorrentInfo {
+	infos := m.list()
+	if infos == nil {
+		return nil
+	}
+	return m.queue.markQueued(infos)
+}
+
+// list is the raw snapshot, without the queue's status rewrite. enforce reads through it:
+// going via List would re-enter queue.mu, which enforce already holds.
+func (m *SessionManager) list() []TorrentInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.session == nil {
@@ -187,23 +242,40 @@ func (m *SessionManager) List() []TorrentInfo {
 
 func (m *SessionManager) Get(hash string) (TorrentInfo, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.session == nil {
+	var (
+		info TorrentInfo
+		ok   bool
+	)
+	if m.session != nil {
+		info, ok = m.session.Get(hash)
+	}
+	m.mu.RUnlock()
+	if !ok {
 		return TorrentInfo{}, false
 	}
-	return m.session.Get(hash)
+	return m.queue.markQueued([]TorrentInfo{info})[0], true
 }
 
 func (m *SessionManager) Remove(hash string, keepData bool) error {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	err := error(nil)
 	if m.session == nil {
-		return ErrSessionNotReady
+		err = ErrSessionNotReady
+	} else {
+		err = m.session.Remove(hash, keepData)
 	}
-	return m.session.Remove(hash, keepData)
+	m.mu.RUnlock()
+	if err != nil {
+		return err
+	}
+	m.queue.drop(hash)
+	m.queue.enforce(m)
+	return nil
 }
 
-func (m *SessionManager) Pause(hash string) error {
+// pause/resume are the raw delegations the queue drives. They deliberately do NOT touch
+// the queue: a pause decided by the queue that re-entered the queue would not terminate.
+func (m *SessionManager) pause(hash string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.session == nil {
@@ -212,13 +284,79 @@ func (m *SessionManager) Pause(hash string) error {
 	return m.session.Pause(hash)
 }
 
-func (m *SessionManager) Resume(hash string) error {
+func (m *SessionManager) resume(hash string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.session == nil {
 		return ErrSessionNotReady
 	}
 	return m.session.Resume(hash)
+}
+
+func (m *SessionManager) Pause(hash string) error {
+	t, ok := m.Get(hash)
+	if !ok {
+		return fmt.Errorf("torrent %s not found", hash)
+	}
+	// A completed torrent is seeding: it never held a download slot, so the queue has no
+	// bookkeeping for it in either direction.
+	if t.Completed {
+		return m.pause(hash)
+	}
+	// Into `paused` first: between the pause and the bookkeeping, an enforce racing from a
+	// completion callback could promote the very torrent the user is pausing.
+	m.queue.markPaused(hash)
+	if err := m.pause(hash); err != nil {
+		return err
+	}
+	m.queue.enforce(m)
+	return nil
+}
+
+func (m *SessionManager) Resume(hash string) error {
+	t, ok := m.Get(hash)
+	if !ok {
+		return fmt.Errorf("torrent %s not found", hash)
+	}
+	// A completed torrent is seeding, not downloading — it never occupied a slot, so the
+	// queue has no say in restarting it.
+	if t.Completed {
+		return m.resume(hash)
+	}
+	m.queue.pushBack(hash)
+	m.queue.enforce(m)
+	return nil
+}
+
+// Prioritize is the single-hash form, and it validates: an unknown or already-completed hash
+// is an error here, while the batch below ignores both (see PrioritizeAll).
+//
+// The Get happens BEFORE delegating, never inside PrioritizeAll: Get goes through markQueued,
+// which takes queue.mu — calling it from under that lock is the deadlock decision 41 already
+// warns about for enforce.
+func (m *SessionManager) Prioritize(hash string) error {
+	t, ok := m.Get(hash)
+	if !ok {
+		return fmt.Errorf("torrent %s not found", hash)
+	}
+	if t.Completed {
+		return fmt.Errorf("torrent %s already completed", hash)
+	}
+	return m.PrioritizeAll([]string{hash})
+}
+
+func (m *SessionManager) PrioritizeAll(hashes []string) error {
+	if len(hashes) == 0 {
+		return nil
+	}
+	m.queue.prioritize(hashes)
+	m.queue.enforce(m)
+	return nil
+}
+
+func (m *SessionManager) SetMaxActiveDownloads(n int) {
+	m.queue.setLimit(n)
+	m.queue.enforce(m)
 }
 
 func (m *SessionManager) Announce(hash string) error {

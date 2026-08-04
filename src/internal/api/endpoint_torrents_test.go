@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -278,13 +279,98 @@ func TestHandleTorrentAnnounce(t *testing.T) {
 	}
 }
 
+func TestHandleTorrentPrioritize(t *testing.T) {
+	server, backend := newTorrentActionServer(t)
+	_ = backend.Pause(hashA)
+
+	w := postTorrentAction(handleTorrentPrioritize(server), hashA)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d", http.StatusOK, w.Code)
+	}
+	if calls := backend.PrioritizeCalls(); len(calls) != 1 || calls[0] != hashA {
+		t.Errorf("PrioritizeCalls() = %v, want [%s]", calls, hashA)
+	}
+	info, _ := backend.Get(hashA)
+	if info.Status != "downloading" {
+		t.Errorf("Status = %q, want downloading", info.Status)
+	}
+}
+
+func TestHandleTorrentPrioritizeCompletedTorrentIs500(t *testing.T) {
+	// Prioritizing something that already finished is a caller mistake, not a missing
+	// torrent — a 404 here would send the UI looking for a torrent that is right there.
+	server, backend := newTorrentActionServer(t)
+	backend.AddCompleted(hashA, "/fake/"+hashA)
+
+	w := postTorrentAction(handleTorrentPrioritize(server), hashA)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("Expected %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+}
+
+// --- POST /api/v1/torrents/prioritize (batch) ---
+
+func postPrioritizeBatch(handler http.HandlerFunc, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/torrents/prioritize", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	handler(w, req)
+	return w
+}
+
+func TestHandleTorrentsPrioritizeAppliesTheOrderReceived(t *testing.T) {
+	server, backend := newTorrentActionServer(t)
+	if _, err := backend.Add(magnetB); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	w := postPrioritizeBatch(handleTorrentsPrioritize(server), `{"hashes":["`+hashB+`","`+hashA+`"]}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d", http.StatusOK, w.Code)
+	}
+	calls := backend.PrioritizeCalls()
+	if len(calls) != 2 || calls[0] != hashB || calls[1] != hashA {
+		t.Errorf("PrioritizeCalls() = %v, want [%s %s]", calls, hashB, hashA)
+	}
+}
+
+func TestHandleTorrentsPrioritizeIgnoresUnknownAndCompletedHashes(t *testing.T) {
+	// Uma lista de 12 episodios nao pode falhar inteira porque um deles terminou de baixar
+	// entre o render e o clique.
+	server, backend := newTorrentActionServer(t)
+	backend.AddCompleted(hashB, "/fake/"+hashB)
+	unknown := "ffffffffffffffffffffffffffffffffffffffff"
+
+	w := postPrioritizeBatch(handleTorrentsPrioritize(server), `{"hashes":["`+unknown+`","`+hashB+`","`+hashA+`"]}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d", http.StatusOK, w.Code)
+	}
+	if calls := backend.PrioritizeCalls(); len(calls) != 1 || calls[0] != hashA {
+		t.Errorf("PrioritizeCalls() = %v, want [%s]", calls, hashA)
+	}
+}
+
+func TestHandleTorrentsPrioritizeRejectsAnEmptyList(t *testing.T) {
+	server, _ := newTorrentActionServer(t)
+
+	for _, body := range []string{`{"hashes":[]}`, `{}`, `not json`} {
+		if w := postPrioritizeBatch(handleTorrentsPrioritize(server), body); w.Code != http.StatusBadRequest {
+			t.Errorf("body %q: expected %d, got %d", body, http.StatusBadRequest, w.Code)
+		}
+	}
+}
+
 func TestHandleTorrentActionsUnknownHashReturn404(t *testing.T) {
 	server, _ := newTorrentActionServer(t)
 
 	handlers := map[string]http.HandlerFunc{
-		"pause":    handleTorrentPause(server),
-		"resume":   handleTorrentResume(server),
-		"announce": handleTorrentAnnounce(server),
+		"pause":      handleTorrentPause(server),
+		"resume":     handleTorrentResume(server),
+		"announce":   handleTorrentAnnounce(server),
+		"prioritize": handleTorrentPrioritize(server),
 	}
 	for name, handler := range handlers {
 		w := postTorrentAction(handler, "ffffffffffffffffffffffffffffffffffffffff")

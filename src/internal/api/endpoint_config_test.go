@@ -3,6 +3,7 @@ package api
 import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -233,6 +234,53 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 		if !response.Success {
 			t.Error("Expected success=true")
+		}
+	})
+
+	t.Run("PUT applies max_concurrent_downloads to the backend right away", func(t *testing.T) {
+		// Sem isso, mudar o limite so valeria no proximo passe de verificacao (10 min por
+		// padrao) e o campo leria como quebrado.
+		backend := torrents.NewFakeBackend()
+		srv := &Server{State: state, FileManager: mockFM, Torrents: backend}
+
+		config := files.Config{
+			AnilistUsernames:       []string{"newuser"},
+			CompletedAnimePath:     "/tmp/newcompleted",
+			CheckInterval:          15,
+			MaxEpisodesPerAnime:    20,
+			EpisodeRetryLimit:      3,
+			MaxConcurrentDownloads: 7,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		w := httptest.NewRecorder()
+		handleUpdateConfig(srv)(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Expected status code %d, got %d", http.StatusOK, w.Code)
+		}
+		if backend.MaxActiveDownloads != 7 {
+			t.Errorf("MaxActiveDownloads = %d, want 7", backend.MaxActiveDownloads)
+		}
+	})
+
+	t.Run("PUT with negative max_concurrent_downloads returns 400", func(t *testing.T) {
+		config := files.Config{
+			AnilistUsernames:       []string{"newuser"},
+			CompletedAnimePath:     "/tmp/newcompleted",
+			CheckInterval:          15,
+			MaxEpisodesPerAnime:    20,
+			MaxConcurrentDownloads: -1,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("Expected status code %d, got %d", http.StatusBadRequest, w.Code)
 		}
 	})
 

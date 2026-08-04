@@ -48,6 +48,7 @@ function activeTorrent(hash: string): TorrentInfo {
     hash,
     name: 'Anime - 01',
     status: 'downloading',
+    queue_position: 0,
     completed: false,
     episode_number: 1,
     is_batch: false,

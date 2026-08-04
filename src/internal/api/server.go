@@ -106,13 +106,17 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	// Single pattern for every method on this path: Go 1.22+ ServeMux patterns without a
 	// method prefix match all verbs, so handleTorrentDelete's own method check is what turns
 	// a non-DELETE request into a 405 instead of the mux ever seeing an unmatched pattern.
-	// This does not collide with "/api/v1/torrents" (different segment count) nor with the
-	// "/pause", "/resume", "/announce" sub-paths below (a bare "{hash}" pattern only matches
-	// a single path segment).
+	// This does not collide with "/api/v1/torrents" (different segment count), nor with the
+	// "/pause", "/resume", "/announce", "/prioritize" sub-paths below (a bare "{hash}" pattern
+	// only matches a single path segment), nor with the literal "/api/v1/torrents/prioritize"
+	// batch route: Go 1.22+ gives a literal segment precedence over a wildcard, and no info
+	// hash is the string "prioritize" anyway (they are 40 hex chars).
+	apiMux.HandleFunc("/api/v1/torrents/prioritize", handleTorrentsPrioritize(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}", handleTorrentDelete(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/pause", handleTorrentPause(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/resume", handleTorrentResume(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/announce", handleTorrentAnnounce(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/prioritize", handleTorrentPrioritize(s))
 	apiMux.HandleFunc("/api/v1/notifications/webhooks/{name}/test", handleNotificationWebhookTest(s))
 
 	// WebSocket route (no JSON middleware)

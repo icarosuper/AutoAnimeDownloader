@@ -3,6 +3,7 @@ package torrents
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 // FakeBackend is an in-memory TorrentBackend for tests. It replaces the qBittorrent mock
@@ -29,6 +30,12 @@ type FakeBackend struct {
 	// RemovedKeepData records the keepData argument passed to Remove, keyed by hash, so tests
 	// can assert what the caller actually asked for even though the fake itself ignores it.
 	RemovedKeepData map[string]bool
+	// prioritizeCalls records every Prioritize(hash) for assertions.
+	prioritizeCalls []string
+	// MaxActiveDownloads records the last SetMaxActiveDownloads(n). The fake does NOT
+	// enforce a queue — that logic is unit-tested directly in queue_test.go, and modelling
+	// it here would make every daemon test depend on it.
+	MaxActiveDownloads int
 }
 
 var _ TorrentBackend = (*FakeBackend)(nil)
@@ -87,6 +94,7 @@ func (f *FakeBackend) Add(magnet string) (string, error) {
 			Name:    magnet,
 			DataDir: "/fake/" + hash,
 			Status:  "downloading",
+			AddedAt: time.Now(),
 		}
 	}
 	return hash, nil
@@ -157,6 +165,50 @@ func (f *FakeBackend) Announce(hash string) error {
 	}
 	f.announceCalls = append(f.announceCalls, hash)
 	return nil
+}
+
+func (f *FakeBackend) Prioritize(hash string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t, ok := f.torrents[hash]
+	if !ok {
+		return fmt.Errorf("fake: torrent %s not found", hash)
+	}
+	if t.Completed {
+		return fmt.Errorf("fake: torrent %s already completed", hash)
+	}
+	t.Status = "downloading"
+	f.prioritizeCalls = append(f.prioritizeCalls, hash)
+	return nil
+}
+
+// PrioritizeAll records the batch the same way Prioritize records a single hash. Unknown and
+// completed hashes are skipped, not rejected — same contract as the real backend.
+func (f *FakeBackend) PrioritizeAll(hashes []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, hash := range hashes {
+		t, ok := f.torrents[hash]
+		if !ok || t.Completed {
+			continue
+		}
+		t.Status = "downloading"
+		f.prioritizeCalls = append(f.prioritizeCalls, hash)
+	}
+	return nil
+}
+
+// PrioritizeCalls returns the hashes passed to Prioritize/PrioritizeAll, in order.
+func (f *FakeBackend) PrioritizeCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.prioritizeCalls...)
+}
+
+func (f *FakeBackend) SetMaxActiveDownloads(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.MaxActiveDownloads = n
 }
 
 // AnnounceCalls returns the hashes passed to Announce, in order.

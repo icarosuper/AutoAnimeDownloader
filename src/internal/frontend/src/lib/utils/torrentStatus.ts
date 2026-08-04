@@ -1,10 +1,12 @@
 import * as m from '../i18n/messages.js'
 
-// Slugs emitidos pelo backend (src/internal/torrents/status.go, statusSlug()). Mesma lista de
+// Slugs emitidos pelo backend (src/internal/torrents/status.go, statusSlug()) mais 'queued',
+// que quem escreve e a fila de downloads (queue.markQueued), nao o enum da rain. Mesma lista de
 // src/lib/utils/torrentFilters.ts (KNOWN_STATUSES) — duplicada aqui só como array de valores
 // porque aquele arquivo não a exporta; não invente slugs novos além destes.
 export const STATUS_SLUGS = [
   'stopped',
+  'queued',
   'downloading_metadata',
   'allocating',
   'verifying',
@@ -18,6 +20,8 @@ export function statusLabel(status: string): string {
   switch (status) {
     case 'stopped':
       return m.downloads_status_stopped()
+    case 'queued':
+      return m.downloads_status_queued()
     case 'downloading_metadata':
       return m.downloads_status_downloading_metadata()
     case 'allocating':
@@ -43,6 +47,7 @@ export function statusClass(status: string): string {
     case 'downloading':
       return 'badge-info'
     case 'stopped':
+    case 'queued':
       return 'badge-ghost'
     case 'stopping':
       return 'badge-warning'

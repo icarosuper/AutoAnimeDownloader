@@ -22,6 +22,7 @@ function makeTorrent(overrides: Partial<TorrentInfo> = {}): TorrentInfo {
     hash: 'h1',
     name: 't',
     status: 'downloading',
+    queue_position: 0,
     completed: false,
     episode_number: 1,
     is_batch: false,

@@ -120,6 +120,7 @@ export interface Config {
   check_interval: number
   max_episodes_per_anime: number
   episode_retry_limit: number
+  max_concurrent_downloads: number
   delete_watched_episodes: boolean
   watched_episodes_to_keep: number
   excluded_list?: string
@@ -155,6 +156,8 @@ export interface TorrentInfo {
   hash: string
   name: string
   status: string
+  /** 1-based place in the download queue's waiting line; 0 = not waiting. */
+  queue_position: number
   completed: boolean
   anime_name?: string
   anime_id?: number
@@ -283,6 +286,20 @@ export async function pauseTorrent(hash: string): Promise<void> {
 
 export async function resumeTorrent(hash: string): Promise<void> {
   return apiRequest<void>('POST', `/torrents/${hash}/resume`)
+}
+
+export async function prioritizeTorrent(hash: string): Promise<void> {
+  return apiRequest<void>('POST', `/torrents/${hash}/prioritize`)
+}
+
+/**
+ * Batch prioritize: ONE request, applied in the order given — N calls to `prioritizeTorrent`
+ * would front-push past each other and reverse the batch. Unknown or already-completed hashes
+ * are ignored by the backend, so the whole call cannot fail because one episode finished
+ * between the render and the click.
+ */
+export async function prioritizeTorrents(hashes: string[]): Promise<void> {
+  return apiRequest<void>('POST', '/torrents/prioritize', { hashes })
 }
 
 export async function announceTorrent(hash: string): Promise<void> {

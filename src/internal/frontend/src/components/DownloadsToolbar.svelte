@@ -25,6 +25,7 @@
     search: string;
     presetChange: FilterPreset;
     selectAll: void;
+    bulkPrioritize: void;
     bulkPause: void;
     bulkResume: void;
     bulkAnnounce: void;
@@ -37,6 +38,7 @@
     clearSearch: m.status_clear_search(),
     selectAll: m.downloads_select_all(),
     selected: m.downloads_selected({ count: selectedCount }),
+    bulkPrioritize: m.downloads_bulk_prioritize(),
     bulkPause: m.downloads_bulk_pause(),
     bulkResume: m.downloads_bulk_resume(),
     bulkAnnounce: m.downloads_bulk_announce(),
@@ -65,14 +67,17 @@
       class="w-full min-w-0 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
     />
     {#if query}
-      <button
-        type="button"
-        class="shrink-0 text-subtle hover:text-body"
-        aria-label={T && T.clearSearch}
-        on:click={() => dispatch("search", "")}
-      >
-        <X size={14} strokeWidth={2} />
-      </button>
+      <!-- daisyUI 4: o tooltip sai do `data-tip` do wrapper (`.tooltip-content` é v5). -->
+      <div class="tooltip tooltip-left shrink-0" data-tip={T && T.clearSearch}>
+        <button
+          type="button"
+          class="flex text-subtle hover:text-body"
+          aria-label={T && T.clearSearch}
+          on:click={() => dispatch("search", "")}
+        >
+          <X size={14} strokeWidth={2} />
+        </button>
+      </div>
     {/if}
   </label>
 
@@ -113,6 +118,9 @@
     {#if selectedCount > 0}
       <span class="text-copy text-accent">{T && T.selected}</span>
     {/if}
+    <Button variant="ghost" disabled={bulkBusy || selectedCount === 0} on:click={() => dispatch("bulkPrioritize")}>
+      {T && T.bulkPrioritize}
+    </Button>
     <Button variant="ghost" disabled={bulkBusy || selectedCount === 0} on:click={() => dispatch("bulkPause")}>
       {T && T.bulkPause}
     </Button>

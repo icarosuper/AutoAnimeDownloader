@@ -49,6 +49,8 @@
     labelCheckInterval: m.config_label_check_interval(),
     labelMaxEpisodes: m.config_label_max_episodes(),
     labelRetryLimit: m.config_label_retry_limit(),
+    labelMaxConcurrent: m.config_label_max_concurrent(),
+    hintMaxConcurrent: m.config_hint_max_concurrent(),
     labelRenameJellyfin: m.config_label_rename_jellyfin(),
     hintRenameJellyfin: m.config_hint_rename_jellyfin(),
     labelExcludedList: m.config_label_excluded_list(),
@@ -94,6 +96,7 @@
     check_interval: 10,
     max_episodes_per_anime: 12,
     episode_retry_limit: 5,
+    max_concurrent_downloads: 3,
     delete_watched_episodes: true,
     watched_episodes_to_keep: 0,
     excluded_lists: [],
@@ -225,6 +228,11 @@
       group: "automation" as GroupId,
       ok: config.episode_retry_limit >= 0,
       message: m.config_val_retry,
+    },
+    {
+      group: "automation" as GroupId,
+      ok: config.max_concurrent_downloads >= 0,
+      message: m.config_val_max_concurrent,
     },
     {
       group: "downloads" as GroupId,
@@ -483,6 +491,17 @@
                 min="0"
                 required={true}
               />
+            </div>
+            <div class="space-y-1.5 p-4.5">
+              <Input
+                id="max_concurrent_downloads"
+                label={T && T.labelMaxConcurrent || ""}
+                type="number"
+                bind:value={config.max_concurrent_downloads}
+                min="0"
+                required={true}
+              />
+              <p class="text-caption text-subtle">{T && T.hintMaxConcurrent}</p>
             </div>
           {/if}
 

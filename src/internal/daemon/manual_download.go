@@ -3,10 +3,32 @@ package daemon
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"fmt"
 	"time"
 )
+
+// addAndPrioritize adiciona o magnet e o poe na frente da fila de downloads.
+//
+// Um download pedido a mao tem de comecar agora, nao quando a fila chegar nele — mas
+// continua respeitando max_concurrent_downloads: em vez de virar um ativo a mais, ele
+// rebaixa o torrent automatico menos adiantado. Um limite que a UI mostra sendo furado e
+// um limite em que ninguem confia.
+//
+// A falha do Prioritize e so logada: o torrent ja esta na sessao e vai baixar de qualquer
+// jeito, so que na vez dele — abortar o download inteiro por causa disso seria pior.
+func addAndPrioritize(backend torrents.TorrentBackend, magnet string) (string, error) {
+	hash, err := backend.Add(magnet)
+	if err != nil || hash == "" {
+		return hash, err
+	}
+	if err := backend.Prioritize(hash); err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).
+			Msg("Manual download added but could not be prioritized; it will start when the queue reaches it")
+	}
+	return hash, nil
+}
 
 type animeDetails struct {
 	mediaList  anilist.MediaListDetail
@@ -63,7 +85,7 @@ func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId in
 	}
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
-	hash, err := backend.Add(magnet)
+	hash, err := addAndPrioritize(backend, magnet)
 	if err != nil || hash == "" {
 		return files.EpisodeStruct{}, fmt.Errorf("failed to add torrent to embedded client: %w", err)
 	}
@@ -92,7 +114,7 @@ func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int,
 		return nil, err
 	}
 
-	hash, err := backend.Add(magnet)
+	hash, err := addAndPrioritize(backend, magnet)
 	if err != nil || hash == "" {
 		return nil, fmt.Errorf("failed to add torrent to embedded client: %w", err)
 	}
@@ -156,7 +178,7 @@ func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episode
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 	var hash string
 	for i := range maxAttempts {
-		h, err := backend.Add(magnets[i])
+		h, err := addAndPrioritize(backend, magnets[i])
 		if err == nil && h != "" {
 			hash = h
 			break

@@ -55,13 +55,19 @@ type Config struct {
 	// SavePath e um campo LEGADO, lido apenas por daemon.MigrateSavePath. O diretorio de
 	// download deixou de ser configuravel e passou a ser derivado (ver DownloadPath). O
 	// omitempty faz o campo sumir do config.json assim que a migracao o zera.
-	SavePath               string              `json:"save_path,omitempty" swaggerignore:"true"`
-	CompletedAnimePath     string              `json:"completed_anime_path"`
-	AnilistUsername        string              `json:"anilist_username,omitempty"`
-	AnilistUsernames       []string            `json:"anilist_usernames"`
-	CheckInterval          int                 `json:"check_interval"`
-	MaxEpisodesPerAnime    int                 `json:"max_episodes_per_anime"`
-	EpisodeRetryLimit      int                 `json:"episode_retry_limit"`
+	SavePath            string   `json:"save_path,omitempty" swaggerignore:"true"`
+	CompletedAnimePath  string   `json:"completed_anime_path"`
+	AnilistUsername     string   `json:"anilist_username,omitempty"`
+	AnilistUsernames    []string `json:"anilist_usernames"`
+	CheckInterval       int      `json:"check_interval"`
+	MaxEpisodesPerAnime int      `json:"max_episodes_per_anime"`
+	EpisodeRetryLimit   int      `json:"episode_retry_limit"`
+	// MaxConcurrentDownloads limita quantos torrents INCOMPLETOS baixam ao mesmo tempo; o
+	// excedente espera na fila (torrents.queue). 0 desliga o limite. Seeding nunca conta.
+	//
+	// Nao precisa de migracao: LoadConfigs desserializa POR CIMA de getDefaultConfig(),
+	// entao um config.json anterior a este campo ja carrega valendo o default.
+	MaxConcurrentDownloads int                 `json:"max_concurrent_downloads"`
 	DeleteWatchedEpisodes  bool                `json:"delete_watched_episodes"`
 	WatchedEpisodesToKeep  int                 `json:"watched_episodes_to_keep"`
 	ExcludedList           string              `json:"excluded_list,omitempty"`
@@ -109,19 +115,20 @@ type FileManager struct {
 
 func getDefaultConfig() *Config {
 	return &Config{
-		SavePath:              "",
-		AnilistUsernames:      []string{},
-		CheckInterval:         10,
-		MaxEpisodesPerAnime:   12,
-		EpisodeRetryLimit:     5,
-		DeleteWatchedEpisodes: true,
-		WatchedEpisodesToKeep: 0,
-		ExcludedLists:         []string{},
-		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
-		DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
-		DeleteStatuses:        []string{},
-		Notifications:         NotificationsConfig{Webhooks: []WebhookPreset{}},
-		Priorities:            nyaa.DefaultPriorities(),
+		SavePath:               "",
+		AnilistUsernames:       []string{},
+		CheckInterval:          10,
+		MaxEpisodesPerAnime:    12,
+		EpisodeRetryLimit:      5,
+		MaxConcurrentDownloads: 3,
+		DeleteWatchedEpisodes:  true,
+		WatchedEpisodesToKeep:  0,
+		ExcludedLists:          []string{},
+		DownloadStatuses:       []string{"CURRENT", "REPEATING"},
+		DownloadMediaStatuses:  []string{"RELEASING", "FINISHED"},
+		DeleteStatuses:         []string{},
+		Notifications:          NotificationsConfig{Webhooks: []WebhookPreset{}},
+		Priorities:             nyaa.DefaultPriorities(),
 	}
 }
 

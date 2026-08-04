@@ -1,5 +1,7 @@
 package torrents
 
+import "time"
+
 // TorrentInfo is a backend-agnostic snapshot of a torrent, exposing what the daemon needs
 // (identity, on-disk location, completion) plus the progress data the WebUI renders. It
 // replaces the qBittorrent WebUI Torrent struct for the embedded client.
@@ -18,7 +20,8 @@ type TorrentInfo struct {
 	// Completed reports whether all pieces are downloaded (seeding).
 	Completed bool
 	// Status is the API slug for rain's status enum: stopped, downloading_metadata,
-	// allocating, verifying, downloading, seeding, stopping (or unknown).
+	// allocating, verifying, downloading, seeding, stopping (or unknown) — plus "queued",
+	// the one slug the queue writes instead of statusSlug (see queue.markQueued).
 	Status string
 	// BytesCompleted is the number of bytes downloaded and hash-checked.
 	BytesCompleted int64
@@ -43,6 +46,16 @@ type TorrentInfo struct {
 	ETASeconds *int64
 	// SeededForSeconds is how long the torrent has been in seeding status.
 	SeededForSeconds int64
+	// AddedAt is when the torrent entered the session. It gives the initial order to torrents
+	// the queue does not know yet: rain's ListTorrents iterates a map, so slice order carries
+	// no information at all. rain persists it, so the order survives a restart.
+	AddedAt time.Time
+	// QueuePosition is the 1-based place in the download queue's waiting line, written by
+	// queue.markQueued alongside the "queued" slug. 0 means NOT queued — which is every
+	// active, every completed and every manually paused torrent (a paused one has a place in
+	// the queue, but it never starts on its own, so publishing a number that predicts nothing
+	// is worse than publishing none).
+	QueuePosition int
 }
 
 // TorrentBackend abstracts the embedded BitTorrent client so the daemon and the tests
@@ -82,11 +95,35 @@ type TorrentBackend interface {
 	// Pause stops a torrent (rain's Torrent.Stop). It does not block: the torrent enters
 	// "stopping" and only reaches "stopped" up to ~5s later, after the stop event reaches
 	// the trackers. rain persists the paused state, so it survives a restart.
+	//
+	// It also marks the torrent as PAUSED BY THE USER: it keeps its place in the queue but
+	// never starts on its own, so a pause the user asked for is not undone by the queue
+	// promoting it a second later. That makes pausing a queued torrent meaningful ("do not
+	// start when a slot frees"). A completed (seeding) torrent bypasses the queue entirely.
 	Pause(hash string) error
-	// Resume starts a paused torrent (rain's Torrent.Start) and re-arms its completion
-	// listener — pausing consumes the one-shot NotifyStop, which would otherwise leave the
-	// resumed torrent completing silently.
+	// Resume puts a torrent at the BACK of the download queue and starts it if a slot is
+	// free. It is deliberately not "start now": with a concurrent-download limit in place,
+	// a resume that started unconditionally would silently exceed it. Use Prioritize for
+	// "start now". A completed (seeding) torrent bypasses the queue entirely.
+	//
+	// It re-arms the completion listener — pausing consumes the one-shot NotifyStop, which
+	// would otherwise leave the resumed torrent completing silently.
 	Resume(hash string) error
+	// Prioritize moves a torrent to the FRONT of the download queue and starts it, pausing
+	// whichever active torrent is now last in queue order if that would exceed the limit
+	// (position, not progress — position is the axis the user controls). Nothing is lost by
+	// the demotion: rain keeps the piece bitfield across a stop. Returns an error when the
+	// hash is unknown or already completed.
+	Prioritize(hash string) error
+	// PrioritizeAll is the batch form: the hashes go to the front in the ORDER RECEIVED, which
+	// is why it is one call and not N Prioritize calls (each of those would front-push past
+	// the previous one, reversing the batch). Unknown or already-completed hashes are ignored
+	// rather than rejected — a list of 12 episodes must not fail whole because one of them
+	// finished downloading between the render and the click.
+	PrioritizeAll(hashes []string) error
+	// SetMaxActiveDownloads caps how many incomplete torrents run at the same time; the rest
+	// wait in the queue. 0 (or negative) disables the limit. Seeding is never capped.
+	SetMaxActiveDownloads(n int)
 	// Announce forces a re-announce to all trackers and DHT. It does not override the
 	// trackers' minimum interval, so calling it in a loop achieves nothing.
 	Announce(hash string) error
