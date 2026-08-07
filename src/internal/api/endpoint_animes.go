@@ -135,12 +135,28 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		// already-downloaded animes whose current status fell outside the allowed sets (and thus
 		// weren't covered) can be refreshed individually below instead of disappearing.
 		covered := make(map[int]bool)
+		mergeFailed := false
 		for _, username := range config.AnilistUsernames {
-			for id := range mergeCurrentAniListAnimes(animeMap, username, config.ExcludedLists, config.DownloadStatuses, config.DownloadMediaStatuses) {
+			// nil (e nao um mapa vazio) significa que a busca falhou — ver mergeCurrentAniListAnimes.
+			ids := mergeCurrentAniListAnimes(animeMap, username, config.ExcludedLists, config.DownloadStatuses, config.DownloadMediaStatuses)
+			if ids == nil {
+				mergeFailed = true
+				continue
+			}
+			for id := range ids {
 				covered[id] = true
 			}
 		}
-		refreshOrphanAnimes(animeMap, covered, config.ExcludedLists)
+
+		// Com uma busca de lista falhada nao da para saber o que ficou coberto, e tratar
+		// "nao coberto" como "precisa refresh" transformaria a falha em um GetAnimeInfo por
+		// anime baixado, a cada poll do frontend. Era exatamente esse feedback que empurrava
+		// a AniList para 429 — e o 429 fazia a proxima lista falhar, prendendo o ciclo.
+		if mergeFailed {
+			logger.Logger.Warn().Msg("Skipping orphan refresh: AniList list fetch failed, coverage unknown")
+		} else {
+			refreshOrphanAnimes(animeMap, covered, config.ExcludedLists)
+		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
 		for _, animeInfo := range animeMap {
@@ -252,6 +268,8 @@ func computeAnimeFields(title anilist.Title, status anilist.MediaStatus, episode
 // mergeCurrentAniListAnimes merges animes fetched from AniList (filtered by both list status and
 // media status) into animeMap so they appear even with 0 downloaded episodes. It returns the set
 // of AnimeIDs it saw, so the caller can tell which already-downloaded animes weren't covered.
+// Retorna nil — e nao um mapa vazio — quando a busca falha, para o chamador distinguir
+// "nenhum anime coberto" de "cobertura desconhecida"; o refresh de orfaos depende disso.
 // It never removes existing animeMap entries — an anime with downloaded episodes stays visible
 // even if its current status falls outside the allowed sets (see refreshOrphanAnimes).
 func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedLists []string, statuses []string, mediaStatuses []string) map[int]bool {

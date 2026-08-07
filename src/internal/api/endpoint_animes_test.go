@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -376,6 +377,58 @@ func TestHandleAnimes(t *testing.T) {
 		}
 		if animeData["episodes_watched"].(float64) != 10 {
 			t.Errorf("expected refreshed episodes_watched=10, got %v", animeData["episodes_watched"])
+		}
+	})
+
+	// Regressao: quando a busca da lista falha, mergeCurrentAniListAnimes devolve nil e o
+	// conjunto "covered" fica vazio — o que fazia TODO anime com episodio baixado virar
+	// orfao e disparar um GetAnimeInfo individual por anime, a cada poll de /api/v1/animes.
+	// Isso multiplicava uma falha passageira da AniList em centenas de requests por minuto,
+	// levando a 429; o 429 fazia a lista falhar de novo, prendendo o daemon no ciclo.
+	t.Run("List fetch failure does not trigger per-anime refresh storm", func(t *testing.T) {
+		var perAnimeCalls int32
+		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(readBody(req), "mediaListId") {
+				atomic.AddInt32(&perAnimeCalls, 1)
+			}
+			// A AniList esta fora do ar / limitando: toda query falha.
+			return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader("rate limited"))}, nil
+		})()
+
+		var episodes []files.EpisodeStruct
+		for i := 0; i < 16; i++ {
+			episodes = append(episodes, files.EpisodeStruct{
+				EpisodeID: i, AnimeID: 900 + i, AnimeName: "Anime Baixado",
+				EpisodeName: "Anime Baixado - Episode 1", DownloadDate: time.Now(),
+			})
+		}
+
+		serverStorm := &Server{State: state, FileManager: &mockFileManager{
+			episodes: episodes,
+			configs: &files.Config{
+				AnilistUsernames:      []string{"testuser"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+			},
+		}}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil)
+		w := httptest.NewRecorder()
+		handleAnimes(serverStorm)(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 (dados locais continuam servindo), got %d", w.Code)
+		}
+		if n := atomic.LoadInt32(&perAnimeCalls); n != 0 {
+			t.Errorf("quero 0 requests por anime quando a lista falhou, veio %d", n)
+		}
+
+		var response SuccessResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if animes, ok := response.Data.([]interface{}); !ok || len(animes) != 16 {
+			t.Fatalf("animes baixados devem seguir visiveis, veio %v", response.Data)
 		}
 	})
 

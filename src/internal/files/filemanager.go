@@ -269,6 +269,24 @@ func (m *FileManager) SaveConfigs(config *Config) error {
 	return m.saveConfigsLocked(config)
 }
 
+// writeAtomic grava via arquivo temporario + rename, para que um leitor (ou uma queda de
+// energia no meio da escrita) nunca enxergue o arquivo truncado. Todo estado persistido
+// aqui e reescrito por inteiro a cada alteracao, entao um WriteFile direto deixa uma
+// janela em que o arquivo esta pela metade — foi assim que o arquivo de episodios corrompeu.
+func (m *FileManager) writeAtomic(path string, data []byte) error {
+	tmpPath := path + ".tmp"
+	if err := m.fs.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write temp file %s: %w", tmpPath, err)
+	}
+
+	if err := m.fs.Rename(tmpPath, path); err != nil {
+		_ = m.fs.Remove(tmpPath)
+		return fmt.Errorf("failed to rename temp file %s: %w", tmpPath, err)
+	}
+
+	return nil
+}
+
 // saveConfigsLocked performs an atomic write of config. Must be called with m.mu held.
 func (m *FileManager) saveConfigsLocked(config *Config) error {
 	if config == nil {
@@ -280,20 +298,21 @@ func (m *FileManager) saveConfigsLocked(config *Config) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	tmpPath := m.configPath + ".tmp"
-	if err := m.fs.WriteFile(tmpPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write config temp file: %w", err)
-	}
-
-	if err := m.fs.Rename(tmpPath, m.configPath); err != nil {
-		_ = m.fs.Remove(tmpPath)
-		return fmt.Errorf("failed to rename config temp file: %w", err)
-	}
-
-	return nil
+	return m.writeAtomic(m.configPath, data)
 }
 
+// As rotinas de episodios abaixo fazem read-modify-write no mesmo arquivo. A UI dispara
+// varias delas em paralelo (soltar/apagar varios episodios de uma vez) enquanto o daemon
+// organiza torrents, entao todas precisam segurar m.mu — senao as atualizacoes se perdem
+// e as escritas concorrentes corrompem o arquivo.
 func (m *FileManager) LoadSavedEpisodes() ([]EpisodeStruct, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.loadSavedEpisodesLocked()
+}
+
+// loadSavedEpisodesLocked must be called with m.mu held.
+func (m *FileManager) loadSavedEpisodesLocked() ([]EpisodeStruct, error) {
 	_, err := m.fs.Stat(m.episodesPath)
 	if os.IsNotExist(err) {
 		return []EpisodeStruct{}, nil
@@ -329,7 +348,7 @@ func (m *FileManager) LoadSavedEpisodes() ([]EpisodeStruct, error) {
 				}
 			}
 			// Save in new format
-			if err := m.saveEpisodesToFileJSON(episodes); err != nil {
+			if err := m.saveEpisodesLocked(episodes); err != nil {
 				return nil, fmt.Errorf("failed to migrate episodes to JSON format: %w", err)
 			}
 		}
@@ -343,8 +362,11 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 		return nil
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Load existing episodes
-	existingEpisodes, err := m.LoadSavedEpisodes()
+	existingEpisodes, err := m.loadSavedEpisodesLocked()
 	if err != nil {
 		return fmt.Errorf("failed to load existing episodes: %w", err)
 	}
@@ -371,7 +393,7 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 	allEpisodes := append(existingEpisodes, newEpisodes...)
 
 	// Save all episodes in JSON format
-	return m.saveEpisodesToFileJSON(allEpisodes)
+	return m.saveEpisodesLocked(allEpisodes)
 }
 
 // UpsertEpisodes updates existing saved episodes (matched by EpisodeID) in place and
@@ -382,7 +404,10 @@ func (m *FileManager) UpsertEpisodes(episodes []EpisodeStruct) error {
 		return nil
 	}
 
-	existing, err := m.LoadSavedEpisodes()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	existing, err := m.loadSavedEpisodesLocked()
 	if err != nil {
 		return fmt.Errorf("failed to load existing episodes: %w", err)
 	}
@@ -410,17 +435,17 @@ func (m *FileManager) UpsertEpisodes(episodes []EpisodeStruct) error {
 		}
 	}
 
-	return m.saveEpisodesToFileJSON(result)
+	return m.saveEpisodesLocked(result)
 }
 
-// saveEpisodesToFileJSON saves episodes in JSONL format
-func (m *FileManager) saveEpisodesToFileJSON(episodes []EpisodeStruct) error {
+// saveEpisodesLocked saves episodes in JSONL format. Must be called with m.mu held.
+func (m *FileManager) saveEpisodesLocked(episodes []EpisodeStruct) error {
 	content, err := SerializeEpisodes(episodes)
 	if err != nil {
 		return fmt.Errorf("failed to serialize episodes: %w", err)
 	}
 
-	if err := m.fs.WriteFile(m.episodesPath, []byte(content), 0644); err != nil {
+	if err := m.writeAtomic(m.episodesPath, []byte(content)); err != nil {
 		return fmt.Errorf("failed to write episodes to file: %w", err)
 	}
 
@@ -432,7 +457,10 @@ func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
 		return nil
 	}
 
-	savedEpisodes, err := m.LoadSavedEpisodes()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	savedEpisodes, err := m.loadSavedEpisodesLocked()
 	if err != nil {
 		return fmt.Errorf("failed to load saved episodes: %w", err)
 	}
@@ -457,16 +485,7 @@ func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
 		return nil
 	}
 
-	content, err := SerializeEpisodes(newSaved)
-	if err != nil {
-		return fmt.Errorf("failed to serialize episodes: %w", err)
-	}
-
-	if err := m.fs.WriteFile(m.episodesPath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write filtered episodes: %w", err)
-	}
-
-	return nil
+	return m.saveEpisodesLocked(newSaved)
 }
 
 // DeleteEmptyFolders remove os diretorios de anime que ficaram vazios na biblioteca depois
@@ -486,6 +505,13 @@ func (m *FileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error 
 }
 
 func (m *FileManager) LoadBlockedEpisodes() ([]int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.loadBlockedEpisodesLocked()
+}
+
+// loadBlockedEpisodesLocked must be called with m.mu held.
+func (m *FileManager) loadBlockedEpisodesLocked() ([]int, error) {
 	_, err := m.fs.Stat(m.blockedEpisodesPath)
 	if os.IsNotExist(err) {
 		return []int{}, nil
@@ -507,7 +533,10 @@ func (m *FileManager) LoadBlockedEpisodes() ([]int, error) {
 }
 
 func (m *FileManager) BlockEpisode(episodeID int) error {
-	ids, err := m.LoadBlockedEpisodes()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ids, err := m.loadBlockedEpisodesLocked()
 	if err != nil {
 		return err
 	}
@@ -519,11 +548,14 @@ func (m *FileManager) BlockEpisode(episodeID int) error {
 	}
 
 	ids = append(ids, episodeID)
-	return m.saveBlockedEpisodes(ids)
+	return m.saveBlockedEpisodesLocked(ids)
 }
 
 func (m *FileManager) UnmanageEpisode(episodeID int) error {
-	episodes, err := m.LoadSavedEpisodes()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	episodes, err := m.loadSavedEpisodesLocked()
 	if err != nil {
 		return err
 	}
@@ -541,11 +573,14 @@ func (m *FileManager) UnmanageEpisode(episodeID int) error {
 		return nil
 	}
 
-	return m.saveEpisodesToFileJSON(episodes)
+	return m.saveEpisodesLocked(episodes)
 }
 
 func (m *FileManager) UnblockEpisode(episodeID int) error {
-	ids, err := m.LoadBlockedEpisodes()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ids, err := m.loadBlockedEpisodesLocked()
 	if err != nil {
 		return err
 	}
@@ -561,10 +596,11 @@ func (m *FileManager) UnblockEpisode(episodeID int) error {
 		return nil // not found, nothing to do
 	}
 
-	return m.saveBlockedEpisodes(filtered)
+	return m.saveBlockedEpisodesLocked(filtered)
 }
 
-func (m *FileManager) saveBlockedEpisodes(ids []int) error {
+// saveBlockedEpisodesLocked must be called with m.mu held.
+func (m *FileManager) saveBlockedEpisodesLocked(ids []int) error {
 	if ids == nil {
 		ids = []int{}
 	}
@@ -572,7 +608,7 @@ func (m *FileManager) saveBlockedEpisodes(ids []int) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal blocked episodes: %w", err)
 	}
-	if err := m.fs.WriteFile(m.blockedEpisodesPath, b, 0644); err != nil {
+	if err := m.writeAtomic(m.blockedEpisodesPath, b); err != nil {
 		return fmt.Errorf("failed to write blocked episodes file: %w", err)
 	}
 	return nil
@@ -604,7 +640,7 @@ func (m *FileManager) saveAllAnimeSettings(settings map[int]AnimeSettings) error
 	if err != nil {
 		return fmt.Errorf("failed to marshal anime settings: %w", err)
 	}
-	if err := m.fs.WriteFile(m.animeSettingsPath, b, 0644); err != nil {
+	if err := m.writeAtomic(m.animeSettingsPath, b); err != nil {
 		return fmt.Errorf("failed to write anime settings file: %w", err)
 	}
 	return nil

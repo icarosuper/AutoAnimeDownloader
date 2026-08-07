@@ -17,15 +17,18 @@ func ParseEpisodes(content string) ([]EpisodeStruct, error) {
 	}
 
 	// Try JSONL format first
-	episodes, err := parseEpisodesJSONL(content)
-	if err == nil {
+	episodes, jsonlErr := parseEpisodesJSONL(content)
+	if jsonlErr == nil {
 		return episodes, nil
 	}
 
 	// Fall back to old text format
-	episodes, err = parseEpisodesTextFormat(content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse as JSONL and text format: %w", err)
+	episodes, textErr := parseEpisodesTextFormat(content)
+	if textErr != nil {
+		// Os dois erros importam: para um arquivo ja migrado (o caso normal) o erro do
+		// formato antigo e ruido — ele so reclama que a linha e JSON. Reportar apenas ele
+		// escondia a linha JSONL realmente quebrada, que e o que aponta a corrupcao.
+		return nil, fmt.Errorf("failed to parse as JSONL (%w) and as legacy text format (%v)", jsonlErr, textErr)
 	}
 
 	return episodes, nil
