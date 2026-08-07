@@ -1042,6 +1042,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/torrents/prioritize": {
+            "post": {
+                "description": "Moves every listed torrent to the FRONT of the download queue, in the order received, and starts as many as max_concurrent_downloads allows — whatever is pushed past the limit pauses. Unknown or already-completed hashes are ignored rather than rejected: a list of episodes must not fail whole because one of them finished between the render and the click. Use this instead of N calls to /torrents/{hash}/prioritize, which would reverse the batch.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "Prioritize several torrents at once",
+                "parameters": [
+                    {
+                        "description": "Info hashes, most important first",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.PrioritizeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/torrents/{hash}": {
             "delete": {
                 "description": "Removes a torrent and every saved episode sharing its hash, as a single unit (the deletion boundary is the torrent, not the episode, so a batch's episodes always leave together). By default this frees both the seeding copy and the library hardlink (same inode); keep_data=true keeps both instead. block=true additionally blocks every episode in the group against automatic re-download.",
@@ -1210,9 +1262,59 @@ const docTemplate = `{
                 }
             }
         },
+        "/torrents/{hash}/prioritize": {
+            "post": {
+                "description": "Moves a torrent to the FRONT of the download queue and starts it immediately, pausing the least-progressed active torrent when that would exceed max_concurrent_downloads. Nothing is lost by the demotion — rain keeps the piece bitfield across a stop. A torrent that is already downloading is a no-op; an already-completed one is a 500.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "Prioritize a torrent",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Torrent info hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/torrents/{hash}/resume": {
             "post": {
-                "description": "Restarts a paused torrent and re-arms its completion listener.",
+                "description": "Puts a paused torrent at the BACK of the download queue and starts it if a slot is free — with max_concurrent_downloads set, resuming does not mean \"start now\" (use /prioritize for that). Re-arms the completion listener. A completed (seeding) torrent bypasses the queue.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1402,6 +1504,21 @@ const docTemplate = `{
                 }
             }
         },
+        "api.PrioritizeRequest": {
+            "type": "object",
+            "properties": {
+                "hashes": {
+                    "description": "Hashes is applied IN THE ORDER RECEIVED — the frontend decides the order, because it is\nwhat knows what the user clicked.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "0123456789abcdef0123456789abcdef01234567"
+                    ]
+                }
+            }
+        },
         "api.StatusResponse": {
             "type": "object",
             "properties": {
@@ -1506,6 +1623,11 @@ const docTemplate = `{
                     "type": "number",
                     "example": 0.48
                 },
+                "queue_position": {
+                    "description": "QueuePosition is the 1-based place in the download queue's waiting line; 0 means the\ntorrent is not waiting (active, completed, or paused by the user). Not a pointer: 0\nalready says \"not queued\" without ambiguity — there is no position 0.",
+                    "type": "integer",
+                    "example": 3
+                },
                 "seeded_for_seconds": {
                     "type": "integer",
                     "example": 3600
@@ -1578,6 +1700,10 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "max_concurrent_downloads": {
+                    "description": "MaxConcurrentDownloads limita quantos torrents INCOMPLETOS baixam ao mesmo tempo; o\nexcedente espera na fila (torrents.queue). 0 desliga o limite. Seeding nunca conta.\n\nNao precisa de migracao: LoadConfigs desserializa POR CIMA de getDefaultConfig(),\nentao um config.json anterior a este campo ja carrega valendo o default.",
+                    "type": "integer"
                 },
                 "max_episodes_per_anime": {
                     "type": "integer"

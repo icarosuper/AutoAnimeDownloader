@@ -50,6 +50,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
+| `queue.json` | `~/.autoAnimeDownloader/` | Download queue state: `{"order": [...], "paused": [...]}`. Lives next to the resume database because it is torrent-client state, not user config. Missing/corrupted = rebuilt from `AddedAt`, never fatal — see decisions.md #41 |
 | `download_root.id` | `~/.autoAnimeDownloader/` | Id of the download folder the session is bound to. Its twin, `.aad_root`, lives **inside** the download folder; the pair is how a moved/trashed/replaced folder is detected — see decisions.md #34 |
 
 Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). See `configsFolder` in `files/filemanager.go` and `getJobsFilePath` / `getSessionDBPath` / `getPIDFilePath` in `cmd/daemon/main.go`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
@@ -91,6 +92,8 @@ Key endpoints:
 | `POST` | `/api/v1/torrents/{hash}/pause` | `handleTorrentPause` | `endpoint_torrents.go` |
 | `POST` | `/api/v1/torrents/{hash}/resume` | `handleTorrentResume` | `endpoint_torrents.go` |
 | `POST` | `/api/v1/torrents/{hash}/announce` | `handleTorrentAnnounce` | `endpoint_torrents.go` |
+| `POST` | `/api/v1/torrents/{hash}/prioritize` | `handleTorrentPrioritize` | `endpoint_torrents.go` |
+| `POST` | `/api/v1/torrents/prioritize` | `handleTorrentsPrioritize` | `endpoint_torrents.go` — batch, body `{"hashes":[...]}`, applied in the order received; unknown/completed hashes ignored |
 | `DELETE` | `/api/v1/torrents/{hash}?keep_data=<bool>&block=<bool>` | `handleTorrentDelete` | `endpoint_torrents.go` |
 | `WS` | `/api/v1/ws` | `handleWebSocket` | `websocket.go` |
 
@@ -437,16 +440,20 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | Symbol | Purpose |
 |--------|---------|
-| `TorrentBackend` interface | `Ensure(savePath)`, `ConsumeRootSwap()`, `Add(magnet)`, `List()`, `Get(hash)`, `Remove(hash, keepData)`, `Pause(hash)`, `Resume(hash)`, `Announce(hash)`, `SetCallbacks(onComplete, onFailed)`, `Close()` |
-| `TorrentBackend.Pause/Resume/Announce(hash)` | Per-torrent controls. `Pause` stops the torrent (non-blocking — `stopping` for up to ~5s before `stopped`); `Resume` re-arms the completion listener that pausing consumed; `Announce` forces a tracker/DHT re-announce without overriding the trackers' minimum interval |
+| `TorrentBackend` interface | `Ensure(savePath)`, `ConsumeRootSwap()`, `Add(magnet)`, `List()`, `Get(hash)`, `Remove(hash, keepData)`, `Pause(hash)`, `Resume(hash)`, `Announce(hash)`, `Prioritize(hash)`, `PrioritizeAll(hashes)`, `SetMaxActiveDownloads(n)`, `SetCallbacks(onComplete, onFailed)`, `Close()` |
+| `TorrentBackend.Pause/Resume/Announce(hash)` | Per-torrent controls, all queue-aware. `Pause` stops the torrent (non-blocking — `stopping` for up to ~5s before `stopped`) **and marks it paused-by-the-user** in the queue, so it keeps its place but never starts on its own; `Resume` puts it at the **back** of the queue and re-arms the completion listener that pausing consumed — it is not "start now" (see decision 41). Both **bypass the queue entirely for a completed torrent** (seeding never held a slot). `Announce` forces a tracker/DHT re-announce without overriding the trackers' minimum interval |
+| `TorrentBackend.Prioritize(hash)` | Moves the torrent to the **front** of the queue and starts it, demoting whichever active torrent is now last in queue order when that exceeds the limit (position, not progress). Errors on an unknown or already-completed hash. Backs the row's "Priorizar" button and the manual-download endpoints (`daemon.addAndPrioritize`) |
+| `TorrentBackend.PrioritizeAll(hashes)` | Batch form, applied **in the order received** — one call, because N `Prioritize` calls would front-push past each other and reverse the batch. Unknown/completed hashes are ignored, not rejected. Backs the group and bulk "Priorizar" buttons |
+| `TorrentBackend.SetMaxActiveDownloads(n)` | Caps concurrent **incomplete** torrents; `0` disables the cap. Fed by `Config.MaxConcurrentDownloads` |
 | `TorrentBackend.ConsumeRootSwap()` | Reports **and clears** a swap latched by `Ensure`: the download folder was moved/trashed/replaced. Latched rather than returned by `Ensure` because the manual-download endpoints call `Ensure` too and must not swallow it — only the verification pass consumes it (decisions.md #34) |
-| `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<save_path>/<id>`), `Completed`, `Status` (API slug from `statusSlug`), plus progress fields (`BytesCompleted/Total/Uploaded`, `DownloadSpeed`, `UploadSpeed`, `PeersTotal`, `PiecesHave/Total`, `ETASeconds`, `SeededForSeconds`) — all filled from a single `Stats()` call per torrent in `toInfo` |
+| `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<save_path>/<id>`), `Completed`, `Status` (API slug from `statusSlug`), plus progress fields (`BytesCompleted/Total/Uploaded`, `DownloadSpeed`, `UploadSpeed`, `PeersTotal`, `PiecesHave/Total`, `ETASeconds`, `SeededForSeconds`, `AddedAt`) — all filled from a single `Stats()` call per torrent in `toInfo`. `QueuePosition` is the exception: 1-based place in the queue's waiting line, written by `queue.markQueued`, `0` = not waiting |
 
 **`status.go`**
 
 | Symbol | Purpose |
 |--------|---------|
 | `statusSlug(torrent.Status)` | Maps rain's status enum to the stable API slug (`stopped`, `downloading_metadata`, `allocating`, `verifying`, `downloading`, `seeding`, `stopping`, `unknown`) — never `Status.String()`, which is display text (`"Downloading Metadata"`) and can be reworded by a library upgrade |
+| `StatusStopped` / `StatusStopping` / `StatusQueued` | The three slugs other code compares by name. `queued` is the only slug rain never produces — `queue.markQueued` writes it (decision 41) |
 
 **`session.go`** — rain-backed implementation.
 
@@ -459,16 +466,33 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `completedFromStats(st)` | `st.Pieces.Total > 0 && st.Pieces.Have >= st.Pieces.Total` — deliberately independent of `Status`, because pausing a finished torrent takes it out of `Seeding` (see decision 30) |
 | `parseInfoHash(magnet)` | Extracts the lowercase-hex info hash from a magnet link |
 
+**`queue.go`** — the ordered list of **every** incomplete torrent, the concurrency limit, and the manual priority override. Owned by `SessionManager` (not `Session`), so it survives a session being torn down and rebuilt.
+
+| Symbol | Purpose |
+|--------|---------|
+| `queueOps` interface | `list()`, `pause()`, `resume()` — the **raw** delegations, all unexported. Going through `List`/`Pause`/`Resume` would re-enter the queue: infinite recursion for pause/resume, deadlock on `queue.mu` for list |
+| `queue` struct | `limit`, `order []string` (every incomplete torrent, in download order), `paused []string` (paused by the user; incomplete hashes only), `queued map[string]int` (hash → 1-based waiting position, the output of `enforce`'s step 3), `path`/`lastSaved` (persistence), `seedPaused` (one-shot upgrade latch) |
+| `queue.enforce(ops)` | The single decision point, a reconciliation in five steps: **0** bail out when `list()` is `nil` (no session — `nil` ≠ empty session, see decision 41); **1** prune hashes that are gone or completed; **2** append missing incompletes at the end, ordered by `AddedAt`; **3** compute the wanted set and the waiting positions; **4** apply the diff **iterating `order`, never the session** (that would pause every seeder), leaving `stopping` alone; **5** save when changed. Triggered by `Add`, the completion callback (`wrapComplete`), `Prioritize`/`PrioritizeAll`, `Resume`, `Pause`, `Remove`, `SetMaxActiveDownloads` and the `Ensure` that creates a session |
+| `queue.markQueued(infos)` | Writes the `queued` slug **and** `QueuePosition` from `q.queued` — not from `order`, which now holds the active ones too. Called by `SessionManager.List`/`Get`, never by `enforce` |
+| `queue.prioritize(hashes)` | Moves to the front the hashes already in `order` and **inserts** the ones that are not, in the order received; clears them from `paused` |
+| `queue.pushBack/markPaused/drop/setLimit` | Queue-order primitives. `pushBack` = `Resume` (to the **end**, and out of `paused`); `markPaused` = `Pause` (into `paused`, position untouched); `drop` = `Remove` |
+| `queue.load(path)` / `queue.save()` | `queue.json` next to the resume DB. `load` runs once in `NewSessionManager`; a **missing** file arms `seedPaused`, a corrupted one only warns. `save` is tmp + `Rename`, only when the marshaled state differs from `lastSaved`, and `lastSaved` only advances after a successful `Rename` |
+
+**Lock order: `queue.mu` → `SessionManager.mu`, never the reverse.** `enforce` holds `queue.mu` while calling `list`/`pause`/`resume`, so every `SessionManager` method releases its own lock **before** touching the queue. A reentrant `RLock` deadlocks the moment a writer queues between the two acquisitions.
+
 **`sessionmanager.go`** — lifecycle owner.
 
 | Symbol | Purpose |
 |--------|---------|
 | `SessionManager` struct | Owns the current `Session`; recreates it when `save_path` changes **or when the download root was swapped**; keeps `session.db` stable across changes |
-| `NewSessionManager(dbPath)` | Constructor; derives `download_root.id` from `dbPath`'s folder |
+| `NewSessionManager(dbPath)` | Constructor; derives `download_root.id` and `queue.json` from `dbPath`'s folder, and loads the persisted queue |
 | `SessionManager.Ensure(savePath)` | Creates/recreates the session; returns `true` when a new session was made (caller reconciles); latches `pendingSwap`; `ErrSessionNotReady` if `savePath==""` |
 | `SessionManager.ConsumeRootSwap()` | Reads and clears `pendingSwap` |
 | `SessionManager.checkRoot(savePath)` | Compares `download_root.id` with `<savePath>/.aad_root`; mismatch ⇒ swapped. No id on record (first run/upgrade) is never a swap |
-| `SessionManager.Pause/Resume/Announce(hash)` | Delegate to the current `Session` under the read lock; `ErrSessionNotReady` if no session exists |
+| `SessionManager.Pause/Resume/Announce/Prioritize(hash)` | Delegate to the current `Session` under the read lock, then run the queue **outside** it; `ErrSessionNotReady` if no session exists. `Pause`/`Resume` of a **completed** torrent skip the queue bookkeeping entirely |
+| `SessionManager.PrioritizeAll(hashes)` | Batch prioritize. It must **not** call `Get`/`List` — both go through `markQueued`, which takes `queue.mu`; `Prioritize(hash)` validates *before* delegating here, never during |
+| `SessionManager.list()` / `pause()` / `resume()` | The unexported `queueOps` implementation — raw delegation, no queue side effects |
+| `SessionManager.wrapComplete(cb)` | Wraps the caller's completion handler so `enforce` runs first: a torrent finishing is the moment a slot frees. The raw handler stays in `m.onComplete` so `Ensure` re-wraps per session instead of stacking wrappers |
 | `ErrSessionNotReady` | Returned when no session exists yet (incomplete config — `completed_anime_path` empty, so `Config.DownloadPath()` can't be derived) |
 
 **`rootmarker.go`** — download-root identity.
@@ -545,7 +569,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `StatusBadge.svelte` | Colored badge for daemon/episode status |
 | `ConfirmDialog.svelte` | Modal confirmation dialog. Binds the native `open` attribute on `<dialog>` (needed so a closed dialog is out of the a11y tree/role queries even with the daisyUI `.modal-open` class applied) and exposes an optional `<slot />` for callers that need extra content between the message and the action buttons |
 | `TorrentDeleteDialog.svelte` | Wraps `ConfirmDialog` for the Downloads delete flow (single row or bulk selection). Two checkboxes — delete files, block re-download — both default checked; emits `confirm` with `{keepData, block}` |
-| `DownloadsToolbar.svelte` | Search input + four filter pills with counts (All/Downloading/Seeding/Problems, replacing the old status multi-select dropdown) + bulk action bar (pause/resume/announce/delete/deselect) for `Downloads.svelte`. The bulk group is always rendered — dimmed and disabled with an empty selection — rather than appearing and disappearing, which used to shift the list on every click. Controlled: holds no state of its own, just relays events; the view state lives in `Downloads.svelte` via `torrentFilters.ts`. Pill counts are computed from the search-filtered list only, never the active filter, so picking one pill doesn't zero the other three |
+| `DownloadsToolbar.svelte` | Search input + four filter pills with counts (All/Downloading/Seeding/Problems, replacing the old status multi-select dropdown) + bulk action bar (prioritize/pause/resume/announce/delete/deselect) for `Downloads.svelte`. The bulk group is always rendered — dimmed and disabled with an empty selection — rather than appearing and disappearing, which used to shift the list on every click. Controlled: holds no state of its own, just relays events; the view state lives in `Downloads.svelte` via `torrentFilters.ts`. Pill counts are computed from the search-filtered list only, never the active filter, so picking one pill doesn't zero the other three |
 | `Toasts.svelte` | Toast notification container |
 | `ErrorMessage.svelte` | Inline error display |
 | `Input.svelte` | Styled input field: label + control + help line, on the redesign's tokens. `subtitle` is a `<p>` referenced by `aria-describedby`, not the second `<label>` it used to be (one control can't have two labels). Only `Config.svelte` consumes it |
@@ -594,9 +618,9 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | File | Export | Purpose |
 |------|--------|---------|
-| `torrentFilters.ts` | `ViewState`, `filterTorrents`, `sortTorrents`, `encodeViewState`, `decodeViewState`, `DEFAULT_VIEW_STATE`, `isProblemTorrent`, `groupKey`, `groupTorrents`, `applyFilterPreset`, `activeFilterPreset`, `DOWNLOADING_SLUGS` | Downloads screen search/status-filter/sort/grouping, and its round-trip to/from the URL querystring (`decodeViewState` is tolerant of garbage — unknown values fall back to defaults). `ViewState` also carries `problems` (the pill that can't be expressed as status slugs — see `isProblemTorrent`: actively transferring, not paused, not complete, zero peers) and `closed` (**collapsed** accordion groups, not open ones, so "everything expanded" serializes to an empty querystring). The four filter pills are presets over `statuses`/`problems`, so a pre-existing `?status=<slug>` deep link still filters exactly as before — it just lights up no pill |
+| `torrentFilters.ts` | `ViewState`, `filterTorrents`, `sortTorrents`, `encodeViewState`, `decodeViewState`, `DEFAULT_VIEW_STATE`, `isProblemTorrent`, `groupKey`, `groupTorrents`, `applyFilterPreset`, `activeFilterPreset`, `DOWNLOADING_SLUGS`, `prioritizeOrder`, `selectionPrioritizeOrder` | Downloads screen search/status-filter/sort/grouping, and its round-trip to/from the URL querystring (`decodeViewState` is tolerant of garbage — unknown values fall back to defaults). `ViewState` also carries `problems` (the pill that can't be expressed as status slugs — see `isProblemTorrent`: actively transferring, not paused, not complete, zero peers) and `closed` (**collapsed** accordion groups, not open ones, so "everything expanded" serializes to an empty querystring). The four filter pills are presets over `statuses`/`problems`, so a pre-existing `?status=<slug>` deep link still filters exactly as before — it just lights up no pill. `prioritizeOrder` (group button: ascending `episode_number`, batches/numberless last) and `selectionPrioritizeOrder` (bulk button: the click order the selection `Set` preserves) decide the order sent to `POST /torrents/prioritize`, which applies it verbatim |
 | `torrentsByEpisode.ts` | `indexTorrentsByEpisode(torrents, episodes)` | Joins torrents onto episodes by `episode.episode_hash === torrent.hash`; a batch torrent's hash appears under each episode it covers. Used by `AnimeDetail.svelte` |
-| `torrentStatus.ts` | `STATUS_SLUGS`, `statusLabel`, `statusClass` | Shared status-badge label/class for a torrent's `status` slug (must be kept in sync by hand with `statusSlug()` in `src/internal/torrents/status.go`); used by `Downloads.svelte`, `DownloadsToolbar.svelte`, and `AnimeDetail.svelte` |
+| `torrentStatus.ts` | `STATUS_SLUGS`, `statusLabel`, `statusClass` | Shared status-badge label/class for a torrent's `status` slug (must be kept in sync by hand with `statusSlug()` in `src/internal/torrents/status.go`); used by `Downloads.svelte`, `DownloadsToolbar.svelte`, and `AnimeDetail.svelte`. `statusLabel` stays **pure and position-free** — the queue position is rendered by the Downloads row itself, because the same function feeds the toolbar's status filter, where "Queued #7" means nothing |
 
 **API client** (`src/lib/api/client.ts`):
 

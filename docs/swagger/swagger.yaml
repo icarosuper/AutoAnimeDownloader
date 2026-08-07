@@ -101,6 +101,18 @@ definitions:
           type: string
         type: array
     type: object
+  api.PrioritizeRequest:
+    properties:
+      hashes:
+        description: |-
+          Hashes is applied IN THE ORDER RECEIVED — the frontend decides the order, because it is
+          what knows what the user clicked.
+        example:
+        - 0123456789abcdef0123456789abcdef01234567
+        items:
+          type: string
+        type: array
+    type: object
   api.StatusResponse:
     properties:
       disk_free:
@@ -185,6 +197,13 @@ definitions:
           buildTorrentResponse. 0 while BytesTotal and PiecesTotal are both unknown.
         example: 0.48
         type: number
+      queue_position:
+        description: |-
+          QueuePosition is the 1-based place in the download queue's waiting line; 0 means the
+          torrent is not waiting (active, completed, or paused by the user). Not a pointer: 0
+          already says "not queued" without ambiguity — there is no position 0.
+        example: 3
+        type: integer
       seeded_for_seconds:
         example: 3600
         type: integer
@@ -234,6 +253,14 @@ definitions:
         items:
           type: string
         type: array
+      max_concurrent_downloads:
+        description: |-
+          MaxConcurrentDownloads limita quantos torrents INCOMPLETOS baixam ao mesmo tempo; o
+          excedente espera na fila (torrents.queue). 0 desliga o limite. Seeding nunca conta.
+
+          Nao precisa de migracao: LoadConfigs desserializa POR CIMA de getDefaultConfig(),
+          entao um config.json anterior a este campo ja carrega valendo o default.
+        type: integer
       max_episodes_per_anime:
         type: integer
       notifications:
@@ -1109,11 +1136,51 @@ paths:
       summary: Pause a torrent
       tags:
       - torrents
+  /torrents/{hash}/prioritize:
+    post:
+      consumes:
+      - application/json
+      description: Moves a torrent to the FRONT of the download queue and starts it
+        immediately, pausing the least-progressed active torrent when that would exceed
+        max_concurrent_downloads. Nothing is lost by the demotion — rain keeps the
+        piece bitfield across a stop. A torrent that is already downloading is a no-op;
+        an already-completed one is a 500.
+      parameters:
+      - description: Torrent info hash
+        in: path
+        name: hash
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Prioritize a torrent
+      tags:
+      - torrents
   /torrents/{hash}/resume:
     post:
       consumes:
       - application/json
-      description: Restarts a paused torrent and re-arms its completion listener.
+      description: Puts a paused torrent at the BACK of the download queue and starts
+        it if a slot is free — with max_concurrent_downloads set, resuming does not
+        mean "start now" (use /prioritize for that). Re-arms the completion listener.
+        A completed (seeding) torrent bypasses the queue.
       parameters:
       - description: Torrent info hash
         in: path
@@ -1140,6 +1207,45 @@ paths:
           schema:
             $ref: '#/definitions/api.SuccessResponse'
       summary: Resume a torrent
+      tags:
+      - torrents
+  /torrents/prioritize:
+    post:
+      consumes:
+      - application/json
+      description: 'Moves every listed torrent to the FRONT of the download queue,
+        in the order received, and starts as many as max_concurrent_downloads allows
+        — whatever is pushed past the limit pauses. Unknown or already-completed hashes
+        are ignored rather than rejected: a list of episodes must not fail whole because
+        one of them finished between the render and the click. Use this instead of
+        N calls to /torrents/{hash}/prioritize, which would reverse the batch.'
+      parameters:
+      - description: Info hashes, most important first
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.PrioritizeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Prioritize several torrents at once
       tags:
       - torrents
 schemes:

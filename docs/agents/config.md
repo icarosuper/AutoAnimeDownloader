@@ -14,6 +14,7 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 | `CheckInterval` | `check_interval` | `int` | `10` | Minutes between verification loops. Must be > 0 |
 | `MaxEpisodesPerAnime` | `max_episodes_per_anime` | `int` | `12` | Max saved episodes per anime before oldest are deleted. Must be > 0 |
 | `EpisodeRetryLimit` | `episode_retry_limit` | `int` | `5` | Max magnet links to try per episode before giving up. Must be >= 0 |
+| `MaxConcurrentDownloads` | `max_concurrent_downloads` | `int` | `3` | How many **incomplete** torrents may run at once; the rest wait in the download queue (`torrents/queue.go`, status slug `queued`). `0` = no limit. Seeding is never limited. Must be >= 0. Applied by `SetMaxActiveDownloads` from three places: boot (`cmd/daemon/main.go`), `PUT /config`, and the top of every `AnimeVerification`. No migration needed — `LoadConfigs` unmarshals **over** `getDefaultConfig()`, so a `config.json` written before this field loads with the default already in place |
 | `DeleteWatchedEpisodes` | `delete_watched_episodes` | `bool` | `true` | Whether to auto-delete episodes marked as watched on Anilist |
 | `WatchedEpisodesToKeep` | `watched_episodes_to_keep` | `int` | `0` | Number of watched episodes to keep before deleting. 0 = delete all watched. Must be >= 0 |
 | `ExcludedLists` | `excluded_lists` | `[]string` | `[]` | Names of Anilist custom lists to exclude from downloads |
@@ -71,7 +72,7 @@ If missing, daemon opens browser to `http://localhost:<port>/#/config?missingCon
 - `anilist_usernames` — at least one entry (after legacy-field migration), `completed_anime_path` — non-empty
 - `completed_anime_path` must support hardlinks — verified with a single-path probe (`Librarian.ProbePath`); a filesystem without hardlink support is rejected with HTTP 400
 - `check_interval`, `max_episodes_per_anime` — > 0
-- `episode_retry_limit`, `watched_episodes_to_keep` — >= 0
+- `episode_retry_limit`, `watched_episodes_to_keep`, `max_concurrent_downloads` — >= 0
 - `save_path` is always zeroed on the incoming config before it is persisted, regardless of what the client sends
 
 ## Webhook Template Variables
