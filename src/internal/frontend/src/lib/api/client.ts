@@ -212,8 +212,9 @@ export interface AnimeEpisodeInfo {
 }
 
 export interface AnimeDetailResponse {
+  // anime_id e o id da MIDIA na AniList: serve de chave interna e tambem monta o link
+  // anilist.co/anime/{id}. Nao ha mais um anilist_id separado.
   anime_id: number
-  anilist_id?: number
   total_episodes: number
   progress: number
   status: string

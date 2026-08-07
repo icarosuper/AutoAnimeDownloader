@@ -12,32 +12,36 @@ import (
 	"time"
 )
 
-// mockAnimeDetailResponse builds a minimal AniList MediaListDetailResponse JSON body with two
-// airing nodes: episode 1 (id 1) and episode 2 (id 2). Used to drive handleAnimeEpisodes without
-// a real network call.
+// mockAnimeDetailResponse builds a minimal AniList list-entry JSON body with two airing nodes:
+// episode 1 (id 1) and episode 2 (id 2). Used to drive handleAnimeEpisodes without a real
+// network call. The route id is the MEDIA id (21), not the entry id (1).
 const mockAnimeDetailResponse = `{
 	"data": {
-		"MediaList": {
-			"id": 1,
-			"status": "CURRENT",
-			"progress": 0,
-			"customLists": {},
-			"media": {
-				"id": 21,
-				"episodes": 24,
-				"format": "TV",
-				"status": "RELEASING",
-				"title": {"english": "Test Anime", "romaji": "Test Anime"},
-				"synonyms": [],
-				"relations": {"edges": []},
-				"coverImage": {"large": "", "medium": ""},
-				"airingSchedule": {
-					"nodes": [
-						{"id": 1, "episode": 1, "timeUntilAiring": -100, "airingAt": 111},
-						{"id": 2, "episode": 2, "timeUntilAiring": -50, "airingAt": 222}
-					]
+		"Page": {
+			"mediaList": [
+				{
+					"id": 1,
+					"status": "CURRENT",
+					"progress": 0,
+					"customLists": {},
+					"media": {
+						"id": 21,
+						"episodes": 24,
+						"format": "TV",
+						"status": "RELEASING",
+						"title": {"english": "Test Anime", "romaji": "Test Anime"},
+						"synonyms": [],
+						"relations": {"edges": []},
+						"coverImage": {"large": "", "medium": ""},
+						"airingSchedule": {
+							"nodes": [
+								{"id": 1, "episode": 1, "timeUntilAiring": -100, "airingAt": 111},
+								{"id": 2, "episode": 2, "timeUntilAiring": -50, "airingAt": 222}
+							]
+						}
+					}
 				}
-			}
+			]
 		}
 	}
 }`
@@ -62,7 +66,7 @@ func TestHandleAnimeEpisodes_EpisodeHash(t *testing.T) {
 	fm := &mockFileManager{episodes: []files.EpisodeStruct{
 		{
 			EpisodeID:    1,
-			AnimeID:      1,
+			AnimeID:      21,
 			EpisodeHash:  "0123456789abcdef0123456789abcdef01234567",
 			EpisodeName:  "Test Anime - Episode 1",
 			DownloadDate: time.Now(),
@@ -70,8 +74,8 @@ func TestHandleAnimeEpisodes_EpisodeHash(t *testing.T) {
 	}}
 	server := &Server{FileManager: fm}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/animes/1/episodes", nil)
-	req.SetPathValue("id", "1")
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/animes/21/episodes", nil)
+	req.SetPathValue("id", "21")
 	w := httptest.NewRecorder()
 	handleAnimeEpisodes(server)(w, req)
 

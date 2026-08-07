@@ -168,7 +168,7 @@ func shouldShowTray() bool {
 }
 
 // runDebugAnime runs a one-shot debug pass for a single anime (AniList
-// MediaList ID) and exits. Skips the PID file, API server, tray, and loop
+// media ID) and exits. Skips the PID file, API server, tray, and loop
 // entirely — this is a read-only diagnostic, not a daemon startup path.
 // Output goes to a new .debug_<animeId>_<N>/ directory in the current
 // working directory (debug.jsonl trace + summary.json) — nothing is written
@@ -241,7 +241,7 @@ func ensureStartupSession(manager *torrents.SessionManager, fileManager *files.F
 }
 
 func main() {
-	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList MediaList ID and exit (no daemon, no downloads)")
+	debugAnimeID := flag.Int("debug-anime", 0, "Run a one-shot debug pass for this AniList media ID and exit (no daemon, no downloads)")
 	flag.Parse()
 
 	if *debugAnimeID > 0 {
@@ -311,6 +311,14 @@ func main() {
 	migrationErr := daemon.MigrateSavePath(files.NewOSFileSystem(), fileManager, torrentManager)
 	if migrationErr != nil {
 		logger.Logger.Error().Err(migrationErr).Msg("Failed to migrate the legacy save path; the verification pass will retry")
+	}
+	// Converte os AnimeID gravados de id de entrada para id de midia (decisions.md #43). Roda
+	// no boot, e nao so no passe de verificacao, porque a API ja comeca a servir /animes antes
+	// do primeiro tick — e com os ids no formato antigo a listagem duplica animes que estao em
+	// mais de uma conta. Falhar aqui nao e fatal: o passe de verificacao retenta e aborta se
+	// ainda nao tiver funcionado.
+	if err := daemon.MigrateAnimeIDsToMedia(fileManager); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to migrate anime IDs to AniList media IDs; the verification pass will retry")
 	}
 	// Defers run LIFO: register Close first so jobQueue.Stop() (which may run organize jobs
 	// that use the session) runs before the session is closed.

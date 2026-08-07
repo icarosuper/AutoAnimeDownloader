@@ -31,18 +31,21 @@ func addAndPrioritize(backend torrents.TorrentBackend, magnet string) (string, e
 }
 
 type animeDetails struct {
-	mediaList  anilist.MediaListDetail
+	mediaList  anilist.MediaList
 	title      string
 	isFinished bool
 }
 
-func resolveAnimeDetails(animeId int) (*animeDetails, error) {
-	detail, err := anilist.GetAnimeInfo(animeId)
+// resolveAnimeDetails busca um anime pelo MEDIA id, colapsando as contas configuradas.
+func resolveAnimeDetails(animeId int, usernames []string) (*animeDetails, error) {
+	ml, err := anilist.GetAnimeInfo(animeId, usernames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get anime info: %w", err)
 	}
+	if ml == nil {
+		return nil, fmt.Errorf("anime %d is not in any configured AniList account", animeId)
+	}
 
-	ml := detail.Data.MediaList
 	title := ""
 	if ml.Media.Title.English != nil && *ml.Media.Title.English != "" {
 		title = *ml.Media.Title.English
@@ -51,7 +54,7 @@ func resolveAnimeDetails(animeId int) (*animeDetails, error) {
 	}
 
 	return &animeDetails{
-		mediaList:  ml,
+		mediaList:  *ml,
 		title:      title,
 		isFinished: ml.Media.Status == anilist.MediaStatusFinished,
 	}, nil
@@ -74,7 +77,7 @@ func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId in
 		return files.EpisodeStruct{}, err
 	}
 
-	details, err := resolveAnimeDetails(animeId)
+	details, err := resolveAnimeDetails(animeId, configs.AnilistUsernames)
 	if err != nil {
 		return files.EpisodeStruct{}, err
 	}
@@ -109,7 +112,7 @@ func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int,
 		return nil, err
 	}
 
-	details, err := resolveAnimeDetails(animeId)
+	details, err := resolveAnimeDetails(animeId, configs.AnilistUsernames)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +156,7 @@ func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episode
 		return files.EpisodeStruct{}, err
 	}
 
-	details, err := resolveAnimeDetails(animeId)
+	details, err := resolveAnimeDetails(animeId, configs.AnilistUsernames)
 	if err != nil {
 		return files.EpisodeStruct{}, err
 	}

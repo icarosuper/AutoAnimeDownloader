@@ -13,30 +13,6 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// mediaListFromDetail adapts the single-anime GetAnimeInfo response into the
-// anilist.MediaList shape that checkEpisode/resolveSearchStrategy expect.
-// CustomLists is left empty — GetAnimeInfo doesn't fetch per-anime custom-list
-// membership, so excluded-list checks always evaluate false here.
-// ponytail: known gap, not fixed — called out in RunAnimeDebug's warning banner.
-func mediaListFromDetail(d anilist.MediaListDetail) anilist.MediaList {
-	episodes := d.Media.Episodes
-	return anilist.MediaList{
-		Id:       d.Id,
-		Status:   d.Status,
-		Progress: d.Progress,
-		Media: anilist.Media{
-			Status:         d.Media.Status,
-			Format:         d.Media.Format,
-			Title:          d.Media.Title,
-			Episodes:       &episodes,
-			Synonyms:       d.Media.Synonyms,
-			Relations:      d.Media.Relations,
-			CoverImage:     d.Media.CoverImage,
-			AiringSchedule: d.Media.AiringSchedule,
-		},
-	}
-}
-
 // DebugSummary is the machine-readable summary of a RunAnimeDebug pass,
 // written to summary.json by the caller.
 type DebugSummary struct {
@@ -62,13 +38,12 @@ type EpisodeDebugResult struct {
 // log trace.
 //
 // ponytail: episodes are always treated as not-yet-downloaded (no
-// episodes.json / torrent-client check) and excluded-list membership is never
-// checked (GetAnimeInfo doesn't return it). Add both if this tool starts
-// producing false positives in practice.
+// episodes.json / torrent-client check). Add it if this tool starts producing
+// false positives in practice.
 func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerInterface) (*DebugSummary, error) {
-	logger.Logger.Warn().Msg("Debug mode: episodes are always treated as not-yet-downloaded, and excluded-list membership is not checked. Results may differ from a real run for those two reasons.")
+	logger.Logger.Warn().Msg("Debug mode: episodes are always treated as not-yet-downloaded. Results may differ from a real run for that reason.")
 
-	details, err := resolveAnimeDetails(animeId)
+	details, err := resolveAnimeDetails(animeId, configs.AnilistUsernames)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +52,8 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		logger.Logger.Info().RawJSON("anilist_response", raw).Msg("Fetched anime from AniList")
 	}
 
-	anime := mediaListFromDetail(details.mediaList)
-	animeTitle := getAnimeTitleSafe(anime)
+	anime := details.mediaList
+	animeTitle := details.title
 
 	customQuery := ""
 	if settings, err := fileManager.LoadAnimeSettings(animeId); err == nil && settings != nil {

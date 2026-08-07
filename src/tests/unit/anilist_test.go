@@ -2,6 +2,7 @@ package unit
 
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -19,23 +20,24 @@ func mockAniListResponse(body string, status int) func() {
 }
 
 func TestAniListModule_GetAnimeInfo_ParsesSynonymsAndRelations(t *testing.T) {
-	json := `{"data": {"MediaList": {"id": 1, "status": "CURRENT", "progress": 2, "media": {
-		"episodes": 12, "format": "TV", "status": "RELEASING",
+	json := `{"data": {"Page": {"mediaList": [{"id": 1, "status": "CURRENT", "progress": 2, "media": {
+		"id": 21, "episodes": 12, "format": "TV", "status": "RELEASING",
 		"title": {"english": "My Anime", "romaji": "Boku no Anime"},
 		"synonyms": ["My Anime Season 2"],
 		"relations": {"edges": [{"relationType": "PREQUEL", "node": {"title": {"romaji": "Prequel"}, "episodes": 12}}]},
 		"coverImage": {"large": "", "medium": ""},
 		"airingSchedule": {"nodes": [{"id": 10, "episode": 3, "timeUntilAiring": 0}]}
-	}}}}`
+	}}]}}}`
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	resp, err := anilist.GetAnimeInfo(1)
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	ml := resp.Data.MediaList
+	if ml == nil {
+		t.Fatal("expected an entry, got nil")
+	}
 	if len(ml.Media.Synonyms) != 1 || ml.Media.Synonyms[0] != "My Anime Season 2" {
 		t.Fatalf("expected synonyms to be parsed, got %v", ml.Media.Synonyms)
 	}
@@ -107,34 +109,73 @@ func TestAniListModule_SearchAnimes_InvalidJSON(t *testing.T) {
 }
 
 func TestAniListModule_GetAnimeInfo_ParsesMediaID(t *testing.T) {
-	json := `{"data": {"MediaList": {"id": 12345, "status": "CURRENT", "progress": 3, "media": {"id": 21, "episodes": 12, "title": {"english": "My Anime", "romaji": "Boku no Anime"}, "airingSchedule": {"nodes": [{"id": 1, "episode": 4, "timeUntilAiring": 3600}]}}}}}`
+	json := `{"data": {"Page": {"mediaList": [{"id": 12345, "status": "CURRENT", "progress": 3, "media": {"id": 21, "episodes": 12, "title": {"english": "My Anime", "romaji": "Boku no Anime"}, "airingSchedule": {"nodes": [{"id": 1, "episode": 4, "timeUntilAiring": 3600}]}}}]}}}`
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	resp, err := anilist.GetAnimeInfo(12345)
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if resp.Data.MediaList.Media.Id != 21 {
-		t.Fatalf("expected media id 21, got %d", resp.Data.MediaList.Media.Id)
+	if ml.Media.Id != 21 {
+		t.Fatalf("expected media id 21, got %d", ml.Media.Id)
+	}
+}
+
+// GetAnimeInfo colapsa as contas: o anime aparece nas duas listas com entradas diferentes e
+// deve voltar como UM registro, com o MENOR progresso (a conta mais atrasada manda).
+func TestAniListModule_GetAnimeInfo_CollapsesAccountsKeepingLowestProgress(t *testing.T) {
+	var calls int
+	restore := anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+		calls++
+		progress := 7
+		entryID := 111
+		if calls > 1 {
+			progress, entryID = 2, 222
+		}
+		body := fmt.Sprintf(`{"data": {"Page": {"mediaList": [{"id": %d, "status": "CURRENT", "progress": %d, "media": {"id": 21, "episodes": 12, "title": {"english": "My Anime"}, "airingSchedule": {"nodes": []}}}]}}}`, entryID, progress)
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+	defer restore()
+
+	ml, err := anilist.GetAnimeInfo(21, []string{"accountA", "accountB"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if ml.Progress != 2 {
+		t.Errorf("esperava o menor progresso entre as contas (2), obteve %d", ml.Progress)
+	}
+}
+
+// Anime fora de todas as listas nao e erro: os episodios podem seguir em disco.
+func TestAniListModule_GetAnimeInfo_NotTrackedReturnsNil(t *testing.T) {
+	restore := mockAniListResponse(`{"data": {"Page": {"mediaList": []}}}`, 200)
+	defer restore()
+
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if ml != nil {
+		t.Errorf("esperava nil para anime fora das listas, obteve %+v", ml)
 	}
 }
 
 func TestAniListModule_GetAnimeInfo_ParsesCustomLists(t *testing.T) {
-	json := `{"data": {"MediaList": {"id": 1, "status": "CURRENT", "progress": 2, "customLists": {"Blacklist": true}, "media": {
-		"episodes": 12, "format": "TV", "status": "RELEASING",
+	json := `{"data": {"Page": {"mediaList": [{"id": 1, "status": "CURRENT", "progress": 2, "customLists": {"Blacklist": true}, "media": {
+		"id": 21, "episodes": 12, "format": "TV", "status": "RELEASING",
 		"title": {"english": "My Anime", "romaji": "Boku no Anime"},
 		"airingSchedule": {"nodes": []}
-	}}}}`
+	}}]}}}`
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	resp, err := anilist.GetAnimeInfo(1)
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !resp.Data.MediaList.CustomLists["Blacklist"] {
-		t.Fatalf("expected CustomLists[Blacklist]=true, got %v", resp.Data.MediaList.CustomLists)
+	if !ml.CustomLists["Blacklist"] {
+		t.Fatalf("expected CustomLists[Blacklist]=true, got %v", ml.CustomLists)
 	}
 }
 

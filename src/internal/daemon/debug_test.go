@@ -36,13 +36,13 @@ func (m *debugMockFileManager) LoadAnimeSettings(id int) (*files.AnimeSettings, 
 func (m *debugMockFileManager) SaveAnimeSettings(id int, s files.AnimeSettings) error { return nil }
 
 func TestRunAnimeDebug_NoNyaaResults_NoError(t *testing.T) {
-	anilistJSON := `{"data": {"MediaList": {"id": 1, "status": "CURRENT", "progress": 0, "media": {
-		"episodes": 12, "format": "TV", "status": "RELEASING",
+	anilistJSON := `{"data": {"Page": {"mediaList": [{"id": 1, "status": "CURRENT", "progress": 0, "media": {
+		"id": 21, "episodes": 12, "format": "TV", "status": "RELEASING",
 		"title": {"english": "My Anime", "romaji": "Boku no Anime"},
 		"synonyms": [], "relations": {"edges": []},
 		"coverImage": {"large": "", "medium": ""},
 		"airingSchedule": {"nodes": [{"id": 10, "episode": 1, "timeUntilAiring": 0}]}
-	}}}}`
+	}}]}}}`
 	restoreAnilist := anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(anilistJSON)), Header: make(http.Header)}, nil
 	})
@@ -53,15 +53,15 @@ func TestRunAnimeDebug_NoNyaaResults_NoError(t *testing.T) {
 	})
 	defer restoreNyaa()
 
-	summary, err := RunAnimeDebug(1, &files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 3}, &debugMockFileManager{})
+	summary, err := RunAnimeDebug(21, &files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}}, &debugMockFileManager{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if summary == nil {
 		t.Fatal("expected a non-nil summary")
 	}
-	if summary.AnimeID != 1 {
-		t.Errorf("expected AnimeID 1, got %d", summary.AnimeID)
+	if summary.AnimeID != 21 {
+		t.Errorf("expected AnimeID 21, got %d", summary.AnimeID)
 	}
 	if len(summary.Episodes) != 1 {
 		t.Fatalf("expected 1 episode in summary, got %d", len(summary.Episodes))

@@ -31,8 +31,9 @@ type AnimeEpisodeInfo struct {
 }
 
 type AnimeDetailResponse struct {
+	// AnimeID e o id da MIDIA na AniList — a mesma chave usada em episodes.json e nas rotas
+	// /animes/{id}/*, e tambem o id do link anilist.co/anime/{id} (ver decisions.md #43).
 	AnimeID           int                `json:"anime_id"`
-	AnilistID         int                `json:"anilist_id,omitempty" example:"21"`
 	TotalEpisodes     int                `json:"total_episodes"`
 	Progress          int                `json:"progress"`
 	Status            string             `json:"status"`
@@ -46,7 +47,7 @@ type AnimeDetailResponse struct {
 // @Tags         animes
 // @Accept       json
 // @Produce      json
-// @Param        id path int true "Anime ID (AniList MediaList ID)"
+// @Param        id path int true "Anime ID (AniList media ID)"
 // @Success      200  {object}  SuccessResponse{data=AnimeDetailResponse}
 // @Failure      400  {object}  SuccessResponse
 // @Failure      405  {object}  SuccessResponse
@@ -66,10 +67,21 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			return
 		}
 
-		detail, err := anilist.GetAnimeInfo(id)
+		config, err := server.FileManager.LoadConfigs()
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to load config")
+			JSONInternalError(w, err)
+			return
+		}
+
+		mediaList, err := anilist.GetAnimeInfo(id, config.AnilistUsernames)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", id).Msg("Failed to fetch anime detail from AniList")
 			JSONInternalError(w, err)
+			return
+		}
+		if mediaList == nil {
+			JSONError(w, http.StatusNotFound, "ANIME_NOT_FOUND", "Anime is not in any configured AniList account")
 			return
 		}
 
@@ -109,7 +121,6 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			}
 		}
 
-		mediaList := detail.Data.MediaList
 		episodes := make([]AnimeEpisodeInfo, 0, len(mediaList.Media.AiringSchedule.Nodes))
 
 		for _, node := range mediaList.Media.AiringSchedule.Nodes {
@@ -140,6 +151,11 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
+		totalEpisodes := 0
+		if mediaList.Media.Episodes != nil {
+			totalEpisodes = *mediaList.Media.Episodes
+		}
+
 		coverImage := mediaList.Media.CoverImage.Large
 		if coverImage == "" {
 			coverImage = mediaList.Media.CoverImage.Medium
@@ -147,8 +163,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 
 		response := AnimeDetailResponse{
 			AnimeID:           id,
-			AnilistID:         mediaList.Media.Id,
-			TotalEpisodes:     mediaList.Media.Episodes,
+			TotalEpisodes:     totalEpisodes,
 			Progress:          mediaList.Progress,
 			Status:            string(mediaList.Status),
 			CoverImage:        coverImage,

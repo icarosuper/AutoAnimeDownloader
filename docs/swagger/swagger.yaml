@@ -2,10 +2,10 @@ basePath: /api/v1
 definitions:
   api.AnimeDetailResponse:
     properties:
-      anilist_id:
-        example: 21
-        type: integer
       anime_id:
+        description: |-
+          AnimeID e o id da MIDIA na AniList — a mesma chave usada em episodes.json e nas rotas
+          /animes/{id}/*, e tambem o id do link anilist.co/anime/{id} (ver decisions.md #43).
         type: integer
       cover_image:
         type: string
@@ -234,6 +234,14 @@ definitions:
         items:
           type: string
         type: array
+      anime_ids_are_media_ids:
+        description: |-
+          AnimeIDsAreMediaIDs marca que daemon.MigrateAnimeIDsToMedia ja converteu os AnimeID
+          gravados de id de ENTRADA (MediaList, por conta) para id de MIDIA (ver decisions.md #43).
+          O default e false de proposito: um config.json anterior a este campo desserializa por
+          cima do default e precisa migrar. Numa instalacao nova a migracao roda sem nada a fazer
+          e liga o campo no primeiro passe.
+        type: boolean
       check_interval:
         type: integer
       completed_anime_path:
@@ -392,7 +400,7 @@ paths:
       description: Returns anime info from AniList combined with downloaded episodes
         data
       parameters:
-      - description: Anime ID (AniList MediaList ID)
+      - description: Anime ID (AniList media ID)
         in: path
         name: id
         required: true

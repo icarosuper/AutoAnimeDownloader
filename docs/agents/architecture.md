@@ -46,7 +46,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `config.json` | `~/.autoAnimeDownloader/` | User settings (Anilist usernames, paths, intervals) |
 | `downloaded_episodes` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL, no extension) |
 | `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of IDs, no extension) |
-| `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList MediaList ID (JSON map, no extension) |
+| `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList **media** ID (JSON map, no extension) |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
@@ -154,7 +154,6 @@ One-shot diagnostic for a single anime, driven by the `--debug-anime` flag on th
 | Symbol | Purpose |
 |--------|---------|
 | `RunAnimeDebug(animeId, configs, fileManager)` | Fetches the anime, logs the raw AniList response, runs `checkEpisode` + `resolveSearchStrategy` (real production functions) against live Nyaa, logs raw vs. matched results per episode. Returns a `*DebugSummary` |
-| `mediaListFromDetail(d)` | Adapts `anilist.MediaListDetail` (from `GetAnimeInfo`) into `anilist.MediaList` so it can be passed to `checkEpisode`/`resolveSearchStrategy`. `CustomLists` is left empty — excluded-list checks always evaluate false in debug mode |
 | `DebugSummary` / `EpisodeDebugResult` structs | JSON-tagged summary written to `summary.json` — per episode, whether it would be searched and how many magnets were found |
 | `NextDebugDir(baseDir, animeId)` | Returns the next unused `.debug_<animeId>_<N>` directory name inside `baseDir` (scans for existing ones, doesn't create it) |
 | `WriteDebugSummary(dir, summary)` | Marshals `DebugSummary` to `<dir>/summary.json` |
@@ -297,8 +296,9 @@ Middleware stack (API routes): CORS → JSON Content-Type → Logging. Static fi
 
 - `AnimeInfo` struct — aggregated anime info from `episodes.json`
 - `handleAnimes` — groups saved episodes by anime name, merges current AniList watching list (so animes with 0 eps still show), then calls `refreshOrphanAnimes` for already-downloaded animes not covered by that merge
-- `mergeCurrentAniListAnimes` — adds AniList animes (filtered by both `DownloadStatuses` and `DownloadMediaStatuses`) not yet in episodes.json; never removes an existing entry; returns the set of AnimeIDs it covered
-- `refreshOrphanAnimes` — for animeMap entries with a known AnimeID that `mergeCurrentAniListAnimes` didn't cover (current status fell outside the allowed sets), re-fetches cover/progress/blacklist via `anilist.GetAnimeInfo` per anime, bounded to `maxConcurrentOrphanRefresh` (5) in flight; a failed refresh just logs a warning and leaves the anime as-is — it's never removed
+- `fetchAniListEntries` — one account's AniList entries, filtered by both `DownloadStatuses` (server-side) and `DownloadMediaStatuses` (client-side), with customLists overlaid; returns `nil` (not an empty slice) on fetch failure
+- `mergeAniListAnimes` — adds the (already deduped) AniList entries not yet in episodes.json into animeMap; never removes an existing entry
+- `refreshOrphanAnimes` — for animeMap entries with a known AnimeID that no account's fetch covered (current status fell outside the allowed sets), re-fetches cover/progress/blacklist via `anilist.GetAnimeInfo` per anime, bounded to `maxConcurrentOrphanRefresh` (5) in flight; a failed refresh just logs a warning and leaves the anime as-is — it's never removed
 - `computeAnimeFields` — shared field-derivation (name, total/released episodes, cover, blacklist) used by both the batch merge loop and the single-anime orphan refresh
 - `countPendingEpisodes` — preenche `AnimeInfo.EpisodesPending`: episódios lançados **acima do progresso da AniList** que não estão em disco. Conta por número de episódio (não `released - downloaded`) porque assistidos podem continuar salvos (`watched_episodes_to_keep`); o daemon nunca baixa episódio ≤ progresso, então ele não é atraso. É o número do chip "Atrasado" no frontend (`lib/domain/animeState.ts`)
 - `extractAnimeName(episodeName)` — strips episode number suffix from torrent name to get anime name
@@ -306,8 +306,8 @@ Middleware stack (API routes): CORS → JSON Content-Type → Logging. Static fi
 ### `src/internal/api/endpoint_anime_episodes.go`
 
 - `AnimeEpisodeInfo` struct — per-episode detail (aired, watched, downloaded, blocked, manually managed). `EpisodeHash` (`episode_hash`, `omitempty`) is the info hash of the torrent that downloaded it, if any — the frontend uses it to join the episode against `GET /torrents` (see `torrentsByEpisode.ts`) to show live progress inline before the episode finishes.
-- `AnimeDetailResponse` struct — `{animeId, anilistId, totalEpisodes, progress, status, episodes[]}` — `animeId` is the AniList MediaList entry ID (used as primary key everywhere else); `anilistId` is the actual AniList media ID, only useful for building `anilist.co/anime/{id}` links
-- `handleAnimeEpisodes` — fetches `GetAnimeInfo(id)` from AniList + saved episodes + blocked list → merges
+- `AnimeDetailResponse` struct — `{animeId, totalEpisodes, progress, status, episodes[]}` — `animeId` is the AniList **media** ID: the primary key everywhere else *and* the `anilist.co/anime/{id}` link component (there is no separate `anilistId` field — see [decisions.md #43](decisions.md))
+- `handleAnimeEpisodes` — fetches `GetAnimeInfo(id, usernames)` from AniList + saved episodes + blocked list → merges; 404s when no configured account tracks the media
 
 ### `src/internal/api/endpoint_episode_actions.go`
 
@@ -342,9 +342,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | Symbol | Purpose |
 |--------|---------|
 | `AniListResponse` | Response for `GetAllCurrentAnime` — `Data.Page.MediaList[]` |
-| `MediaListDetailResponse` | Response for `GetAnimeInfo` — single `MediaList` with full `AiringSchedule`; `Media.Id` is the real AniList media ID |
 | `MediaList` struct | `Id`, `Status`, `Progress`, `CustomLists`, `Media` |
-| `MediaListDetail` struct | Response shape for `GetAnimeInfo` — like `MediaList` but `Episodes` is `int` not `*int`, and has no `CustomLists` |
 | `Media` struct | `Format`, `Status`, `Title`, `Episodes`, `AiringSchedule`, `Synonyms`, `Relations` |
 | `AiringNode` struct | `ID`, `Episode`, `TimeUntilAiring`, `AiringAt` |
 | `MediaRelations` struct | `Edges []MediaRelationEdge` — PREQUEL/SEQUEL links |
@@ -353,7 +351,10 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `MediaFormat` consts | `TV`, `MOVIE`, `OVA`, `ONA`, etc. |
 | `MediaListStatus` consts | `CURRENT`, `COMPLETED`, `DROPPED`, `PAUSED`, `PLANNING`, `REPEATING` |
 | `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list with synonyms and relations (used by verification loop) |
-| `GetAnimeInfo(mediaListId)` | Fetches single anime detail with full airing schedule, synonyms, and relations (used by `/animes/{id}/episodes` and `daemon.RunAnimeDebug`) |
+| `GetAnimeInfo(mediaId, usernames)` | Fetches one anime by **media** id with full airing schedule, synonyms, and relations, querying each account and collapsing via `DedupeByMedia`. Returns `(nil, nil)` when no account tracks it — a normal state, not an error (used by `/animes/{id}/episodes`, `refreshOrphanAnimes` and `daemon.RunAnimeDebug`) |
+| `GetMediaListStatus(username, mediaId)` | One account's list status for one media; the bool reports whether that account tracks it at all. Only `allAccountsAgreeOnDelete` uses it — see the delete rule below |
+| `GetMediaIDForEntry(mediaListId)` | Legacy entry id → media id. The only thing left that keys by entry id: `MigrateAnimeIDsToMedia`. Returns 0 when the entry no longer exists |
+| `ErrNotFound` | Sentinel for AniList's 404 — lets a by-id lookup tell "was deleted" from "AniList is down" |
 | `sendAnilistRequest[T]` | Generic GraphQL POST helper |
 | `httpDo` var | Swappable HTTP func — overridden in tests via `MockAniListDo` |
 
@@ -635,14 +636,19 @@ Connects to `/api/v1/ws`, updates `wsState` store on messages.
 
 **Manual magnet paste**: `AnimeDetail.svelte` exposes a magnet input UI that calls `/api/v1/animes/{id}/episodes/{episodeId}/replace` (per-episode) or `/api/v1/animes/{id}/replace` (full anime/batch). Allows bypassing Nyaa search and adding any magnet link directly to the embedded torrent client.
 
-**Multi-account Anilist**: `Config.AnilistUsernames []string` — the verification loop (`verification.go`) and `mergeCurrentAniListAnimes` (`endpoint_animes.go`) both iterate over every configured username. Episode tracking is not per-account; all accounts share the same `episodes.json`. See [Config Reference](config.md) for the legacy singular-field migration.
+**Multi-account Anilist**: `Config.AnilistUsernames []string` — the verification loop (`verification.go`) and `handleAnimes` (`endpoint_animes.go`) both iterate over every configured username. Episode tracking is not per-account; all accounts share the same `episodes.json`. See [Config Reference](config.md) for the legacy singular-field migration.
 
-The same anime linked on multiple accounts appears once per account in the merged list, each with its own `MediaList.Id`/`Progress` but the same `Media` (and same airing-schedule episode IDs, which key every download/keep/delete decision). `searchAnilist` therefore runs `dedupeAnimesByMedia` (`verification.go`) after merging: it collapses duplicates by `Media.Id`, keeping the entry with the **lowest** `Progress` (an episode is only "watched"/deletable once all accounts have seen it). Without this, the account further ahead would delete watched episodes another account hasn't reached, causing download/delete churn each cycle. The `media { id }` field is fetched by `GetAllCurrentAnime` specifically for this dedup key. Note: `deleteEpisodesByStatus` still matches saved episodes by `MediaList.Id`, so status-based deletion has a parallel per-account caveat.
+The same anime linked on multiple accounts appears once per account in the merged list, each with its own `MediaList.Id`/`Progress`/`Status` but the same `Media` (and the same airing-schedule episode IDs, which key every download/keep/delete decision). **`Media.Id` — not `MediaList.Id` — is therefore this app's anime identity**: it is what `episodes.json`, `anime_settings`, the `/animes/{id}/*` routes and the `anilist.co` link all use ([decisions.md #43](decisions.md)). Installations predating that are converted once by `daemon.MigrateAnimeIDsToMedia`, gated by the `anime_ids_are_media_ids` config flag; the verification pass aborts until it succeeds.
+
+`anilist.DedupeByMedia(list)` collapses the per-account entries by `Media.Id`, keeping the **lowest** `Progress` (an episode is only "watched"/deletable once all accounts have seen it) — without it the account further ahead would delete episodes another account hasn't reached, and `GET /animes` would list the anime twice. The `media { id }` field is fetched by both `GetAllCurrentAnime` and `GetFrontendAnimeList` specifically for this key. The surviving entry's **`Status` must not be read** — it belongs to one arbitrary account. Status is resolved per account instead:
+
+- **Download — OR**: one account having the anime in a `DownloadStatuses` status is enough. Falls out of the union of the per-account fetches in `searchAnilist` (each is filtered server-side by `status_in`).
+- **Deletion — AND** (`deletableMediaIDs` / `allAccountsAgreeOnDelete`, `daemon/verification.go`): every account that *has* the anime must have it in some `DeleteStatuses` status; the statuses need not match (`DROPPED` in one and `COMPLETED` in another still deletes). An account that doesn't track the anime doesn't vote; one holding it in a neutral status (`PLANNING`) **vetoes**, as does an account whose list fetch failed. Telling "doesn't track it" from "tracks it in a neutral status" costs one `GetMediaListStatus` call per account that didn't report the anime — only for animes **with episodes on disk** that some account wants deleted, a set that empties itself as those episodes get removed.
 
 **Media-status filter** {#media-status-filter}: `Config.DownloadStatuses` filters by *list* status (`MediaListStatus` — the user's relationship to the anime, e.g. `CURRENT`); `Config.DownloadMediaStatuses` filters by *media* status (`MediaStatus` — the anime's own airing state, e.g. `RELEASING`). The former is applied server-side by AniList (`status_in` in the GraphQL query); the latter can't share that filter, so both consumers apply it client-side per anime via `anilist.MediaStatusAllowed`:
 
 - **Download pipeline**: `searchAnilist` (`daemon/verification.go`) applies it right after the per-account fetch, before dedup — an anime whose media status isn't allowed is simply never a download candidate.
-- **Frontend listing**: `mergeCurrentAniListAnimes` (`api/endpoint_animes.go`) applies it (alongside the server-side list-status filter) to decide which *not-yet-downloaded* animes get merged into `GET /animes`. Critically, this filtering only gates *new* entries — an anime that already has a downloaded episode is never removed from the listing by either filter, no matter what its current status is. If such an anime's status falls outside both allowed sets (so it wasn't covered by the filtered fetch), `refreshOrphanAnimes` fetches it individually via `anilist.GetAnimeInfo` to keep its cover image/progress/blacklist fields fresh; a failed individual fetch just leaves the anime with its `episodes.json`-derived fields (name, total episodes, last download date) and blank AniList-derived ones, rather than disappearing or failing the request.
+- **Frontend listing**: `fetchAniListEntries` (`api/endpoint_animes.go`) applies it (alongside the server-side list-status filter) to decide which *not-yet-downloaded* animes get merged into `GET /animes`. Critically, this filtering only gates *new* entries — an anime that already has a downloaded episode is never removed from the listing by either filter, no matter what its current status is. If such an anime's status falls outside both allowed sets (so it wasn't covered by the filtered fetch), `refreshOrphanAnimes` fetches it individually via `anilist.GetAnimeInfo` to keep its cover image/progress/blacklist fields fresh; a failed individual fetch just leaves the anime with its `episodes.json`-derived fields (name, total episodes, last download date) and blank AniList-derived ones, rather than disappearing or failing the request.
 
 See [Config Reference](config.md).
 

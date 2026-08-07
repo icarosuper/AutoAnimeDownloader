@@ -104,13 +104,23 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
 	downloadedTorrents := backend.List()
 
+	// Mesma logica de aborto: com os AnimeID ainda no formato antigo (id de entrada) nada em
+	// disco casa com a AniList, e um passe nesse estado rebaixaria a biblioteca inteira.
+	if err := MigrateAnimeIDsToMedia(fileManager); err != nil {
+		logger.Logger.Error().Err(err).Msg("Failed to migrate anime IDs to AniList media IDs; skipping verification")
+		state.SetLastCheckError(err)
+		return
+	}
+
 	// Phase 1: fetch all independent data sources in parallel.
 	var (
-		anilistResponse    *anilist.AniListResponse
-		savedEpisodes      []files.EpisodeStruct
-		blockedEpisodes    []int
-		animeSettingsMap   map[int]files.AnimeSettings
-		deleteListResponse *anilist.AniListResponse
+		anilistResponse  *anilist.AniListResponse
+		savedEpisodes    []files.EpisodeStruct
+		blockedEpisodes  []int
+		animeSettingsMap map[int]files.AnimeSettings
+		// inDeleteStatus[username][mediaId] — quais animes cada conta tem em algum status de
+		// deleção. Uma conta cuja busca falhou fica ausente do mapa, e ausente nunca concorda.
+		inDeleteStatus map[string]map[int]bool
 
 		errAnilist  error
 		errEpisodes error
@@ -161,21 +171,24 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		fetchWg.Add(1)
 		go func() {
 			defer fetchWg.Done()
-			merged := &anilist.AniListResponse{}
+			inDeleteStatus = make(map[string]map[int]bool, len(configs.AnilistUsernames))
 			for _, username := range configs.AnilistUsernames {
 				resp, e := anilist.GetAllCurrentAnime(username, configs.DeleteStatuses)
 				if e != nil {
 					logger.Logger.Warn().Err(e).Str("username", username).Msg("Failed to fetch AniList animes for delete statuses")
+					// Conta sem resposta nao pode concordar com a deleção — ver deletableMediaIDs.
 					continue
 				}
-				count := len(resp.Data.Page.MediaList)
+				byMedia := make(map[int]bool, len(resp.Data.Page.MediaList))
+				for _, ml := range resp.Data.Page.MediaList {
+					byMedia[ml.Media.Id] = true
+				}
 				logger.Logger.Debug().
 					Str("username", username).
-					Int("animes_found", count).
+					Int("animes_found", len(byMedia)).
 					Msg("Fetched animes from Anilist for delete statuses")
-				merged.Data.Page.MediaList = append(merged.Data.Page.MediaList, resp.Data.Page.MediaList...)
+				inDeleteStatus[username] = byMedia
 			}
-			deleteListResponse = merged
 		}()
 	}
 
@@ -202,16 +215,12 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	animes := anilistResponse.Data.Page.MediaList
 
+	// Regra de deleção por status: TODAS as contas que têm o anime precisam tê-lo em algum
+	// status de deleção (não necessariamente o mesmo). A regra de download é a oposta —
+	// basta UMA conta —, e ela já vem aplicada em searchAnilist pela união das listas.
+	deletableMedia := deletableMediaIDs(configs, inDeleteStatus, savedEpisodes)
+
 	var idsToDelete []int
-	for _, anime := range animes {
-		if isInDeleteStatuses(configs.DeleteStatuses, anime.Status) {
-			for _, ep := range savedEpisodes {
-				if ep.AnimeID == anime.Id && !ep.ManuallyManaged {
-					idsToDelete = append(idsToDelete, ep.EpisodeID)
-				}
-			}
-		}
-	}
 
 	// Phase 2: process each anime concurrently, bounded by maxConcurrentAnimes.
 	sem := make(chan struct{}, maxConcurrentAnimes)
@@ -228,12 +237,14 @@ outer:
 		default:
 		}
 
-		if isInDeleteStatuses(configs.DeleteStatuses, anime.Status) {
+		// anime.Status é de UMA conta arbitrária (a que venceu o dedup), então não serve para
+		// decidir nada — quem responde é a regra AND acima.
+		if deletableMedia[anime.Media.Id] {
 			continue
 		}
 
 		customQuery := ""
-		if s, ok := animeSettingsMap[anime.Id]; ok {
+		if s, ok := animeSettingsMap[anime.Media.Id]; ok {
 			customQuery = s.CustomSearchQuery
 		}
 
@@ -274,7 +285,7 @@ outer:
 	}
 
 	// Phase 3: sequential cleanup (file writes must not overlap).
-	deleteEpisodesByStatus(deleteListResponse, fileManager, backend, librarian, savedEpisodes)
+	deleteEpisodesByStatus(deletableMedia, fileManager, backend, librarian, savedEpisodes)
 
 	handleSavedEpisodes(fileManager, configs, backend, librarian, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
@@ -377,6 +388,80 @@ func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.E
 	}
 }
 
+// deletableMediaIDs decide quais animes podem ter os episódios apagados por status.
+//
+// Regra: TODA conta que tem o anime na lista precisa tê-lo em algum status de deleção — os
+// statuses não precisam ser o mesmo (DROPPED numa e COMPLETED noutra apaga). Uma conta que
+// não acompanha o anime não participa da votação; uma que o tem em status neutro (PLANNING,
+// por exemplo) veta, senão apagaríamos episódios que outra conta ainda pretende assistir.
+//
+// Só animes COM episódio em disco são avaliados: a resposta não muda nada para os demais, e é
+// isso que mantém as consultas de desempate raras — um anime deletável some do disco no mesmo
+// passe e nunca mais volta a ser candidato.
+func deletableMediaIDs(configs *files.Config, inDeleteStatus map[string]map[int]bool, savedEpisodes []files.EpisodeStruct) map[int]bool {
+	if len(configs.DeleteStatuses) == 0 || len(inDeleteStatus) == 0 {
+		return nil
+	}
+
+	onDisk := make(map[int]bool)
+	for _, ep := range savedEpisodes {
+		if ep.AnimeID != 0 && !ep.ManuallyManaged {
+			onDisk[ep.AnimeID] = true
+		}
+	}
+
+	candidates := make(map[int]bool)
+	for _, byMedia := range inDeleteStatus {
+		for mediaID := range byMedia {
+			if onDisk[mediaID] {
+				candidates[mediaID] = true
+			}
+		}
+	}
+
+	deletable := make(map[int]bool, len(candidates))
+	for mediaID := range candidates {
+		if allAccountsAgreeOnDelete(configs, inDeleteStatus, mediaID) {
+			deletable[mediaID] = true
+		}
+	}
+	return deletable
+}
+
+func allAccountsAgreeOnDelete(configs *files.Config, inDeleteStatus map[string]map[int]bool, mediaID int) bool {
+	for _, username := range configs.AnilistUsernames {
+		byMedia, fetched := inDeleteStatus[username]
+		if !fetched {
+			// A busca desta conta falhou: sem a opinião dela não há unanimidade.
+			logger.Logger.Debug().Str("username", username).Int("media_id", mediaID).
+				Msg("Skipping status deletion: account list unavailable")
+			return false
+		}
+		if byMedia[mediaID] {
+			continue
+		}
+
+		// A conta não listou o anime entre os deletáveis. Pode ser que ela não o acompanhe
+		// (não vota) ou que o tenha em status neutro (veta) — só uma consulta distingue.
+		status, tracked, err := anilist.GetMediaListStatus(username, mediaID)
+		switch {
+		case err != nil:
+			logger.Logger.Warn().Err(err).Str("username", username).Int("media_id", mediaID).
+				Msg("Skipping status deletion: could not resolve the account's status")
+			return false
+		case !tracked:
+			continue // conta não acompanha este anime, não veta
+		case isInDeleteStatuses(configs.DeleteStatuses, status):
+			continue // status de deleção diferente do que a busca por lista trouxe
+		default:
+			logger.Logger.Debug().Str("username", username).Int("media_id", mediaID).
+				Str("status", string(status)).Msg("Status deletion vetoed by account")
+			return false
+		}
+	}
+	return true
+}
+
 func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 	if len(configs.AnilistUsernames) == 0 || configs.DownloadPath() == "" {
 		err := fmt.Errorf("missing required configuration: Anilist username or completed anime path")
@@ -432,7 +517,7 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 		return nil, fmt.Errorf("failed to search animes on Anilist: %w", lastErr)
 	}
 
-	merged.Data.Page.MediaList = dedupeAnimesByMedia(merged.Data.Page.MediaList)
+	merged.Data.Page.MediaList = anilist.DedupeByMedia(merged.Data.Page.MediaList)
 
 	logger.Logger.Info().
 		Strs("usernames", configs.AnilistUsernames).
@@ -440,33 +525,4 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 		Msg("Successfully fetched animes from Anilist")
 
 	return merged, nil
-}
-
-// dedupeAnimesByMedia collapses the same anime appearing across multiple linked
-// accounts into a single entry, keeping the one with the LOWEST progress. Every
-// download/keep/delete decision is keyed by airing-schedule episode ID (shared
-// across accounts), so duplicate entries with divergent progress would otherwise
-// fight — the account further ahead deleting episodes another account hasn't
-// watched yet, causing download/delete churn. Lowest progress is the conservative
-// choice: an episode is only "watched" once all accounts have seen it.
-// ponytail: keeps the lowest-progress entry wholesale (its status/customLists win
-// too); split status/customLists per-account only if that edge actually bites.
-func dedupeAnimesByMedia(list []anilist.MediaList) []anilist.MediaList {
-	byMedia := make(map[int]int, len(list)) // media id -> index in result
-	result := make([]anilist.MediaList, 0, len(list))
-	for _, anime := range list {
-		if anime.Media.Id == 0 { // no media id (shouldn't happen) — keep as-is
-			result = append(result, anime)
-			continue
-		}
-		if idx, ok := byMedia[anime.Media.Id]; ok {
-			if anime.Progress < result[idx].Progress {
-				result[idx] = anime
-			}
-			continue
-		}
-		byMedia[anime.Media.Id] = len(result)
-		result = append(result, anime)
-	}
-	return result
 }

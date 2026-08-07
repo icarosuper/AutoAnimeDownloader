@@ -125,10 +125,7 @@ func TestDeleteEpisodesByStatus_DroppedAnime(t *testing.T) {
 	const episodeID = 42
 	const episodeHash = "abc123hash"
 
-	deleteListResponse := &anilist.AniListResponse{}
-	deleteListResponse.Data.Page.MediaList = []anilist.MediaList{
-		{Id: animeID},
-	}
+	deletableMedia := map[int]bool{animeID: true}
 
 	savedEpisodes := []files.EpisodeStruct{
 		{
@@ -143,7 +140,7 @@ func TestDeleteEpisodesByStatus_DroppedAnime(t *testing.T) {
 	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
-	deleteEpisodesByStatus(deleteListResponse, fm, backend, testLibrarian(), savedEpisodes)
+	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), savedEpisodes)
 
 	if _, ok := backend.Get(episodeHash); ok {
 		t.Errorf("esperava torrent %q removido do cliente, mas ainda presente", episodeHash)
@@ -160,10 +157,7 @@ func TestDeleteEpisodesByStatus_ManuallyManagedNotDeleted(t *testing.T) {
 	const episodeID = 99
 	const episodeHash = "manualhash"
 
-	deleteListResponse := &anilist.AniListResponse{}
-	deleteListResponse.Data.Page.MediaList = []anilist.MediaList{
-		{Id: animeID},
-	}
+	deletableMedia := map[int]bool{animeID: true}
 
 	savedEpisodes := []files.EpisodeStruct{
 		{
@@ -178,7 +172,7 @@ func TestDeleteEpisodesByStatus_ManuallyManagedNotDeleted(t *testing.T) {
 	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
-	deleteEpisodesByStatus(deleteListResponse, fm, backend, testLibrarian(), savedEpisodes)
+	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), savedEpisodes)
 
 	if _, ok := backend.Get(episodeHash); !ok {
 		t.Error("episódio manualmente gerenciado não deve ter o torrent removido")
@@ -439,7 +433,7 @@ func TestDedupeAnimesByMedia(t *testing.T) {
 		{Id: 3, Progress: 7, Media: anilist.Media{Id: 999}},  // outro anime, só conta A
 	}
 
-	got := dedupeAnimesByMedia(list)
+	got := anilist.DedupeByMedia(list)
 
 	if len(got) != 2 {
 		t.Fatalf("esperava 2 animes após dedup, obteve %d", len(got))
@@ -470,7 +464,7 @@ func TestDedupeAnimesByMedia_NoMediaID(t *testing.T) {
 		{Id: 2, Progress: 8},
 	}
 
-	got := dedupeAnimesByMedia(list)
+	got := anilist.DedupeByMedia(list)
 
 	if len(got) != 2 {
 		t.Errorf("entradas sem media id não devem ser colapsadas, esperava 2, obteve %d", len(got))
@@ -756,14 +750,13 @@ func TestHandleSavedEpisodes_DeleteErrorIsTolerated(t *testing.T) {
 // TestDeleteEpisodesByStatus_DeleteErrorIsTolerated: idem para a deleção por status.
 func TestDeleteEpisodesByStatus_DeleteErrorIsTolerated(t *testing.T) {
 	const hash = "ffffffffffffffffffffffffffffffffffffffff"
-	deleteResp := &anilist.AniListResponse{}
-	deleteResp.Data.Page.MediaList = []anilist.MediaList{{Id: 100}}
+	deletableMedia := map[int]bool{100: true}
 
 	saved := []files.EpisodeStruct{{EpisodeID: 42, AnimeID: 100, EpisodeHash: hash}}
 	fm := &failingFM{saved: saved, deleteErr: errors.New("write failed")}
 	backend := fakeWithTorrents(hash)
 
-	deleteEpisodesByStatus(deleteResp, fm, backend, testLibrarian(), saved)
+	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), saved)
 
 	if _, ok := backend.Get(hash); ok {
 		t.Error("torrent deve ser removido mesmo com falha na escrita do arquivo")

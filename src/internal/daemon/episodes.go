@@ -90,7 +90,7 @@ func processAnimeEpisodes(
 			}
 			result.newEpisodes = append(result.newEpisodes, files.EpisodeStruct{
 				EpisodeID:          ep.ID,
-				AnimeID:            anime.Id,
+				AnimeID:            anime.Media.Id,
 				AnimeTotalEpisodes: totalEpisodes,
 				AnimeName:          animeTitle,
 				EpisodeHash:        hash,
@@ -417,22 +417,19 @@ func RemoveTorrentWithEpisodes(
 }
 
 // deleteEpisodesByStatus deletes episodes for animes in the delete-status list.
-func deleteEpisodesByStatus(deleteResp *anilist.AniListResponse, fileManager FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, savedEpisodes []files.EpisodeStruct) {
-	if deleteResp == nil {
+// deleteEpisodesByStatus apaga os episódios dos animes que TODAS as contas concordam em
+// deletar. Quem decide isso é deletableMediaIDs (verification.go) — aqui só se aplica.
+func deleteEpisodesByStatus(deletableMedia map[int]bool, fileManager FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, savedEpisodes []files.EpisodeStruct) {
+	if len(deletableMedia) == 0 {
 		return
 	}
 
 	logger.Logger.Debug().
 		Msg("Running status-based episode deletion")
 
-	deleteAnimeIDs := make(map[int]bool, len(deleteResp.Data.Page.MediaList))
-	for _, anime := range deleteResp.Data.Page.MediaList {
-		deleteAnimeIDs[anime.Id] = true
-	}
-
 	var idsToDelete []int
 	for _, ep := range savedEpisodes {
-		if deleteAnimeIDs[ep.AnimeID] && !ep.ManuallyManaged {
+		if deletableMedia[ep.AnimeID] && !ep.ManuallyManaged {
 			idsToDelete = append(idsToDelete, ep.EpisodeID)
 		}
 	}

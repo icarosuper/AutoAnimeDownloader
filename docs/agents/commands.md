@@ -59,7 +59,7 @@ PORT=:8092 ./autoanimedownloader-daemon        # custom port (default 8091)
 
 ## Debugging a specific anime
 
-`--debug-anime <anilistId>` on the daemon binary runs a one-shot pass that fetches the anime from AniList, runs the real search/match pipeline against Nyaa, and logs everything (raw Nyaa rows, matched torrents, per-episode results). No download happens, and no running daemon is needed (the torrent client is embedded — there is nothing external to start). `<anilistId>` is the AniList MediaList ID (same ID used in `/api/v1/animes/{id}/episodes`).
+`--debug-anime <anilistId>` on the daemon binary runs a one-shot pass that fetches the anime from AniList, runs the real search/match pipeline against Nyaa, and logs everything (raw Nyaa rows, matched torrents, per-episode results). No download happens, and no running daemon is needed (the torrent client is embedded — there is nothing external to start). `<anilistId>` is the AniList **media** ID (same ID used in `/api/v1/animes/{id}/episodes` and in `anilist.co/anime/{id}`).
 
 ```bash
 make debug-anime ID=123

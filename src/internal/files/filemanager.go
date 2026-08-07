@@ -67,17 +67,23 @@ type Config struct {
 	//
 	// Nao precisa de migracao: LoadConfigs desserializa POR CIMA de getDefaultConfig(),
 	// entao um config.json anterior a este campo ja carrega valendo o default.
-	MaxConcurrentDownloads int                 `json:"max_concurrent_downloads"`
-	DeleteWatchedEpisodes  bool                `json:"delete_watched_episodes"`
-	WatchedEpisodesToKeep  int                 `json:"watched_episodes_to_keep"`
-	ExcludedList           string              `json:"excluded_list,omitempty"`
-	ExcludedLists          []string            `json:"excluded_lists"`
-	RenameFilesForJellyfin bool                `json:"rename_files_for_jellyfin"`
-	DownloadStatuses       []string            `json:"download_statuses"`
-	DownloadMediaStatuses  []string            `json:"download_media_statuses"`
-	DeleteStatuses         []string            `json:"delete_statuses"`
-	Notifications          NotificationsConfig `json:"notifications"`
-	Priorities             nyaa.Priorities     `json:"priorities"`
+	MaxConcurrentDownloads int      `json:"max_concurrent_downloads"`
+	DeleteWatchedEpisodes  bool     `json:"delete_watched_episodes"`
+	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
+	ExcludedList           string   `json:"excluded_list,omitempty"`
+	ExcludedLists          []string `json:"excluded_lists"`
+	RenameFilesForJellyfin bool     `json:"rename_files_for_jellyfin"`
+	DownloadStatuses       []string `json:"download_statuses"`
+	DownloadMediaStatuses  []string `json:"download_media_statuses"`
+	DeleteStatuses         []string `json:"delete_statuses"`
+	// AnimeIDsAreMediaIDs marca que daemon.MigrateAnimeIDsToMedia ja converteu os AnimeID
+	// gravados de id de ENTRADA (MediaList, por conta) para id de MIDIA (ver decisions.md #43).
+	// O default e false de proposito: um config.json anterior a este campo desserializa por
+	// cima do default e precisa migrar. Numa instalacao nova a migracao roda sem nada a fazer
+	// e liga o campo no primeiro passe.
+	AnimeIDsAreMediaIDs bool                `json:"anime_ids_are_media_ids"`
+	Notifications       NotificationsConfig `json:"notifications"`
+	Priorities          nyaa.Priorities     `json:"priorities"`
 }
 
 // downloadDirName e o nome do diretorio de download dentro da biblioteca. O ponto o

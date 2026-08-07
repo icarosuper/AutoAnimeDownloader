@@ -148,19 +148,25 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		// Tracks which AnimeIDs were covered by the filtered fetch, across all accounts, so that
 		// already-downloaded animes whose current status fell outside the allowed sets (and thus
 		// weren't covered) can be refreshed individually below instead of disappearing.
+		var entries []anilist.MediaList
 		covered := make(map[int]bool)
 		mergeFailed := false
 		for _, username := range config.AnilistUsernames {
-			// nil (e nao um mapa vazio) significa que a busca falhou — ver mergeCurrentAniListAnimes.
-			ids := mergeCurrentAniListAnimes(animeMap, username, config.ExcludedLists, config.DownloadStatuses, config.DownloadMediaStatuses)
-			if ids == nil {
+			// nil (e nao uma lista vazia) significa que a busca falhou — ver fetchAniListEntries.
+			list := fetchAniListEntries(username, config.DownloadStatuses, config.DownloadMediaStatuses)
+			if list == nil {
 				mergeFailed = true
 				continue
 			}
-			for id := range ids {
-				covered[id] = true
+			for _, ml := range list {
+				covered[ml.Media.Id] = true
 			}
+			entries = append(entries, list...)
 		}
+
+		// Sem o dedup o mesmo anime em duas contas vira duas linhas na tela: cada conta traz uma
+		// entrada propria para a mesma midia (ver decisions.md #43).
+		mergeAniListAnimes(animeMap, anilist.DedupeByMedia(entries), config.ExcludedLists)
 
 		// Com uma busca de lista falhada nao da para saber o que ficou coberto, e tratar
 		// "nao coberto" como "precisa refresh" transformaria a falha em um GetAnimeInfo por
@@ -169,7 +175,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		if mergeFailed {
 			logger.Logger.Warn().Msg("Skipping orphan refresh: AniList list fetch failed, coverage unknown")
 		} else {
-			refreshOrphanAnimes(animeMap, covered, config.ExcludedLists)
+			refreshOrphanAnimes(animeMap, covered, config.ExcludedLists, config.AnilistUsernames)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
@@ -204,7 +210,7 @@ const maxConcurrentOrphanRefresh = 5
 // status fell outside the configured allowed sets). These animes stay visible regardless —
 // this only tries to keep their cover/progress/blacklist fields fresh instead of stale/blank.
 // A failed refresh is logged and left as-is; it never fails the overall request.
-func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string) {
+func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string, usernames []string) {
 	var orphans []*AnimeInfo
 	for _, info := range animeMap {
 		if info.AnimeID != 0 && !covered[info.AnimeID] {
@@ -224,15 +230,19 @@ func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, e
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			detail, err := anilist.GetAnimeInfo(info.AnimeID)
+			ml, err := anilist.GetAnimeInfo(info.AnimeID, usernames)
 			if err != nil {
 				logger.Logger.Warn().Err(err).Int("anime_id", info.AnimeID).Msg("Failed to refresh orphaned anime, keeping existing data")
 				return
 			}
+			if ml == nil {
+				// Nenhuma conta acompanha mais este anime; os episodios em disco continuam listados
+				// com os campos que vieram do episodes.json.
+				return
+			}
 
-			ml := detail.Data.MediaList
 			name, totalEpisodes, episodesReleased, coverImage, isBlacklisted := computeAnimeFields(
-				ml.Media.Title, ml.Media.Status, &ml.Media.Episodes, ml.Media.CoverImage, ml.Media.AiringSchedule, ml.CustomLists, excludedLists,
+				ml.Media.Title, ml.Media.Status, ml.Media.Episodes, ml.Media.CoverImage, ml.Media.AiringSchedule, ml.CustomLists, excludedLists,
 			)
 
 			if name != "" {
@@ -293,14 +303,11 @@ func computeAnimeFields(title anilist.Title, status anilist.MediaStatus, episode
 	return name, totalEpisodes, episodesReleased, coverImage, isBlacklisted
 }
 
-// mergeCurrentAniListAnimes merges animes fetched from AniList (filtered by both list status and
-// media status) into animeMap so they appear even with 0 downloaded episodes. It returns the set
-// of AnimeIDs it saw, so the caller can tell which already-downloaded animes weren't covered.
-// Retorna nil — e nao um mapa vazio — quando a busca falha, para o chamador distinguir
+// fetchAniListEntries returns one account's AniList entries, filtered by both list status
+// (server-side) and media status (here), with customLists overlaid.
+// Retorna nil — e nao uma lista vazia — quando a busca falha, para o chamador distinguir
 // "nenhum anime coberto" de "cobertura desconhecida"; o refresh de orfaos depende disso.
-// It never removes existing animeMap entries — an anime with downloaded episodes stays visible
-// even if its current status falls outside the allowed sets (see refreshOrphanAnimes).
-func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, excludedLists []string, statuses []string, mediaStatuses []string) map[int]bool {
+func fetchAniListEntries(username string, statuses []string, mediaStatuses []string) []anilist.MediaList {
 	// Fetch customLists via cached minimal query before the complex query that may null it out.
 	clMap := anilist.GetCustomListsMap(username, statuses)
 
@@ -310,7 +317,7 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 		return nil
 	}
 
-	var filtered []anilist.MediaList
+	filtered := make([]anilist.MediaList, 0, len(resp.Data.Page.MediaList))
 	for i := range resp.Data.Page.MediaList {
 		ml := &resp.Data.Page.MediaList[i]
 		if cl, ok := clMap[ml.Id]; ok && len(cl) > 0 {
@@ -321,13 +328,13 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 		}
 		filtered = append(filtered, *ml)
 	}
+	return filtered
+}
 
-	// Build set of covered AnimeIDs (list status filtered server-side, media status filtered above)
-	covered := make(map[int]bool, len(filtered))
-	for _, ml := range filtered {
-		covered[ml.Id] = true
-	}
-
+// mergeAniListAnimes merges AniList entries into animeMap so they appear even with 0 downloaded
+// episodes. It never removes existing animeMap entries — an anime with downloaded episodes stays
+// visible even if its current status falls outside the allowed sets (see refreshOrphanAnimes).
+func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.MediaList, excludedLists []string) {
 	// Build map from AnimeID → *AnimeInfo pointer so we can update existing entries
 	knownByID := make(map[int]*AnimeInfo)
 	for _, info := range animeMap {
@@ -345,7 +352,7 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 			continue
 		}
 
-		if existing, ok := knownByID[ml.Id]; ok {
+		if existing, ok := knownByID[ml.Media.Id]; ok {
 			existing.Name = name
 			if existing.TotalEpisodes == 0 {
 				existing.TotalEpisodes = totalEpisodes
@@ -358,7 +365,7 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 		}
 
 		animeMap[name] = &AnimeInfo{
-			AnimeID:          ml.Id,
+			AnimeID:          ml.Media.Id,
 			Name:             name,
 			EpisodesReleased: episodesReleased,
 			EpisodesWatched:  ml.Progress,
@@ -367,6 +374,4 @@ func mergeCurrentAniListAnimes(animeMap map[string]*AnimeInfo, username string, 
 			IsBlacklisted:    isBlacklisted,
 		}
 	}
-
-	return covered
 }

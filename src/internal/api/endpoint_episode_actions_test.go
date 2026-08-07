@@ -64,7 +64,7 @@ func mockAniListRecorder(called *bool) func() {
 		*called = true
 		return &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader(`{"data":{"MediaList":{}}}`)),
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"Page":{"mediaList":[]}}}`)),
 		}, nil
 	})
 }
@@ -236,9 +236,9 @@ func newRealEpisodeStore(t *testing.T) *realEpisodeStore {
 // airing-node ID is 42 and whose episode number is 5.
 func mockAnimeInfo() func() {
 	return anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
-		body := `{"data":{"MediaList":{"id":7,"status":"CURRENT","progress":0,"media":{
+		body := `{"data":{"Page":{"mediaList":[{"id":700,"status":"CURRENT","progress":0,"media":{
 			"id":7,"title":{"english":"My Anime","romaji":"My Anime"},"status":"RELEASING",
-			"episodes":12,"airingSchedule":{"nodes":[{"id":42,"episode":5,"airingAt":0,"timeUntilAiring":0}]}}}}}`
+			"episodes":12,"airingSchedule":{"nodes":[{"id":42,"episode":5,"airingAt":0,"timeUntilAiring":0}]}}}]}}}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(strings.NewReader(body)),

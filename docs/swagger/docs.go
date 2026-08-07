@@ -90,7 +90,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Anime ID (AniList MediaList ID)",
+                        "description": "Anime ID (AniList media ID)",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -1367,11 +1367,8 @@ const docTemplate = `{
         "api.AnimeDetailResponse": {
             "type": "object",
             "properties": {
-                "anilist_id": {
-                    "type": "integer",
-                    "example": 21
-                },
                 "anime_id": {
+                    "description": "AnimeID e o id da MIDIA na AniList — a mesma chave usada em episodes.json e nas rotas\n/animes/{id}/*, e tambem o id do link anilist.co/anime/{id} (ver decisions.md #43).",
                     "type": "integer"
                 },
                 "cover_image": {
@@ -1666,6 +1663,10 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "anime_ids_are_media_ids": {
+                    "description": "AnimeIDsAreMediaIDs marca que daemon.MigrateAnimeIDsToMedia ja converteu os AnimeID\ngravados de id de ENTRADA (MediaList, por conta) para id de MIDIA (ver decisions.md #43).\nO default e false de proposito: um config.json anterior a este campo desserializa por\ncima do default e precisa migrar. Numa instalacao nova a migracao roda sem nada a fazer\ne liga o campo no primeiro passe.",
+                    "type": "boolean"
                 },
                 "check_interval": {
                     "type": "integer"

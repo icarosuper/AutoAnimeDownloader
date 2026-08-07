@@ -628,9 +628,9 @@
            largura, o botão quebra para a própria linha quando não cabe. -->
       <div class="min-w-[200px] flex-1">
         <h1 class="text-[24px] font-bold leading-tight text-heading">
-          {#if anime && detail?.anilist_id}
+          {#if anime && detail?.anime_id}
             <a
-              href="https://anilist.co/anime/{detail.anilist_id}"
+              href="https://anilist.co/anime/{detail.anime_id}"
               target="_blank"
               rel="noopener noreferrer"
               class="hover:underline"

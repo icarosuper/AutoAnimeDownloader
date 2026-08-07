@@ -12,7 +12,7 @@ Before doing anything manual, try:
 make debug-anime ID=<anilistId>
 ```
 
-`<anilistId>` is the AniList MediaList ID (visible in the web UI URL for that anime, `#/status/<id>`, or via `GET /api/v1/animes`). This runs a one-shot pass — no running daemon required (the torrent client is embedded, nothing external to start) — that:
+`<anilistId>` is the AniList **media** ID (visible in the web UI URL for that anime, `#/status/<id>`, or via `GET /api/v1/animes`). This runs a one-shot pass — no running daemon required (the torrent client is embedded, nothing external to start) — that:
 
 1. Fetches the anime from AniList and logs the full response (title, progress, status, synonyms, relations, airing schedule).
 2. Picks the episodes that would be searched (same `checkEpisode` logic the real loop uses).

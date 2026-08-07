@@ -108,7 +108,7 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ### 11. `GetCustomListsMap` — separate lightweight query + cache for `customLists`
 
-**Location:** `internal/anilist/anilist.go` — `GetCustomListsMap`; called at the top of `searchAnilist` (`verification.go`) and `mergeCurrentAniListAnimes` (`api/endpoint_animes.go`) before `GetAllCurrentAnime`.
+**Location:** `internal/anilist/anilist.go` — `GetCustomListsMap`; called at the top of `searchAnilist` (`verification.go`) and `fetchAniListEntries` (`api/endpoint_animes.go`) before `GetAllCurrentAnime`.
 
 **What it looks like:** We call Anilist twice per verification cycle: once with a minimal `id + customLists` query, and once with the full `GetAllCurrentAnime` query. Then we overwrite `ml.CustomLists` from the first result when the second comes back with `null`. Looks like redundant work and a band-aid.
 
@@ -131,11 +131,11 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ### 13. `GetFrontendAnimeList` — separate lighter Anilist query for the API endpoint
 
-**Location:** `internal/anilist/anilist.go` — `GetFrontendAnimeList`; called from `mergeCurrentAniListAnimes` (`api/endpoint_animes.go`).
+**Location:** `internal/anilist/anilist.go` — `GetFrontendAnimeList`; called from `fetchAniListEntries` (`api/endpoint_animes.go`).
 
 **What it looks like:** There are now two functions that both return `*AniListResponse` and differ only in which GraphQL fields they request. Looks like duplication.
 
-**Why it's right:** `GetAllCurrentAnime` (used by the daemon verification loop via `searchAnilist`) needs `synonyms`, `relations`, and `format` to match torrents and compute offsets, but does not need `coverImage`. `mergeCurrentAniListAnimes` (frontend `/animes` endpoint) needs `coverImage` for display but never touches `synonyms`, `relations`, or the `id` field on airingSchedule nodes. Keeping them separate lets each query stay within Anilist's complexity budget — `GetAllCurrentAnime` avoids the cost of fetching images, and `GetFrontendAnimeList` avoids the cost of fetching relations/synonyms. The return type is the same (`*AniListResponse`); unused fields simply remain at their zero values.
+**Why it's right:** `GetAllCurrentAnime` (used by the daemon verification loop via `searchAnilist`) needs `synonyms`, `relations`, and `format` to match torrents and compute offsets, but does not need `coverImage`. `GetFrontendAnimeList` (frontend `/animes` endpoint) needs `coverImage` for display but never touches `synonyms`, `relations`, or the `id` field on airingSchedule nodes. Keeping them separate lets each query stay within Anilist's complexity budget — `GetAllCurrentAnime` avoids the cost of fetching images, and `GetFrontendAnimeList` avoids the cost of fetching relations/synonyms. The return type is the same (`*AniListResponse`); unused fields simply remain at their zero values.
 
 **Don't "fix" by:** merging back into one query. Requesting all fields from both call sites is what caused complexity-budget exhaustion (see decision 11).
 
@@ -187,15 +187,15 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ---
 
-### 16. `anime_id` is the AniList MediaList entry ID, not the AniList media ID
+### 16. `anime_id` é o AniList **media** ID (foi o MediaList entry ID até a migração)
 
-**Location:** `internal/anilist/anilist.go` (`MediaList.Id`, `GetAnimeInfo(mediaListId)`); `internal/api/endpoint_animes.go` and `endpoint_anime_episodes.go` (`AnimeID` fields).
+**Location:** `internal/anilist/anilist.go` (`Media.Id`, `GetAnimeInfo(mediaId, usernames)`); `internal/api/endpoint_animes.go` e `endpoint_anime_episodes.go` (campos `AnimeID`); `daemon/migration.go` (`MigrateAnimeIDsToMedia`).
 
-**What it looks like:** `anime_id` is used everywhere as *the* identifier for an anime (settings files keyed by it, episode records, route params) — it would be natural to assume it's the AniList media ID and build an `anilist.co/anime/{id}` link directly from it.
+**What it looks like:** `anime_id` é *o* identificador de anime em todo lugar (arquivo de settings, registros de episódio, parâmetros de rota) e também serve de componente da URL `anilist.co/anime/{id}` — não existe mais um `anilist_id` separado na API.
 
-**Why it's right:** The value actually comes from the top-level `id` field of AniList's `MediaList` GraphQL type, i.e. the list-entry ID (unique per user-entry), not `media.id` (the actual anime). It's stable and available from every query that returns a user's list, which is why it was chosen as the app-wide key. But it is not a valid AniList media URL component — `anilist.co/anime/{mediaListEntryId}` 404s. The real media ID is only fetched where needed: `AnimeDetailResponse.AnilistID` (from `GetAnimeInfo`'s `media { id }`), used solely to build the "view on AniList" link.
+**Why it's right:** até a migração, o valor vinha do campo `id` do tipo `MediaList` da AniList, que é o id da **entrada de lista** e portanto **por conta**. Com mais de uma conta configurada, o mesmo anime tinha dois `anime_id`, e o app tratava como dois animes. Ver a decisão #43 para o bug concreto e o desenho atual. Instalações antigas são convertidas uma única vez por `MigrateAnimeIDsToMedia`, marcada pelo campo `anime_ids_are_media_ids` do config.
 
-**Don't "fix" by:** assuming `anime_id` can be used to build AniList URLs, or replacing `anime_id` app-wide with the media ID — that would require re-keying settings files and episode records, a much larger and unrelated change.
+**Don't "fix" by:** voltar a chavear qualquer coisa por `MediaList.Id` (é por conta — ver #43); rodar a migração de novo depois da marca ligada (interpretaria ids de mídia como ids de entrada).
 
 ---
 
@@ -633,9 +633,9 @@ Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são f
 
 ---
 
-### 42. Todo estado persistido do `FileManager` grava com temp+rename sob `m.mu`, e `mergeCurrentAniListAnimes` devolve `nil` de propósito
+### 42. Todo estado persistido do `FileManager` grava com temp+rename sob `m.mu`, e `fetchAniListEntries` devolve `nil` de propósito
 
-**Location:** `files/filemanager.go` (`writeAtomic`, `loadSavedEpisodesLocked`, `saveEpisodesLocked`, `loadBlockedEpisodesLocked`, `saveBlockedEpisodesLocked`), `files/parser.go` (`ParseEpisodes`), `api/endpoint_animes.go` (`handleAnimes`, `mergeCurrentAniListAnimes`, `refreshOrphanAnimes`).
+**Location:** `files/filemanager.go` (`writeAtomic`, `loadSavedEpisodesLocked`, `saveEpisodesLocked`, `loadBlockedEpisodesLocked`, `saveBlockedEpisodesLocked`), `files/parser.go` (`ParseEpisodes`), `api/endpoint_animes.go` (`handleAnimes`, `fetchAniListEntries`, `refreshOrphanAnimes`).
 
 **What it looks like:** dois pares de convenções que parecem cerimônia e são cicatriz de um incidente real (07/08/2026): soltar 5 episódios de uma vez pela UI matou a API por 3 minutos e depois prendeu o daemon numa tempestade de 429 na AniList.
 
@@ -645,6 +645,28 @@ Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são f
 
 **(c) `ParseEpisodes` reporta os DOIS erros.** Para um arquivo já migrado o erro do formato antigo é ruído (ele só reclama que a linha é JSON), e reportar só ele escondia a linha JSONL realmente quebrada. A mensagem que produzia — `invalid episode ID '{"episode_id"'` — apontava para a linha 1 de um arquivo cuja linha 1 estava íntegra, e foi o que mais atrasou o diagnóstico do incidente.
 
-**(d) `mergeCurrentAniListAnimes` devolve `nil` na falha e mapa vazio (não-`nil`) no sucesso — e `handleAnimes` depende disso.** `refreshOrphanAnimes` busca um `GetAnimeInfo` individual por anime que ficou fora do conjunto `covered`. Quando a busca da lista falhava, `covered` ficava vazio e **todo anime com episódio baixado virava órfão**: 16 requests por poll de `/api/v1/animes`, ~10 polls por minuto, com o frontend aberto em duas abas. Isso multiplicava um 500 passageiro da AniList em ~200 requests/min contra um limite de 90 (hoje degradado para 30) — e o 429 resultante fazia a busca da lista falhar de novo, fechando o ciclo: o daemon não saía sozinho. Por isso, com qualquer conta falhando, o refresh de órfãos é **pulado inteiro**: sem a lista não dá para saber o que está coberto, e tratar "não coberto" como "precisa refresh" é justamente o amplificador. Os animes continuam visíveis com os dados locais — degradar campo desatualizado é barato, derrubar a AniList não.
+**(d) `fetchAniListEntries` devolve `nil` na falha e slice vazio (não-`nil`) no sucesso — e `handleAnimes` depende disso.** `refreshOrphanAnimes` busca um `GetAnimeInfo` individual por anime que ficou fora do conjunto `covered`. Quando a busca da lista falhava, `covered` ficava vazio e **todo anime com episódio baixado virava órfão**: 16 requests por poll de `/api/v1/animes`, ~10 polls por minuto, com o frontend aberto em duas abas. Isso multiplicava um 500 passageiro da AniList em ~200 requests/min contra um limite de 90 (hoje degradado para 30) — e o 429 resultante fazia a busca da lista falhar de novo, fechando o ciclo: o daemon não saía sozinho. Por isso, com qualquer conta falhando, o refresh de órfãos é **pulado inteiro**: sem a lista não dá para saber o que está coberto, e tratar "não coberto" como "precisa refresh" é justamente o amplificador. Os animes continuam visíveis com os dados locais — degradar campo desatualizado é barato, derrubar a AniList não.
 
-**Don't "fix" by:** chamar o método público de dentro de um `...Locked` (deadlock — `sync.Mutex` não é reentrante); "simplificar" `writeAtomic` de volta para `WriteFile` porque "o lock já resolve" (o lock só protege este processo, não protege queda de energia no meio da escrita); fazer `mergeCurrentAniListAnimes` devolver mapa vazio na falha "porque nil é mapa vazio em Go" (apaga a distinção entre "nenhum coberto" e "cobertura desconhecida" e ressuscita a tempestade); tratar o skip do refresh de órfãos como perda de funcionalidade e "só limitar a concorrência" (o `maxConcurrentOrphanRefresh` já existe e não ajuda — ele limita o paralelismo, não o total de requests por poll).
+**Don't "fix" by:** chamar o método público de dentro de um `...Locked` (deadlock — `sync.Mutex` não é reentrante); "simplificar" `writeAtomic` de volta para `WriteFile` porque "o lock já resolve" (o lock só protege este processo, não protege queda de energia no meio da escrita); fazer `fetchAniListEntries` devolver slice vazio na falha "porque nil é slice vazio em Go" (apaga a distinção entre "nenhum coberto" e "cobertura desconhecida" e ressuscita a tempestade); tratar o skip do refresh de órfãos como perda de funcionalidade e "só limitar a concorrência" (o `maxConcurrentOrphanRefresh` já existe e não ajuda — ele limita o paralelismo, não o total de requests por poll).
+
+---
+
+### 43. A identidade de um anime é `Media.Id`; status é uma pergunta POR CONTA (download = OR, deleção = AND)
+
+**Location:** `anilist/anilist.go` (`DedupeByMedia`, `GetAnimeInfo`, `GetMediaListStatus`, `GetMediaIDForEntry`), `daemon/verification.go` (`searchAnilist`, `deletableMediaIDs`, `allAccountsAgreeOnDelete`), `daemon/migration.go` (`MigrateAnimeIDsToMedia`), `api/endpoint_animes.go`.
+
+**What it looks like:** três coisas que parecem exageradas — `GetAnimeInfo` recebe a lista de usernames e faz uma requisição por conta para buscar UM anime; `DedupeByMedia` avisa no comentário que ninguém pode ler o `Status` do resultado; e `allAccountsAgreeOnDelete` dispara uma consulta extra por conta que não reportou o anime.
+
+**Why it's right:** `MediaList.Id` é o id da **entrada**, que é por conta — o mesmo anime em duas contas chega como duas entradas com ids diferentes e o mesmo `Media.Id`. Enquanto o `AnimeID` gravado era o id da entrada, ele apontava para **uma** das contas, e o `GET /animes` listava o anime duas vezes: uma sob a chave `id:<AnimeID>` vinda do disco e outra pelo nome, porque a entrada da outra conta não batia com nada conhecido (bug real: "From Old Country Bumpkin to Master Swordsman II", entradas 488911345 e 583631757, media 194829). Pior que a duplicata: qual entrada "vence" dependia do progresso, então o id gravado em disco **mudava** conforme o usuário assistia, e a deleção por status, as settings por anime e a tela de detalhe passavam a procurar por um id que metade dos registros não tinha.
+
+Com `Media.Id` como identidade isso some por construção. O que sobra é o que a identidade única *não* resolve: cada conta tem seu próprio `status` e `progress` para a mesma mídia, e colapsar os dois numa entrada só significa escolher. As escolhas são deliberadamente assimétricas, porque os erros não custam o mesmo:
+
+- **`progress`: o MENOR entre as contas** (`DedupeByMedia`). Um episódio só é "assistido" quando todas as contas o viram; errar para o lado alto apaga episódio que alguém ainda não assistiu.
+- **Download: OR** — basta UMA conta ter o anime em status de download. Já sai de graça da união das listas em `searchAnilist`, já que cada busca é filtrada por `status_in` no servidor.
+- **Deleção: AND** — TODAS as contas que têm o anime precisam tê-lo em algum status de deleção, e não precisa ser o mesmo (`DROPPED` numa e `COMPLETED` noutra apaga). Uma conta que **não acompanha** o anime não vota; uma que o tem em status neutro (`PLANNING`) **veta**. Distinguir esses dois casos é exatamente o que a consulta extra de `allAccountsAgreeOnDelete` compra: a busca por lista só traz os deletáveis, então "não veio na lista" é ambíguo. Ela só roda para anime **com episódio em disco** que alguma conta quer apagar — um conjunto que se esvazia sozinho, porque o anime some do disco no mesmo passe.
+
+Consequência direta: **ninguém pode ler o `Status` da entrada vencedora do dedup** — ele é de uma conta arbitrária. Quem responde sobre status é `deletableMediaIDs`.
+
+**Migração:** `MigrateAnimeIDsToMedia` resolve cada `anime_id` antigo via `GetMediaIDForEntry` e reescreve `downloaded_episodes` e `anime_settings`, marcando `anime_ids_are_media_ids` no config. Roda no boot **e** no topo do passe de verificação, e o passe **aborta** enquanto ela não tiver rodado: com os ids no formato antigo nada em disco casa com a AniList, e um passe nesse estado rebaixaria a biblioteca inteira. Só escreve depois de resolver tudo, então uma falha de rede no meio não deixa metade convertida. Entradas que já não existem na AniList (404) ficam com o id antigo e são apenas logadas — os episódios continuam em disco.
+
+**Don't "fix" by:** deduplicar por nome (dois animes distintos podem compartilhar título em inglês, e o nome de um registro vindo só do `episodes.json` não vem da AniList); tirar o `media { id }` de `GetFrontendAnimeList`/`GetAllCurrentAnime` por "complexidade" (é um escalar, e sem ele a chave do dedup é `0` — todas as entradas caem no ramo "sem media id" e o bug volta inteiro, silenciosamente); ramificar em `MediaList.Status` depois do dedup (é de uma conta sorteada); trocar o veto por "qualquer conta em status de deleção apaga" (basta uma conta completar um anime para os episódios sumirem debaixo de quem ainda assiste); tratar conta com busca falhada como concordância (transformaria uma falha passageira da AniList em deleção de arquivo, que é irreversível); rodar a migração sem a marca de conclusão (na segunda vez ela leria ids de mídia como ids de entrada).
