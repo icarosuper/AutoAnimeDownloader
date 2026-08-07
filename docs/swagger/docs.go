@@ -1453,6 +1453,11 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 8
                 },
+                "episodes_pending": {
+                    "description": "EpisodesPending conta episodios ja lancados, ainda nao assistidos e ainda nao baixados.\nEpisodio assistido nunca e baixado (daemon.shouldSkipEpisode), entao ele nao pode contar\ncomo atraso — era isso que marcava meia lista como \"atrasado\" no frontend.",
+                    "type": "integer",
+                    "example": 2
+                },
                 "episodes_released": {
                     "type": "integer",
                     "example": 10

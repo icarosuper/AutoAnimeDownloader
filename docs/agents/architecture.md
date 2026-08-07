@@ -300,6 +300,7 @@ Middleware stack (API routes): CORS → JSON Content-Type → Logging. Static fi
 - `mergeCurrentAniListAnimes` — adds AniList animes (filtered by both `DownloadStatuses` and `DownloadMediaStatuses`) not yet in episodes.json; never removes an existing entry; returns the set of AnimeIDs it covered
 - `refreshOrphanAnimes` — for animeMap entries with a known AnimeID that `mergeCurrentAniListAnimes` didn't cover (current status fell outside the allowed sets), re-fetches cover/progress/blacklist via `anilist.GetAnimeInfo` per anime, bounded to `maxConcurrentOrphanRefresh` (5) in flight; a failed refresh just logs a warning and leaves the anime as-is — it's never removed
 - `computeAnimeFields` — shared field-derivation (name, total/released episodes, cover, blacklist) used by both the batch merge loop and the single-anime orphan refresh
+- `countPendingEpisodes` — preenche `AnimeInfo.EpisodesPending`: episódios lançados **acima do progresso da AniList** que não estão em disco. Conta por número de episódio (não `released - downloaded`) porque assistidos podem continuar salvos (`watched_episodes_to_keep`); o daemon nunca baixa episódio ≤ progresso, então ele não é atraso. É o número do chip "Atrasado" no frontend (`lib/domain/animeState.ts`)
 - `extractAnimeName(episodeName)` — strips episode number suffix from torrent name to get anime name
 
 ### `src/internal/api/endpoint_anime_episodes.go`

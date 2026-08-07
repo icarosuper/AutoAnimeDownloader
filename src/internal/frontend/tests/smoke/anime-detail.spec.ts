@@ -9,6 +9,7 @@ const mockAnimes = {
       episodes_downloaded: 1,
       episodes_released: 3,
       episodes_watched: 1,
+      episodes_pending: 1,
       total_episodes: 12,
       latest_episode_id: 1003,
       last_download_date: '2026-01-01T00:00:00Z',

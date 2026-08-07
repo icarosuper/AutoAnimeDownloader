@@ -509,3 +509,25 @@ func TestHandleAnimes(t *testing.T) {
 		}
 	})
 }
+
+func TestCountPendingEpisodes(t *testing.T) {
+	tests := []struct {
+		name       string
+		info       AnimeInfo
+		downloaded map[int]bool
+		want       int
+	}{
+		{"assistido ate o ultimo lancado nao e atraso", AnimeInfo{EpisodesWatched: 8, EpisodesReleased: 8}, nil, 0},
+		{"so conta o que passou do progresso", AnimeInfo{EpisodesWatched: 5, EpisodesReleased: 10}, map[int]bool{6: true, 7: true}, 3},
+		{"assistido salvo em disco nao esconde o atraso", AnimeInfo{EpisodesWatched: 5, EpisodesReleased: 10}, map[int]bool{4: true, 5: true, 6: true}, 4},
+		{"buraco no meio conta", AnimeInfo{EpisodesWatched: 0, EpisodesReleased: 3}, map[int]bool{1: true, 3: true}, 1},
+		{"progresso acima do lancado nao vira negativo", AnimeInfo{EpisodesWatched: 12, EpisodesReleased: 10}, nil, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := countPendingEpisodes(&tt.info, tt.downloaded); got != tt.want {
+				t.Fatalf("countPendingEpisodes = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

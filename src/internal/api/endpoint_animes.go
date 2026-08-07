@@ -26,11 +26,15 @@ type AnimeInfo struct {
 	EpisodesDownloaded int    `json:"episodes_downloaded" example:"8"`
 	EpisodesReleased   int    `json:"episodes_released" example:"10"`
 	EpisodesWatched    int    `json:"episodes_watched" example:"5"`
-	TotalEpisodes      int    `json:"total_episodes" example:"12"`
-	LatestEpisodeID    int    `json:"latest_episode_id" example:"12"`
-	LastDownloadDate   string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
-	CoverImage         string `json:"cover_image,omitempty"`
-	IsBlacklisted      bool   `json:"is_blacklisted,omitempty"`
+	// EpisodesPending conta episodios ja lancados, ainda nao assistidos e ainda nao baixados.
+	// Episodio assistido nunca e baixado (daemon.shouldSkipEpisode), entao ele nao pode contar
+	// como atraso — era isso que marcava meia lista como "atrasado" no frontend.
+	EpisodesPending  int    `json:"episodes_pending" example:"2"`
+	TotalEpisodes    int    `json:"total_episodes" example:"12"`
+	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
+	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
+	CoverImage       string `json:"cover_image,omitempty"`
+	IsBlacklisted    bool   `json:"is_blacklisted,omitempty"`
 }
 
 func extractAnimeName(episodeName string) string {
@@ -84,6 +88,9 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		// Group episodes by anime.
 		// Key: "id:<AnimeID>" when AnimeID is set, otherwise the extracted name (backward compat).
 		animeMap := make(map[string]*AnimeInfo)
+		// Numeros de episodio ja em disco, por anime — base do EpisodesPending calculado no final,
+		// depois que o merge da AniList preencheu released/watched.
+		downloadedNums := make(map[string]map[int]bool)
 
 		for _, episode := range episodes {
 			var key string
@@ -97,6 +104,13 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			displayName := episode.AnimeName
 			if displayName == "" {
 				displayName = extractAnimeName(episode.EpisodeName)
+			}
+
+			if episode.EpisodeNumber > 0 {
+				if downloadedNums[key] == nil {
+					downloadedNums[key] = make(map[int]bool)
+				}
+				downloadedNums[key][episode.EpisodeNumber] = true
 			}
 
 			if animeInfo, exists := animeMap[key]; exists {
@@ -159,12 +173,26 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
-		for _, animeInfo := range animeMap {
+		for key, animeInfo := range animeMap {
+			animeInfo.EpisodesPending = countPendingEpisodes(animeInfo, downloadedNums[key])
 			animes = append(animes, *animeInfo)
 		}
 
 		JSONSuccess(w, http.StatusOK, animes)
 	}
+}
+
+// countPendingEpisodes conta os episodios lancados acima do progresso de leitura que ainda nao
+// estao em disco. Percorre por numero (e nao released-downloaded) porque episodios assistidos
+// podem continuar salvos (watched_episodes_to_keep) e inflariam a subtracao.
+func countPendingEpisodes(info *AnimeInfo, downloaded map[int]bool) int {
+	pending := 0
+	for n := info.EpisodesWatched + 1; n <= info.EpisodesReleased; n++ {
+		if !downloaded[n] {
+			pending++
+		}
+	}
+	return pending
 }
 
 // maxConcurrentOrphanRefresh bounds concurrent per-anime AniList lookups for orphan refresh,

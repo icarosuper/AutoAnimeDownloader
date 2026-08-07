@@ -9,6 +9,7 @@ function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
     episodes_downloaded: 0,
     episodes_released: 0,
     episodes_watched: 0,
+    episodes_pending: 0,
     total_episodes: 12,
     latest_episode_id: 0,
     last_download_date: '',
@@ -104,15 +105,21 @@ describe('deriveAnimeChip', () => {
     expect(chip).toEqual({ key: 'awaitingPremiere', variant: 'neutral' })
   })
 
-  it('episodes_downloaded === episodes_released (both > 0) produces the upToDate chip', () => {
-    const anime = makeAnime({ episodes_released: 8, episodes_downloaded: 8 })
+  it('episodes_pending === 0 produces the upToDate chip', () => {
+    const anime = makeAnime({ episodes_released: 8, episodes_downloaded: 8, episodes_pending: 0 })
     const chip = deriveAnimeChip(anime, [], NOW)
     expect(chip).toEqual({ key: 'upToDate', variant: 'ok' })
   })
 
-  it('episodes_downloaded < episodes_released produces the behind chip with the gap count', () => {
-    const anime = makeAnime({ episodes_released: 8, episodes_downloaded: 5 })
+  it('episodes_pending > 0 produces the behind chip with the pending count', () => {
+    const anime = makeAnime({ episodes_released: 8, episodes_downloaded: 5, episodes_pending: 3 })
     const chip = deriveAnimeChip(anime, [], NOW)
     expect(chip).toEqual({ key: 'behind', variant: 'warn', behindCount: 3 })
+  })
+
+  it('nada baixado mas tudo assistido nao e atraso (episodes_pending === 0)', () => {
+    const anime = makeAnime({ episodes_released: 8, episodes_downloaded: 0, episodes_watched: 8, episodes_pending: 0 })
+    const chip = deriveAnimeChip(anime, [], NOW)
+    expect(chip).toEqual({ key: 'upToDate', variant: 'ok' })
   })
 })

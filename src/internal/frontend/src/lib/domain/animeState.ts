@@ -93,13 +93,15 @@ export function deriveAnimeChip(
     return { key: 'awaitingPremiere', variant: 'neutral' }
   }
 
-  if (anime.episodes_downloaded === anime.episodes_released) {
+  // `episodes_pending` ja desconta o que foi assistido (o daemon nunca baixa episodio abaixo do
+  // progresso da AniList, entao ele nao e atraso) — ver countPendingEpisodes no backend.
+  if (anime.episodes_pending === 0) {
     return { key: 'upToDate', variant: 'ok' }
   }
 
   return {
     key: 'behind',
     variant: 'warn',
-    behindCount: anime.episodes_released - anime.episodes_downloaded,
+    behindCount: anime.episodes_pending,
   }
 }

@@ -141,6 +141,8 @@ export interface AnimeInfo {
   episodes_downloaded: number
   episodes_released: number
   episodes_watched: number
+  /** Lancados, nao assistidos e nao baixados — a contagem de "atrasado". */
+  episodes_pending: number
   total_episodes: number
   latest_episode_id: number
   last_download_date: string

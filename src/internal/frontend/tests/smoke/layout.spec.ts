@@ -51,6 +51,7 @@ const manyAnimes = Array.from({ length: 30 }, (_, i) => ({
   episodes_downloaded: 128,
   episodes_released: 128,
   episodes_watched: 128,
+  episodes_pending: 0,
   total_episodes: 128,
   latest_episode_id: 128,
   last_download_date: '2026-01-03T00:00:00Z',
