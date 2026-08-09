@@ -319,6 +319,12 @@ func main() {
 	// ainda nao tiver funcionado.
 	if err := daemon.MigrateAnimeIDsToMedia(fileManager); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to migrate anime IDs to AniList media IDs; the verification pass will retry")
+	} else if saved, err := fileManager.LoadSavedEpisodes(); err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load saved episodes for the tvshow.nfo backfill")
+	} else {
+		// So depois da migracao acima ter dado certo: com id de entrada o nfo sairia com o id
+		// errado, e ele nunca e reescrito. Idempotente (nao sobrescreve), entao roda todo boot.
+		librarian.BackfillShowNFOs(saved)
 	}
 	// Defers run LIFO: register Close first so jobQueue.Stop() (which may run organize jobs
 	// that use the session) runs before the session is closed.

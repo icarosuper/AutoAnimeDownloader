@@ -670,3 +670,45 @@ Consequência direta: **ninguém pode ler o `Status` da entrada vencedora do ded
 **Migração:** `MigrateAnimeIDsToMedia` resolve cada `anime_id` antigo via `GetMediaIDForEntry` e reescreve `downloaded_episodes` e `anime_settings`, marcando `anime_ids_are_media_ids` no config. Roda no boot **e** no topo do passe de verificação, e o passe **aborta** enquanto ela não tiver rodado: com os ids no formato antigo nada em disco casa com a AniList, e um passe nesse estado rebaixaria a biblioteca inteira. Só escreve depois de resolver tudo, então uma falha de rede no meio não deixa metade convertida. Entradas que já não existem na AniList (404) ficam com o id antigo e são apenas logadas — os episódios continuam em disco.
 
 **Don't "fix" by:** deduplicar por nome (dois animes distintos podem compartilhar título em inglês, e o nome de um registro vindo só do `episodes.json` não vem da AniList); tirar o `media { id }` de `GetFrontendAnimeList`/`GetAllCurrentAnime` por "complexidade" (é um escalar, e sem ele a chave do dedup é `0` — todas as entradas caem no ramo "sem media id" e o bug volta inteiro, silenciosamente); ramificar em `MediaList.Status` depois do dedup (é de uma conta sorteada); trocar o veto por "qualquer conta em status de deleção apaga" (basta uma conta completar um anime para os episódios sumirem debaixo de quem ainda assiste); tratar conta com busca falhada como concordância (transformaria uma falha passageira da AniList em deleção de arquivo, que é irreversível); rodar a migração sem a marca de conclusão (na segunda vez ela leria ids de mídia como ids de entrada).
+
+---
+
+### 44. O `tvshow.nfo` é escrito DEPOIS dos hardlinks, nunca sobrescreve, e falhar nele não falha o organize
+
+**Location:** `internal/files/librarian.go` (`writeShowNFO`, chamado no fim de `Organize`, e `BackfillShowNFOs`); `internal/daemon/jobs.go` (`organizeTorrent` preenche `OrganizeRequest.AnimeID`); `cmd/daemon/main.go` (chamada do backfill no boot).
+
+**What it looks like:** o nfo parece que deveria ser escrito logo depois do `MkdirAll` (é metadado da pasta, não dos arquivos), e um erro ao escrevê-lo parece um erro do `Organize`.
+
+**Why it's right:** três coisas, todas por causa de invariantes que já existiam:
+
+- **Depois dos links:** o rollback de `Organize` é `cleanupIfEmpty`, que usa `os.Remove` e só funciona em pasta **vazia**. Um nfo escrito antes de um hardlink que falha (cross-device, permissão) deixaria a pasta não-vazia e um diretório órfão na biblioteca a cada retry.
+- **Não sobrescreve:** se o usuário corrigiu o match à mão no Jellyfin (que reescreve o nfo), o próximo episódio do mesmo anime não pode desfazer isso. `Organize` roda uma vez por torrent, então isso acontece o tempo todo.
+- **Só loga em falha:** os hardlinks são o produto; devolver erro aqui faria o job repetir (backoff, e depois dropar) um trabalho que já deu certo, e o `LibraryPaths` nunca seria gravado.
+
+O `AnimeID` é o id de **mídia** da AniList (decisions.md #43) — vem de `EpisodeStruct.AnimeID` já migrado. `AnimeID == 0` (registro antigo não resolvível) simplesmente pula o nfo: o Jellyfin volta a adivinhar pelo nome, que é o comportamento anterior.
+
+**O backfill existe porque `Organize` nao re-roda:** `organizeTorrent` sai cedo quando os episodios do hash ja tem `LibraryPaths`, e `reconcileLibrary` so enfileira quem tem `LibraryPaths` vazio. Sem `BackfillShowNFOs` um anime ja terminado nunca ganharia o arquivo (um em andamento ganharia no proximo episodio). Ele roda **todo boot** e nao tem flag de "ja rodou": o "nao sobrescreve" ja o torna idempotente, e uma flag so criaria um estado a mais para dessincronizar. A pasta vem de `LibraryPaths`, nao de `sanitizeName(AnimeName)` — e o unico caminho que com certeza casa com o que existe em disco depois de renomeacoes manuais ou mudancas na sanitizacao.
+
+**Ele e gated pela migracao de ids** (`main.go`, ramo `else` de `MigrateAnimeIDsToMedia`): com os ids no formato antigo o nfo sairia com um id de ENTRADA, e como nunca e reescrito isso seria permanente. Roda no `else` de propósito — falha de migracao apenas adia o backfill para o proximo boot.
+
+**Requer no Jellyfin:** o plugin `jellyfin-plugin-anilist` como provedor de metadados; sem ele o `uniqueid type="anilist"` é ignorado.
+
+**Don't "fix" by:** mover a escrita para junto do `MkdirAll`; sobrescrever sempre "para manter sincronizado"; propagar o erro de escrita para o retorno de `Organize`; dar uma flag de config ao backfill; derivar a pasta do backfill do nome do anime; rodar o backfill antes/independente da migracao de ids.
+
+---
+
+### 45. Uma pasta de biblioteca por ENTRADA da AniList — o marcador de season fica no nome
+
+**Location:** `internal/files/librarian.go` — `sanitizeName` (era `sanitizeFolderName` + `sanitizeFileName`, agora uma so) e o `destDir` em `Organize`; teste `TestSanitizeNameKeepsSeasonMarker`.
+
+**What it looks like:** o layout "certo" pro Jellyfin/TVDB e uma pasta por serie com `Season 03/` dentro, e ate `cd496c3` o codigo ia meio caminho nessa direcao: um `seasonPattern` apagava "Season 2"/"S2"/"2nd Season"/"Cour 2" do nome da pasta, juntando todas as seasons numa pasta so.
+
+**Why it's right:** na AniList **nao existe** serie com varias seasons. Cada season e uma midia propria, com id, capa, sinopse e numeracao de episodio comecando em 1 — e os nossos dados sao exatamente assim (um `AnimeID` por season, `EpisodeNumber` reiniciando). Juntar as seasons numa pasta so obrigava o Jellyfin a escolher UMA entrada pra pasta inteira, e ele escolhia a season 1: toda season nova aparecia com a capa e os metadados da primeira (relato real: Mushoku Tensei — as entradas 108465, 127720, 146065 e 178789 caiam todas em `Mushoku Tensei Jobless Reincarnation`). O agrupamento nem era coerente: o regex comia "Season 2" mas nao "Part", entao "Season 2 Part 2" ia parar numa quinta pasta.
+
+Com o `tvshow.nfo` (decisions.md #44) isso deixaria de ser um palpite e viraria erro fixo: a primeira season a chegar na pasta gravaria o `uniqueid` dela e, como o nfo nunca e sobrescrito, prenderia a pasta naquela season para sempre.
+
+O layout de franquia com `Season NN/` tambem nao tem como funcionar aqui: o `tvshow.nfo` da franquia precisaria de um id que a AniList nao tem, e o `jellyfin-plugin-anilist` nao fornece metadado por season. Uma pasta por entrada e ao mesmo tempo o diff menor e o unico modelo que casa com o provider.
+
+Como as duas funcoes de sanitizacao ficaram identicas depois de tirar o regex, viraram uma: `sanitizeName`.
+
+**Don't "fix" by:** reintroduzir o strip de season "pra agrupar a franquia"; criar subpastas `Season NN/` (a numeracao de episodio da AniList e por entrada, entao E01 da season 3 e mesmo o episodio 1 da midia dela, nao o 25 da franquia); deduplicar pastas por titulo-base.

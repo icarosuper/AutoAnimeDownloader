@@ -3,10 +3,11 @@ package files
 import (
 	"AutoAnimeDownloader/src/internal/logger"
 
+	"encoding/xml"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -39,7 +40,10 @@ type OrganizeRequest struct {
 	// TorrentDataDir is the on-disk root of the torrent's content (<DataDir>/<id>).
 	TorrentDataDir string
 	AnimeName      string
-	CompletedPath  string
+	// AnimeID e o id de MIDIA da AniList; vira o <uniqueid> do tvshow.nfo para o Jellyfin
+	// casar pelo id em vez de adivinhar pelo titulo da pasta. Zero = pula o nfo.
+	AnimeID       int
+	CompletedPath string
 	// EpisodeNumber is used for the Jellyfin name; required when RenameJellyfin is set
 	// for a single episode.
 	EpisodeNumber *int
@@ -60,8 +64,6 @@ func NewLibrarian(fs FileSystem) *organizer {
 	return &organizer{fs: fs, link: fs.Link}
 }
 
-var seasonPattern = regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season|cour\s*\d+)`)
-
 var videoExtensions = map[string]bool{
 	".mkv": true, ".mp4": true, ".avi": true, ".mov": true, ".m4v": true,
 	".webm": true, ".flv": true, ".wmv": true, ".ts": true, ".mpg": true,
@@ -72,17 +74,9 @@ func isVideoFile(name string) bool {
 	return videoExtensions[strings.ToLower(filepath.Ext(name))]
 }
 
-// sanitizeFolderName strips filesystem-invalid characters and season/cour markers.
-func sanitizeFolderName(name string) string {
-	sanitized := stripInvalidChars(name)
-	sanitized = seasonPattern.ReplaceAllString(sanitized, "")
-	sanitized = strings.TrimSpace(sanitized)
-	sanitized = strings.ReplaceAll(sanitized, "  ", " ")
-	return sanitized
-}
-
-// sanitizeFileName strips filesystem-invalid characters (keeps season markers).
-func sanitizeFileName(name string) string {
+// sanitizeName strips filesystem-invalid characters. O marcador de season e MANTIDO: uma
+// pasta por entrada da AniList (decisions.md #45).
+func sanitizeName(name string) string {
 	sanitized := stripInvalidChars(name)
 	sanitized = strings.TrimSpace(sanitized)
 	sanitized = strings.ReplaceAll(sanitized, "  ", " ")
@@ -100,7 +94,7 @@ func stripInvalidChars(name string) string {
 
 // jellyfinName returns "Anime - E05.ext".
 func jellyfinName(animeName string, episodeNumber int, ext string) string {
-	return fmt.Sprintf("%s - E%02d%s", sanitizeFileName(animeName), episodeNumber, ext)
+	return fmt.Sprintf("%s - E%02d%s", sanitizeName(animeName), episodeNumber, ext)
 }
 
 func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
@@ -118,7 +112,7 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		return nil, fmt.Errorf("no video files found in %s", req.TorrentDataDir)
 	}
 
-	destDir := filepath.Join(req.CompletedPath, sanitizeFolderName(req.AnimeName))
+	destDir := filepath.Join(req.CompletedPath, sanitizeName(req.AnimeName))
 
 	// Track whether we created destDir, so we can clean it up on a cross-device failure
 	// without leaving an orphan folder in the library.
@@ -180,7 +174,86 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		created = append(created, dest)
 	}
 
+	// Depois dos links: se falhar antes, cleanupIfEmpty nao conseguiria remover a pasta.
+	o.writeShowNFO(destDir, req.AnimeName, req.AnimeID)
+
 	return created, nil
+}
+
+type nfoUniqueID struct {
+	Type    string `xml:"type,attr"`
+	Default bool   `xml:"default,attr"`
+	Value   string `xml:",chardata"`
+}
+
+type nfoTVShow struct {
+	XMLName  xml.Name    `xml:"tvshow"`
+	Title    string      `xml:"title"`
+	UniqueID nfoUniqueID `xml:"uniqueid"`
+}
+
+// writeShowNFO escreve o tvshow.nfo com o id da AniList para o Jellyfin (plugin AniList)
+// casar pelo id. Nao sobrescreve um nfo existente — o usuario pode ter ajustado o match a
+// mao. Falha aqui nao invalida os hardlinks, entao so loga. Retorna true se escreveu.
+func (o *organizer) writeShowNFO(destDir, animeName string, animeID int) bool {
+	if animeID <= 0 {
+		return false
+	}
+	path := filepath.Join(destDir, "tvshow.nfo")
+	if _, err := o.fs.Stat(path); err == nil {
+		return false
+	}
+
+	data, err := xml.MarshalIndent(nfoTVShow{
+		Title:    animeName,
+		// "AniList" com essa capitalizacao e o valor de ProviderNames.AniList no
+		// jellyfin-plugin-anilist. O ProviderIds do Jellyfin e OrdinalIgnoreCase, entao
+		// minusculo tambem casaria — escrevemos igual ao provider para nao depender disso.
+		UniqueID: nfoUniqueID{Type: "AniList", Default: true, Value: strconv.Itoa(animeID)},
+	}, "", "  ")
+	if err != nil {
+		logger.Logger.Warn().Err(err).Str("path", path).Msg("Failed to build tvshow.nfo")
+		return false
+	}
+	data = append([]byte(xml.Header), append(data, '\n')...)
+
+	if err := o.fs.WriteFile(path, data, 0644); err != nil {
+		logger.Logger.Warn().Err(err).Str("path", path).Msg("Failed to write tvshow.nfo")
+		return false
+	}
+	return true
+}
+
+// BackfillShowNFOs escreve o tvshow.nfo das pastas que ja estavam na biblioteca antes de o
+// nfo existir: Organize so roda para episodio novo (sai cedo quando LibraryPaths ja esta
+// preenchido), entao sem isso um anime que ja terminou nunca ganharia o arquivo. A pasta sai
+// de LibraryPaths, nao do nome do anime, para casar com o que foi realmente criado em disco
+// (sanitizacao, renomeacao manual). Uma pasta por anime; pasta que sumiu do disco e pulada.
+//
+// SO PODE RODAR COM OS AnimeID JA MIGRADOS para id de midia (decisions.md #43): como o nfo
+// nunca e sobrescrito, gravar um id de entrada aqui seria permanente.
+func (o *organizer) BackfillShowNFOs(episodes []EpisodeStruct) {
+	seen := make(map[string]bool)
+	written := 0
+	for _, ep := range episodes {
+		if ep.AnimeID <= 0 || len(ep.LibraryPaths) == 0 {
+			continue
+		}
+		dir := filepath.Dir(ep.LibraryPaths[0])
+		if seen[dir] {
+			continue
+		}
+		seen[dir] = true
+		if _, err := o.fs.Stat(dir); err != nil {
+			continue // pasta removida da biblioteca por fora
+		}
+		if o.writeShowNFO(dir, ep.AnimeName, ep.AnimeID) {
+			written++
+		}
+	}
+	if written > 0 {
+		logger.Logger.Info().Int("count", written).Msg("Backfilled tvshow.nfo for existing library folders")
+	}
 }
 
 func (o *organizer) RemoveFromLibrary(path string) error {

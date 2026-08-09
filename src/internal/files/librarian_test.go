@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -67,16 +68,107 @@ func TestJellyfinName(t *testing.T) {
 	}
 }
 
-func TestSanitizeFolderName(t *testing.T) {
+// O marcador de season TEM de sobreviver: cada season e uma entrada propria na AniList, com
+// id e capa proprios. Apagar o marcador jogava Season 1/2/3 na mesma pasta e o Jellyfin
+// casava tudo com a season 1 (decisions.md #45).
+func TestSanitizeNameKeepsSeasonMarker(t *testing.T) {
 	cases := map[string]string{
-		"My Anime Season 2": "My Anime",
-		"Anime/Name:Test":   "AnimeNameTest",
-		"Show 2nd Season":   "Show",
+		"Anime/Name:Test":                                       "AnimeNameTest",
+		"My Anime Season 2":                                     "My Anime Season 2",
+		"Show 2nd Season":                                       "Show 2nd Season",
+		"Mushoku Tensei: Jobless Reincarnation":                 "Mushoku Tensei Jobless Reincarnation",
+		"Mushoku Tensei: Jobless Reincarnation Season 3":        "Mushoku Tensei Jobless Reincarnation Season 3",
+		"Mushoku Tensei: Jobless Reincarnation Cour 2":          "Mushoku Tensei Jobless Reincarnation Cour 2",
+		"Mushoku Tensei: Jobless Reincarnation Season 2 Part 2": "Mushoku Tensei Jobless Reincarnation Season 2 Part 2",
 	}
+	seen := make(map[string]string)
 	for in, want := range cases {
-		if got := sanitizeFolderName(in); got != want {
-			t.Errorf("sanitizeFolderName(%q) = %q, want %q", in, got, want)
+		got := sanitizeName(in)
+		if got != want {
+			t.Errorf("sanitizeName(%q) = %q, want %q", in, got, want)
 		}
+		if other, dup := seen[got]; dup {
+			t.Errorf("%q e %q caem na mesma pasta %q", other, in, got)
+		}
+		seen[got] = in
+	}
+}
+
+func TestOrganizeWritesShowNFO(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "torrentid")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "ep.mkv"), "video-bytes")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	req := OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "My Anime",
+		AnimeID:        194829,
+		CompletedPath:  completed,
+	}
+	if _, err := lib.Organize(req); err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+
+	nfo := filepath.Join(completed, "My Anime", "tvshow.nfo")
+	data, err := os.ReadFile(nfo)
+	if err != nil {
+		t.Fatalf("tvshow.nfo missing: %v", err)
+	}
+	if !strings.Contains(string(data), `<uniqueid type="AniList" default="true">194829</uniqueid>`) {
+		t.Errorf("nfo sem uniqueid da anilist:\n%s", data)
+	}
+
+	// Nao sobrescreve um nfo existente (match ajustado a mao pelo usuario).
+	if err := os.WriteFile(nfo, []byte("manual"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lib.Organize(req); err != nil {
+		t.Fatalf("Organize (2a vez): %v", err)
+	}
+	if data, _ := os.ReadFile(nfo); string(data) != "manual" {
+		t.Errorf("nfo existente foi sobrescrito: %s", data)
+	}
+
+	// Sem AnimeID nao escreve nada.
+	req.AnimeName = "Outro Anime"
+	req.AnimeID = 0
+	if _, err := lib.Organize(req); err != nil {
+		t.Fatalf("Organize (sem id): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(completed, "Outro Anime", "tvshow.nfo")); err == nil {
+		t.Error("escreveu tvshow.nfo sem AnimeID")
+	}
+}
+
+func TestBackfillShowNFOs(t *testing.T) {
+	tmp := t.TempDir()
+	existing := filepath.Join(tmp, "completed", "My Anime")
+	writeFile(t, filepath.Join(existing, "My Anime - E01.mkv"), "video-bytes")
+	gone := filepath.Join(tmp, "completed", "Deleted Anime")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	lib.BackfillShowNFOs([]EpisodeStruct{
+		{AnimeID: 194829, AnimeName: "My Anime", LibraryPaths: []string{filepath.Join(existing, "My Anime - E01.mkv")}},
+		// Segundo episodio do mesmo anime: nao pode duplicar trabalho nem falhar.
+		{AnimeID: 194829, AnimeName: "My Anime", LibraryPaths: []string{filepath.Join(existing, "My Anime - E02.mkv")}},
+		// Pasta que sumiu do disco.
+		{AnimeID: 111, AnimeName: "Deleted Anime", LibraryPaths: []string{filepath.Join(gone, "ep.mkv")}},
+		// Sem id e sem paths: ignorados.
+		{AnimeID: 0, AnimeName: "No ID", LibraryPaths: []string{filepath.Join(existing, "x.mkv")}},
+		{AnimeID: 222, AnimeName: "Not Organized"},
+	})
+
+	data, err := os.ReadFile(filepath.Join(existing, "tvshow.nfo"))
+	if err != nil {
+		t.Fatalf("tvshow.nfo nao foi criado no backfill: %v", err)
+	}
+	if !strings.Contains(string(data), ">194829<") {
+		t.Errorf("nfo com id errado:\n%s", data)
+	}
+	if _, err := os.Stat(gone); err == nil {
+		t.Error("backfill criou a pasta de um anime que ja nao esta em disco")
 	}
 }
 

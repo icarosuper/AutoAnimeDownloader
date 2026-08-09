@@ -357,6 +357,7 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	req := files.OrganizeRequest{
 		TorrentDataDir: info.DataDir,
 		AnimeName:      matched[0].AnimeName,
+		AnimeID:        matched[0].AnimeID,
 		CompletedPath:  configs.CompletedAnimePath,
 		IsBatch:        isBatch,
 		RenameJellyfin: configs.RenameFilesForJellyfin,
