@@ -71,7 +71,7 @@ Key endpoints:
 
 | Method | Endpoint | Handler func | File |
 |--------|----------|-------------|------|
-| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` |
+| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — `StatusResponse` carries `disk_total`, `disk_free` and `disk_low` (free below `min_free_disk_percent`, i.e. the daemon stopped adding torrents; the threshold lives server-side only) |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
 | `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` |
@@ -122,11 +122,14 @@ Main verification orchestrator. Key functions:
 | `StartLoop(p)` | Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
 | `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`) |
 | `processAnimeEpisodes(...)` | Per-anime: decide download/delete per episode, execute download strategy |
-| `checkEpisode(...)` | Returns `(shouldDownload, shouldDelete)` per episode |
+| `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete)` per episode. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited when the anime will batch |
+| `willBatchAnime(configs, anime)` | Batch eligibility: `FINISHED`, not a movie, known episode count within `max_batch_episodes`. Used both to lift the per-anime limit before the episode loop and to gate Strategy 2 in `resolveSearchStrategy` |
+| `filterBySize(results, maxGB)` | Drops Nyaa results above the GiB ceiling, after priority sorting and preserving order (`search.go`). `maxGB <= 0` = off; `Size == 0` (parse failure) passes |
+| `checkDiskSpace(configs)` | `ErrInsufficientDiskSpace` when the library volume is below `min_free_disk_percent` (`helpers.go`). A `statfs` error does **not** block. Guards `attemptDownloadWithRetries` and `addAndPrioritize` — never the verification pass |
 | `shouldSkipEpisode(...)` | Skip if: excluded list, already watched, not yet aired |
 | `handleAlreadySavedEpisode(...)` | Re-download if missing from torrents, delete if over limit |
 | `handleSavedEpisodes(...)` | Post-loop: save new, delete watched, delete torrent files |
-| `attemptDownloadWithRetries(...)` | Tries up to `EpisodeRetryLimit` magnets, returns first hash |
+| `attemptDownloadWithRetries(...)` | Tries up to `EpisodeRetryLimit` magnets, returns first hash. Returns `""` with **no** `Add` call and no retry when `checkDiskSpace` blocks |
 | `searchNyaaForSingleEpisode(ep, titles, synonyms, relations, customQuery)` | Single ep search — extracts season/part from titles+synonyms, falls back to `ep+offset` (no part filter) if 0 results and PREQUEL has episode count |
 | `searchNyaaForBatch(titles, synonyms, customQuery)` | Batch search for finished animes (priority 2) |
 | `searchNyaaForMovie(...)` | Movie search (priority 1) |
@@ -143,9 +146,11 @@ Main verification orchestrator. Key functions:
 
 **Download priority** (in `processAnimeEpisodes`):
 1. Movie → `searchNyaaForMovie` → `skipSubfolder=true`, epName = animeName
-2. Batch (finished + >1 ep) → `searchNyaaForBatch` → `skipSubfolder=true`
-3. Multiple ep search → `searchNyaaForMultipleEpisodes`
-4. Single ep fallback → `searchNyaaForSingleEpisode`
+2. Batch (`willBatchAnime` + >1 ep) → `searchNyaaForBatch` → `skipSubfolder=true`, filtered by `max_batch_torrent_size_gb`
+3. Multiple ep search → `searchNyaaForMultipleEpisodes`, filtered by `max_episode_torrent_size_gb`
+4. Single ep fallback → `searchNyaaForSingleEpisode`, same filter
+
+`max_episodes_per_anime` is lifted whenever `willBatchAnime` holds; if the search then does **not** resolve to a batch (empty result, or the size filter emptied it), `processAnimeEpisodes` cuts `episodesToDownload` back to the limit, keeping the oldest episodes.
 
 ### `src/internal/daemon/debug.go`
 

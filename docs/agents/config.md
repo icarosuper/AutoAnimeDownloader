@@ -12,7 +12,11 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 | `AnilistUsernames` | `anilist_usernames` | `[]string` | `[]` | Anilist usernames to sync watch lists from (multi-account supported). **Required** — at least one |
 | `AnilistUsername` | `anilist_username` | `string` | `""` | **Legacy.** Single-username field, `omitempty`. Migrated into `AnilistUsernames` and cleared — by `FileManager.LoadConfigs()` (`filemanager.go`) on every load, and again by `handleUpdateConfig` (`endpoint_config.go`) so a PUT from an old client is migrated before validation. Kept only for backward compatibility |
 | `CheckInterval` | `check_interval` | `int` | `10` | Minutes between verification loops. Must be > 0 |
-| `MaxEpisodesPerAnime` | `max_episodes_per_anime` | `int` | `12` | Max saved episodes per anime before oldest are deleted. Must be > 0 |
+| `MaxEpisodesPerAnime` | `max_episodes_per_anime` | `int` | `12` | Max saved episodes per anime before oldest are deleted. Must be > 0. **Applies only to the episode-by-episode path** — never to a batch download (a batch is one torrent, so limiting records would limit neither bytes nor library files; see decisions.md) |
+| `MaxBatchEpisodes` | `max_batch_episodes` | `int` | `30` | Above this episode count a finished anime stops using batch and falls back to the episode-by-episode path (where `max_episodes_per_anime` applies again). `0`/negative = ceiling off (every finished anime with a known count batches — the pre-spec behaviour). An unknown count (`Media.Episodes == nil`) is never eligible for batch. Must be >= 0 |
+| `MaxBatchTorrentSizeGB` | `max_batch_torrent_size_gb` | `float64` | `0` | Ceiling in **GiB** for a batch torrent: results above it are dropped from the Nyaa search result (`daemon.filterBySize`), not downloaded and deleted. `0` = off (the default on purpose — no positive default is defensible without knowing whether the user wants 1080p web or remux). A torrent whose size failed to parse (`Size == 0`) passes the filter. Must be >= 0 |
+| `MaxEpisodeTorrentSizeGB` | `max_episode_torrent_size_gb` | `float64` | `0` | Same, for the single-episode / multi-episode / movie searches. Must be >= 0 |
+| `MinFreeDiskPercent` | `min_free_disk_percent` | `int` | `10` | Below this percentage of free space on the library volume **no new torrent is added** (`daemon.checkDiskSpace`, applied in `attemptDownloadWithRetries` and `addAndPrioritize`). The verification pass still runs in full — pruning and organizing are what free space. `0` = off. Must be 0..99 (`100` would block every download forever). Also drives `disk_low` in `GET /status` |
 | `EpisodeRetryLimit` | `episode_retry_limit` | `int` | `5` | Max magnet links to try per episode before giving up. Must be >= 0 |
 | `MaxConcurrentDownloads` | `max_concurrent_downloads` | `int` | `3` | How many **incomplete** torrents may run at once; the rest wait in the download queue (`torrents/queue.go`, status slug `queued`). `0` = no limit. Seeding is never limited. Must be >= 0. Applied by `SetMaxActiveDownloads` from three places: boot (`cmd/daemon/main.go`), `PUT /config`, and the top of every `AnimeVerification`. No migration needed — `LoadConfigs` unmarshals **over** `getDefaultConfig()`, so a `config.json` written before this field loads with the default already in place |
 | `DeleteWatchedEpisodes` | `delete_watched_episodes` | `bool` | `true` | Whether to auto-delete episodes marked as watched on Anilist |
@@ -74,7 +78,8 @@ If missing, daemon opens browser to `http://localhost:<port>/#/config?missingCon
 - `anilist_usernames` — at least one entry (after legacy-field migration), `completed_anime_path` — non-empty
 - `completed_anime_path` must support hardlinks — verified with a single-path probe (`Librarian.ProbePath`); a filesystem without hardlink support is rejected with HTTP 400
 - `check_interval`, `max_episodes_per_anime` — > 0
-- `episode_retry_limit`, `watched_episodes_to_keep`, `max_concurrent_downloads` — >= 0
+- `episode_retry_limit`, `watched_episodes_to_keep`, `max_concurrent_downloads`, `max_batch_episodes`, `max_batch_torrent_size_gb`, `max_episode_torrent_size_gb` — >= 0
+- `min_free_disk_percent` — 0..99
 - `save_path` is always zeroed on the incoming config before it is persisted, regardless of what the client sends
 
 ## Webhook Template Variables

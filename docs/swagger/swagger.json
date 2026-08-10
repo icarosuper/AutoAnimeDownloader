@@ -1525,6 +1525,11 @@
                     "type": "integer",
                     "example": 128849018880
                 },
+                "disk_low": {
+                    "description": "DiskLow marca que o livre esta abaixo de min_free_disk_percent — ou seja, que o daemon\nPAROU de adicionar torrents. Calculado no servidor de proposito: um limiar duplicado no\nfrontend acabaria discordando do que o daemon esta fazendo.",
+                    "type": "boolean",
+                    "example": false
+                },
                 "disk_total": {
                     "type": "integer",
                     "example": 500107862016
@@ -1704,11 +1709,27 @@
                         "type": "string"
                     }
                 },
+                "max_batch_episodes": {
+                    "description": "MaxBatchEpisodes e o teto de episodios para usar batch. Acima disso um anime finalizado\nvolta ao caminho episodio-a-episodio (onde MaxEpisodesPerAnime vale). 0 desliga o teto.",
+                    "type": "integer"
+                },
+                "max_batch_torrent_size_gb": {
+                    "description": "MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB descartam da busca torrents acima do teto,\nem GiB. 0 desliga (default: nao filtrar, pois nao existe numero defensavel sem saber se o\nusuario quer 1080p web ou remux).",
+                    "type": "number"
+                },
                 "max_concurrent_downloads": {
                     "description": "MaxConcurrentDownloads limita quantos torrents INCOMPLETOS baixam ao mesmo tempo; o\nexcedente espera na fila (torrents.queue). 0 desliga o limite. Seeding nunca conta.\n\nNao precisa de migracao: LoadConfigs desserializa POR CIMA de getDefaultConfig(),\nentao um config.json anterior a este campo ja carrega valendo o default.",
                     "type": "integer"
                 },
+                "max_episode_torrent_size_gb": {
+                    "type": "number"
+                },
                 "max_episodes_per_anime": {
+                    "description": "MaxEpisodesPerAnime limita quantos episodios de um anime existem ao mesmo tempo, e vale\nAPENAS no caminho episodio-a-episodio: um batch e um torrent so, entao limitar registros\nnao limitaria bytes nem arquivos na biblioteca (ver decisions.md).",
+                    "type": "integer"
+                },
+                "min_free_disk_percent": {
+                    "description": "MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco\nlivre no volume da biblioteca. 0 desliga.",
                     "type": "integer"
                 },
                 "notifications": {

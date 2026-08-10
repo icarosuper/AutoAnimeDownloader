@@ -761,3 +761,37 @@ A URL fica fora porque escape de URL tem regras próprias, e os headers passam p
 - Escapar sempre, ou escapar a URL/headers junto: o body de texto puro do ntfy recebe barra-n literal.
 - Tirar o `wait` do `Flush` "porque goroutine é mais rápido".
 - Adicionar retry com backoff no 429 esperando resolver o caso do log: era cota de serviço, não falha transitória. O que resolve é mandar menos mensagem.
+
+---
+
+### 48. `max_episodes_per_anime` nunca limitou batch — agora a regra é explícita, com quatro tetos em volta
+
+**Location:** `daemon/episodes.go` — `willBatchAnime`, `processAnimeEpisodes` (limite efetivo + tampão), `resolveSearchStrategy`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
+
+**What it looks like:** um limite por anime que às vezes não se aplica, um filtro de tamanho que deixa passar tamanho zero, uma guarda de disco que só barra o `Add`, e um booleano de "disco baixo" calculado no servidor para o frontend.
+
+**Why it's right:**
+
+**(a) O limite se aplica só episódio a episódio.** Um batch é **um torrent**: um anime finalizado de 24 episódios com o limite em 12 baixava os 24 arquivos, o `organize` hardlinkava os 24, e `episodes.json` registrava 12 — a tela mostrava 12/24 para sempre com os 24 no disco. Limitar registros não limita bytes nem arquivos; só produz contagem mentirosa. Então `willBatchAnime` decide **antes** do loop, e com ele o limite efetivo é ilimitado.
+
+O que substitui o teto em batch é `max_batch_episodes` (default 30): Naruto/Bleach/Gintama/Detective Conan deixam de virar um torrent único gigante e voltam ao caminho um-a-um, onde o limite por anime vale. Contagem desconhecida (`Media.Episodes == nil`) **não** é elegível a batch — sem saber o tamanho não há como afirmar que o pack cabe no teto. `max_batch_episodes <= 0` é teto **desligado**, e por isso não entra na comparação como número.
+
+O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso um anime de 720 episódios continuaria baixando o pack inteiro para 12 registros — exatamente o defeito.
+
+**(b) O tampão.** Com o limite lançado, se a busca de batch volta vazia (ou o filtro de tamanho a esvazia) a Estratégia 3 assume e baixaria N episódios sem limite. Depois de `resolveSearchStrategy`, se o resultado não é batch, `episodesToDownload` é cortado de volta ao limite; a ordem do `airingSchedule` garante que sobram os mais antigos.
+
+**(c) `Size == 0` passa o filtro de tamanho.** É o valor de `nyaa.parseSize` quando o Nyaa muda o formato da coluna. Descartar tamanho desconhecido trocaria "às vezes baixa um torrent grande" por "não baixa nada": um bug de parsing viraria paralisação silenciosa. O filtro roda **depois** da ordenação por prioridade e preserva a ordem, então o escolhido é o melhor **entre os que cabem**.
+
+**(d) A guarda de disco barra o `Add`, não o passe.** A poda de assistidos, o `deleteEpisodesByStatus` e o `organize` são justamente o que **libera** espaço; um `if disco cheio { return }` no início do passe deixaria o app travado no estado em que não consegue se desentupir. Erro de `statfs` não bloqueia — um volume que não responde (rede, permissão) não é prova de disco cheio. Quando barra, não tenta nenhum magnet e não faz retry (o magnet não é o problema) e notifica `ReasonNoDiskSpace`, que o batch de notificações agrupa.
+
+**(e) O limiar de disco vive no servidor.** `GET /status` devolve `disk_low`, calculado com `min_free_disk_percent`. Um único lugar decide o que é "baixo", e o aviso da tela não pode discordar do que o daemon está fazendo.
+
+**(f) `organizeTorrent` não renotifica um grupo parcialmente organizado.** Se parte do grupo já tem `LibraryPaths`, o torrent já pousou e o webhook já saiu: organiza (é idempotente), grava o marcador nos registros novos, não notifica. Sem isso, o primeiro passe pós-upgrade de uma biblioteca existente — onde a regra (a) cria os registros que faltavam para packs já no disco — viraria enxurrada de `download_completed` duplicado.
+
+**Don't "fix" by:**
+- Aplicar `max_episodes_per_anime` em batch "para o limite valer sempre": volta a contagem mentirosa.
+- Colocar `totalEpisodes <= configs.MaxBatchEpisodes` sem o guarda de `<= 0`: desligar o teto passaria a ligá-lo para todo mundo.
+- Descartar torrent com `Size == 0` "porque tamanho desconhecido é suspeito".
+- Consolidar a guarda de disco num `return` no topo do passe de verificação (ver (d)).
+- Mover a guarda para `torrents.Session.Add` "porque é um site só": o pacote `torrents` não conhece `files.Config`, e passar a config para lá inverte a dependência.
+- Reintroduzir um ratio hardcoded em `lib/utils/status.ts` para economizar um campo na resposta (ver (e)).

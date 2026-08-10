@@ -125,6 +125,13 @@ definitions:
       disk_free:
         example: 128849018880
         type: integer
+      disk_low:
+        description: |-
+          DiskLow marca que o livre esta abaixo de min_free_disk_percent — ou seja, que o daemon
+          PAROU de adicionar torrents. Calculado no servidor de proposito: um limiar duplicado no
+          frontend acabaria discordando do que o daemon esta fazendo.
+        example: false
+        type: boolean
       disk_total:
         example: 500107862016
         type: integer
@@ -268,6 +275,17 @@ definitions:
         items:
           type: string
         type: array
+      max_batch_episodes:
+        description: |-
+          MaxBatchEpisodes e o teto de episodios para usar batch. Acima disso um anime finalizado
+          volta ao caminho episodio-a-episodio (onde MaxEpisodesPerAnime vale). 0 desliga o teto.
+        type: integer
+      max_batch_torrent_size_gb:
+        description: |-
+          MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB descartam da busca torrents acima do teto,
+          em GiB. 0 desliga (default: nao filtrar, pois nao existe numero defensavel sem saber se o
+          usuario quer 1080p web ou remux).
+        type: number
       max_concurrent_downloads:
         description: |-
           MaxConcurrentDownloads limita quantos torrents INCOMPLETOS baixam ao mesmo tempo; o
@@ -276,7 +294,18 @@ definitions:
           Nao precisa de migracao: LoadConfigs desserializa POR CIMA de getDefaultConfig(),
           entao um config.json anterior a este campo ja carrega valendo o default.
         type: integer
+      max_episode_torrent_size_gb:
+        type: number
       max_episodes_per_anime:
+        description: |-
+          MaxEpisodesPerAnime limita quantos episodios de um anime existem ao mesmo tempo, e vale
+          APENAS no caminho episodio-a-episodio: um batch e um torrent so, entao limitar registros
+          nao limitaria bytes nem arquivos na biblioteca (ver decisions.md).
+        type: integer
+      min_free_disk_percent:
+        description: |-
+          MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco
+          livre no volume da biblioteca. 0 desliga.
         type: integer
       notifications:
         $ref: '#/definitions/files.NotificationsConfig'
