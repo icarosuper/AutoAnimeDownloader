@@ -732,3 +732,32 @@ O TTL de 60s é seguro porque essa lista só muda quando o usuário mexe na AniL
 - Aumentar o intervalo de poll do frontend em vez do cache — não resolve F5, múltiplas abas, nem múltiplos dispositivos na LAN.
 - Devolver a fatia do cache direto "pra economizar a cópia".
 - Cachear também `GetAnimeInfo` do refresh de órfãos: aquele caminho já está desligado quando a lista falha (decisions.md #42d), que é quando ele amplifica.
+
+---
+
+### 47. Notificações são agrupadas por janela, e o body é escapado só quando o preset é JSON
+
+**Location:** `internal/notifications/notifications.go` — `Notify`, `Flush`, `flushEvent`, `fireBatch`, `buildBatchVars`, `jsonEscape`/`escapeVarsForJSON`/`presetIsJSON`; `NotificationsConfig.BatchWindowSeconds` em `files/filemanager.go`; `notifications.Flush()` no shutdown de `cmd/daemon/main.go`.
+
+**What it looks like:** três coisas que parecem opcionais num disparador de webhook: uma fila com timer, um `Flush()` síncrono no shutdown, e escape de JSON condicionado a um header.
+
+**Why it's right:**
+
+**(a) A janela.** Um backfill de biblioteca dispara um `JobOrganize` por torrent, e cada um fecha com um `download_completed`. Caso real (`daemon.log`, 09/08/2026 17:49→18:22): 67 organizes, os 24 primeiros passaram e o ntfy.sh respondeu **429 nos 53 restantes** — a cota estourou e as notificações foram perdidas sem retry. Como o intervalo mediano entre organizes era de 25s, janela curta não resolve: medido no próprio log, 10s levaria 67 → 53, e 60s leva 67 → 24. Por isso o default é 60s e o campo é configurável.
+
+A fila é **por evento**, não global: um preset inscrito só em `download_failed` não pode receber texto de sucesso, e o filtro por evento que já existia (`slices.Contains(preset.Events, ...)`) continua valendo.
+
+**(b) `len(items) == 1` sai idêntico ao não-agrupado.** `buildVars` virou um wrapper de `buildBatchVars` com um item. É isso que faz ligar o agrupamento não mudar a aparência das notificações de quem recebe uma de cada vez — e é o que os testes `TestNotify_SingleItemBatchMatchesUnbatched` travam.
+
+**(c) `Flush()` é síncrono.** `fireBatch` normalmente dispara em goroutine, mas no shutdown isso é o mesmo que não disparar: o processo sai antes das goroutines rodarem. Daí o parâmetro `wait` e o `wg.Wait()`.
+
+**(d) O escape de JSON depende do `Content-Type`.** Dos 7 presets embutidos, 6 embutem `{{message}}` dentro de uma string JSON (Discord, Slack, Telegram, Gotify, Pushover, Apprise) e 1 manda o body cru (ntfy: `body: '{{message}}'`). O `\n` do agrupamento é JSON inválido dentro de string — e escapar o body do ntfy mandaria a barra-n literal em vez da quebra de linha. Então o escape é aplicado **só no body, e só quando o preset se declara `Content-Type: application/json`**. De brinde isso conserta um bug latente que existia antes do agrupamento: anime com aspas ou barra invertida no nome já quebrava o body desses 6 presets, e o serviço respondia 400 com a notificação sumindo (o log só diz "Webhook returned error status").
+
+A URL fica fora porque escape de URL tem regras próprias, e os headers passam por um strip de `\n`/`\r`: um header com quebra de linha faz o `net/http` **recusar a request inteira**, e o preset do ntfy usa `Title: {{title}}`.
+
+**Don't "fix" by:**
+- Trocar a fila por evento por uma fila global "pra mandar menos mensagem ainda" — quebra o filtro `Events` do preset.
+- Mandar `{{anime_name}}`/`{{episode}}` do primeiro item quando N > 1: o template passa a mentir sobre os outros N-1.
+- Escapar sempre, ou escapar a URL/headers junto: o body de texto puro do ntfy recebe barra-n literal.
+- Tirar o `wait` do `Flush` "porque goroutine é mais rápido".
+- Adicionar retry com backoff no 429 esperando resolver o caso do log: era cota de serviço, não falha transitória. O que resolve é mandar menos mensagem.

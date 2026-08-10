@@ -1731,6 +1731,10 @@ const docTemplate = `{
         "files.NotificationsConfig": {
             "type": "object",
             "properties": {
+                "batch_window_seconds": {
+                    "description": "BatchWindowSeconds agrupa os eventos de uma mesma janela num webhook so. 0 desliga o\nagrupamento (um webhook por evento, comportamento original). Existe porque um backfill\nde biblioteca dispara um ` + "`" + `download_completed` + "`" + ` por torrent e estoura a cota de servicos\ncomo o ntfy.sh — ver decisions.md #47.",
+                    "type": "integer"
+                },
                 "webhooks": {
                     "type": "array",
                     "items": {

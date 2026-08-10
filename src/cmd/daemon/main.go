@@ -37,6 +37,7 @@ import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"AutoAnimeDownloader/src/internal/tray"
 	"context"
@@ -414,6 +415,10 @@ func main() {
 		apiServer.StopDaemonLoop()
 		logger.Logger.Info().Msg("Daemon loop stopped")
 	}
+
+	// Depois de parar o loop (que e quem produz notificacao) e antes de sair: manda o que ainda
+	// estiver esperando a janela de agrupamento.
+	notifications.Flush()
 
 	// Stop API server with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

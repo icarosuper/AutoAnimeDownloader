@@ -528,13 +528,17 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 |--------|---------|
 | `Event` type | `NewEpisode`, `DownloadFailed`, `DownloadCompleted` (the webhook event key string for the last one is still `download_completed` — only the Go constant was renamed from `QBittorrentDownloadCompleted`) |
 | `NewEpisode` ordering | Fired by `processAnimeEpisodes` **only when there is at least one magnet to try** — an episode with no search result goes straight to `DownloadFailed`/`ReasonNotFound`. Firing it earlier sent a false "starting download" push on every loop pass (every `check_interval`) for an episode that never started |
-| `Notify(cfg, event, animeName, episode int, reason string)` | Fires all configured webhooks for an event in background goroutines. No-op if cfg is nil or has no webhooks |
+| `Notify(cfg, event, animeName, episode int, reason string)` | Fires all configured webhooks for an event in background goroutines. No-op if cfg is nil or has no webhooks. With `notifications.batch_window_seconds > 0` the event joins a **per-event** queue and leaves with the rest of its window as one webhook (decisions.md #47) |
+| `Flush()` | Fires every pending batch **synchronously** and only returns once the requests finished. Called from `cmd/daemon/main.go` at shutdown — firing in goroutines there would be the same as not firing |
+| `flushEvent(event, wait)` / `fireBatch(event, items, webhooks, wait)` | Take the queue out under lock and fan out to the subscribed presets; `wait` is what makes `Flush` synchronous |
 | `FireTestWebhook(cfg, name)` | Fires one named webhook with sample variables. Returns error if not found |
 | `interpolate(template, vars)` | Replaces `{{var}}` placeholders — missing vars become empty string |
-| `buildVars(animeName, episode, event, reason)` | Builds the template variable map from event data |
-| `fireWebhook(preset, vars)` | Sends HTTP request; logs error/warn on failure but never panics |
+| `buildVars(animeName, episode, event, reason)` | Wrapper over `buildBatchVars` with a single item — keeps a one-item window byte-identical to the unbatched message |
+| `buildBatchVars(event, items)` | Template vars for a window. N > 1: `{{title}}` gets the count, `{{message}}` becomes one line per item, `{{count}}` is N, and `{{anime_name}}`/`{{episode}}`/`{{reason}}` are empty — no single value exists |
+| `jsonEscape` / `escapeVarsForJSON` / `presetIsJSON` | Escape var values **in the body only, and only when the preset declares `Content-Type: application/json`**. The batch `\n` (and any quote in an anime name) would otherwise produce an invalid JSON body → 400 with the notification vanishing; ntfy's raw-text body must keep the real newline |
+| `fireWebhook(preset, vars)` | Sends HTTP request; logs error/warn on failure but never panics. Strips `\n`/`\r` from header values — `net/http` rejects the whole request otherwise, and ntfy uses `Title: {{title}}` |
 
-**Template variables available in URL, headers, and body**: `{{title}}`, `{{message}}`, `{{anime_name}}`, `{{episode}}`, `{{reason}}` (failure reason, empty for non-failure events), `{{quality}}` (always empty), `{{file_path}}` (always empty), `{{timestamp}}` (formatted `2006-01-02 15:04`).
+**Template variables available in URL, headers, and body**: `{{title}}`, `{{message}}`, `{{anime_name}}`, `{{episode}}`, `{{reason}}` (failure reason, empty for non-failure events), `{{count}}` (items in the batch — `1` when not batching), `{{quality}}` (always empty), `{{file_path}}` (always empty), `{{timestamp}}` (formatted `2006-01-02 15:04`).
 
 ### `src/internal/stringutil/stringutil.go`
 

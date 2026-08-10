@@ -3,11 +3,13 @@ package notifications
 import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,17 +49,58 @@ func interpolate(template string, vars map[string]string) string {
 }
 
 func buildVars(animeName string, episode int, event Event, reason string) map[string]string {
-	title, message := eventStrings(animeName, episode, event, reason)
-	return map[string]string{
-		"title":      title,
-		"message":    message,
-		"anime_name": animeName,
-		"episode":    fmt.Sprintf("%d", episode),
+	return buildBatchVars(event, []item{{animeName: animeName, episode: episode, reason: reason}})
+}
+
+// buildBatchVars monta as variaveis de template para os itens de uma janela. Com um item so o
+// resultado e identico ao de antes do agrupamento — e por isso que ligar o batching nao muda a
+// aparencia das notificacoes de quem recebe uma de cada vez.
+//
+// Com N > 1, `anime_name`, `episode` e `reason` ficam VAZIOS: nao existe valor unico para eles e
+// mandar o do primeiro item faria o template mentir sobre os outros N-1. Quem quer identificar os
+// episodios usa `message` (uma linha por item) ou `count`.
+func buildBatchVars(event Event, items []item) map[string]string {
+	lines := make([]string, 0, len(items))
+	for _, it := range items {
+		_, message := eventStrings(it.animeName, it.episode, event, it.reason)
+		lines = append(lines, message)
+	}
+
+	vars := map[string]string{
+		"title":      batchTitle(event, items),
+		"message":    strings.Join(lines, "\n"),
+		"anime_name": "",
+		"episode":    "",
+		"reason":     "",
+		"count":      fmt.Sprintf("%d", len(items)),
 		"quality":    "",
 		"file_path":  "",
-		"reason":     reason,
 		"timestamp":  time.Now().Format("2006-01-02 15:04"),
 	}
+
+	if len(items) == 1 {
+		vars["anime_name"] = items[0].animeName
+		vars["episode"] = fmt.Sprintf("%d", items[0].episode)
+		vars["reason"] = items[0].reason
+	}
+
+	return vars
+}
+
+func batchTitle(event Event, items []item) string {
+	if len(items) == 1 {
+		title, _ := eventStrings(items[0].animeName, items[0].episode, event, items[0].reason)
+		return title
+	}
+	switch event {
+	case NewEpisode:
+		return fmt.Sprintf("%d novos episódios detectados", len(items))
+	case DownloadFailed:
+		return fmt.Sprintf("%d erros no download", len(items))
+	case DownloadCompleted:
+		return fmt.Sprintf("%d downloads concluídos", len(items))
+	}
+	return ""
 }
 
 func eventStrings(animeName string, episode int, event Event, reason string) (title, message string) {
@@ -78,9 +121,46 @@ func eventStrings(animeName string, episode int, event Event, reason string) (ti
 	return "", ""
 }
 
+// jsonEscape devolve o valor pronto para ser colado DENTRO de uma string JSON (sem as aspas
+// externas). Um nome de anime com aspas, barra invertida ou o \n do agrupamento quebraria o body
+// dos presets que embutem {{message}} num JSON (Discord, Slack, Telegram, Gotify, Pushover,
+// Apprise): o servico responderia 400 e a notificacao sumiria sem explicacao no log.
+func jsonEscape(value string) string {
+	encoded, err := json.Marshal(value)
+	if err != nil { // json.Marshal de string nao falha; se falhar, melhor o valor cru que nada
+		return value
+	}
+	return string(encoded[1 : len(encoded)-1])
+}
+
+// escapeVarsForJSON aplica jsonEscape em todas as variaveis. So e usado no body, e so quando o
+// preset se declara JSON: a URL tem regras de escape proprias e um body de texto puro (o do ntfy
+// e `{{message}}` cru) tem de receber o \n de verdade.
+func escapeVarsForJSON(vars map[string]string) map[string]string {
+	escaped := make(map[string]string, len(vars))
+	for k, v := range vars {
+		escaped[k] = jsonEscape(v)
+	}
+	return escaped
+}
+
+func presetIsJSON(preset files.WebhookPreset) bool {
+	for k, v := range preset.Headers {
+		if strings.EqualFold(k, "Content-Type") && strings.Contains(strings.ToLower(v), "json") {
+			return true
+		}
+	}
+	return false
+}
+
 func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
+	bodyVars := vars
+	if presetIsJSON(preset) {
+		bodyVars = escapeVarsForJSON(vars)
+	}
+
 	url := interpolate(preset.URL, vars)
-	body := interpolate(preset.Body, vars)
+	body := interpolate(preset.Body, bodyVars)
 
 	req, err := http.NewRequest(preset.Method, url, strings.NewReader(body))
 	if err != nil {
@@ -88,7 +168,9 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
 		return
 	}
 	for k, v := range preset.Headers {
-		req.Header.Set(k, interpolate(v, vars))
+		// Um header com \n faz o net/http recusar a request inteira. O ntfy usa
+		// `Title: {{title}}`, e nada impede alguem de colocar {{message}} num header.
+		req.Header.Set(k, strings.NewReplacer("\n", " ", "\r", " ").Replace(interpolate(v, vars)))
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -107,21 +189,114 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
 	}
 }
 
+// item e um evento aguardando na janela de agrupamento.
+type item struct {
+	animeName string
+	episode   int
+	reason    string
+}
+
+// batch acumula os itens de uma janela de um evento. O timer e guardado junto para que Flush
+// possa cancela-lo: sem isso o flush do shutdown e o do timer disputariam a mesma fila.
+type batch struct {
+	items   []item
+	timer   *time.Timer
+	webhook []files.WebhookPreset
+}
+
+var (
+	batchMu      sync.Mutex
+	pendingBatch = make(map[Event]*batch)
+)
+
 // Notify fires webhooks subscribed to the given event in background goroutines.
 // No-op if cfg is nil or has no webhooks.
+//
+// Com cfg.Notifications.BatchWindowSeconds > 0 o evento entra numa fila por tipo de evento e sai
+// junto com os outros da mesma janela, num webhook so. Um backfill de biblioteca dispara um
+// DownloadCompleted por torrent (77 num caso real) e servicos como o ntfy.sh respondem 429 a
+// partir de um certo volume — ver decisions.md #47.
 func Notify(cfg *files.Config, event Event, animeName string, episode int, reason string) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 {
 		return
 	}
+
+	it := item{animeName: animeName, episode: episode, reason: reason}
+	window := time.Duration(cfg.Notifications.BatchWindowSeconds) * time.Second
+	if window <= 0 {
+		fireBatch(event, []item{it}, cfg.Notifications.Webhooks, false)
+		return
+	}
+
+	batchMu.Lock()
+	defer batchMu.Unlock()
+
+	if b, ok := pendingBatch[event]; ok {
+		b.items = append(b.items, it)
+		// Os webhooks da janela sao os da ultima config vista: se o usuario mexeu nos presets no
+		// meio da janela, o que vale e o mais recente.
+		b.webhook = cfg.Notifications.Webhooks
+		return
+	}
+
+	b := &batch{items: []item{it}, webhook: cfg.Notifications.Webhooks}
+	pendingBatch[event] = b
+	b.timer = time.AfterFunc(window, func() { flushEvent(event, false) })
+}
+
+// Flush dispara agora tudo que esta esperando janela e SO retorna quando as requests terminaram.
+// Chamado no shutdown do daemon: sem isso ate uma janela inteira de notificacoes morreria com o
+// processo — e disparar em goroutine no shutdown seria o mesmo que nao disparar, porque o
+// processo sai antes delas rodarem.
+func Flush() {
+	batchMu.Lock()
+	events := make([]Event, 0, len(pendingBatch))
+	for event := range pendingBatch {
+		events = append(events, event)
+	}
+	batchMu.Unlock()
+
+	for _, event := range events {
+		flushEvent(event, true)
+	}
+}
+
+func flushEvent(event Event, wait bool) {
+	batchMu.Lock()
+	b, ok := pendingBatch[event]
+	if !ok {
+		batchMu.Unlock()
+		return
+	}
+	delete(pendingBatch, event)
+	if b.timer != nil {
+		b.timer.Stop()
+	}
+	batchMu.Unlock()
+
+	fireBatch(event, b.items, b.webhook, wait)
+}
+
+func fireBatch(event Event, items []item, webhooks []files.WebhookPreset, wait bool) {
+	if len(items) == 0 {
+		return
+	}
 	eventStr := eventString(event)
-	vars := buildVars(animeName, episode, event, reason)
-	for _, preset := range cfg.Notifications.Webhooks {
+	vars := buildBatchVars(event, items)
+
+	var wg sync.WaitGroup
+	for _, preset := range webhooks {
 		if !slices.Contains(preset.Events, eventStr) {
 			continue
 		}
+		wg.Add(1)
 		go func(p files.WebhookPreset) {
+			defer wg.Done()
 			fireWebhook(p, vars)
 		}(preset)
+	}
+	if wait {
+		wg.Wait()
 	}
 }
 

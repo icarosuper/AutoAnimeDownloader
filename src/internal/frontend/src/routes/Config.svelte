@@ -104,7 +104,7 @@
     download_statuses: ["CURRENT", "REPEATING"],
     download_media_statuses: ["RELEASING", "FINISHED"],
     delete_statuses: [],
-    notifications: { webhooks: [] },
+    notifications: { webhooks: [], batch_window_seconds: 0 },
     priorities: {
       criteria_order: [],
       fansubs: [],
@@ -180,7 +180,7 @@
       if (config.anilist_username && (config.anilist_usernames ?? []).length === 0) {
         config.anilist_usernames = [config.anilist_username];
       }
-      if (!config.notifications) config.notifications = { webhooks: [] };
+      if (!config.notifications) config.notifications = { webhooks: [], batch_window_seconds: 0 };
       if (!Array.isArray(config.notifications.webhooks)) config.notifications.webhooks = [];
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.config_error_load());

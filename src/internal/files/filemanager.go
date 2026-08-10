@@ -49,6 +49,11 @@ type WebhookPreset struct {
 
 type NotificationsConfig struct {
 	Webhooks []WebhookPreset `json:"webhooks"`
+	// BatchWindowSeconds agrupa os eventos de uma mesma janela num webhook so. 0 desliga o
+	// agrupamento (um webhook por evento, comportamento original). Existe porque um backfill
+	// de biblioteca dispara um `download_completed` por torrent e estoura a cota de servicos
+	// como o ntfy.sh — ver decisions.md #47.
+	BatchWindowSeconds int `json:"batch_window_seconds"`
 }
 
 type Config struct {
@@ -133,7 +138,7 @@ func getDefaultConfig() *Config {
 		DownloadStatuses:       []string{"CURRENT", "REPEATING"},
 		DownloadMediaStatuses:  []string{"RELEASING", "FINISHED"},
 		DeleteStatuses:         []string{},
-		Notifications:          NotificationsConfig{Webhooks: []WebhookPreset{}},
+		Notifications:          NotificationsConfig{Webhooks: []WebhookPreset{}, BatchWindowSeconds: 60},
 		Priorities:             nyaa.DefaultPriorities(),
 	}
 }

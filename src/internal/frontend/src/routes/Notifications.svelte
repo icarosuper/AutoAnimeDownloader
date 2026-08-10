@@ -8,6 +8,7 @@
     type WebhookPreset,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
+  import Input from "../components/Input.svelte";
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
@@ -31,6 +32,9 @@
     labelBody: m.notifications_label_body(),
     presetLabel: m.notifications_preset_label(),
     btnEdit: m.notifications_btn_edit(),
+    sectionBatch: m.notifications_section_batch(),
+    labelBatchWindow: m.notifications_label_batch_window(),
+    hintBatchWindow: m.notifications_hint_batch_window(),
     labelEvents: m.notifications_label_events(),
     eventNewEpisode: m.notifications_event_new_episode(),
     eventDownloadFailed: m.notifications_event_download_failed(),
@@ -53,7 +57,7 @@
   const varsHint = 'Variables: {{title}}, {{message}}, {{anime_name}}, {{episode}}, {{reason}}, {{timestamp}}';
 
   let fullConfig: Config | null = null;
-  let notifications: { webhooks: WebhookPreset[] } = { webhooks: [] };
+  let notifications: { webhooks: WebhookPreset[]; batch_window_seconds: number } = { webhooks: [], batch_window_seconds: 0 };
   let savedWebhookNames = new Set<string>();
   let loading = true;
   let saving = false;
@@ -123,7 +127,7 @@
     loading = true;
     try {
       fullConfig = await getConfig();
-      notifications = fullConfig.notifications ?? { webhooks: [] };
+      notifications = fullConfig.notifications ?? { webhooks: [], batch_window_seconds: 0 };
       savedWebhookNames = new Set(notifications.webhooks.map(h => h.name));
     } finally {
       loading = false;
@@ -136,7 +140,7 @@
     try {
       await updateConfig({ ...fullConfig, notifications });
       fullConfig = await getConfig();
-      notifications = fullConfig.notifications ?? { webhooks: [] };
+      notifications = fullConfig.notifications ?? { webhooks: [], batch_window_seconds: 0 };
       savedWebhookNames = new Set(notifications.webhooks.map(h => h.name));
       toast.success(m.notifications_toast_saved());
     } catch (e) {
@@ -159,6 +163,21 @@
     <Loading />
   {:else}
     <div class="flex flex-col gap-6">
+      <div class="card bg-base-200 border border-base-300">
+        <div class="card-body p-5 gap-4">
+          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionBatch}</h2>
+
+          <Input
+            id="batch_window_seconds"
+            label={T && T.labelBatchWindow || ""}
+            subtitle={T && T.hintBatchWindow || ""}
+            type="number"
+            bind:value={notifications.batch_window_seconds}
+            min="0"
+          />
+        </div>
+      </div>
+
       <div class="card bg-base-200 border border-base-300">
         <div class="card-body p-5 gap-4">
           <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionWebhooks}</h2>

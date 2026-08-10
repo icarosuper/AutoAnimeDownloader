@@ -289,6 +289,13 @@ definitions:
     type: object
   files.NotificationsConfig:
     properties:
+      batch_window_seconds:
+        description: |-
+          BatchWindowSeconds agrupa os eventos de uma mesma janela num webhook so. 0 desliga o
+          agrupamento (um webhook por evento, comportamento original). Existe porque um backfill
+          de biblioteca dispara um `download_completed` por torrent e estoura a cota de servicos
+          como o ntfy.sh — ver decisions.md #47.
+        type: integer
       webhooks:
         items:
           $ref: '#/definitions/files.WebhookPreset'

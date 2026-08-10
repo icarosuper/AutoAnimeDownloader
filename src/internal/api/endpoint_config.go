@@ -130,6 +130,11 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
+		if config.Notifications.BatchWindowSeconds < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Notification batch window must be non-negative")
+			return
+		}
+
 		// Save configurations
 		if err := server.FileManager.SaveConfigs(&config); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save configs")

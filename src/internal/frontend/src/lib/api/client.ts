@@ -131,6 +131,7 @@ export interface Config {
   delete_statuses: string[]
   notifications: {
     webhooks: WebhookPreset[]
+    batch_window_seconds: number
   }
   priorities: Priorities
 }
