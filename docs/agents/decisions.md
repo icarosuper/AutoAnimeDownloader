@@ -118,7 +118,7 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 **Effect when broken:** `customLists` is always `null` → `animeIsInExcludedList` never matches → blacklisted animes (e.g. in the "AutoDownloader" custom list used to block titles) are downloaded anyway and the frontend block icon is never shown.
 
-**Cache:** `GetCustomListsMap` caches results for 5 minutes keyed by `username + statuses`. This prevents the API endpoint (`/animes`, called on every page load) from exhausting the rate limit on repeated minimal queries. The cache is only populated when the response contains at least one non-null `CustomLists` entry, so a rate-limited empty response never evicts a valid cached result.
+**Cache:** `GetCustomListsMap` caches results keyed by `username + statuses` (`ttlCache`, ver decisions.md #46). Uma resposta com pelo menos um `CustomLists` não-nulo fica 5 minutos (`customListsTTL`); uma resposta vazia fica só 30 segundos (`customListsEmptyTTL`), porque "vazio" tanto pode ser uma conta sem custom lists quanto um campo que a AniList degradou. Antes o vazio não era cacheado de jeito nenhum, e aí uma conta sem custom lists gerava um request por poll do frontend — exatamente o amplificador que estourava o limite. A leitura do cache acontece antes da busca, então nenhuma resposta degradada chega a evictar uma entrada ainda válida.
 
 **Overlay guard:** `if cl, ok := clMap[ml.Id]; ok && len(cl) > 0 { ml.CustomLists = cl }` — the `len(cl) > 0` guard ensures that a rate-limited nil response from `GetCustomListsMap` (which would produce an empty map entry) never silently clears data that `GetAllCurrentAnime` might have returned correctly on a lucky call.
 
@@ -712,3 +712,23 @@ O layout de franquia com `Season NN/` tambem nao tem como funcionar aqui: o `tvs
 Como as duas funcoes de sanitizacao ficaram identicas depois de tirar o regex, viraram uma: `sanitizeName`.
 
 **Don't "fix" by:** reintroduzir o strip de season "pra agrupar a franquia"; criar subpastas `Season NN/` (a numeracao de episodio da AniList e por entrada, entao E01 da season 3 e mesmo o episodio 1 da midia dela, nao o 25 da franquia); deduplicar pastas por titulo-base.
+
+---
+
+### 46. `GetFrontendAnimeList` é cacheado por 60s — o poll de `/api/v1/animes` é o que estoura a AniList
+
+**Location:** `internal/anilist/anilist.go` — `ttlCache`, `frontendListCache`, `GetFrontendAnimeList`, `frontendListResponse`, `clearCaches` (chamado por `MockAniListDo`); testes em `anilist_test.go`.
+
+**What it looks like:** um cache com TTL num getter que "só lê uma lista", devolvendo uma cópia da fatia em vez da fatia guardada. Parece otimização prematura em cima de um request que leva ~1s.
+
+**Why it's right:** a AniList hoje limita a **30 req/min** por IP. `Status.svelte` faz poll de `/api/v1/animes` a cada 30s **por aba aberta**, e o handler faz uma busca por conta configurada (`fetchAniListEntries` = `GetCustomListsMap` + `GetFrontendAnimeList`). Com 2 contas e 2 abas isso sozinho são ~16 req/min só de UI parada — some com um F5, com o ciclo de verificação de 10 em 10 minutos e com `GetAnimeInfo` de órfãos e o 429 é garantido. Diagnóstico real (`daemon.log`, 10/08/2026 11:09): 15 requests a `/api/v1/animes` em 2 minutos, seguidos de 429 em cascata que derrubaram junto o `searchAnilist` do daemon (`verification.go:486`) — ou seja, a tela aberta impedia o download automático de rodar. Com o cache, N abas custam no máximo 1 request por minuto por conta.
+
+O TTL de 60s é seguro porque essa lista só muda quando o usuário mexe na AniList; contagem de episódios baixados vem do `episodes.json` local e continua instantânea. A chave inclui username + statuses, então mudança de config gera chave nova (não precisa invalidação).
+
+**Cópia, não a fatia guardada:** `fetchAniListEntries` sobrescreve `ml.CustomLists` nas entradas que recebe. Devolver a fatia do cache faria dois requests concorrentes de `/api/v1/animes` escreverem na mesma memória (corrida real, pega no `-race`) e vazaria o overlay de um chamador pro próximo.
+
+**Don't "fix" by:**
+- Cachear `GetAllCurrentAnime` junto — esse é o ciclo do daemon, que roda de 10 em 10 min e **precisa** de dado fresco pra decidir download/deleção.
+- Aumentar o intervalo de poll do frontend em vez do cache — não resolve F5, múltiplas abas, nem múltiplos dispositivos na LAN.
+- Devolver a fatia do cache direto "pra economizar a cópia".
+- Cachear também `GetAnimeInfo` do refresh de órfãos: aquele caminho já está desligado quando a lista falha (decisions.md #42d), que é quando ele amplifica.

@@ -15,10 +15,59 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
+// ttlCache guarda respostas da AniList por um tempo curto. A AniList hoje limita a 30 req/min
+// por IP e o frontend faz poll de /api/v1/animes a cada 30s por aba aberta, com uma busca por
+// conta configurada: sem cache, duas abas e duas contas ja estouram o orcamento sozinhas e o
+// 429 resultante derruba tambem o ciclo de verificacao do daemon (ver decisions.md #11 e #57).
+type ttlCache[T any] struct {
+	mu     sync.Mutex
+	data   map[string]T
+	expiry map[string]time.Time
+}
+
+func newTTLCache[T any]() *ttlCache[T] {
+	return &ttlCache[T]{data: make(map[string]T), expiry: make(map[string]time.Time)}
+}
+
+func (c *ttlCache[T]) get(key string) (T, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if time.Now().Before(c.expiry[key]) {
+		return c.data[key], true
+	}
+	var zero T
+	return zero, false
+}
+
+func (c *ttlCache[T]) set(key string, value T, ttl time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data[key] = value
+	c.expiry[key] = time.Now().Add(ttl)
+}
+
+func (c *ttlCache[T]) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	clear(c.data)
+	clear(c.expiry)
+}
+
+// ponytail: sem protecao contra stampede — N polls simultaneos que erram o cache disparam N
+// buscas. Os timers das abas sao desencontrados, entao o TTL sozinho ja segura o volume; se um
+// dia isso nao bastar, serializar as buscas por chave resolve.
 var (
-	customListsCacheMu     sync.RWMutex
-	customListsCacheData   = make(map[string]map[int]CustomLists)
-	customListsCacheExpiry = make(map[string]time.Time)
+	customListsCache  = newTTLCache[map[int]CustomLists]()
+	frontendListCache = newTTLCache[[]MediaList]()
+)
+
+const (
+	customListsTTL = 5 * time.Minute
+	// Uma resposta vazia pode ser tanto "a conta nao tem custom lists" quanto um campo que a
+	// AniList degradou. O TTL curto limita os dois: o poll para de bater na API a cada request
+	// e um campo degradado se corrige em meio minuto.
+	customListsEmptyTTL = 30 * time.Second
+	frontendListTTL     = 60 * time.Second
 )
 
 var httpDo = func(req *http.Request) (*http.Response, error) {
@@ -37,13 +86,20 @@ func init() {
 	}
 }
 
+// MockAniListDo troca o transporte HTTP e limpa os caches nas duas pontas: um teste que instala
+// um mock precisa ver as respostas dele, nao as do teste anterior.
 func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func()) {
 	prev := httpDo
-	if fn == nil {
-		return func() { httpDo = prev }
+	clearCaches()
+	if fn != nil {
+		httpDo = fn
 	}
-	httpDo = fn
-	return func() { httpDo = prev }
+	return func() { httpDo = prev; clearCaches() }
+}
+
+func clearCaches() {
+	customListsCache.clear()
+	frontendListCache.clear()
 }
 
 type AniListResponse struct {
@@ -248,13 +304,9 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 func GetCustomListsMap(userName string, statuses []string) map[int]CustomLists {
 	key := userName + "\x00" + strings.Join(statuses, "\x00")
 
-	customListsCacheMu.RLock()
-	if exp, ok := customListsCacheExpiry[key]; ok && time.Now().Before(exp) {
-		result := customListsCacheData[key]
-		customListsCacheMu.RUnlock()
+	if result, ok := customListsCache.get(key); ok {
 		return result
 	}
-	customListsCacheMu.RUnlock()
 
 	type miniEntry struct {
 		Id          int         `json:"id"`
@@ -289,10 +341,9 @@ func GetCustomListsMap(userName string, statuses []string) map[int]CustomLists {
 	}
 
 	if hasData {
-		customListsCacheMu.Lock()
-		customListsCacheData[key] = m
-		customListsCacheExpiry[key] = time.Now().Add(5 * time.Minute)
-		customListsCacheMu.Unlock()
+		customListsCache.set(key, m, customListsTTL)
+	} else {
+		customListsCache.set(key, m, customListsEmptyTTL)
 	}
 
 	return m
@@ -356,6 +407,11 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 	return sendAnilistRequest[AniListResponse](query, variables)
 }
 
+// GetFrontendAnimeList alimenta /api/v1/animes, que o frontend faz poll a cada 30s por aba.
+// O resultado fica em cache por frontendListTTL: sem isso cada aba aberta multiplicava a
+// pressao sobre o limite da AniList ate o 429, que por sua vez fazia o ciclo de download do
+// daemon falhar junto. A lista so muda quando o usuario mexe na AniList, entao um minuto de
+// atraso na tela e barato perto de derrubar o daemon.
 func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse, error) {
 	query := `
 		query GetFrontendAnimeList($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
@@ -392,13 +448,32 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 		return &AniListResponse{}, nil
 	}
 
+	key := userName + "\x00" + strings.Join(statuses, "\x00")
+	if list, ok := frontendListCache.get(key); ok {
+		return frontendListResponse(list), nil
+	}
+
 	variables := RequestVariables{
 		"userName": userName,
 		"type":     "ANIME",
 		"statuses": statuses,
 	}
 
-	return sendAnilistRequest[AniListResponse](query, variables)
+	resp, err := sendAnilistRequest[AniListResponse](query, variables)
+	if err != nil {
+		return nil, err
+	}
+
+	frontendListCache.set(key, resp.Data.Page.MediaList, frontendListTTL)
+	// Copia: quem chama sobrescreve CustomLists nas entradas, e devolver a fatia guardada
+	// deixaria dois requests concorrentes escrevendo na mesma memoria.
+	return frontendListResponse(resp.Data.Page.MediaList), nil
+}
+
+func frontendListResponse(list []MediaList) *AniListResponse {
+	resp := &AniListResponse{}
+	resp.Data.Page.MediaList = append([]MediaList(nil), list...)
+	return resp
 }
 
 // GetAnimeInfo returns one anime's data by MEDIA id, collapsed across every configured account:

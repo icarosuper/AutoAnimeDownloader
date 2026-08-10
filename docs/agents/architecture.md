@@ -358,7 +358,10 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `GetMediaIDForEntry(mediaListId)` | Legacy entry id → media id. The only thing left that keys by entry id: `MigrateAnimeIDsToMedia`. Returns 0 when the entry no longer exists |
 | `ErrNotFound` | Sentinel for AniList's 404 — lets a by-id lookup tell "was deleted" from "AniList is down" |
 | `sendAnilistRequest[T]` | Generic GraphQL POST helper |
-| `httpDo` var | Swappable HTTP func — overridden in tests via `MockAniListDo` |
+| `GetFrontendAnimeList(username, statuses)` | Lighter list query behind `GET /animes`. **Cached for 60s** per `username+statuses` and hands out a copy of the slice — the frontend polls this endpoint every 30s per open tab, which used to blow AniList's 30 req/min budget and 429 the daemon's own loop (decisions.md #46) |
+| `GetCustomListsMap(username, statuses)` | Minimal `id + customLists` query, cached 5min (30s when the response is empty) — see decisions.md #11 |
+| `ttlCache[T]` | Tiny TTL map behind both caches (`get`/`set`/`clear`) |
+| `httpDo` var | Swappable HTTP func — overridden in tests via `MockAniListDo`, which also clears both caches so one test can't serve another's responses |
 
 ### `src/internal/nyaa/nyaa.go`
 
@@ -524,6 +527,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | Symbol | Purpose |
 |--------|---------|
 | `Event` type | `NewEpisode`, `DownloadFailed`, `DownloadCompleted` (the webhook event key string for the last one is still `download_completed` — only the Go constant was renamed from `QBittorrentDownloadCompleted`) |
+| `NewEpisode` ordering | Fired by `processAnimeEpisodes` **only when there is at least one magnet to try** — an episode with no search result goes straight to `DownloadFailed`/`ReasonNotFound`. Firing it earlier sent a false "starting download" push on every loop pass (every `check_interval`) for an episode that never started |
 | `Notify(cfg, event, animeName, episode int, reason string)` | Fires all configured webhooks for an event in background goroutines. No-op if cfg is nil or has no webhooks |
 | `FireTestWebhook(cfg, name)` | Fires one named webhook with sample variables. Returns error if not found |
 | `interpolate(template, vars)` | Replaces `{{var}}` placeholders — missing vars become empty string |

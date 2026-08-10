@@ -6,6 +6,9 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -915,5 +918,77 @@ func TestRemoveTorrentWithEpisodes_LoadErrorAbortsWithoutRemoving(t *testing.T) 
 	}
 	if _, ok := backend.Get(hash); !ok {
 		t.Error("backend.Remove não deve ser chamado quando LoadSavedEpisodes falha")
+	}
+}
+
+// TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook: quando nenhuma busca acha torrent,
+// o episódio não pode disparar "novo episódio detectado, iniciando download" — esse push saía a
+// cada passada do loop (10 em 10 min) para um episódio que nunca começou a baixar, e ainda fazia
+// attemptDownloadWithRetries logar "falhou após todas as tentativas" com zero tentativas.
+// Só o webhook de falha (motivo: nenhum torrent encontrado) deve sair.
+func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
+	events := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		events <- string(body)
+	}))
+	defer srv.Close()
+
+	englishTitle := "Sem Torrent"
+	anime := anilist.MediaList{
+		Id:       900,
+		Progress: 0,
+		Status:   anilist.MediaListStatusCurrent,
+		Media: anilist.Media{
+			Id:     900,
+			Status: anilist.MediaStatusReleasing,
+			Title:  anilist.Title{English: &englishTitle},
+			AiringSchedule: anilist.AiringSchedule{
+				Nodes: []anilist.AiringNode{{ID: 9001, Episode: 1, TimeUntilAiring: -100}},
+			},
+		},
+	}
+
+	noResults := nyaaSearcher{
+		searchBatch: func(anilist.Title, []string, string) []nyaa.TorrentResult { return nil },
+		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string) []nyaa.TorrentResult {
+			return nil
+		},
+		searchMovie:    func(anilist.Title, bool, string) []nyaa.TorrentResult { return nil },
+		searchMultiple: func(anilist.Title, []string, []int, string) []nyaa.TorrentResult { return nil },
+	}
+
+	configs := &files.Config{
+		MaxEpisodesPerAnime: 12,
+		EpisodeRetryLimit:   3,
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{{
+				Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{},
+				Body:   "{{title}}",
+				Events: []string{"new_episode", "download_failed"},
+			}},
+		},
+	}
+
+	backend := torrents.NewFakeBackend()
+	result := processAnimeEpisodes(configs, backend, anime, nil, nil, map[int]bool{}, "", noResults)
+
+	if len(result.newEpisodes) > 0 {
+		t.Errorf("nenhum episódio deve ser salvo sem magnet, obteve %d", len(result.newEpisodes))
+	}
+	if len(backend.List()) > 0 {
+		t.Errorf("backend.Add não deve ser chamado sem magnet, cliente tem %d torrent(s)", len(backend.List()))
+	}
+
+	var got []string
+	for range 2 {
+		select {
+		case body := <-events:
+			got = append(got, body)
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+	if len(got) != 1 || got[0] != "Erro no download" {
+		t.Errorf("esperava só o webhook de falha, obteve %v", got)
 	}
 }

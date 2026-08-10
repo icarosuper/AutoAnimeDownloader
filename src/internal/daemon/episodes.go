@@ -79,6 +79,18 @@ func processAnimeEpisodes(
 			}
 		}
 
+		// Sem magnet nao ha o que tentar: avisar "iniciando download" aqui mandava um push
+		// falso a cada passada do loop enquanto o episodio nao aparecesse no Nyaa, e ainda
+		// fazia attemptDownloadWithRetries logar "falhou apos todas as tentativas" com zero
+		// tentativas.
+		if len(magnets) == 0 {
+			logger.Logger.Warn().
+				Str("episode", epName).
+				Msg("No torrent found for episode")
+			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, notifications.ReasonNotFound)
+			continue
+		}
+
 		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
 
 		hash := attemptDownloadWithRetries(configs, backend, magnets, epName)
@@ -103,11 +115,7 @@ func processAnimeEpisodes(
 			// the reconciliation pass as a safety net) enqueue JobOrganize, which hardlinks
 			// the finished files into the library and fires the completion webhook.
 		} else {
-			reason := notifications.ReasonDownloadRejected
-			if len(magnets) == 0 {
-				reason = notifications.ReasonNotFound
-			}
-			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, reason)
+			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, notifications.ReasonDownloadRejected)
 		}
 	}
 
