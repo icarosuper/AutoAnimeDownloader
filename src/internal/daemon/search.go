@@ -24,6 +24,37 @@ func defaultNyaaSearcher() nyaaSearcher {
 	}
 }
 
+// filterBySize descarta torrents acima de maxGB (GiB). maxGB <= 0 desliga o filtro.
+//
+// Roda DEPOIS da ordenacao por prioridade e preserva a ordem, entao o escolhido continua sendo
+// o melhor entre os que cabem. Size == 0 passa: e o valor de nyaa.parseSize quando o Nyaa muda o
+// formato da coluna, e descartar tamanho desconhecido trocaria "as vezes baixa um torrent grande"
+// por "nao baixa nada" — um bug de parsing viraria paralisacao silenciosa.
+func filterBySize(results []nyaa.TorrentResult, maxGB float64) []nyaa.TorrentResult {
+	if maxGB <= 0 || len(results) == 0 {
+		return results
+	}
+	maxBytes := int64(maxGB * 1024 * 1024 * 1024)
+	filtered := make([]nyaa.TorrentResult, 0, len(results))
+	for _, tr := range results {
+		if tr.Size == 0 {
+			logger.Logger.Debug().Str("torrent", tr.Name).Msg("Size filter: unknown size, passing without check")
+			filtered = append(filtered, tr)
+			continue
+		}
+		if tr.Size > maxBytes {
+			logger.Logger.Debug().
+				Str("torrent", tr.Name).
+				Int64("size_bytes", tr.Size).
+				Int64("max_bytes", maxBytes).
+				Msg("Size filter: discarding torrent above the size ceiling")
+			continue
+		}
+		filtered = append(filtered, tr)
+	}
+	return filtered
+}
+
 func buildTitleVariants(titles anilist.Title, customQuery string) []string {
 	if customQuery != "" {
 		return []string{customQuery}

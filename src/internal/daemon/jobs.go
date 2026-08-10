@@ -343,10 +343,12 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	// The webhook + write-back run only when at least one matched episode is not yet
 	// organized (empty LibraryPaths). This makes reconciliation re-runs no-ops.
 	needsOrganize := false
+	partiallyOrganized := false
 	for _, ep := range matched {
 		if len(ep.LibraryPaths) == 0 {
 			needsOrganize = true
-			break
+		} else {
+			partiallyOrganized = true
 		}
 	}
 	if !needsOrganize {
@@ -383,7 +385,15 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 		return false // retry; hardlinks already exist so Organize will no-op next time
 	}
 
-	notifications.Notify(configs, notifications.DownloadCompleted, matched[0].AnimeName, matched[0].EpisodeNumber, "")
+	// Se PARTE do grupo ja tinha LibraryPaths, o torrent ja pousou e o webhook ja saiu: organiza
+	// (e idempotente), grava o marcador nos registros novos, mas nao notifica de novo. Sem isso,
+	// registros criados depois para um torrent ja organizado — como os que a regra de batch cria
+	// no primeiro passe pos-upgrade de uma biblioteca existente — duplicariam a notificacao.
+	if partiallyOrganized {
+		logger.Logger.Debug().Str("hash", hash).Msg("Organize: group was already partially organized, skipping the completion webhook")
+	} else {
+		notifications.Notify(configs, notifications.DownloadCompleted, matched[0].AnimeName, matched[0].EpisodeNumber, "")
+	}
 	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", len(created)).Msg("Organized torrent into library")
 	return true
 }

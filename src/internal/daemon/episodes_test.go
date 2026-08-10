@@ -206,7 +206,7 @@ func TestCheckEpisode_BlacklistedEpisodeMarkedForDeletion(t *testing.T) {
 	}
 
 	downloaded := 0
-	shouldDownload, shouldDelete := checkEpisode(configs, ep, anime, true, &downloaded, false, false)
+	shouldDownload, shouldDelete := checkEpisode(configs, configs.MaxEpisodesPerAnime, ep, anime, true, &downloaded, false, false)
 
 	if shouldDownload {
 		t.Error("episódio de anime na blacklist não deve ser baixado")

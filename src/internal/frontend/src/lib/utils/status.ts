@@ -54,14 +54,11 @@ export function computeNextCheckIn(
 }
 
 const GIB = 1024 ** 3
-// ponytail: 10% hardcoded — promote to a config field if users ever ask to tune it
-const LOW_DISK_SPACE_RATIO = 0.1
 
 export function formatBytes(bytes: number): string {
   return `${(bytes / GIB).toFixed(1)} GB`
 }
 
-export function isDiskSpaceLow(free: number, total: number): boolean {
-  if (total <= 0) return false
-  return free / total < LOW_DISK_SPACE_RATIO
-}
+// O limiar de "disco baixo" vive no servidor (StatusResponse.disk_low, calculado com
+// min_free_disk_percent): um cálculo duplicado aqui acabaria discordando do que o daemon está
+// fazendo. Não reintroduzir o ratio para economizar um campo na resposta.

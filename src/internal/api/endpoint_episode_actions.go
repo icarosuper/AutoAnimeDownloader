@@ -63,7 +63,7 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeId, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to manually download episode")
-			JSONError(w, http.StatusInternalServerError, "DOWNLOAD_FAILED", err.Error())
+			JSONDownloadError(w, err, "DOWNLOAD_FAILED")
 			return
 		}
 
@@ -138,8 +138,6 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Remove both links (library hardlink + seeding torrent, batch guard applied) and
-		// delete the episode from the saved file.
 		if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode")
 			JSONInternalError(w, err)
@@ -256,7 +254,6 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 		}
 
 		if alreadyDownloaded {
-			// Remove both links (library hardlink + seeding torrent) and delete from file.
 			// Abort on failure: adding a new torrent while the stale record survives would
 			// leave the new download untracked (JobOrganize joins saved episodes by hash).
 			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
@@ -279,7 +276,7 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeId, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to redownload episode")
-			JSONError(w, http.StatusInternalServerError, "REDOWNLOAD_FAILED", err.Error())
+			JSONDownloadError(w, err, "REDOWNLOAD_FAILED")
 			return
 		}
 
@@ -345,7 +342,6 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Delete existing torrent if already downloaded
 		savedEpisodes, err := server.FileManager.LoadSavedEpisodes()
 		if err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to load saved episodes")
@@ -362,7 +358,6 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 		}
 
 		if alreadyDownloaded {
-			// Remove both links (library hardlink + seeding torrent) and delete from file.
 			// Abort on failure: the replacement torrent would otherwise be untracked.
 			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
 				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode before replacement")
@@ -378,7 +373,7 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 		ep, err := daemon.ManualDownloadEpisodeWithMagnet(server.Torrents, animeId, episodeId, body.Magnet, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to replace episode with magnet")
-			JSONError(w, http.StatusInternalServerError, "REPLACE_FAILED", err.Error())
+			JSONDownloadError(w, err, "REPLACE_FAILED")
 			return
 		}
 
@@ -443,7 +438,6 @@ func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Collect IDs for all existing episodes of this anime and remove both links.
 		var idsToDelete []int
 		for _, ep := range savedEpisodes {
 			if ep.AnimeID == animeId {
@@ -463,7 +457,7 @@ func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 		episodes, err := daemon.ManualDownloadAnimeWithMagnet(server.Torrents, animeId, body.Magnet, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Msg("Failed to replace anime with magnet")
-			JSONError(w, http.StatusInternalServerError, "REPLACE_FAILED", err.Error())
+			JSONDownloadError(w, err, "REPLACE_FAILED")
 			return
 		}
 

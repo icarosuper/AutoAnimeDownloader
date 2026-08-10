@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes, isDiskSpaceLow } from '../../src/lib/utils/status.js'
+import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes } from '../../src/lib/utils/status.js'
 import type { AnimeInfo } from '../../src/lib/api/client.js'
 
 function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
@@ -132,16 +132,3 @@ describe('formatBytes', () => {
   })
 })
 
-describe('isDiskSpaceLow', () => {
-  it('is true when free/total is below 10%', () => {
-    expect(isDiskSpaceLow(5, 100)).toBe(true)
-  })
-
-  it('is false when free/total is at or above 10%', () => {
-    expect(isDiskSpaceLow(10, 100)).toBe(false)
-  })
-
-  it('is false when total is 0 (no data)', () => {
-    expect(isDiskSpaceLow(0, 0)).toBe(false)
-  })
-})

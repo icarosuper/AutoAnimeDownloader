@@ -60,13 +60,27 @@ type Config struct {
 	// SavePath e um campo LEGADO, lido apenas por daemon.MigrateSavePath. O diretorio de
 	// download deixou de ser configuravel e passou a ser derivado (ver DownloadPath). O
 	// omitempty faz o campo sumir do config.json assim que a migracao o zera.
-	SavePath            string   `json:"save_path,omitempty" swaggerignore:"true"`
-	CompletedAnimePath  string   `json:"completed_anime_path"`
-	AnilistUsername     string   `json:"anilist_username,omitempty"`
-	AnilistUsernames    []string `json:"anilist_usernames"`
-	CheckInterval       int      `json:"check_interval"`
-	MaxEpisodesPerAnime int      `json:"max_episodes_per_anime"`
-	EpisodeRetryLimit   int      `json:"episode_retry_limit"`
+	SavePath           string   `json:"save_path,omitempty" swaggerignore:"true"`
+	CompletedAnimePath string   `json:"completed_anime_path"`
+	AnilistUsername    string   `json:"anilist_username,omitempty"`
+	AnilistUsernames   []string `json:"anilist_usernames"`
+	CheckInterval      int      `json:"check_interval"`
+	// MaxEpisodesPerAnime limita quantos episodios de um anime existem ao mesmo tempo, e vale
+	// APENAS no caminho episodio-a-episodio: um batch e um torrent so, entao limitar registros
+	// nao limitaria bytes nem arquivos na biblioteca (ver decisions.md).
+	MaxEpisodesPerAnime int `json:"max_episodes_per_anime"`
+	// MaxBatchEpisodes e o teto de episodios para usar batch. Acima disso um anime finalizado
+	// volta ao caminho episodio-a-episodio (onde MaxEpisodesPerAnime vale). 0 desliga o teto.
+	MaxBatchEpisodes int `json:"max_batch_episodes"`
+	// MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB descartam da busca torrents acima do teto,
+	// em GiB. 0 desliga (default: nao filtrar, pois nao existe numero defensavel sem saber se o
+	// usuario quer 1080p web ou remux).
+	MaxBatchTorrentSizeGB   float64 `json:"max_batch_torrent_size_gb"`
+	MaxEpisodeTorrentSizeGB float64 `json:"max_episode_torrent_size_gb"`
+	// MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco
+	// livre no volume da biblioteca. 0 desliga.
+	MinFreeDiskPercent int `json:"min_free_disk_percent"`
+	EpisodeRetryLimit  int `json:"episode_retry_limit"`
 	// MaxConcurrentDownloads limita quantos torrents INCOMPLETOS baixam ao mesmo tempo; o
 	// excedente espera na fila (torrents.queue). 0 desliga o limite. Seeding nunca conta.
 	//
@@ -130,6 +144,8 @@ func getDefaultConfig() *Config {
 		AnilistUsernames:       []string{},
 		CheckInterval:          10,
 		MaxEpisodesPerAnime:    12,
+		MaxBatchEpisodes:       30,
+		MinFreeDiskPercent:     10,
 		EpisodeRetryLimit:      5,
 		MaxConcurrentDownloads: 3,
 		DeleteWatchedEpisodes:  true,
@@ -217,7 +233,6 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Check if file is empty or contains only whitespace
 	trimmed := strings.TrimSpace(string(file))
 	if len(trimmed) == 0 {
 		logger.Logger.Warn().Msg("Config file is empty, recreating with default values")
@@ -228,7 +243,6 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		return config, nil
 	}
 
-	// Try to parse the JSON
 	if err := json.Unmarshal(file, config); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to parse config JSON, recreating with default values")
 		config = getDefaultConfig()
@@ -341,9 +355,7 @@ func (m *FileManager) loadSavedEpisodesLocked() ([]EpisodeStruct, error) {
 		return nil, fmt.Errorf("failed to parse episodes: %w", err)
 	}
 
-	// If we loaded episodes from old format, migrate to JSON format
 	if len(episodes) > 0 && episodes[0].DownloadDate.IsZero() {
-		// Check if any episode has zero date (indicating old format)
 		needsMigration := false
 		for _, ep := range episodes {
 			if ep.DownloadDate.IsZero() {
@@ -352,13 +364,11 @@ func (m *FileManager) loadSavedEpisodesLocked() ([]EpisodeStruct, error) {
 			}
 		}
 		if needsMigration {
-			// Migrate: set download date to current time for episodes without date
 			for i := range episodes {
 				if episodes[i].DownloadDate.IsZero() {
 					episodes[i].DownloadDate = time.Now()
 				}
 			}
-			// Save in new format
 			if err := m.saveEpisodesLocked(episodes); err != nil {
 				return nil, fmt.Errorf("failed to migrate episodes to JSON format: %w", err)
 			}
@@ -376,19 +386,16 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Load existing episodes
 	existingEpisodes, err := m.loadSavedEpisodesLocked()
 	if err != nil {
 		return fmt.Errorf("failed to load existing episodes: %w", err)
 	}
 
-	// Create map of existing episodes by ID to avoid duplicates
 	existingMap := make(map[int]bool)
 	for _, ep := range existingEpisodes {
 		existingMap[ep.EpisodeID] = true
 	}
 
-	// Append only new episodes
 	var newEpisodes []EpisodeStruct
 	for _, ep := range episodes {
 		if !existingMap[ep.EpisodeID] {
@@ -400,10 +407,8 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 		return nil
 	}
 
-	// Append new episodes to existing ones
 	allEpisodes := append(existingEpisodes, newEpisodes...)
 
-	// Save all episodes in JSON format
 	return m.saveEpisodesLocked(allEpisodes)
 }
 
@@ -438,7 +443,6 @@ func (m *FileManager) UpsertEpisodes(episodes []EpisodeStruct) error {
 			result = append(result, ep)
 		}
 	}
-	// Append updates that did not correspond to an existing record.
 	for _, ep := range episodes {
 		if !seen[ep.EpisodeID] {
 			result = append(result, ep)

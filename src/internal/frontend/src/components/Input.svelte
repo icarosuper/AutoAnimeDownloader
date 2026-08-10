@@ -17,6 +17,7 @@
     export let required: boolean = false;
     export let min: number | string | null = null;
     export let max: number | string | null = null;
+    export let step: number | string | null = null;
     export let disabled: boolean = false;
     export let error: string = "";
 
@@ -48,6 +49,7 @@
             {required}
             {min}
             {max}
+            {step}
             {disabled}
             aria-describedby={describedBy}
             aria-invalid={error ? "true" : undefined}

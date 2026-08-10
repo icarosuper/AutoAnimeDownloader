@@ -84,7 +84,6 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 		// por um config.json escrito por uma versao anterior, que e o caso de uso.
 		config.SavePath = ""
 
-		// Validate required fields
 		if len(config.AnilistUsernames) == 0 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "At least one Anilist username is required")
 			return
@@ -104,7 +103,6 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			}
 		}
 
-		// Validate numeric values
 		if config.CheckInterval <= 0 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Check interval must be greater than 0")
 			return
@@ -130,12 +128,27 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
+		if config.MaxBatchEpisodes < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Max batch episodes must be non-negative")
+			return
+		}
+
+		if config.MaxBatchTorrentSizeGB < 0 || config.MaxEpisodeTorrentSizeGB < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Torrent size limits must be non-negative")
+			return
+		}
+
+		// 100 bloquearia todo download para sempre.
+		if config.MinFreeDiskPercent < 0 || config.MinFreeDiskPercent > 99 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Min free disk percent must be between 0 and 99")
+			return
+		}
+
 		if config.Notifications.BatchWindowSeconds < 0 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Notification batch window must be non-negative")
 			return
 		}
 
-		// Save configurations
 		if err := server.FileManager.SaveConfigs(&config); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save configs")
 			JSONInternalError(w, err)

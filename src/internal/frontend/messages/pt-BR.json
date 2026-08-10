@@ -343,5 +343,17 @@
   "downloads_col_episode": "Ep.",
   "downloads_sort_by": "Ordenar por",
   "downloads_peers_count": "{count} peers",
-  "downloads_group_progress": "Progresso geral de {name}"
+  "downloads_group_progress": "Progresso geral de {name}",
+  "config_label_max_batch_episodes": "Máx. Episódios para Batch",
+  "config_hint_max_batch_episodes": "Acima desse número de episódios, um anime finalizado é baixado episódio por episódio respeitando o limite por anime, em vez de num torrent batch único. Use 0 para não limitar.",
+  "config_label_max_batch_size": "Tamanho Máx. do Torrent Batch (GiB)",
+  "config_hint_max_batch_size": "Torrents batch acima desse tamanho são descartados do resultado da busca (~40 GiB para um pack de 26 episódios em 1080p). Use 0 para não limitar.",
+  "config_label_max_episode_size": "Tamanho Máx. do Torrent de Episódio (GiB)",
+  "config_hint_max_episode_size": "Torrents de episódio avulso acima desse tamanho são descartados do resultado da busca (~1.5 GiB para um episódio em 1080p). Use 0 para não limitar.",
+  "config_label_min_free_disk": "Espaço Livre Mínimo em Disco (%)",
+  "config_hint_min_free_disk": "Abaixo dessa porcentagem de espaço livre o download é pausado. Use 0 para desligar a guarda.",
+  "config_val_max_batch_episodes": "Máx. de episódios para batch não pode ser negativo",
+  "config_val_torrent_size": "Os limites de tamanho de torrent não podem ser negativos",
+  "config_val_min_free_disk": "O espaço livre mínimo deve estar entre 0 e 99",
+  "status_disk_low_alert": "Espaço em disco baixo — downloads pausados."
 }

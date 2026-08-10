@@ -65,7 +65,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	downloadedEpisodes := 0
 	var episodesToDownload []anilist.AiringNode
 	for _, ep := range anime.Media.AiringSchedule.Nodes {
-		shouldDownload, _ := checkEpisode(configs, ep, anime, false, &downloadedEpisodes, false, false)
+		shouldDownload, _ := checkEpisode(configs, configs.MaxEpisodesPerAnime, ep, anime, false, &downloadedEpisodes, false, false)
 		summary.Episodes = append(summary.Episodes, EpisodeDebugResult{
 			Episode:     ep.Episode,
 			WouldSearch: shouldDownload,
@@ -87,7 +87,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		return summary, nil
 	}
 
-	magnetsForEpisodes := resolveSearchStrategy(anime, animeTitle, episodesToDownload, customQuery, defaultNyaaSearcher())
+	magnetsForEpisodes := resolveSearchStrategy(configs, anime, animeTitle, episodesToDownload, customQuery, defaultNyaaSearcher())
 
 	magnetsByEpisodeNumber := make(map[int]int, len(episodesToDownload))
 	for _, ep := range episodesToDownload {

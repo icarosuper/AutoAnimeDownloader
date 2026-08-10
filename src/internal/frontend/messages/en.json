@@ -343,5 +343,17 @@
   "downloads_col_episode": "Ep.",
   "downloads_sort_by": "Sort by",
   "downloads_peers_count": "{count} peers",
-  "downloads_group_progress": "Overall progress of {name}"
+  "downloads_group_progress": "Overall progress of {name}",
+  "config_label_max_batch_episodes": "Max Episodes for Batch",
+  "config_hint_max_batch_episodes": "Above this episode count a finished anime is downloaded episode by episode, respecting the per-anime limit, instead of as a single batch torrent. Set to 0 for no ceiling.",
+  "config_label_max_batch_size": "Max Batch Torrent Size (GiB)",
+  "config_hint_max_batch_size": "Batch torrents above this size are discarded from the search results (~40 GiB for a 26-episode 1080p pack). Set to 0 for no limit.",
+  "config_label_max_episode_size": "Max Episode Torrent Size (GiB)",
+  "config_hint_max_episode_size": "Single-episode torrents above this size are discarded from the search results (~1.5 GiB for a 1080p episode). Set to 0 for no limit.",
+  "config_label_min_free_disk": "Min Free Disk Space (%)",
+  "config_hint_min_free_disk": "Below this percentage of free space downloads are paused. Set to 0 to disable the guard.",
+  "config_val_max_batch_episodes": "Max episodes for batch must be non-negative",
+  "config_val_torrent_size": "Torrent size limits must be non-negative",
+  "config_val_min_free_disk": "Min free disk space must be between 0 and 99",
+  "status_disk_low_alert": "Low disk space — downloads paused."
 }

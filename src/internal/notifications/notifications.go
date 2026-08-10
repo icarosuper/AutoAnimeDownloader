@@ -25,6 +25,7 @@ const (
 const (
 	ReasonNotFound         = "nenhum torrent encontrado"
 	ReasonDownloadRejected = "torrent rejeitado"
+	ReasonNoDiskSpace      = "espaço em disco insuficiente"
 )
 
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)

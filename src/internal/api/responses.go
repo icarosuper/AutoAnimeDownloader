@@ -1,7 +1,9 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/daemon"
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -19,13 +21,13 @@ type ErrorInfo struct {
 func JSONSuccess(w http.ResponseWriter, statusCode int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	
+
 	response := SuccessResponse{
 		Success: true,
 		Data:    data,
 		Error:   nil,
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
@@ -34,7 +36,7 @@ func JSONSuccess(w http.ResponseWriter, statusCode int, data interface{}) {
 func JSONError(w http.ResponseWriter, statusCode int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	
+
 	response := SuccessResponse{
 		Success: false,
 		Data:    nil,
@@ -43,7 +45,7 @@ func JSONError(w http.ResponseWriter, statusCode int, code, message string) {
 			Message: message,
 		},
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode error response", http.StatusInternalServerError)
 	}
@@ -53,3 +55,12 @@ func JSONInternalError(w http.ResponseWriter, err error) {
 	JSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 }
 
+// JSONDownloadError responde a falha de um download manual. Disco cheio vira 409 e nao 500: a
+// causa e conhecida e acionavel pelo usuario.
+func JSONDownloadError(w http.ResponseWriter, err error, code string) {
+	if errors.Is(err, daemon.ErrInsufficientDiskSpace) {
+		JSONError(w, http.StatusConflict, "INSUFFICIENT_DISK_SPACE", err.Error())
+		return
+	}
+	JSONError(w, http.StatusInternalServerError, code, err.Error())
+}

@@ -7,7 +7,6 @@ const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_BASE_URL
   }
 
-  // Check if we're in browser environment before accessing window
   if (typeof window === 'undefined') {
     // Fallback for non-browser environments (build time, SSR, etc.)
     return 'http://localhost:8091/api/v1'
@@ -92,6 +91,9 @@ export interface StatusResponse {
   version: string
   disk_total: number
   disk_free: number
+  /** Livre abaixo de min_free_disk_percent: o daemon parou de adicionar torrents. Calculado no
+   *  servidor de proposito — um limiar duplicado no frontend discordaria do daemon. */
+  disk_low: boolean
 }
 
 export interface WebhookPreset {
@@ -119,6 +121,13 @@ export interface Config {
   completed_anime_path: string
   check_interval: number
   max_episodes_per_anime: number
+  /** Acima deste numero de episodios um anime finalizado nao usa batch. 0 desliga. */
+  max_batch_episodes: number
+  /** Tetos de tamanho de torrent em GiB. 0 desliga. */
+  max_batch_torrent_size_gb: number
+  max_episode_torrent_size_gb: number
+  /** Abaixo desta porcentagem de espaco livre o download e pausado. 0 desliga. */
+  min_free_disk_percent: number
   episode_retry_limit: number
   max_concurrent_downloads: number
   delete_watched_episodes: boolean

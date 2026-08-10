@@ -7,6 +7,7 @@ import (
 	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -29,6 +30,37 @@ type FileManagerInterface interface {
 	LoadAllAnimeSettings() (map[int]files.AnimeSettings, error)
 	LoadAnimeSettings(animeID int) (*files.AnimeSettings, error)
 	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
+}
+
+// ErrInsufficientDiskSpace e devolvido por checkDiskSpace quando o volume da biblioteca esta
+// abaixo de Config.MinFreeDiskPercent de espaco livre.
+var ErrInsufficientDiskSpace = errors.New("insufficient free disk space")
+
+// checkDiskSpace barra a ADICAO de novos torrents quando o volume da biblioteca esta cheio.
+//
+// Nao barra o passe de verificacao: a poda de episodios assistidos, o deleteEpisodesByStatus e o
+// organize sao justamente o que LIBERA espaco, e um "if disco cheio { return }" no inicio do
+// passe deixaria o app travado no estado em que nao consegue se desentupir.
+//
+// Erro de statfs NAO bloqueia: um volume que nao responde (rede, permissao) nao e prova de disco
+// cheio, e transformar isso em "para de baixar tudo" e pior que o risco que a guarda cobre.
+func checkDiskSpace(configs *files.Config) error {
+	if configs.MinFreeDiskPercent <= 0 || configs.CompletedAnimePath == "" {
+		return nil
+	}
+	// Mesmo volume que o diretorio de download, por construcao (ver Config.DownloadPath).
+	total, free, err := files.DiskSpace(configs.CompletedAnimePath)
+	if err != nil {
+		logger.Logger.Debug().Err(err).Msg("Disk space guard: statfs failed, not blocking downloads")
+		return nil
+	}
+	if total == 0 {
+		return nil
+	}
+	if float64(free)/float64(total)*100 < float64(configs.MinFreeDiskPercent) {
+		return fmt.Errorf("%w: %d%% free required on %s", ErrInsufficientDiskSpace, configs.MinFreeDiskPercent, configs.CompletedAnimePath)
+	}
+	return nil
 }
 
 // HandleTorrentFailure reacts to a torrent the embedded client stopped with an error.

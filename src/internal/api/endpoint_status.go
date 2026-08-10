@@ -14,6 +14,10 @@ type StatusResponse struct {
 	Version   string    `json:"version" example:"1.2.0"`
 	DiskTotal uint64    `json:"disk_total" example:"500107862016"`
 	DiskFree  uint64    `json:"disk_free" example:"128849018880"`
+	// DiskLow marca que o livre esta abaixo de min_free_disk_percent — ou seja, que o daemon
+	// PAROU de adicionar torrents. Calculado no servidor de proposito: um limiar duplicado no
+	// frontend acabaria discordando do que o daemon esta fazendo.
+	DiskLow bool `json:"disk_low" example:"false"`
 }
 
 // @Summary      Get daemon status
@@ -34,9 +38,13 @@ func handleStatus(server *Server) http.HandlerFunc {
 		status, lastCheck, hasError := server.State.GetAll()
 
 		var diskTotal, diskFree uint64
+		diskLow := false
 		// Mesmo volume que o diretorio de download, por construcao (ver Config.DownloadPath).
 		if cfg, err := server.FileManager.LoadConfigs(); err == nil && cfg.CompletedAnimePath != "" {
 			diskTotal, diskFree, _ = files.DiskSpace(cfg.CompletedAnimePath)
+			if diskTotal > 0 && cfg.MinFreeDiskPercent > 0 {
+				diskLow = float64(diskFree)/float64(diskTotal)*100 < float64(cfg.MinFreeDiskPercent)
+			}
 		}
 
 		response := StatusResponse{
@@ -46,6 +54,7 @@ func handleStatus(server *Server) http.HandlerFunc {
 			Version:   version.Version,
 			DiskTotal: diskTotal,
 			DiskFree:  diskFree,
+			DiskLow:   diskLow,
 		}
 
 		JSONSuccess(w, http.StatusOK, response)

@@ -49,6 +49,14 @@
     labelCheckInterval: m.config_label_check_interval(),
     labelMaxEpisodes: m.config_label_max_episodes(),
     labelRetryLimit: m.config_label_retry_limit(),
+    labelMaxBatchEpisodes: m.config_label_max_batch_episodes(),
+    hintMaxBatchEpisodes: m.config_hint_max_batch_episodes(),
+    labelMaxBatchSize: m.config_label_max_batch_size(),
+    hintMaxBatchSize: m.config_hint_max_batch_size(),
+    labelMaxEpisodeSize: m.config_label_max_episode_size(),
+    hintMaxEpisodeSize: m.config_hint_max_episode_size(),
+    labelMinFreeDisk: m.config_label_min_free_disk(),
+    hintMinFreeDisk: m.config_hint_min_free_disk(),
     labelMaxConcurrent: m.config_label_max_concurrent(),
     hintMaxConcurrent: m.config_hint_max_concurrent(),
     labelRenameJellyfin: m.config_label_rename_jellyfin(),
@@ -95,6 +103,10 @@
     completed_anime_path: "",
     check_interval: 10,
     max_episodes_per_anime: 12,
+    max_batch_episodes: 30,
+    max_batch_torrent_size_gb: 0,
+    max_episode_torrent_size_gb: 0,
+    min_free_disk_percent: 10,
     episode_retry_limit: 5,
     max_concurrent_downloads: 3,
     delete_watched_episodes: true,
@@ -238,6 +250,22 @@
       group: "downloads" as GroupId,
       ok: !(config.delete_watched_episodes && config.watched_episodes_to_keep < 0),
       message: m.config_val_watched_keep,
+    },
+    {
+      group: "downloads" as GroupId,
+      ok: config.max_batch_episodes >= 0,
+      message: m.config_val_max_batch_episodes,
+    },
+    {
+      group: "downloads" as GroupId,
+      ok: config.max_batch_torrent_size_gb >= 0 && config.max_episode_torrent_size_gb >= 0,
+      message: m.config_val_torrent_size,
+    },
+    {
+      // 100 bloquearia todo download para sempre.
+      group: "downloads" as GroupId,
+      ok: config.min_free_disk_percent >= 0 && config.min_free_disk_percent <= 99,
+      message: m.config_val_min_free_disk,
     },
   ];
 
@@ -447,6 +475,53 @@
                   />
                 </div>
               {/if}
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="max_batch_episodes"
+                label={T && T.labelMaxBatchEpisodes || ""}
+                subtitle={T && T.hintMaxBatchEpisodes || ""}
+                type="number"
+                bind:value={config.max_batch_episodes}
+                min="0"
+              />
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="max_batch_torrent_size_gb"
+                label={T && T.labelMaxBatchSize || ""}
+                subtitle={T && T.hintMaxBatchSize || ""}
+                type="number"
+                bind:value={config.max_batch_torrent_size_gb}
+                min="0"
+                step="0.1"
+              />
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="max_episode_torrent_size_gb"
+                label={T && T.labelMaxEpisodeSize || ""}
+                subtitle={T && T.hintMaxEpisodeSize || ""}
+                type="number"
+                bind:value={config.max_episode_torrent_size_gb}
+                min="0"
+                step="0.1"
+              />
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="min_free_disk_percent"
+                label={T && T.labelMinFreeDisk || ""}
+                subtitle={T && T.hintMinFreeDisk || ""}
+                type="number"
+                bind:value={config.min_free_disk_percent}
+                min="0"
+                max="99"
+              />
             </div>
 
             <div class="space-y-1.5 p-4.5">

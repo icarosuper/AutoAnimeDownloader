@@ -1,0 +1,402 @@
+package daemon
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"AutoAnimeDownloader/src/internal/anilist"
+	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/notifications"
+	"AutoAnimeDownloader/src/internal/nyaa"
+	"AutoAnimeDownloader/src/internal/torrents"
+)
+
+// animeWithEpisodes builds an anime with n aired episode nodes. total is what AniList reports as
+// Media.Episodes (nil when totalKnown is false).
+func animeWithEpisodes(n int, status anilist.MediaStatus, totalKnown bool, format anilist.MediaFormat) anilist.MediaList {
+	title := "Limits Test Anime"
+	nodes := make([]anilist.AiringNode, n)
+	for i := range nodes {
+		nodes[i] = anilist.AiringNode{ID: 2000 + i, Episode: i + 1, TimeUntilAiring: -100}
+	}
+	media := anilist.Media{
+		Id:             777,
+		Status:         status,
+		Format:         format,
+		Title:          anilist.Title{English: &title},
+		AiringSchedule: anilist.AiringSchedule{Nodes: nodes},
+	}
+	if totalKnown {
+		total := n
+		media.Episodes = &total
+	}
+	return anilist.MediaList{Id: 777, Status: anilist.MediaListStatusCurrent, Media: media}
+}
+
+// searcherFor builds a searcher whose strategies return the given results.
+func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearcher {
+	return nyaaSearcher{
+		searchBatch: func(anilist.Title, []string, string) []nyaa.TorrentResult { return batch },
+		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string) []nyaa.TorrentResult {
+			return single
+		},
+		searchMovie:    func(anilist.Title, bool, string) []nyaa.TorrentResult { return movie },
+		searchMultiple: func(anilist.Title, []string, []int, string) []nyaa.TorrentResult { return multiple },
+	}
+}
+
+// fakeMagnet builds a magnet with a valid (unique) 40-hex infohash, which FakeBackend requires.
+func fakeMagnet(n int) string {
+	return "magnet:?xt=urn:btih:" + strings.Repeat("0", 36) + fmt.Sprintf("%04x", n)
+}
+
+// multipleFor builds one per-episode result for each episode number in 1..n, as
+// ScrapNyaaForMultipleEpisodes would.
+func multipleFor(n int, sizeBytes int64) []nyaa.TorrentResult {
+	out := make([]nyaa.TorrentResult, 0, n)
+	for i := 1; i <= n; i++ {
+		ep := i
+		out = append(out, nyaa.TorrentResult{
+			Name:       "ep",
+			MagnetLink: fakeMagnet(i),
+			Episode:    &ep,
+			Size:       sizeBytes,
+		})
+	}
+	return out
+}
+
+func limitsConfig() *files.Config {
+	return &files.Config{
+		MaxEpisodesPerAnime: 12,
+		MaxBatchEpisodes:    30,
+		EpisodeRetryLimit:   3,
+	}
+}
+
+// TestWillBatch_FinishedWithinCeilingIgnoresPerAnimeLimit: 26 episódios finalizados casam com o
+// batch, e o limite de 12 por anime NÃO se aplica — um batch é um torrent só, limitar registros
+// não limitaria nem bytes nem arquivos na biblioteca.
+func TestWillBatch_FinishedWithinCeilingIgnoresPerAnimeLimit(t *testing.T) {
+	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
+	searcher := searcherFor([]nyaa.TorrentResult{{Name: "batch", MagnetLink: fakeMagnet(9001)}}, nil, nil, nil)
+
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 26 {
+		t.Errorf("esperava 26 episódios registrados pelo batch, obteve %d", len(result.newEpisodes))
+	}
+	for _, ep := range result.newEpisodes {
+		if !ep.IsBatch {
+			t.Fatalf("episódio %d deveria estar marcado como batch", ep.EpisodeNumber)
+		}
+	}
+}
+
+// TestWillBatch_AboveCeilingFallsBackToLimitedOneByOne: 39 > max_batch_episodes 30, então o anime
+// volta ao caminho um-a-um e o limite de 12 volta a valer.
+func TestWillBatch_AboveCeilingFallsBackToLimitedOneByOne(t *testing.T) {
+	anime := animeWithEpisodes(39, anilist.MediaStatusFinished, true, "")
+	batchCalled := false
+	searcher := searcherFor(nil, multipleFor(39, 0), nil, nil)
+	searcher.searchBatch = func(anilist.Title, []string, string) []nyaa.TorrentResult {
+		batchCalled = true
+		return []nyaa.TorrentResult{{MagnetLink: fakeMagnet(9001)}}
+	}
+
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if batchCalled {
+		t.Error("searchBatch não deve ser chamado acima do teto de max_batch_episodes")
+	}
+	if len(result.newEpisodes) == 0 {
+		t.Fatal("esperava downloads episódio a episódio, obteve nenhum")
+	}
+	if len(result.newEpisodes) != 12 {
+		t.Errorf("esperava 12 episódios (limite por anime), obteve %d", len(result.newEpisodes))
+	}
+	if result.newEpisodes[0].EpisodeNumber != 1 {
+		t.Errorf("o corte deve preservar os episódios mais antigos, obteve o primeiro = %d", result.newEpisodes[0].EpisodeNumber)
+	}
+}
+
+// TestWillBatch_ReleasingStaysLimited: One Piece — RELEASING nunca casa com batch.
+func TestWillBatch_ReleasingStaysLimited(t *testing.T) {
+	anime := animeWithEpisodes(1100, anilist.MediaStatusReleasing, false, "")
+	searcher := searcherFor(nil, multipleFor(1100, 0), nil, nil)
+
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 12 {
+		t.Errorf("esperava 12 episódios, obteve %d", len(result.newEpisodes))
+	}
+}
+
+// TestWillBatch_UnknownTotalStaysLimited: Media.Episodes == nil não lança o limite — sem saber o
+// tamanho não há como afirmar que o pack cabe no teto.
+func TestWillBatch_UnknownTotalStaysLimited(t *testing.T) {
+	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, false, "")
+	searcher := searcherFor(nil, multipleFor(26, 0), nil, nil)
+
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 12 {
+		t.Errorf("contagem desconhecida deve continuar limitada em 12, obteve %d", len(result.newEpisodes))
+	}
+}
+
+// TestWillBatch_CeilingZeroDisablesTheCeiling: 0 desliga o teto, então 720 episódios batcham
+// (comportamento anterior à spec).
+func TestWillBatch_CeilingZeroDisablesTheCeiling(t *testing.T) {
+	anime := animeWithEpisodes(720, anilist.MediaStatusFinished, true, "")
+	configs := limitsConfig()
+	configs.MaxBatchEpisodes = 0
+	searcher := searcherFor([]nyaa.TorrentResult{{MagnetLink: fakeMagnet(9001)}}, nil, nil, nil)
+
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 720 {
+		t.Errorf("com o teto desligado esperava 720 episódios, obteve %d", len(result.newEpisodes))
+	}
+}
+
+// TestWillBatch_MovieUnaffected: filme continua usando a estratégia de filme.
+func TestWillBatch_MovieUnaffected(t *testing.T) {
+	anime := animeWithEpisodes(1, anilist.MediaStatusFinished, true, anilist.MediaFormatMovie)
+	searcher := searcherFor(nil, nil, nil, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(9004)}})
+
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 1 || !result.newEpisodes[0].IsBatch {
+		t.Errorf("filme deve baixar como torrent único, obteve %+v", result.newEpisodes)
+	}
+}
+
+// TestWillBatch_EmptyBatchSearchReAppliesLimit é o tampão: o limite foi lançado contando com um
+// batch, a busca de batch voltou vazia e a Estratégia 3 assumiu — o limite tem de voltar.
+func TestWillBatch_EmptyBatchSearchReAppliesLimit(t *testing.T) {
+	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
+	searcher := searcherFor(nil, multipleFor(26, 0), nil, nil)
+
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 12 {
+		t.Errorf("busca de batch vazia deve devolver o limite de 12, obteve %d", len(result.newEpisodes))
+	}
+}
+
+// TestBatchSizeCeiling_EmptiesResultAndReAppliesLimit: o mesmo caminho do tampão, com o filtro de
+// tamanho como gatilho em vez da busca vazia.
+func TestBatchSizeCeiling_EmptiesResultAndReAppliesLimit(t *testing.T) {
+	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
+	configs := limitsConfig()
+	configs.MaxBatchTorrentSizeGB = 10
+	const gib = int64(1024 * 1024 * 1024)
+	searcher := searcherFor(
+		[]nyaa.TorrentResult{{Name: "remux pack", MagnetLink: fakeMagnet(9002), Size: 300 * gib}},
+		multipleFor(26, gib),
+		nil, nil,
+	)
+
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 12 {
+		t.Errorf("batch acima do teto deve cair em 12 episódios individuais, obteve %d", len(result.newEpisodes))
+	}
+	for _, ep := range result.newEpisodes {
+		if ep.IsBatch {
+			t.Fatal("nenhum episódio deveria vir marcado como batch")
+		}
+	}
+}
+
+// TestEpisodeSizeCeiling_DoesNotAffectBatchChoice: um pack de 40 GiB continua sendo baixado com
+// max_episode_torrent_size_gb = 1.5 — os dois tetos são independentes.
+func TestEpisodeSizeCeiling_DoesNotAffectBatchChoice(t *testing.T) {
+	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
+	configs := limitsConfig()
+	configs.MaxEpisodeTorrentSizeGB = 1.5
+	const gib = int64(1024 * 1024 * 1024)
+	searcher := searcherFor([]nyaa.TorrentResult{{Name: "pack", MagnetLink: fakeMagnet(9003), Size: 40 * gib}}, nil, nil, nil)
+
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+
+	if len(result.newEpisodes) != 26 {
+		t.Errorf("o teto de episódio não deve filtrar o batch, obteve %d episódios", len(result.newEpisodes))
+	}
+}
+
+func TestFilterBySize(t *testing.T) {
+	const gib = int64(1024 * 1024 * 1024)
+	results := []nyaa.TorrentResult{
+		{Name: "small", Size: 1 * gib},
+		{Name: "huge", Size: 300 * gib},
+		{Name: "unknown", Size: 0},
+		{Name: "medium", Size: 5 * gib},
+	}
+
+	if got := filterBySize(results, 0); len(got) != 4 {
+		t.Errorf("teto 0 não deve filtrar nada, sobraram %d", len(got))
+	}
+
+	got := filterBySize(results, 10)
+	if len(got) != 3 {
+		t.Fatalf("esperava 3 resultados, obteve %d (%+v)", len(got), got)
+	}
+	// Size == 0 fica (parsing quebrado não pode virar paralisação) e a ordem é preservada.
+	want := []string{"small", "unknown", "medium"}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Errorf("posição %d: esperava %q, obteve %q", i, name, got[i].Name)
+		}
+	}
+}
+
+// --- Guarda de espaço em disco ---
+
+func TestCheckDiskSpace(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}); err != nil {
+		t.Errorf("com 1%% exigido esperava nil, obteve %v", err)
+	}
+	// 100% livre é impossível num volume em uso: força o caminho "abaixo do teto".
+	err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 100})
+	if !errors.Is(err, ErrInsufficientDiskSpace) {
+		t.Errorf("esperava ErrInsufficientDiskSpace, obteve %v", err)
+	}
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}); err != nil {
+		t.Errorf("0 desliga a guarda, obteve %v", err)
+	}
+	// Erro de statfs não bloqueia.
+	missing := filepath.Join(dir, "nao-existe")
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: missing, MinFreeDiskPercent: 100}); err != nil {
+		t.Errorf("falha de statfs não deve bloquear, obteve %v", err)
+	}
+}
+
+// diskFullConfig devolve uma config cuja guarda de disco sempre barra.
+func diskFullConfig(t *testing.T) *files.Config {
+	t.Helper()
+	configs := limitsConfig()
+	configs.CompletedAnimePath = t.TempDir()
+	configs.MinFreeDiskPercent = 100
+	return configs
+}
+
+func TestAttemptDownloadWithRetries_DiskFullDoesNotCallAdd(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	hash := attemptDownloadWithRetries(diskFullConfig(t), backend, []string{fakeMagnet(1), fakeMagnet(2)}, "ep")
+
+	if hash != "" {
+		t.Errorf("esperava hash vazio com disco cheio, obteve %q", hash)
+	}
+	if len(backend.List()) != 0 {
+		t.Errorf("backend.Add não deve ser chamado nenhuma vez, cliente tem %d torrent(s)", len(backend.List()))
+	}
+}
+
+func TestProcessAnimeEpisodes_DiskFullNotifiesNoDiskSpaceReason(t *testing.T) {
+	bodies := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies <- string(body)
+	}))
+	defer srv.Close()
+
+	configs := diskFullConfig(t)
+	configs.Notifications = files.NotificationsConfig{Webhooks: []files.WebhookPreset{{
+		Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{},
+		Body: "{{reason}}", Events: []string{"download_failed"},
+	}}}
+
+	anime := animeWithEpisodes(1, anilist.MediaStatusReleasing, false, "")
+	searcher := searcherFor(nil, nil, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(1)}}, nil)
+
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	if len(result.newEpisodes) != 0 {
+		t.Errorf("nada deve ser registrado com disco cheio, obteve %d", len(result.newEpisodes))
+	}
+
+	select {
+	case body := <-bodies:
+		if !strings.Contains(body, notifications.ReasonNoDiskSpace) {
+			t.Errorf("esperava a razão %q no webhook, obteve %q", notifications.ReasonNoDiskSpace, body)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Error("nenhum webhook de falha recebido")
+	}
+}
+
+// TestHandleSavedEpisodes_DiskFullStillPrunes: disco cheio barra o Add, não o passe — a poda é
+// justamente o que libera espaço.
+func TestHandleSavedEpisodes_DiskFullStillPrunes(t *testing.T) {
+	configs := diskFullConfig(t)
+	configs.DeleteWatchedEpisodes = true
+
+	saved := []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: "h1"}, {EpisodeID: 2, EpisodeHash: "h2"}}
+	fm := &mockFileManagerForEpisodes{}
+	backend := fakeWithTorrents("h1", "h2")
+
+	handleSavedEpisodes(fm, configs, backend, testLibrarian(), handleEpisodesData{
+		savedEpisodes: saved,
+		idsToDelete:   []int{1, 2},
+	})
+
+	if !containsID(fm.deletedEpisodeIDs, 1) || !containsID(fm.deletedEpisodeIDs, 2) {
+		t.Errorf("a poda deve rodar com disco cheio, apagados = %v", fm.deletedEpisodeIDs)
+	}
+}
+
+// TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook: registros novos criados para um torrent já
+// organizado (o caminho da migração da regra de batch) não redisparam DownloadCompleted.
+func TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook(t *testing.T) {
+	events := make(chan string, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		events <- string(body)
+	}))
+	defer srv.Close()
+
+	dataDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dataDir, "ep01.mkv"), []byte("v"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	const hash = "0123456789abcdef0123456789abcdef01234567"
+	backend := torrents.NewFakeBackend()
+	backend.AddCompleted(hash, dataDir)
+
+	fm := &orchestrationFM{
+		saved: []files.EpisodeStruct{
+			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 1, IsBatch: true, LibraryPaths: []string{"/library/My Anime/ep01.mkv"}},
+			{EpisodeID: 2, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 2, IsBatch: true},
+		},
+		configs: &files.Config{
+			CompletedAnimePath: t.TempDir(),
+			Notifications: files.NotificationsConfig{Webhooks: []files.WebhookPreset{{
+				Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{},
+				Body: "done", Events: []string{"download_completed"},
+			}}},
+		},
+	}
+
+	if ok := organizeTorrent(hash, backend, files.NewLibrarian(files.NewOSFileSystem()), fm, fm.configs); !ok {
+		t.Fatal("organizeTorrent deveria ter sucesso")
+	}
+	if len(fm.upserted) != 1 {
+		t.Errorf("o marcador LibraryPaths deve ser gravado nos registros novos, upserts = %d", len(fm.upserted))
+	}
+	select {
+	case body := <-events:
+		t.Errorf("nenhum webhook deveria sair para um torrent já organizado, obteve %q", body)
+	case <-time.After(300 * time.Millisecond):
+	}
+}

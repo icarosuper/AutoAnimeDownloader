@@ -33,7 +33,7 @@
   import { wsConnectionState } from "../lib/stores/wsState.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
-  import { filterAnimes, sortAnimes, computeNextCheckIn, isDiskSpaceLow, type SortKey, type SortDir } from "../lib/utils/status.js";
+  import { filterAnimes, sortAnimes, computeNextCheckIn, type SortKey, type SortDir } from "../lib/utils/status.js";
   import { totalSpeeds } from "../lib/utils/torrents.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
   import {
@@ -112,7 +112,8 @@
     ? computeNextCheckIn(status.last_check, checkInterval, status.status, now)
     : null;
 
-  $: diskSpaceLow = status ? isDiskSpaceLow(status.disk_free, status.disk_total) : false;
+  // Servidor manda: disk_low é o mesmo limiar que faz o daemon parar de adicionar torrents.
+  $: diskSpaceLow = status?.disk_low ?? false;
 
   $: speeds = totalSpeeds(torrents);
   $: heroSpeed = formatSpeedParts(speeds.download, fmtLocale);
@@ -280,7 +281,7 @@
     if (status) {
       status = { ...status, status: statusValue, last_check: lastCheck, has_error: hasError };
     } else {
-      status = { status: statusValue, last_check: lastCheck, has_error: hasError, version: "", disk_total: 0, disk_free: 0 };
+      status = { status: statusValue, last_check: lastCheck, has_error: hasError, version: "", disk_total: 0, disk_free: 0, disk_low: false };
     }
     if (previousStatus !== "running" && statusValue === "running") {
       loadAnimes();
@@ -451,6 +452,15 @@
   {#if loading}
     <Loading message="Loading status..." />
   {:else if status}
+    {#if diskSpaceLow}
+      <div
+        role="alert"
+        class="flex items-center gap-2 rounded-field border border-danger-tint/32 bg-danger-tint/12 px-3.5 py-2.5 text-copy text-danger"
+      >
+        {$locale && m.status_disk_low_alert()}
+      </div>
+    {/if}
+
     {#if status.has_error && status.status !== "checking"}
       <div
         role="alert"

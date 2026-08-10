@@ -18,7 +18,13 @@ import (
 //
 // A falha do Prioritize e so logada: o torrent ja esta na sessao e vai baixar de qualquer
 // jeito, so que na vez dele — abortar o download inteiro por causa disso seria pior.
-func addAndPrioritize(backend torrents.TorrentBackend, magnet string) (string, error) {
+func addAndPrioritize(backend torrents.TorrentBackend, magnet string, configs *files.Config) (string, error) {
+	// A guarda de espaco em disco fica aqui (e nao em torrents.Session.Add) porque o pacote
+	// torrents nao conhece files.Config — passar a config para la so para ler uma porcentagem
+	// inverteria a dependencia. Este e o unico Add dos caminhos manuais.
+	if err := checkDiskSpace(configs); err != nil {
+		return "", err
+	}
 	hash, err := backend.Add(magnet)
 	if err != nil || hash == "" {
 		return hash, err
@@ -88,7 +94,7 @@ func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId in
 	}
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
-	hash, err := addAndPrioritize(backend, magnet)
+	hash, err := addAndPrioritize(backend, magnet, configs)
 	if err != nil || hash == "" {
 		return files.EpisodeStruct{}, fmt.Errorf("failed to add torrent to embedded client: %w", err)
 	}
@@ -117,7 +123,7 @@ func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int,
 		return nil, err
 	}
 
-	hash, err := addAndPrioritize(backend, magnet)
+	hash, err := addAndPrioritize(backend, magnet, configs)
 	if err != nil || hash == "" {
 		return nil, fmt.Errorf("failed to add torrent to embedded client: %w", err)
 	}
@@ -168,6 +174,12 @@ func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episode
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
 
+	// Checado antes da busca no Nyaa para o handler receber ErrInsufficientDiskSpace em vez do
+	// "falhou apos N tentativas" genrico (que viraria 500 em vez de 409).
+	if err := checkDiskSpace(configs); err != nil {
+		return files.EpisodeStruct{}, err
+	}
+
 	results := searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, customQuery)
 	var magnets []string
 	for _, result := range results {
@@ -181,7 +193,7 @@ func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episode
 	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
 	var hash string
 	for i := range maxAttempts {
-		h, err := addAndPrioritize(backend, magnets[i])
+		h, err := addAndPrioritize(backend, magnets[i], configs)
 		if err == nil && h != "" {
 			hash = h
 			break
