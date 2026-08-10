@@ -113,6 +113,10 @@ import (
 | JSON tags | snake_case | `json:"completed_anime_path"` |
 | Go types | PascalCase | `EpisodeStruct`, `SessionManager` |
 
+## Comentários
+
+Não escrever comentário explicando **o que** o código faz — só **por que** ele existe daquele jeito, e apenas quando não for óbvio. Comentário inútil encontrado fora dessa regra: remover.
+
 ## Dual FileManagerInterface
 
 `FileManagerInterface` is declared **twice** — in `api/server.go` and `daemon/helpers.go`. Both must be kept in sync. When adding a new method to `files.FileManager`, update **both** interfaces.
