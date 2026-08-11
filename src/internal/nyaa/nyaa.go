@@ -241,13 +241,33 @@ func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
 	return doc, nil
 }
 
-// torrentNames extracts the Name field of each result, for debug logging.
-func torrentNames(results []TorrentResult) []string {
-	names := make([]string, len(results))
+// torrentSummaries formats each result as "name | S:412/L:3 | 1.4GiB | h=4.21", in the
+// order given (i.e. already sorted by priority when logged after SortTorrentResults).
+//
+// Só o nome não basta para auditar "por que esse ganhou": os campos que decidem o sort
+// (seeders, tamanho, health) ficavam de fora e reproduzir a escolha exigia repetir a busca
+// à mão. Tamanho desconhecido (parse falhou) sai como "?".
+func torrentSummaries(results []TorrentResult) []string {
+	summaries := make([]string, len(results))
 	for i, r := range results {
-		names[i] = r.Name
+		summaries[i] = fmt.Sprintf("%s | S:%d/L:%d | %s | h=%.2f",
+			r.Name, parseSeeders(r.Seeders), r.Leechers, formatSize(r.Size), torrentHealthScore(r))
 	}
-	return names
+	return summaries
+}
+
+// formatSize renders bytes for the log. Só para leitura humana — nada parseia de volta.
+func formatSize(bytes int64) string {
+	switch {
+	case bytes <= 0:
+		return "?"
+	case bytes >= 1<<30:
+		return fmt.Sprintf("%.1fGiB", float64(bytes)/(1<<30))
+	case bytes >= 1<<20:
+		return fmt.Sprintf("%.0fMiB", float64(bytes)/(1<<20))
+	default:
+		return fmt.Sprintf("%dB", bytes)
+	}
 }
 
 // deduplicateByMagnet removes duplicate TorrentResult entries by magnet link.
@@ -402,7 +422,7 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		Str("anime_name", animeName).
 		Int("episode", episode).
 		Int("results", len(results)).
-		Strs("matched_names", torrentNames(results)).
+		Strs("matched_torrents", torrentSummaries(results)).
 		Msg("Found Nyaa results for single episode")
 
 	if len(results) == 0 {
@@ -561,7 +581,7 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
 		Int("results", len(results)).
-		Strs("matched_names", torrentNames(results)).
+		Strs("matched_torrents", torrentSummaries(results)).
 		Msg("Found Nyaa results for multiple episodes")
 
 	if len(results) == 0 {
@@ -685,7 +705,7 @@ func ScrapNyaaForBatch(animeName string, season, part *int) ([]TorrentResult, er
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
 		Int("results", len(results)).
-		Strs("matched_names", torrentNames(results)).
+		Strs("matched_torrents", torrentSummaries(results)).
 		Msg("Found Nyaa batch results")
 
 	if len(results) == 0 {
@@ -797,7 +817,7 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
 		Int("results", len(results)).
-		Strs("matched_names", torrentNames(results)).
+		Strs("matched_torrents", torrentSummaries(results)).
 		Msg("Found Nyaa movie results")
 
 	if len(results) == 0 {

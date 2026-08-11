@@ -17,7 +17,7 @@ make debug-anime ID=<anilistId>
 1. Fetches the anime from AniList and logs the full response (title, progress, status, synonyms, relations, airing schedule).
 2. Picks the episodes that would be searched (same `checkEpisode` logic the real loop uses).
 3. Runs the real search/match pipeline (`resolveSearchStrategy` — same movie→batch→multi→single priority as production) against live Nyaa.
-4. Logs **every raw torrent row** Nyaa returned for the query (`"Raw Nyaa row"`), then the **matched subset** (`"Found ... results"` with `matched_names`), then a per-episode summary (`magnets_found`).
+4. Logs **every raw torrent row** Nyaa returned for the query (`"Raw Nyaa row"`), then the **matched subset** (`"Found ... results"` with `matched_torrents` — name, seeders/leechers, size and health score of each candidate, in ranking order), then a per-episode summary (`magnets_found`).
 
 Output goes to `.debug_<anilistId>_<N>/` in the current directory — nothing is written to `~/.autoAnimeDownloader`:
 - `debug.jsonl` has the full trace from steps 1-4 above (one JSON object per line — grep/`jq` it, or just read it directly)

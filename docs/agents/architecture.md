@@ -426,7 +426,8 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 |--------|---------|
 | `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Part*`, `Size`, `Fansub`, `IsBatch` |
 | `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
-| `torrentNames(results)` | Extracts `.Name` from each result, for debug logging |
+| `torrentSummaries(results)` | Formats each result as `name \| S:412/L:3 \| 1.4GiB \| h=4.21` for debug logging, in the order given (sorted, when logged after `SortTorrentResults`) — the sort-deciding fields, not just the name |
+| `formatSize(bytes)` | Human-readable size for the log only (`?` when the size failed to parse) |
 | `ScrapNyaa(title, episode, season*, part*)` | Scrapes Nyaa for a single episode (2 pages); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil |
 | `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
@@ -443,7 +444,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `httpGet` var | Swappable HTTP func — overridden in tests via `MockNyaaHttpGet` |
 | `getNyaaBaseURL()` | Reads `NYAA_URL` env or defaults to `https://nyaa.si` |
 
-All four `ScrapNyaa*` functions log every parsed row at Debug (`"Raw Nyaa row"`, before any filter) and log the matched torrent names alongside the count in their final `"Found ..."` log — used by `daemon.RunAnimeDebug` and manual troubleshooting to see what got filtered out.
+All four `ScrapNyaa*` functions log every parsed row at Debug (`"Raw Nyaa row"`, before any filter) and log the matched torrents alongside the count in their final `"Found ..."` log (`matched_torrents`, via `torrentSummaries`) — used by `daemon.RunAnimeDebug` and manual troubleshooting to see what got filtered out.
 
 ### `src/internal/nyaa/priorities.go`
 
