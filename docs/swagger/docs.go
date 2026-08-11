@@ -1986,6 +1986,10 @@ const docTemplate = `{
                     "description": "MaxEpisodesPerAnime limita quantos episodios de um anime existem ao mesmo tempo, e vale\nAPENAS no caminho episodio-a-episodio: um batch e um torrent so, entao limitar registros\nnao limitaria bytes nem arquivos na biblioteca (ver decisions.md).",
                     "type": "integer"
                 },
+                "max_search_pages": {
+                    "description": "MaxSearchPages e o teto de paginas do Nyaa por busca. A busca desce para a pagina\nseguinte apenas enquanto tiver poucos candidatos aceitos, entao o teto e um limite, nao\num custo fixo. \u003c= 1 significa buscar so a pagina 1.",
+                    "type": "integer"
+                },
                 "min_free_disk_percent": {
                     "description": "MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco\nlivre no volume da biblioteca. 0 desliga.",
                     "type": "integer"

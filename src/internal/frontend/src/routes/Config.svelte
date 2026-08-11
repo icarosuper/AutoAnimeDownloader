@@ -57,6 +57,8 @@
     hintMaxEpisodeSize: m.config_hint_max_episode_size(),
     labelMinSeeders: m.config_label_min_seeders(),
     hintMinSeeders: m.config_hint_min_seeders(),
+    labelMaxSearchPages: m.config_label_max_search_pages(),
+    hintMaxSearchPages: m.config_hint_max_search_pages(),
     labelMinFreeDisk: m.config_label_min_free_disk(),
     hintMinFreeDisk: m.config_hint_min_free_disk(),
     labelMaxConcurrent: m.config_label_max_concurrent(),
@@ -109,6 +111,7 @@
     max_batch_torrent_size_gb: 0,
     max_episode_torrent_size_gb: 0,
     min_seeders: 1,
+    max_search_pages: 5,
     min_free_disk_percent: 10,
     episode_retry_limit: 5,
     max_concurrent_downloads: 3,
@@ -266,6 +269,11 @@
       group: "downloads" as GroupId,
       ok: config.min_seeders >= 0,
       message: m.config_val_min_seeders,
+    },
+    {
+      group: "downloads" as GroupId,
+      ok: config.max_search_pages >= 0,
+      message: m.config_val_max_search_pages,
     },
     {
       // 100 bloquearia todo download para sempre.
@@ -525,6 +533,17 @@
                 type="number"
                 bind:value={config.min_seeders}
                 min="0"
+              />
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="max_search_pages"
+                label={T && T.labelMaxSearchPages || ""}
+                subtitle={T && T.hintMaxSearchPages || ""}
+                type="number"
+                bind:value={config.max_search_pages}
+                min="1"
               />
             </div>
 

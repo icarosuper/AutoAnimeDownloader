@@ -94,6 +94,10 @@ type Config struct {
 	// e 1: barra so o torrent literalmente morto, que sem piso e candidato valido e chega a ser
 	// escolhido quando e o unico resultado do episodio.
 	MinSeeders int `json:"min_seeders"`
+	// MaxSearchPages e o teto de paginas do Nyaa por busca. A busca desce para a pagina
+	// seguinte apenas enquanto tiver poucos candidatos aceitos, entao o teto e um limite, nao
+	// um custo fixo. <= 1 significa buscar so a pagina 1.
+	MaxSearchPages int `json:"max_search_pages"`
 	// MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco
 	// livre no volume da biblioteca. 0 desliga.
 	MinFreeDiskPercent int `json:"min_free_disk_percent"`
@@ -156,6 +160,14 @@ type FileManager struct {
 	mu                   sync.Mutex
 }
 
+// applyNyaaSettings empurra para o pacote nyaa os campos de config que ele consome. Chamado em
+// TODO retorno de LoadConfigs — o nyaa nao pode importar files (ciclo), entao a config chega
+// nele por push, nunca por leitura.
+func applyNyaaSettings(config *Config) {
+	nyaa.SetPriorities(config.Priorities)
+	nyaa.SetMaxSearchPages(config.MaxSearchPages)
+}
+
 func getDefaultConfig() *Config {
 	// Default da biblioteca: ~/Animes. Se o home nao existir (container sem HOME), fica ""
 	// e a config segue "incompleta" como antes, exigindo que o usuario preencha.
@@ -172,6 +184,7 @@ func getDefaultConfig() *Config {
 		MaxEpisodesPerAnime:    12,
 		MaxBatchEpisodes:       30,
 		MinSeeders:             1,
+		MaxSearchPages:         5,
 		MinFreeDiskPercent:     10,
 		EpisodeRetryLimit:      5,
 		MaxConcurrentDownloads: 3,
@@ -262,7 +275,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
-		nyaa.SetPriorities(config.Priorities)
+		applyNyaaSettings(config)
 		return config, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to stat config file: %w", err)
@@ -279,7 +292,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
-		nyaa.SetPriorities(config.Priorities)
+		applyNyaaSettings(config)
 		return config, nil
 	}
 
@@ -289,7 +302,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
 		}
-		nyaa.SetPriorities(config.Priorities)
+		applyNyaaSettings(config)
 		return config, nil
 	}
 
@@ -324,7 +337,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		config.AnilistUsernames = []string{}
 	}
 
-	nyaa.SetPriorities(config.Priorities)
+	applyNyaaSettings(config)
 	return config, nil
 }
 

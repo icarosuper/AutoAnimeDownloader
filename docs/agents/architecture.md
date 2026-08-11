@@ -428,12 +428,16 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
 | `torrentSummaries(results)` | Formats each result as `name \| S:412/L:3 \| 1.4GiB \| t=5 h=4.21` (t = health tier, h = raw score) for debug logging, in the order given (sorted, when logged after `SortTorrentResults`) — the sort-deciding fields, not just the name |
 | `formatSize(bytes)` | Human-readable size for the log only (`?` when the size failed to parse) |
-| `ScrapNyaa(title, episode, season*, part*, totalEpisodes...)` | Scrapes Nyaa for a single episode (2 pages **per query variant**); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil. With `totalEpisodes > 100` it also queries the zero-padded episode (`one piece 001`) — see `episodeQueries` and [decisions.md #56](decisions.md) |
+| `ScrapNyaa(title, episode, season*, part*, totalEpisodes...)` | Scrapes Nyaa for a single episode (adaptive pagination **per query variant**); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil. With `totalEpisodes > 100` it also queries the zero-padded episode (`one piece 001`) — see `episodeQueries` and [decisions.md #56](decisions.md) |
 | `episodeQueries(query, episode, totalEpisodes)` | The episode search queries: plain, plus 3-digit zero-padded on a long series (additional, never a replacement) |
 | `longSeriesEpisodes` const | `100` — threshold above which the padded variant is added |
 | `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
+| `fetchSearchPages(url, floor, accepted, parse)` | Adaptive pagination shared by all four searches: page 1, then deeper only while `accepted() < floor` and the page had rows, up to `ActiveMaxSearchPages()`. Errors only if page 1 fails |
+| `parsePagesWith(parseRow)` | Adapts a `parseRow` into the `parse` callback of `fetchSearchPages` (returns the row count of the page) |
+| `enoughCandidates` const | `3` — the accepted-candidate floor that stops the descent |
+| `SetMaxSearchPages(n)` / `ActiveMaxSearchPages()` | Page ceiling from `max_search_pages`, pushed by `files.LoadConfigs`; same atomic+restore pattern as `SetPriorities`. Getter never returns < 1 |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
-| `ScrapNyaaForMultipleEpisodes(title, eps[], season*, part*)` | Scrapes for multiple specific episodes (2 pages); same batch/movie guards as `ScrapNyaa`; hard-filters by season and part when non-nil |
+| `ScrapNyaaForMultipleEpisodes(title, eps[], season*, part*)` | Scrapes for multiple specific episodes (adaptive pagination); same batch/movie guards as `ScrapNyaa`; hard-filters by season and part when non-nil |
 | `hasMovieMarker(name)` | Explicit movie/OVA/special marker check — the part of `isMovie` safe to use as a guard on episode searches (see [Decisions](decisions.md)) |
 | `ExtractSeason(name)` | Exported: extracts season number from torrent name |
 | `ExtractPart(name)` | Exported: extracts part/cour number from torrent name |
@@ -446,7 +450,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `httpGet` var | Swappable HTTP func — overridden in tests via `MockNyaaHttpGet` |
 | `getNyaaBaseURL()` | Reads `NYAA_URL` env or defaults to `https://nyaa.si` |
 
-All four `ScrapNyaa*` functions log every parsed row at Debug (`"Raw Nyaa row"`, before any filter) and log the matched torrents alongside the count in their final `"Found ..."` log (`matched_torrents`, via `torrentSummaries`) — used by `daemon.RunAnimeDebug` and manual troubleshooting to see what got filtered out.
+All four `ScrapNyaa*` functions fetch through `fetchNyaaPage`/`fetchSearchPages` (so every page request is logged), log every parsed row at Debug (`"Raw Nyaa row"`, before any filter) and log the matched torrents alongside the count in their final `"Found ..."` log (`matched_torrents`, via `torrentSummaries`) — used by `daemon.RunAnimeDebug` and manual troubleshooting to see what got filtered out.
 
 ### `src/internal/nyaa/priorities.go`
 

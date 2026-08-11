@@ -975,3 +975,26 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 - Trocar o gate por `Media.Episodes` "que é o total de verdade" (ver (c)).
 - Substituir a query simples pela com padding (ver (b)).
 - Sempre buscar as duas formas: dobra o tráfego no Nyaa em todo anime curto, onde padding não muda nada (ver (d)).
+
+### 57. Paginação adaptativa: sequencial, com piso de candidatos, sem orçamento por anime
+
+**Location:** `nyaa/nyaa.go` — `fetchSearchPages`, `parsePagesWith`, `enoughCandidates`, `SetMaxSearchPages`/`ActiveMaxSearchPages`; `files/filemanager.go` — `Config.MaxSearchPages`, `applyNyaaSettings`.
+
+**What it looks like:** um só helper de paginação usado pelas quatro buscas, que desce página por página **sequencialmente** enquanto tiver menos de 3 candidatos aceitos, com teto configurável.
+
+**Why it's right:**
+
+**(a) A página 2 era buscada SEMPRE.** Nas buscas que resolvem na página 1 — a maioria — isso era um fetch jogado fora. É essa economia que paga o teto de 5 páginas sem subir o tráfego médio: um teto fixo de 5 custaria ~1200 fetches por passada (240 buscas × 5) contra o nyaa.si, onde se espera 429/Cloudflare.
+
+**(b) Piso de candidatos aceitos, não de linhas.** O Nyaa devolve ordenado por seeders desc, então a partir de um punhado de candidatos a página seguinte só traz opção pior; 3 já dá escolha ao ranking. Página **vazia** também encerra: significa que a query acabou, e insistir até o teto seria fetch garantido inútil.
+
+**(c) Sequencial, sem rajada paralela.** O plano previa 2-3 concorrentes "quando de fato precisar descer". Ficou de fora de propósito: cada página só é pedida porque a anterior não bastou (paralelizar exigiria pedir páginas que talvez não fossem necessárias, desfazendo (a)), o ganho é só de latência num caminho raro, e rajada paralela é justamente o que provoca 429/Cloudflare — o problema que o resto da decisão evita. Sem throttle no cliente, esse é o pior lugar para adicionar concorrência.
+
+**(d) Batch e filme entraram no mesmo caminho.** Os dois liam só a página 1 com `httpGet` direto, sem passar por `fetchNyaaPage` — não paginavam e **não apareciam no log**. Agora usam o mesmo helper e ganham o log de página junto.
+
+**(e) NÃO existe orçamento de fetches por anime por passada.** O plano pedia, para que um anime insolúvel não queime o teto toda passada. Medido: o pior caso é uma busca que nunca satisfaz o piso e vai até 5 páginas, ~2,3x os fetches de hoje, e **só** em anime que não encontra nada. O orçamento exigiria estado por anime atravessando `nyaaSearcher` e as quatro funções exportadas do nyaa — plumbing desproporcional ao risco. Se o tráfego incomodar, o caminho mais curto é baixar `max_search_pages`.
+
+**Don't "fix" by:**
+- Buscar as páginas 1..N em paralelo "para ficar mais rápido" (ver (a) e (c)).
+- Trocar o piso por "sempre buscar o teto" (ver (a)).
+- Continuar descendo depois de uma página vazia (ver (b)).

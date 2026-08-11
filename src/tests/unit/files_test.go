@@ -241,6 +241,7 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 
 func TestManager_LoadConfigs_AppliesDefaultPrioritiesToNyaa(t *testing.T) {
 	defer nyaa.SetPriorities(nyaa.Priorities{})()
+	defer nyaa.SetMaxSearchPages(1)()
 
 	mockFS := NewMockFileSystem()
 	mockFS.SetFile("/config.json", []byte("{}"))
@@ -256,6 +257,12 @@ func TestManager_LoadConfigs_AppliesDefaultPrioritiesToNyaa(t *testing.T) {
 	}
 	if nyaa.ActivePriorities().Fansubs[0] != "subsplease" {
 		t.Fatal("expected LoadConfigs to apply priorities to nyaa active state")
+	}
+	if config.MaxSearchPages != 5 {
+		t.Fatalf("expected default max_search_pages 5, got %d", config.MaxSearchPages)
+	}
+	if nyaa.ActiveMaxSearchPages() != 5 {
+		t.Fatalf("expected LoadConfigs to apply max_search_pages to nyaa, got %d", nyaa.ActiveMaxSearchPages())
 	}
 }
 

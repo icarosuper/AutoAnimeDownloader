@@ -136,6 +136,107 @@ func TestNyaaModule_CanGetCorrectAnime_WithSpecialCharactersDifferences(t *testi
 	runEpisodeNameTest(options, t)
 }
 
+// mockHttpGetPerURL serve HTML dependente da URL e registra cada URL pedida — é o mock dos
+// testes de paginação, que verificam quantas páginas a busca foi buscar.
+func mockHttpGetPerURL(html func(url string) string, urls *[]string) func() {
+	return nyaa.MockNyaaHttpGet(func(url string) (*http.Response, error) {
+		*urls = append(*urls, url)
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(strings.NewReader(html(url))),
+			Header:     make(http.Header),
+		}, nil
+	})
+}
+
+// Página 1 com candidatos de sobra: a página 2 não pode ser pedida (era pedida SEMPRE).
+func TestScrapNyaa_StopsOnFirstPageWhenEnoughCandidates(t *testing.T) {
+	defer nyaa.SetMaxSearchPages(5)()
+
+	page := mockHtml([]string{
+		"Show - 05 [1080p]",
+		"Show - 05 [720p]",
+		"Show - 05 [480p]",
+	})
+	var urls []string
+	defer mockHttpGetPerURL(func(string) string { return page }, &urls)()
+
+	results, err := nyaa.ScrapNyaa("Show", 5, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaa error: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("esperava 3 candidatos, obtive %d", len(results))
+	}
+	if len(urls) != 1 {
+		t.Fatalf("esperava 1 fetch (só a página 1), obtive %d: %v", len(urls), urls)
+	}
+}
+
+// Candidatos abaixo do piso e páginas sempre cheias: desce até o teto e para lá.
+func TestScrapNyaa_PagesUntilCapWhenCandidatesAreThin(t *testing.T) {
+	defer nyaa.SetMaxSearchPages(3)()
+
+	// Linhas de outro anime: a página nunca fica vazia, mas nada é aceito.
+	page := mockHtml([]string{"Kemono Jihen - 05 [1080p]", "Manaria Friends - 05 [1080p]"})
+	var urls []string
+	defer mockHttpGetPerURL(func(string) string { return page }, &urls)()
+
+	results, err := nyaa.ScrapNyaa("Show", 5, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaa error: %v", err)
+	}
+	if results != nil {
+		t.Fatalf("esperava nenhum candidato, obtive %v", results)
+	}
+	if len(urls) != 3 {
+		t.Fatalf("esperava 3 fetches (teto), obtive %d: %v", len(urls), urls)
+	}
+	if !strings.Contains(urls[2], "&p=3") {
+		t.Fatalf("a última página buscada deveria ser a 3, obtive %s", urls[2])
+	}
+}
+
+// Página vazia = a query acabou: insistir até o teto seria fetch jogado fora.
+func TestScrapNyaa_StopsWhenPageIsEmpty(t *testing.T) {
+	defer nyaa.SetMaxSearchPages(5)()
+
+	var urls []string
+	defer mockHttpGetPerURL(func(url string) string {
+		if strings.Contains(url, "&p=") {
+			return mockHtml(nil)
+		}
+		return mockHtml([]string{"Show - 05 [1080p]"}) // 1 candidato, abaixo do piso
+	}, &urls)()
+
+	results, err := nyaa.ScrapNyaa("Show", 5, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaa error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("esperava 1 candidato, obtive %d", len(results))
+	}
+	if len(urls) != 2 {
+		t.Fatalf("esperava 2 fetches (página 1 + a vazia), obtive %d: %v", len(urls), urls)
+	}
+}
+
+// Batch lia só a página 1; agora pagina igual à busca de episódio.
+func TestScrapNyaaForBatch_PaginatesLikeEpisodeSearch(t *testing.T) {
+	defer nyaa.SetMaxSearchPages(2)()
+
+	page := mockHtml([]string{"Kemono Jihen (01-12) [Batch] [1080p]"})
+	var urls []string
+	defer mockHttpGetPerURL(func(string) string { return page }, &urls)()
+
+	if _, err := nyaa.ScrapNyaaForBatch("Show", nil, nil); err != nil {
+		t.Fatalf("ScrapNyaaForBatch error: %v", err)
+	}
+	if len(urls) != 2 {
+		t.Fatalf("esperava 2 fetches (teto), obtive %d: %v", len(urls), urls)
+	}
+}
+
 // Série longa: grupos numeram com zero-padding ("One Piece - 001"), e a query sem
 // padding afoga o episódio 1 nos 1160+ ordenados por seeders.
 func TestScrapNyaa_LongSeriesAlsoQueriesPaddedEpisode(t *testing.T) {

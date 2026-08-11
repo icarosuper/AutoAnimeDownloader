@@ -151,6 +151,8 @@ export interface Config {
   max_episode_torrent_size_gb: number
   /** Piso de seeders: torrent abaixo disso e descartado da busca. 0 desliga. */
   min_seeders: number
+  /** Teto de paginas do Nyaa por busca. A busca so desce se tiver poucos candidatos. */
+  max_search_pages: number
   /** Abaixo desta porcentagem de espaco livre o download e pausado. 0 desliga. */
   min_free_disk_percent: number
   episode_retry_limit: number

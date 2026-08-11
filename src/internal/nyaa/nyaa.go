@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"AutoAnimeDownloader/src/internal/logger"
@@ -218,6 +219,81 @@ func hasMovieMarker(torrentName string) bool {
 	return reOvaPattern.MatchString(torrentName) || reSpecialPattern.MatchString(torrentName)
 }
 
+// enoughCandidates é o piso de candidatos aceitos que faz a busca parar de descer páginas.
+// O Nyaa devolve ordenado por seeders desc, então a partir de um punhado de candidatos a
+// página seguinte só traz opções piores — 3 já dá escolha ao ranking.
+const enoughCandidates = 3
+
+// maxSearchPages é o teto de páginas por busca (config max_search_pages), empurrado por
+// files.LoadConfigs. Mesmo padrão de SetPriorities.
+var maxSearchPages atomic.Int32
+
+func init() { maxSearchPages.Store(5) }
+
+// SetMaxSearchPages aplica o teto de páginas por busca e devolve uma função que restaura o
+// valor anterior (padrão de SetPriorities/MockNyaaHttpGet). Valor <= 0 vale como 1 página.
+func SetMaxSearchPages(pages int) (restore func()) {
+	prev := maxSearchPages.Load()
+	maxSearchPages.Store(int32(pages))
+	return func() { maxSearchPages.Store(prev) }
+}
+
+// ActiveMaxSearchPages devolve o teto em uso, nunca menor que 1 (par de ActivePriorities).
+func ActiveMaxSearchPages() int {
+	if p := int(maxSearchPages.Load()); p > 1 {
+		return p
+	}
+	return 1
+}
+
+// fetchSearchPages busca a página 1 de nyaaURL e continua para as seguintes ENQUANTO houver
+// linhas e accepted() estiver abaixo de floor, até ActiveMaxSearchPages().
+//
+// parse recebe o documento da página e devolve quantas LINHAS ela trazia (não quantas foram
+// aceitas): página vazia significa que a query acabou, e insistir seria fetch jogado fora.
+//
+// Adaptativo porque a página 2 era buscada SEMPRE: numa busca que já resolve na página 1 — a
+// maioria — isso era um fetch desperdiçado, e é essa economia que paga o teto maior sem subir
+// o tráfego médio contra o nyaa.si.
+//
+// Sequencial de propósito: cada página só é pedida porque a anterior não bastou. Ver
+// decisions.md #57 para por que não há rajada paralela aqui.
+//
+// Só devolve erro se a PÁGINA 1 falhar (sem ela não há busca); falha em página seguinte
+// encerra a descida em silêncio, que é o comportamento best-effort que a página 2 já tinha.
+func fetchSearchPages(nyaaURL string, floor int, accepted func() int, parse func(*goquery.Document) int) error {
+	maxPages := ActiveMaxSearchPages()
+	for page := 1; page <= maxPages; page++ {
+		pageURL := nyaaURL
+		if page > 1 {
+			pageURL = fmt.Sprintf("%s&p=%d", nyaaURL, page)
+		}
+
+		doc, err := fetchNyaaPage(pageURL)
+		if err != nil {
+			if page == 1 {
+				return err
+			}
+			return nil
+		}
+
+		rows := parse(doc)
+		if rows == 0 || accepted() >= floor {
+			return nil
+		}
+	}
+	return nil
+}
+
+// parsePagesWith devolve o parse para fetchSearchPages a partir do parseRow de cada busca.
+func parsePagesWith(parseRow func(int, *goquery.Selection)) func(*goquery.Document) int {
+	return func(doc *goquery.Document) int {
+		rows := doc.Find(".torrent-list tbody tr")
+		rows.Each(parseRow)
+		return rows.Length()
+	}
+}
+
 // fetchNyaaPage fetches a single Nyaa results page and returns the parsed document.
 func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
 	logger.Logger.Debug().Str("url", nyaaURL).Msg("Fetching Nyaa page")
@@ -331,34 +407,6 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		return fmt.Sprintf("%s/?%s", getNyaaBaseURL(), params.Encode())
 	}
 
-	var docs []*goquery.Document
-	var firstErr error
-	for _, q := range episodeQueries(query, episode, total) {
-		nyaaURL := buildURL(q)
-
-		logger.Logger.Debug().
-			Str("url", nyaaURL).
-			Str("anime_name", animeName).
-			Int("episode", episode).
-			Msg("Searching Nyaa for single episode")
-
-		doc1, err := fetchNyaaPage(nyaaURL)
-		if err != nil {
-			if firstErr == nil {
-				firstErr = err
-			}
-			continue
-		}
-		docs = append(docs, doc1)
-		if doc2, _ := fetchNyaaPage(nyaaURL + "&p=2"); doc2 != nil { // best-effort; page 2 may not exist
-			docs = append(docs, doc2)
-		}
-	}
-	// Só falha se NENHUMA variante respondeu: uma query que dá erro não pode anular a outra.
-	if len(docs) == 0 {
-		return nil, firstErr
-	}
-
 	var results []TorrentResult
 
 	parseRow := func(_ int, s *goquery.Selection) {
@@ -456,9 +504,31 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		})
 	}
 
-	for _, doc := range docs {
-		doc.Find(".torrent-list tbody tr").Each(parseRow)
+	var searched bool
+	var firstErr error
+	for _, q := range episodeQueries(query, episode, total) {
+		nyaaURL := buildURL(q)
+
+		logger.Logger.Debug().
+			Str("url", nyaaURL).
+			Str("anime_name", animeName).
+			Int("episode", episode).
+			Msg("Searching Nyaa for single episode")
+
+		err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow))
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		searched = true
 	}
+	// Só falha se NENHUMA variante respondeu: uma query que dá erro não pode anular a outra.
+	if !searched {
+		return nil, firstErr
+	}
+
 	results = deduplicateByMagnet(results)
 
 	logger.Logger.Debug().
@@ -502,12 +572,6 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 		Str("anime_name", animeName).
 		Int("episodes_count", len(episodes)).
 		Msg("Searching Nyaa for multiple episodes")
-
-	doc1, err := fetchNyaaPage(nyaaURL)
-	if err != nil {
-		return nil, err
-	}
-	doc2, _ := fetchNyaaPage(nyaaURL + "&p=2") // best-effort; page 2 may not exist
 
 	var results []TorrentResult
 
@@ -615,9 +679,8 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 		})
 	}
 
-	doc1.Find(".torrent-list tbody tr").Each(parseRow)
-	if doc2 != nil {
-		doc2.Find(".torrent-list tbody tr").Each(parseRow)
+	if err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow)); err != nil {
+		return nil, err
 	}
 	results = deduplicateByMagnet(results)
 
@@ -660,27 +723,10 @@ func ScrapNyaaForBatch(animeName string, season, part *int) ([]TorrentResult, er
 		Str("anime_name", animeName).
 		Msg("Searching Nyaa for batch")
 
-	// Fazer requisição HTTP
-	resp, err := httpGet(nyaaURL)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao fazer requisição: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("erro HTTP: status %d", resp.StatusCode)
-	}
-
-	// Parsear HTML
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao parsear HTML: %v", err)
-	}
-
 	var results []TorrentResult
 
 	// Parsear linhas da tabela de torrents
-	doc.Find(".torrent-list tbody tr").Each(func(_ int, s *goquery.Selection) {
+	parseRow := func(_ int, s *goquery.Selection) {
 		cells := s.Find("td")
 
 		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
@@ -743,7 +789,11 @@ func ScrapNyaaForBatch(animeName string, season, part *int) ([]TorrentResult, er
 			Fansub:     fansub,
 			IsBatch:    true,
 		})
-	})
+	}
+
+	if err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow)); err != nil {
+		return nil, err
+	}
 
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
@@ -790,27 +840,10 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 		Str("anime_name", animeName).
 		Msg("Searching Nyaa for movie")
 
-	// Fazer requisição HTTP
-	resp, err := httpGet(nyaaURL)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao fazer requisição: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("erro HTTP: status %d", resp.StatusCode)
-	}
-
-	// Parsear HTML
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao parsear HTML: %v", err)
-	}
-
 	var results []TorrentResult
 
 	// Parsear linhas da tabela de torrents
-	doc.Find(".torrent-list tbody tr").Each(func(_ int, s *goquery.Selection) {
+	parseRow := func(_ int, s *goquery.Selection) {
 		cells := s.Find("td")
 
 		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
@@ -855,7 +888,11 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 			Fansub:     fansub,
 			IsBatch:    false,
 		})
-	})
+	}
+
+	if err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow)); err != nil {
+		return nil, err
+	}
 
 	logger.Logger.Debug().
 		Str("anime_name", animeName).
