@@ -457,6 +457,14 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 			return
 		}
 
+		// Descartar batch: o caminho de batch (ScrapNyaaForBatch) roda antes desta
+		// busca, então um batch que valesse a pena já teria sido pego lá. Sem esse
+		// guard, "Naruto - 001 ~ 220" casa como "episódio 1" e fura os tetos de
+		// max_batch_episodes / max_episodes_per_anime.
+		if isBatch(name) {
+			return
+		}
+
 		// Extrair informações do nome do torrent
 		var animeEpisode *int
 		var season *int

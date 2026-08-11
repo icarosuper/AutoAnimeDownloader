@@ -430,6 +430,31 @@ func TestScrapNyaaForMultipleEpisodes_CanGetMultipleEpisodes(t *testing.T) {
 	}
 }
 
+func TestScrapNyaaForMultipleEpisodes_IgnoresBatch(t *testing.T) {
+	options := []string{
+		"[Erai-raws] Naruto - 001 ~ 220 [480p][Multiple Subtitle]",
+		"[Erai-raws] Naruto - 002 [480p]",
+	}
+
+	html := mockHtml(options)
+	restore := mockHttpGet(html)
+	defer restore()
+
+	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Naruto", []int{1, 2}, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+	}
+
+	for _, r := range results {
+		if strings.Contains(r.Name, "001 ~ 220") {
+			t.Fatalf("batch leaked into multi-episode results: %s", r.Name)
+		}
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected only the single-episode result, got %d: %v", len(results), results)
+	}
+}
+
 func TestScrapNyaaForMultipleEpisodes_CanFilterByAnimeTitle(t *testing.T) {
 	options := testOptions{
 		animeName: "Kemono Friends",
