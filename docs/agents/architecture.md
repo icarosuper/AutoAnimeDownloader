@@ -426,7 +426,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 |--------|---------|
 | `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Part*`, `Size`, `Fansub`, `IsBatch` |
 | `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
-| `torrentSummaries(results)` | Formats each result as `name \| S:412/L:3 \| 1.4GiB \| h=4.21` for debug logging, in the order given (sorted, when logged after `SortTorrentResults`) — the sort-deciding fields, not just the name |
+| `torrentSummaries(results)` | Formats each result as `name \| S:412/L:3 \| 1.4GiB \| t=5 h=4.21` (t = health tier, h = raw score) for debug logging, in the order given (sorted, when logged after `SortTorrentResults`) — the sort-deciding fields, not just the name |
 | `formatSize(bytes)` | Human-readable size for the log only (`?` when the size failed to parse) |
 | `ScrapNyaa(title, episode, season*, part*)` | Scrapes Nyaa for a single episode (2 pages); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil |
 | `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
@@ -436,8 +436,8 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `ExtractSeason(name)` | Exported: extracts season number from torrent name |
 | `ExtractPart(name)` | Exported: extracts part/cour number from torrent name |
 | `GenerateSearchTitleVariants(romaji, english)` | Search query variants: clean romaji → original romaji → clean english → original english |
-| `SortTorrentResults(results)` | Sorts by the episode-relevant subset of `ActivePriorities().CriteriaOrder` (default: uncensored → resolution → fansub → health score → size) |
-| `SortMovieResults(results)` | Sorts by all of `ActivePriorities().CriteriaOrder` (default: uncensored → source → resolution → codec → fansub → audio → health → size) |
+| `SortTorrentResults(results)` | Sorts by the episode-relevant subset of `ActivePriorities().CriteriaOrder` (default: uncensored → resolution → health tier → fansub → size) |
+| `SortMovieResults(results)` | Sorts by all of `ActivePriorities().CriteriaOrder` (default: uncensored → source → resolution → health tier → codec → fansub → audio → size) |
 | `IsBatch(name)` | Exported batch detection for tests |
 | `IsMovie(torrentName, animeName, isFormatMovie?)` | Exported movie detection for tests |
 | `MockNyaaHttpGet(fn)` | Replaces `httpGet` for tests; returns restore func |
@@ -459,6 +459,7 @@ Holds the user-configurable priority lists that drive torrent ranking/filtering.
 | `ShouldIgnore(name)` | True if `name` matches any (case-insensitive substring) entry in the active `IgnoreList` |
 | `priorityIndex(list, token)` | Index of `token` (lowercased) in `list`, or `len(list)` (worst) if absent |
 | `criterionCompare` map | `criteria_order` value → comparator `func(a, b TorrentResult) int` |
+| `healthTier(r)`, `healthTierFloors` | Health band of a result (0..5, floors `1/5/20/100/400` seeders). What the `health` criterion compares — **not** the raw score (decisions.md #55) |
 | `sortByCriteria(results, criteria)` | Stable sort applying `criteria` in order, first non-zero comparator wins |
 | `episodeCriteria` | Subset of criteria valid for `SortTorrentResults` (excludes `source`, `codec`, `audio`) |
 

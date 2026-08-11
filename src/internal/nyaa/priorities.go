@@ -26,7 +26,10 @@ type Priorities struct {
 // Tudo em minúsculas (o lookup compara contra tokens minúsculos).
 func DefaultPriorities() Priorities {
 	return Priorities{
-		CriteriaOrder: []string{"uncensored", "source", "resolution", "codec", "fansub", "audio", "health", "size"},
+		// health vem antes de fansub: era o 7º de 8 num sort lexicográfico e nunca era
+		// alcançado (resolução/fansub decidiam antes), então um torrent com 12 seeders
+		// ganhava de um com 400 por ser de um fansub melhor colocado.
+		CriteriaOrder: []string{"uncensored", "source", "resolution", "health", "codec", "fansub", "audio", "size"},
 		Fansubs: []string{
 			"subsplease", "erai-raws", "judas", "toonshub", "asw",
 			"ember", "hd-zone", "kamig", "remix", "aniverse", "dub", "raw",
@@ -92,8 +95,33 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"source":     func(a, b TorrentResult) int { return sourcePriority(extractSource(a.Name)) - sourcePriority(extractSource(b.Name)) },
 	"codec":      func(a, b TorrentResult) int { return codecPriority(extractCodec(a.Name)) - codecPriority(extractCodec(b.Name)) },
 	"audio":      func(a, b TorrentResult) int { return audioPriority(extractAudio(a.Name)) - audioPriority(extractAudio(b.Name)) },
-	"health":     func(a, b TorrentResult) int { return -cmpFloat(torrentHealthScore(a), torrentHealthScore(b)) }, // maior é melhor
+	"health":     func(a, b TorrentResult) int { return healthTier(b) - healthTier(a) }, // faixa maior é melhor
 	"size":       func(a, b TorrentResult) int { return sizeCompare(a, b) },
+}
+
+// healthTierFloors são os pisos das faixas de saúde: seeders 0 / 1-4 / 5-19 / 20-99 /
+// 100-399 / 400+ ⇒ faixa 0..5. Cada faixa é ~4-5x a anterior.
+var healthTierFloors = []int{1, 5, 20, 100, 400}
+
+// healthTier devolve a faixa de saúde do torrent (maior = mais saudável).
+//
+// O critério compara FAIXA, não o score cru, porque o sort é lexicográfico: com o score cru
+// qualquer diferença de 1 seeder já decidia e nenhum critério depois de health era consultado.
+// Comparar faixa faz 400 seeders vencer 12 e faz 150 vs 300 empatar, deixando o critério
+// seguinte (fansub) decidir — que é o comportamento pretendido.
+//
+// Faixa fixa em vez de razão (ex: "empata a menos que um tenha 2x o outro") de propósito:
+// razão não é transitiva (100 ~ 150 ~ 220, mas 100 < 220) e sort.SliceStable com comparador
+// intransitivo devolve ordem arbitrária.
+func healthTier(r TorrentResult) int {
+	seeders := parseSeeders(r.Seeders)
+	tier := 0
+	for _, floor := range healthTierFloors {
+		if seeders >= floor {
+			tier++
+		}
+	}
+	return tier
 }
 
 func boolBetter(a, b bool) int {
@@ -104,17 +132,6 @@ func boolBetter(a, b bool) int {
 		return -1
 	}
 	return 1
-}
-
-func cmpFloat(a, b float64) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
 }
 
 // resCompare reproduz a lógica atual: ambos com resolução → por índice;

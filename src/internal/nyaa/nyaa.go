@@ -241,8 +241,9 @@ func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
 	return doc, nil
 }
 
-// torrentSummaries formats each result as "name | S:412/L:3 | 1.4GiB | h=4.21", in the
+// torrentSummaries formats each result as "name | S:412/L:3 | 1.4GiB | t=5 h=4.21", in the
 // order given (i.e. already sorted by priority when logged after SortTorrentResults).
+// t é a faixa de saúde (o que o critério health compara); h é o score cru, que só informa.
 //
 // Só o nome não basta para auditar "por que esse ganhou": os campos que decidem o sort
 // (seeders, tamanho, health) ficavam de fora e reproduzir a escolha exigia repetir a busca
@@ -250,8 +251,8 @@ func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
 func torrentSummaries(results []TorrentResult) []string {
 	summaries := make([]string, len(results))
 	for i, r := range results {
-		summaries[i] = fmt.Sprintf("%s | S:%d/L:%d | %s | h=%.2f",
-			r.Name, parseSeeders(r.Seeders), r.Leechers, formatSize(r.Size), torrentHealthScore(r))
+		summaries[i] = fmt.Sprintf("%s | S:%d/L:%d | %s | t=%d h=%.2f",
+			r.Name, parseSeeders(r.Seeders), r.Leechers, formatSize(r.Size), healthTier(r), torrentHealthScore(r))
 	}
 	return summaries
 }

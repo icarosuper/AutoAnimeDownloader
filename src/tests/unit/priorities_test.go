@@ -44,6 +44,53 @@ func TestIgnoreList_FiltersConfiguredSubstrings(t *testing.T) {
 	}
 }
 
+// Com a ordem default, health vem antes de fansub — mas só decide quando os dois
+// estão em faixas diferentes de saúde.
+func TestHealthTiers_BeatFansubAcrossTiers(t *testing.T) {
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[SubsPlease] Anime - 01 1080p", Resolution: &r1080, Seeders: "12"},
+		{Name: "[Ember] Anime - 01 1080p", Resolution: &r1080, Seeders: "400"},
+	}
+
+	sorted := nyaa.SortTorrentResults(results)
+	if !strings.Contains(sorted[0].Name, "Ember") {
+		t.Fatalf("faixa de saúde maior deve vencer o fansub, obteve %s", sorted[0].Name)
+	}
+}
+
+func TestHealthTiers_SameTierLetsFansubDecide(t *testing.T) {
+	r1080 := "1080p"
+	// 150 e 300 estão os dois na faixa 100-399: health empata e o fansub decide.
+	results := []nyaa.TorrentResult{
+		{Name: "[Ember] Anime - 01 1080p", Resolution: &r1080, Seeders: "300"},
+		{Name: "[SubsPlease] Anime - 01 1080p", Resolution: &r1080, Seeders: "150"},
+	}
+
+	sorted := nyaa.SortTorrentResults(results)
+	if !strings.Contains(sorted[0].Name, "SubsPlease") {
+		t.Fatalf("dentro da mesma faixa o fansub deve decidir, obteve %s", sorted[0].Name)
+	}
+}
+
+func TestDefaultCriteriaOrder_HealthBeforeFansub(t *testing.T) {
+	order := nyaa.DefaultPriorities().CriteriaOrder
+	health, fansub, resolution := -1, -1, -1
+	for i, c := range order {
+		switch c {
+		case "health":
+			health = i
+		case "fansub":
+			fansub = i
+		case "resolution":
+			resolution = i
+		}
+	}
+	if !(resolution < health && health < fansub) {
+		t.Fatalf("esperava resolution < health < fansub, obteve %v", order)
+	}
+}
+
 func TestCriteriaOrder_FansubBeforeResolution(t *testing.T) {
 	// Com ordem default, 1080p (Ember) vence 720p (SubsPlease).
 	// Com fansub antes de resolution, SubsPlease 720p vence.

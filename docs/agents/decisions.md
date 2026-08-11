@@ -927,3 +927,26 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 **Don't "fix" by:**
 - Fazer `Size == 0` ser descartado "por simetria com os seeders" (ver (b)).
 - Subir o default para "só torrent saudável": ranking é trabalho do critério `health`, não do piso — o piso existe para o que não baixa de jeito nenhum.
+
+### 55. `health` compara FAIXA de seeders, e vem antes de `fansub`
+
+**Location:** `nyaa/priorities.go` — `criterionCompare["health"]`, `healthTier`, `healthTierFloors`, `DefaultPriorities().CriteriaOrder`; `nyaa/nyaa.go` — `torrentHealthScore` (só log).
+
+**What it looks like:** o comparador de `health` não usa `torrentHealthScore`; usa um índice de faixa (`0 / 1-4 / 5-19 / 20-99 / 100-399 / 400+`). E `health` está na 4ª posição da ordem default, não na 7ª.
+
+**Why it's right:**
+
+**(a) O sort é lexicográfico, então score cru = health sozinho decide ou nunca decide.** Com o score contínuo, 1 seeder de diferença já resolve a comparação e nenhum critério depois de `health` chega a ser consultado. Comparando faixa, 400 seeders vence 12 (faixas 5 e 3), mas 150 vs 300 empata e o `fansub` decide — que é o comportamento pretendido.
+
+**(b) `health` na 7ª posição nunca era alcançado.** Medido no With You: os 3 candidatos eram 1080p, o `fansub` desempatou (subsplease=0, judas=2, ember=5) e `health` não foi consultado — um torrent com 12 seeders ganharia de um com 400 por ordem de fansub. A ordem nova é `uncensored, source, resolution, health, codec, fansub, audio, size`.
+
+**(c) Faixa fixa, não razão.** "Empata a menos que um tenha 2x o outro" parece melhor (sem efeito de borda), mas não é transitivo — 100 ~ 150 ~ 220 e 100 < 220 — e `sort.SliceStable` com comparador intransitivo devolve ordem arbitrária. O preço da faixa fixa é a borda: 399 e 400 caem em faixas diferentes. Aceito de propósito; qualquer bucketização tem borda.
+
+**(d) `torrentHealthScore` ficou só no log.** Ele combina seeders com a razão seeders/leechers, informação que a faixa (só seeders) descarta. Vale como diagnóstico no `matched_torrents` (`t=` faixa, `h=` score), não como critério.
+
+**Nota de entrega:** um `config.json` existente **já tem** `criteria_order` gravado e `LoadConfigs` desserializa por cima do default, então a ordem nova NÃO chega sozinha em instalação antiga. O usuário edita à mão ou clica "restaurar defaults" na página de Prioridades.
+
+**Don't "fix" by:**
+- Voltar o comparador para `torrentHealthScore` "porque usa mais informação" (ver (a) e (d)).
+- Trocar faixa por razão/tolerância percentual (ver (c)).
+- Migrar `criteria_order` de config existente automaticamente: reordenar silenciosamente a preferência que o usuário gravou é pior que a nota de entrega.
