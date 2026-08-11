@@ -55,6 +55,38 @@ func filterBySize(results []nyaa.TorrentResult, maxGB float64) []nyaa.TorrentRes
 	return filtered
 }
 
+// filterBySeeders descarta torrents com menos de minSeeders. minSeeders <= 0 desliga o filtro.
+//
+// Mesmo contrato do filterBySize (roda depois da ordenacao, preserva a ordem). Aqui, ao contrario
+// do tamanho, seeders ilegivel conta como 0 e e DESCARTADO com o default de 1: a coluna de seeders
+// do Nyaa e o unico sinal de que existe alguem semeando, e um torrent sem semeador nao baixa nunca
+// — deixar passar troca "nao escolhe esse" por "trava o episodio num torrent morto", que foi
+// exatamente o que aconteceu com o unico candidato do Naruto Shippuuden episodio 3 (0 peers).
+func filterBySeeders(results []nyaa.TorrentResult, minSeeders int) []nyaa.TorrentResult {
+	if minSeeders <= 0 || len(results) == 0 {
+		return results
+	}
+	filtered := make([]nyaa.TorrentResult, 0, len(results))
+	for _, tr := range results {
+		if seeders := nyaa.ParseSeeders(tr.Seeders); seeders < minSeeders {
+			logger.Logger.Debug().
+				Str("torrent", tr.Name).
+				Int("seeders", seeders).
+				Int("min_seeders", minSeeders).
+				Msg("Seeders filter: discarding torrent below the seeders floor")
+			continue
+		}
+		filtered = append(filtered, tr)
+	}
+	return filtered
+}
+
+// filterSearchResults aplica os dois filtros de busca (teto de tamanho + piso de seeders) na
+// ordem em que os quatro pontos de busca precisam deles.
+func filterSearchResults(results []nyaa.TorrentResult, maxGB float64, minSeeders int) []nyaa.TorrentResult {
+	return filterBySeeders(filterBySize(results, maxGB), minSeeders)
+}
+
 func buildTitleVariants(titles anilist.Title, customQuery string) []string {
 	if customQuery != "" {
 		return []string{customQuery}

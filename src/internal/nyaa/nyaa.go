@@ -158,6 +158,13 @@ func IsBatch(name string) bool {
 	return isBatch(name)
 }
 
+// ParseSeeders é a versão exportável de parseSeeders: converte a coluna de
+// seeders do Nyaa (string, podendo ser "-") para int. Usada pelo piso de
+// seeders em daemon.filterBySeeders.
+func ParseSeeders(seedersStr string) int {
+	return parseSeeders(seedersStr)
+}
+
 // ExtractSeason é uma versão exportável de extractSeason para uso externo ao pacote
 func ExtractSeason(name string) *int {
 	return extractSeason(name)

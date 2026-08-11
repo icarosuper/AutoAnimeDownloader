@@ -1987,6 +1987,10 @@
                     "description": "MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco\nlivre no volume da biblioteca. 0 desliga.",
                     "type": "integer"
                 },
+                "min_seeders": {
+                    "description": "MinSeeders descarta da busca o torrent com menos seeders que isso. 0 desliga. O default\ne 1: barra so o torrent literalmente morto, que sem piso e candidato valido e chega a ser\nescolhido quando e o unico resultado do episodio.",
+                    "type": "integer"
+                },
                 "notifications": {
                     "$ref": "#/definitions/files.NotificationsConfig"
                 },

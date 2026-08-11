@@ -55,6 +55,8 @@
     hintMaxBatchSize: m.config_hint_max_batch_size(),
     labelMaxEpisodeSize: m.config_label_max_episode_size(),
     hintMaxEpisodeSize: m.config_hint_max_episode_size(),
+    labelMinSeeders: m.config_label_min_seeders(),
+    hintMinSeeders: m.config_hint_min_seeders(),
     labelMinFreeDisk: m.config_label_min_free_disk(),
     hintMinFreeDisk: m.config_hint_min_free_disk(),
     labelMaxConcurrent: m.config_label_max_concurrent(),
@@ -106,6 +108,7 @@
     max_batch_episodes: 30,
     max_batch_torrent_size_gb: 0,
     max_episode_torrent_size_gb: 0,
+    min_seeders: 1,
     min_free_disk_percent: 10,
     episode_retry_limit: 5,
     max_concurrent_downloads: 3,
@@ -258,6 +261,11 @@
       group: "downloads" as GroupId,
       ok: config.max_batch_torrent_size_gb >= 0 && config.max_episode_torrent_size_gb >= 0,
       message: m.config_val_torrent_size,
+    },
+    {
+      group: "downloads" as GroupId,
+      ok: config.min_seeders >= 0,
+      message: m.config_val_min_seeders,
     },
     {
       // 100 bloquearia todo download para sempre.
@@ -506,6 +514,17 @@
                 bind:value={config.max_episode_torrent_size_gb}
                 min="0"
                 step="0.1"
+              />
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="min_seeders"
+                label={T && T.labelMinSeeders || ""}
+                subtitle={T && T.hintMinSeeders || ""}
+                type="number"
+                bind:value={config.min_seeders}
+                min="0"
               />
             </div>
 

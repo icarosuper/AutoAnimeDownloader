@@ -260,6 +260,35 @@ func TestFilterBySize(t *testing.T) {
 	}
 }
 
+func TestFilterBySeeders(t *testing.T) {
+	results := []nyaa.TorrentResult{
+		{Name: "alive", Seeders: "412"},
+		{Name: "dead", Seeders: "0"},
+		{Name: "unknown", Seeders: "-"},
+		{Name: "weak", Seeders: "3"},
+	}
+
+	if got := filterBySeeders(results, 0); len(got) != 4 {
+		t.Errorf("piso 0 não deve filtrar nada, sobraram %d", len(got))
+	}
+
+	// Default: só o literalmente morto sai (e "-" conta como 0).
+	got := filterBySeeders(results, 1)
+	want := []string{"alive", "weak"}
+	if len(got) != len(want) {
+		t.Fatalf("esperava %d resultados, obteve %d (%+v)", len(want), len(got), got)
+	}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Errorf("posição %d: esperava %q, obteve %q", i, name, got[i].Name)
+		}
+	}
+
+	if got := filterBySeeders(results, 5); len(got) != 1 || got[0].Name != "alive" {
+		t.Errorf("piso 5 deveria sobrar só o alive, obteve %+v", got)
+	}
+}
+
 // --- Guarda de espaço em disco ---
 
 func TestCheckDiskSpace(t *testing.T) {

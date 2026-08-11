@@ -136,6 +136,11 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
+		if config.MinSeeders < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Min seeders must be non-negative")
+			return
+		}
+
 		// 100 bloquearia todo download para sempre.
 		if config.MinFreeDiskPercent < 0 || config.MinFreeDiskPercent > 99 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Min free disk percent must be between 0 and 99")

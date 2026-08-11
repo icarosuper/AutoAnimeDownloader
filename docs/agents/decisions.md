@@ -909,3 +909,21 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 - Trocar `hasMovieMarker` por `isMovie` no guard de episódio "para reusar a função" (ver (b)).
 - Aceitar o batch vazado marcando `IsBatch: true` em vez de descartar (ver (a)).
 - Tirar o `\b` de `reOvaPattern` para "pegar `(OVA)` também" — `\b` já casa antes de `(` e depois de `)` (ver (c)).
+
+### 54. Piso de seeders: seeders ilegível é descartado, tamanho ilegível passa
+
+**Location:** `daemon/search.go` — `filterBySeeders`, `filterSearchResults`, `filterBySize`; `files/filemanager.go` — `Config.MinSeeders` (default `1`); `nyaa/nyaa.go` — `ParseSeeders`.
+
+**What it looks like:** dois filtros com contrato quase idêntico e uma assimetria de propósito — `Size == 0` (parse falhou) **passa** pelo teto de tamanho, `seeders == 0` (inclusive `"-"`) **não passa** pelo piso.
+
+**Why it's right:**
+
+**(a) Sem piso, torrent morto é candidato válido — e ganha quando é o único.** Medido: `[DB] Naruto Shippuuden Movie 3` com **0 peers** foi o único candidato do episódio 3 e foi baixado. O default `1` barra só isso; `0` desliga, seguindo a convenção de `max_batch_torrent_size_gb`.
+
+**(b) A assimetria com `filterBySize` é o ponto, não um descuido.** Tamanho desconhecido significa "não sei se cabe", e descartar trocaria "às vezes baixa um torrent grande" por "não baixa nada" — um bug de parsing viraria paralisação silenciosa. Seeders desconhecido é diferente: a coluna é o **único** sinal de que existe alguém semeando, e um torrent sem semeador não completa nunca. Deixar passar não é o lado conservador — é travar o episódio num torrent que não baixa.
+
+**(c) O filtro ficou no daemon, não no `parseRow` do nyaa.** O plano pedia no parse, "antes de qualquer ordenação". Como o sort é estável e os filtros preservam a ordem, o escolhido é o mesmo; e no daemon reusa o padrão do `filterBySize`, vale para as quatro estratégias num ponto só (`filterSearchResults`) e mantém o log `"Found N results"` do nyaa mostrando o torrent morto com seus seeders — que é o que serve para diagnosticar. `nyaa.ParseSeeders` existe só para isso (mesmo padrão de `IsBatch`/`ExtractSeason`).
+
+**Don't "fix" by:**
+- Fazer `Size == 0` ser descartado "por simetria com os seeders" (ver (b)).
+- Subir o default para "só torrent saudável": ranking é trabalho do critério `health`, não do piso — o piso existe para o que não baixa de jeito nenhum.

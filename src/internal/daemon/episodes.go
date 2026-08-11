@@ -103,7 +103,7 @@ func processAnimeEpisodes(
 		}
 
 		if len(magnets) == 0 {
-			singleResults := filterBySize(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery), configs.MaxEpisodeTorrentSizeGB)
+			singleResults := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 			for _, tr := range singleResults {
 				magnets = append(magnets, tr.MagnetLink)
 			}
@@ -199,7 +199,7 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 			Str("anime", animeTitle).
 			Msg("Detected movie - searching for movie torrent")
 
-		movieResult := filterBySize(searcher.searchMovie(anime.Media.Title, true, customQuery), configs.MaxEpisodeTorrentSizeGB)
+		movieResult := filterSearchResults(searcher.searchMovie(anime.Media.Title, true, customQuery), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 
 		if len(episodesToDownload) == 0 && len(movieResult) > 0 {
 			fakeEp := anilist.AiringNode{Episode: 1}
@@ -237,7 +237,7 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 			Str("anime", animeTitle).
 			Msg("Detected finished anime - searching for batch torrent")
 
-		batchResult := filterBySize(searcher.searchBatch(anime.Media.Title, anime.Media.Synonyms, customQuery), configs.MaxBatchTorrentSizeGB)
+		batchResult := filterSearchResults(searcher.searchBatch(anime.Media.Title, anime.Media.Synonyms, customQuery), configs.MaxBatchTorrentSizeGB, configs.MinSeeders)
 
 		if len(batchResult) > 0 {
 			for _, ep := range episodesToDownload {
@@ -260,7 +260,7 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 		eps = append(eps, ep.Episode)
 	}
 
-	multipleResult := filterBySize(searcher.searchMultiple(anime.Media.Title, anime.Media.Synonyms, eps, customQuery), configs.MaxEpisodeTorrentSizeGB)
+	multipleResult := filterSearchResults(searcher.searchMultiple(anime.Media.Title, anime.Media.Synonyms, eps, customQuery), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 	if len(multipleResult) > 0 {
 		byEpisode := make(map[int][]nyaa.TorrentResult)
 		for _, tr := range multipleResult {

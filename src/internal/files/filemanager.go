@@ -90,6 +90,10 @@ type Config struct {
 	// usuario quer 1080p web ou remux).
 	MaxBatchTorrentSizeGB   float64 `json:"max_batch_torrent_size_gb"`
 	MaxEpisodeTorrentSizeGB float64 `json:"max_episode_torrent_size_gb"`
+	// MinSeeders descarta da busca o torrent com menos seeders que isso. 0 desliga. O default
+	// e 1: barra so o torrent literalmente morto, que sem piso e candidato valido e chega a ser
+	// escolhido quando e o unico resultado do episodio.
+	MinSeeders int `json:"min_seeders"`
 	// MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco
 	// livre no volume da biblioteca. 0 desliga.
 	MinFreeDiskPercent int `json:"min_free_disk_percent"`
@@ -167,6 +171,7 @@ func getDefaultConfig() *Config {
 		CheckInterval:          10,
 		MaxEpisodesPerAnime:    12,
 		MaxBatchEpisodes:       30,
+		MinSeeders:             1,
 		MinFreeDiskPercent:     10,
 		EpisodeRetryLimit:      5,
 		MaxConcurrentDownloads: 3,

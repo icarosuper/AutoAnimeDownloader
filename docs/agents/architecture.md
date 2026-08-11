@@ -130,6 +130,8 @@ Main verification orchestrator. Key functions:
 | `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete)` per episode. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited when the anime will batch |
 | `willBatchAnime(configs, anime)` | Batch eligibility: `FINISHED`, not a movie, known episode count within `max_batch_episodes`. Used both to lift the per-anime limit before the episode loop and to gate Strategy 2 in `resolveSearchStrategy` |
 | `filterBySize(results, maxGB)` | Drops Nyaa results above the GiB ceiling, after priority sorting and preserving order (`search.go`). `maxGB <= 0` = off; `Size == 0` (parse failure) passes |
+| `filterBySeeders(results, minSeeders)` | Drops Nyaa results below the seeders floor, same contract (`search.go`). `minSeeders <= 0` = off; an unparseable seeders column counts as `0` and **is** dropped |
+| `filterSearchResults(results, maxGB, minSeeders)` | The pair above, in the order the four search sites apply them |
 | `checkDiskSpace(configs)` | `ErrInsufficientDiskSpace` when the library volume is below `min_free_disk_percent` (`helpers.go`). A `statfs` error does **not** block. Guards `attemptDownloadWithRetries` and `addAndPrioritize` — never the verification pass |
 | `shouldSkipEpisode(...)` | Skip if: excluded list, already watched, not yet aired |
 | `handleAlreadySavedEpisode(...)` | Re-download if missing from torrents, delete if over limit |
@@ -157,6 +159,8 @@ Main verification orchestrator. Key functions:
 2. Batch (`willBatchAnime` + >1 ep) → `searchNyaaForBatch` → `skipSubfolder=true`, filtered by `max_batch_torrent_size_gb`
 3. Multiple ep search → `searchNyaaForMultipleEpisodes`, filtered by `max_episode_torrent_size_gb`
 4. Single ep fallback → `searchNyaaForSingleEpisode`, same filter
+
+All four also pass through the `min_seeders` floor (`filterSearchResults`).
 
 `max_episodes_per_anime` is lifted whenever `willBatchAnime` holds; if the search then does **not** resolve to a batch (empty result, or the size filter emptied it), `processAnimeEpisodes` cuts `episodesToDownload` back to the limit, keeping the oldest episodes.
 
