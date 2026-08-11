@@ -43,7 +43,9 @@ var (
 		regexp.MustCompile(`(?i)theater\s+version`),
 		regexp.MustCompile(`(?i)theatrical`),
 	}
-	reOvaPattern     = regexp.MustCompile(`(?i)\(?(ova|ona)\)?|original\s+(video|net)\s+animation`)
+	// \b é obrigatório: sem ele "ona" casa dentro de "Persona", "ova" dentro de
+	// "Nova", e o título do anime é lido como marcador de OVA.
+	reOvaPattern     = regexp.MustCompile(`(?i)\b(ova|ona)\b|original\s+(video|net)\s+animation`)
 	reSpecialPattern = regexp.MustCompile(`(?i)\(special\)|\[special\]|\sspecial\s|(tv\s+special|episode\s+sp)`)
 	reHasEpisode     = regexp.MustCompile(`(?i)(-\s?\d{1,4}|episode\s*\d{1,4}|s\d{1,2}e\d{1,4})`)
 

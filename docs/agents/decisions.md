@@ -890,3 +890,22 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 - Reintroduzir um `EpisodeID` sintético "para não mexer no estado em disco" (ver (c)).
 - Tentar converter o `blocked_episodes` antigo (ver (d)).
 - Fazer a lista começar em `Progress + 1` sem o recuo (ver (e)).
+
+### 53. Busca de episódio descarta batch e filme, e usa `hasMovieMarker` — não `isMovie`
+
+**Location:** `nyaa/nyaa.go` — `parseRow` de `ScrapNyaa` e de `ScrapNyaaForMultipleEpisodes`, `isMovie`, `hasMovieMarker`; `nyaa/nyaa_regex.go` — `reOvaPattern`.
+
+**What it looks like:** dois guards no começo dos dois `parseRow` de episódio (`isBatch` e `hasMovieMarker`), e um `hasMovieMarker` que é `isMovie` **menos** o ramo final.
+
+**Why it's right:**
+
+**(a) Sem o guard de batch, um pack de 220 episódios entra como "episódio 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` casa `- 001` em `extractEpisodeNumber`, e a busca multi-episódio (ao contrário da single) não filtrava batch. Resultado medido: 220 episódios num registro só, com `IsBatch: false`, furando `max_batch_episodes` **e** `max_episodes_per_anime` — e organizado como episódio único (renomeado "Naruto - E01" com `rename_files_for_jellyfin`). Descartar em vez de aceitar como batch porque `ScrapNyaaForBatch` roda **antes** na `resolveSearchStrategy`: um batch que valesse a pena já teria sido pego lá, e o que vaza aqui é exatamente o que o teto rejeitou.
+
+**(b) O ramo `!reHasEpisode && !isBatch` de `isMovie` não pode virar guard de episódio.** `reHasEpisode` só cobre `- 05`, `episode 05` e `S01E05`; `extractEpisodeNumber` cobre também `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` e `" 5"`. Chamar `isMovie` inteiro rejeitaria todo release nessas formas (os testes de "Lucky Star EP015 / E015 / 15" pegam isso). Daí o split: `hasMovieMarker` (keywords + OVA/ONA + special) serve os dois lados, e `isMovie` continua sendo o `hasMovieMarker` mais o fallback "não tem marcador de episódio" que só faz sentido na busca de filme.
+
+**(c) `reOvaPattern` precisa de `\b`.** Era `\(?(ova|ona)\)?`, sem boundary: "ona" casa dentro de **Persona**, "ova" dentro de **Nova**. Enquanto o padrão só era usado na direção permissiva (`ScrapNyaaForMovie`) isso passava; como guard de episódio viraria rejeição do anime inteiro.
+
+**Don't "fix" by:**
+- Trocar `hasMovieMarker` por `isMovie` no guard de episódio "para reusar a função" (ver (b)).
+- Aceitar o batch vazado marcando `IsBatch: true` em vez de descartar (ver (a)).
+- Tirar o `\b` de `reOvaPattern` para "pegar `(OVA)` também" — `\b` já casa antes de `(` e depois de `)` (ver (c)).

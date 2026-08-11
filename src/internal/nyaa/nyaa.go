@@ -186,17 +186,7 @@ func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 		return true
 	}
 
-	for _, re := range reMovieKeywords {
-		if re.MatchString(torrentName) {
-			return true
-		}
-	}
-
-	if reOvaPattern.MatchString(torrentName) {
-		return true
-	}
-
-	if reSpecialPattern.MatchString(torrentName) {
+	if hasMovieMarker(torrentName) {
 		return true
 	}
 
@@ -205,6 +195,20 @@ func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 	}
 
 	return false
+}
+
+// hasMovieMarker reporta se o nome traz marcador explícito de filme, OVA/ONA ou
+// special. É a parte de isMovie que serve como guard na busca de episódio: o
+// ramo "não tem marcador de episódio" de isMovie não pode ser usado lá porque
+// reHasEpisode é mais restrito que extractEpisodeNumber (não cobre EP05, E05,
+// [05], " 05 (" etc.) e rejeitaria episódios legítimos.
+func hasMovieMarker(torrentName string) bool {
+	for _, re := range reMovieKeywords {
+		if re.MatchString(torrentName) {
+			return true
+		}
+	}
+	return reOvaPattern.MatchString(torrentName) || reSpecialPattern.MatchString(torrentName)
 }
 
 // fetchNyaaPage fetches a single Nyaa results page and returns the parsed document.
@@ -314,6 +318,12 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 
 		// Verificar se é batch - ignorar para busca de episódio único
 		if isBatch(name) {
+			return
+		}
+
+		// Filme/OVA/special não é episódio: "Naruto Shippuuden Movie 3" casa o
+		// padrão " 3 (" de extractEpisodeNumber e passaria como episódio 3.
+		if hasMovieMarker(name) {
 			return
 		}
 
@@ -462,6 +472,12 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 		// guard, "Naruto - 001 ~ 220" casa como "episódio 1" e fura os tetos de
 		// max_batch_episodes / max_episodes_per_anime.
 		if isBatch(name) {
+			return
+		}
+
+		// Mesmo motivo do guard em ScrapNyaa: filme/OVA/special casa número de
+		// episódio e entraria como episódio comum.
+		if hasMovieMarker(name) {
 			return
 		}
 

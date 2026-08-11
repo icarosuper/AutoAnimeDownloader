@@ -121,6 +121,42 @@ func TestNyaaModule_CanGetCorrectAnime_WithSpecialCharactersDifferences(t *testi
 	runEpisodeNameTest(options, t)
 }
 
+// Um filme não pode ser aceito como episódio: "[DB] Naruto Shippuuden Movie 3"
+// casava o padrão " 3 (" de extractEpisodeNumber e virava "episódio 3".
+func TestNyaaModule_IgnoresMovieOnEpisodeSearch(t *testing.T) {
+	options := testOptions{
+		animeName: "Naruto Shippuuden",
+		episode:   3,
+		correct: []string{
+			"[Erai-raws] Naruto Shippuuden - 03 [1080p]",
+		},
+		incorrect: []string{
+			"[DB] Naruto Shippuuden Movie 3 (Eng Sub).avi",
+			"[Group] Naruto Shippuuden OVA 3 (1080p)",
+			"[Group] Naruto Shippuuden Special 3 (1080p)",
+		},
+	}
+
+	runEpisodeNameTest(options, t)
+}
+
+// "Persona" contém "ona": o marcador de OVA precisa de word boundary, senão o
+// guard de filme rejeita episódios legítimos.
+func TestNyaaModule_OvaMarkerDoesNotMatchTitleSubstring(t *testing.T) {
+	options := testOptions{
+		animeName: "Persona Trinity Soul",
+		episode:   5,
+		correct: []string{
+			"[Group] Persona Trinity Soul - 05 [1080p]",
+		},
+		incorrect: []string{
+			"[Group] Persona Trinity Soul - 06 [1080p]",
+		},
+	}
+
+	runEpisodeNameTest(options, t)
+}
+
 func TestNyaaModule_CanGetEpisode_OfCompleteAnime(t *testing.T) {
 	options := testOptions{
 		animeName: "Lucky Star",
@@ -433,6 +469,7 @@ func TestScrapNyaaForMultipleEpisodes_CanGetMultipleEpisodes(t *testing.T) {
 func TestScrapNyaaForMultipleEpisodes_IgnoresBatch(t *testing.T) {
 	options := []string{
 		"[Erai-raws] Naruto - 001 ~ 220 [480p][Multiple Subtitle]",
+		"[DB] Naruto Movie 1 (Eng Sub).avi",
 		"[Erai-raws] Naruto - 002 [480p]",
 	}
 
@@ -448,6 +485,9 @@ func TestScrapNyaaForMultipleEpisodes_IgnoresBatch(t *testing.T) {
 	for _, r := range results {
 		if strings.Contains(r.Name, "001 ~ 220") {
 			t.Fatalf("batch leaked into multi-episode results: %s", r.Name)
+		}
+		if strings.Contains(r.Name, "Movie") {
+			t.Fatalf("movie leaked into multi-episode results: %s", r.Name)
 		}
 	}
 	if len(results) != 1 {

@@ -423,10 +423,11 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Part*`, `Size`, `Fansub`, `IsBatch` |
 | `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
 | `torrentNames(results)` | Extracts `.Name` from each result, for debug logging |
-| `ScrapNyaa(title, episode, season*, part*)` | Scrapes Nyaa for a single episode (2 pages); hard-filters by season and part when non-nil |
+| `ScrapNyaa(title, episode, season*, part*)` | Scrapes Nyaa for a single episode (2 pages); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil |
 | `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
-| `ScrapNyaaForMultipleEpisodes(title, eps[], season*, part*)` | Scrapes for multiple specific episodes (2 pages); hard-filters by season and part when non-nil |
+| `ScrapNyaaForMultipleEpisodes(title, eps[], season*, part*)` | Scrapes for multiple specific episodes (2 pages); same batch/movie guards as `ScrapNyaa`; hard-filters by season and part when non-nil |
+| `hasMovieMarker(name)` | Explicit movie/OVA/special marker check — the part of `isMovie` safe to use as a guard on episode searches (see [Decisions](decisions.md)) |
 | `ExtractSeason(name)` | Exported: extracts season number from torrent name |
 | `ExtractPart(name)` | Exported: extracts part/cour number from torrent name |
 | `GenerateSearchTitleVariants(romaji, english)` | Search query variants: clean romaji → original romaji → clean english → original english |
