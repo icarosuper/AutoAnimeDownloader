@@ -1,4 +1,5 @@
-- Substituir torrent de um anime ou episódio **+0.1.0**
+- Player de vídeo imbutido **+0.1.0**
+- Modal com lista para substituir torrent **+0.1.0**
 	- Hoje vc tem que trazer um torrent de fora e inserir no campo
 	- Quero um botão que abre a listagem do nyaa dentro do app
 - Fontes alternativas de torrent — **+0.1.0**

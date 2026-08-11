@@ -12,7 +12,7 @@
  * assim a troca de idioma dispara um novo render. Quem consumir este array deve mapear
  * `item.label()` dentro desse bloco reativo, não direto no template.
  */
-import { Activity, Bell, Download, Ellipsis, ListOrdered, ScrollText, Settings } from '@lucide/svelte'
+import { Activity, Bell, Download, Ellipsis, ListOrdered, Plus, ScrollText, Settings } from '@lucide/svelte'
 import * as m from './i18n/messages.js'
 
 /** Todo ícone Lucide usado aqui tem essa mesma assinatura de componente. */
@@ -30,9 +30,16 @@ export interface NavItem {
   label: () => string
 }
 
-/** Grupo de cima do rail / primeiras colunas da tab bar: Status, Downloads. */
+/**
+ * Grupo de cima do rail / primeiras colunas da tab bar: Status, Adicionar anime, Downloads.
+ *
+ * "Adicionar anime" fica em SEGUNDO lugar e com o mesmo destaque do Status — é a porta de
+ * entrada de qualquer anime na biblioteca, e enterrá-la no MoreMenu (onde nasceu) escondia a
+ * única ação que uma instalação sem conta do AniList tem para fazer.
+ */
 export const primaryNavItems: NavItem[] = [
   { id: 'status', path: '/status', activePaths: ['/'], icon: Activity, label: m.nav_status },
+  { id: 'add', path: '/add', icon: Plus, label: m.nav_add_anime },
   { id: 'downloads', path: '/downloads', icon: Download, label: m.nav_downloads },
 ]
 

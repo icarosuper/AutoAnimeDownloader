@@ -42,14 +42,30 @@ type animeDetails struct {
 	isFinished bool
 }
 
-// resolveAnimeDetails busca um anime pelo MEDIA id, colapsando as contas configuradas.
+// resolveAnimeDetails busca um anime pelo MEDIA id, colapsando as contas configuradas, e cai em
+// GetMediaByID quando nenhuma conta o acompanha.
+//
+// O fallback e o que faz os botoes por episodio (download, redownload, replace) funcionarem num
+// anime avulso: a tela de detalhe dele abre — resolveMediaList ja cobria isso —, mas cada acao
+// morria aqui com "nao esta em nenhuma conta". Sem contas configuradas, que passou a ser um
+// estado valido, esse era o caminho de TODO download manual.
+//
+// Nao ha checagem contra o arquivo de avulsos aqui, ao contrario de api.resolveMediaList: estas
+// funcoes ja exigem um media id e um episode id que so a tela de detalhe fornece, e o resultado
+// e sempre gravado com ManuallyManaged=true — o loop nunca o apaga por nao acompanhar o anime.
+// Um id que nao existe na AniList continua devolvendo erro.
 func resolveAnimeDetails(animeId int, usernames []string) (*animeDetails, error) {
 	ml, err := anilist.GetAnimeInfo(animeId, usernames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get anime info: %w", err)
 	}
 	if ml == nil {
-		return nil, fmt.Errorf("anime %d is not in any configured AniList account", animeId)
+		if ml, err = anilist.GetMediaByID(animeId); err != nil {
+			return nil, fmt.Errorf("failed to get anime info: %w", err)
+		}
+	}
+	if ml == nil {
+		return nil, fmt.Errorf("anime %d does not exist on AniList", animeId)
 	}
 
 	title := ""
@@ -66,9 +82,13 @@ func resolveAnimeDetails(animeId int, usernames []string) (*animeDetails, error)
 	}, nil
 }
 
-func findEpisodeNode(nodes []anilist.AiringNode, episodeId int) *anilist.AiringNode {
-	for _, node := range nodes {
-		if node.ID == episodeId {
+// findEpisodeNode acha o episodio pelo NUMERO na lista completa do anime — e nao no
+// airingSchedule cru, que nao tem no para episodio fora da janela que a AniList guarda. Sem isso
+// os botoes por episodio morriam com "episodio nao encontrado" justamente nos animes em que a
+// tela mostra os episodios sinteticos (ver anilist.EpisodeList e decisions.md #52).
+func findEpisodeNode(ml anilist.MediaList, episodeNumber int) *anilist.AiringNode {
+	for _, node := range anilist.EpisodeList(ml, 1) {
+		if node.Episode == episodeNumber {
 			n := node
 			return &n
 		}
@@ -78,7 +98,7 @@ func findEpisodeNode(nodes []anilist.AiringNode, episodeId int) *anilist.AiringN
 
 // ManualDownloadEpisodeWithMagnet downloads a specific episode using a user-supplied magnet link.
 // Skips Nyaa search entirely. Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId int, episodeId int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
+func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId int, episodeNumber int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
@@ -88,9 +108,9 @@ func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId in
 		return files.EpisodeStruct{}, err
 	}
 
-	targetNode := findEpisodeNode(details.mediaList.Media.AiringSchedule.Nodes, episodeId)
+	targetNode := findEpisodeNode(details.mediaList, episodeNumber)
 	if targetNode == nil {
-		return files.EpisodeStruct{}, fmt.Errorf("episode %d not found for anime %d", episodeId, animeId)
+		return files.EpisodeStruct{}, fmt.Errorf("episode %d not found for anime %d", episodeNumber, animeId)
 	}
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
@@ -100,7 +120,6 @@ func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId in
 	}
 
 	return files.EpisodeStruct{
-		EpisodeID:       episodeId,
 		AnimeID:         animeId,
 		AnimeName:       details.title,
 		EpisodeHash:     hash,
@@ -130,13 +149,12 @@ func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int,
 
 	now := time.Now()
 	var episodes []files.EpisodeStruct
-	for _, node := range details.mediaList.Media.AiringSchedule.Nodes {
+	for _, node := range anilist.EpisodeList(details.mediaList, 1) {
 		if node.TimeUntilAiring > 0 {
 			continue
 		}
 		epName := fmt.Sprintf("%s - Episode %d", details.title, node.Episode)
 		episodes = append(episodes, files.EpisodeStruct{
-			EpisodeID:       node.ID,
 			AnimeID:         animeId,
 			AnimeName:       details.title,
 			EpisodeHash:     hash,
@@ -157,7 +175,7 @@ func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int,
 
 // ManualDownloadEpisode downloads a specific episode manually (called from API).
 // Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episodeId int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
+func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episodeNumber int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
@@ -167,9 +185,9 @@ func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episode
 		return files.EpisodeStruct{}, err
 	}
 
-	targetNode := findEpisodeNode(details.mediaList.Media.AiringSchedule.Nodes, episodeId)
+	targetNode := findEpisodeNode(details.mediaList, episodeNumber)
 	if targetNode == nil {
-		return files.EpisodeStruct{}, fmt.Errorf("episode %d not found for anime %d", episodeId, animeId)
+		return files.EpisodeStruct{}, fmt.Errorf("episode %d not found for anime %d", episodeNumber, animeId)
 	}
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
@@ -205,7 +223,6 @@ func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episode
 	}
 
 	return files.EpisodeStruct{
-		EpisodeID:       episodeId,
 		AnimeID:         animeId,
 		AnimeName:       details.title,
 		EpisodeHash:     hash,

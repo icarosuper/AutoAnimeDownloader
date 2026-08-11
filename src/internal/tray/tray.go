@@ -20,13 +20,13 @@
 package tray
 
 import (
+	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/logger"
 	"context"
 	"fmt"
 	"net/http"
 	"os/exec"
 	"runtime"
-	"strings"
 	"time"
 
 	"fyne.io/systray"
@@ -115,18 +115,7 @@ func (tm *TrayManager) openWebUI() {
 }
 
 func (tm *TrayManager) getWebUiURL() string {
-	port := tm.apiPort
-	if port == "" {
-		port = ":8091"
-	}
-
-	// Remove leading colon if present
-	port = strings.TrimPrefix(port, ":")
-	if port == "" {
-		port = "8091"
-	}
-
-	return fmt.Sprintf("http://localhost:%s", port)
+	return daemon.WebUIURL(tm.apiPort, "")
 }
 
 func (tm *TrayManager) triggerCheck() {

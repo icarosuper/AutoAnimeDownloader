@@ -45,8 +45,9 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 |------|-----------------|---------|
 | `config.json` | `~/.autoAnimeDownloader/` | User settings (Anilist usernames, paths, intervals) |
 | `downloaded_episodes` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL, no extension) |
-| `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of IDs, no extension) |
+| `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of `{anime_id, episode}`, no extension). O formato antigo (array de ids de nó da AniList) é descartado com aviso ao ser lido — ver decisions.md #52 |
 | `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList **media** ID (JSON map, no extension) |
+| `standalone_animes` | `~/.autoAnimeDownloader/` | Media IDs tracked **without** being in any AniList list (JSON array of IDs, no extension) |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
@@ -74,14 +75,17 @@ Key endpoints:
 | `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — `StatusResponse` carries `disk_total`, `disk_free` and `disk_low` (free below `min_free_disk_percent`, i.e. the daemon stopped adding torrents; the threshold lives server-side only) |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
-| `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` |
+| `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` — `AnimeInfo.is_standalone` marks animes tracked via `standalone_animes` |
+| `GET` | `/api/v1/anilist/search?q=<term>&include_unreleased=<bool>` | `handleAniListSearch` | `endpoint_anilist_search.go` — 20 results with a `block_reason` per result (`""` = addable); a term under 3 chars returns an empty list, not a 400. `include_unreleased` defaults to false and hides `NOT_YET_RELEASED` **server-side**; a non-boolean value is a 400 `INVALID_QUERY_PARAM` (via `parseBoolQueryParam`, shared with `/torrents`) |
+| `POST` | `/api/v1/standalone-animes` | `handleStandaloneAnimeAdd` | `endpoint_standalone_animes.go` — body `{"media_id": 21}`, answers `{"added": N}`; 409 `LIBRARY_NOT_CONFIGURED` / `ALREADY_BLACKLISTED` / `ALREADY_STANDALONE` / `ALREADY_TRACKED` / `ALREADY_DOWNLOADED` |
+| `DELETE` | `/api/v1/standalone-animes/{id}?delete_episodes=<bool>` | `handleStandaloneAnimeRemove` | `endpoint_standalone_animes.go` — without `delete_episodes` the episodes stay and are marked `ManuallyManaged` |
 | `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
 | `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` |
-| `POST` | `/api/v1/animes/{id}/episodes/{episodeId}/download` | `handleDownloadEpisode` | `endpoint_episode_actions.go` |
-| `POST` | `/api/v1/animes/{id}/episodes/{episodeId}/redownload` | `handleRedownloadEpisode` | `endpoint_episode_actions.go` |
-| `DELETE` | `/api/v1/animes/{id}/episodes/{episodeId}` | `handleDeleteEpisode` | `endpoint_episode_actions.go` |
-| `POST` | `/api/v1/animes/{id}/episodes/{episodeId}/release` | `handleReleaseEpisode` | `endpoint_episode_actions.go` |
-| `POST` | `/api/v1/animes/{id}/episodes/{episodeId}/replace` | `handleReplaceEpisodeWithMagnet` | `endpoint_episode_actions.go` |
+| `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/download` | `handleDownloadEpisode` | `endpoint_episode_actions.go` |
+| `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/redownload` | `handleRedownloadEpisode` | `endpoint_episode_actions.go` |
+| `DELETE` | `/api/v1/animes/{id}/episodes/{episodeNumber}` | `handleDeleteEpisode` | `endpoint_episode_actions.go` |
+| `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/release` | `handleReleaseEpisode` | `endpoint_episode_actions.go` |
+| `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/replace` | `handleReplaceEpisodeWithMagnet` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/animes/{id}/replace` | `handleReplaceAnimeWithMagnet` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/check` | `handleCheck` | `endpoint_check.go` |
 | `POST` | `/api/v1/daemon/start` | `handleDaemonStart` | `endpoint_daemon_start.go` |
@@ -121,7 +125,8 @@ Main verification orchestrator. Key functions:
 |----------|---------|
 | `StartLoop(p)` | Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
 | `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`) |
-| `processAnimeEpisodes(...)` | Per-anime: decide download/delete per episode, execute download strategy |
+| `processAnimeEpisodes(...)` | Per-anime: monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(...))`, decide download/delete por episódio e executa a estratégia de busca |
+| `firstEpisodeToConsider(anime, savedEpisodes)` | Onde a lista começa: `Progress + 1` (avulso tem progresso 0, logo começa no 1), recuando para o menor episódio já salvo — sem o recuo, um salvo abaixo do progresso não é "checado" e a poda o apagaria ignorando `watched_episodes_to_keep` |
 | `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete)` per episode. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited when the anime will batch |
 | `willBatchAnime(configs, anime)` | Batch eligibility: `FINISHED`, not a movie, known episode count within `max_batch_episodes`. Used both to lift the per-anime limit before the episode loop and to gate Strategy 2 in `resolveSearchStrategy` |
 | `filterBySize(results, maxGB)` | Drops Nyaa results above the GiB ceiling, after priority sorting and preserving order (`search.go`). `maxGB <= 0` = off; `Size == 0` (parse failure) passes |
@@ -136,13 +141,16 @@ Main verification orchestrator. Key functions:
 | `searchNyaaForMultipleEpisodes(titles, synonyms, episodes, customQuery)` | Multi-episode search for airing animes (priority 3) |
 | `ExtractAnimeSeasonPart(title, synonyms)` | Exported: reads english→romaji→synonyms, returns `(season, part *int)` — first non-nil wins independently |
 | `ComputeEpisodeOffset(relations, part)` | Exported: returns PREQUEL episode count when `part >= 2`; 0 otherwise (gate prevents spurious offsets on non-split seasons) |
-| `RemoveEpisodesWithLinks(fm, backend, librarian, ids) error` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`). Returns an error when the record could not be removed from the JSONL (load/delete failure); freeing disk space is best-effort and only logged |
+| `RemoveEpisodesWithLinks(fm, backend, librarian, keys []files.EpisodeKey) error` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`). Returns an error when the record could not be removed from the JSONL (load/delete failure); freeing disk space is best-effort and only logged |
 | `RemoveTorrentWithEpisodes(fm, backend, librarian, hash, opts) error` | Deletes a torrent and every saved episode sharing its hash as one unit (a batch always leaves together) — used by `DELETE /torrents/{hash}`. `RemoveTorrentOptions{KeepData, Block}`: `Block` marks every episode in the group blocked before removing its record; an orphan hash (no saved episode matches) is removed directly via `backend.Remove` (`episodes.go`) |
 | `reconcileLibrary(downloaded, saved, jobQueue)` | Startup/periodic reconciliation: enqueues an `organize` job for any completed torrent whose episode isn't yet in the library (`verification.go`) |
 | `clearLibraryPathsAfterRootSwap(fileManager, completedPath)` | Runs when `Ensure` reports `RootSwapped`: wipes every `LibraryPaths` so the library is rebuilt at the configured path after the redownloads (`verification.go`) — the one exception to decisions.md #29, see #34 |
-| `ManualDownloadEpisode(backend, animeId, episodeId, cfg, customQuery)` | Used by API for manual download — calls Anilist then Nyaa (`manual_download.go`) |
+| `ManualDownloadEpisode(backend, animeId, episodeNumber, cfg, customQuery)` | Used by API for manual download — calls Anilist then Nyaa (`manual_download.go`). Resolves the anime via `resolveAnimeDetails`, which falls back to `anilist.GetMediaByID` when no account tracks it — that fallback is what makes the per-episode buttons work on a standalone anime (and at all when no AniList account is configured) |
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
 | `ManualDownloadAnimeWithMagnet(...)` | Used by API for replace-with-magnet for full anime batch |
+| `searchAnilist(fm, configs, standaloneIDs)` | Builds the pass's anime universe: the union of the accounts' lists plus the standalone animes, appended **after** `DedupeByMedia` (`verification.go`) |
+| `appendStandaloneAnimes(fm, merged, standaloneIDs)` | Drops the standalone record of any id the lists already cover (with a log), then appends the rest via `anilist.GetMediaByID`. No media-status filter — a standalone anime is tracked while `NOT_YET_RELEASED` too (`standalone.go`) |
+| `DownloadStandaloneAnime(fm, backend, configs, mediaID) (int, error)` | `Ensure` + `processAnimeEpisodes` + `saveEpisodesToFile` for one anime, nothing else. **Must never call `handleSavedEpisodes`** — with a single anime's episodes in hand and `delete_watched_episodes` on, `identifyEpisodesNotInWatching` would wipe the rest of the library (`standalone.go`, decisions.md) |
 
 **Download priority** (in `processAnimeEpisodes`):
 1. Movie → `searchNyaaForMovie` → `skipSubfolder=true`, epName = animeName
@@ -151,6 +159,17 @@ Main verification orchestrator. Key functions:
 4. Single ep fallback → `searchNyaaForSingleEpisode`, same filter
 
 `max_episodes_per_anime` is lifted whenever `willBatchAnime` holds; if the search then does **not** resolve to a batch (empty result, or the size filter emptied it), `processAnimeEpisodes` cuts `episodesToDownload` back to the limit, keeping the oldest episodes.
+
+### `src/internal/daemon/webui.go`
+
+| Symbol | Purpose |
+|--------|---------|
+| `WebUIURL(port, route)` | Builds the Web UI URL from what the process calls "the port" — which is really the `http.Server` **Addr** (`":8091"`). Strips the leading colon: interpolating the raw value produces `http://localhost::8091`, an invalid host, and the browser lands on an error page instead of the app. Single source for the verification pass, the tray and the first-boot open — the conversion used to be written out three times and the newest copy forgot the strip |
+| `WaitForListener(addr, timeout)` | Dials until the port accepts. `apiServer.Start()` runs in a goroutine and the "API server started successfully" log fires **before** the socket is bound, so anything opening a browser right after races `ListenAndServe`; losing that race is `ERR_CONNECTION_REFUSED` |
+
+### `src/internal/daemon/standalone.go`
+
+Standalone animes (animes tracked without being in any AniList list). `appendStandaloneAnimes` and `DownloadStandaloneAnime` are listed in the `daemon.go` symbol table above; both are documented in [decisions.md #49](decisions.md).
 
 ### `src/internal/daemon/debug.go`
 
@@ -225,18 +244,22 @@ All persistence. Key types:
 |--------|---------|
 | `Config` struct | All user settings — maps to `config.json`. `SavePath` is a **legacy** field (`omitempty`), read only by `daemon.MigrateSavePath`; it is zeroed as soon as migration runs or `PUT /config` is called |
 | `Config.DownloadPath()` | Derives the download/seeding directory: `filepath.Join(CompletedAnimePath, ".torrents")` (`downloadDirName` const). Computed on every call, not stored |
-| `EpisodeStruct` struct | `EpisodeID`, `AnimeID`, `EpisodeHash`, `EpisodeName`, `DownloadDate`, `ManuallyManaged`, `EpisodeNumber int`, `IsBatch bool`, `LibraryPaths []string` (hardlink paths in the library, set once organized) |
+| `EpisodeKey` struct | `AnimeID`, `Episode` — **a identidade de um episódio** em todo o app (arquivo de episódios, bloqueados, rotas da API). `EpisodeStruct.Key()` a produz |
+| `EpisodeStruct` struct | `AnimeID`, `EpisodeHash`, `EpisodeName`, `DownloadDate`, `ManuallyManaged`, `EpisodeNumber int`, `IsBatch bool`, `LibraryPaths []string` (hardlink paths in the library, set once organized) |
 | `FileManagerInterface` | Interface used by daemon + API — mock in tests |
 | `FileManager.LoadConfigs()` | Reads `config.json`; creates with defaults if missing |
 | `FileManager.LoadSavedEpisodes()` | Reads `episodes.json` (JSONL), migrates old format |
 | `FileManager.SaveEpisodesToFile(eps)` | Appends only new episodes (deduped by ID) — **silently discards updates to existing IDs**; see decision 27 |
 | `FileManager.UpsertEpisodes(eps)` | Inserts or **fully replaces** episodes by ID — used to write back `LibraryPaths` after a torrent is organized |
-| `FileManager.DeleteEpisodesFromFile(ids)` | Removes episodes by ID from JSONL |
-| `FileManager.BlockEpisode(id)` | Appends ID to `blocked_episodes` |
-| `FileManager.UnblockEpisode(id)` | Removes ID from `blocked_episodes` |
+| `FileManager.DeleteEpisodesFromFile(keys)` | Removes episodes by `EpisodeKey` from JSONL |
+| `FileManager.BlockEpisode(key)` | Appends `files.EpisodeKey` to `blocked_episodes` |
+| `FileManager.UnblockEpisode(key)` | Removes `files.EpisodeKey` from `blocked_episodes` |
 | `FileManager.UnmanageEpisode(id)` | Sets `ManuallyManaged=false` for episode |
 | `FileManager.LoadAnimeSettings(animeID)` | Returns `*AnimeSettings` for one anime (empty struct if not set) |
 | `FileManager.SaveAnimeSettings(animeID, settings)` | Persists `AnimeSettings` for one anime to `anime_settings` |
+| `FileManager.LoadStandaloneAnimes()` | Media IDs from `standalone_animes` (missing file = empty list) |
+| `FileManager.AddStandaloneAnime(id)` | Appends ID to `standalone_animes` (idempotent) |
+| `FileManager.RemoveStandaloneAnime(id)` | Removes ID from `standalone_animes` (absent ID is not an error) |
 | `FileManager.LoadAllAnimeSettings()` | Returns full `map[int]AnimeSettings` — used by daemon loop |
 | `FileManager.DeleteEmptyFolders(completedAnimeSaveFolder)` | Removes empty dirs under the single `completed_anime_path` tree (single argument now that download and library share a root); skips the `.torrents` download folder itself |
 
@@ -245,6 +268,10 @@ All persistence. Key types:
 Config defaults: `CheckInterval=10`, `MaxEpisodesPerAnime=12`, `EpisodeRetryLimit=5`. (There is no `qbittorrent_url` field — the torrent client is embedded.)
 
 | `DiskSpace(path)` | Cross-platform total/free bytes for the filesystem containing `path` (`diskspace_unix.go` for Linux/Darwin via `syscall.Statfs`, `diskspace_windows.go` via `golang.org/x/sys/windows.GetDiskFreeSpaceEx`) |
+
+### `src/internal/files/standalone.go`
+
+`LoadStandaloneAnimes` / `AddStandaloneAnime` / `RemoveStandaloneAnime` on `*FileManager`, over `standalone_animes` (JSON array of media ids). Built on the `loadIntListLocked` / `saveIntListLocked` helpers in `filemanager.go`. `blocked_episodes` NÃO usa mais esse par: ele guarda `EpisodeKey` (objeto), não int.
 
 ### `src/internal/files/filesystem.go`
 
@@ -271,7 +298,7 @@ Hardlinks completed torrent files into the Jellyfin library. The seeded copy sta
 
 ### `src/internal/files/parser.go`
 
-`ParseEpisodes(string)` and `SerializeEpisodes([]EpisodeStruct)` — JSONL format (one JSON object per line).
+`ParseEpisodes(string)` and `SerializeEpisodes([]EpisodeStruct)` — JSONL (um objeto JSON por linha). O formato de texto legado (`id:hash:name`) foi removido junto com `EpisodeID`: sem anime id nem número de episódio, um registro daqueles não tem chave (decisions.md #52).
 
 ### `src/internal/api/server.go`
 
@@ -305,16 +332,29 @@ Middleware stack (API routes): CORS → JSON Content-Type → Logging. Static fi
 - `handleAnimes` — groups saved episodes by anime name, merges current AniList watching list (so animes with 0 eps still show), then calls `refreshOrphanAnimes` for already-downloaded animes not covered by that merge
 - `fetchAniListEntries` — one account's AniList entries, filtered by both `DownloadStatuses` (server-side) and `DownloadMediaStatuses` (client-side), with customLists overlaid; returns `nil` (not an empty slice) on fetch failure
 - `mergeAniListAnimes` — adds the (already deduped) AniList entries not yet in episodes.json into animeMap; never removes an existing entry
-- `refreshOrphanAnimes` — for animeMap entries with a known AnimeID that no account's fetch covered (current status fell outside the allowed sets), re-fetches cover/progress/blacklist via `anilist.GetAnimeInfo` per anime, bounded to `maxConcurrentOrphanRefresh` (5) in flight; a failed refresh just logs a warning and leaves the anime as-is — it's never removed
+- `refreshOrphanAnimes` — for animeMap entries with a known AnimeID that no account's fetch covered (current status fell outside the allowed sets), re-fetches cover/progress/blacklist via `resolveMediaList` per anime, bounded to `maxConcurrentOrphanRefresh` (5) in flight; a failed refresh just logs a warning and leaves the anime as-is — it's never removed
 - `computeAnimeFields` — shared field-derivation (name, total/released episodes, cover, blacklist) used by both the batch merge loop and the single-anime orphan refresh
 - `countPendingEpisodes` — preenche `AnimeInfo.EpisodesPending`: episódios lançados **acima do progresso da AniList** que não estão em disco. Conta por número de episódio (não `released - downloaded`) porque assistidos podem continuar salvos (`watched_episodes_to_keep`); o daemon nunca baixa episódio ≤ progresso, então ele não é atraso. É o número do chip "Atrasado" no frontend (`lib/domain/animeState.ts`)
 - `extractAnimeName(episodeName)` — strips episode number suffix from torrent name to get anime name
+- Standalone animes are appended **after** `DedupeByMedia` (`appendStandaloneEntries`), so an anime that is also in a list keeps the real entry's progress; `AnimeInfo.IsStandalone` is stamped from the same set at the end
 
 ### `src/internal/api/endpoint_anime_episodes.go`
 
 - `AnimeEpisodeInfo` struct — per-episode detail (aired, watched, downloaded, blocked, manually managed). `EpisodeHash` (`episode_hash`, `omitempty`) is the info hash of the torrent that downloaded it, if any — the frontend uses it to join the episode against `GET /torrents` (see `torrentsByEpisode.ts`) to show live progress inline before the episode finishes.
 - `AnimeDetailResponse` struct — `{animeId, totalEpisodes, progress, status, episodes[]}` — `animeId` is the AniList **media** ID: the primary key everywhere else *and* the `anilist.co/anime/{id}` link component (there is no separate `anilistId` field — see [decisions.md #43](decisions.md))
-- `handleAnimeEpisodes` — fetches `GetAnimeInfo(id, usernames)` from AniList + saved episodes + blocked list → merges; 404s when no configured account tracks the media
+- `handleAnimeEpisodes` — fetches the anime via `resolveMediaList(id, usernames, standaloneSet)` + saved episodes + blocked list → merges; 404s when no configured account tracks the media **and** it is not a standalone anime
+
+### `src/internal/api/standalone.go` / `standalone_guard.go` / `endpoint_standalone_animes.go` / `endpoint_anilist_search.go`
+
+Standalone animes — animes tracked without being in any AniList list (`standalone_animes`). "Avulso" in the UI; **never** call the concept `manual`, which already means "the user touched this episode by hand" (`ManuallyManaged`, `ManualDownloadEpisode`).
+
+- `loadStandaloneSet(fm)` — the file as a `map[int]bool`; a read failure degrades to "no standalone animes" instead of failing the request
+- `resolveMediaList(id, usernames, standalone)` — `anilist.GetAnimeInfo` with a fallback to `anilist.GetMediaByID` **only** when the id is standalone. Without it a standalone anime 404s on the detail screen; without the set check every AniList id would answer on `/animes/{id}/*`
+- `appendStandaloneEntries(entries, standalone, covered)` — merges standalone animes into a list of AniList entries, skipping ids the lists already cover
+- `standaloneGuard` / `blockReason(mediaID, totalEpisodes)` — one blocking rule, two consumers (the `POST` and the search handler), so "the front won't let you click" and "the back returns an error" agree by construction. Precedence: `blacklist` > `standalone` > `tracked` > `downloaded`. `downloaded` only blocks with a **known** total (`totalEpisodes > 0 && downloaded >= totalEpisodes`). `tracked` comes from `fetchAniListEntries` — the snapshot the daemon **processes**, not "an entry exists on AniList" (see decisions.md)
+- `handleAniListSearch` — `AniListSearchResult` carries `block_reason` (one field, not four booleans)
+- `handleStandaloneAnimeAdd` — library check → `GetMediaByID` (404) → `blockReason` (409) → `AddStandaloneAnime` → `daemon.DownloadStandaloneAnime`. Synchronous, like the per-episode download endpoint. `{"added": 0}` is a normal answer, not an error
+- `handleStandaloneAnimeRemove` — `RemoveStandaloneAnime`, then either `daemon.RemoveEpisodesWithLinks` (`delete_episodes=true`) or `UpsertEpisodes` marking the anime's episodes `ManuallyManaged=true`
 
 ### `src/internal/api/endpoint_episode_actions.go`
 
@@ -322,7 +362,7 @@ All episode mutation endpoints. Each shares same pattern:
 1. Parse path params
 2. Load config + saved episodes
 3. Use the shared `server.Torrents` (`TorrentBackend`) and `server.Librarian` — no per-request client construction
-4. Call `daemon.ManualDownload*`, or `daemon.RemoveEpisodesWithLinks(fm, backend, librarian, ids)` for deletes (removes library hardlinks + seeding torrents). It returns an `error`: handlers must answer 500 via `JSONInternalError` and, on redownload/replace, **abort before adding the new torrent** — otherwise the new torrent is untracked while the stale record survives
+4. Call `daemon.ManualDownload*`, or `daemon.RemoveEpisodesWithLinks(fm, backend, librarian, keys)` for deletes (removes library hardlinks + seeding torrents). It returns an `error`: handlers must answer 500 via `JSONInternalError` and, on redownload/replace, **abort before adding the new torrent** — otherwise the new torrent is untracked while the stale record survives
 5. Update `FileManager` (save/delete/block/unblock)
 
 Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unmanage), `replace` (per episode magnet), `replaceAnime` (full anime magnet).
@@ -335,7 +375,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 - `torrentAction(server, action)` — shared shape for `pause`/`resume`/`announce`: POST only, hash from the path, 404 when `Get(hash)` misses, backend call last.
 - `handleTorrentPause` / `handleTorrentResume` / `handleTorrentAnnounce` — thin wrappers over `torrentAction` calling `Torrents.Pause/Resume/Announce`.
 - `parseBoolQueryParam(r, name)` — reads a boolean query param, defaulting to `false` when absent; an unparseable value becomes a 400 (`INVALID_QUERY_PARAM`).
-- `handleTorrentDelete` — `DELETE /torrents/{hash}?keep_data=<bool>&block=<bool>`. Registered on the same `/api/v1/torrents/{hash}` mux pattern as pause/resume/announce (a Go 1.22+ pattern with no method prefix matches every verb), so the method check turns non-DELETE requests into a 405. 404 is decided the same way as `torrentAction` — only by `server.Torrents.Get(hash)` — so an orphaned saved-episode record with no matching live torrent is left alone; cleaning that up is `DELETE /animes/{id}/episodes/{episodeId}`'s job, not this route's. Delegates to `daemon.RemoveTorrentWithEpisodes` with `daemon.RemoveTorrentOptions{KeepData: keep_data, Block: block}`. See decisions.md for the default (delete + block) and why `keep_data` can't split the library copy from the seeding copy.
+- `handleTorrentDelete` — `DELETE /torrents/{hash}?keep_data=<bool>&block=<bool>`. Registered on the same `/api/v1/torrents/{hash}` mux pattern as pause/resume/announce (a Go 1.22+ pattern with no method prefix matches every verb), so the method check turns non-DELETE requests into a 405. 404 is decided the same way as `torrentAction` — only by `server.Torrents.Get(hash)` — so an orphaned saved-episode record with no matching live torrent is left alone; cleaning that up is `DELETE /animes/{id}/episodes/{episodeNumber}`'s job, not this route's. Delegates to `daemon.RemoveTorrentWithEpisodes` with `daemon.RemoveTorrentOptions{KeepData: keep_data, Block: block}`. See decisions.md for the default (delete + block) and why `keep_data` can't split the library copy from the seeding copy.
 
 ### `src/internal/api/websocket.go`
 
@@ -350,23 +390,31 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 |--------|---------|
 | `AniListResponse` | Response for `GetAllCurrentAnime` — `Data.Page.MediaList[]` |
 | `MediaList` struct | `Id`, `Status`, `Progress`, `CustomLists`, `Media` |
-| `Media` struct | `Format`, `Status`, `Title`, `Episodes`, `AiringSchedule`, `Synonyms`, `Relations` |
-| `AiringNode` struct | `ID`, `Episode`, `TimeUntilAiring`, `AiringAt` |
+| `Media` struct | `Format`, `Status`, `Title`, `Episodes`, `AiringSchedule`, `NextAiringEpisode *AiringNode`, `Synonyms`, `Relations` |
+| `AiringNode` struct | `ID`, `Episode`, `TimeUntilAiring`, `AiringAt`. `ID` é só o id do nó de agenda da AniList e **não identifica** um episódio (ver `EpisodeList`) |
 | `MediaRelations` struct | `Edges []MediaRelationEdge` — PREQUEL/SEQUEL links |
 | `MediaRelationEdge` struct | `RelationType string`, `Node MediaRelationNode` |
 | `MediaRelationNode` struct | `Title`, `Synonyms`, `Episodes *int` — the related anime |
 | `MediaFormat` consts | `TV`, `MOVIE`, `OVA`, `ONA`, etc. |
+| `EpisodeList(ml, fromEpisode)` (`episodes.go`) | **A única fonte de "quais episódios existem"**. Sintetiza a lista de `fromEpisode` até o último no ar, usando o nó real do `airingSchedule` quando existe. Necessária porque a AniList guarda só uma JANELA de ~500 entradas de agenda por mídia: One Piece começa no 1123 e anime antigo/finalizado vem com agenda VAZIA — ver decisions.md #52 |
+| `lastAiredEpisode(ml)` (`episodes.go`) | Combina agenda + `nextAiringEpisode - 1` + `media.episodes` (este só quando FINISHED, pois num RELEASING é a contagem prevista) |
 | `MediaListStatus` consts | `CURRENT`, `COMPLETED`, `DROPPED`, `PAUSED`, `PLANNING`, `REPEATING` |
 | `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list with synonyms and relations (used by verification loop) |
 | `GetAnimeInfo(mediaId, usernames)` | Fetches one anime by **media** id with full airing schedule, synonyms, and relations, querying each account and collapsing via `DedupeByMedia`. Returns `(nil, nil)` when no account tracks it — a normal state, not an error (used by `/animes/{id}/episodes`, `refreshOrphanAnimes` and `daemon.RunAnimeDebug`) |
+| `SearchMedia(term, includeUnreleased)` | `Page(perPage:20){media(search:...)}` — feeds the add-anime search bar. Not cached: every keystroke is a different key, so the debounce is what limits the volume. With `includeUnreleased=false` (the screen's default) the query gains `status_not: NOT_YET_RELEASED`, appended as a **string**, not passed as a null GraphQL variable — see decisions.md |
+| `GetMediaByID(mediaId)` | Reads one anime by media id **without** going through any account's list — the primitive a standalone anime needs (`GetAnimeInfo` returns nil for it). Returns a **synthetic** `MediaList`: only `Media` filled, `Progress: 0`, `Status: ""`, `Id: 0` — the zeros are part of the contract, since `DedupeByMedia` keeps the LOWEST progress. Same fields as `getMediaListEntry` (synonyms, relations, airing-schedule ids) because `resolveSearchStrategy` depends on them. Cached 60s per id |
 | `GetMediaListStatus(username, mediaId)` | One account's list status for one media; the bool reports whether that account tracks it at all. Only `allAccountsAgreeOnDelete` uses it — see the delete rule below |
 | `GetMediaIDForEntry(mediaListId)` | Legacy entry id → media id. The only thing left that keys by entry id: `MigrateAnimeIDsToMedia`. Returns 0 when the entry no longer exists |
 | `ErrNotFound` | Sentinel for AniList's 404 — lets a by-id lookup tell "was deleted" from "AniList is down" |
 | `sendAnilistRequest[T]` | Generic GraphQL POST helper |
 | `GetFrontendAnimeList(username, statuses)` | Lighter list query behind `GET /animes`. **Cached for 60s** per `username+statuses` and hands out a copy of the slice — the frontend polls this endpoint every 30s per open tab, which used to blow AniList's 30 req/min budget and 429 the daemon's own loop (decisions.md #46) |
 | `GetCustomListsMap(username, statuses)` | Minimal `id + customLists` query, cached 5min (30s when the response is empty) — see decisions.md #11 |
-| `ttlCache[T]` | Tiny TTL map behind both caches (`get`/`set`/`clear`) |
-| `httpDo` var | Swappable HTTP func — overridden in tests via `MockAniListDo`, which also clears both caches so one test can't serve another's responses |
+| `ttlCache[T]` | Tiny TTL map behind all three caches (`get`/`set`/`clear`) |
+| `httpDo` var | Swappable HTTP func — overridden in tests via `MockAniListDo`, which also clears every cache so one test can't serve another's responses |
+
+### `src/internal/anilist/standalone.go`
+
+`SearchMedia(term)`, `GetMediaByID(id)`, `MediaSearchResult` and `mediaByIDCache` — the two queries the standalone-anime feature needs, both listed in the `anilist.go` symbol table above.
 
 ### `src/internal/nyaa/nyaa.go`
 
@@ -560,9 +608,10 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | File | Route | Purpose |
 |------|-------|---------|
-| `routes/Status.svelte` | `#/` | Daemon status **and** anime list — one screen, not two (redesign decision D4; there is no separate "Biblioteca" route). Header holds the daemon pill (`PulseDot` + label + relative last-check) and start/stop/force-check; a hero card shows aggregate download speed (`formatSpeedParts`, split number/unit), a `Sparkline` fed by `speedHistory`, and one `ProgressRing` per active download; the right column has the library `TripleProgressBar` and disk/next-check cards; the anime list renders a derived `Chip` per row (`deriveAnimeChip`) with search, unwatched filter and sortable name/watched/last-download headers. Polls `GET /api/v1/torrents` every 5s — a failed poll sets a `stale` flag that switches the "polling 5s" note to a frozen-values warning and stops feeding `speedHistory` (never extrapolates) |
+| `routes/Status.svelte` | `#/` | Daemon status **and** anime list — one screen, not two (redesign decision D4; there is no separate "Biblioteca" route). Header holds the daemon pill (`PulseDot` + label + relative last-check) and start/stop/force-check; a hero card shows aggregate download speed (`formatSpeedParts`, split number/unit), a `Sparkline` fed by `speedHistory`, and one `ProgressRing` per active download; the right column has the library `TripleProgressBar` and disk/next-check cards; the anime list renders a derived `Chip` per row (`deriveAnimeChip`) with search, unwatched filter and sortable name/watched/last-download headers; a standalone anime gets a second neutral "Avulso" chip **next to** the derived one, never inside `deriveAnimeChip` (that cascade returns a single download state, and origin isn't a state — a standalone anime that is downloading must keep its "Downloading" chip). Polls `GET /api/v1/torrents` every 5s — a failed poll sets a `stale` flag that switches the "polling 5s" note to a frozen-values warning and stops feeding `speedHistory` (never extrapolates) |
+| `routes/AddAnime.svelte` | `#/add` | Search AniList and start tracking an anime that is in no list ("avulso"). `<input>` with a 300ms debounce plus an `AbortController` cancelling the previous request — both requirements, not polish: without the debounce AniList's 30 req/min limit blows up while typing, and without the abort a stale result paints over a newer one. Searches from 3 characters. A `Toggle` under the search bar controls `include_unreleased` (off by default, hiding `NOT_YET_RELEASED`); flipping it re-runs the search **immediately**, bypassing the debounce, because a click doesn't fire in bursts. The toggle is blind — the server-side filter means nothing knows how many results were hidden, and it does not persist between visits. Each result card is cover + title + meta line + reason line + a footer driven by `block_reason`: `standalone`/`tracked`/`downloaded` (and anything added in this session) → a **link** to `#/status/{id}`, since `anime_id` is the AniList media id; `blacklist` → dimmed card + disabled Add button, the only reason with no detail page to open; `""` → Add / Adding…. The reason itself is a line in the card, not a tooltip — tooltips don't exist on mobile. The title is an `<a target="_blank">` to `https://anilist.co/anime/{id}`. The front is best-effort and the backend is the authority: the 409 toast has the final word, there is no retry or revalidation. Second item in the nav, with the same prominence as Status (`primaryNavItems` in `lib/navItems.ts`) — it is the door every anime comes through, and an installation with no AniList account has nothing else to do. Also reached from the primary button in the Status header (disabled with a tooltip when the library is not configured) and from the Status empty state. The `NavTabBar` columns are `flex-1`, so its count follows `navItems.ts`: five columns now, labels truncating on narrow phones (the documented degrade, same as "Configurações") |
 | `routes/Downloads.svelte` | `#/downloads` | Live torrent list as an **accordion grouped by anime** (`groupTorrents`): group header with cover, aggregate bar and group-scoped bulk actions; indented torrent rows with status chip, truncated hash, per-row bar and icon actions. Group order is a fixed severity rule (problems → downloading → rest); the user's sort key orders rows *within* a group. Header shows a ↓/↑ bandwidth summary and a "polling 2s" note; a banner appears only while the WebSocket is disconnected, since progress comes from the HTTP poll and not the socket (this screen opens its own `WebSocketClient` so that state is meaningful here). Search/filter/sort **and the set of collapsed groups** round-trip through the URL querystring, not localStorage; select-all/bulk pause/resume/announce/delete live in `DownloadsToolbar.svelte`; per-row and bulk delete use `TorrentDeleteDialog.svelte` against `DELETE /torrents/{hash}`. Polls `GET /api/v1/torrents` every 2s while mounted (plus one non-polled `GET /animes` for cover art), stops polling on unmount |
-| `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions. **One** action definition — `episodeActions()` (`lib/domain/`) — drives both the desktop grid and the mobile stack, replacing the five icon-only buttons that used to be written out twice; each row shows a labelled principal action in a fixed column plus an `ActionMenu` (`⋯`) holding the rest, also labelled. `delete`/`redownload` still go through `ConfirmDialog` — deletion is never one click. Header carries a breadcrumb, cover, the derived `deriveAnimeChip` chip and the magnet-paste button; the custom Nyaa search query (`custom_search_query`) lives in a collapsible block. Joins each episode against the live torrent list via `episode_hash` (`torrentsByEpisode.ts`) to show an inline 4px `ProgressBar` while a torrent is in flight. Adaptive poll of `GET /api/v1/torrents`: 2s while this anime has an active torrent, 15s otherwise |
+| `routes/AnimeDetail.svelte` | `#/status/:id` | Per-anime episode list + actions. **One** action definition — `episodeActions()` (`lib/domain/`) — drives both the desktop grid and the mobile stack, replacing the five icon-only buttons that used to be written out twice; each row shows a labelled principal action in a fixed column plus an `ActionMenu` (`⋯`) holding the rest, also labelled. `delete`/`redownload` still go through `ConfirmDialog` — deletion is never one click. Header carries a breadcrumb, cover, the derived `deriveAnimeChip` chip, the magnet-paste button and — only when `is_standalone` — a "Stop tracking" action (a `ConfirmDialog` with a "delete downloaded files" `Checkbox` in its slot, unchecked by default); the custom Nyaa search query (`custom_search_query`) lives in a collapsible block. Joins each episode against the live torrent list via `episode_hash` (`torrentsByEpisode.ts`) to show an inline 4px `ProgressBar` while a torrent is in flight. Adaptive poll of `GET /api/v1/torrents`: 2s while this anime has an active torrent, 15s otherwise |
 | `routes/Config.svelte` | `#/config` | Edit all config fields. 196px side index with **one group visible at a time** (Anilist / Downloads / Automation / Filters); fields inside a group are separated by 1px dividers, each with label + control + help line. Save stays the only write path — no autosave, no debounce (redesign decision D5: `PUT /config` validates everything at once and does filesystem I/O, so a mid-typing save would 400 per keystroke). The six validations run client-side before the PUT and each one knows its group, so a failing rule **switches the visible group** to the offending field instead of firing an unreachable toast. They live in one `requiredChecks` list (was a chain of `if`s) because the screen now uses them twice: the Save toast, and the "still missing" dot in the side index — required fields carry a `*` plus a `* Required field` legend, and each group whose check fails gets the dot with `sr-only` text in the button's accessible name. Rewriting the conditions for the dot would let it lie the moment a rule changed. AniList status multi-selects are toggle pills with a "✓"; download and delete status sets stay mutually exclusive. `anilist_usernames`/`excluded_lists` use `ChipsInput` |
 | `routes/Priorities.svelte` | `#/priorities` | Reorder/add/remove torrent priority lists (fansubs, resolutions, source, codec, audio, criteria order, ignore list); reset per-list or all, via `GET/PUT /api/v1/config` + `GET /api/v1/config/priorities/defaults` |
 | `routes/Logs.svelte` | `#/logs` | Tail daemon logs in a terminal-like body (`--bg-sunken`, darker than the surrounding cards) laid out as a 4-column grid — `82px 60px 90px 1fr`: time, level badge, **origin** (derived from the zerolog `caller` by `logSource.ts`), message. The grid only applies from `md` up; below that rows stack, because three fixed columns would leave ~130px for the message on a 390px screen. Rows are a real `<ul>`/`<li>`. Level filtering is pills **with counts** (was a count-less `<select>`); counts come from the search-filtered list, never the active level, so picking one pill doesn't zero the others. Search highlights the match (HTML-escaped before the `<mark>` is injected — log text is arbitrary daemon output). Lines-to-load, level and search round-trip through the querystring; follow-the-tail (scrolls to the **top**, since newest renders first), live reload with a chosen interval, the back-to-top button with its new-lines counter, and per-line copy are all preserved |
@@ -597,7 +646,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | File | Purpose |
 |------|---------|
 | `Chip.svelte` | Tinted badge, five variants (accent/ok/warn/danger/neutral) mapping 1:1 onto `deriveAnimeChip`'s `variant`. Takes rendered text via slot, never an i18n key |
-| `Button.svelte` | `solid` (the accent primary), `ghost`, `warn` (destructive/attention — tinted, not a solid red fill). There is intentionally **no `ok`/green variant**: spec §4.1 reserves the solid green for "Iniciar daemon", which `Status.svelte` writes inline so the style can't be reused elsewhere |
+| `Button.svelte` | `solid` (the accent primary), `ghost`, `warn` (destructive/attention — tinted, not a solid red fill). There is intentionally **no `ok`/green variant**: spec §4.1 reserves the solid green for "Iniciar daemon", which `Status.svelte` writes inline so the style can't be reused elsewhere. With `href` set it renders an `<a>` instead (`target="_blank"` adds `rel="noopener noreferrer"`), so navigation that looks like a card's primary action keeps middle-click and open-in-new-tab; `disabled` is ignored in that mode — a link that shouldn't be followed shouldn't be rendered |
 | `ProgressBar.svelte` | Single-segment bar, `transition: width .9s linear`; `stale` kills the transition and dims the fill (the screen owns staleness detection, not this component) |
 | `TripleProgressBar.svelte` | Three **adjacent, summed** segments (watched/downloaded/released) over one track. `legend` is a required prop — the spec forbids showing this bar without a textual legend |
 | `ProgressRing.svelte` | 46px `conic-gradient` ring + 34px inner disc with the percentage in mono |
@@ -649,7 +698,7 @@ Connects to `/api/v1/ws`, updates `wsState` store on messages.
 
 ## Implemented Features (notable)
 
-**Manual magnet paste**: `AnimeDetail.svelte` exposes a magnet input UI that calls `/api/v1/animes/{id}/episodes/{episodeId}/replace` (per-episode) or `/api/v1/animes/{id}/replace` (full anime/batch). Allows bypassing Nyaa search and adding any magnet link directly to the embedded torrent client.
+**Manual magnet paste**: `AnimeDetail.svelte` exposes a magnet input UI that calls `/api/v1/animes/{id}/episodes/{episodeNumber}/replace` (per-episode) or `/api/v1/animes/{id}/replace` (full anime/batch). Allows bypassing Nyaa search and adding any magnet link directly to the embedded torrent client.
 
 **Multi-account Anilist**: `Config.AnilistUsernames []string` — the verification loop (`verification.go`) and `handleAnimes` (`endpoint_animes.go`) both iterate over every configured username. Episode tracking is not per-account; all accounts share the same `episodes.json`. See [Config Reference](config.md) for the legacy singular-field migration.
 

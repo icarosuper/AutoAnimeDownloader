@@ -208,4 +208,3 @@ func (c *Client) StopLoop() error {
 
 	return c.parseResponse(resp, nil)
 }
-

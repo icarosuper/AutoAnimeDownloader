@@ -359,7 +359,7 @@ The probe aborts the pass instead of merely warning: downloading episodes that p
 
 **Why it's right:** The three functions have genuinely different semantics and each is wrong on its own here.
 
-- `SaveEpisodesToFile` is **append-only with dedupe by `EpisodeID`**: for an ID that already exists it drops the incoming record *entirely*. That was the original bug. On the upgrade path to the embedded client, the rain session boots empty, so `episodeInTorrents` is false for every saved episode and the loop re-downloads all of them — and every one of those updates was silently discarded. The stale record kept `EpisodeNumber: 0` (a field that did not exist before the upgrade, so it deserialises as zero for all pre-existing records) and the stale `EpisodeHash`. The first caused every episode of an anime to be organized as `Anime - E00.mkv`; the second broke `JobOrganize`'s saved-episode ↔ torrent join by hash, so the job retried 20 times over ~2.5h and gave up, forever.
+- (Histórico: a chave era `EpisodeID`, o id do nó de agenda da AniList; hoje é `EpisodeKey{AnimeID, Episode}` — ver #52.) `SaveEpisodesToFile` is **append-only with dedupe by key**: for an ID that already exists it drops the incoming record *entirely*. That was the original bug. On the upgrade path to the embedded client, the rain session boots empty, so `episodeInTorrents` is false for every saved episode and the loop re-downloads all of them — and every one of those updates was silently discarded. The stale record kept `EpisodeNumber: 0` (a field that did not exist before the upgrade, so it deserialises as zero for all pre-existing records) and the stale `EpisodeHash`. The first caused every episode of an anime to be organized as `Anime - E00.mkv`; the second broke `JobOrganize`'s saved-episode ↔ torrent join by hash, so the job retried 20 times over ~2.5h and gave up, forever.
 - `UpsertEpisodes` **replaces the record wholesale**. That is exactly what `organizeTorrent` needs when writing `LibraryPaths` back, and it is what makes it wrong here: it would clobber `ManuallyManaged`, a user flag the automatic loop must never clear (clearing it lets the loop delete an episode the user pinned).
 
 The merge is the only place that knows which fields belong to *this* download (hash, number, `IsBatch`, names, totals, date — all taken from the new record), which belongs to the *user* (`ManuallyManaged`, OR-ed so a manual download can still set it), and which is *derived* (`LibraryPaths`, reset to nil because the old hardlinks point at the previous release — leaving it set would make `organizeTorrent` think the episode was already organized and never create the new link).
@@ -643,7 +643,7 @@ Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são f
 
 **(b) `writeAtomic` (temp+rename) para os quatro arquivos, não só o config.** Todo estado aqui é reescrito por inteiro a cada alteração, então `WriteFile` direto deixa uma janela em que o arquivo está pela metade — um leitor concorrente enxerga truncado, e uma queda de energia no meio (Raspberry Pi, cartão SD) deixa truncado para sempre. O `rename` é atômico no mesmo filesystem, então leitor nenhum vê estado intermediário.
 
-**(c) `ParseEpisodes` reporta os DOIS erros.** Para um arquivo já migrado o erro do formato antigo é ruído (ele só reclama que a linha é JSON), e reportar só ele escondia a linha JSONL realmente quebrada. A mensagem que produzia — `invalid episode ID '{"episode_id"'` — apontava para a linha 1 de um arquivo cuja linha 1 estava íntegra, e foi o que mais atrasou o diagnóstico do incidente.
+**(c) `ParseEpisodes` reportava os DOIS erros** (o formato de texto legado foi removido em #52, então hoje só existe o erro do JSONL). Para um arquivo já migrado o erro do formato antigo é ruído (ele só reclama que a linha é JSON), e reportar só ele escondia a linha JSONL realmente quebrada. A mensagem que produzia — `invalid episode ID '{"episode_id"'` — apontava para a linha 1 de um arquivo cuja linha 1 estava íntegra, e foi o que mais atrasou o diagnóstico do incidente.
 
 **(d) `fetchAniListEntries` devolve `nil` na falha e slice vazio (não-`nil`) no sucesso — e `handleAnimes` depende disso.** `refreshOrphanAnimes` busca um `GetAnimeInfo` individual por anime que ficou fora do conjunto `covered`. Quando a busca da lista falhava, `covered` ficava vazio e **todo anime com episódio baixado virava órfão**: 16 requests por poll de `/api/v1/animes`, ~10 polls por minuto, com o frontend aberto em duas abas. Isso multiplicava um 500 passageiro da AniList em ~200 requests/min contra um limite de 90 (hoje degradado para 30) — e o 429 resultante fazia a busca da lista falhar de novo, fechando o ciclo: o daemon não saía sozinho. Por isso, com qualquer conta falhando, o refresh de órfãos é **pulado inteiro**: sem a lista não dá para saber o que está coberto, e tratar "não coberto" como "precisa refresh" é justamente o amplificador. Os animes continuam visíveis com os dados locais — degradar campo desatualizado é barato, derrubar a AniList não.
 
@@ -795,3 +795,98 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 - Consolidar a guarda de disco num `return` no topo do passe de verificação (ver (d)).
 - Mover a guarda para `torrents.Session.Add` "porque é um site só": o pacote `torrents` não conhece `files.Config`, e passar a config para lá inverte a dependência.
 - Reintroduzir um ratio hardcoded em `lib/utils/status.ts` para economizar um campo na resposta (ver (e)).
+
+### 49. Anime avulso: "acompanhado pela lista" é o snapshot que o daemon PROCESSA, e `DownloadStandaloneAnime` nunca chama `handleSavedEpisodes`
+
+**Location:** `files/standalone.go`; `anilist/standalone.go` — `SearchMedia`/`GetMediaByID`; `daemon/standalone.go` — `appendStandaloneAnimes`/`DownloadStandaloneAnime`; `daemon/verification.go` — `searchAnilist`; `daemon/helpers.go` — `isConfigComplete`; `api/standalone_guard.go` — `blockReason`; `api/standalone.go` — `resolveMediaList`; `api/endpoint_config.go` — validação do `PUT`.
+
+**What it looks like:** um arquivo `standalone_animes` com ids soltos; uma função de bloqueio que serve tanto o `POST` quanto o resultado da busca; um "baixar agora" que não faz nenhuma limpeza; e um anime avulso que nunca é apagado pela poda automática.
+
+**Why it's right:**
+
+**(a) O append acontece DEPOIS do `DedupeByMedia`.** `GetMediaByID` devolve um `MediaList` **sintético**: `Progress: 0`, `Status: ""`, `Id: 0`. `DedupeByMedia` mantém o **menor** progresso, então anexar antes do dedupe faria o zero sintético vencer a entrada real e o daemon rebaixaria episódios já assistidos. É ordem, não estilo.
+
+**(b) "Acompanhado pela lista" = aparece no conjunto que o daemon processa,** ou seja as entradas que sobrevivem ao filtro de `download_statuses` + `DownloadMediaStatuses` — **não** "existe entrada na AniList". Um anime em `PLANNING` com `download_statuses = [CURRENT]` está numa lista e o daemon o ignora; adicioná-lo como avulso é o caso de uso mais óbvio da feature, não um erro a bloquear. A mesma definição alimenta os três consumidores (remoção automática, 409 do `POST`, `block_reason` da busca) porque duas definições diferentes produziriam um card cinza que o backend aceita, ou o inverso.
+
+**(c) Uma função de bloqueio, dois consumidores.** `blockReason` decide o 409 e o `block_reason` de cada resultado da busca. "O front não deixa clicar" e "o back devolve erro" precisam concordar **por construção**, não por disciplina. Precedência `blacklist > standalone > tracked > downloaded`: blacklist vem primeiro porque é o único motivo em que adicionar mudaria o comportamento **para pior** — um blacklisted fora de `download_statuses` escapa do `searchAnilist`, o registro avulso sobrevive ao merge e o filtro do usuário é contornado (o `MediaList` sintético tem `CustomLists` nulo, então `animeIsInExcludedList` nunca dispara nele). `downloaded` só bloqueia com total **conhecido**: 12 registros de 24 episódios é o limite por anime, não "já baixado".
+
+**(d) `DownloadStandaloneAnime` não pode chamar `handleSavedEpisodes`.** Ela chama `identifyEpisodesNotInWatching`, que compara **todos** os episódios salvos contra os `checkedEpisodes` recebidos e devolve os não cobertos para deleção. Com os episódios de um único anime na mão e `delete_watched_episodes` ligado, isso apagaria a biblioteca inteira. Pelo mesmo motivo não chama `deleteEpisodesByStatus` nem `DeleteEmptyFolders`: adicionar um anime não é ocasião para apagar nada.
+
+**(e) Um avulso nunca é apagado por status nem por assistido** — e isso é consequência da arquitetura existente, não decisão nova. `deletableMediaIDs` só avalia candidatos que apareceram na lista de alguma conta, e um avulso não aparece em nenhuma; `delete_watched_episodes`/`watched_episodes_to_keep` dependem de `Progress`, que é sempre 0 num avulso. Ele acumula no disco até o usuário deixar de acompanhá-lo — que é o que "avulso" deveria significar.
+
+**(f) A remoção automática consome o registro, e isso pode chegar a apagar arquivo.** Um avulso que depois entra numa lista da AniList sai do arquivo no passe seguinte (a entrada real já vencia o dedupe, então o que o passe baixa não muda). Se **depois disso** o usuário tirar o anime da lista, o registro avulso já foi consumido e os episódios dele passam a cair em `identifyEpisodesNotInWatching` como os de qualquer anime tirado da lista. É a troca aceita: preservar os dois registros exigiria distinguir "avulso ativo" de "avulso dormente" no arquivo, no `AnimeInfo` e na tela, para cobrir um caminho que quem usa avulso não percorre. O `DELETE` explícito fecha a **outra** janela marcando os episódios `ManuallyManaged`.
+
+**(g) Conta da AniList deixou de ser obrigatória.** `isConfigComplete`, `searchAnilist` e a validação de `PUT /config` exigiam pelo menos um `anilist_usernames`; com avulsos isso passou a ser uma exigência sem função — uma instalação que só usa avulsos nunca configura conta nenhuma, e o daemon a deixaria presa na tela de configuração para sempre. A **biblioteca** continua obrigatória nos três lugares: sem ela não há para onde baixar. `searchAnilist` sem conta não é erro — o passe ainda tem os avulsos a processar, e abortar ali faria a feature nunca rodar. A regra saiu também do `requiredChecks` do frontend: uma obrigatoriedade só na tela é uma regra que o servidor não conhece.
+
+**(h) O conceito se chama `standalone` no código, "avulso" na UI, e nunca `manual`.** `manual` já significa outra coisa aqui — `ManuallyManaged`, `ManualDownloadEpisode` querem dizer "o usuário mexeu neste episódio à mão, o loop não deve tocar". Reaproveitar a palavra faria dois conceitos diferentes lerem igual.
+
+**Don't "fix" by:**
+- Anexar os avulsos antes do `DedupeByMedia` "porque o merge é um só" (ver (a)).
+- Trocar `tracked` por "existe entrada na AniList" para evitar depender de `fetchAniListEntries` — isso quebra o caso `PLANNING`, que é o caso de uso da feature.
+- Duplicar a regra de bloqueio no frontend para não precisar do campo `block_reason` na resposta da busca (ver (c)).
+- Devolver quatro booleanos em vez de um `block_reason`: os motivos são mutuamente exclusivos por precedência e o card precisa de um rótulo só.
+- Consolidar `DownloadStandaloneAnime` com `handleSavedEpisodes` "para reaproveitar o salvamento" (ver (d)).
+- Filtrar o avulso por `DownloadMediaStatuses` no append: quem pediu o anime a mão quer acompanhá-lo também enquanto ele é `NOT_YET_RELEASED`.
+- Reintroduzir `anilist_usernames` como campo obrigatório (em qualquer das quatro camadas) "porque o app é sobre a lista do AniList": ele deixou de ser (ver (g)).
+
+### 50. Busca de avulso: o filtro de não lançados é server-side e por concatenação, e o card bloqueado vira link em vez de beco sem saída
+
+**Location:** `anilist/standalone.go` — `SearchMedia`; `api/endpoint_anilist_search.go`; `frontend/src/routes/AddAnime.svelte`; `frontend/src/components/ui/Button.svelte`.
+
+**What it looks like:** um `status_not: NOT_YET_RELEASED` **grudado na string** da query em vez de passado como variável GraphQL; um toggle que não sabe quantos resultados escondeu; e um `Button` que às vezes renderiza `<a>`.
+
+**Why it's right:**
+
+**(a) O filtro vive na query, não no Go.** `perPage` é 20. Filtrar depois de receber devolveria buscas com 4 resultados úteis em temporada de anúncios — o usuário leria isso como "a busca está quebrada", não como "escondi 16". O preço é que **nada sabe quantos foram escondidos**, então o toggle é cego: não existe "3 ocultos · mostrar". Foi a troca escolhida; inverter os dois é uma decisão de produto, não um bug.
+
+**(b) Concatenação, e não uma variável GraphQL nula.** A AniList ignora argumentos com valor nulo hoje, e `status_not: $statusNot` com `$statusNot = null` funcionaria. Mas se essa semântica mudar, o filtro passa a esconder tudo ou nada **em silêncio** — o pior modo de falha para um filtro. Com a concatenação, `includeUnreleased = true` faz o argumento simplesmente não existir na query, o que é verdade em qualquer versão da API. Custa três linhas e o teste inspeciona o corpo enviado, não o resultado, justamente porque as duas implementações passariam num teste de resultado.
+
+**(c) Só `NOT_YET_RELEASED` sai.** `CANCELLED` e `HIATUS` ficam: um anime interrompido no meio da exibição tem episódios no ar e baixáveis. "Ainda não lançou" é um status só.
+
+**(d) `tracked`/`downloaded`/`standalone` viram link para `#/status/{id}`.** `anime_id` **é** o media id da AniList, então o href sai do próprio resultado da busca, sem lookup — e `AddStandaloneAnime` grava antes de responder, então o link funciona no instante seguinte ao clique em Adicionar, sem esperar ciclo do daemon. O motivo do bloqueio saiu do `tooltip` e virou uma linha do card: tooltip não existe no mobile, e a tela nasceu para a instalação sem conta, que é a que mais roda no celular. `blacklist` é a única exceção — não está no conjunto que o daemon processa, não tem página, continua apagado e desabilitado.
+
+**(e) `Button` com `href` renderiza `<a>` em vez de um `on:click` que escreve `location.hash`.** Um botão que navega perde middle-click, "abrir em nova aba" e a URL na barra de status. A alternativa era copiar as classes de variante para dentro do card, o que duplicaria o estilo em cada tela que precisar disso. `disabled` é ignorado com `href` de propósito: não existe âncora desabilitada, e um link que não deve ser seguido não deve ser renderizado como link.
+
+**Don't "fix" by:**
+- Mover o filtro para o Go "para poder mostrar quantos foram escondidos": isso reintroduz a busca com 4 de 20 (ver (a)).
+- Trocar a concatenação por `status_not: $var` com valor nulo "porque variável é mais limpo" (ver (b)).
+- Estender o filtro para `CANCELLED`/`HIATUS` — esses têm episódios baixáveis (ver (c)).
+- Devolver o `block_reason` para dentro de um `tooltip` "para o card ficar mais limpo": o motivo some no mobile inteiro.
+- Fazer o card todo virar `<a>`: o botão Adicionar dentro da âncora exigiria `stopPropagation` e quebraria a navegação por teclado.
+
+### 51. Episódio aceita 4 dígitos, exceto entre colchetes
+
+**Location:** `nyaa/nyaa_regex.go` — `reEpisodePatterns`, `reBatchRange`, `reHasEpisode`, `reBatchPatterns`; `nyaa/nyaa.go` — `extractEpisodeNumber` (teto `< 10000`).
+
+**What it looks like:** todos os padrões de episódio usam `\d{1,4}`, menos `\[(\d{1,3})\]`.
+
+**Why it's right:** com `\d{1,3}` o One Piece (ep. 1123+) não casava em nenhum padrão, `extractEpisodeNumber` devolvia `nil` e **todo** resultado do Nyaa era descartado — o log mostrava 30 linhas boas e `results: 0`. `[05]` fica em 3 dígitos porque `[2025]` (ano) é muito mais comum no nome de um torrent que episódio de 4 dígitos entre colchetes, e um ano lido como episódio descarta o torrent certo.
+
+**Don't "fix" by:** estender `\[(\d{1,3})\]` para 4 dígitos "por consistência".
+
+### 52. A lista de episódios é sintetizada, e a chave de um episódio é (anime, número)
+
+**Location:** `anilist/episodes.go` — `EpisodeList`, `lastAiredEpisode`; `anilist/anilist.go` — `Media.NextAiringEpisode`; `files/filemanager.go` — `EpisodeKey`, `EpisodeStruct.Key()`, `loadBlockedEpisodesLocked`; `daemon/episodes.go` — `firstEpisodeToConsider`; `api/endpoint_episode_actions.go` e as rotas `/animes/{id}/episodes/{episodeNumber}/*`.
+
+**What it looks like:** nós de `AiringNode` **fabricados** (id zero) para episódios que a AniList não devolve; `EpisodeStruct` sem `EpisodeID`; `blocked_episodes` guardando objetos; e o `{episodeId}` das rotas virando `{episodeNumber}`.
+
+**Why it's right:**
+
+**(a) `airingSchedule` não é a lista de episódios de um anime.** A AniList mantém uma **janela** de ~500 entradas de agenda por mídia e descarta as antigas. Medido na API: `Media(21)` (One Piece) tem `pageInfo.total = 500` e a página 1 **começa no episódio 1123** — 1 a 1122 não existem na API; `Media(20)` (Naruto, 220 eps) e `Media(16498)` (Shingeki no Kyojin, 25 eps) voltam com `total = 0`, agenda **vazia**. Enquanto a lista saía dali, o daemon literalmente não tinha episódio para processar nesses animes (o log mostrava `Processing anime episodes` e nada depois), e no One Piece começava no 1123 como se os anteriores não existissem. Além disso o código nunca paginou a agenda, então mesmo dentro da janela só os 25 primeiros nós chegavam — e paginar não resolveria nada, porque as páginas seguintes só trazem episódios **mais novos**.
+
+**(b) Por isso a lista é sintetizada, e o último no ar vem de três fontes.** `lastAiredEpisode` combina o maior episódio já exibido da agenda, `nextAiringEpisode.episode - 1` e `media.episodes` — este último **somente quando `FINISHED`**: num `RELEASING` ele é a contagem PREVISTA da temporada, e usá-lo mandaria o daemon caçar episódio que ainda não foi ao ar. Nenhuma das três serve sozinha (agenda clipada/vazia, `nextAiringEpisode` nulo em anime terminado).
+
+**(c) A chave passou a ser `(AnimeID, EpisodeNumber)`, não um id sintético.** Um episódio fora da janela não tem id de nó — e inventar um (`-(mediaID*10000+ep)`) faria a identidade de um episódio depender de uma fórmula que nada valida, com colisão silenciosa como modo de falha. Número de episódio dentro de um anime é único por definição e é o que o usuário vê. `EpisodeStruct.EpisodeID` foi **removido** (não deixado como campo morto) de propósito: é o compilador que aponta cada lugar que ainda identificava episódio pelo id antigo.
+
+**(d) `blocked_episodes` legado é descartado, não migrado.** Ele era `[416348, ...]` — ids de nó que nada mais resolve. Um parse que falha travaria `LoadBlockedEpisodes` e com ela o passe de verificação, então o arquivo antigo é lido, logado como aviso e tratado como lista vazia. O usuário refaz os bloqueios com um clique por episódio; adivinhar seria pior.
+
+**(e) `firstEpisodeToConsider` recua para o menor episódio salvo.** A regra é `Progress + 1` (e anime avulso tem `Progress = 0`, então começa no 1 sem precisar de flag). Mas `watched_episodes_to_keep` e a poda de assistidos só operam sobre episódios que aparecem na lista: um episódio salvo abaixo do progresso ficaria fora dela, nunca seria "checado" e cairia direto em `identifyEpisodesNotInWatching` — apagado ignorando o "quantos assistidos manter".
+
+**(f) `{episodeId}` virou `{episodeNumber}` nas rotas, e `episode_id` saiu do JSON.** As rotas já tinham a forma certa; manter o nome antigo com semântica nova seria a pior combinação possível. `AnimeInfo.latest_episode_id` virou `latest_episode_number` pelo mesmo motivo.
+
+**Don't "fix" by:**
+- Paginar `airingSchedule` "para pegar os episódios que faltam": as páginas seguintes só têm episódios mais novos (ver (a)).
+- Usar `media.episodes` como último no ar em anime `RELEASING` (ver (b)).
+- Reintroduzir um `EpisodeID` sintético "para não mexer no estado em disco" (ver (c)).
+- Tentar converter o `blocked_episodes` antigo (ver (d)).
+- Fazer a lista começar em `Progress + 1` sem o recuo (ver (e)).

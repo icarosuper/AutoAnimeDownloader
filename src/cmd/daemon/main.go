@@ -274,6 +274,10 @@ func main() {
 		logger.Logger.Fatal().Err(err).Msg("Failed to initialize files manager")
 	}
 
+	// Antes de qualquer LoadConfigs: e ele que cria o config.json com os defaults, o que
+	// apagaria o sinal de primeira execucao.
+	firstBoot := !fileManager.ConfigExists()
+
 	jobsFilePath, err := getJobsFilePath()
 	if err != nil {
 		logger.Logger.Fatal().Err(err).Msg("Failed to determine jobs file path")
@@ -375,6 +379,25 @@ func main() {
 	logger.Logger.Info().
 		Str("port", apiPort).
 		Msg("API server started successfully")
+
+	// Primeira execucao: abre a UI no status. Independe da config estar completa — o passe de
+	// verificacao ja abre /#/config quando falta a biblioteca, e este boot com defaults novos
+	// (ver files.getDefaultConfig) normalmente nao dispara aquele caminho.
+	//
+	// Espera a porta aceitar conexao antes de abrir: o Start() acima roda numa goroutine e o log
+	// logo abaixo dele sai ANTES do socket estar ligado, entao abrir direto e uma corrida cujo
+	// lado perdedor e uma aba com ERR_CONNECTION_REFUSED.
+	if firstBoot {
+		go func() {
+			if err := daemon.WaitForListener(apiPort, 10*time.Second); err != nil {
+				logger.Logger.Warn().Err(err).Msg("Web UI did not come up in time; not opening the browser")
+				return
+			}
+			if err := daemon.OpenBrowser(daemon.WebUIURL(apiPort, "/#/status")); err != nil {
+				logger.Logger.Warn().Err(err).Msg("Failed to open the Web UI in the browser on first boot")
+			}
+		}()
+	}
 
 	if err := apiServer.StartDaemonLoop(); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to start daemon loop automatically, daemon will start as stopped")

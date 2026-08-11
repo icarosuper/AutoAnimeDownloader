@@ -11,8 +11,7 @@ const mockAnimes = {
       episodes_watched: 1,
       episodes_pending: 1,
       total_episodes: 12,
-      latest_episode_id: 1003,
-      last_download_date: '2026-01-01T00:00:00Z',
+      latest_last_download_date: '2026-01-01T00:00:00Z',
       cover_image: null,
       is_blacklisted: false,
     },
@@ -31,7 +30,6 @@ const mockDetail = {
     custom_search_query: null,
     episodes: [
       {
-        episode_id: 1001,
         episode_number: 1,
         airing_at: 0,
         time_until_airing: 0,
@@ -44,7 +42,6 @@ const mockDetail = {
         is_blocked: false,
       },
       {
-        episode_id: 1002,
         episode_number: 2,
         airing_at: 0,
         time_until_airing: 0,
@@ -185,7 +182,7 @@ test('episode row shows a progress bar when an active torrent is joined to it', 
     data: {
       ...mockDetail.data,
       episodes: mockDetail.data.episodes.map(ep =>
-        ep.episode_id === 1002
+        ep.episode_number === 2
           ? { ...ep, is_downloaded: true, download_date: '2026-01-02T00:00:00Z', episode_hash: 'f'.repeat(40) }
           : ep
       ),

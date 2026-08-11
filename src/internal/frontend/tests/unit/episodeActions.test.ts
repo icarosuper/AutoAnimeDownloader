@@ -4,7 +4,6 @@ import type { AnimeEpisodeInfo, TorrentInfo } from '../../src/lib/api/client'
 
 function makeEpisode(overrides: Partial<AnimeEpisodeInfo> = {}): AnimeEpisodeInfo {
   return {
-    episode_id: 1,
     episode_number: 1,
     airing_at: 0,
     time_until_airing: 0,

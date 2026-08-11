@@ -14,9 +14,9 @@ var (
 	reBatchPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\(batch\)|\[batch\]|\s+batch\s+`),
 		regexp.MustCompile(`(?i)\(unofficial\s+batch\)`),
-		regexp.MustCompile(`(?i)\(\d{1,3}\s*[-~]\s*\d{1,3}\)`),
-		regexp.MustCompile(`(?i)\s\d{2,3}\s*[-~]\s*\d{2,3}\s`),
-		regexp.MustCompile(`(?i)\s\d{2,3}~\d{2,3}\s`),
+		regexp.MustCompile(`(?i)\(\d{1,4}\s*[-~]\s*\d{1,4}\)`),
+		regexp.MustCompile(`(?i)\s\d{2,4}\s*[-~]\s*\d{2,4}\s`),
+		regexp.MustCompile(`(?i)\s\d{2,4}~\d{2,4}\s`),
 		regexp.MustCompile(`(?i)\(complete\)|\[complete\]|\s+complete\s+`),
 		regexp.MustCompile(`(?i)complete\s+series|complete\s+season`),
 		regexp.MustCompile(`(?i)\(season\s+\d+.*complete\)`),
@@ -32,7 +32,7 @@ var (
 	}
 
 	// Batch info extraction
-	reBatchRange    = regexp.MustCompile(`(?i)(\d{1,3})\s*[-~]\s*(\d{1,3})`)
+	reBatchRange    = regexp.MustCompile(`(?i)(\d{1,4})\s*[-~]\s*(\d{1,4})`)
 	reBatchComplete = regexp.MustCompile(`(?i)complete|batch`)
 
 	// Movie keyword patterns
@@ -45,7 +45,7 @@ var (
 	}
 	reOvaPattern     = regexp.MustCompile(`(?i)\(?(ova|ona)\)?|original\s+(video|net)\s+animation`)
 	reSpecialPattern = regexp.MustCompile(`(?i)\(special\)|\[special\]|\sspecial\s|(tv\s+special|episode\s+sp)`)
-	reHasEpisode     = regexp.MustCompile(`(?i)(-\s?\d{1,3}|episode\s*\d{1,3}|s\d{1,2}e\d{1,3})`)
+	reHasEpisode     = regexp.MustCompile(`(?i)(-\s?\d{1,4}|episode\s*\d{1,4}|s\d{1,2}e\d{1,4})`)
 
 	// Fansub extraction
 	reFansub = regexp.MustCompile(`(?i)^\[([^\]]+)\]|^\(([^\)]+)\)`)
@@ -55,16 +55,18 @@ var (
 		re   *regexp.Regexp
 		desc string
 	}{
-		{regexp.MustCompile(`(?i)S\d{1,2}E(\d{1,3})`), "S01E05"},
-		{regexp.MustCompile(`(?i)\s+-\s+(\d{1,3})(?:\s|v\d+|$|\[)`), "- 05, - 05v2"},
-		{regexp.MustCompile(`(?i)\s+-\s+(\d{1,3})\s*\(`), "- 05 (1080p)"},
-		{regexp.MustCompile(`(?i)EP\s*(\d{1,3})\b`), "EP05"},
-		{regexp.MustCompile(`(?i)Episode\s*(\d{1,3})\b`), "Episode 05"},
-		{regexp.MustCompile(`(?i)\bE(\d{1,3})\b`), "E05"},
+		// 4 dígitos: animes longos (One Piece 1123+). Exceção: `[05]` fica em 3
+		// dígitos porque `[2025]` (ano) é muito mais comum que episódio de 4 dígitos entre colchetes.
+		{regexp.MustCompile(`(?i)S\d{1,2}E(\d{1,4})`), "S01E05"},
+		{regexp.MustCompile(`(?i)\s+-\s+(\d{1,4})(?:\s|v\d+|$|\[)`), "- 05, - 05v2"},
+		{regexp.MustCompile(`(?i)\s+-\s+(\d{1,4})\s*\(`), "- 05 (1080p)"},
+		{regexp.MustCompile(`(?i)EP\s*(\d{1,4})\b`), "EP05"},
+		{regexp.MustCompile(`(?i)Episode\s*(\d{1,4})\b`), "Episode 05"},
+		{regexp.MustCompile(`(?i)\bE(\d{1,4})\b`), "E05"},
 		{regexp.MustCompile(`(?i)\[(\d{1,3})\]`), "[05]"},
-		{regexp.MustCompile(`(?i)\s(\d{1,3})\s*\(`), " 05 ("},
-		{regexp.MustCompile(`(?i)\s(\d{1,3})\.mkv`), " 05.mkv"},
-		{regexp.MustCompile(`(?i)\s(\d{1,3})$`), " 5"},
+		{regexp.MustCompile(`(?i)\s(\d{1,4})\s*\(`), " 05 ("},
+		{regexp.MustCompile(`(?i)\s(\d{1,4})\.mkv`), " 05.mkv"},
+		{regexp.MustCompile(`(?i)\s(\d{1,4})$`), " 5"},
 	}
 
 	// Season number patterns (ordered by specificity)

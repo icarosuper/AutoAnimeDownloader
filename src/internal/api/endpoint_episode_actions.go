@@ -16,13 +16,13 @@ import (
 // @Accept       json
 // @Produce      json
 // @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeId path int true "Episode ID (AniList AiringNode ID)"
+// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
 // @Success      200  {object}  SuccessResponse
 // @Failure      400  {object}  SuccessResponse
 // @Failure      404  {object}  SuccessResponse
 // @Failure      405  {object}  SuccessResponse
 // @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeId}/download [post]
+// @Router       /animes/{id}/episodes/{episodeNumber}/download [post]
 func handleDownloadEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -36,11 +36,12 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		episodeId, err := strconv.Atoi(r.PathValue("episodeId"))
-		if err != nil || episodeId <= 0 {
-			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "Invalid episode ID")
+		episodeNumber, err := strconv.Atoi(r.PathValue("episodeNumber"))
+		if err != nil || episodeNumber <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_NUMBER", "Invalid episode number")
 			return
 		}
+		key := files.EpisodeKey{AnimeID: animeId, Episode: episodeNumber}
 
 		configs, err := server.FileManager.LoadConfigs()
 		if err != nil {
@@ -50,8 +51,8 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 		}
 
 		// Unblock the episode in case it was previously manually deleted
-		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
-			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
+		if err := server.FileManager.UnblockEpisode(key); err != nil {
+			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to unblock episode")
 		}
 
 		animeSettings, err := server.FileManager.LoadAnimeSettings(animeId)
@@ -60,15 +61,15 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeId, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
-			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to manually download episode")
+			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to manually download episode")
 			JSONDownloadError(w, err, "DOWNLOAD_FAILED")
 			return
 		}
 
 		// UpsertEpisodes, never SaveEpisodesToFile: the latter is append-only with dedupe by
-		// EpisodeID, so an already-saved record makes it discard this one entirely — the new
+		// EpisodeKey, so an already-saved record makes it discard this one entirely — the new
 		// hash would be lost (breaking JobOrganize's saved-episode ↔ torrent join by hash) and
 		// the stale LibraryPaths would survive, making organizeTorrent think the episode was
 		// already organized. Wholesale replacement is correct here because
@@ -81,7 +82,7 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		logger.Logger.Info().Int("anime_id", animeId).Int("episode_id", episodeId).Str("hash", ep.EpisodeHash).Msg("Manually downloaded episode")
+		logger.Logger.Info().Int("anime_id", animeId).Int("episode", episodeNumber).Str("hash", ep.EpisodeHash).Msg("Manually downloaded episode")
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode download started"})
 	}
 }
@@ -92,13 +93,13 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 // @Accept       json
 // @Produce      json
 // @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeId path int true "Episode ID (AniList AiringNode ID)"
+// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
 // @Success      200  {object}  SuccessResponse
 // @Failure      400  {object}  SuccessResponse
 // @Failure      404  {object}  SuccessResponse
 // @Failure      405  {object}  SuccessResponse
 // @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeId} [delete]
+// @Router       /animes/{id}/episodes/{episodeNumber} [delete]
 func handleDeleteEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
@@ -112,11 +113,12 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		episodeId, err := strconv.Atoi(r.PathValue("episodeId"))
-		if err != nil || episodeId <= 0 {
-			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "Invalid episode ID")
+		episodeNumber, err := strconv.Atoi(r.PathValue("episodeNumber"))
+		if err != nil || episodeNumber <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_NUMBER", "Invalid episode number")
 			return
 		}
+		key := files.EpisodeKey{AnimeID: animeId, Episode: episodeNumber}
 
 		savedEpisodes, err := server.FileManager.LoadSavedEpisodes()
 		if err != nil {
@@ -127,7 +129,7 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 
 		found := false
 		for _, ep := range savedEpisodes {
-			if ep.EpisodeID == episodeId && ep.AnimeID == animeId {
+			if ep.Key() == key {
 				found = true
 				break
 			}
@@ -138,17 +140,17 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
-			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode")
+		if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []files.EpisodeKey{key}); err != nil {
+			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to remove episode")
 			JSONInternalError(w, err)
 			return
 		}
 
-		if err := server.FileManager.BlockEpisode(episodeId); err != nil {
-			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to block episode")
+		if err := server.FileManager.BlockEpisode(key); err != nil {
+			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to block episode")
 		}
 
-		logger.Logger.Info().Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Manually deleted episode")
+		logger.Logger.Info().Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Manually deleted episode")
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode deleted"})
 	}
 }
@@ -159,12 +161,12 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 // @Accept       json
 // @Produce      json
 // @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeId path int true "Episode ID (AniList AiringNode ID)"
+// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
 // @Success      200  {object}  SuccessResponse
 // @Failure      400  {object}  SuccessResponse
 // @Failure      405  {object}  SuccessResponse
 // @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeId}/release [post]
+// @Router       /animes/{id}/episodes/{episodeNumber}/release [post]
 func handleReleaseEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -178,23 +180,24 @@ func handleReleaseEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		episodeId, err := strconv.Atoi(r.PathValue("episodeId"))
-		if err != nil || episodeId <= 0 {
-			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "Invalid episode ID")
+		episodeNumber, err := strconv.Atoi(r.PathValue("episodeNumber"))
+		if err != nil || episodeNumber <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_NUMBER", "Invalid episode number")
 			return
 		}
+		key := files.EpisodeKey{AnimeID: animeId, Episode: episodeNumber}
 
-		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
-			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
+		if err := server.FileManager.UnblockEpisode(key); err != nil {
+			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to unblock episode")
 		}
 
-		if err := server.FileManager.UnmanageEpisode(episodeId); err != nil {
-			logger.Logger.Error().Err(err).Int("episode_id", episodeId).Msg("Failed to unmanage episode")
+		if err := server.FileManager.UnmanageEpisode(key); err != nil {
+			logger.Logger.Error().Err(err).Int("episode", episodeNumber).Msg("Failed to unmanage episode")
 			JSONInternalError(w, err)
 			return
 		}
 
-		logger.Logger.Info().Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Released episode from manual management")
+		logger.Logger.Info().Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Released episode from manual management")
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode released"})
 	}
 }
@@ -205,13 +208,13 @@ func handleReleaseEpisode(server *Server) http.HandlerFunc {
 // @Accept       json
 // @Produce      json
 // @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeId path int true "Episode ID (AniList AiringNode ID)"
+// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
 // @Success      200  {object}  SuccessResponse
 // @Failure      400  {object}  SuccessResponse
 // @Failure      404  {object}  SuccessResponse
 // @Failure      405  {object}  SuccessResponse
 // @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeId}/redownload [post]
+// @Router       /animes/{id}/episodes/{episodeNumber}/redownload [post]
 func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -225,11 +228,12 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		episodeId, err := strconv.Atoi(r.PathValue("episodeId"))
-		if err != nil || episodeId <= 0 {
-			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "Invalid episode ID")
+		episodeNumber, err := strconv.Atoi(r.PathValue("episodeNumber"))
+		if err != nil || episodeNumber <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_NUMBER", "Invalid episode number")
 			return
 		}
+		key := files.EpisodeKey{AnimeID: animeId, Episode: episodeNumber}
 
 		configs, err := server.FileManager.LoadConfigs()
 		if err != nil {
@@ -247,7 +251,7 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 
 		alreadyDownloaded := false
 		for _, ep := range savedEpisodes {
-			if ep.EpisodeID == episodeId && ep.AnimeID == animeId {
+			if ep.Key() == key {
 				alreadyDownloaded = true
 				break
 			}
@@ -256,15 +260,15 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 		if alreadyDownloaded {
 			// Abort on failure: adding a new torrent while the stale record survives would
 			// leave the new download untracked (JobOrganize joins saved episodes by hash).
-			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
-				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode before redownload")
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []files.EpisodeKey{key}); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to remove episode before redownload")
 				JSONInternalError(w, err)
 				return
 			}
 		}
 
-		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
-			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
+		if err := server.FileManager.UnblockEpisode(key); err != nil {
+			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to unblock episode")
 		}
 
 		animeSettings, err := server.FileManager.LoadAnimeSettings(animeId)
@@ -273,9 +277,9 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeId, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
-			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to redownload episode")
+			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to redownload episode")
 			JSONDownloadError(w, err, "REDOWNLOAD_FAILED")
 			return
 		}
@@ -290,7 +294,7 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			return
 		}
 
-		logger.Logger.Info().Int("anime_id", animeId).Int("episode_id", episodeId).Str("hash", ep.EpisodeHash).Msg("Redownloaded episode")
+		logger.Logger.Info().Int("anime_id", animeId).Int("episode", episodeNumber).Str("hash", ep.EpisodeHash).Msg("Redownloaded episode")
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode redownload started"})
 	}
 }
@@ -301,13 +305,13 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 // @Accept       json
 // @Produce      json
 // @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeId path int true "Episode ID (AniList AiringNode ID)"
+// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
 // @Param        body      body object true "Magnet link" example({"magnet":"magnet:?xt=..."})
 // @Success      200  {object}  SuccessResponse
 // @Failure      400  {object}  SuccessResponse
 // @Failure      405  {object}  SuccessResponse
 // @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeId}/replace [post]
+// @Router       /animes/{id}/episodes/{episodeNumber}/replace [post]
 func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -321,11 +325,12 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		episodeId, err := strconv.Atoi(r.PathValue("episodeId"))
-		if err != nil || episodeId <= 0 {
-			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_ID", "Invalid episode ID")
+		episodeNumber, err := strconv.Atoi(r.PathValue("episodeNumber"))
+		if err != nil || episodeNumber <= 0 {
+			JSONError(w, http.StatusBadRequest, "INVALID_EPISODE_NUMBER", "Invalid episode number")
 			return
 		}
+		key := files.EpisodeKey{AnimeID: animeId, Episode: episodeNumber}
 
 		var body struct {
 			Magnet string `json:"magnet"`
@@ -351,7 +356,7 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 
 		alreadyDownloaded := false
 		for _, ep := range savedEpisodes {
-			if ep.EpisodeID == episodeId && ep.AnimeID == animeId {
+			if ep.Key() == key {
 				alreadyDownloaded = true
 				break
 			}
@@ -359,20 +364,20 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 
 		if alreadyDownloaded {
 			// Abort on failure: the replacement torrent would otherwise be untracked.
-			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []int{episodeId}); err != nil {
-				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to remove episode before replacement")
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, []files.EpisodeKey{key}); err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to remove episode before replacement")
 				JSONInternalError(w, err)
 				return
 			}
 		}
 
-		if err := server.FileManager.UnblockEpisode(episodeId); err != nil {
-			logger.Logger.Warn().Err(err).Int("episode_id", episodeId).Msg("Failed to unblock episode")
+		if err := server.FileManager.UnblockEpisode(key); err != nil {
+			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to unblock episode")
 		}
 
-		ep, err := daemon.ManualDownloadEpisodeWithMagnet(server.Torrents, animeId, episodeId, body.Magnet, configs)
+		ep, err := daemon.ManualDownloadEpisodeWithMagnet(server.Torrents, animeId, episodeNumber, body.Magnet, configs)
 		if err != nil {
-			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode_id", episodeId).Msg("Failed to replace episode with magnet")
+			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to replace episode with magnet")
 			JSONDownloadError(w, err, "REPLACE_FAILED")
 			return
 		}
@@ -386,7 +391,7 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		logger.Logger.Info().Int("anime_id", animeId).Int("episode_id", episodeId).Str("hash", ep.EpisodeHash).Msg("Replaced episode with user magnet")
+		logger.Logger.Info().Int("anime_id", animeId).Int("episode", episodeNumber).Str("hash", ep.EpisodeHash).Msg("Replaced episode with user magnet")
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Episode replacement started"})
 	}
 }
@@ -438,16 +443,16 @@ func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 			return
 		}
 
-		var idsToDelete []int
+		var keysToDelete []files.EpisodeKey
 		for _, ep := range savedEpisodes {
 			if ep.AnimeID == animeId {
-				idsToDelete = append(idsToDelete, ep.EpisodeID)
+				keysToDelete = append(keysToDelete, ep.Key())
 			}
 		}
 
-		if len(idsToDelete) > 0 {
+		if len(keysToDelete) > 0 {
 			// Abort on failure: the replacement batch torrent would otherwise be untracked.
-			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, idsToDelete); err != nil {
+			if err := daemon.RemoveEpisodesWithLinks(server.FileManager, server.Torrents, server.Librarian, keysToDelete); err != nil {
 				logger.Logger.Error().Err(err).Int("anime_id", animeId).Msg("Failed to remove episodes before replacement")
 				JSONInternalError(w, err)
 				return

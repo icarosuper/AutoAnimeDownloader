@@ -8,11 +8,13 @@
   import Logs from "./routes/Logs.svelte";
   import Notifications from "./routes/Notifications.svelte";
   import Downloads from "./routes/Downloads.svelte";
+  import AddAnime from "./routes/AddAnime.svelte";
 
   const routes: Record<string, unknown> = {
     "/": Status,
     "/status": Status,
     "/status/:id": AnimeDetail,
+    "/add": AddAnime,
     "/downloads": Downloads,
     "/config": Config,
     "/priorities": Priorities,

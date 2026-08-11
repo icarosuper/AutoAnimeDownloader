@@ -21,20 +21,19 @@ func handleDaemonStop(server *Server) http.HandlerFunc {
 			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST method is allowed")
 			return
 		}
-		
+
 		currentStatus := server.State.GetStatus()
 		if currentStatus == daemon.StatusStopped {
 			JSONError(w, http.StatusBadRequest, "ALREADY_STOPPED", "Daemon is already stopped")
 			return
 		}
-		
+
 		server.StopDaemonLoop()
-		
+
 		logger.Logger.Info().Msg("Daemon stop requested via API")
-		
+
 		JSONSuccess(w, http.StatusOK, map[string]string{
 			"message": "Daemon stopped",
 		})
 	}
 }
-

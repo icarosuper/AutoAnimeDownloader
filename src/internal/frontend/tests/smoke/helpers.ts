@@ -24,8 +24,7 @@ export function makeAnimesResponse(animes: Array<Record<string, unknown>> = [
     episodes_watched: 12,
     episodes_pending: 0,
     total_episodes: 12,
-    latest_episode_id: 12,
-    last_download_date: '2026-01-03T00:00:00Z',
+    latest_last_download_date: '2026-01-03T00:00:00Z',
     is_blacklisted: false,
   },
   {
@@ -36,8 +35,7 @@ export function makeAnimesResponse(animes: Array<Record<string, unknown>> = [
     episodes_watched: 1,
     episodes_pending: 4,
     total_episodes: 12,
-    latest_episode_id: 3,
-    last_download_date: '2026-01-02T00:00:00Z',
+    latest_last_download_date: '2026-01-02T00:00:00Z',
     is_blacklisted: false,
   },
   {
@@ -48,8 +46,7 @@ export function makeAnimesResponse(animes: Array<Record<string, unknown>> = [
     episodes_watched: 0,
     episodes_pending: 0,
     total_episodes: 24,
-    latest_episode_id: 5,
-    last_download_date: '2026-01-01T00:00:00Z',
+    latest_last_download_date: '2026-01-01T00:00:00Z',
     is_blacklisted: true,
   },
 ]) {

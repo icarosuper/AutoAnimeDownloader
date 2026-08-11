@@ -17,6 +17,14 @@ docker compose -f docker/docker-compose.test.yml up --build --abort-on-container
 
 `go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions.md). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
 
+Mesmo gate, mesma razão, para o smoke contra a AniList de verdade:
+
+```bash
+AAD_LIVE_ANILIST=1 go test ./src/internal/anilist/ -run Live -v
+```
+
+`live_smoke_test.go` mede o que nenhum mock prova: o tamanho da JANELA de `airingSchedule` que a AniList devolve (One Piece começa no episódio 1123; anime antigo volta com agenda vazia) — a premissa de `EpisodeList`, ver [Decisions #52](decisions.md). Rode-o quando mexer em `anilist/episodes.go`.
+
 ## Test Structure
 
 - `src/tests/unit/` — unit tests (`package unit`)
@@ -85,7 +93,7 @@ Library hardlinking is likewise tested through the `files.Librarian` interface (
 ```go
 mockFS := NewMockFileSystem()
 mockFS.SetFile("/config.json", []byte(`{"anilist_username":"test"}`))
-manager := files.NewManager(mockFS, "/config.json", "/episodes", "/blocked", "/settings")
+manager := files.NewManager(mockFS, "/config.json", "/episodes", "/blocked", "/settings", "/standalone")
 ```
 
 For tests needing real disk: `withTempManager` creates a temp dir with real `OSFileSystem`:
@@ -95,7 +103,7 @@ func withTempManager(t *testing.T, fn func(*files.FileManager)) {
     tmp, _ := os.MkdirTemp("", "aad_test_home_")
     defer os.RemoveAll(tmp)
     // ... setup paths ...
-    manager := files.NewManager(files.NewOSFileSystem(), configPath, episodesPath, blockedPath, settingsPath)
+    manager := files.NewManager(files.NewOSFileSystem(), configPath, episodesPath, blockedPath, settingsPath, standalonePath)
     fn(manager)
 }
 ```

@@ -14,7 +14,7 @@ if err != nil {
 Domain/validation errors (no underlying error to wrap):
 
 ```go
-return fmt.Errorf("episode %d not found for anime %d", episodeId, animeId)
+return fmt.Errorf("episode %d not found for anime %d", episodeNumber, animeId)
 ```
 
 Logging errors (zerolog chain):

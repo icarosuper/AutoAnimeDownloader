@@ -28,7 +28,6 @@ function detailWith(animeId: number, episodeHash: string | undefined): AnimeDeta
     status: 'CURRENT',
     episodes: [
       {
-        episode_id: 1,
         episode_number: 1,
         airing_at: 0,
         time_until_airing: 0,

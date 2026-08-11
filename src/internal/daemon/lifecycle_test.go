@@ -118,7 +118,7 @@ func TestHandleTorrentFailure_NotifiesAndRemovesFromSession(t *testing.T) {
 	fm := &lifecycleFM{
 		configs: configWithFailedWebhook(spy.server.URL),
 		saved: []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 7},
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 7},
 		},
 	}
 

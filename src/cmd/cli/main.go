@@ -413,7 +413,7 @@ func handleAnimes() error {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Name", "Episodes", "Latest Episode ID"})
 		for _, anime := range animes {
-			t.AppendRow(table.Row{anime.Name, anime.EpisodesDownloaded, anime.LatestEpisodeID})
+			t.AppendRow(table.Row{anime.Name, anime.EpisodesDownloaded, anime.LatestEpisodeNumber})
 		}
 		t.Render()
 	}
@@ -437,9 +437,9 @@ func handleEpisodes() error {
 
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
-		t.AppendHeader(table.Row{"ID", "Name", "Hash"})
+		t.AppendHeader(table.Row{"Anime", "Ep", "Name", "Hash"})
 		for _, episode := range episodes {
-			t.AppendRow(table.Row{episode.EpisodeID, episode.EpisodeName, episode.EpisodeHash})
+			t.AppendRow(table.Row{episode.AnimeID, episode.EpisodeNumber, episode.EpisodeName, episode.EpisodeHash})
 		}
 		t.Render()
 	}
@@ -675,11 +675,11 @@ func handleLogs(lines int, filterLevel, searchQuery string) error {
 func handleOpen() error {
 	// Construir a URL da web UI a partir do endpoint da API
 	webUIURL := apiEndpoint
-	
+
 	// Remover /api/v1 se presente, já que a web UI está na raiz
 	webUIURL = strings.TrimSuffix(webUIURL, "/api/v1")
 	webUIURL = strings.TrimSuffix(webUIURL, "/")
-	
+
 	// Garantir que tenha http:// ou https://
 	if !strings.HasPrefix(webUIURL, "http://") && !strings.HasPrefix(webUIURL, "https://") {
 		webUIURL = "http://" + webUIURL

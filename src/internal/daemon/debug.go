@@ -91,7 +91,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 
 	magnetsByEpisodeNumber := make(map[int]int, len(episodesToDownload))
 	for _, ep := range episodesToDownload {
-		resolved := magnetsForEpisodes[ep.ID]
+		resolved := magnetsForEpisodes[ep.Episode]
 		magnetsByEpisodeNumber[ep.Episode] = len(resolved.magnets)
 		logger.Logger.Info().
 			Str("anime", animeTitle).

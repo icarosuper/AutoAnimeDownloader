@@ -8,8 +8,8 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 
 | Field | JSON key | Type | Default | Description |
 |-------|----------|------|---------|-------------|
-| `CompletedAnimePath` | `completed_anime_path` | `string` | `""` | The Jellyfin library location. Completed episodes are **hardlinked** here (not moved/copied). **Required**. The download/seeding working directory (rain's DataDir) is **derived** from it — see "Download Path" below — so there is no separate path to configure |
-| `AnilistUsernames` | `anilist_usernames` | `[]string` | `[]` | Anilist usernames to sync watch lists from (multi-account supported). **Required** — at least one |
+| `CompletedAnimePath` | `completed_anime_path` | `string` | `~/Animes` (`""` if the home dir is unknown) | The Jellyfin library location. Completed episodes are **hardlinked** here (not moved/copied). **Required**. The download/seeding working directory (rain's DataDir) is **derived** from it — see "Download Path" below — so there is no separate path to configure |
+| `AnilistUsernames` | `anilist_usernames` | `[]string` | `[]` | Anilist usernames to sync watch lists from (multi-account supported). **Optional** — an installation can run entirely on standalone animes (`standalone_animes`, see [decisions.md #49](decisions.md)) |
 | `AnilistUsername` | `anilist_username` | `string` | `""` | **Legacy.** Single-username field, `omitempty`. Migrated into `AnilistUsernames` and cleared — by `FileManager.LoadConfigs()` (`filemanager.go`) on every load, and again by `handleUpdateConfig` (`endpoint_config.go`) so a PUT from an old client is migrated before validation. Kept only for backward compatibility |
 | `CheckInterval` | `check_interval` | `int` | `10` | Minutes between verification loops. Must be > 0 |
 | `MaxEpisodesPerAnime` | `max_episodes_per_anime` | `int` | `12` | Max saved episodes per anime before oldest are deleted. Must be > 0. **Applies only to the episode-by-episode path** — never to a batch download (a batch is one torrent, so limiting records would limit neither bytes nor library files; see decisions.md) |
@@ -67,15 +67,16 @@ Torrents download and keep seeding there (rain's `DataDir`, layout `<DownloadPat
 ## Required Fields
 
 Daemon checks these in `isConfigComplete()` (`daemon/helpers.go`) before starting the verification loop:
-- `anilist_usernames` — at least one
-- `completed_anime_path`
+- `completed_anime_path` — **the only one.** An AniList account is *not* required: with standalone animes the app works with no list at all, and demanding an account would strand that installation on the config screen
 
 If missing, daemon opens browser to `http://localhost:<port>/#/config?missingConfig=true`.
+
+Default: `completed_anime_path` starts as `~/Animes` (`getDefaultConfig()`), so a fresh install is already "complete". On the **first boot only** (no `config.json` yet — `FileManager.ConfigExists()`, checked in `main()` before the first `LoadConfigs()`) the daemon opens `http://localhost:<port>/#/status`.
 
 ## Validation (API)
 
 `handleUpdateConfig()` in `endpoint_config.go` validates:
-- `anilist_usernames` — at least one entry (after legacy-field migration), `completed_anime_path` — non-empty
+- `completed_anime_path` — non-empty. `anilist_usernames` is **not** validated (see Required Fields); the legacy `anilist_username` is still migrated into it before anything else runs
 - `completed_anime_path` must support hardlinks — verified with a single-path probe (`Librarian.ProbePath`); a filesystem without hardlink support is rejected with HTTP 400
 - `check_interval`, `max_episodes_per_anime` — > 0
 - `episode_retry_limit`, `watched_episodes_to_keep`, `max_concurrent_downloads`, `max_batch_episodes`, `max_batch_torrent_size_gb`, `max_episode_torrent_size_gb` — >= 0

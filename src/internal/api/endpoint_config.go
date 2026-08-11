@@ -84,10 +84,8 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 		// por um config.json escrito por uma versao anterior, que e o caso de uso.
 		config.SavePath = ""
 
-		if len(config.AnilistUsernames) == 0 {
-			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "At least one Anilist username is required")
-			return
-		}
+		// anilist_usernames NAO e validado: uma instalacao que so usa animes avulsos nunca
+		// configura conta nenhuma (decisions.md #49).
 
 		if config.CompletedAnimePath == "" {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Completed anime path is required")

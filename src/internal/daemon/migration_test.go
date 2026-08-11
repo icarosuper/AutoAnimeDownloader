@@ -260,7 +260,7 @@ func (m *animeIDMigrationFM) LoadSavedEpisodes() ([]files.EpisodeStruct, error) 
 func (m *animeIDMigrationFM) UpsertEpisodes(eps []files.EpisodeStruct) error {
 	for _, up := range eps {
 		for i := range m.episodes {
-			if m.episodes[i].EpisodeID == up.EpisodeID {
+			if m.episodes[i].EpisodeNumber == up.EpisodeNumber {
 				m.episodes[i] = up
 			}
 		}
@@ -310,8 +310,8 @@ func TestMigrateAnimeIDsToMedia_RewritesEpisodesAndSettings(t *testing.T) {
 	fm := &animeIDMigrationFM{
 		configs: &files.Config{},
 		episodes: []files.EpisodeStruct{
-			{EpisodeID: 1, AnimeID: 583631757},
-			{EpisodeID: 2, AnimeID: 488911345},
+			{EpisodeNumber: 1, AnimeID: 583631757},
+			{EpisodeNumber: 2, AnimeID: 488911345},
 		},
 		settings: map[int]files.AnimeSettings{583631757: {CustomSearchQuery: "bumpkin"}},
 	}
@@ -323,7 +323,7 @@ func TestMigrateAnimeIDsToMedia_RewritesEpisodesAndSettings(t *testing.T) {
 	// As duas entradas apontam para a MESMA midia: e exatamente o caso que duplicava o anime.
 	for _, ep := range fm.episodes {
 		if ep.AnimeID != 194829 {
-			t.Errorf("episodio %d deveria estar com o id da midia, veio %d", ep.EpisodeID, ep.AnimeID)
+			t.Errorf("episodio %d deveria estar com o id da midia, veio %d", ep.EpisodeNumber, ep.AnimeID)
 		}
 	}
 	if fm.settings[194829].CustomSearchQuery != "bumpkin" {
@@ -345,7 +345,7 @@ func TestMigrateAnimeIDsToMedia_SkipsWhenAlreadyMigrated(t *testing.T) {
 
 	fm := &animeIDMigrationFM{
 		configs:  &files.Config{AnimeIDsAreMediaIDs: true},
-		episodes: []files.EpisodeStruct{{EpisodeID: 1, AnimeID: 194829}},
+		episodes: []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 194829}},
 	}
 
 	if err := MigrateAnimeIDsToMedia(fm); err != nil {
@@ -366,7 +366,7 @@ func TestMigrateAnimeIDsToMedia_FailureWritesNothing(t *testing.T) {
 
 	fm := &animeIDMigrationFM{
 		configs:  &files.Config{},
-		episodes: []files.EpisodeStruct{{EpisodeID: 1, AnimeID: 583631757}},
+		episodes: []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 583631757}},
 	}
 
 	if err := MigrateAnimeIDsToMedia(fm); err == nil {
@@ -389,8 +389,8 @@ func TestMigrateAnimeIDsToMedia_UnresolvedEntryDoesNotBlock(t *testing.T) {
 	fm := &animeIDMigrationFM{
 		configs: &files.Config{},
 		episodes: []files.EpisodeStruct{
-			{EpisodeID: 1, AnimeID: 111},
-			{EpisodeID: 2, AnimeID: 222}, // nao existe mais
+			{EpisodeNumber: 1, AnimeID: 111},
+			{EpisodeNumber: 2, AnimeID: 222}, // nao existe mais
 		},
 	}
 

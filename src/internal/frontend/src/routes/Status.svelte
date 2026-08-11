@@ -7,7 +7,7 @@
   // A seção "Fila e problemas" do artboard 1b foi DESCARTADA de propósito (spec §9.1): é
   // redundante com a tela de Downloads, que existe justamente para isso.
   import { onMount, onDestroy } from "svelte";
-  import { ChevronRight, Eye, Search, X } from "@lucide/svelte";
+  import { ChevronRight, Eye, Search, Unlink, X } from "@lucide/svelte";
   import {
     getStatus,
     getAnimes,
@@ -78,6 +78,7 @@
     emptyDesc: m.status_empty_desc(),
     goToConfig: m.status_go_to_config(),
     filterUnwatched: m.status_filter_unwatched(),
+    filterStandalone: m.status_filter_standalone(),
     heroSpeedLabel: m.status_hero_speed_label(),
     heroNoDownloads: m.status_hero_no_downloads(),
     activeDownloads: m.status_active_downloads_label(),
@@ -91,10 +92,14 @@
   let animes: AnimeInfo[] = [];
   let torrents: TorrentInfo[] = [];
   let checkInterval = 0;
+  // Sem biblioteca configurada não há para onde baixar: o botão de adicionar anime nasce
+  // desabilitado em vez de deixar o usuário descobrir isso só no 409 do POST.
+  let libraryConfigured = true;
   let loading = true;
   let actionLoading = false;
   let search = "";
   let filterUnwatched = false;
+  let filterStandalone = false;
   let now = Date.now();
   // spec §8: o progresso não vem do WebSocket, vem do poll HTTP. Quando um poll falha a UI
   // precisa DIZER isso em vez de continuar exibindo o último número como se fosse ao vivo.
@@ -105,7 +110,7 @@
 
   $: fmtLocale = ($locale ?? "en") as FormatLocale;
 
-  $: filteredAnimes = filterAnimes(animes, search, filterUnwatched);
+  $: filteredAnimes = filterAnimes(animes, search, filterUnwatched, filterStandalone);
   $: sortedAnimes = sortAnimes(filteredAnimes, sortKey, sortDir);
 
   $: nextCheckIn = status
@@ -269,6 +274,7 @@
       status = statusData;
       animes = animesData;
       checkInterval = configData.check_interval;
+      libraryConfigured = Boolean(configData.completed_anime_path);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load data");
     } finally {
@@ -420,6 +426,23 @@
       </div>
 
       <div class="flex shrink-0 gap-2">
+        <!-- Caminho real para a tela de adicionar (o item no MoreMenu é o atalho, não a porta).
+             Desabilitado sem biblioteca configurada: é o mesmo bloqueio do
+             LIBRARY_NOT_CONFIGURED, dito ANTES de o usuário digitar uma busca inteira para
+             descobrir que nada pode ser adicionado. O tooltip mora no wrapper porque um
+             <a>/<button> desabilitado não emite eventos de mouse (padrão de NavRail.svelte). -->
+        {#if libraryConfigured}
+          <a
+            href="#/add"
+            class="inline-flex items-center justify-center gap-1.5 rounded-control bg-accent px-3 py-1.5 text-copy font-semibold text-on-accent transition-opacity hover:opacity-90"
+          >
+            + {$locale && m.nav_add_anime()}
+          </a>
+        {:else}
+          <div class="tooltip tooltip-bottom" data-tip={$locale && m.add_library_required()}>
+            <Button variant="ghost" disabled>+ {$locale && m.nav_add_anime()}</Button>
+          </div>
+        {/if}
         <Button
           variant="ghost"
           on:click={handleCheck}
@@ -585,7 +608,7 @@
       <div class="flex shrink-0 flex-col gap-3 border-b border-divider p-4 sm:flex-row sm:items-center">
         <h2 class="flex-1 text-card-title text-heading">{T && T.animesHeader}</h2>
 
-        {#if search || filterUnwatched}
+        {#if search || filterUnwatched || filterStandalone}
           <span class="whitespace-nowrap font-mono text-[12px] text-subtle">
             {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
           </span>
@@ -596,14 +619,14 @@
              para fora da tela, sem nenhuma dica de que ele está lá. -->
         <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
           <label
-            class="flex w-full shrink-0 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-1.5 sm:w-64"
+            class="flex w-full shrink-0 items-center gap-2 rounded-field border border-neutral/45 bg-control px-2.5 py-1.5 transition-colors hover:border-neutral/70 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40 sm:w-64"
           >
-            <Search size={16} strokeWidth={2} class="shrink-0 text-subtle" />
+            <Search size={16} strokeWidth={2} class="shrink-0 text-tertiary" />
             <input
               type="text"
               placeholder={(T && T.searchPlaceholder) || ""}
               bind:value={search}
-              class="w-full min-w-0 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
+              class="w-full min-w-0 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-tertiary"
             />
             {#if search}
               <button
@@ -623,28 +646,54 @@
             <button
               type="button"
               class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {filterUnwatched
-                ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
-                : 'border-default bg-control text-subtle hover:text-body'}"
+                ? 'border-accent bg-accent-tint/16 text-accent'
+                : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
               aria-pressed={filterUnwatched}
               on:click={() => (filterUnwatched = !filterUnwatched)}
             >
               <Eye size={14} strokeWidth={2} />
               {T && T.filterUnwatched}
             </button>
+
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {filterStandalone
+                ? 'border-accent bg-accent-tint/16 text-accent'
+                : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
+              aria-pressed={filterStandalone}
+              on:click={() => (filterStandalone = !filterStandalone)}
+            >
+              <Unlink size={14} strokeWidth={2} />
+              {T && T.filterStandalone}
+            </button>
           </div>
         </div>
       </div>
 
       {#if animes.length === 0}
+        <!-- Dois caminhos, porque conta do AniList deixou de ser obrigatória: adicionar um anime
+             avulso é o próximo passo real de quem já tem a biblioteca configurada. O CTA é
+             `ghost` e não sólido — o acento sólido da tela já é o "+ Adicionar anime" do header
+             (spec §4.1: no máximo um por tela). -->
         <div class="flex flex-col items-center gap-3 py-12 text-center">
           <p class="text-card-title text-body">{T && T.emptyTitle}</p>
           <p class="text-caption text-subtle">{T && T.emptyDesc}</p>
-          <a
-            href="#/config"
-            class="mt-1 inline-flex items-center rounded-control bg-accent px-3 py-1.5 text-copy font-semibold text-on-accent transition-opacity hover:opacity-90"
-          >
-            {T && T.goToConfig}
-          </a>
+          <div class="mt-1 flex flex-wrap justify-center gap-2">
+            {#if libraryConfigured}
+              <a
+                href="#/add"
+                class="inline-flex items-center rounded-control border border-neutral/45 bg-control px-3 py-1.5 text-copy font-semibold text-heading transition-colors hover:border-accent hover:text-accent"
+              >
+                + {$locale && m.nav_add_anime()}
+              </a>
+            {/if}
+            <a
+              href="#/config"
+              class="inline-flex items-center rounded-control border border-neutral/45 bg-control px-3 py-1.5 text-copy font-semibold text-heading transition-colors hover:border-accent hover:text-accent"
+            >
+              {T && T.goToConfig}
+            </a>
+          </div>
         </div>
       {:else if filteredAnimes.length === 0}
         <div class="py-10 text-center">
@@ -709,8 +758,14 @@
               <span class="truncate text-copy text-heading {row.chip.dimmed ? 'opacity-45' : ''}" title={row.anime.name}>
                 {row.anime.name}
               </span>
-              <span>
+              <!-- "Avulso" é ORIGEM, não estado de download: fica AO LADO do chip derivado,
+                   nunca dentro de `deriveAnimeChip` — aquela cascata devolve um estado só, e
+                   enfiar a origem lá faria um avulso baixando perder o chip "Baixando". -->
+              <span class="flex flex-wrap items-center gap-1">
                 <Chip variant={row.chip.variant} dimmed={row.chip.dimmed}>{row.chipText}</Chip>
+                {#if row.anime.is_standalone}
+                  <Chip variant="neutral">{$locale && m.chip_standalone()}</Chip>
+                {/if}
               </span>
               <TripleProgressBar
                 watched={row.breakdown.watched}
@@ -746,8 +801,11 @@
                   <p class="truncate text-copy text-heading {row.chip.dimmed ? 'opacity-45' : ''}">
                     {row.anime.name}
                   </p>
-                  <div class="mt-1.5">
+                  <div class="mt-1.5 flex flex-wrap items-center gap-1">
                     <Chip variant={row.chip.variant} dimmed={row.chip.dimmed}>{row.chipText}</Chip>
+                    {#if row.anime.is_standalone}
+                      <Chip variant="neutral">{$locale && m.chip_standalone()}</Chip>
+                    {/if}
                   </div>
                   <div class="mt-2">
                     <TripleProgressBar

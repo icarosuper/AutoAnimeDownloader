@@ -17,10 +17,10 @@ func TestHandleDaemonStart(t *testing.T) {
 			CheckInterval: 10,
 		},
 	}
-	
+
 	server := &Server{
-		State:         state,
-		FileManager:   mockFM,
+		State:       state,
+		FileManager: mockFM,
 		StartLoopFunc: func(p daemon.StartLoopPayload) *daemon.LoopControl {
 			return &daemon.LoopControl{
 				UpdateInterval: func(d time.Duration) {},
@@ -33,7 +33,7 @@ func TestHandleDaemonStart(t *testing.T) {
 
 	t.Run("POST starts daemon when stopped", func(t *testing.T) {
 		state.SetStatus(daemon.StatusStopped)
-		
+
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/daemon/start", nil)
 		w := httptest.NewRecorder()
 
@@ -55,7 +55,7 @@ func TestHandleDaemonStart(t *testing.T) {
 
 	t.Run("POST returns 400 when already running", func(t *testing.T) {
 		state.SetStatus(daemon.StatusRunning)
-		
+
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/daemon/start", nil)
 		w := httptest.NewRecorder()
 
@@ -81,7 +81,7 @@ func TestHandleDaemonStart(t *testing.T) {
 
 	t.Run("POST returns 400 when checking", func(t *testing.T) {
 		state.SetStatus(daemon.StatusChecking)
-		
+
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/daemon/start", nil)
 		w := httptest.NewRecorder()
 

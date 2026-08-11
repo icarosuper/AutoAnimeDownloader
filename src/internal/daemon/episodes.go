@@ -14,8 +14,8 @@ import (
 
 type handleEpisodesData struct {
 	savedEpisodes   []files.EpisodeStruct
-	idsToDelete     []int
-	checkedEpisodes []int
+	keysToDelete    []files.EpisodeKey
+	checkedEpisodes []files.EpisodeKey
 	newEpisodes     []files.EpisodeStruct
 }
 
@@ -25,7 +25,7 @@ func processAnimeEpisodes(
 	anime anilist.MediaList,
 	dlTorrents []torrents.TorrentInfo,
 	savedEpisodes []files.EpisodeStruct,
-	blockedMap map[int]bool,
+	blockedMap map[files.EpisodeKey]bool,
 	customQuery string,
 	searcher nyaaSearcher,
 ) animeProcessResult {
@@ -40,8 +40,8 @@ func processAnimeEpisodes(
 	savedEpisodesFullMap := buildSavedEpisodesFullMap(savedEpisodes)
 
 	downloadedEpisodesOfAnime := 0
-	episodes := anime.Media.AiringSchedule.Nodes
-	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, episodes, savedEpisodesMap, anime.Progress)
+	episodes := anilist.EpisodeList(anime, firstEpisodeToConsider(anime, savedEpisodes))
+	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, anime.Media.Id, episodes, savedEpisodesMap, anime.Progress)
 	var episodesToDownload []anilist.AiringNode
 
 	totalEpisodes := 0
@@ -61,18 +61,19 @@ func processAnimeEpisodes(
 	}
 
 	for _, ep := range episodes {
-		result.checkedEpisodes = append(result.checkedEpisodes, ep.ID)
+		key := files.EpisodeKey{AnimeID: anime.Media.Id, Episode: ep.Episode}
+		result.checkedEpisodes = append(result.checkedEpisodes, key)
 
-		isInTorrents := episodeInTorrents(savedEpisodesFullMap[ep.ID].EpisodeHash, torrentsHashSet)
-		alreadySaved := savedEpisodesMap[ep.ID]
+		isInTorrents := episodeInTorrents(savedEpisodesFullMap[key].EpisodeHash, torrentsHashSet)
+		alreadySaved := savedEpisodesMap[key]
 
-		shouldDownload, shouldDelete := checkEpisode(configs, maxEpisodes, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents, keepSet[ep.ID])
+		shouldDownload, shouldDelete := checkEpisode(configs, maxEpisodes, ep, anime, alreadySaved, &downloadedEpisodesOfAnime, isInTorrents, keepSet[key])
 
-		if shouldDownload && !blockedMap[ep.ID] {
+		if shouldDownload && !blockedMap[key] {
 			episodesToDownload = append(episodesToDownload, ep)
 		} else if shouldDelete {
-			if savedEp, ok := savedEpisodesFullMap[ep.ID]; !ok || !savedEp.ManuallyManaged {
-				result.idsToDelete = append(result.idsToDelete, ep.ID)
+			if savedEp, ok := savedEpisodesFullMap[key]; !ok || !savedEp.ManuallyManaged {
+				result.keysToDelete = append(result.keysToDelete, key)
 			}
 		}
 	}
@@ -94,7 +95,7 @@ func processAnimeEpisodes(
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 
-		resolved := magnetsForEpisodes[ep.ID]
+		resolved := magnetsForEpisodes[ep.Episode]
 		magnets := resolved.magnets
 		skipSubfolder := resolved.skipSubfolder
 		if resolved.overrideName != "" {
@@ -126,7 +127,6 @@ func processAnimeEpisodes(
 
 		if hash != "" {
 			result.newEpisodes = append(result.newEpisodes, files.EpisodeStruct{
-				EpisodeID:          ep.ID,
 				AnimeID:            anime.Media.Id,
 				AnimeTotalEpisodes: totalEpisodes,
 				AnimeName:          animeTitle,
@@ -180,7 +180,7 @@ func willBatchAnime(configs *files.Config, anime anilist.MediaList) bool {
 
 func resolvedIsBatch(resolved map[int]resolvedMagnets, episodes []anilist.AiringNode) bool {
 	for _, ep := range episodes {
-		if resolved[ep.ID].skipSubfolder {
+		if resolved[ep.Episode].skipSubfolder {
 			return true
 		}
 	}
@@ -188,7 +188,8 @@ func resolvedIsBatch(resolved map[int]resolvedMagnets, episodes []anilist.Airing
 }
 
 // resolveSearchStrategy picks the best Nyaa search strategy for the anime and returns
-// magnets keyed by episode ID. Tries movie → batch → multi-episode in priority order.
+// magnets keyed by episode NUMBER (unique inside one anime, which is all this map spans).
+// Tries movie → batch → multi-episode in priority order.
 func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, animeTitle string, episodesToDownload []anilist.AiringNode, customQuery string, searcher nyaaSearcher) map[int]resolvedMagnets {
 	result := make(map[int]resolvedMagnets, len(episodesToDownload))
 	animeIsMovie := isAnimeMovie(anime)
@@ -201,7 +202,7 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 		movieResult := filterBySize(searcher.searchMovie(anime.Media.Title, true, customQuery), configs.MaxEpisodeTorrentSizeGB)
 
 		if len(episodesToDownload) == 0 && len(movieResult) > 0 {
-			fakeEp := anilist.AiringNode{ID: 0, Episode: 1}
+			fakeEp := anilist.AiringNode{Episode: 1}
 			episodesToDownload = append(episodesToDownload, fakeEp)
 			logger.Logger.Info().
 				Str("anime", animeTitle).
@@ -210,7 +211,7 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 
 		if len(movieResult) > 0 {
 			for _, ep := range episodesToDownload {
-				result[ep.ID] = resolvedMagnets{
+				result[ep.Episode] = resolvedMagnets{
 					magnets:       []string{movieResult[0].MagnetLink},
 					skipSubfolder: true,
 					overrideName:  animeTitle,
@@ -240,7 +241,7 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 
 		if len(batchResult) > 0 {
 			for _, ep := range episodesToDownload {
-				result[ep.ID] = resolvedMagnets{
+				result[ep.Episode] = resolvedMagnets{
 					magnets:       []string{batchResult[0].MagnetLink},
 					skipSubfolder: true,
 					overrideName:  animeTitle,
@@ -273,7 +274,7 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 				for _, tr := range trs {
 					magnets = append(magnets, tr.MagnetLink)
 				}
-				result[ep.ID] = resolvedMagnets{magnets: magnets}
+				result[ep.Episode] = resolvedMagnets{magnets: magnets}
 			}
 		}
 	}
@@ -281,25 +282,45 @@ func resolveSearchStrategy(configs *files.Config, anime anilist.MediaList, anime
 	return result
 }
 
-func buildWatchedKeepSet(n int, episodes []anilist.AiringNode, savedEpisodesMap map[int]bool, progress int) map[int]bool {
+func buildWatchedKeepSet(n int, animeID int, episodes []anilist.AiringNode, savedEpisodesMap map[files.EpisodeKey]bool, progress int) map[files.EpisodeKey]bool {
 	if n <= 0 {
 		return nil
 	}
-	var watchedSaved []int
+	var watchedSaved []files.EpisodeKey
 	for _, ep := range episodes {
-		if ep.Episode <= progress && savedEpisodesMap[ep.ID] {
-			watchedSaved = append(watchedSaved, ep.ID)
+		key := files.EpisodeKey{AnimeID: animeID, Episode: ep.Episode}
+		if ep.Episode <= progress && savedEpisodesMap[key] {
+			watchedSaved = append(watchedSaved, key)
 		}
 	}
-	keepSet := make(map[int]bool)
+	keepSet := make(map[files.EpisodeKey]bool)
 	start := len(watchedSaved) - n
 	if start < 0 {
 		start = 0
 	}
-	for _, id := range watchedSaved[start:] {
-		keepSet[id] = true
+	for _, key := range watchedSaved[start:] {
+		keepSet[key] = true
 	}
 	return keepSet
+}
+
+// firstEpisodeToConsider e onde a lista de episodios de um anime comeca.
+//
+// Regra: progresso + 1 — o episodio seguinte ao ultimo assistido. Anime avulso nao tem entrada de
+// lista e portanto tem progresso 0, o que faz a lista dele comecar no 1 sem precisar de flag.
+//
+// Ela recua para o menor episodio JA SALVO quando este e anterior a isso, porque
+// watched_episodes_to_keep e a poda de assistidos so funcionam sobre episodios que aparecem na
+// lista: um episodio salvo fora dela nunca seria "checado" e cairia direto em
+// identifyEpisodesNotInWatching, ignorando o "quantos assistidos manter".
+func firstEpisodeToConsider(anime anilist.MediaList, savedEpisodes []files.EpisodeStruct) int {
+	first := anime.Progress + 1
+	for _, ep := range savedEpisodes {
+		if ep.AnimeID == anime.Media.Id && ep.EpisodeNumber > 0 && ep.EpisodeNumber < first {
+			first = ep.EpisodeNumber
+		}
+	}
+	return first
 }
 
 // checkEpisode decide se um episodio deve ser baixado ou apagado. maxEpisodes e o limite
@@ -424,15 +445,15 @@ func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentB
 // Exposed for API handlers (manual delete / redownload / replace): it returns an error when the
 // record could not actually leave the saved-episodes file, so the handler can answer 500 and
 // abort instead of adding a new torrent that the stale record would shadow.
-func RemoveEpisodesWithLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, ids []int) error {
-	if len(ids) == 0 {
+func RemoveEpisodesWithLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, keys []files.EpisodeKey) error {
+	if len(keys) == 0 {
 		return nil
 	}
 	saved, err := fm.LoadSavedEpisodes()
 	if err != nil {
 		return fmt.Errorf("failed to load saved episodes: %w", err)
 	}
-	return removeEpisodesAndLinks(fm, backend, librarian, ids, saved, false)
+	return removeEpisodesAndLinks(fm, backend, librarian, keys, saved, false)
 }
 
 // RemoveTorrentOptions configures RemoveTorrentWithEpisodes.
@@ -477,18 +498,18 @@ func RemoveTorrentWithEpisodes(
 
 	if opts.Block {
 		for _, ep := range group {
-			if err := fm.BlockEpisode(ep.EpisodeID); err != nil {
-				logger.Logger.Warn().Err(err).Int("episode_id", ep.EpisodeID).Msg("Failed to block episode before torrent removal")
+			if err := fm.BlockEpisode(ep.Key()); err != nil {
+				logger.Logger.Warn().Err(err).Int("anime_id", ep.AnimeID).Int("episode", ep.EpisodeNumber).Msg("Failed to block episode before torrent removal")
 			}
 		}
 	}
 
-	ids := make([]int, 0, len(group))
+	keys := make([]files.EpisodeKey, 0, len(group))
 	for _, ep := range group {
-		ids = append(ids, ep.EpisodeID)
+		keys = append(keys, ep.Key())
 	}
 
-	return removeEpisodesAndLinks(fm, backend, librarian, ids, saved, opts.KeepData)
+	return removeEpisodesAndLinks(fm, backend, librarian, keys, saved, opts.KeepData)
 }
 
 // deleteEpisodesByStatus apaga os episódios dos animes que TODAS as contas concordam em
@@ -501,24 +522,24 @@ func deleteEpisodesByStatus(deletableMedia map[int]bool, fileManager FileManager
 	logger.Logger.Debug().
 		Msg("Running status-based episode deletion")
 
-	var idsToDelete []int
+	var keysToDelete []files.EpisodeKey
 	for _, ep := range savedEpisodes {
 		if deletableMedia[ep.AnimeID] && !ep.ManuallyManaged {
-			idsToDelete = append(idsToDelete, ep.EpisodeID)
+			keysToDelete = append(keysToDelete, ep.Key())
 		}
 	}
 
-	if len(idsToDelete) == 0 {
+	if len(keysToDelete) == 0 {
 		logger.Logger.Debug().Msg("Status-based deletion: no matching episodes found")
 		return
 	}
 
 	logger.Logger.Info().
-		Int("count", len(idsToDelete)).
+		Int("count", len(keysToDelete)).
 		Msg("Deleting episodes for animes with delete statuses")
 
 	// Best-effort: a failure here must not abort the verification pass.
-	if err := removeEpisodesAndLinks(fileManager, backend, librarian, idsToDelete, savedEpisodes, false); err != nil {
+	if err := removeEpisodesAndLinks(fileManager, backend, librarian, keysToDelete, savedEpisodes, false); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Status-based deletion: failed to delete episodes from file")
 	}
 }
@@ -529,9 +550,9 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 	saveEpisodesToFile(fileManager, data.newEpisodes)
 
 	if configs.DeleteWatchedEpisodes {
-		allIds := append(append([]int{}, data.idsToDelete...), episodesNotInWatching...)
+		allKeys := append(append([]files.EpisodeKey{}, data.keysToDelete...), episodesNotInWatching...)
 		// Best-effort: a failure here must not abort the verification pass.
-		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allIds, data.savedEpisodes, false); err != nil {
+		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allKeys, data.savedEpisodes, false); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
 		}
 	}
@@ -550,13 +571,13 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 // keepData, when true, skips the library-hardlink removal loop entirely and is passed through to
 // backend.Remove. Library files and the seeding copy are the same inode (hardlinks), so keeping
 // one but not the other frees no disk space — keep_data is honestly binary: both stay or both go.
-func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, idsToDelete []int, savedEpisodes []files.EpisodeStruct, keepData bool) error {
-	if len(idsToDelete) == 0 {
+func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, keysToDelete []files.EpisodeKey, savedEpisodes []files.EpisodeStruct, keepData bool) error {
+	if len(keysToDelete) == 0 {
 		return nil
 	}
-	deleteSet := make(map[int]bool, len(idsToDelete))
-	for _, id := range idsToDelete {
-		deleteSet[id] = true
+	deleteSet := make(map[files.EpisodeKey]bool, len(keysToDelete))
+	for _, k := range keysToDelete {
+		deleteSet[k] = true
 	}
 
 	byHash := make(map[string][]files.EpisodeStruct)
@@ -570,7 +591,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 	// torrent is removed anyway does not double as "keep everything" since it's the same inode).
 	if !keepData {
 		for _, ep := range savedEpisodes {
-			if !deleteSet[ep.EpisodeID] {
+			if !deleteSet[ep.Key()] {
 				continue
 			}
 			removingTorrent := ep.EpisodeHash == "" || allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet)
@@ -590,7 +611,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 	// Remove torrents (seeding copy) with no surviving siblings.
 	removedHashes := make(map[string]bool)
 	for _, ep := range savedEpisodes {
-		if !deleteSet[ep.EpisodeID] || ep.EpisodeHash == "" || removedHashes[ep.EpisodeHash] {
+		if !deleteSet[ep.Key()] || ep.EpisodeHash == "" || removedHashes[ep.EpisodeHash] {
 			continue
 		}
 		if allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet) {
@@ -603,7 +624,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 		}
 	}
 
-	if err := fm.DeleteEpisodesFromFile(idsToDelete); err != nil {
+	if err := fm.DeleteEpisodesFromFile(keysToDelete); err != nil {
 		return fmt.Errorf("failed to delete episodes from file: %w", err)
 	}
 
@@ -612,28 +633,28 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 
 // allEpisodesInDeleteSet reports whether every episode in the group is in the delete set
 // (i.e. no sibling survives, so the shared torrent can be removed).
-func allEpisodesInDeleteSet(group []files.EpisodeStruct, deleteSet map[int]bool) bool {
+func allEpisodesInDeleteSet(group []files.EpisodeStruct, deleteSet map[files.EpisodeKey]bool) bool {
 	if len(group) == 0 {
 		return true
 	}
 	for _, ep := range group {
-		if !deleteSet[ep.EpisodeID] {
+		if !deleteSet[ep.Key()] {
 			return false
 		}
 	}
 	return true
 }
 
-func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedEpisodes []int) []int {
-	checkedMap := make(map[int]bool)
-	for _, id := range checkedEpisodes {
-		checkedMap[id] = true
+func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedEpisodes []files.EpisodeKey) []files.EpisodeKey {
+	checkedMap := make(map[files.EpisodeKey]bool, len(checkedEpisodes))
+	for _, k := range checkedEpisodes {
+		checkedMap[k] = true
 	}
 
-	var episodesToDelete []int
+	var episodesToDelete []files.EpisodeKey
 	for _, savedEp := range savedEpisodes {
-		if !checkedMap[savedEp.EpisodeID] && !savedEp.ManuallyManaged {
-			episodesToDelete = append(episodesToDelete, savedEp.EpisodeID)
+		if !checkedMap[savedEp.Key()] && !savedEp.ManuallyManaged {
+			episodesToDelete = append(episodesToDelete, savedEp.Key())
 		}
 	}
 
@@ -641,7 +662,7 @@ func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedE
 }
 
 // saveEpisodesToFile persists freshly downloaded episodes, merging over any existing record
-// with the same EpisodeID. FileManager.SaveEpisodesToFile dedupes by EpisodeID and silently
+// with the same EpisodeKey. FileManager.SaveEpisodesToFile dedupes by EpisodeKey and silently
 // discards updates, which would leave a re-downloaded episode with its stale hash (breaking the
 // JobOrganize join) and a stale EpisodeNumber (producing "Anime - E00.mkv" for records saved
 // before EpisodeNumber existed). UpsertEpisodes alone would clobber ManuallyManaged, so the
@@ -663,14 +684,14 @@ func saveEpisodesToFile(fileManager FileManagerInterface, newEpisodes []files.Ep
 		return
 	}
 
-	existingByID := make(map[int]files.EpisodeStruct, len(existing))
+	existingByKey := make(map[files.EpisodeKey]files.EpisodeStruct, len(existing))
 	for _, ep := range existing {
-		existingByID[ep.EpisodeID] = ep
+		existingByKey[ep.Key()] = ep
 	}
 
 	merged := make([]files.EpisodeStruct, 0, len(newEpisodes))
 	for _, ep := range newEpisodes {
-		merged = append(merged, mergeSavedEpisode(existingByID[ep.EpisodeID], ep))
+		merged = append(merged, mergeSavedEpisode(existingByKey[ep.Key()], ep))
 	}
 
 	if err := fileManager.UpsertEpisodes(merged); err != nil {

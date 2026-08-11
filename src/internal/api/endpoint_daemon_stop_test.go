@@ -20,7 +20,7 @@ func TestHandleDaemonStop(t *testing.T) {
 
 	t.Run("POST stops daemon when running", func(t *testing.T) {
 		state.SetStatus(daemon.StatusRunning)
-		
+
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/daemon/stop", nil)
 		w := httptest.NewRecorder()
 
@@ -42,7 +42,7 @@ func TestHandleDaemonStop(t *testing.T) {
 
 	t.Run("POST returns 400 when already stopped", func(t *testing.T) {
 		state.SetStatus(daemon.StatusStopped)
-		
+
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/daemon/stop", nil)
 		w := httptest.NewRecorder()
 

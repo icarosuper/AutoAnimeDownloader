@@ -18,15 +18,28 @@ const configFileName = "config.json"
 const downloadedEpsFileName = "downloaded_episodes"
 const blockedEpsFileName = "blocked_episodes"
 const animeSettingsFileName = "anime_settings"
+const standaloneAnimesFileName = "standalone_animes"
+
+// EpisodeKey identifica um episodio. E (anime, numero do episodio) e nao o id do no de
+// airingSchedule da AniList, porque aquele id nao existe para todo episodio: a AniList guarda uma
+// janela de agenda por midia e descarta as antigas, entao One Piece 1 a 1122 e todo anime antigo
+// nao tinham id nenhum — e portanto nao podiam ser baixados (ver decisions.md #52).
+type EpisodeKey struct {
+	AnimeID int `json:"anime_id"`
+	Episode int `json:"episode"`
+}
+
+func (e EpisodeStruct) Key() EpisodeKey {
+	return EpisodeKey{AnimeID: e.AnimeID, Episode: e.EpisodeNumber}
+}
 
 type EpisodeStruct struct {
-	EpisodeID          int       `json:"episode_id"`
-	AnimeID            int       `json:"anime_id,omitempty"`
+	AnimeID            int       `json:"anime_id"`
 	AnimeTotalEpisodes int       `json:"anime_total_episodes,omitempty"`
 	AnimeName          string    `json:"anime_name,omitempty"`
 	EpisodeHash        string    `json:"episode_hash"`
 	EpisodeName        string    `json:"episode_name"`
-	EpisodeNumber      int       `json:"episode_number,omitempty"`
+	EpisodeNumber      int       `json:"episode_number"`
 	DownloadDate       time.Time `json:"download_date"`
 	ManuallyManaged    bool      `json:"manually_managed,omitempty"`
 	// IsBatch marks episodes that came from a batch/movie torrent (multiple episodes share
@@ -130,17 +143,26 @@ type AnimeSettings struct {
 }
 
 type FileManager struct {
-	fs                  FileSystem
-	configPath          string
-	episodesPath        string
-	blockedEpisodesPath string
-	animeSettingsPath   string
-	mu                  sync.Mutex
+	fs                   FileSystem
+	configPath           string
+	episodesPath         string
+	blockedEpisodesPath  string
+	animeSettingsPath    string
+	standaloneAnimesPath string
+	mu                   sync.Mutex
 }
 
 func getDefaultConfig() *Config {
+	// Default da biblioteca: ~/Animes. Se o home nao existir (container sem HOME), fica ""
+	// e a config segue "incompleta" como antes, exigindo que o usuario preencha.
+	completedPath := ""
+	if home, err := os.UserHomeDir(); err == nil {
+		completedPath = filepath.Join(home, "Animes")
+	}
+
 	return &Config{
 		SavePath:               "",
+		CompletedAnimePath:     completedPath,
 		AnilistUsernames:       []string{},
 		CheckInterval:          10,
 		MaxEpisodesPerAnime:    12,
@@ -186,13 +208,14 @@ func ensureConfigsFolder(fs FileSystem) (string, error) {
 	return configsFolderPath, nil
 }
 
-func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath string) *FileManager {
+func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath, standaloneAnimesPath string) *FileManager {
 	return &FileManager{
-		fs:                  fs,
-		configPath:          configPath,
-		episodesPath:        episodesPath,
-		blockedEpisodesPath: blockedEpisodesPath,
-		animeSettingsPath:   animeSettingsPath,
+		fs:                   fs,
+		configPath:           configPath,
+		episodesPath:         episodesPath,
+		blockedEpisodesPath:  blockedEpisodesPath,
+		animeSettingsPath:    animeSettingsPath,
+		standaloneAnimesPath: standaloneAnimesPath,
 	}
 }
 
@@ -207,8 +230,20 @@ func NewDefaultFileManager() (*FileManager, error) {
 	episodesPath := filepath.Join(configsFolderPath, downloadedEpsFileName)
 	blockedEpisodesPath := filepath.Join(configsFolderPath, blockedEpsFileName)
 	animeSettingsPath := filepath.Join(configsFolderPath, animeSettingsFileName)
+	standaloneAnimesPath := filepath.Join(configsFolderPath, standaloneAnimesFileName)
 
-	return NewManager(fs, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath), nil
+	return NewManager(fs, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath, standaloneAnimesPath), nil
+}
+
+// ConfigExists diz se ja existe um config.json em disco. Serve para detectar a primeira
+// execucao, e por isso precisa ser consultado ANTES do primeiro LoadConfigs — que cria o
+// arquivo com os defaults quando ele nao existe.
+func (m *FileManager) ConfigExists() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, err := m.fs.Stat(m.configPath)
+	return err == nil
 }
 
 func (m *FileManager) LoadConfigs() (*Config, error) {
@@ -391,14 +426,14 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 		return fmt.Errorf("failed to load existing episodes: %w", err)
 	}
 
-	existingMap := make(map[int]bool)
+	existingMap := make(map[EpisodeKey]bool)
 	for _, ep := range existingEpisodes {
-		existingMap[ep.EpisodeID] = true
+		existingMap[ep.Key()] = true
 	}
 
 	var newEpisodes []EpisodeStruct
 	for _, ep := range episodes {
-		if !existingMap[ep.EpisodeID] {
+		if !existingMap[ep.Key()] {
 			newEpisodes = append(newEpisodes, ep)
 		}
 	}
@@ -412,7 +447,7 @@ func (m *FileManager) SaveEpisodesToFile(episodes []EpisodeStruct) error {
 	return m.saveEpisodesLocked(allEpisodes)
 }
 
-// UpsertEpisodes updates existing saved episodes (matched by EpisodeID) in place and
+// UpsertEpisodes updates existing saved episodes (matched by EpisodeKey) in place and
 // appends any that are new. Unlike SaveEpisodesToFile, it overwrites existing records —
 // used to write back LibraryPaths after a torrent is organized into the library.
 func (m *FileManager) UpsertEpisodes(episodes []EpisodeStruct) error {
@@ -428,25 +463,25 @@ func (m *FileManager) UpsertEpisodes(episodes []EpisodeStruct) error {
 		return fmt.Errorf("failed to load existing episodes: %w", err)
 	}
 
-	updates := make(map[int]EpisodeStruct, len(episodes))
+	updates := make(map[EpisodeKey]EpisodeStruct, len(episodes))
 	for _, ep := range episodes {
-		updates[ep.EpisodeID] = ep
+		updates[ep.Key()] = ep
 	}
 
 	result := make([]EpisodeStruct, 0, len(existing)+len(episodes))
-	seen := make(map[int]bool, len(existing))
+	seen := make(map[EpisodeKey]bool, len(existing))
 	for _, ep := range existing {
-		if updated, ok := updates[ep.EpisodeID]; ok {
+		if updated, ok := updates[ep.Key()]; ok {
 			result = append(result, updated)
-			seen[ep.EpisodeID] = true
+			seen[ep.Key()] = true
 		} else {
 			result = append(result, ep)
 		}
 	}
 	for _, ep := range episodes {
-		if !seen[ep.EpisodeID] {
+		if !seen[ep.Key()] {
 			result = append(result, ep)
-			seen[ep.EpisodeID] = true
+			seen[ep.Key()] = true
 		}
 	}
 
@@ -467,8 +502,8 @@ func (m *FileManager) saveEpisodesLocked(episodes []EpisodeStruct) error {
 	return nil
 }
 
-func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
-	if len(episodeIds) == 0 {
+func (m *FileManager) DeleteEpisodesFromFile(keys []EpisodeKey) error {
+	if len(keys) == 0 {
 		return nil
 	}
 
@@ -484,14 +519,14 @@ func (m *FileManager) DeleteEpisodesFromFile(episodeIds []int) error {
 		return nil
 	}
 
-	idsToDelete := make(map[int]struct{}, len(episodeIds))
-	for _, id := range episodeIds {
-		idsToDelete[id] = struct{}{}
+	toDelete := make(map[EpisodeKey]struct{}, len(keys))
+	for _, k := range keys {
+		toDelete[k] = struct{}{}
 	}
 
 	var newSaved []EpisodeStruct
 	for _, ep := range savedEpisodes {
-		if _, found := idsToDelete[ep.EpisodeID]; !found {
+		if _, found := toDelete[ep.Key()]; !found {
 			newSaved = append(newSaved, ep)
 		}
 	}
@@ -519,17 +554,62 @@ func (m *FileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error 
 	return nil
 }
 
-func (m *FileManager) LoadBlockedEpisodes() ([]int, error) {
+func (m *FileManager) LoadBlockedEpisodes() ([]EpisodeKey, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.loadBlockedEpisodesLocked()
 }
 
-// loadBlockedEpisodesLocked must be called with m.mu held.
-func (m *FileManager) loadBlockedEpisodesLocked() ([]int, error) {
-	_, err := m.fs.Stat(m.blockedEpisodesPath)
+// loadIntListLocked le um arquivo de estado que e so um array JSON de ids (standalone_animes).
+// Arquivo ausente e lista vazia, nao erro: e o estado inicial normal.
+// Must be called with m.mu held.
+func (m *FileManager) loadIntListLocked(path, what string) ([]int, error) {
+	_, err := m.fs.Stat(path)
 	if os.IsNotExist(err) {
 		return []int{}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat %s file: %w", what, err)
+	}
+
+	b, err := m.fs.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s file: %w", what, err)
+	}
+
+	var ids []int
+	if err := json.Unmarshal(b, &ids); err != nil {
+		return nil, fmt.Errorf("failed to parse %s file: %w", what, err)
+	}
+
+	return ids, nil
+}
+
+// saveIntListLocked must be called with m.mu held.
+func (m *FileManager) saveIntListLocked(path string, ids []int, what string) error {
+	if ids == nil {
+		ids = []int{}
+	}
+	b, err := json.Marshal(ids)
+	if err != nil {
+		return fmt.Errorf("failed to marshal %s: %w", what, err)
+	}
+	if err := m.writeAtomic(path, b); err != nil {
+		return fmt.Errorf("failed to write %s file: %w", what, err)
+	}
+	return nil
+}
+
+// loadBlockedEpisodesLocked le blocked_episodes, um array JSON de EpisodeKey. Must be called
+// with m.mu held.
+//
+// O arquivo no formato antigo era um array de ids de no da AniList (`[416348, ...]`). Esses ids
+// nao existem mais em lugar nenhum do codigo, entao nao ha como converte-los: o arquivo legado e
+// DESCARTADO com um aviso, e o usuario perde os bloqueios manuais que tinha. Bloquear e um clique
+// por episodio na tela de detalhe; migrar por adivinhacao seria pior que refazer.
+func (m *FileManager) loadBlockedEpisodesLocked() ([]EpisodeKey, error) {
+	_, err := m.fs.Stat(m.blockedEpisodesPath)
+	if os.IsNotExist(err) {
+		return []EpisodeKey{}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to stat blocked episodes file: %w", err)
 	}
@@ -539,34 +619,40 @@ func (m *FileManager) loadBlockedEpisodesLocked() ([]int, error) {
 		return nil, fmt.Errorf("failed to read blocked episodes file: %w", err)
 	}
 
-	var ids []int
-	if err := json.Unmarshal(b, &ids); err != nil {
+	var keys []EpisodeKey
+	if err := json.Unmarshal(b, &keys); err != nil {
+		var legacyIDs []int
+		if json.Unmarshal(b, &legacyIDs) == nil {
+			logger.Logger.Warn().
+				Int("count", len(legacyIDs)).
+				Msg("Discarding legacy blocked_episodes file: AniList airing-node ids can no longer be resolved to episodes")
+			return []EpisodeKey{}, nil
+		}
 		return nil, fmt.Errorf("failed to parse blocked episodes file: %w", err)
 	}
 
-	return ids, nil
+	return keys, nil
 }
 
-func (m *FileManager) BlockEpisode(episodeID int) error {
+func (m *FileManager) BlockEpisode(key EpisodeKey) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ids, err := m.loadBlockedEpisodesLocked()
+	keys, err := m.loadBlockedEpisodesLocked()
 	if err != nil {
 		return err
 	}
 
-	for _, id := range ids {
-		if id == episodeID {
+	for _, k := range keys {
+		if k == key {
 			return nil // already blocked
 		}
 	}
 
-	ids = append(ids, episodeID)
-	return m.saveBlockedEpisodesLocked(ids)
+	return m.saveBlockedEpisodesLocked(append(keys, key))
 }
 
-func (m *FileManager) UnmanageEpisode(episodeID int) error {
+func (m *FileManager) UnmanageEpisode(key EpisodeKey) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -577,7 +663,7 @@ func (m *FileManager) UnmanageEpisode(episodeID int) error {
 
 	found := false
 	for i, ep := range episodes {
-		if ep.EpisodeID == episodeID {
+		if ep.Key() == key {
 			episodes[i].ManuallyManaged = false
 			found = true
 			break
@@ -591,23 +677,23 @@ func (m *FileManager) UnmanageEpisode(episodeID int) error {
 	return m.saveEpisodesLocked(episodes)
 }
 
-func (m *FileManager) UnblockEpisode(episodeID int) error {
+func (m *FileManager) UnblockEpisode(key EpisodeKey) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	ids, err := m.loadBlockedEpisodesLocked()
+	keys, err := m.loadBlockedEpisodesLocked()
 	if err != nil {
 		return err
 	}
 
-	var filtered []int
-	for _, id := range ids {
-		if id != episodeID {
-			filtered = append(filtered, id)
+	filtered := make([]EpisodeKey, 0, len(keys))
+	for _, k := range keys {
+		if k != key {
+			filtered = append(filtered, k)
 		}
 	}
 
-	if len(filtered) == len(ids) {
+	if len(filtered) == len(keys) {
 		return nil // not found, nothing to do
 	}
 
@@ -615,11 +701,11 @@ func (m *FileManager) UnblockEpisode(episodeID int) error {
 }
 
 // saveBlockedEpisodesLocked must be called with m.mu held.
-func (m *FileManager) saveBlockedEpisodesLocked(ids []int) error {
-	if ids == nil {
-		ids = []int{}
+func (m *FileManager) saveBlockedEpisodesLocked(keys []EpisodeKey) error {
+	if keys == nil {
+		keys = []EpisodeKey{}
 	}
-	b, err := json.Marshal(ids)
+	b, err := json.Marshal(keys)
 	if err != nil {
 		return fmt.Errorf("failed to marshal blocked episodes: %w", err)
 	}

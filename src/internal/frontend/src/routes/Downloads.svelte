@@ -17,6 +17,7 @@
     prioritizeTorrents,
     announceTorrent,
     deleteTorrent,
+    removeStandaloneAnime,
     type TorrentInfo,
   } from "../lib/api/client.js";
   import { WebSocketClient } from "../lib/websocket/client.js";
@@ -107,6 +108,11 @@
   let deleteDialogOpen = false;
   let pendingDeleteHashes: string[] = [];
   let pendingDeleteName = "";
+  // Preenchido só quando a exclusão é do grupo inteiro (o botão do cabeçalho do anime).
+  let pendingDeleteAnimeId: number | undefined;
+  // Ids dos avulsos, do mesmo GET /animes das capas: para o avulso o 2º check do diálogo deixa
+  // de acompanhar o anime em vez de só bloquear os episódios.
+  let standaloneAnimeIds = new Set<number>();
 
   // 'queued' aceita pausar: com `paused` explícito na fila, pausar um enfileirado quer dizer
   // "não inicie sozinho quando o slot vagar" — antes disso, a única forma de impedir que um
@@ -279,6 +285,7 @@
     try {
       const animes = await getAnimes();
       coversByAnimeId = new Map(animes.map((a) => [a.anime_id, a.cover_image]));
+      standaloneAnimeIds = new Set(animes.filter((a) => a.is_standalone).map((a) => a.anime_id));
     } catch {
       // Dado de apresentação — o accordion funciona igual com o fallback hachurado.
     }
@@ -385,22 +392,28 @@
     await load();
   }
 
-  function handleDeleteRow(t: TorrentInfo) {
+  // `animeId` só vem preenchido quando esta linha é o único torrent do anime (batch, ou grupo de
+  // um): aí excluí-la é excluir o anime, e o diálogo precisa do texto/untrack de anime.
+  function handleDeleteRow(t: TorrentInfo, animeId?: number) {
     pendingDeleteHashes = [t.hash];
     pendingDeleteName = t.anime_name || t.name;
+    pendingDeleteAnimeId = animeId;
     deleteDialogOpen = true;
   }
 
-  function handleBulkDeleteRequest(scope: TorrentInfo[] | null = null, name = "") {
+  function handleBulkDeleteRequest(scope: TorrentInfo[] | null = null, name = "", animeId?: number) {
     pendingDeleteHashes = bulkTargets(scope);
     pendingDeleteName = name;
+    pendingDeleteAnimeId = animeId;
     deleteDialogOpen = true;
   }
 
   async function confirmDelete(e: CustomEvent<{ keepData: boolean; block: boolean }>) {
     const { keepData, block } = e.detail;
     const hashes = pendingDeleteHashes;
+    const animeId = pendingDeleteAnimeId;
     pendingDeleteHashes = [];
+    pendingDeleteAnimeId = undefined;
 
     if (hashes.length <= 1) {
       const hash = hashes[0];
@@ -419,6 +432,18 @@
     } else {
       const result = await runBulk(hashes, (h) => deleteTorrent(h, { keepData, block }));
       reportBulk(result, m.downloads_bulk_deleted);
+    }
+
+    // Avulso + exclusão do anime inteiro: o check prometeu parar de acompanhar. Sem isso o
+    // registro avulso continuaria e o próximo passe baixaria tudo de novo. delete_episodes=false
+    // porque os arquivos já foram tratados acima, conforme o primeiro check.
+    if (block && animeId !== undefined && standaloneAnimeIds.has(animeId)) {
+      try {
+        await removeStandaloneAnime(animeId, false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : m.downloads_delete_toast_error());
+      }
+      await loadCovers();
     }
 
     selected = new Set();
@@ -483,6 +508,8 @@
   bind:open={deleteDialogOpen}
   count={pendingDeleteHashes.length || 1}
   name={pendingDeleteName}
+  scope={pendingDeleteAnimeId !== undefined ? "anime" : "episode"}
+  standalone={pendingDeleteAnimeId !== undefined && standaloneAnimeIds.has(pendingDeleteAnimeId)}
   on:confirm={confirmDelete}
   on:cancel={cancelDelete}
 />
@@ -689,7 +716,14 @@
                    Os tooltips do daisyUI 4 saem do `data-tip` do wrapper (`.tooltip-content` é
                    v5), mesmo padrão do NavRail. `tooltip-left` porque estes botões ficam
                    colados na borda direita do card. O texto é só o RÓTULO DA AÇÃO: o
-                   `aria-label` concatena " — {nome}", que no tooltip seria ruído. -->
+                   `aria-label` concatena " — {nome}", que no tooltip seria ruído.
+
+                   Grupo de um torrent só (batch, ou anime com um episódio) aberto não ganha barra
+                   de lote: ela repetiria pausar/excluir a um palmo dos mesmos botões da linha. As
+                   ações da linha são um superconjunto (têm announce e respeitam o estado), e o
+                   excluir de lá já usa o escopo do anime quando a linha é o grupo inteiro.
+                   Recolhido a barra volta — senão o grupo ficaria sem nenhuma ação. -->
+              {#if group.torrents.length > 1 || closed}
               <div class="flex shrink-0 items-center gap-1">
                 <div class="tooltip tooltip-left" data-tip={T && T.bulkPrioritize}>
                   <button
@@ -730,12 +764,13 @@
                     class="flex h-8 w-8 items-center justify-center rounded-control border border-danger-tint/32 text-danger transition-colors hover:bg-danger-tint/12"
                     aria-label="{T && T.delete} — {group.name}"
                     disabled={bulkBusy}
-                    on:click={() => handleBulkDeleteRequest(group.torrents, group.name)}
+                    on:click={() => handleBulkDeleteRequest(group.torrents, group.name, group.animeId)}
                   >
                     <Trash2 size={15} strokeWidth={2} />
                   </button>
                 </div>
               </div>
+              {/if}
             </div>
 
             {#if !closed}
@@ -872,7 +907,7 @@
                         class="flex h-7 w-7 items-center justify-center rounded-control border border-danger-tint/32 text-danger transition-colors hover:bg-danger-tint/12 disabled:opacity-50"
                         aria-label="{T && T.delete} — {t.name}"
                         disabled={busy.has(t.hash)}
-                        on:click={() => handleDeleteRow(t)}
+                        on:click={() => handleDeleteRow(t, group.torrents.length === 1 ? group.animeId : undefined)}
                       >
                         <Trash2 size={14} strokeWidth={2} />
                       </button>

@@ -1,0 +1,149 @@
+package anilist
+
+import (
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+// TestSearchMedia_MapsResults: a barra de busca da tela #/add depende destes campos.
+func TestSearchMedia_MapsResults(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Page":{"media":[
+		{"id":21,"title":{"english":"One Piece","romaji":"One Piece"},"format":"TV","status":"RELEASING",
+		 "seasonYear":1999,"episodes":null,"coverImage":{"large":"big.jpg","medium":"small.jpg"}},
+		{"id":5114,"title":{"english":null,"romaji":"Hagane no Renkinjutsushi"},"format":"TV","status":"FINISHED",
+		 "seasonYear":2009,"episodes":64,"coverImage":{"large":"","medium":"fma.jpg"}}
+	]}}}`)()
+
+	results, err := SearchMedia("one", false)
+	if err != nil {
+		t.Fatalf("SearchMedia: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("quero 2 resultados, veio %d", len(results))
+	}
+
+	first := results[0]
+	if first.Id != 21 || first.Format != MediaFormatTV || first.Status != MediaStatusReleasing {
+		t.Fatalf("primeiro resultado mapeado errado: %+v", first)
+	}
+	if first.SeasonYear != 1999 {
+		t.Fatalf("quero seasonYear 1999, veio %d", first.SeasonYear)
+	}
+	if first.Episodes != nil {
+		t.Fatalf("episodes null deve virar nil, veio %v", *first.Episodes)
+	}
+	if first.CoverImage.Large != "big.jpg" {
+		t.Fatalf("cover mapeada errado: %+v", first.CoverImage)
+	}
+	if results[1].Episodes == nil || *results[1].Episodes != 64 {
+		t.Fatalf("quero 64 episodios no segundo resultado, veio %v", results[1].Episodes)
+	}
+}
+
+// TestSearchMedia_UnreleasedFilterIsServerSide: o filtro precisa viajar NA QUERY. Filtrar depois
+// de receber esvaziaria a busca (perPage e 20), e um teste que so olhasse o resultado passaria
+// com as duas implementacoes — por isso este inspeciona o corpo enviado.
+func TestSearchMedia_UnreleasedFilterIsServerSide(t *testing.T) {
+	var sent string
+	defer MockAniListDo(func(req *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(req.Body)
+		sent = string(body)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"Page":{"media":[]}}}`)),
+		}, nil
+	})()
+
+	if _, err := SearchMedia("one", false); err != nil {
+		t.Fatalf("SearchMedia: %v", err)
+	}
+	if !strings.Contains(sent, "status_not: NOT_YET_RELEASED") {
+		t.Fatalf("o padrao precisa esconder os nao lancados na query, veio: %s", sent)
+	}
+
+	if _, err := SearchMedia("one", true); err != nil {
+		t.Fatalf("SearchMedia: %v", err)
+	}
+	if strings.Contains(sent, "status_not") {
+		t.Fatalf("com includeUnreleased o argumento nao pode existir, veio: %s", sent)
+	}
+}
+
+// TestGetMediaByID_SyntheticEntry: o MediaList devolvido nao vem de lista nenhuma, entao
+// Progress/Status/Id precisam ser os zeros — e nao lixo que o dedupe do loop leve a serio.
+func TestGetMediaByID_SyntheticEntry(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Media":{
+		"id":21,"episodes":12,"format":"TV","status":"RELEASING",
+		"title":{"english":"My Anime","romaji":"Boku no Anime"},
+		"synonyms":["MA"],
+		"relations":{"edges":[{"node":{"title":{"english":"Prequel","romaji":"Prequel"},"synonyms":[],"episodes":13},"relationType":"PREQUEL"}]},
+		"coverImage":{"large":"big.jpg","medium":"small.jpg"},
+		"airingSchedule":{"nodes":[{"id":10,"episode":1,"timeUntilAiring":-100,"airingAt":123}]}
+	}}}`)()
+
+	ml, err := GetMediaByID(21)
+	if err != nil {
+		t.Fatalf("GetMediaByID: %v", err)
+	}
+	if ml == nil {
+		t.Fatal("quero um MediaList, veio nil")
+	}
+	if ml.Id != 0 || ml.Progress != 0 || ml.Status != "" {
+		t.Fatalf("entrada sintetica precisa vir zerada, veio Id=%d Progress=%d Status=%q", ml.Id, ml.Progress, ml.Status)
+	}
+	if ml.Media.Id != 21 {
+		t.Fatalf("quero media id 21, veio %d", ml.Media.Id)
+	}
+	// resolveSearchStrategy e searchNyaaForSingleEpisode dependem destes tres.
+	if len(ml.Media.Synonyms) != 1 {
+		t.Fatalf("synonyms perdido: %+v", ml.Media.Synonyms)
+	}
+	if len(ml.Media.Relations.Edges) != 1 || ml.Media.Relations.Edges[0].RelationType != "PREQUEL" {
+		t.Fatalf("relations perdido: %+v", ml.Media.Relations)
+	}
+	if len(ml.Media.AiringSchedule.Nodes) != 1 || ml.Media.AiringSchedule.Nodes[0].ID != 10 {
+		t.Fatalf("airingSchedule sem id: %+v", ml.Media.AiringSchedule.Nodes)
+	}
+}
+
+// TestGetMediaByID_CachesWithinTTL: GET /animes tem poll de 30s por aba e passa a chamar isto
+// por anime avulso — o mesmo motivo do cache de GetFrontendAnimeList.
+func TestGetMediaByID_CachesWithinTTL(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Media":{"id":21,"title":{"romaji":"X"}}}}`)()
+
+	if _, err := GetMediaByID(21); err != nil {
+		t.Fatalf("primeira busca: %v", err)
+	}
+	if _, err := GetMediaByID(21); err != nil {
+		t.Fatalf("segunda busca: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("quero 1 request, veio %d", calls)
+	}
+
+	if _, err := GetMediaByID(22); err != nil {
+		t.Fatalf("outro id: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("id diferente e chave diferente: quero 2 requests, veio %d", calls)
+	}
+}
+
+// TestGetMediaByID_NotFound: id que nao existe devolve (nil, nil), o que o POST traduz em 404.
+func TestGetMediaByID_NotFound(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Media":null}}`)()
+
+	ml, err := GetMediaByID(999999)
+	if err != nil {
+		t.Fatalf("Media null nao e erro: %v", err)
+	}
+	if ml != nil {
+		t.Fatalf("quero nil, veio %+v", ml)
+	}
+}

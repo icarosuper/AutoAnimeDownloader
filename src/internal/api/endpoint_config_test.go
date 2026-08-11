@@ -24,7 +24,9 @@ func (s *stubLibrarian) ProbePath(completedPath string) error             { retu
 type mockFileManager struct {
 	configs           *files.Config
 	episodes          []files.EpisodeStruct
-	blockedEpisodes   []int
+	blockedEpisodes   []files.EpisodeKey
+	standaloneAnimes  []int
+	addStandaloneErr  error
 	loadErr           error
 	saveErr           error
 	loadEpisodesErr   error
@@ -77,15 +79,30 @@ func (m *mockFileManager) SaveEpisodesToFile(episodes []files.EpisodeStruct) err
 	return nil
 }
 
+// UpsertEpisodes atualiza em lugar (casando por EpisodeID) e acrescenta o que e novo, como o
+// FileManager de verdade — um mock que simplesmente substituisse a lista faria um teste de
+// "marcar episodio" passar apagando todos os outros.
 func (m *mockFileManager) UpsertEpisodes(episodes []files.EpisodeStruct) error {
 	if m.saveEpisodesErr != nil {
 		return m.saveEpisodesErr
 	}
-	m.episodes = episodes
+	for _, updated := range episodes {
+		found := false
+		for i, existing := range m.episodes {
+			if existing.EpisodeNumber == updated.EpisodeNumber {
+				m.episodes[i] = updated
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.episodes = append(m.episodes, updated)
+		}
+	}
 	return nil
 }
 
-func (m *mockFileManager) DeleteEpisodesFromFile(ids []int) error {
+func (m *mockFileManager) DeleteEpisodesFromFile(keys []files.EpisodeKey) error {
 	if m.deleteEpisodesErr != nil {
 		return m.deleteEpisodesErr
 	}
@@ -93,8 +110,8 @@ func (m *mockFileManager) DeleteEpisodesFromFile(ids []int) error {
 	newEpisodes := []files.EpisodeStruct{}
 	for _, ep := range m.episodes {
 		found := false
-		for _, id := range ids {
-			if ep.EpisodeID == id {
+		for _, k := range keys {
+			if ep.Key() == k {
 				found = true
 				break
 			}
@@ -111,29 +128,29 @@ func (m *mockFileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) er
 	return nil
 }
 
-func (m *mockFileManager) LoadBlockedEpisodes() ([]int, error) {
+func (m *mockFileManager) LoadBlockedEpisodes() ([]files.EpisodeKey, error) {
 	return m.blockedEpisodes, nil
 }
 
-func (m *mockFileManager) BlockEpisode(episodeID int) error {
-	m.blockedEpisodes = append(m.blockedEpisodes, episodeID)
+func (m *mockFileManager) BlockEpisode(key files.EpisodeKey) error {
+	m.blockedEpisodes = append(m.blockedEpisodes, key)
 	return nil
 }
 
-func (m *mockFileManager) UnblockEpisode(episodeID int) error {
-	var filtered []int
-	for _, id := range m.blockedEpisodes {
-		if id != episodeID {
-			filtered = append(filtered, id)
+func (m *mockFileManager) UnblockEpisode(key files.EpisodeKey) error {
+	var filtered []files.EpisodeKey
+	for _, k := range m.blockedEpisodes {
+		if k != key {
+			filtered = append(filtered, k)
 		}
 	}
 	m.blockedEpisodes = filtered
 	return nil
 }
 
-func (m *mockFileManager) UnmanageEpisode(episodeID int) error {
+func (m *mockFileManager) UnmanageEpisode(key files.EpisodeKey) error {
 	for i, ep := range m.episodes {
-		if ep.EpisodeID == episodeID {
+		if ep.Key() == key {
 			m.episodes[i].ManuallyManaged = false
 			break
 		}
@@ -150,6 +167,34 @@ func (m *mockFileManager) LoadAnimeSettings(animeID int) (*files.AnimeSettings, 
 }
 
 func (m *mockFileManager) SaveAnimeSettings(animeID int, settings files.AnimeSettings) error {
+	return nil
+}
+
+func (m *mockFileManager) LoadStandaloneAnimes() ([]int, error) {
+	return m.standaloneAnimes, nil
+}
+
+func (m *mockFileManager) AddStandaloneAnime(mediaID int) error {
+	if m.addStandaloneErr != nil {
+		return m.addStandaloneErr
+	}
+	for _, id := range m.standaloneAnimes {
+		if id == mediaID {
+			return nil
+		}
+	}
+	m.standaloneAnimes = append(m.standaloneAnimes, mediaID)
+	return nil
+}
+
+func (m *mockFileManager) RemoveStandaloneAnime(mediaID int) error {
+	var filtered []int
+	for _, id := range m.standaloneAnimes {
+		if id != mediaID {
+			filtered = append(filtered, id)
+		}
+	}
+	m.standaloneAnimes = filtered
 	return nil
 }
 
@@ -510,6 +555,58 @@ func TestHandleUpdateConfig_SavePath(t *testing.T) {
 		}
 		if mockFM.configs.SavePath != "" {
 			t.Errorf("SavePath deveria ter sido zerado, veio %q", mockFM.configs.SavePath)
+		}
+	})
+}
+
+// TestHandleUpdateConfig_NoAniListAccount: conta da AniList deixou de ser obrigatoria. Com
+// animes avulsos o app funciona inteiro sem lista nenhuma; a biblioteca continua obrigatoria,
+// porque sem ela nao ha para onde baixar.
+func TestHandleUpdateConfig_NoAniListAccount(t *testing.T) {
+	t.Run("PUT sem anilist_usernames e aceito", func(t *testing.T) {
+		mockFM := &mockFileManager{}
+		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
+
+		config := files.Config{
+			AnilistUsernames:    []string{},
+			CompletedAnimePath:  "/tmp/completed",
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+			EpisodeRetryLimit:   5,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("quero 200 sem conta da AniList, veio %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("PUT sem completed_anime_path continua 400", func(t *testing.T) {
+		mockFM := &mockFileManager{}
+		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
+
+		config := files.Config{
+			AnilistUsernames:    []string{},
+			CheckInterval:       10,
+			MaxEpisodesPerAnime: 12,
+			EpisodeRetryLimit:   5,
+		}
+
+		jsonData, _ := json.Marshal(config)
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("quero 400 sem biblioteca, veio %d", w.Code)
 		}
 	})
 }

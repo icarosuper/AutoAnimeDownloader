@@ -785,7 +785,7 @@ func extractEpisodeNumber(name string) *int {
 		matches := p.re.FindStringSubmatch(name)
 		if len(matches) > 1 {
 			if episodeNum, err := strconv.Atoi(matches[1]); err == nil {
-				if episodeNum > 0 && episodeNum < 1000 {
+				if episodeNum > 0 && episodeNum < 10000 {
 					return &episodeNum
 				}
 			}

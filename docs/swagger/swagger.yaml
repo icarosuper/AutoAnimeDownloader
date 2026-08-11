@@ -1,5 +1,37 @@
 basePath: /api/v1
 definitions:
+  api.AniListSearchResult:
+    properties:
+      block_reason:
+        description: |-
+          BlockReason e "" quando o anime pode ser adicionado como avulso, senao um dos motivos de
+          standalone_guard.go. E UM CAMPO, nao quatro booleanos: os motivos sao mutuamente
+          exclusivos por precedencia e o card precisa de um rotulo so. Vem do mesmo blockReason que
+          o POST usa para decidir o 409 — e o que faz front e back concordarem por construcao.
+        type: string
+      cover:
+        type: string
+      episodes:
+        description: Episodes e 0 quando a AniList nao sabe o total (o comum em anime
+          ainda no ar).
+        example: 24
+        type: integer
+      format:
+        example: TV
+        type: string
+      id:
+        example: 21
+        type: integer
+      status:
+        example: RELEASING
+        type: string
+      title:
+        example: One Piece
+        type: string
+      year:
+        example: 1999
+        type: integer
+    type: object
   api.AnimeDetailResponse:
     properties:
       anime_id:
@@ -37,11 +69,13 @@ definitions:
           entirely. Joining by hash instead, single and batch episodes use the same path. Empty
           (and omitted via omitempty) when the episode has no saved record.
         type: string
-      episode_id:
-        type: integer
       episode_name:
         type: string
       episode_number:
+        description: |-
+          EpisodeNumber e a identidade do episodio nas rotas /animes/{id}/episodes/{episodeNumber}/*:
+          o id de no da AniList saiu de cena porque nao existe para episodio fora da janela de agenda
+          que ela guarda (ver decisions.md #52).
         type: integer
       is_aired:
         type: boolean
@@ -81,10 +115,16 @@ definitions:
         type: integer
       is_blacklisted:
         type: boolean
+      is_standalone:
+        description: |-
+          IsStandalone marca os animes acompanhados pelo arquivo standalone_animes, e nao por uma
+          lista da AniList. E ORIGEM, nao estado de download — por isso a tela o mostra num chip
+          proprio ao lado do chip derivado, nunca dentro dele.
+        type: boolean
       last_download_date:
         example: "2026-02-24T10:30:00Z"
         type: string
-      latest_episode_id:
+      latest_episode_number:
         example: 12
         type: integer
       name:
@@ -119,6 +159,22 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  api.StandaloneAnimeAddResponse:
+    properties:
+      added:
+        description: |-
+          Added e quantos episodios entraram na fila agora. 0 e resposta normal: um anime
+          NOT_YET_RELEASED (ou um cujo proximo episodio ainda nao foi ao ar) fica acompanhado do
+          mesmo jeito. Quem traduz isso e o toast, nao um codigo de erro.
+        example: 3
+        type: integer
+    type: object
+  api.StandaloneAnimeRequest:
+    properties:
+      media_id:
+        example: 21
+        type: integer
     type: object
   api.StatusResponse:
     properties:
@@ -399,6 +455,50 @@ info:
   title: Auto Anime Downloader API
   version: "1.0"
 paths:
+  /anilist/search:
+    get:
+      description: Searches AniList by term and flags which results can be added as
+        standalone animes
+      parameters:
+      - description: Search term (fewer than 3 characters returns an empty list)
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Include animes that have not aired yet (NOT_YET_RELEASED). Default
+          false
+        in: query
+        name: include_unreleased
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/api.AniListSearchResult'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Search animes on AniList
+      tags:
+      - standalone
   /animes:
     get:
       consumes:
@@ -468,7 +568,7 @@ paths:
       summary: Get detail and episodes for a specific anime
       tags:
       - animes
-  /animes/{id}/episodes/{episodeId}:
+  /animes/{id}/episodes/{episodeNumber}:
     delete:
       consumes:
       - application/json
@@ -480,9 +580,9 @@ paths:
         name: id
         required: true
         type: integer
-      - description: Episode ID (AniList AiringNode ID)
+      - description: Episode number (1-based, as aired)
         in: path
-        name: episodeId
+        name: episodeNumber
         required: true
         type: integer
       produces:
@@ -511,7 +611,7 @@ paths:
       summary: Manually delete a downloaded episode
       tags:
       - animes
-  /animes/{id}/episodes/{episodeId}/download:
+  /animes/{id}/episodes/{episodeNumber}/download:
     post:
       consumes:
       - application/json
@@ -523,9 +623,9 @@ paths:
         name: id
         required: true
         type: integer
-      - description: Episode ID (AniList AiringNode ID)
+      - description: Episode number (1-based, as aired)
         in: path
-        name: episodeId
+        name: episodeNumber
         required: true
         type: integer
       produces:
@@ -554,7 +654,7 @@ paths:
       summary: Manually download an episode
       tags:
       - animes
-  /animes/{id}/episodes/{episodeId}/redownload:
+  /animes/{id}/episodes/{episodeNumber}/redownload:
     post:
       consumes:
       - application/json
@@ -566,9 +666,9 @@ paths:
         name: id
         required: true
         type: integer
-      - description: Episode ID (AniList AiringNode ID)
+      - description: Episode number (1-based, as aired)
         in: path
-        name: episodeId
+        name: episodeNumber
         required: true
         type: integer
       produces:
@@ -597,7 +697,7 @@ paths:
       summary: Redownload an episode from Nyaa
       tags:
       - animes
-  /animes/{id}/episodes/{episodeId}/release:
+  /animes/{id}/episodes/{episodeNumber}/release:
     post:
       consumes:
       - application/json
@@ -609,9 +709,9 @@ paths:
         name: id
         required: true
         type: integer
-      - description: Episode ID (AniList AiringNode ID)
+      - description: Episode number (1-based, as aired)
         in: path
-        name: episodeId
+        name: episodeNumber
         required: true
         type: integer
       produces:
@@ -636,7 +736,7 @@ paths:
       summary: Release an episode from manual management
       tags:
       - animes
-  /animes/{id}/episodes/{episodeId}/replace:
+  /animes/{id}/episodes/{episodeNumber}/replace:
     post:
       consumes:
       - application/json
@@ -648,9 +748,9 @@ paths:
         name: id
         required: true
         type: integer
-      - description: Episode ID (AniList AiringNode ID)
+      - description: Episode number (1-based, as aired)
         in: path
-        name: episodeId
+        name: episodeNumber
         required: true
         type: integer
       - description: Magnet link
@@ -1010,6 +1110,90 @@ paths:
       summary: Test a webhook preset
       tags:
       - notifications
+  /standalone-animes:
+    post:
+      consumes:
+      - application/json
+      description: Adds a standalone anime and immediately downloads the episodes
+        already aired
+      parameters:
+      - description: Media ID
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.StandaloneAnimeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/api.StandaloneAnimeAddResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Track an anime that is not in any AniList list
+      tags:
+      - standalone
+  /standalone-animes/{id}:
+    delete:
+      description: Removes the standalone record; optionally deletes the downloaded
+        episodes
+      parameters:
+      - description: AniList media ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Delete the downloaded episodes (default false)
+        in: query
+        name: delete_episodes
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Stop tracking a standalone anime
+      tags:
+      - standalone
   /status:
     get:
       consumes:

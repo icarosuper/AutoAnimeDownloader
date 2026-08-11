@@ -28,7 +28,25 @@ interface ApiResponse<T> {
   }
 }
 
+/**
+ * Erro de API que preserva o `code` do envelope. A mensagem continua sendo a do servidor (nada
+ * muda para quem só a exibe), mas quem precisa DECIDIR pelo motivo — o 409 do POST de avulso,
+ * cujos cinco códigos viram cinco toasts diferentes — não precisa parsear texto para isso.
+ */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly status: number,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 interface ApiRequestOptions {
+  /** Cancela a requisição. A busca da tela de adicionar aborta a anterior a cada tecla. */
+  signal?: AbortSignal
   /**
    * Suppresses the automatic error toast on failure. For endpoints polled on a short interval
    * (e.g. getTorrents(), hit every 2-15s by Downloads/Status/AnimeDetail) a transient failure
@@ -51,6 +69,7 @@ async function apiRequest<T>(
     headers: {
       'Content-Type': 'application/json',
     },
+    signal: opts.signal,
   }
 
   if (body) {
@@ -64,7 +83,11 @@ async function apiRequest<T>(
     const data: ApiResponse<T> = await response.json()
 
     if (!response.ok) {
-      throw new Error(data.error?.message || `HTTP error! status: ${response.status}`)
+      throw new ApiError(
+        data.error?.message || `HTTP error! status: ${response.status}`,
+        data.error?.code ?? 'UNKNOWN',
+        response.status,
+      )
     }
 
     return data.data
@@ -154,10 +177,27 @@ export interface AnimeInfo {
   /** Lancados, nao assistidos e nao baixados — a contagem de "atrasado". */
   episodes_pending: number
   total_episodes: number
-  latest_episode_id: number
+  latest_episode_number: number
   last_download_date: string
   cover_image?: string
   is_blacklisted?: boolean
+  /** Acompanhado pelo arquivo de avulsos, e não por uma lista do AniList. Origem, não estado. */
+  is_standalone?: boolean
+}
+
+/** Motivos pelos quais um anime não pode ser adicionado como avulso — vêm prontos do servidor. */
+export type BlockReason = '' | 'blacklist' | 'standalone' | 'tracked' | 'downloaded'
+
+export interface AniListSearchResult {
+  id: number
+  title: string
+  format: string
+  status: string
+  year: number
+  /** 0 quando o AniList não sabe o total (comum em anime ainda no ar). */
+  episodes: number
+  cover?: string
+  block_reason: BlockReason
 }
 
 export interface LogsResponse {
@@ -207,7 +247,7 @@ export async function getAnimes(): Promise<AnimeInfo[]> {
 }
 
 export interface AnimeEpisodeInfo {
-  episode_id: number
+  /** Identidade do episodio nas rotas de acao: (anime, numero). Nao existe mais episode_id. */
   episode_number: number
   airing_at: number
   time_until_airing: number
@@ -241,24 +281,24 @@ export async function getAnimeDetail(animeId: number): Promise<AnimeDetailRespon
   return apiRequest<AnimeDetailResponse>('GET', `/animes/${animeId}/episodes`)
 }
 
-export async function downloadEpisode(animeId: number, episodeId: number): Promise<void> {
-  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/download`)
+export async function downloadEpisode(animeId: number, episodeNumber: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeNumber}/download`)
 }
 
-export async function deleteEpisode(animeId: number, episodeId: number): Promise<void> {
-  return apiRequest<void>('DELETE', `/animes/${animeId}/episodes/${episodeId}`)
+export async function deleteEpisode(animeId: number, episodeNumber: number): Promise<void> {
+  return apiRequest<void>('DELETE', `/animes/${animeId}/episodes/${episodeNumber}`)
 }
 
-export async function releaseEpisode(animeId: number, episodeId: number): Promise<void> {
-  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/release`)
+export async function releaseEpisode(animeId: number, episodeNumber: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeNumber}/release`)
 }
 
-export async function redownloadEpisode(animeId: number, episodeId: number): Promise<void> {
-  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/redownload`)
+export async function redownloadEpisode(animeId: number, episodeNumber: number): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeNumber}/redownload`)
 }
 
-export async function replaceEpisodeWithMagnet(animeId: number, episodeId: number, magnet: string): Promise<void> {
-  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeId}/replace`, { magnet })
+export async function replaceEpisodeWithMagnet(animeId: number, episodeNumber: number, magnet: string): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/${episodeNumber}/replace`, { magnet })
 }
 
 export async function replaceAnimeWithMagnet(animeId: number, magnet: string): Promise<void> {
@@ -328,6 +368,36 @@ export async function deleteTorrent(
     block: String(opts.block),
   })
   return apiRequest<void>('DELETE', `/torrents/${hash}?${params.toString()}`)
+}
+
+/**
+ * Busca no AniList. `silent` porque a tela busca a cada tecla (com debounce) — um erro de rede
+ * transitório não pode virar um toast por letra digitada.
+ */
+export async function searchAniList(
+  q: string,
+  includeUnreleased = false,
+  signal?: AbortSignal,
+): Promise<AniListSearchResult[]> {
+  // O parâmetro só viaja quando é true: o backend já assume false, e mandar `=false` em toda
+  // busca só engorda a URL do log.
+  const unreleased = includeUnreleased ? '&include_unreleased=true' : ''
+  return apiRequest<AniListSearchResult[]>(
+    'GET',
+    `/anilist/search?q=${encodeURIComponent(q)}${unreleased}`,
+    null,
+    { silent: true, signal },
+  )
+}
+
+/** Passa a acompanhar um anime avulso e já baixa o que estiver no ar. Devolve quantos entraram. */
+export async function addStandaloneAnime(mediaId: number): Promise<{ added: number }> {
+  return apiRequest<{ added: number }>('POST', '/standalone-animes', { media_id: mediaId }, { silent: true })
+}
+
+export async function removeStandaloneAnime(mediaId: number, deleteEpisodes: boolean): Promise<void> {
+  const params = new URLSearchParams({ delete_episodes: String(deleteEpisodes) })
+  return apiRequest<void>('DELETE', `/standalone-animes/${mediaId}?${params.toString()}`)
 }
 
 export async function testWebhook(name: string): Promise<void> {

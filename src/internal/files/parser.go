@@ -3,43 +3,23 @@ package files
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
-	"time"
 )
 
-// ParseEpisodes parses episodes from JSONL format (one JSON object per line)
-// Falls back to old text format if JSON parsing fails
+// ParseEpisodes le o arquivo de episodios em JSONL (um objeto JSON por linha).
+//
+// O formato de texto legado (`id:hash:name`) foi REMOVIDO junto com EpisodeStruct.EpisodeID: ele
+// nao carregava anime id nem numero de episodio, que sao exatamente a chave de um episodio hoje
+// (ver decisions.md #52). Um registro desses nao tem como ser identificado, entao suportar o
+// formato so serviria para produzir chaves (0,0) colidindo entre si.
 func ParseEpisodes(content string) ([]EpisodeStruct, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return []EpisodeStruct{}, nil
 	}
 
-	// Try JSONL format first
-	episodes, jsonlErr := parseEpisodesJSONL(content)
-	if jsonlErr == nil {
-		return episodes, nil
-	}
-
-	// Fall back to old text format
-	episodes, textErr := parseEpisodesTextFormat(content)
-	if textErr != nil {
-		// Os dois erros importam: para um arquivo ja migrado (o caso normal) o erro do
-		// formato antigo e ruido — ele so reclama que a linha e JSON. Reportar apenas ele
-		// escondia a linha JSONL realmente quebrada, que e o que aponta a corrupcao.
-		return nil, fmt.Errorf("failed to parse as JSONL (%w) and as legacy text format (%v)", jsonlErr, textErr)
-	}
-
-	return episodes, nil
-}
-
-// parseEpisodesJSONL parses episodes from JSONL format (one JSON object per line)
-func parseEpisodesJSONL(content string) ([]EpisodeStruct, error) {
 	var episodes []EpisodeStruct
-	lines := strings.Split(content, "\n")
-
-	for lineNum, line := range lines {
+	for lineNum, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -54,56 +34,6 @@ func parseEpisodesJSONL(content string) ([]EpisodeStruct, error) {
 	}
 
 	return episodes, nil
-}
-
-// parseEpisodesTextFormat parses episodes from old text format (id:hash:name)
-// Used for migration from old format
-func parseEpisodesTextFormat(content string) ([]EpisodeStruct, error) {
-	var episodes []EpisodeStruct
-	lines := strings.Split(content, "\n")
-
-	for lineNum, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		episode, err := parseEpisodeLine(line)
-		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", lineNum+1, err)
-		}
-		episodes = append(episodes, episode)
-	}
-
-	return episodes, nil
-}
-
-func parseEpisodeLine(line string) (EpisodeStruct, error) {
-	parts := strings.SplitN(line, ":", 3)
-	if len(parts) < 2 {
-		return EpisodeStruct{}, fmt.Errorf("invalid format: expected 'id:hash' or 'id:hash:name', got '%s'", line)
-	}
-
-	id, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return EpisodeStruct{}, fmt.Errorf("invalid episode ID '%s': %w", parts[0], err)
-	}
-
-	if parts[1] == "" {
-		return EpisodeStruct{}, fmt.Errorf("episode hash cannot be empty")
-	}
-
-	episode := EpisodeStruct{
-		EpisodeID:    id,
-		EpisodeHash:  parts[1],
-		DownloadDate: time.Now(), // Default to current time for migrated episodes
-	}
-
-	if len(parts) == 3 {
-		episode.EpisodeName = parts[2]
-	}
-
-	return episode, nil
 }
 
 // SerializeEpisode serializes an episode to JSONL format (one JSON object per line)

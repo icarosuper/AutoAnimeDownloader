@@ -14,8 +14,8 @@ import (
 // animeProcessResult holds the per-anime outputs from processAnimeEpisodes.
 type animeProcessResult struct {
 	newEpisodes     []files.EpisodeStruct
-	checkedEpisodes []int
-	idsToDelete     []int
+	checkedEpisodes []files.EpisodeKey
+	keysToDelete    []files.EpisodeKey
 }
 
 // maxConcurrentAnimes limits simultaneous Nyaa HTTP searches to avoid rate limiting.
@@ -34,12 +34,12 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			webUIURL := getWebUiURL()
-			if err := openBrowserToConfig(webUIURL); err != nil {
+			if err := OpenBrowser(webUIURL); err != nil {
 				logger.Logger.Warn().Err(err).Msg("Failed to open browser to configuration page")
 			}
 		}()
 
-		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (Anilist username or completed anime path)"))
+		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (completed anime path)"))
 		return
 	}
 
@@ -116,7 +116,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	var (
 		anilistResponse  *anilist.AniListResponse
 		savedEpisodes    []files.EpisodeStruct
-		blockedEpisodes  []int
+		blockedEpisodes  []files.EpisodeKey
 		animeSettingsMap map[int]files.AnimeSettings
 		// inDeleteStatus[username][mediaId] — quais animes cada conta tem em algum status de
 		// deleção. Uma conta cuja busca falhou fica ausente do mapa, e ausente nunca concorda.
@@ -126,12 +126,20 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		errEpisodes error
 	)
 
+	// Leitura local e barata, feita antes do fan-out porque searchAnilist depende dela. Uma
+	// falha aqui nao aborta o passe: sem o arquivo o daemon so deixa de cobrir os avulsos.
+	standaloneIDs, err := fileManager.LoadStandaloneAnimes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load standalone animes, continuing with the AniList lists only")
+		standaloneIDs = nil
+	}
+
 	var fetchWg sync.WaitGroup
 
 	fetchWg.Add(1)
 	go func() {
 		defer fetchWg.Done()
-		anilistResponse, errAnilist = searchAnilist(configs)
+		anilistResponse, errAnilist = searchAnilist(fileManager, configs, standaloneIDs)
 	}()
 
 	fetchWg.Add(1)
@@ -152,7 +160,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		blockedEpisodes, e = fileManager.LoadBlockedEpisodes()
 		if e != nil {
 			logger.Logger.Warn().Err(e).Msg("Failed to load blocked episodes, continuing without block list")
-			blockedEpisodes = []int{}
+			blockedEpisodes = []files.EpisodeKey{}
 		}
 	}()
 
@@ -208,9 +216,9 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// was down and a save-path change. JobOrganize is idempotent, so re-runs are no-ops.
 	reconcileLibrary(downloadedTorrents, savedEpisodes, jobQueue)
 
-	blockedMap := make(map[int]bool, len(blockedEpisodes))
-	for _, id := range blockedEpisodes {
-		blockedMap[id] = true
+	blockedMap := make(map[files.EpisodeKey]bool, len(blockedEpisodes))
+	for _, k := range blockedEpisodes {
+		blockedMap[k] = true
 	}
 
 	animes := anilistResponse.Data.Page.MediaList
@@ -220,7 +228,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// basta UMA conta —, e ela já vem aplicada em searchAnilist pela união das listas.
 	deletableMedia := deletableMediaIDs(configs, inDeleteStatus, savedEpisodes)
 
-	var idsToDelete []int
+	var keysToDelete []files.EpisodeKey
 
 	// Phase 2: process each anime concurrently, bounded by maxConcurrentAnimes.
 	sem := make(chan struct{}, maxConcurrentAnimes)
@@ -269,11 +277,11 @@ outer:
 	elapsed := time.Since(start)
 
 	var newEpisodes []files.EpisodeStruct
-	var checkedEpisodes []int
+	var checkedEpisodes []files.EpisodeKey
 	for r := range resultCh {
 		newEpisodes = append(newEpisodes, r.newEpisodes...)
 		checkedEpisodes = append(checkedEpisodes, r.checkedEpisodes...)
-		idsToDelete = append(idsToDelete, r.idsToDelete...)
+		keysToDelete = append(keysToDelete, r.keysToDelete...)
 	}
 
 	select {
@@ -289,7 +297,7 @@ outer:
 
 	handleSavedEpisodes(fileManager, configs, backend, librarian, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,
-		idsToDelete:     idsToDelete,
+		keysToDelete:    keysToDelete,
 		checkedEpisodes: checkedEpisodes,
 		newEpisodes:     newEpisodes,
 	})
@@ -462,14 +470,22 @@ func allAccountsAgreeOnDelete(configs *files.Config, inDeleteStatus map[string]m
 	return true
 }
 
-func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
-	if len(configs.AnilistUsernames) == 0 || configs.DownloadPath() == "" {
-		err := fmt.Errorf("missing required configuration: Anilist username or completed anime path")
+// searchAnilist monta o universo de animes do passe: a uniao das listas das contas
+// configuradas mais os animes avulsos (§ standalone).
+//
+// fileManager entra aqui, e nao so a config, por causa da remocao automatica: um avulso que
+// depois apareceu numa lista da AniList sai do arquivo, e a unica hora em que se sabe disso e
+// exatamente aqui, com a lista mesclada na mao.
+func searchAnilist(fileManager FileManagerInterface, configs *files.Config, standaloneIDs []int) (*anilist.AniListResponse, error) {
+	// Sem conta da AniList NAO e erro: o passe ainda tem trabalho a fazer (os avulsos), e
+	// abortar aqui faria a feature nunca rodar numa instalacao sem lista. Sem biblioteca e:
+	// nao ha para onde baixar.
+	if configs.DownloadPath() == "" {
+		err := fmt.Errorf("missing required configuration: completed anime path")
 		logger.Logger.Error().
 			Err(err).
-			Strs("anilist_usernames", configs.AnilistUsernames).
 			Str("download_path", configs.DownloadPath()).
-			Msg("Missing required configuration: Anilist usernames or completed anime path")
+			Msg("Missing required configuration: completed anime path")
 		return nil, err
 	}
 
@@ -518,6 +534,11 @@ func searchAnilist(configs *files.Config) (*anilist.AniListResponse, error) {
 	}
 
 	merged.Data.Page.MediaList = anilist.DedupeByMedia(merged.Data.Page.MediaList)
+
+	// DEPOIS do dedupe, nunca antes: a entrada real precisa vencer. DedupeByMedia mantem o
+	// MENOR progresso, entao o Progress 0 do MediaList sintetico de GetMediaByID ganharia e o
+	// daemon voltaria a baixar episodios ja assistidos.
+	merged.Data.Page.MediaList = appendStandaloneAnimes(fileManager, merged.Data.Page.MediaList, standaloneIDs)
 
 	logger.Logger.Info().
 		Strs("usernames", configs.AnilistUsernames).

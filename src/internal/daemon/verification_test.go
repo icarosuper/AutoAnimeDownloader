@@ -40,7 +40,7 @@ func TestSearchAnilist_FiltersByMediaStatus(t *testing.T) {
 		DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
 	}
 
-	resp, err := searchAnilist(config)
+	resp, err := searchAnilist(&mockFileManagerForEpisodes{}, config, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -75,7 +75,7 @@ func TestSearchAnilist_EmptyMediaStatusesAllowsNothing(t *testing.T) {
 		DownloadMediaStatuses: []string{},
 	}
 
-	resp, err := searchAnilist(config)
+	resp, err := searchAnilist(&mockFileManagerForEpisodes{}, config, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -130,7 +130,7 @@ func TestDeletableMediaIDs_AllAccountsAgree(t *testing.T) {
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
 		"accountA": {500: true},
 		"accountB": {500: true},
-	}, []files.EpisodeStruct{{EpisodeID: 1, AnimeID: 500}})
+	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if !got[500] {
 		t.Error("as duas contas querem apagar, o anime deve ser deletavel")
@@ -144,7 +144,7 @@ func TestDeletableMediaIDs_DifferentDeleteStatusesStillDeletes(t *testing.T) {
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
 		"accountA": {500: true}, // DROPPED, veio na lista
 		"accountB": {},          // COMPLETED chega pelo desempate
-	}, []files.EpisodeStruct{{EpisodeID: 1, AnimeID: 500}})
+	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if !got[500] {
 		t.Error("statuses de delecao diferentes nas duas contas ainda devem apagar")
@@ -158,7 +158,7 @@ func TestDeletableMediaIDs_NeutralStatusInOtherAccountVetoes(t *testing.T) {
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
 		"accountA": {500: true},
 		"accountB": {},
-	}, []files.EpisodeStruct{{EpisodeID: 1, AnimeID: 500}})
+	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if got[500] {
 		t.Error("uma conta com o anime em status neutro deve vetar a delecao")
@@ -173,7 +173,7 @@ func TestDeletableMediaIDs_AccountWithoutTheAnimeDoesNotVeto(t *testing.T) {
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
 		"accountA": {500: true},
 		"accountB": {},
-	}, []files.EpisodeStruct{{EpisodeID: 1, AnimeID: 500}})
+	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if !got[500] {
 		t.Error("conta que nao acompanha o anime nao pode vetar a delecao")
@@ -190,7 +190,7 @@ func TestDeletableMediaIDs_FailedAccountFetchVetoes(t *testing.T) {
 
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
 		"accountA": {500: true},
-	}, []files.EpisodeStruct{{EpisodeID: 1, AnimeID: 500}})
+	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if got[500] {
 		t.Error("com a lista de uma conta indisponivel nada pode ser apagado")

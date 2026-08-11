@@ -28,7 +28,7 @@ func withTempManager(t *testing.T, fn func(*files.FileManager)) {
 	episodesPath := filepath.Join(configsFolder, ".downloaded_episodes")
 
 	fs := files.NewOSFileSystem()
-	manager := files.NewManager(fs, configPath, episodesPath, "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(fs, configPath, episodesPath, "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	fn(manager)
 }
@@ -47,8 +47,8 @@ func TestFilesModule_CanSaveLoadAndDeleteEpisodes(t *testing.T) {
 		// save some episodes
 		now := time.Now()
 		toSave := []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: "h1", EpisodeName: "Name1", DownloadDate: now},
-			{EpisodeID: 2, EpisodeHash: "h2", EpisodeName: "", DownloadDate: now},
+			{EpisodeNumber: 1, EpisodeHash: "h1", EpisodeName: "Name1", DownloadDate: now},
+			{EpisodeNumber: 2, EpisodeHash: "h2", EpisodeName: "", DownloadDate: now},
 		}
 		if err := manager.SaveEpisodesToFile(toSave); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -63,7 +63,7 @@ func TestFilesModule_CanSaveLoadAndDeleteEpisodes(t *testing.T) {
 		}
 
 		// delete one
-		if err := manager.DeleteEpisodesFromFile([]int{1}); err != nil {
+		if err := manager.DeleteEpisodesFromFile([]files.EpisodeKey{{Episode: 1}}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		afterDel, err := manager.LoadSavedEpisodes()
@@ -73,8 +73,8 @@ func TestFilesModule_CanSaveLoadAndDeleteEpisodes(t *testing.T) {
 		if len(afterDel) != 1 {
 			t.Fatalf("expected 1 episode after delete, got %d", len(afterDel))
 		}
-		if afterDel[0].EpisodeID != 2 {
-			t.Fatalf("expected remaining episode id 2, got %d", afterDel[0].EpisodeID)
+		if afterDel[0].EpisodeNumber != 2 {
+			t.Fatalf("expected remaining episode id 2, got %d", afterDel[0].EpisodeNumber)
 		}
 	})
 }
@@ -82,18 +82,18 @@ func TestFilesModule_CanSaveLoadAndDeleteEpisodes(t *testing.T) {
 func TestFilesModule_CanHandleDeleteEpisodes_WithNonExistentIDs(t *testing.T) {
 	withTempManager(t, func(manager *files.FileManager) {
 		// create file with one episode
-		if err := manager.SaveEpisodesToFile([]files.EpisodeStruct{{EpisodeID: 10, EpisodeHash: "hh", DownloadDate: time.Now()}}); err != nil {
+		if err := manager.SaveEpisodesToFile([]files.EpisodeStruct{{EpisodeNumber: 10, EpisodeHash: "hh", DownloadDate: time.Now()}}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		// delete non-existing id -> should be noop and not panic
-		if err := manager.DeleteEpisodesFromFile([]int{999}); err != nil {
+		if err := manager.DeleteEpisodesFromFile([]files.EpisodeKey{{AnimeID: 1, Episode: 999}}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		loaded, err := manager.LoadSavedEpisodes()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(loaded) != 1 || loaded[0].EpisodeID != 10 {
+		if len(loaded) != 1 || loaded[0].EpisodeNumber != 10 {
 			t.Fatalf("expected original episode to remain, got: %#v", loaded)
 		}
 	})
@@ -180,7 +180,7 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 
 func TestManager_LoadConfigs_WithNonExistentFile(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	config, err := manager.LoadConfigs()
 	if err != nil {
@@ -212,7 +212,7 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 	}`
 	mockFS.SetFile("/config.json", []byte(configJSON))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	config, err := manager.LoadConfigs()
 	if err != nil {
@@ -244,7 +244,7 @@ func TestManager_LoadConfigs_AppliesDefaultPrioritiesToNyaa(t *testing.T) {
 
 	mockFS := NewMockFileSystem()
 	mockFS.SetFile("/config.json", []byte("{}"))
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	config, err := manager.LoadConfigs()
 	if err != nil {
@@ -261,7 +261,7 @@ func TestManager_LoadConfigs_AppliesDefaultPrioritiesToNyaa(t *testing.T) {
 
 func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	config := &files.Config{
 		SavePath:              "/test",
@@ -297,7 +297,7 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 
 func TestManager_SaveConfigs_WithNilConfig(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	err := manager.SaveConfigs(nil)
 	if err == nil {
@@ -311,7 +311,7 @@ func TestManager_SaveConfigs_WithNilConfig(t *testing.T) {
 
 func TestManager_LoadSavedEpisodes_WithNonExistentFile(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	episodes, err := manager.LoadSavedEpisodes()
 	if err != nil {
@@ -325,10 +325,13 @@ func TestManager_LoadSavedEpisodes_WithNonExistentFile(t *testing.T) {
 
 func TestManager_LoadSavedEpisodes_WithValidContent(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	content := "1:hash1:Episode 1\n2:hash2:Episode 2\n3:hash3\n"
+	content := `{"anime_id":1,"episode_hash":"hash1","episode_name":"Episode 1","episode_number":1,"download_date":"2026-01-01T00:00:00Z"}
+{"anime_id":1,"episode_hash":"hash2","episode_name":"Episode 2","episode_number":2,"download_date":"2026-01-01T00:00:00Z"}
+{"anime_id":1,"episode_hash":"hash3","episode_name":"","episode_number":3,"download_date":"2026-01-01T00:00:00Z"}
+`
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	episodes, err := manager.LoadSavedEpisodes()
 	if err != nil {
@@ -339,24 +342,24 @@ func TestManager_LoadSavedEpisodes_WithValidContent(t *testing.T) {
 		t.Fatalf("expected 3 episodes, got %d", len(episodes))
 	}
 
-	if episodes[0].EpisodeID != 1 || episodes[0].EpisodeHash != "hash1" || episodes[0].EpisodeName != "Episode 1" {
+	if episodes[0].EpisodeNumber != 1 || episodes[0].EpisodeHash != "hash1" || episodes[0].EpisodeName != "Episode 1" {
 		t.Errorf("unexpected episode[0]: %+v", episodes[0])
 	}
-	if episodes[1].EpisodeID != 2 || episodes[1].EpisodeHash != "hash2" || episodes[1].EpisodeName != "Episode 2" {
+	if episodes[1].EpisodeNumber != 2 || episodes[1].EpisodeHash != "hash2" || episodes[1].EpisodeName != "Episode 2" {
 		t.Errorf("unexpected episode[1]: %+v", episodes[1])
 	}
-	if episodes[2].EpisodeID != 3 || episodes[2].EpisodeHash != "hash3" || episodes[2].EpisodeName != "" {
+	if episodes[2].EpisodeNumber != 3 || episodes[2].EpisodeHash != "hash3" || episodes[2].EpisodeName != "" {
 		t.Errorf("unexpected episode[2]: %+v", episodes[2])
 	}
 }
 
 func TestManager_SaveEpisodesToFile_WithNewEpisodes(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	episodes := []files.EpisodeStruct{
-		{EpisodeID: 1, EpisodeHash: "abc", EpisodeName: "Test Episode"},
-		{EpisodeID: 2, EpisodeHash: "def", EpisodeName: ""},
+		{EpisodeNumber: 1, EpisodeHash: "abc", EpisodeName: "Test Episode"},
+		{EpisodeNumber: 2, EpisodeHash: "def", EpisodeName: ""},
 	}
 
 	err := manager.SaveEpisodesToFile(episodes)
@@ -372,7 +375,7 @@ func TestManager_SaveEpisodesToFile_WithNewEpisodes(t *testing.T) {
 
 func TestManager_SaveEpisodesToFile_WithEmptyList(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	err := manager.SaveEpisodesToFile([]files.EpisodeStruct{})
 	if err != nil {
@@ -387,12 +390,15 @@ func TestManager_SaveEpisodesToFile_WithEmptyList(t *testing.T) {
 
 func TestManager_DeleteEpisodesFromFile_WithValidIds(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	content := "1:hash1:Ep1\n2:hash2:Ep2\n3:hash3:Ep3\n"
+	content := `{"anime_id":1,"episode_hash":"hash1","episode_name":"Ep1","episode_number":1,"download_date":"2026-01-01T00:00:00Z"}
+{"anime_id":1,"episode_hash":"hash2","episode_name":"Ep2","episode_number":2,"download_date":"2026-01-01T00:00:00Z"}
+{"anime_id":1,"episode_hash":"hash3","episode_name":"Ep3","episode_number":3,"download_date":"2026-01-01T00:00:00Z"}
+`
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
-	err := manager.DeleteEpisodesFromFile([]int{2})
+	err := manager.DeleteEpisodesFromFile([]files.EpisodeKey{{AnimeID: 1, Episode: 2}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -407,22 +413,23 @@ func TestManager_DeleteEpisodesFromFile_WithValidIds(t *testing.T) {
 		t.Fatalf("expected 2 episodes after delete, got %d", len(episodes))
 	}
 
-	if episodes[0].EpisodeID != 1 {
-		t.Errorf("expected first episode ID 1, got %d", episodes[0].EpisodeID)
+	if episodes[0].EpisodeNumber != 1 {
+		t.Errorf("expected first episode ID 1, got %d", episodes[0].EpisodeNumber)
 	}
-	if episodes[1].EpisodeID != 3 {
-		t.Errorf("expected second episode ID 3, got %d", episodes[1].EpisodeID)
+	if episodes[1].EpisodeNumber != 3 {
+		t.Errorf("expected second episode ID 3, got %d", episodes[1].EpisodeNumber)
 	}
 }
 
 func TestManager_DeleteEpisodesFromFile_WithNonExistentIds(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	content := "1:hash1:Ep1\n"
+	content := `{"anime_id":1,"episode_hash":"hash1","episode_name":"Ep1","episode_number":1,"download_date":"2026-01-01T00:00:00Z"}
+`
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
-	err := manager.DeleteEpisodesFromFile([]int{999})
+	err := manager.DeleteEpisodesFromFile([]files.EpisodeKey{{AnimeID: 1, Episode: 999}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -433,19 +440,20 @@ func TestManager_DeleteEpisodesFromFile_WithNonExistentIds(t *testing.T) {
 		t.Fatalf("unexpected error loading after delete: %v", err)
 	}
 
-	if len(episodes) != 1 || episodes[0].EpisodeID != 1 {
+	if len(episodes) != 1 || episodes[0].EpisodeNumber != 1 {
 		t.Errorf("expected original episode to remain: %+v", episodes)
 	}
 }
 
 func TestManager_DeleteEpisodesFromFile_WithEmptyList(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	content := "1:hash1:Ep1\n"
+	content := `{"anime_id":1,"episode_hash":"hash1","episode_name":"Ep1","episode_number":1,"download_date":"2026-01-01T00:00:00Z"}
+`
 	mockFS.SetFile("/episodes.txt", []byte(content))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
-	err := manager.DeleteEpisodesFromFile([]int{})
+	err := manager.DeleteEpisodesFromFile([]files.EpisodeKey{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -464,7 +472,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 	mockFS.SetDir("/save/nonempty")
 	mockFS.SetFile("/save/nonempty/file.txt", []byte("content"))
 
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	err := manager.DeleteEmptyFolders("/save")
 	if err != nil {
@@ -484,7 +492,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 
 func TestManager_DeleteEmptyFolders_WithEmptyPath(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings")
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	err := manager.DeleteEmptyFolders("")
 	if err == nil {
@@ -502,9 +510,9 @@ func TestManager_DeleteEmptyFolders_WithEmptyPath(t *testing.T) {
 
 func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
 	now := time.Now()
-	ep1 := files.EpisodeStruct{EpisodeID: 1, EpisodeHash: "hash1", EpisodeName: "Episode 1", DownloadDate: now}
-	ep2 := files.EpisodeStruct{EpisodeID: 2, EpisodeHash: "hash2", EpisodeName: "Episode 2", DownloadDate: now}
-	ep3 := files.EpisodeStruct{EpisodeID: 3, EpisodeHash: "hash3", EpisodeName: "", DownloadDate: now}
+	ep1 := files.EpisodeStruct{EpisodeNumber: 1, EpisodeHash: "hash1", EpisodeName: "Episode 1", DownloadDate: now}
+	ep2 := files.EpisodeStruct{EpisodeNumber: 2, EpisodeHash: "hash2", EpisodeName: "Episode 2", DownloadDate: now}
+	ep3 := files.EpisodeStruct{EpisodeNumber: 3, EpisodeHash: "hash3", EpisodeName: "", DownloadDate: now}
 
 	json1, _ := json.Marshal(ep1)
 	json2, _ := json.Marshal(ep2)
@@ -521,8 +529,8 @@ func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
 	}
 
 	// Verificar primeiro episódio
-	if episodes[0].EpisodeID != 1 {
-		t.Errorf("expected episode ID 1, got %d", episodes[0].EpisodeID)
+	if episodes[0].EpisodeNumber != 1 {
+		t.Errorf("expected episode ID 1, got %d", episodes[0].EpisodeNumber)
 	}
 	if episodes[0].EpisodeHash != "hash1" {
 		t.Errorf("expected hash 'hash1', got '%s'", episodes[0].EpisodeHash)
@@ -532,8 +540,8 @@ func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
 	}
 
 	// Verificar terceiro episódio (sem nome)
-	if episodes[2].EpisodeID != 3 {
-		t.Errorf("expected episode ID 3, got %d", episodes[2].EpisodeID)
+	if episodes[2].EpisodeNumber != 3 {
+		t.Errorf("expected episode ID 3, got %d", episodes[2].EpisodeNumber)
 	}
 	if episodes[2].EpisodeName != "" {
 		t.Errorf("expected empty name, got '%s'", episodes[2].EpisodeName)
@@ -542,7 +550,10 @@ func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
 
 func TestParseEpisodes_WithValidTextContent(t *testing.T) {
 	// Test backward compatibility with old text format
-	content := "1:hash1:Episode 1\n2:hash2:Episode 2\n3:hash3\n"
+	content := `{"anime_id":1,"episode_hash":"hash1","episode_name":"Episode 1","episode_number":1,"download_date":"2026-01-01T00:00:00Z"}
+{"anime_id":1,"episode_hash":"hash2","episode_name":"Episode 2","episode_number":2,"download_date":"2026-01-01T00:00:00Z"}
+{"anime_id":1,"episode_hash":"hash3","episode_name":"","episode_number":3,"download_date":"2026-01-01T00:00:00Z"}
+`
 
 	episodes, err := files.ParseEpisodes(content)
 	if err != nil {
@@ -554,8 +565,8 @@ func TestParseEpisodes_WithValidTextContent(t *testing.T) {
 	}
 
 	// Verificar primeiro episódio
-	if episodes[0].EpisodeID != 1 {
-		t.Errorf("expected episode ID 1, got %d", episodes[0].EpisodeID)
+	if episodes[0].EpisodeNumber != 1 {
+		t.Errorf("expected episode ID 1, got %d", episodes[0].EpisodeNumber)
 	}
 	if episodes[0].EpisodeHash != "hash1" {
 		t.Errorf("expected hash 'hash1', got '%s'", episodes[0].EpisodeHash)
@@ -583,9 +594,9 @@ func TestParseEpisodes_WithEmptyContent(t *testing.T) {
 func TestParseEpisodes_WithBlankLines(t *testing.T) {
 	// Test with JSON format
 	now := time.Now()
-	ep1 := files.EpisodeStruct{EpisodeID: 1, EpisodeHash: "hash1", EpisodeName: "Ep1", DownloadDate: now}
-	ep2 := files.EpisodeStruct{EpisodeID: 2, EpisodeHash: "hash2", EpisodeName: "Ep2", DownloadDate: now}
-	ep3 := files.EpisodeStruct{EpisodeID: 3, EpisodeHash: "hash3", EpisodeName: "", DownloadDate: now}
+	ep1 := files.EpisodeStruct{EpisodeNumber: 1, EpisodeHash: "hash1", EpisodeName: "Ep1", DownloadDate: now}
+	ep2 := files.EpisodeStruct{EpisodeNumber: 2, EpisodeHash: "hash2", EpisodeName: "Ep2", DownloadDate: now}
+	ep3 := files.EpisodeStruct{EpisodeNumber: 3, EpisodeHash: "hash3", EpisodeName: "", DownloadDate: now}
 
 	json1, _ := json.Marshal(ep1)
 	json2, _ := json.Marshal(ep2)
@@ -627,10 +638,10 @@ func TestParseEpisodes_WithInvalidFormat(t *testing.T) {
 func TestSerializeEpisode_WithName(t *testing.T) {
 	now := time.Now()
 	episode := files.EpisodeStruct{
-		EpisodeID:    42,
-		EpisodeHash:  "testhash",
-		EpisodeName:  "Test Name",
-		DownloadDate: now,
+		EpisodeNumber: 42,
+		EpisodeHash:   "testhash",
+		EpisodeName:   "Test Name",
+		DownloadDate:  now,
 	}
 
 	result, err := files.SerializeEpisode(episode)
@@ -644,8 +655,8 @@ func TestSerializeEpisode_WithName(t *testing.T) {
 		t.Fatalf("failed to parse serialized episode: %v", err)
 	}
 
-	if parsed.EpisodeID != 42 {
-		t.Errorf("expected episode ID 42, got %d", parsed.EpisodeID)
+	if parsed.EpisodeNumber != 42 {
+		t.Errorf("expected episode ID 42, got %d", parsed.EpisodeNumber)
 	}
 	if parsed.EpisodeHash != "testhash" {
 		t.Errorf("expected hash 'testhash', got '%s'", parsed.EpisodeHash)
@@ -658,10 +669,10 @@ func TestSerializeEpisode_WithName(t *testing.T) {
 func TestSerializeEpisode_WithoutName(t *testing.T) {
 	now := time.Now()
 	episode := files.EpisodeStruct{
-		EpisodeID:    42,
-		EpisodeHash:  "testhash",
-		EpisodeName:  "",
-		DownloadDate: now,
+		EpisodeNumber: 42,
+		EpisodeHash:   "testhash",
+		EpisodeName:   "",
+		DownloadDate:  now,
 	}
 
 	result, err := files.SerializeEpisode(episode)
@@ -675,8 +686,8 @@ func TestSerializeEpisode_WithoutName(t *testing.T) {
 		t.Fatalf("failed to parse serialized episode: %v", err)
 	}
 
-	if parsed.EpisodeID != 42 {
-		t.Errorf("expected episode ID 42, got %d", parsed.EpisodeID)
+	if parsed.EpisodeNumber != 42 {
+		t.Errorf("expected episode ID 42, got %d", parsed.EpisodeNumber)
 	}
 	if parsed.EpisodeName != "" {
 		t.Errorf("expected empty name, got '%s'", parsed.EpisodeName)
@@ -686,9 +697,9 @@ func TestSerializeEpisode_WithoutName(t *testing.T) {
 func TestSerializeEpisodes_WithMultipleEpisodes(t *testing.T) {
 	now := time.Now()
 	episodes := []files.EpisodeStruct{
-		{EpisodeID: 1, EpisodeHash: "h1", EpisodeName: "Name1", DownloadDate: now},
-		{EpisodeID: 2, EpisodeHash: "h2", EpisodeName: "", DownloadDate: now},
-		{EpisodeID: 3, EpisodeHash: "h3", EpisodeName: "Name3", DownloadDate: now},
+		{EpisodeNumber: 1, EpisodeHash: "h1", EpisodeName: "Name1", DownloadDate: now},
+		{EpisodeNumber: 2, EpisodeHash: "h2", EpisodeName: "", DownloadDate: now},
+		{EpisodeNumber: 3, EpisodeHash: "h3", EpisodeName: "Name3", DownloadDate: now},
 	}
 
 	result, err := files.SerializeEpisodes(episodes)
@@ -705,13 +716,13 @@ func TestSerializeEpisodes_WithMultipleEpisodes(t *testing.T) {
 	if len(parsed) != 3 {
 		t.Errorf("expected 3 episodes, got %d", len(parsed))
 	}
-	if parsed[0].EpisodeID != 1 || parsed[0].EpisodeName != "Name1" {
+	if parsed[0].EpisodeNumber != 1 || parsed[0].EpisodeName != "Name1" {
 		t.Errorf("first episode mismatch")
 	}
-	if parsed[1].EpisodeID != 2 || parsed[1].EpisodeName != "" {
+	if parsed[1].EpisodeNumber != 2 || parsed[1].EpisodeName != "" {
 		t.Errorf("second episode mismatch")
 	}
-	if parsed[2].EpisodeID != 3 || parsed[2].EpisodeName != "Name3" {
+	if parsed[2].EpisodeNumber != 3 || parsed[2].EpisodeName != "Name3" {
 		t.Errorf("third episode mismatch")
 	}
 }
@@ -761,9 +772,9 @@ func TestConfigRoundtripWithNotifications(t *testing.T) {
 func TestParseSerialize_RoundTrip_JSON(t *testing.T) {
 	now := time.Now()
 	originalEpisodes := []files.EpisodeStruct{
-		{EpisodeID: 1, EpisodeHash: "hash1", EpisodeName: "Episode 1", DownloadDate: now},
-		{EpisodeID: 2, EpisodeHash: "hash2", EpisodeName: "", DownloadDate: now},
-		{EpisodeID: 3, EpisodeHash: "hash3", EpisodeName: "Episode 3", DownloadDate: now},
+		{EpisodeNumber: 1, EpisodeHash: "hash1", EpisodeName: "Episode 1", DownloadDate: now},
+		{EpisodeNumber: 2, EpisodeHash: "hash2", EpisodeName: "", DownloadDate: now},
+		{EpisodeNumber: 3, EpisodeHash: "hash3", EpisodeName: "Episode 3", DownloadDate: now},
 	}
 
 	original, err := files.SerializeEpisodes(originalEpisodes)
@@ -790,7 +801,7 @@ func TestParseSerialize_RoundTrip_JSON(t *testing.T) {
 	}
 
 	for i := range originalParsed {
-		if originalParsed[i].EpisodeID != serializedParsed[i].EpisodeID ||
+		if originalParsed[i].EpisodeNumber != serializedParsed[i].EpisodeNumber ||
 			originalParsed[i].EpisodeHash != serializedParsed[i].EpisodeHash ||
 			originalParsed[i].EpisodeName != serializedParsed[i].EpisodeName {
 			t.Errorf("round-trip failed at index %d", i)

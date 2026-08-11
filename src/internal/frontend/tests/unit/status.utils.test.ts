@@ -11,7 +11,7 @@ function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
     episodes_watched: 0,
     episodes_pending: 12,
     total_episodes: 24,
-    latest_episode_id: 0,
+    latest_episode_number: 1,
     last_download_date: '2026-01-01T00:00:00Z',
     cover_image: undefined,
     is_blacklisted: false,
@@ -51,6 +51,15 @@ describe('filterAnimes', () => {
     const result = filterAnimes(animes, 'naruto', true)
     expect(result).toHaveLength(1)
     expect(result[0].name).toBe('Naruto ongoing')
+  })
+
+  it('keeps only standalone animes when filterStandalone is true', () => {
+    const animes = [
+      makeAnime({ name: 'Avulso', is_standalone: true }),
+      makeAnime({ name: 'Da lista' }),
+    ]
+    expect(filterAnimes(animes, '', false, true).map(a => a.name)).toEqual(['Avulso'])
+    expect(filterAnimes(animes, '', false, false)).toHaveLength(2)
   })
 })
 

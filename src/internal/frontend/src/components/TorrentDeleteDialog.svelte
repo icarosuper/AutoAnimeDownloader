@@ -8,6 +8,10 @@
   export let open = false;
   export let count = 1;
   export let name = "";
+  /** "anime" quando a exclusão cobre o grupo inteiro — troca o texto do 2º check. */
+  export let scope: "episode" | "anime" = "episode";
+  /** Anime avulso: em vez de bloquear episódios, o check deixa de acompanhá-lo. */
+  export let standalone = false;
 
   // Ambos marcados por default: apaga os arquivos e bloqueia o redownload do episódio.
   let deleteFiles = true;
@@ -39,12 +43,20 @@
     cancelBtn: m.common_cancel(),
     checkboxFiles: m.downloads_delete_checkbox_files(),
     checkboxBlock: m.downloads_delete_checkbox_block(),
+    checkboxBlockAnime: m.downloads_delete_checkbox_block_anime(),
+    checkboxUntrack: m.downloads_delete_checkbox_untrack(),
     consequenceBlocked: m.downloads_delete_consequence_blocked(),
+    consequenceBlockedAnime: m.downloads_delete_consequence_blocked_anime(),
+    consequenceUntracked: m.downloads_delete_consequence_untracked(),
     consequenceRedownload: m.downloads_delete_consequence_will_redownload(),
   };
 
   $: title = count > 1 ? T && T.titleBulk : T && T.titleSingle;
-  $: consequence = blockRedownload ? T && T.consequenceBlocked : T && T.consequenceRedownload;
+  $: blockLabel =
+    T && (scope !== "anime" ? T.checkboxBlock : standalone ? T.checkboxUntrack : T.checkboxBlockAnime);
+  $: consequence = !blockRedownload
+    ? T && T.consequenceRedownload
+    : T && (scope !== "anime" ? T.consequenceBlocked : standalone ? T.consequenceUntracked : T.consequenceBlockedAnime);
 </script>
 
 <ConfirmDialog
@@ -62,7 +74,7 @@
     </label>
     <label class="flex items-start gap-2.5 cursor-pointer">
       <input type="checkbox" class="checkbox checkbox-sm mt-px" bind:checked={blockRedownload} />
-      <span class="text-copy leading-snug text-base-content">{T && T.checkboxBlock}</span>
+      <span class="text-copy leading-snug text-base-content">{blockLabel}</span>
     </label>
     <p class="!mt-4 text-caption leading-snug {blockRedownload ? 'text-base-content/50' : 'text-warning'}">
       {consequence}

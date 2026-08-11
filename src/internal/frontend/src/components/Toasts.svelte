@@ -23,13 +23,16 @@
 <div class="toast toast-end toast-bottom z-50 gap-2">
   {#each $toasts as t (t.id)}
     <div
-      class="alert {alertClass(t.type)} shadow-lg max-w-sm animate-in"
+      class="alert {alertClass(t.type)} shadow-lg max-w-sm animate-in whitespace-normal"
       role="alert"
     >
       <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         {@html icon(t.type)}
       </svg>
       <span class="text-copy">{t.message}</span>
+      {#if t.link}
+        <a href={t.link.href} class="text-copy font-semibold underline">{t.link.label}</a>
+      {/if}
     </div>
   {/each}
 </div>

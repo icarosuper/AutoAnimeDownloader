@@ -42,13 +42,12 @@ func episodeRequest(method, target string, body string) *http.Request {
 		req = httptest.NewRequest(method, target, strings.NewReader(body))
 	}
 	req.SetPathValue("id", "7")
-	req.SetPathValue("episodeId", "42")
+	req.SetPathValue("episodeNumber", "5")
 	return req
 }
 
 func savedEpisodeFixture() []files.EpisodeStruct {
 	return []files.EpisodeStruct{{
-		EpisodeID:     42,
 		AnimeID:       7,
 		AnimeName:     "My Anime",
 		EpisodeHash:   testEpisodeHash,
@@ -79,7 +78,7 @@ func TestHandleDeleteEpisode_DeleteFailureReturns500(t *testing.T) {
 	server, _ := episodeActionServer(t, fm)
 
 	w := httptest.NewRecorder()
-	handleDeleteEpisode(server)(w, episodeRequest(http.MethodDelete, "/api/v1/animes/7/episodes/42", ""))
+	handleDeleteEpisode(server)(w, episodeRequest(http.MethodDelete, "/api/v1/animes/7/episodes/5", ""))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("esperava 500 quando DeleteEpisodesFromFile falha, obteve %d: %s", w.Code, w.Body.String())
@@ -92,7 +91,7 @@ func TestHandleDeleteEpisode_Success(t *testing.T) {
 	server, backend := episodeActionServer(t, fm)
 
 	w := httptest.NewRecorder()
-	handleDeleteEpisode(server)(w, episodeRequest(http.MethodDelete, "/api/v1/animes/7/episodes/42", ""))
+	handleDeleteEpisode(server)(w, episodeRequest(http.MethodDelete, "/api/v1/animes/7/episodes/5", ""))
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("esperava 200, obteve %d: %s", w.Code, w.Body.String())
@@ -119,7 +118,7 @@ func TestHandleRedownloadEpisode_RemovalFailureAborts(t *testing.T) {
 	server, backend := episodeActionServer(t, fm)
 
 	w := httptest.NewRecorder()
-	handleRedownloadEpisode(server)(w, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/42/redownload", ""))
+	handleRedownloadEpisode(server)(w, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/5/redownload", ""))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("esperava 500 quando a remoção falha, obteve %d: %s", w.Code, w.Body.String())
@@ -149,7 +148,7 @@ func TestHandleReplaceEpisodeWithMagnet_RemovalFailureAborts(t *testing.T) {
 
 	magnet := `{"magnet":"magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}`
 	w := httptest.NewRecorder()
-	handleReplaceEpisodeWithMagnet(server)(w, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/42/replace", magnet))
+	handleReplaceEpisodeWithMagnet(server)(w, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/5/replace", magnet))
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("esperava 500 quando a remoção falha, obteve %d: %s", w.Code, w.Body.String())
@@ -221,6 +220,7 @@ func newRealEpisodeStore(t *testing.T) *realEpisodeStore {
 			filepath.Join(dir, "downloaded_episodes"),
 			filepath.Join(dir, "blocked_episodes"),
 			filepath.Join(dir, "anime_settings"),
+			filepath.Join(dir, "standalone_animes"),
 		),
 		configs: &files.Config{
 			AnilistUsernames:   []string{"testuser"},
@@ -277,7 +277,6 @@ func TestHandleDownloadEpisode_UpdatesExistingRecord(t *testing.T) {
 
 	// A record already on disk for this episode: old hash, already organized somewhere.
 	if err := fm.SaveEpisodesToFile([]files.EpisodeStruct{{
-		EpisodeID:     42,
 		AnimeID:       7,
 		AnimeName:     "My Anime",
 		EpisodeHash:   testEpisodeHash,
@@ -298,7 +297,7 @@ func TestHandleDownloadEpisode_UpdatesExistingRecord(t *testing.T) {
 	defer restoreNyaa()
 
 	rec := httptest.NewRecorder()
-	handleDownloadEpisode(server)(rec, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/42/download", ""))
+	handleDownloadEpisode(server)(rec, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/5/download", ""))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("esperava 200, obteve %d: %s", rec.Code, rec.Body.String())

@@ -53,8 +53,7 @@ const manyAnimes = Array.from({ length: 30 }, (_, i) => ({
   episodes_watched: 128,
   episodes_pending: 0,
   total_episodes: 128,
-  latest_episode_id: 128,
-  last_download_date: '2026-01-03T00:00:00Z',
+  latest_last_download_date: '2026-01-03T00:00:00Z',
   is_blacklisted: false,
 }))
 
@@ -123,7 +122,6 @@ test.describe('no screen scrolls horizontally', () => {
       cover_image: null,
       custom_search_query: null,
       episodes: Array.from({ length: 8 }, (_, i) => ({
-        episode_id: 1000 + i,
         episode_number: i + 1,
         airing_at: 0,
         time_until_airing: 0,

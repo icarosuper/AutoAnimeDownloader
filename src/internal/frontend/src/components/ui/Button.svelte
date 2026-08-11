@@ -14,6 +14,18 @@
   export let disabled = false
   /** Accessible name when the button is icon-only (no visible text in the slot). */
   export let ariaLabel: string | undefined = undefined
+  /**
+   * When set, renders an `<a>` instead of a `<button>` — same three variants, same box.
+   *
+   * Navigation that LOOKS like the primary action of a card still has to BE a link: the
+   * alternative is a `<button on:click={() => location.hash = ...}>`, which loses
+   * middle-click, "open in new tab" and the status bar preview. `disabled` is ignored in this
+   * mode (there is no disabled anchor) — a link that shouldn't be followed shouldn't be
+   * rendered as one.
+   */
+  export let href: string | undefined = undefined
+  /** Only meaningful with `href` — `"_blank"` for links leaving the app. */
+  export let target: string | undefined = undefined
 
   const VARIANT_CLASSES: Record<string, string> = {
     solid: 'bg-accent text-on-accent hover:opacity-90',
@@ -21,15 +33,25 @@
     warn: 'border border-danger-tint/32 bg-danger-tint/12 text-danger hover:bg-danger-tint/16',
   }
 
+  const BASE_CLASSES =
+    'inline-flex items-center justify-center gap-1.5 rounded-control px-3 py-1.5 text-copy font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50'
+
   $: classes = VARIANT_CLASSES[variant] ?? VARIANT_CLASSES.ghost
 </script>
 
-<button
-  {type}
-  {disabled}
-  aria-label={ariaLabel}
-  class="inline-flex items-center justify-center gap-1.5 rounded-control px-3 py-1.5 text-copy font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 {classes}"
-  on:click
->
-  <slot />
-</button>
+{#if href}
+  <a
+    {href}
+    {target}
+    rel={target === '_blank' ? 'noopener noreferrer' : undefined}
+    aria-label={ariaLabel}
+    class="{BASE_CLASSES} {classes}"
+    on:click
+  >
+    <slot />
+  </a>
+{:else}
+  <button {type} {disabled} aria-label={ariaLabel} class="{BASE_CLASSES} {classes}" on:click>
+    <slot />
+  </button>
+{/if}

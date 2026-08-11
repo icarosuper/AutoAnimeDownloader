@@ -20,6 +20,7 @@
     replaceEpisodeWithMagnet,
     replaceAnimeWithMagnet,
     updateAnimeSettings,
+    removeStandaloneAnime,
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
@@ -69,6 +70,14 @@
   let bulkLoading = false;
   let confirmBulkOpen = false;
 
+  // Deixar de acompanhar (só para avulsos). Mora no header do AnimeDetail porque é onde o
+  // usuário já está depois de clicar no anime na lista do Status, e o header já é o lugar das
+  // ações de anime — pôr isso na linha do Status custaria uma coluna de ActionMenu que a lista
+  // não tem hoje.
+  let untrackOpen = false;
+  let untrackDeleteFiles = false;
+  let untrackLoading = false;
+
   // Replace with magnet state
   let replaceEpOpen = false;
   let pendingReplaceEp: AnimeEpisodeInfo | null = null;
@@ -106,10 +115,10 @@
   // `episode_hash != "" ⟺ is_downloaded`. Logo a condição do inline não pode exigir
   // `!ep.is_downloaded`: essa combinação nunca ocorre na prática e a barra nunca aparecia.
   // Quem decide é só o torrent ainda estar em voo (`!torrent.completed`).
-  $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_id));
+  $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_number));
   $: someSelected = selectedEpisodes.size > 0 && !allSelected;
 
-  $: selectedList = allEpisodes.filter(ep => selectedEpisodes.has(ep.episode_id));
+  $: selectedList = allEpisodes.filter(ep => selectedEpisodes.has(ep.episode_number));
   $: canBulkDownload = selectedList.some(ep => ep.is_aired && !ep.is_downloaded);
   $: canBulkDelete = selectedList.some(ep => ep.is_downloaded);
   $: canBulkRelease = selectedList.some(ep => ep.is_manually_managed || ep.is_blocked);
@@ -121,7 +130,7 @@
     if (allSelected) {
       selectedEpisodes = new Set();
     } else {
-      selectedEpisodes = new Set(allEpisodes.map(ep => ep.episode_id));
+      selectedEpisodes = new Set(allEpisodes.map(ep => ep.episode_number));
     }
   }
 
@@ -278,15 +287,15 @@
   }
 
   async function handleDownload(ep: AnimeEpisodeInfo) {
-    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    actionLoading = { ...actionLoading, [ep.episode_number]: true };
     try {
-      await downloadEpisode(animeId, ep.episode_id);
+      await downloadEpisode(animeId, ep.episode_number);
       toast.success(m.detail_toast_queued({ number: ep.episode_number }));
       await loadData(animeId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.detail_toast_dl_error());
     } finally {
-      actionLoading = { ...actionLoading, [ep.episode_id]: false };
+      actionLoading = { ...actionLoading, [ep.episode_number]: false };
     }
   }
 
@@ -299,27 +308,27 @@
     if (!pendingDeleteEp) return;
     const ep = pendingDeleteEp;
     pendingDeleteEp = null;
-    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    actionLoading = { ...actionLoading, [ep.episode_number]: true };
     try {
-      await deleteEpisode(animeId, ep.episode_id);
+      await deleteEpisode(animeId, ep.episode_number);
       toast.success(m.detail_toast_deleted({ number: ep.episode_number }));
       await loadData(animeId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.detail_toast_del_error());
     } finally {
-      actionLoading = { ...actionLoading, [ep.episode_id]: false };
+      actionLoading = { ...actionLoading, [ep.episode_number]: false };
     }
   }
 
   async function handleRelease(ep: AnimeEpisodeInfo) {
-    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    actionLoading = { ...actionLoading, [ep.episode_number]: true };
     try {
-      await releaseEpisode(animeId, ep.episode_id);
+      await releaseEpisode(animeId, ep.episode_number);
       await loadData(animeId);
     } catch (err) {
       console.error("Failed to release episode:", err);
     } finally {
-      actionLoading = { ...actionLoading, [ep.episode_id]: false };
+      actionLoading = { ...actionLoading, [ep.episode_number]: false };
     }
   }
 
@@ -332,15 +341,15 @@
     if (!pendingRedownloadEp) return;
     const ep = pendingRedownloadEp;
     pendingRedownloadEp = null;
-    actionLoading = { ...actionLoading, [ep.episode_id]: true };
+    actionLoading = { ...actionLoading, [ep.episode_number]: true };
     try {
-      await redownloadEpisode(animeId, ep.episode_id);
+      await redownloadEpisode(animeId, ep.episode_number);
       toast.success(m.detail_toast_redownload({ number: ep.episode_number }));
       await loadData(animeId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.detail_toast_redl_error());
     } finally {
-      actionLoading = { ...actionLoading, [ep.episode_id]: false };
+      actionLoading = { ...actionLoading, [ep.episode_number]: false };
     }
   }
 
@@ -350,7 +359,7 @@
     let success = 0, failed = 0;
     await Promise.all(targets.map(async ep => {
       try {
-        await downloadEpisode(animeId, ep.episode_id);
+        await downloadEpisode(animeId, ep.episode_number);
         success++;
       } catch {
         failed++;
@@ -373,7 +382,7 @@
     let success = 0, failed = 0;
     await Promise.all(targets.map(async ep => {
       try {
-        await deleteEpisode(animeId, ep.episode_id);
+        await deleteEpisode(animeId, ep.episode_number);
         success++;
       } catch {
         failed++;
@@ -392,7 +401,7 @@
     let success = 0, failed = 0;
     await Promise.all(targets.map(async ep => {
       try {
-        await releaseEpisode(animeId, ep.episode_id);
+        await releaseEpisode(animeId, ep.episode_number);
         success++;
       } catch {
         failed++;
@@ -420,7 +429,7 @@
     const ep = pendingReplaceEp;
     replaceLoading = true;
     try {
-      await replaceEpisodeWithMagnet(animeId, ep.episode_id, replaceEpMagnet);
+      await replaceEpisodeWithMagnet(animeId, ep.episode_number, replaceEpMagnet);
       toast.success(m.detail_replace_ep_done({ number: ep.episode_number }));
       replaceEpOpen = false;
       pendingReplaceEp = null;
@@ -537,6 +546,21 @@
   // `md` (768px) sobram ~628px depois do rail e do padding do main, o que jogava a página
   // inteira em rolagem horizontal. Mesmo critério da lista de animes (Status.svelte, LIST_GRID)
   // e das linhas de torrent (Downloads.svelte, ROW_GRID).
+  async function confirmUntrack(): Promise<void> {
+    if (!anime) return;
+    untrackLoading = true;
+    try {
+      await removeStandaloneAnime(anime.anime_id, untrackDeleteFiles);
+      toast.success(m.detail_untrack_done());
+      window.location.hash = "#/status";
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m.detail_untrack_btn());
+    } finally {
+      untrackLoading = false;
+      untrackDeleteFiles = false;
+    }
+  }
+
   const EP_GRID =
     "grid grid-cols-[28px_52px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
 </script>
@@ -567,6 +591,19 @@
   cancelLabel={m.common_cancel()}
   on:confirm={confirmBulkDelete}
 />
+
+<!-- ConfirmDialog + um Checkbox no slot. O TorrentDeleteDialog não serve aqui: ele é
+     específico de keepData/block, que são perguntas de torrent, não de anime. -->
+<ConfirmDialog
+  bind:open={untrackOpen}
+  title={m.detail_untrack_title()}
+  message={m.detail_untrack_msg()}
+  confirmLabel={m.detail_untrack_confirm()}
+  cancelLabel={m.common_cancel()}
+  on:confirm={confirmUntrack}
+>
+  <Checkbox bind:checked={untrackDeleteFiles} label={m.detail_untrack_delete_files()} />
+</ConfirmDialog>
 
 <!-- Os dois diálogos de magnet agora usam o primitivo Modal (foco preso, Esc, clique fora),
      no lugar das duas overlays feitas à mão que não prendiam foco nem fechavam com Esc. -->
@@ -650,11 +687,18 @@
 
         {#if anime}
           <p class="mt-2 font-mono text-caption text-subtle">
-            {$locale && m.detail_counts({
-              downloaded: anime.episodes_downloaded,
-              total: anime.total_episodes || "?",
-              watched: anime.episodes_watched,
-            })}
+            {#if anime.is_standalone}
+              {$locale && m.detail_counts_no_watched({
+                downloaded: anime.episodes_downloaded,
+                total: anime.total_episodes || "?",
+              })}
+            {:else}
+              {$locale && m.detail_counts({
+                downloaded: anime.episodes_downloaded,
+                total: anime.total_episodes || "?",
+                watched: anime.episodes_watched,
+              })}
+            {/if}
             {#if detail?.status}
               · {m.detail_anilist_status({ status: detail.status })}
             {/if}
@@ -662,14 +706,21 @@
         {/if}
       </div>
 
-      <Button variant="ghost" on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}>
-        {$locale && m.detail_replace_btn_anime()}
-      </Button>
+      <div class="flex flex-wrap gap-2">
+        {#if anime?.is_standalone}
+          <Button variant="warn" disabled={untrackLoading} on:click={() => { untrackDeleteFiles = false; untrackOpen = true; }}>
+            {$locale && m.detail_untrack_btn()}
+          </Button>
+        {/if}
+        <Button variant="ghost" on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}>
+          {$locale && m.detail_replace_btn_anime()}
+        </Button>
+      </div>
     </div>
   </div>
 
   <!-- Busca customizada do anime — recolhível (spec §9.2) -->
-  {#if detail}
+  {#if detail && !anime?.is_standalone}
     <section class="rounded-card border border-default bg-card">
       <button
         type="button"
@@ -770,9 +821,9 @@
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_actions()}</span>
         </div>
 
-        {#each rows || [] as row (row.ep.episode_id)}
-          {@const isLoading = !!actionLoading[row.ep.episode_id]}
-          {@const isSelected = selectedEpisodes.has(row.ep.episode_id)}
+        {#each rows || [] as row (row.ep.episode_number)}
+          {@const isLoading = !!actionLoading[row.ep.episode_number]}
+          {@const isSelected = selectedEpisodes.has(row.ep.episode_number)}
           <div
             data-episode-row
             class="{EP_GRID} border-b border-divider px-4 py-3 last:border-b-0 {isSelected ? 'bg-accent-tint/[.06]' : ''}"
@@ -781,7 +832,7 @@
               checked={isSelected}
               label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
               labelHidden
-              on:change={() => toggleEpisode(row.ep.episode_id)}
+              on:change={() => toggleEpisode(row.ep.episode_number)}
             />
 
             <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
@@ -837,16 +888,16 @@
 
       <!-- Mobile: mesma definição de linha, empilhada -->
       <div class="divide-y divide-divider lg:hidden">
-        {#each rows || [] as row (row.ep.episode_id)}
-          {@const isLoading = !!actionLoading[row.ep.episode_id]}
-          {@const isSelected = selectedEpisodes.has(row.ep.episode_id)}
+        {#each rows || [] as row (row.ep.episode_number)}
+          {@const isLoading = !!actionLoading[row.ep.episode_number]}
+          {@const isSelected = selectedEpisodes.has(row.ep.episode_number)}
           <div data-episode-row class="p-4 {isSelected ? 'bg-accent-tint/[.06]' : ''}">
             <div class="flex items-start gap-3">
               <Checkbox
                 checked={isSelected}
                 label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
                 labelHidden
-                on:change={() => toggleEpisode(row.ep.episode_id)}
+                on:change={() => toggleEpisode(row.ep.episode_number)}
               />
               <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
               <div class="min-w-0 flex-1">

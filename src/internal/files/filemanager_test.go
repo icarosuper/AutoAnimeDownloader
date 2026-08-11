@@ -9,16 +9,50 @@ import (
 	"time"
 )
 
-func newTestManager(t *testing.T) *FileManager {
+func newTestManagerIn(t *testing.T, dir string) *FileManager {
 	t.Helper()
-	dir := t.TempDir()
 	return NewManager(
 		NewOSFileSystem(),
 		filepath.Join(dir, "config.json"),
 		filepath.Join(dir, "episodes"),
 		filepath.Join(dir, "blocked"),
 		filepath.Join(dir, "settings"),
+		filepath.Join(dir, "standalone"),
 	)
+}
+
+func newTestManager(t *testing.T) *FileManager {
+	t.Helper()
+	return newTestManagerIn(t, t.TempDir())
+}
+
+// O blocked_episodes antigo era um array de ids de nó da AniList. Esses ids nao existem mais em
+// lugar nenhum, entao o arquivo legado tem de ser descartado — e nao virar erro, que travaria
+// LoadBlockedEpisodes (e com ela o passe de verificacao) para sempre.
+func TestLoadBlockedEpisodes_DiscardsLegacyIntList(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "blocked"), []byte("[416348,416349]"), 0o644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	m := newTestManagerIn(t, dir)
+
+	blocked, err := m.LoadBlockedEpisodes()
+	if err != nil {
+		t.Fatalf("arquivo legado nao pode virar erro: %v", err)
+	}
+	if len(blocked) != 0 {
+		t.Fatalf("quero lista vazia, veio %v", blocked)
+	}
+
+	// E o arquivo volta a funcionar no formato novo.
+	key := EpisodeKey{AnimeID: 21, Episode: 1123}
+	if err := m.BlockEpisode(key); err != nil {
+		t.Fatalf("BlockEpisode: %v", err)
+	}
+	blocked, err = m.LoadBlockedEpisodes()
+	if err != nil || len(blocked) != 1 || blocked[0] != key {
+		t.Fatalf("quero [%v], veio %v (err=%v)", key, blocked, err)
+	}
 }
 
 func TestDeleteEmptyFolders(t *testing.T) {
@@ -74,7 +108,7 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 		episodes := make([]EpisodeStruct, 0, n)
 		for i := 0; i < n; i++ {
 			episodes = append(episodes, EpisodeStruct{
-				EpisodeID:       1000 + i,
+				EpisodeNumber:   1 + i,
 				EpisodeHash:     fmt.Sprintf("hash%04d", i),
 				EpisodeName:     fmt.Sprintf("Anime Bem Longo Para Encher o Arquivo - Episode %d", i),
 				AnimeID:         488911345,
@@ -96,12 +130,12 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 		var wg sync.WaitGroup
 		for i := 0; i < n; i++ {
 			wg.Add(1)
-			go func(id int) {
+			go func(ep int) {
 				defer wg.Done()
-				if err := m.UnmanageEpisode(id); err != nil {
-					t.Errorf("UnmanageEpisode(%d): %v", id, err)
+				if err := m.UnmanageEpisode(EpisodeKey{AnimeID: 488911345, Episode: ep}); err != nil {
+					t.Errorf("UnmanageEpisode(%d): %v", ep, err)
 				}
-			}(1000 + i)
+			}(1 + i)
 		}
 		wg.Wait()
 
@@ -114,7 +148,7 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 		}
 		for _, ep := range got {
 			if ep.ManuallyManaged {
-				t.Errorf("episodio %d continua manually managed: atualizacao perdida", ep.EpisodeID)
+				t.Errorf("episodio %d continua manually managed: atualizacao perdida", ep.EpisodeNumber)
 			}
 		}
 	})
@@ -136,10 +170,11 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 			defer close(done)
 			for i := 0; i < 50; i++ {
 				if err := m.UpsertEpisodes([]EpisodeStruct{{
-					EpisodeID:    1000,
-					EpisodeHash:  "hash0000",
-					EpisodeName:  fmt.Sprintf("reescrita %d", i),
-					DownloadDate: time.Now(),
+					AnimeID:       488911345,
+					EpisodeNumber: 1,
+					EpisodeHash:   "hash0000",
+					EpisodeName:   fmt.Sprintf("reescrita %d", i),
+					DownloadDate:  time.Now(),
 				}}); err != nil {
 					t.Errorf("UpsertEpisodes: %v", err)
 					return
@@ -178,21 +213,21 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 		var wg sync.WaitGroup
 		for i := 0; i < n; i++ {
 			wg.Add(1)
-			go func(id int) {
+			go func(ep int) {
 				defer wg.Done()
-				if err := m.BlockEpisode(id); err != nil {
-					t.Errorf("BlockEpisode(%d): %v", id, err)
+				if err := m.BlockEpisode(EpisodeKey{AnimeID: 488911345, Episode: ep}); err != nil {
+					t.Errorf("BlockEpisode(%d): %v", ep, err)
 				}
-			}(2000 + i)
+			}(1 + i)
 		}
 		wg.Wait()
 
-		ids, err := m.LoadBlockedEpisodes()
+		blocked, err := m.LoadBlockedEpisodes()
 		if err != nil {
 			t.Fatalf("arquivo de bloqueados corrompido: %v", err)
 		}
-		if len(ids) != n {
-			t.Fatalf("quero %d episodios bloqueados, veio %d: atualizacao perdida", n, len(ids))
+		if len(blocked) != n {
+			t.Fatalf("quero %d episodios bloqueados, veio %d: atualizacao perdida", n, len(blocked))
 		}
 	})
 }

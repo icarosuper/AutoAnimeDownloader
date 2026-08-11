@@ -29,12 +29,16 @@ type AnimeInfo struct {
 	// EpisodesPending conta episodios ja lancados, ainda nao assistidos e ainda nao baixados.
 	// Episodio assistido nunca e baixado (daemon.shouldSkipEpisode), entao ele nao pode contar
 	// como atraso — era isso que marcava meia lista como "atrasado" no frontend.
-	EpisodesPending  int    `json:"episodes_pending" example:"2"`
-	TotalEpisodes    int    `json:"total_episodes" example:"12"`
-	LatestEpisodeID  int    `json:"latest_episode_id" example:"12"`
-	LastDownloadDate string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
-	CoverImage       string `json:"cover_image,omitempty"`
-	IsBlacklisted    bool   `json:"is_blacklisted,omitempty"`
+	EpisodesPending     int    `json:"episodes_pending" example:"2"`
+	TotalEpisodes       int    `json:"total_episodes" example:"12"`
+	LatestEpisodeNumber int    `json:"latest_episode_number" example:"12"`
+	LastDownloadDate    string `json:"last_download_date" example:"2026-02-24T10:30:00Z"`
+	CoverImage          string `json:"cover_image,omitempty"`
+	IsBlacklisted       bool   `json:"is_blacklisted,omitempty"`
+	// IsStandalone marca os animes acompanhados pelo arquivo standalone_animes, e nao por uma
+	// lista da AniList. E ORIGEM, nao estado de download — por isso a tela o mostra num chip
+	// proprio ao lado do chip derivado, nunca dentro dele.
+	IsStandalone bool `json:"is_standalone,omitempty"`
 }
 
 func extractAnimeName(episodeName string) string {
@@ -115,8 +119,8 @@ func handleAnimes(server *Server) http.HandlerFunc {
 
 			if animeInfo, exists := animeMap[key]; exists {
 				animeInfo.EpisodesDownloaded++
-				if episode.EpisodeID > animeInfo.LatestEpisodeID {
-					animeInfo.LatestEpisodeID = episode.EpisodeID
+				if episode.EpisodeNumber > animeInfo.LatestEpisodeNumber {
+					animeInfo.LatestEpisodeNumber = episode.EpisodeNumber
 				}
 				lastDownloadedTime, _ := time.Parse(time.RFC3339, animeInfo.LastDownloadDate)
 				if episode.DownloadDate.After(lastDownloadedTime) {
@@ -134,12 +138,12 @@ func handleAnimes(server *Server) http.HandlerFunc {
 				}
 			} else {
 				animeMap[key] = &AnimeInfo{
-					AnimeID:            episode.AnimeID,
-					Name:               displayName,
-					EpisodesDownloaded: 1,
-					TotalEpisodes:      episode.AnimeTotalEpisodes,
-					LatestEpisodeID:    episode.EpisodeID,
-					LastDownloadDate:   episode.DownloadDate.Format(time.RFC3339),
+					AnimeID:             episode.AnimeID,
+					Name:                displayName,
+					EpisodesDownloaded:  1,
+					TotalEpisodes:       episode.AnimeTotalEpisodes,
+					LatestEpisodeNumber: episode.EpisodeNumber,
+					LastDownloadDate:    episode.DownloadDate.Format(time.RFC3339),
 				}
 			}
 		}
@@ -164,9 +168,12 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			entries = append(entries, list...)
 		}
 
-		// Sem o dedup o mesmo anime em duas contas vira duas linhas na tela: cada conta traz uma
-		// entrada propria para a mesma midia (ver decisions.md #43).
-		mergeAniListAnimes(animeMap, anilist.DedupeByMedia(entries), config.ExcludedLists)
+		// Os avulsos entram DEPOIS do dedupe pelo mesmo motivo do daemon: quando o anime tambem
+		// esta numa lista, a entrada real (com progresso) tem de vencer a sintetica.
+		standaloneSet := loadStandaloneSet(server.FileManager)
+		entries = append(anilist.DedupeByMedia(entries), appendStandaloneEntries(nil, standaloneSet, covered)...)
+
+		mergeAniListAnimes(animeMap, entries, config.ExcludedLists)
 
 		// Com uma busca de lista falhada nao da para saber o que ficou coberto, e tratar
 		// "nao coberto" como "precisa refresh" transformaria a falha em um GetAnimeInfo por
@@ -175,12 +182,13 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		if mergeFailed {
 			logger.Logger.Warn().Msg("Skipping orphan refresh: AniList list fetch failed, coverage unknown")
 		} else {
-			refreshOrphanAnimes(animeMap, covered, config.ExcludedLists, config.AnilistUsernames)
+			refreshOrphanAnimes(animeMap, covered, config.ExcludedLists, config.AnilistUsernames, standaloneSet)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
 		for key, animeInfo := range animeMap {
 			animeInfo.EpisodesPending = countPendingEpisodes(animeInfo, downloadedNums[key])
+			animeInfo.IsStandalone = standaloneSet[animeInfo.AnimeID]
 			animes = append(animes, *animeInfo)
 		}
 
@@ -210,7 +218,7 @@ const maxConcurrentOrphanRefresh = 5
 // status fell outside the configured allowed sets). These animes stay visible regardless —
 // this only tries to keep their cover/progress/blacklist fields fresh instead of stale/blank.
 // A failed refresh is logged and left as-is; it never fails the overall request.
-func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string, usernames []string) {
+func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string, usernames []string, standalone map[int]bool) {
 	var orphans []*AnimeInfo
 	for _, info := range animeMap {
 		if info.AnimeID != 0 && !covered[info.AnimeID] {
@@ -230,7 +238,7 @@ func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, e
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			ml, err := anilist.GetAnimeInfo(info.AnimeID, usernames)
+			ml, err := resolveMediaList(info.AnimeID, usernames, standalone)
 			if err != nil {
 				logger.Logger.Warn().Err(err).Int("anime_id", info.AnimeID).Msg("Failed to refresh orphaned anime, keeping existing data")
 				return
@@ -278,12 +286,7 @@ func computeAnimeFields(title anilist.Title, status anilist.MediaStatus, episode
 		for _, n := range excludedLists {
 			excludedSet[n] = true
 		}
-		for listName, inList := range customLists {
-			if excludedSet[listName] && inList {
-				isBlacklisted = true
-				break
-			}
-		}
+		isBlacklisted = isInExcludedList(customLists, excludedSet)
 	}
 
 	coverImage = cover.Large

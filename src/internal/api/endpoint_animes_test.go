@@ -36,9 +36,9 @@ func TestHandleAnimes(t *testing.T) {
 	state := daemon.NewState()
 	mockFM := &mockFileManager{
 		episodes: []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeName: "Test Anime - Episode 1", DownloadDate: time.Now()},
-			{EpisodeID: 2, EpisodeName: "Test Anime - Episode 2", DownloadDate: time.Now()},
-			{EpisodeID: 3, EpisodeName: "Another Anime - Episode 1", DownloadDate: time.Now()},
+			{EpisodeNumber: 1, EpisodeName: "Test Anime - Episode 1", DownloadDate: time.Now()},
+			{EpisodeNumber: 2, EpisodeName: "Test Anime - Episode 2", DownloadDate: time.Now()},
+			{EpisodeNumber: 3, EpisodeName: "Another Anime - Episode 1", DownloadDate: time.Now()},
 		},
 	}
 	server := &Server{
@@ -342,7 +342,7 @@ func TestHandleAnimes(t *testing.T) {
 
 		mockFMOrphan := &mockFileManager{
 			episodes: []files.EpisodeStruct{
-				{EpisodeID: 1, AnimeID: 999, AnimeName: "Old Anime", AnimeTotalEpisodes: 12, EpisodeName: "Old Anime - Episode 1", DownloadDate: time.Now()},
+				{EpisodeNumber: 1, AnimeID: 999, AnimeName: "Old Anime", AnimeTotalEpisodes: 12, EpisodeName: "Old Anime - Episode 1", DownloadDate: time.Now()},
 			},
 			configs: &files.Config{
 				AnilistUsernames:      []string{"testuser"},
@@ -399,7 +399,7 @@ func TestHandleAnimes(t *testing.T) {
 		var episodes []files.EpisodeStruct
 		for i := 0; i < 16; i++ {
 			episodes = append(episodes, files.EpisodeStruct{
-				EpisodeID: i, AnimeID: 900 + i, AnimeName: "Anime Baixado",
+				EpisodeNumber: i, AnimeID: 900 + i, AnimeName: "Anime Baixado",
 				EpisodeName: "Anime Baixado - Episode 1", DownloadDate: time.Now(),
 			})
 		}
@@ -445,7 +445,7 @@ func TestHandleAnimes(t *testing.T) {
 
 		mockFMOrphanFail := &mockFileManager{
 			episodes: []files.EpisodeStruct{
-				{EpisodeID: 1, AnimeID: 998, AnimeName: "Failing Refresh Anime", AnimeTotalEpisodes: 12, EpisodeName: "Failing Refresh Anime - Episode 1", DownloadDate: time.Now()},
+				{EpisodeNumber: 1, AnimeID: 998, AnimeName: "Failing Refresh Anime", AnimeTotalEpisodes: 12, EpisodeName: "Failing Refresh Anime - Episode 1", DownloadDate: time.Now()},
 			},
 			configs: &files.Config{
 				AnilistUsernames:      []string{"testuser"},
@@ -535,7 +535,7 @@ func TestHandleAnimes(t *testing.T) {
 		serverDup := &Server{State: state, FileManager: &mockFileManager{
 			// Episodio baixado ancorado na entrada da conta B.
 			episodes: []files.EpisodeStruct{{
-				EpisodeID: 1, EpisodeNumber: 1, AnimeID: 194829, AnimeName: "Two Account Anime",
+				EpisodeNumber: 1, AnimeID: 194829, AnimeName: "Two Account Anime",
 				EpisodeName: "Two Account Anime - Episode 1", DownloadDate: time.Now(),
 			}},
 			configs: &files.Config{

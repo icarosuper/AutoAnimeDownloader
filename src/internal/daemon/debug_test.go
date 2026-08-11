@@ -21,12 +21,12 @@ func (m *debugMockFileManager) SaveConfigs(config *files.Config) error          
 func (m *debugMockFileManager) LoadSavedEpisodes() ([]files.EpisodeStruct, error)       { return nil, nil }
 func (m *debugMockFileManager) SaveEpisodesToFile(episodes []files.EpisodeStruct) error { return nil }
 func (m *debugMockFileManager) UpsertEpisodes(episodes []files.EpisodeStruct) error     { return nil }
-func (m *debugMockFileManager) DeleteEpisodesFromFile(ids []int) error                  { return nil }
+func (m *debugMockFileManager) DeleteEpisodesFromFile(keys []files.EpisodeKey) error    { return nil }
 func (m *debugMockFileManager) DeleteEmptyFolders(a string) error                       { return nil }
-func (m *debugMockFileManager) LoadBlockedEpisodes() ([]int, error)                     { return nil, nil }
-func (m *debugMockFileManager) BlockEpisode(id int) error                               { return nil }
-func (m *debugMockFileManager) UnblockEpisode(id int) error                             { return nil }
-func (m *debugMockFileManager) UnmanageEpisode(id int) error                            { return nil }
+func (m *debugMockFileManager) LoadBlockedEpisodes() ([]files.EpisodeKey, error)        { return nil, nil }
+func (m *debugMockFileManager) BlockEpisode(key files.EpisodeKey) error                 { return nil }
+func (m *debugMockFileManager) UnblockEpisode(key files.EpisodeKey) error               { return nil }
+func (m *debugMockFileManager) UnmanageEpisode(key files.EpisodeKey) error              { return nil }
 func (m *debugMockFileManager) LoadAllAnimeSettings() (map[int]files.AnimeSettings, error) {
 	return nil, nil
 }
@@ -34,6 +34,9 @@ func (m *debugMockFileManager) LoadAnimeSettings(id int) (*files.AnimeSettings, 
 	return &files.AnimeSettings{}, nil
 }
 func (m *debugMockFileManager) SaveAnimeSettings(id int, s files.AnimeSettings) error { return nil }
+func (m *debugMockFileManager) LoadStandaloneAnimes() ([]int, error)                  { return nil, nil }
+func (m *debugMockFileManager) AddStandaloneAnime(int) error                          { return nil }
+func (m *debugMockFileManager) RemoveStandaloneAnime(int) error                       { return nil }
 
 func TestRunAnimeDebug_NoNyaaResults_NoError(t *testing.T) {
 	anilistJSON := `{"data": {"Page": {"mediaList": [{"id": 1, "status": "CURRENT", "progress": 0, "media": {

@@ -22,22 +22,21 @@ func handleDaemonStart(server *Server) http.HandlerFunc {
 			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST method is allowed")
 			return
 		}
-		
+
 		currentStatus := server.State.GetStatus()
 		if currentStatus == daemon.StatusRunning || currentStatus == daemon.StatusChecking {
 			JSONError(w, http.StatusBadRequest, "ALREADY_RUNNING", "Daemon is already running")
 			return
 		}
-		
+
 		if err := server.StartDaemonLoop(); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to start daemon loop")
 			JSONInternalError(w, err)
 			return
 		}
-		
+
 		JSONSuccess(w, http.StatusOK, map[string]string{
 			"message": "Daemon started",
 		})
 	}
 }
-

@@ -87,13 +87,13 @@
   }
 
   $: groups = ($locale && [
-    { id: "anilist" as GroupId, label: m.config_section_anilist() },
     { id: "downloads" as GroupId, label: m.config_section_downloads() },
+    { id: "anilist" as GroupId, label: m.config_section_anilist() },
     { id: "automation" as GroupId, label: m.config_section_automation() },
     { id: "filters" as GroupId, label: m.config_section_filters() },
   ]) || [];
 
-  let activeGroup: GroupId = "anilist";
+  let activeGroup: GroupId = "downloads";
 
   const ALL_STATUSES = ["CURRENT", "REPEATING", "PLANNING", "PAUSED", "DROPPED", "COMPLETED"];
   const ALL_MEDIA_STATUSES = ["RELEASING", "FINISHED", "CANCELLED", "HIATUS"];
@@ -216,11 +216,9 @@
    * resolvida no idioma vigente no momento do clique, como era quando cada `if` a chamava.
    */
   $: requiredChecks = [
-    {
-      group: "anilist" as GroupId,
-      ok: (config.anilist_usernames ?? []).length > 0,
-      message: m.config_val_username,
-    },
+    // Conta do AniList NÃO entra: com animes avulsos (#/add) o app funciona inteiro sem lista
+    // nenhuma, e o backend deixou de validá-la. Uma obrigatoriedade só no frontend seria uma
+    // regra que o servidor não conhece.
     {
       group: "downloads" as GroupId,
       ok: !!config.completed_anime_path?.trim(),
@@ -367,7 +365,6 @@
                 id="anilist_usernames"
                 bind:values={config.anilist_usernames}
                 label={(T && T.labelUsername) || ""}
-                required={true}
                 hint={(T && T.hintAnilistUsernames) || ""}
                 placeholder={(T && T.chipsPlaceholder) || ""}
                 removeLabel={(item) => m.config_chips_remove({ item })}

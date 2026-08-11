@@ -233,6 +233,24 @@ func TestNyaaModule_CanGetCorrectMagnets_OfSeason3Anime(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
+// Animes longos (One Piece) têm episódios de 4 dígitos.
+func TestNyaaModule_CanGetFourDigitEpisode(t *testing.T) {
+	runEpisodeNameTest(testOptions{
+		animeName: "One Piece",
+		episode:   1123,
+		correct: []string{
+			"[SubsPlease] One Piece - 1123 (1080p) [A6D8A84C].mkv",
+			"[Erai-raws] One Piece - 1123 [1080p CR WEB-DL AVC EAC3][MultiSub][7C62698E]",
+			"[ToonsHub] One Piece EP1123 1080p CR WEB-DL AAC2.0 H.264 (Multi-Subs)",
+			"ONE PIECE S01E1123 1080p NF WEB-DL AAC2.0 H 264-VARYG (Multi-Subs)",
+		},
+		incorrect: []string{
+			"[SubsPlease] One Piece - 1124 (1080p) [5C59247E].mkv",
+			"[HatSubs] One Piece 1123-1133 (WEB 1080p)",
+		},
+	}, t)
+}
+
 func runEpisodeNameTest(opt testOptions, t *testing.T) {
 	html := mockHtml(append(opt.correct, opt.incorrect...))
 	restore := mockHttpGet(html)

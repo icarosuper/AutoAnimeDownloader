@@ -100,6 +100,7 @@ func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func
 func clearCaches() {
 	customListsCache.clear()
 	frontendListCache.clear()
+	mediaByIDCache.clear()
 }
 
 type AniListResponse struct {
@@ -163,6 +164,10 @@ type Media struct {
 	Relations      MediaRelations `json:"relations"`
 	CoverImage     CoverImage     `json:"coverImage"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
+	// NextAiringEpisode e a fonte de "qual foi o ultimo episodio no ar" para os animes cujo
+	// airingSchedule a AniList ja clipou (ver EpisodeList e decisions.md #52). nil quando o
+	// anime terminou ou nao tem data marcada.
+	NextAiringEpisode *AiringNode `json:"nextAiringEpisode"`
 }
 
 type Title struct {
@@ -388,6 +393,11 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 								timeUntilAiring
 							}
 						}
+						nextAiringEpisode {
+							episode
+							airingAt
+							timeUntilAiring
+						}
 					}
 				}
 			}
@@ -437,6 +447,11 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 								episode
 								timeUntilAiring
 							}
+						}
+						nextAiringEpisode {
+							episode
+							airingAt
+							timeUntilAiring
 						}
 					}
 				}
@@ -617,6 +632,11 @@ func getMediaListEntry(userName string, mediaId int) (*AniListResponse, error) {
 								episode
 								id
 							}
+						}
+						nextAiringEpisode {
+							episode
+							airingAt
+							timeUntilAiring
 						}
 					}
 				}

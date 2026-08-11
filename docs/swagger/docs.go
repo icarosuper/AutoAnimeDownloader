@@ -24,6 +24,74 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/anilist/search": {
+            "get": {
+                "description": "Searches AniList by term and flags which results can be added as standalone animes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "standalone"
+                ],
+                "summary": "Search animes on AniList",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search term (fewer than 3 characters returns an empty list)",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include animes that have not aired yet (NOT_YET_RELEASED). Default false",
+                        "name": "include_unreleased",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/api.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/api.AniListSearchResult"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/animes": {
             "get": {
                 "description": "Returns a list of animes with aggregated episode information",
@@ -136,7 +204,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/animes/{id}/episodes/{episodeId}": {
+        "/animes/{id}/episodes/{episodeNumber}": {
             "delete": {
                 "description": "Deletes a downloaded episode (library hardlink + torrent) and blocks it from being re-downloaded automatically",
                 "consumes": [
@@ -159,8 +227,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Episode ID (AniList AiringNode ID)",
-                        "name": "episodeId",
+                        "description": "Episode number (1-based, as aired)",
+                        "name": "episodeNumber",
                         "in": "path",
                         "required": true
                     }
@@ -199,7 +267,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/animes/{id}/episodes/{episodeId}/download": {
+        "/animes/{id}/episodes/{episodeNumber}/download": {
             "post": {
                 "description": "Triggers an immediate download for an aired episode and marks it as manually managed",
                 "consumes": [
@@ -222,8 +290,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Episode ID (AniList AiringNode ID)",
-                        "name": "episodeId",
+                        "description": "Episode number (1-based, as aired)",
+                        "name": "episodeNumber",
                         "in": "path",
                         "required": true
                     }
@@ -262,7 +330,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/animes/{id}/episodes/{episodeId}/redownload": {
+        "/animes/{id}/episodes/{episodeNumber}/redownload": {
             "post": {
                 "description": "Deletes the existing torrent (if any) and searches Nyaa again for a fresh download",
                 "consumes": [
@@ -285,8 +353,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Episode ID (AniList AiringNode ID)",
-                        "name": "episodeId",
+                        "description": "Episode number (1-based, as aired)",
+                        "name": "episodeNumber",
                         "in": "path",
                         "required": true
                     }
@@ -325,7 +393,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/animes/{id}/episodes/{episodeId}/release": {
+        "/animes/{id}/episodes/{episodeNumber}/release": {
             "post": {
                 "description": "Unblocks and unmanages an episode so the daemon can handle it automatically again",
                 "consumes": [
@@ -348,8 +416,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Episode ID (AniList AiringNode ID)",
-                        "name": "episodeId",
+                        "description": "Episode number (1-based, as aired)",
+                        "name": "episodeNumber",
                         "in": "path",
                         "required": true
                     }
@@ -382,7 +450,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/animes/{id}/episodes/{episodeId}/replace": {
+        "/animes/{id}/episodes/{episodeNumber}/replace": {
             "post": {
                 "description": "Deletes the existing torrent (if any) and downloads the episode using the provided magnet link",
                 "consumes": [
@@ -405,8 +473,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Episode ID (AniList AiringNode ID)",
-                        "name": "episodeId",
+                        "description": "Episode number (1-based, as aired)",
+                        "name": "episodeNumber",
                         "in": "path",
                         "required": true
                     },
@@ -957,6 +1025,135 @@ const docTemplate = `{
                 }
             }
         },
+        "/standalone-animes": {
+            "post": {
+                "description": "Adds a standalone anime and immediately downloads the episodes already aired",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "standalone"
+                ],
+                "summary": "Track an anime that is not in any AniList list",
+                "parameters": [
+                    {
+                        "description": "Media ID",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.StandaloneAnimeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/api.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/api.StandaloneAnimeAddResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/standalone-animes/{id}": {
+            "delete": {
+                "description": "Removes the standalone record; optionally deletes the downloaded episodes",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "standalone"
+                ],
+                "summary": "Stop tracking a standalone anime",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "AniList media ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the downloaded episodes (default false)",
+                        "name": "delete_episodes",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/status": {
             "get": {
                 "description": "Returns the current status of the daemon, including last check time, error state, and disk space for the configured save path",
@@ -1364,6 +1561,43 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "api.AniListSearchResult": {
+            "type": "object",
+            "properties": {
+                "block_reason": {
+                    "description": "BlockReason e \"\" quando o anime pode ser adicionado como avulso, senao um dos motivos de\nstandalone_guard.go. E UM CAMPO, nao quatro booleanos: os motivos sao mutuamente\nexclusivos por precedencia e o card precisa de um rotulo so. Vem do mesmo blockReason que\no POST usa para decidir o 409 — e o que faz front e back concordarem por construcao.",
+                    "type": "string"
+                },
+                "cover": {
+                    "type": "string"
+                },
+                "episodes": {
+                    "description": "Episodes e 0 quando a AniList nao sabe o total (o comum em anime ainda no ar).",
+                    "type": "integer",
+                    "example": 24
+                },
+                "format": {
+                    "type": "string",
+                    "example": "TV"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 21
+                },
+                "status": {
+                    "type": "string",
+                    "example": "RELEASING"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "One Piece"
+                },
+                "year": {
+                    "type": "integer",
+                    "example": 1999
+                }
+            }
+        },
         "api.AnimeDetailResponse": {
             "type": "object",
             "properties": {
@@ -1407,13 +1641,11 @@ const docTemplate = `{
                     "description": "EpisodeHash is the saved episode's torrent info hash. It is what lets the anime detail\nscreen join in live torrent progress exactly: a batch torrent's saved episodes all carry\nthe same hash but episode_number is meaningless for matching a torrent to them (the\ntorrent itself has no single episode number), so joining by number would miss batches\nentirely. Joining by hash instead, single and batch episodes use the same path. Empty\n(and omitted via omitempty) when the episode has no saved record.",
                     "type": "string"
                 },
-                "episode_id": {
-                    "type": "integer"
-                },
                 "episode_name": {
                     "type": "string"
                 },
                 "episode_number": {
+                    "description": "EpisodeNumber e a identidade do episodio nas rotas /animes/{id}/episodes/{episodeNumber}/*:\no id de no da AniList saiu de cena porque nao existe para episodio fora da janela de agenda\nque ela guarda (ver decisions.md #52).",
                     "type": "integer"
                 },
                 "is_aired": {
@@ -1466,11 +1698,15 @@ const docTemplate = `{
                 "is_blacklisted": {
                     "type": "boolean"
                 },
+                "is_standalone": {
+                    "description": "IsStandalone marca os animes acompanhados pelo arquivo standalone_animes, e nao por uma\nlista da AniList. E ORIGEM, nao estado de download — por isso a tela o mostra num chip\nproprio ao lado do chip derivado, nunca dentro dele.",
+                    "type": "boolean"
+                },
                 "last_download_date": {
                     "type": "string",
                     "example": "2026-02-24T10:30:00Z"
                 },
-                "latest_episode_id": {
+                "latest_episode_number": {
                     "type": "integer",
                     "example": 12
                 },
@@ -1518,6 +1754,25 @@ const docTemplate = `{
                     "example": [
                         "0123456789abcdef0123456789abcdef01234567"
                     ]
+                }
+            }
+        },
+        "api.StandaloneAnimeAddResponse": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "description": "Added e quantos episodios entraram na fila agora. 0 e resposta normal: um anime\nNOT_YET_RELEASED (ou um cujo proximo episodio ainda nao foi ao ar) fica acompanhado do\nmesmo jeito. Quem traduz isso e o toast, nao um codigo de erro.",
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "api.StandaloneAnimeRequest": {
+            "type": "object",
+            "properties": {
+                "media_id": {
+                    "type": "integer",
+                    "example": 21
                 }
             }
         },

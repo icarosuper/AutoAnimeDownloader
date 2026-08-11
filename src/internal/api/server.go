@@ -25,15 +25,18 @@ type FileManagerInterface interface {
 	LoadSavedEpisodes() ([]files.EpisodeStruct, error)
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
 	UpsertEpisodes(episodes []files.EpisodeStruct) error
-	DeleteEpisodesFromFile(episodeIds []int) error
+	DeleteEpisodesFromFile(keys []files.EpisodeKey) error
 	DeleteEmptyFolders(completedAnimeSaveFolder string) error
-	LoadBlockedEpisodes() ([]int, error)
-	BlockEpisode(episodeID int) error
-	UnblockEpisode(episodeID int) error
-	UnmanageEpisode(episodeID int) error
+	LoadBlockedEpisodes() ([]files.EpisodeKey, error)
+	BlockEpisode(key files.EpisodeKey) error
+	UnblockEpisode(key files.EpisodeKey) error
+	UnmanageEpisode(key files.EpisodeKey) error
 	LoadAllAnimeSettings() (map[int]files.AnimeSettings, error)
 	LoadAnimeSettings(animeID int) (*files.AnimeSettings, error)
 	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
+	LoadStandaloneAnimes() ([]int, error)
+	AddStandaloneAnime(mediaID int) error
+	RemoveStandaloneAnime(mediaID int) error
 }
 
 type Server struct {
@@ -91,13 +94,16 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/config/priorities/defaults", handlePriorityDefaults(s))
 	apiMux.HandleFunc("/api/v1/animes", handleAnimes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes", handleAnimeEpisodes(s))
-	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/download", handleDownloadEpisode(s))
-	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/redownload", handleRedownloadEpisode(s))
-	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/release", handleReleaseEpisode(s))
-	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}/replace", handleReplaceEpisodeWithMagnet(s))
-	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeId}", handleDeleteEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/download", handleDownloadEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/redownload", handleRedownloadEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/release", handleReleaseEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/replace", handleReplaceEpisodeWithMagnet(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}", handleDeleteEpisode(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/replace", handleReplaceAnimeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/settings", handleAnimeSettings(s))
+	apiMux.HandleFunc("/api/v1/anilist/search", handleAniListSearch(s))
+	apiMux.HandleFunc("/api/v1/standalone-animes", handleStandaloneAnimeAdd(s))
+	apiMux.HandleFunc("/api/v1/standalone-animes/{id}", handleStandaloneAnimeRemove(s))
 	apiMux.HandleFunc("/api/v1/check", handleCheck(s))
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))

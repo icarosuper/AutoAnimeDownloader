@@ -10,7 +10,9 @@ import (
 )
 
 type AnimeEpisodeInfo struct {
-	EpisodeID         int    `json:"episode_id"`
+	// EpisodeNumber e a identidade do episodio nas rotas /animes/{id}/episodes/{episodeNumber}/*:
+	// o id de no da AniList saiu de cena porque nao existe para episodio fora da janela de agenda
+	// que ela guarda (ver decisions.md #52).
 	EpisodeNumber     int    `json:"episode_number"`
 	AiringAt          int64  `json:"airing_at"`
 	TimeUntilAiring   int    `json:"time_until_airing"`
@@ -74,7 +76,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			return
 		}
 
-		mediaList, err := anilist.GetAnimeInfo(id, config.AnilistUsernames)
+		mediaList, err := resolveMediaList(id, config.AnilistUsernames, loadStandaloneSet(server.FileManager))
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", id).Msg("Failed to fetch anime detail from AniList")
 			JSONInternalError(w, err)
@@ -92,27 +94,26 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			return
 		}
 
-		blockedIDs, err := server.FileManager.LoadBlockedEpisodes()
+		blockedKeys, err := server.FileManager.LoadBlockedEpisodes()
 		if err != nil {
 			logger.Logger.Warn().Err(err).Msg("Failed to load blocked episodes")
-			blockedIDs = []int{}
+			blockedKeys = []files.EpisodeKey{}
 		}
-		blockedSet := make(map[int]bool, len(blockedIDs))
-		for _, bid := range blockedIDs {
-			blockedSet[bid] = true
+		blockedSet := make(map[files.EpisodeKey]bool, len(blockedKeys))
+		for _, k := range blockedKeys {
+			blockedSet[k] = true
 		}
 
-		// Map downloaded episodes by their AiringNode ID
 		type downloadedInfo struct {
 			date            string
 			name            string
 			manuallyManaged bool
 			hash            string
 		}
-		downloadedByNodeID := make(map[int]downloadedInfo)
+		downloadedByEpisode := make(map[int]downloadedInfo)
 		for _, ep := range allEpisodes {
 			if ep.AnimeID == id {
-				downloadedByNodeID[ep.EpisodeID] = downloadedInfo{
+				downloadedByEpisode[ep.EpisodeNumber] = downloadedInfo{
 					date:            ep.DownloadDate.Format(time.RFC3339),
 					name:            ep.EpisodeName,
 					manuallyManaged: ep.ManuallyManaged,
@@ -121,20 +122,23 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			}
 		}
 
-		episodes := make([]AnimeEpisodeInfo, 0, len(mediaList.Media.AiringSchedule.Nodes))
+		// A lista vem do builder, e nao do airingSchedule cru: a tela precisa mostrar tambem os
+		// episodios que a AniList ja tirou da agenda (One Piece 1 a 1122, anime antigo inteiro),
+		// senao o usuario nao tem onde clicar para baixa-los a mao.
+		allNodes := anilist.EpisodeList(*mediaList, 1)
+		episodes := make([]AnimeEpisodeInfo, 0, len(allNodes))
 
-		for _, node := range mediaList.Media.AiringSchedule.Nodes {
+		for _, node := range allNodes {
 			info := AnimeEpisodeInfo{
-				EpisodeID:       node.ID,
 				EpisodeNumber:   node.Episode,
 				AiringAt:        node.AiringAt,
 				TimeUntilAiring: node.TimeUntilAiring,
 				IsAired:         node.TimeUntilAiring <= 0,
 				IsWatched:       node.Episode <= mediaList.Progress,
-				IsBlocked:       blockedSet[node.ID],
+				IsBlocked:       blockedSet[files.EpisodeKey{AnimeID: id, Episode: node.Episode}],
 			}
 
-			if downloaded, ok := downloadedByNodeID[node.ID]; ok {
+			if downloaded, ok := downloadedByEpisode[node.Episode]; ok {
 				info.IsDownloaded = true
 				info.DownloadDate = downloaded.date
 				info.EpisodeName = downloaded.name

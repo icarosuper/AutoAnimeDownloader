@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strings"
 )
 
 type FileManagerInterface interface {
@@ -21,15 +20,18 @@ type FileManagerInterface interface {
 	LoadSavedEpisodes() ([]files.EpisodeStruct, error)
 	SaveEpisodesToFile(episodes []files.EpisodeStruct) error
 	UpsertEpisodes(episodes []files.EpisodeStruct) error
-	DeleteEpisodesFromFile(episodeIds []int) error
+	DeleteEpisodesFromFile(keys []files.EpisodeKey) error
 	DeleteEmptyFolders(completedAnimeSaveFolder string) error
-	LoadBlockedEpisodes() ([]int, error)
-	BlockEpisode(episodeID int) error
-	UnblockEpisode(episodeID int) error
-	UnmanageEpisode(episodeID int) error
+	LoadBlockedEpisodes() ([]files.EpisodeKey, error)
+	BlockEpisode(key files.EpisodeKey) error
+	UnblockEpisode(key files.EpisodeKey) error
+	UnmanageEpisode(key files.EpisodeKey) error
 	LoadAllAnimeSettings() (map[int]files.AnimeSettings, error)
 	LoadAnimeSettings(animeID int) (*files.AnimeSettings, error)
 	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
+	LoadStandaloneAnimes() ([]int, error)
+	AddStandaloneAnime(mediaID int) error
+	RemoveStandaloneAnime(mediaID int) error
 }
 
 // ErrInsufficientDiskSpace e devolvido por checkDiskSpace quando o volume da biblioteca esta
@@ -110,22 +112,21 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 }
 
 func getWebUiURL() string {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8091"
-	} else {
-		port = strings.TrimPrefix(port, ":")
-	}
-	return fmt.Sprintf("http://localhost:%s/#/config?missingConfig=true", port)
+	return WebUIURL(os.Getenv("PORT"), "/#/config?missingConfig=true")
 }
 
+// isConfigComplete: a BIBLIOTECA e o unico requisito. Conta da AniList nao entra — desde os
+// animes avulsos (decisions.md #49) o app funciona inteiro sem lista nenhuma, e exigir uma
+// conta so para o passe rodar deixaria essa instalacao presa na tela de configuracao.
 func isConfigComplete(config *files.Config) bool {
 	// SavePath e legado: uma instalacao migrada tem esse campo zerado, entao a checagem
 	// usa o caminho de download derivado (Config.DownloadPath), nao SavePath diretamente.
-	return len(config.AnilistUsernames) > 0 && config.DownloadPath() != ""
+	return config.DownloadPath() != ""
 }
 
-func openBrowserToConfig(webUIURL string) error {
+// OpenBrowser abre a URL no navegador do usuario. Usado pelo passe de verificacao (config
+// incompleta) e pelo boot (primeira execucao, ver main.go).
+func OpenBrowser(webUIURL string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "linux":
@@ -144,7 +145,7 @@ func openBrowserToConfig(webUIURL string) error {
 
 	logger.Logger.Info().
 		Str("url", webUIURL).
-		Msg("Opened browser to configuration page (missing required configuration)")
+		Msg("Opened the Web UI in the browser")
 
 	return nil
 }
@@ -166,18 +167,18 @@ func episodeInTorrents(savedHash string, torrentsHashSet map[string]bool) bool {
 	return savedHash != "" && torrentsHashSet[savedHash]
 }
 
-func buildSavedEpisodesMap(episodes []files.EpisodeStruct) map[int]bool {
-	m := make(map[int]bool, len(episodes))
+func buildSavedEpisodesMap(episodes []files.EpisodeStruct) map[files.EpisodeKey]bool {
+	m := make(map[files.EpisodeKey]bool, len(episodes))
 	for _, episode := range episodes {
-		m[episode.EpisodeID] = true
+		m[episode.Key()] = true
 	}
 	return m
 }
 
-func buildSavedEpisodesFullMap(episodes []files.EpisodeStruct) map[int]files.EpisodeStruct {
-	m := make(map[int]files.EpisodeStruct, len(episodes))
+func buildSavedEpisodesFullMap(episodes []files.EpisodeStruct) map[files.EpisodeKey]files.EpisodeStruct {
+	m := make(map[files.EpisodeKey]files.EpisodeStruct, len(episodes))
 	for _, ep := range episodes {
-		m[ep.EpisodeID] = ep
+		m[ep.Key()] = ep
 	}
 	return m
 }

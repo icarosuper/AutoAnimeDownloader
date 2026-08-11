@@ -17,7 +17,7 @@ type orchestrationFM struct {
 	mockFileManagerForEpisodes
 	saved    []files.EpisodeStruct
 	upserted [][]files.EpisodeStruct
-	deleted  []int
+	deleted  []files.EpisodeKey
 	configs  *files.Config
 }
 
@@ -28,15 +28,15 @@ func (m *orchestrationFM) UpsertEpisodes(eps []files.EpisodeStruct) error {
 	// reflect the write-back so subsequent LoadSavedEpisodes sees LibraryPaths.
 	for _, up := range eps {
 		for i := range m.saved {
-			if m.saved[i].EpisodeID == up.EpisodeID {
+			if m.saved[i].EpisodeNumber == up.EpisodeNumber {
 				m.saved[i] = up
 			}
 		}
 	}
 	return nil
 }
-func (m *orchestrationFM) DeleteEpisodesFromFile(ids []int) error {
-	m.deleted = append(m.deleted, ids...)
+func (m *orchestrationFM) DeleteEpisodesFromFile(keys []files.EpisodeKey) error {
+	m.deleted = append(m.deleted, keys...)
 	return nil
 }
 
@@ -59,7 +59,7 @@ func TestOrganizeTorrent_SingleEpisode(t *testing.T) {
 
 	fm := &orchestrationFM{
 		saved: []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 5},
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 5},
 		},
 		configs: &files.Config{CompletedAnimePath: completed, RenameFilesForJellyfin: true},
 	}
@@ -95,7 +95,7 @@ func TestOrganizeTorrent_NotCompletedRetries(t *testing.T) {
 		t.Fatal(err)
 	}
 	fm := &orchestrationFM{
-		saved:   []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: hash}},
+		saved:   []files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash}},
 		configs: &files.Config{CompletedAnimePath: t.TempDir()},
 	}
 	if ok := organizeTorrent(hash, backend, files.NewLibrarian(files.NewOSFileSystem()), fm, fm.configs); ok {
@@ -116,8 +116,8 @@ func TestOrganizeTorrent_NoMatchingEpisodeRetries(t *testing.T) {
 func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	const hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	saved := []files.EpisodeStruct{
-		{EpisodeID: 1, EpisodeHash: hash, IsBatch: true},
-		{EpisodeID: 2, EpisodeHash: hash, IsBatch: true},
+		{EpisodeNumber: 1, EpisodeHash: hash, IsBatch: true},
+		{EpisodeNumber: 2, EpisodeHash: hash, IsBatch: true},
 	}
 	lib := files.NewLibrarian(files.NewOSFileSystem())
 
@@ -125,7 +125,7 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	backend.AddCompleted(hash, t.TempDir())
 	fm := &orchestrationFM{saved: saved}
-	removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false)
+	removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false)
 	if _, ok := backend.Get(hash); !ok {
 		t.Error("torrent should be kept while a batch sibling survives")
 	}
@@ -134,7 +134,7 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	backend2 := torrents.NewFakeBackend()
 	backend2.AddCompleted(hash, t.TempDir())
 	fm2 := &orchestrationFM{saved: saved}
-	removeEpisodesAndLinks(fm2, backend2, lib, []int{1, 2}, saved, false)
+	removeEpisodesAndLinks(fm2, backend2, lib, []files.EpisodeKey{{Episode: 1}, {Episode: 2}}, saved, false)
 	if _, ok := backend2.Get(hash); ok {
 		t.Error("torrent should be removed when all batch siblings are deleted")
 	}
@@ -190,7 +190,7 @@ func TestTorrentCompletion_EnqueuesAndRunsOrganize(t *testing.T) {
 	spy := newWebhookSpy(t)
 	fm := &orchestrationFM{
 		saved: []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 5},
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 5},
 		},
 		configs: configWithCompletedWebhook(completed, spy.server.URL),
 	}
@@ -340,13 +340,13 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		created := linkIntoLibrary(t, lib, dataDir, completed, "My Anime", &five, false)
 
 		saved := []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 5, LibraryPaths: created},
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 5, LibraryPaths: created},
 		}
 		backend := torrents.NewFakeBackend()
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 5}}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -354,7 +354,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		if _, ok := backend.Get(hash); ok {
 			t.Error("torrent (seeding copy) should have been removed")
 		}
-		if !containsID(fm.deleted, 1) {
+		if !containsID(fm.deleted, files.EpisodeKey{Episode: 5}) {
 			t.Errorf("episode record should have been deleted, got %v", fm.deleted)
 		}
 	})
@@ -373,14 +373,14 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		}
 
 		saved := []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", LibraryPaths: created[:1]},
-			{EpisodeID: 2, EpisodeHash: hash, AnimeName: "My Anime", LibraryPaths: created[1:]},
+			{EpisodeNumber: 1, EpisodeHash: hash, AnimeName: "My Anime", LibraryPaths: created[:1]},
+			{EpisodeNumber: 2, EpisodeHash: hash, AnimeName: "My Anime", LibraryPaths: created[1:]},
 		}
 		backend := torrents.NewFakeBackend()
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -406,14 +406,14 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		created := linkIntoLibrary(t, lib, dataDir, completed, "My Anime", nil, true)
 
 		saved := []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
-			{EpisodeID: 2, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
+			{EpisodeNumber: 1, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
+			{EpisodeNumber: 2, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
 		}
 		backend := torrents.NewFakeBackend()
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1}, saved, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -434,14 +434,14 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		created := linkIntoLibrary(t, lib, dataDir, completed, "My Anime", nil, true)
 
 		saved := []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
-			{EpisodeID: 2, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
+			{EpisodeNumber: 1, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
+			{EpisodeNumber: 2, EpisodeHash: hash, AnimeName: "My Anime", IsBatch: true, LibraryPaths: created},
 		}
 		backend := torrents.NewFakeBackend()
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []int{1, 2}, saved, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}, {Episode: 2}}, saved, false); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -465,9 +465,9 @@ func TestReconcileLibrary(t *testing.T) {
 		{Hash: notComplete, Completed: false},
 	}
 	saved := []files.EpisodeStruct{
-		{EpisodeID: 1, EpisodeHash: organized, LibraryPaths: []string{"/lib/a.mkv"}},
-		{EpisodeID: 2, EpisodeHash: pending},
-		{EpisodeID: 3, EpisodeHash: notComplete},
+		{EpisodeNumber: 1, EpisodeHash: organized, LibraryPaths: []string{"/lib/a.mkv"}},
+		{EpisodeNumber: 2, EpisodeHash: pending},
+		{EpisodeNumber: 3, EpisodeHash: notComplete},
 	}
 
 	q := NewJobQueue(&orchestrationFM{}, filepath.Join(t.TempDir(), "jobs.json"))
@@ -504,7 +504,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		q := newQueue(t)
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: hash, Completed: true}},
-			[]files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: hash}},
+			[]files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash}},
 			q,
 		)
 		got := queuedOrganizeHashes(t, q)
@@ -522,7 +522,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		q := newQueue(t)
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: hash, Completed: true}},
-			[]files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: hash, LibraryPaths: []string{missing}}},
+			[]files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash, LibraryPaths: []string{missing}}},
 			q,
 		)
 		if got := queuedOrganizeHashes(t, q); len(got) != 0 {
@@ -535,7 +535,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		q := newQueue(t)
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: hash, Completed: false}},
-			[]files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: hash}},
+			[]files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash}},
 			q,
 		)
 		if got := queuedOrganizeHashes(t, q); len(got) != 0 {
@@ -549,8 +549,8 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: hash, Completed: true}},
 			[]files.EpisodeStruct{
-				{EpisodeID: 1, EpisodeHash: hash, IsBatch: true, LibraryPaths: []string{"/lib/a.mkv"}},
-				{EpisodeID: 2, EpisodeHash: hash, IsBatch: true},
+				{EpisodeNumber: 1, EpisodeHash: hash, IsBatch: true, LibraryPaths: []string{"/lib/a.mkv"}},
+				{EpisodeNumber: 2, EpisodeHash: hash, IsBatch: true},
 			},
 			q,
 		)
@@ -574,7 +574,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 	t.Run("repeated passes do not pile up duplicate jobs", func(t *testing.T) {
 		const hash = "6666666666666666666666666666666666666666"
 		downloaded := []torrents.TorrentInfo{{Hash: hash, Completed: true}}
-		saved := []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: hash}}
+		saved := []files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash}}
 
 		q := newQueue(t)
 		reconcileLibrary(downloaded, saved, q)
@@ -596,7 +596,7 @@ func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
 		gone := filepath.Join(t.TempDir(), "moved-away", "Anime", "E01.mkv")
 		fm := &orchestrationFM{
 			saved: []files.EpisodeStruct{
-				{EpisodeID: 1, EpisodeHash: hash, LibraryPaths: []string{gone}},
+				{EpisodeNumber: 1, EpisodeHash: hash, LibraryPaths: []string{gone}},
 			},
 		}
 
@@ -618,7 +618,7 @@ func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
 
 	t.Run("records with nothing organized are left alone", func(t *testing.T) {
 		fm := &orchestrationFM{
-			saved: []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: "8888888888888888888888888888888888888888"}},
+			saved: []files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: "8888888888888888888888888888888888888888"}},
 		}
 
 		clearLibraryPathsAfterRootSwap(fm, t.TempDir())

@@ -26,7 +26,7 @@ func TestAnimeVerification_ErrorHandling_ConfigLoadError(t *testing.T) {
 	mockFS := &mockFileSystemForDaemon{
 		loadConfigsError: &testError{msg: "config load error"},
 	}
-	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings", "/test/standalone_animes")
 
 	state := daemon.NewState()
 	notifier := newMockNotifier()
@@ -64,7 +64,7 @@ func TestAnimeVerification_ErrorHandling_EpisodesLoadError(t *testing.T) {
 		configContent:     createValidConfigJSON(t),
 		loadEpisodesError: &testError{msg: "episodes load error"},
 	}
-	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings", "/test/standalone_animes")
 
 	state := daemon.NewState()
 	notifier := newMockNotifier()
@@ -112,7 +112,7 @@ func TestAnimeVerification_ContextCancellation(t *testing.T) {
 		configContent:   createValidConfigJSON(t),
 		episodesContent: []byte("[]"), // Empty episodes
 	}
-	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings", "/test/standalone_animes")
 
 	state := daemon.NewState()
 	notifier := newMockNotifier()
@@ -153,7 +153,7 @@ func TestAnimeVerification_LogsGenerated(t *testing.T) {
 	mockFS := &mockFileSystemForDaemon{
 		loadConfigsError: &testError{msg: "test error"},
 	}
-	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings", "/test/standalone_animes")
 
 	state := daemon.NewState()
 	ctx := context.Background()
@@ -184,7 +184,7 @@ func TestAnimeVerification_StatusResetOnError(t *testing.T) {
 	mockFS := &mockFileSystemForDaemon{
 		loadConfigsError: &testError{msg: "test error"},
 	}
-	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings", "/test/standalone_animes")
 
 	ctx := context.Background()
 	daemon.AnimeVerification(ctx, fileManager, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
@@ -240,7 +240,7 @@ func TestStartLoop_StatusTransitions(t *testing.T) {
 	mockFS := &mockFileSystemForDaemon{
 		loadConfigsError: &testError{msg: "test error"},
 	}
-	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings", "/test/standalone_animes")
 
 	state := daemon.NewState()
 	notifier := newMockNotifier()
@@ -324,7 +324,7 @@ func TestStartLoop_StatusCheckingDuringVerification(t *testing.T) {
 		configContent:   createValidConfigJSON(t),
 		episodesContent: []byte("[]"),
 	}
-	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings")
+	fileManager := files.NewManager(mockFS, "/test/config.json", "/test/episodes.json", "/test/blocked_episodes", "/test/anime_settings", "/test/standalone_animes")
 
 	state := daemon.NewState()
 	notifier := newMockNotifier()

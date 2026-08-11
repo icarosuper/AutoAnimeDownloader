@@ -73,7 +73,7 @@ func TestHandleTorrentsJoinsEpisodeMetadata(t *testing.T) {
 		t.Fatalf("Add failed: %v", err)
 	}
 	fm := &mockFileManager{episodes: []files.EpisodeStruct{
-		{EpisodeID: 1, AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 7},
+		{AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 7},
 	}}
 	server := &Server{Torrents: backend, FileManager: fm}
 
@@ -102,9 +102,9 @@ func TestHandleTorrentsBatchAppearsOnceWithoutEpisodeNumber(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	backend.Add(magnetA)
 	fm := &mockFileManager{episodes: []files.EpisodeStruct{
-		{EpisodeID: 1, AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 1, IsBatch: true},
-		{EpisodeID: 2, AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 2, IsBatch: true},
-		{EpisodeID: 3, AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 3, IsBatch: true},
+		{AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 1, IsBatch: true},
+		{AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 2, IsBatch: true},
+		{AnimeID: 42, AnimeName: "Frieren", EpisodeHash: hashA, EpisodeNumber: 3, IsBatch: true},
 	}}
 	server := &Server{Torrents: backend, FileManager: fm}
 
@@ -436,7 +436,7 @@ func TestHandleTorrentDeleteHappyPath(t *testing.T) {
 		t.Fatalf("Add failed: %v", err)
 	}
 	fm := &mockFileManager{episodes: []files.EpisodeStruct{
-		{EpisodeID: 1, AnimeID: 42, EpisodeHash: hashA, LibraryPaths: []string{"/lib/ep1.mkv"}},
+		{EpisodeNumber: 1, AnimeID: 42, EpisodeHash: hashA, LibraryPaths: []string{"/lib/ep1.mkv"}},
 	}}
 	lib := &trackingLibrarian{}
 	server := &Server{Torrents: backend, FileManager: fm, Librarian: lib}
@@ -461,7 +461,7 @@ func TestHandleTorrentDeleteKeepDataSkipsLibraryAndPassesFlagToBackend(t *testin
 		t.Fatalf("Add failed: %v", err)
 	}
 	fm := &mockFileManager{episodes: []files.EpisodeStruct{
-		{EpisodeID: 1, AnimeID: 42, EpisodeHash: hashA, LibraryPaths: []string{"/lib/ep1.mkv"}},
+		{EpisodeNumber: 1, AnimeID: 42, EpisodeHash: hashA, LibraryPaths: []string{"/lib/ep1.mkv"}},
 	}}
 	lib := &trackingLibrarian{}
 	server := &Server{Torrents: backend, FileManager: fm, Librarian: lib}
@@ -486,9 +486,9 @@ func TestHandleTorrentDeleteBlockBlocksEveryEpisodeInGroup(t *testing.T) {
 		t.Fatalf("Add failed: %v", err)
 	}
 	fm := &mockFileManager{episodes: []files.EpisodeStruct{
-		{EpisodeID: 1, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
-		{EpisodeID: 2, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
-		{EpisodeID: 3, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
+		{EpisodeNumber: 1, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
+		{EpisodeNumber: 2, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
+		{EpisodeNumber: 3, AnimeID: 42, EpisodeHash: hashA, IsBatch: true},
 	}}
 	lib := &trackingLibrarian{}
 	server := &Server{Torrents: backend, FileManager: fm, Librarian: lib}
@@ -499,13 +499,17 @@ func TestHandleTorrentDeleteBlockBlocksEveryEpisodeInGroup(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("Expected %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
 	}
-	wantBlocked := map[int]bool{1: true, 2: true, 3: true}
+	wantBlocked := map[files.EpisodeKey]bool{
+		{AnimeID: 42, Episode: 1}: true,
+		{AnimeID: 42, Episode: 2}: true,
+		{AnimeID: 42, Episode: 3}: true,
+	}
 	if len(fm.blockedEpisodes) != len(wantBlocked) {
 		t.Fatalf("Expected 3 episodes blocked, got %v", fm.blockedEpisodes)
 	}
-	for _, id := range fm.blockedEpisodes {
-		if !wantBlocked[id] {
-			t.Errorf("Unexpected episode blocked: %d", id)
+	for _, k := range fm.blockedEpisodes {
+		if !wantBlocked[k] {
+			t.Errorf("Unexpected episode blocked: %v", k)
 		}
 	}
 }

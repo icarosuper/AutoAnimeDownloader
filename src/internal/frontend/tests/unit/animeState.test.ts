@@ -11,7 +11,7 @@ function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
     episodes_watched: 0,
     episodes_pending: 0,
     total_episodes: 12,
-    latest_episode_id: 0,
+    latest_episode_number: 1,
     last_download_date: '',
     is_blacklisted: false,
     ...overrides,

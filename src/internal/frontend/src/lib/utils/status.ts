@@ -7,10 +7,12 @@ export function filterAnimes(
   animes: AnimeInfo[],
   search: string,
   filterUnwatched: boolean,
+  filterStandalone = false,
 ): AnimeInfo[] {
   return animes.filter(a => {
     if (!a.name.toLowerCase().includes(search.toLowerCase())) return false
     if (filterUnwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false
+    if (filterStandalone && !a.is_standalone) return false
     return true
   })
 }

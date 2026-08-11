@@ -165,7 +165,7 @@ func (wsm *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Requ
 	// Use a context with timeout for reading
 	readCtx, readCancel := context.WithCancel(ctx)
 	defer readCancel()
-	
+
 	go func() {
 		for {
 			select {
@@ -186,7 +186,7 @@ func (wsm *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Requ
 			}
 		}
 	}()
-	
+
 	// Wait for context cancellation (client disconnect or server shutdown)
 	<-readCtx.Done()
 }
@@ -220,4 +220,3 @@ func (wsm *WebSocketManager) Close() {
 	}
 	wsm.clients = make(map[*websocket.Conn]struct{})
 }
-

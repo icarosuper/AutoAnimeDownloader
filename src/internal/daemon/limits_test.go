@@ -89,7 +89,7 @@ func TestWillBatch_FinishedWithinCeilingIgnoresPerAnimeLimit(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "batch", MagnetLink: fakeMagnet(9001)}}, nil, nil, nil)
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 26 {
 		t.Errorf("esperava 26 episódios registrados pelo batch, obteve %d", len(result.newEpisodes))
@@ -112,7 +112,7 @@ func TestWillBatch_AboveCeilingFallsBackToLimitedOneByOne(t *testing.T) {
 		return []nyaa.TorrentResult{{MagnetLink: fakeMagnet(9001)}}
 	}
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if batchCalled {
 		t.Error("searchBatch não deve ser chamado acima do teto de max_batch_episodes")
@@ -133,7 +133,7 @@ func TestWillBatch_ReleasingStaysLimited(t *testing.T) {
 	anime := animeWithEpisodes(1100, anilist.MediaStatusReleasing, false, "")
 	searcher := searcherFor(nil, multipleFor(1100, 0), nil, nil)
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 12 {
 		t.Errorf("esperava 12 episódios, obteve %d", len(result.newEpisodes))
@@ -146,7 +146,7 @@ func TestWillBatch_UnknownTotalStaysLimited(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, false, "")
 	searcher := searcherFor(nil, multipleFor(26, 0), nil, nil)
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 12 {
 		t.Errorf("contagem desconhecida deve continuar limitada em 12, obteve %d", len(result.newEpisodes))
@@ -161,7 +161,7 @@ func TestWillBatch_CeilingZeroDisablesTheCeiling(t *testing.T) {
 	configs.MaxBatchEpisodes = 0
 	searcher := searcherFor([]nyaa.TorrentResult{{MagnetLink: fakeMagnet(9001)}}, nil, nil, nil)
 
-	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 720 {
 		t.Errorf("com o teto desligado esperava 720 episódios, obteve %d", len(result.newEpisodes))
@@ -173,7 +173,7 @@ func TestWillBatch_MovieUnaffected(t *testing.T) {
 	anime := animeWithEpisodes(1, anilist.MediaStatusFinished, true, anilist.MediaFormatMovie)
 	searcher := searcherFor(nil, nil, nil, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(9004)}})
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 1 || !result.newEpisodes[0].IsBatch {
 		t.Errorf("filme deve baixar como torrent único, obteve %+v", result.newEpisodes)
@@ -186,7 +186,7 @@ func TestWillBatch_EmptyBatchSearchReAppliesLimit(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	searcher := searcherFor(nil, multipleFor(26, 0), nil, nil)
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 12 {
 		t.Errorf("busca de batch vazia deve devolver o limite de 12, obteve %d", len(result.newEpisodes))
@@ -206,7 +206,7 @@ func TestBatchSizeCeiling_EmptiesResultAndReAppliesLimit(t *testing.T) {
 		nil, nil,
 	)
 
-	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 12 {
 		t.Errorf("batch acima do teto deve cair em 12 episódios individuais, obteve %d", len(result.newEpisodes))
@@ -227,7 +227,7 @@ func TestEpisodeSizeCeiling_DoesNotAffectBatchChoice(t *testing.T) {
 	const gib = int64(1024 * 1024 * 1024)
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "pack", MagnetLink: fakeMagnet(9003), Size: 40 * gib}}, nil, nil, nil)
 
-	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 26 {
 		t.Errorf("o teto de episódio não deve filtrar o batch, obteve %d episódios", len(result.newEpisodes))
@@ -321,7 +321,7 @@ func TestProcessAnimeEpisodes_DiskFullNotifiesNoDiskSpaceReason(t *testing.T) {
 	anime := animeWithEpisodes(1, anilist.MediaStatusReleasing, false, "")
 	searcher := searcherFor(nil, nil, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(1)}}, nil)
 
-	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[int]bool{}, "", searcher)
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 	if len(result.newEpisodes) != 0 {
 		t.Errorf("nada deve ser registrado com disco cheio, obteve %d", len(result.newEpisodes))
 	}
@@ -342,17 +342,17 @@ func TestHandleSavedEpisodes_DiskFullStillPrunes(t *testing.T) {
 	configs := diskFullConfig(t)
 	configs.DeleteWatchedEpisodes = true
 
-	saved := []files.EpisodeStruct{{EpisodeID: 1, EpisodeHash: "h1"}, {EpisodeID: 2, EpisodeHash: "h2"}}
+	saved := []files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: "h1"}, {EpisodeNumber: 2, EpisodeHash: "h2"}}
 	fm := &mockFileManagerForEpisodes{}
 	backend := fakeWithTorrents("h1", "h2")
 
 	handleSavedEpisodes(fm, configs, backend, testLibrarian(), handleEpisodesData{
 		savedEpisodes: saved,
-		idsToDelete:   []int{1, 2},
+		keysToDelete:  []files.EpisodeKey{{Episode: 1}, {Episode: 2}},
 	})
 
-	if !containsID(fm.deletedEpisodeIDs, 1) || !containsID(fm.deletedEpisodeIDs, 2) {
-		t.Errorf("a poda deve rodar com disco cheio, apagados = %v", fm.deletedEpisodeIDs)
+	if !containsID(fm.deletedEpisodeKeys, files.EpisodeKey{Episode: 1}) || !containsID(fm.deletedEpisodeKeys, files.EpisodeKey{Episode: 2}) {
+		t.Errorf("a poda deve rodar com disco cheio, apagados = %v", fm.deletedEpisodeKeys)
 	}
 }
 
@@ -376,8 +376,8 @@ func TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook(t *testing.T) {
 
 	fm := &orchestrationFM{
 		saved: []files.EpisodeStruct{
-			{EpisodeID: 1, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 1, IsBatch: true, LibraryPaths: []string{"/library/My Anime/ep01.mkv"}},
-			{EpisodeID: 2, EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 2, IsBatch: true},
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 1, IsBatch: true, LibraryPaths: []string{"/library/My Anime/ep01.mkv"}},
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 2, IsBatch: true},
 		},
 		configs: &files.Config{
 			CompletedAnimePath: t.TempDir(),
