@@ -425,7 +425,15 @@
         </span>
       </div>
 
-      <div class="flex shrink-0 gap-2">
+      <!-- `flex-wrap` e SEM `shrink-0`: a fileira era `flex shrink-0 gap-2`, ou seja não podia
+           encolher nem quebrar, e sua largura ficava sendo a soma dos três botões para sempre
+           (358px em `en`, 438px em pt-BR). Em tela estreita "Parar Daemon" saía pela direita.
+           O `shrink-0` era o problema, não a solução: como item do cabeçalho `flex-wrap`, ele
+           travava a fileira no max-content de uma linha só, então a quebra interna nunca tinha
+           uma linha estreita com que trabalhar. Sem ele, o piso passa a ser o min-content (o
+           botão mais largo) e os botões descem de linha. Mesma regra da decisão 39: conjunto
+           FECHADO de ações quebra linha, não rola nem é cortado. -->
+      <div class="flex flex-wrap gap-2">
         <!-- Caminho real para a tela de adicionar (o item no MoreMenu é o atalho, não a porta).
              Desabilitado sem biblioteca configurada: é o mesmo bloqueio do
              LIBRARY_NOT_CONFIGURED, dito ANTES de o usuário digitar uma busca inteira para

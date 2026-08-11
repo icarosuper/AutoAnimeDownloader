@@ -8,7 +8,7 @@
   // lista (anilist_usernames, excluded_lists) trocaram o par "input + botão +" pelo
   // ChipsInput do artboard 1e.
   import { onMount } from "svelte";
-  import { Check } from "@lucide/svelte";
+  import { ArrowUpRight, Check } from "@lucide/svelte";
   import {
     getConfig,
     updateConfig,
@@ -24,7 +24,7 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
-  type GroupId = "anilist" | "downloads" | "automation" | "filters";
+  type GroupId = "library" | "anilist" | "downloads" | "search";
 
   $: T = $locale && {
     title: m.config_title(),
@@ -35,10 +35,8 @@
     requiredLegend: m.config_required_legend(),
     groupMissing: m.config_group_missing(),
     chipsPlaceholder: m.config_chips_placeholder(),
-    sectionAnilist: m.config_section_anilist(),
-    sectionDownloads: m.config_section_downloads(),
-    sectionAutomation: m.config_section_automation(),
-    sectionFilters: m.config_section_filters(),
+    linkPriorities: m.nav_priorities(),
+    linkNotifications: m.nav_notifications(),
     labelUsername: m.config_label_username(),
     hintAnilistUsernames: m.config_hint_anilist_usernames(),
     labelCompletedPath: m.config_label_completed_path(),
@@ -90,14 +88,21 @@
     btnSaving: m.config_btn_saving(),
   }
 
+  /**
+   * Ordem do índice. Biblioteca primeiro porque hospeda o único campo obrigatório da tela — e é
+   * para cá que `#/config?missingConfig=true` manda o usuário.
+   *
+   * `advanced` desenha o divisor acima do item: "Busca de torrents" é ajuste fino da seleção de
+   * torrent, não algo que uma instalação nova precise tocar.
+   */
   $: groups = ($locale && [
-    { id: "downloads" as GroupId, label: m.config_section_downloads() },
-    { id: "anilist" as GroupId, label: m.config_section_anilist() },
-    { id: "automation" as GroupId, label: m.config_section_automation() },
-    { id: "filters" as GroupId, label: m.config_section_filters() },
+    { id: "library" as GroupId, label: m.config_section_library(), advanced: false },
+    { id: "anilist" as GroupId, label: m.config_section_anilist(), advanced: false },
+    { id: "downloads" as GroupId, label: m.config_section_downloads(), advanced: false },
+    { id: "search" as GroupId, label: m.config_section_search(), advanced: true },
   ]) || [];
 
-  let activeGroup: GroupId = "downloads";
+  let activeGroup: GroupId = "library";
 
   const ALL_STATUSES = ["CURRENT", "REPEATING", "PLANNING", "PAUSED", "DROPPED", "COMPLETED"];
   const ALL_MEDIA_STATUSES = ["RELEASING", "FINISHED", "CANCELLED", "HIATUS"];
@@ -226,27 +231,27 @@
     // nenhuma, e o backend deixou de validá-la. Uma obrigatoriedade só no frontend seria uma
     // regra que o servidor não conhece.
     {
-      group: "downloads" as GroupId,
+      group: "library" as GroupId,
       ok: !!config.completed_anime_path?.trim(),
       message: m.config_val_completed_path,
     },
     {
-      group: "automation" as GroupId,
+      group: "downloads" as GroupId,
       ok: config.check_interval > 0,
       message: m.config_val_interval,
     },
     {
-      group: "automation" as GroupId,
+      group: "downloads" as GroupId,
       ok: config.max_episodes_per_anime > 0,
       message: m.config_val_max_episodes,
     },
     {
-      group: "automation" as GroupId,
+      group: "search" as GroupId,
       ok: config.episode_retry_limit >= 0,
       message: m.config_val_retry,
     },
     {
-      group: "automation" as GroupId,
+      group: "downloads" as GroupId,
       ok: config.max_concurrent_downloads >= 0,
       message: m.config_val_max_concurrent,
     },
@@ -256,28 +261,28 @@
       message: m.config_val_watched_keep,
     },
     {
-      group: "downloads" as GroupId,
+      group: "search" as GroupId,
       ok: config.max_batch_episodes >= 0,
       message: m.config_val_max_batch_episodes,
     },
     {
-      group: "downloads" as GroupId,
+      group: "search" as GroupId,
       ok: config.max_batch_torrent_size_gb >= 0 && config.max_episode_torrent_size_gb >= 0,
       message: m.config_val_torrent_size,
     },
     {
-      group: "downloads" as GroupId,
+      group: "search" as GroupId,
       ok: config.min_seeders >= 0,
       message: m.config_val_min_seeders,
     },
     {
-      group: "downloads" as GroupId,
+      group: "search" as GroupId,
       ok: config.max_search_pages >= 0,
       message: m.config_val_max_search_pages,
     },
     {
       // 100 bloquearia todo download para sempre.
-      group: "downloads" as GroupId,
+      group: "library" as GroupId,
       ok: config.min_free_disk_percent >= 0 && config.min_free_disk_percent <= 99,
       message: m.config_val_min_free_disk,
     },
@@ -343,17 +348,30 @@
       </p>
 
       <div class="grid gap-3.5 md:grid-cols-[196px_1fr] md:items-start">
-        <!-- Índice: coluna de 196px no desktop; no mobile vira faixa rolável horizontal, com
-             `shrink-0` nos itens para a faixa rolar em vez de espremer os rótulos.
+        <!-- Índice: coluna de 196px no desktop; no mobile os itens QUEBRAM LINHA, não rolam.
+             Mesma decisão (e mesmo motivo) das pills de filtro de `DownloadsToolbar.svelte`:
+             em 390px a faixa tinha 358px de espaço para 644px de conteúdo, então metade das
+             opções — inclusive "Torrent search" e os dois links de saída — só aparecia depois
+             de arrastar. `shrink-0` mantém o rótulo inteiro em vez de espremê-lo.
+
+             Os divisores são `w-full`, então a quebra acontece NELES: as três fileiras que saem
+             disso são a arquitetura da tela — grupos do dia a dia, o grupo avançado, e o que
+             sai da tela. No desktop a coluna diz isso implicitamente; aqui fica explícito.
+
              O ponto de pendência entra AQUI porque só um grupo fica na tela por vez: o asterisco
              no campo resolve o grupo aberto, e este ponto é o que conta ao usuário que ainda
              falta algo nos outros três. O texto sr-only entra no nome acessível do botão
              ("Anilist, configuração obrigatória faltando"); o ponto em si é decorativo. -->
         <nav
           aria-label={(T && T.navLabel) || ""}
-          class="flex gap-1 overflow-x-auto md:flex-col md:overflow-x-visible"
+          class="flex flex-wrap gap-1 md:flex-col"
         >
           {#each groups as group (group.id)}
+            {#if group.advanced}
+              <!-- `w-full`: além de separar, é o que empurra "Torrent search" para a fileira
+                   seguinte no mobile. Um só eixo nas duas larguras. -->
+              <div class="my-1 w-full border-t border-divider md:my-1.5" aria-hidden="true"></div>
+            {/if}
             <button
               type="button"
               aria-current={activeGroup === group.id ? "true" : undefined}
@@ -370,6 +388,24 @@
               {/if}
             </button>
           {/each}
+
+          <!-- Divisor: o que vem abaixo SAI da tela em vez de trocar o grupo visível. -->
+          <div class="my-1 w-full border-t border-divider md:my-1.5" aria-hidden="true"></div>
+
+          <a
+            href="#/priorities"
+            class="flex shrink-0 items-center gap-1.5 rounded-field px-3 py-2 text-left text-copy font-semibold text-subtle transition-colors hover:text-body md:w-full"
+          >
+            {T && T.linkPriorities}
+            <ArrowUpRight size={14} strokeWidth={2.5} class="shrink-0 opacity-70" aria-hidden="true" />
+          </a>
+          <a
+            href="#/notifications"
+            class="flex shrink-0 items-center gap-1.5 rounded-field px-3 py-2 text-left text-copy font-semibold text-subtle transition-colors hover:text-body md:w-full"
+          >
+            {T && T.linkNotifications}
+            <ArrowUpRight size={14} strokeWidth={2.5} class="shrink-0 opacity-70" aria-hidden="true" />
+          </a>
         </nav>
 
         <!-- `divide-y` desenha os divisores de 1px ENTRE os campos, sem borda sobrando na
@@ -382,6 +418,17 @@
                 bind:values={config.anilist_usernames}
                 label={(T && T.labelUsername) || ""}
                 hint={(T && T.hintAnilistUsernames) || ""}
+                placeholder={(T && T.chipsPlaceholder) || ""}
+                removeLabel={(item) => m.config_chips_remove({ item })}
+              />
+            </div>
+
+            <div class="p-4.5">
+              <ChipsInput
+                id="excluded_lists"
+                bind:values={config.excluded_lists}
+                label={(T && T.labelExcludedList) || ""}
+                hint={(T && T.hintExcludedList) || ""}
                 placeholder={(T && T.chipsPlaceholder) || ""}
                 removeLabel={(item) => m.config_chips_remove({ item })}
               />
@@ -457,7 +504,7 @@
             </fieldset>
           {/if}
 
-          {#if activeGroup === "downloads"}
+          {#if activeGroup === "library"}
             <div class="p-4.5">
               <Input
                 id="completed_anime_path"
@@ -470,24 +517,129 @@
               />
             </div>
 
+            <!-- A dica aparece sempre: é justamente ela que ajuda a decidir se vale ligar a
+                 chave, então esconder atrás do estado ligado esconde a informação útil.
+                 `Toggle` não tem prop de dica, daí o <p> irmão. -->
+            <div class="space-y-1.5 p-4.5">
+              <Toggle
+                id="rename_files_for_jellyfin"
+                bind:checked={config.rename_files_for_jellyfin}
+                label={(T && T.labelRenameJellyfin) || ""}
+                inline={true}
+              />
+              <p class="text-caption text-subtle">{T && T.hintRenameJellyfin}</p>
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="min_free_disk_percent"
+                label={T && T.labelMinFreeDisk || ""}
+                subtitle={T && T.hintMinFreeDisk || ""}
+                type="number"
+                bind:value={config.min_free_disk_percent}
+                min="0"
+                max="99"
+                inline={true}
+                suffix="%"
+              />
+            </div>
+          {/if}
+
+          {#if activeGroup === "downloads"}
+            <div class="p-4.5">
+              <Input
+                id="check_interval"
+                label={T && T.labelCheckInterval || ""}
+                type="number"
+                bind:value={config.check_interval}
+                min="1"
+                required={true}
+                inline={true}
+                suffix="min"
+              />
+            </div>
+            <div class="space-y-1.5 p-4.5">
+              <Input
+                id="max_concurrent_downloads"
+                label={T && T.labelMaxConcurrent || ""}
+                type="number"
+                bind:value={config.max_concurrent_downloads}
+                min="0"
+                required={true}
+                inline={true}
+              />
+              <p class="text-caption text-subtle">{T && T.hintMaxConcurrent}</p>
+            </div>
+            <div class="p-4.5">
+              <Input
+                id="max_episodes_per_anime"
+                label={T && T.labelMaxEpisodes || ""}
+                type="number"
+                bind:value={config.max_episodes_per_anime}
+                min="1"
+                required={true}
+                inline={true}
+              />
+            </div>
+
+            <!-- Sem divisor entre a chave e a quantidade: a ausência do divisor é o que expressa
+                 que o segundo campo depende do primeiro. -->
             <div class="space-y-3 p-4.5">
               <Toggle
                 id="delete_watched_episodes"
                 bind:checked={config.delete_watched_episodes}
                 label={(T && T.labelDeleteWatched) || ""}
+                inline={true}
               />
               {#if config.delete_watched_episodes}
-                <div class="pl-11">
-                  <Input
-                    id="watched_episodes_to_keep"
-                    label={T && T.labelWatchedKeep || ""}
-                    subtitle={T && T.hintWatchedKeep || ""}
-                    type="number"
-                    bind:value={config.watched_episodes_to_keep}
-                    min="0"
-                  />
-                </div>
+                <Input
+                  id="watched_episodes_to_keep"
+                  label={T && T.labelWatchedKeep || ""}
+                  subtitle={T && T.hintWatchedKeep || ""}
+                  type="number"
+                  bind:value={config.watched_episodes_to_keep}
+                  min="0"
+                  inline={true}
+                />
               {/if}
+            </div>
+          {/if}
+
+          {#if activeGroup === "search"}
+            <div class="p-4.5">
+              <Input
+                id="min_seeders"
+                label={T && T.labelMinSeeders || ""}
+                subtitle={T && T.hintMinSeeders || ""}
+                type="number"
+                bind:value={config.min_seeders}
+                min="0"
+                inline={true}
+              />
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="max_search_pages"
+                label={T && T.labelMaxSearchPages || ""}
+                subtitle={T && T.hintMaxSearchPages || ""}
+                type="number"
+                bind:value={config.max_search_pages}
+                min="1"
+                inline={true}
+              />
+            </div>
+
+            <div class="p-4.5">
+              <Input
+                id="episode_retry_limit"
+                label={T && T.labelRetryLimit || ""}
+                type="number"
+                bind:value={config.episode_retry_limit}
+                min="0"
+                required={true}
+                inline={true}
+              />
             </div>
 
             <div class="p-4.5">
@@ -498,6 +650,7 @@
                 type="number"
                 bind:value={config.max_batch_episodes}
                 min="0"
+                inline={true}
               />
             </div>
 
@@ -510,6 +663,8 @@
                 bind:value={config.max_batch_torrent_size_gb}
                 min="0"
                 step="0.1"
+                inline={true}
+                suffix="GiB"
               />
             </div>
 
@@ -522,108 +677,8 @@
                 bind:value={config.max_episode_torrent_size_gb}
                 min="0"
                 step="0.1"
-              />
-            </div>
-
-            <div class="p-4.5">
-              <Input
-                id="min_seeders"
-                label={T && T.labelMinSeeders || ""}
-                subtitle={T && T.hintMinSeeders || ""}
-                type="number"
-                bind:value={config.min_seeders}
-                min="0"
-              />
-            </div>
-
-            <div class="p-4.5">
-              <Input
-                id="max_search_pages"
-                label={T && T.labelMaxSearchPages || ""}
-                subtitle={T && T.hintMaxSearchPages || ""}
-                type="number"
-                bind:value={config.max_search_pages}
-                min="1"
-              />
-            </div>
-
-            <div class="p-4.5">
-              <Input
-                id="min_free_disk_percent"
-                label={T && T.labelMinFreeDisk || ""}
-                subtitle={T && T.hintMinFreeDisk || ""}
-                type="number"
-                bind:value={config.min_free_disk_percent}
-                min="0"
-                max="99"
-              />
-            </div>
-
-            <div class="space-y-1.5 p-4.5">
-              <Toggle
-                id="rename_files_for_jellyfin"
-                bind:checked={config.rename_files_for_jellyfin}
-                label={(T && T.labelRenameJellyfin) || ""}
-              />
-              {#if config.rename_files_for_jellyfin}
-                <p class="pl-11 text-caption text-subtle">{T && T.hintRenameJellyfin}</p>
-              {/if}
-            </div>
-          {/if}
-
-          {#if activeGroup === "automation"}
-            <div class="p-4.5">
-              <Input
-                id="check_interval"
-                label={T && T.labelCheckInterval || ""}
-                type="number"
-                bind:value={config.check_interval}
-                min="1"
-                required={true}
-              />
-            </div>
-            <div class="p-4.5">
-              <Input
-                id="max_episodes_per_anime"
-                label={T && T.labelMaxEpisodes || ""}
-                type="number"
-                bind:value={config.max_episodes_per_anime}
-                min="1"
-                required={true}
-              />
-            </div>
-            <div class="p-4.5">
-              <Input
-                id="episode_retry_limit"
-                label={T && T.labelRetryLimit || ""}
-                type="number"
-                bind:value={config.episode_retry_limit}
-                min="0"
-                required={true}
-              />
-            </div>
-            <div class="space-y-1.5 p-4.5">
-              <Input
-                id="max_concurrent_downloads"
-                label={T && T.labelMaxConcurrent || ""}
-                type="number"
-                bind:value={config.max_concurrent_downloads}
-                min="0"
-                required={true}
-              />
-              <p class="text-caption text-subtle">{T && T.hintMaxConcurrent}</p>
-            </div>
-          {/if}
-
-          {#if activeGroup === "filters"}
-            <div class="p-4.5">
-              <ChipsInput
-                id="excluded_lists"
-                bind:values={config.excluded_lists}
-                label={(T && T.labelExcludedList) || ""}
-                hint={(T && T.hintExcludedList) || ""}
-                placeholder={(T && T.chipsPlaceholder) || ""}
-                removeLabel={(item) => m.config_chips_remove({ item })}
+                inline={true}
+                suffix="GiB"
               />
             </div>
           {/if}

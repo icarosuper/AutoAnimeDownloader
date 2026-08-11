@@ -7,11 +7,19 @@
   /** Required, no default — spec calls for an accessible label on every instance. */
   export let label: string
   export let id: string = `toggle-${Math.random().toString(36).slice(2, 9)}`
+  /**
+   * Linha de duas colunas: rótulo à esquerda, chave à direita. `flex-row-reverse` inverte a
+   * ORDEM VISUAL sem tocar na ordem do DOM, então a associação rótulo↔input e a ordem de
+   * tabulação continuam as mesmas.
+   */
+  export let inline = false
 </script>
 
 <label
   for={id}
-  class="inline-flex select-none items-center gap-2 {disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}"
+  class="select-none items-center gap-2 {inline
+    ? 'flex w-full flex-row-reverse justify-between'
+    : 'inline-flex'} {disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}"
 >
   <span
     class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-pill transition-colors {checked

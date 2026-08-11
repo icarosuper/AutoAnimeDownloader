@@ -338,3 +338,89 @@ test('the nav rail stays pinned to the top of the viewport while the page scroll
   expect(after?.y).toBe(0)
   await expect(rail.getByRole('link', { name: /status/i })).toBeInViewport()
 })
+
+/**
+ * Índice do Config no mobile. Mesma regressão das pills de filtro de Downloads, mesmo remédio:
+ * a faixa tinha 358px de espaço para 644px de conteúdo em 390px, então "Torrent search" e os
+ * dois links de saída ficavam atrás de um arrasto lateral. `flex-wrap` põe tudo na tela.
+ *
+ * A asserção é dupla de propósito: "todo item inteiro na viewport" pega o item escondido, e
+ * "a faixa não é container de scroll" pega o retorno de `overflow-x-auto` mesmo que por sorte
+ * os itens caibam num idioma curto.
+ */
+for (const width of [375, 390, 414]) {
+  test(`every config group and exit link is visible without horizontal scroll at ${width}px`, async ({
+    page,
+  }) => {
+    await page.route('**/api/v1/config', route => route.fulfill({ json: baseConfig }))
+    await page.route('**/api/v1/ws', route => route.abort())
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto('/#/config')
+
+    const index = page.getByRole('navigation', { name: /configuration sections/i })
+    await expect(index).toBeVisible()
+
+    const items = [
+      index.getByRole('button', { name: /^library$/i }),
+      index.getByRole('button', { name: /^anilist$/i }),
+      index.getByRole('button', { name: /^downloads$/i }),
+      index.getByRole('button', { name: /^torrent search$/i }),
+      index.getByRole('link', { name: /priorities/i }),
+      index.getByRole('link', { name: /notifications/i }),
+    ]
+
+    for (const item of items) {
+      // ratio 1: o item INTEIRO na viewport, não uma borda dele.
+      await expect(item).toBeInViewport({ ratio: 1 })
+    }
+
+    const scrolls = await index.evaluate((el: HTMLElement) => el.scrollWidth > el.clientWidth)
+    expect(scrolls, 'the config index still scrolls horizontally').toBe(false)
+  })
+}
+
+/**
+ * Ações do daemon no cabeçalho do Status. A fileira era `flex shrink-0 gap-2`: não podia
+ * encolher NEM quebrar, então sua largura era a soma dos três botões para sempre — 358px em
+ * inglês, 438px em pt-BR — e em tela estreita "Parar Daemon" saía pela direita.
+ *
+ * Parametrizado por LOCALE de propósito. O resto da suíte roda só em `en`, o default, e foi
+ * exatamente isso que deixou o bug passar: em inglês os rótulos são ~80px mais curtos e a
+ * fileira só estourava abaixo de 375px, fora das larguras testadas. pt-BR é o idioma mais
+ * longo dos dois; um teste de largura que só roda em `en` mede o caso fácil.
+ */
+for (const locale of ['en', 'pt-BR'] as const) {
+  for (const width of [320, 375, 390, 414] as const) {
+    test(`status header daemon actions stay on screen at ${width}px in ${locale}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(l => localStorage.setItem('PARAGLIDE_LOCALE', l), locale)
+      await setupStatusPageMocks(page, 'running')
+      await page.setViewportSize({ width, height: 844 })
+      await page.goto('/#/status')
+
+      // Escopado à fileira do cabeçalho: "+ Add anime" também existe no empty state da lista e
+      // na NavTabBar do mobile, então o nome acessível sozinho casa três elementos. "Forçar
+      // verificação" só existe aqui, e serve de âncora para chegar na fileira.
+      const row = page
+        .getByRole('button', { name: /forçar verificação|force check/i })
+        .locator('..')
+
+      const actions = [
+        row.getByRole('link', { name: /adicionar anime|add anime/i }),
+        row.getByRole('button', { name: /forçar verificação|force check/i }),
+        row.getByRole('button', { name: /parar daemon|stop daemon/i }),
+      ]
+      for (const action of actions) {
+        // ratio 1: o botão INTEIRO na viewport, não uma borda dele.
+        await expect(action).toBeInViewport({ ratio: 1 })
+      }
+
+      // E a página não ganhou scroll horizontal — é o sintoma que o usuário vê.
+      const over = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      )
+      expect(over, 'the page scrolls horizontally').toBe(false)
+    })
+  }
+}

@@ -23,3 +23,7 @@ runtime/
 
 # --debug-anime output
 .debug_*/
+
+# Playwright output
+**/test-results/*
+

@@ -86,6 +86,13 @@ export const baseConfig = {
     check_interval: 60,
     max_episodes_per_anime: 12,
     episode_retry_limit: 3,
+    max_concurrent_downloads: 3,
+    max_batch_episodes: 30,
+    max_batch_torrent_size_gb: 0,
+    max_episode_torrent_size_gb: 0,
+    min_seeders: 1,
+    max_search_pages: 5,
+    min_free_disk_percent: 10,
     delete_watched_episodes: false,
     watched_episodes_to_keep: 0,
     excluded_lists: [],
@@ -93,7 +100,7 @@ export const baseConfig = {
     download_statuses: ['CURRENT', 'REPEATING'],
     download_media_statuses: ['RELEASING', 'FINISHED'],
     delete_statuses: [],
-    notifications: { webhooks: [] },
+    notifications: { webhooks: [], batch_window_seconds: 0 },
   },
 }
 

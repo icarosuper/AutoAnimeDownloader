@@ -581,15 +581,23 @@ Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são f
 
 ---
 
-### 39. As pills de filtro de Downloads quebram linha (`flex-wrap`), ao contrário da faixa do card herói
+### 39. Faixa de escolhas FINITA quebra linha (`flex-wrap`); faixa de conteúdo ILIMITADO rola
 
-**Location:** `frontend/src/components/DownloadsToolbar.svelte`. Coberto por `frontend/tests/smoke/layout.spec.ts` ("every downloads filter pill is visible without horizontal scroll").
+**Location:** `frontend/src/components/DownloadsToolbar.svelte` (pills de filtro), o `<nav>` do índice em `frontend/src/routes/Config.svelte`, e a fileira de ações do daemon no cabeçalho de `frontend/src/routes/Status.svelte`. Cobertos por `frontend/tests/smoke/layout.spec.ts` ("every downloads filter pill…", "every config group and exit link…", "status header daemon actions stay on screen").
 
-**What it looks like:** a fileira de pills (Todos/Baixando/Semeando/Problemas) é `flex flex-wrap`, sem `overflow-x-auto` e sem `min-w-0` — enquanto a faixa "Downloads ativos" do card herói (decisão 37) e o índice lateral do Config no mobile continuam sendo faixas roláveis.
+**What it looks like:** as três faixas são `flex flex-wrap`, sem `overflow-x-auto` e sem `min-w-0` — enquanto a faixa "Downloads ativos" do card herói (decisão 37) continua rolável.
 
-**Why it's right:** o que a rolagem esconde muda de peso em cada caso. A pill existe para responder "tem algo ali?" pela **contagem**; com `overflow-x-auto` as duas últimas ("Semeando", "Problemas") ficavam fora da vista em tela estreita e a informação só aparecia depois de arrastar — o usuário nem sabia que havia mais filtros. Já a faixa do herói e o índice do Config são listas longas e homogêneas, onde rolar é o degrade correto. Também não leva `min-w-0`: o mínimo automático deste item é o min-content (a pill mais larga), que é exatamente o piso desejado — com `min-w-0` uma pill voltaria a estourar em vez de quebrar.
+A fileira do Status mostra a variante em que o sintoma não é rolagem e sim **corte**: ela era `flex shrink-0 gap-2`, sem faixa rolável nenhuma. Como item de um cabeçalho `flex-wrap`, o `shrink-0` travava sua largura no max-content de uma linha só (358px em `en`, 438px em pt-BR), então ela nunca recebia uma linha estreita em que pudesse quebrar e "Parar Daemon" saía pela direita em ≤414px no português. Tirar o `shrink-0` faz o piso passar a ser o min-content (o botão mais largo) e a quebra acontecer. Medido depois do fix: os botões mantêm 148/150/124px em toda largura — nenhum encolhe, então nenhum rótulo quebra no meio, e o `shrink-0` nos FILHOS (que a decisão pedia para as pills) não foi necessário aqui.
 
-**Don't "fix" by:** devolver `overflow-x-auto` "por consistência com a faixa do herói" (as duas faixas resolvem problemas diferentes); tirar o `shrink-0` das pills (elas passariam a encolher e o rótulo quebraria no meio, em vez de a pill inteira descer de linha).
+**Why it's right:** o critério é se a faixa oferece um conjunto FECHADO de escolhas ou uma lista de tamanho arbitrário. Escolha escondida atrás de arrasto é escolha que não existe: o usuário não sabe que há mais. As pills existem para responder "tem algo ali?" pela contagem, e "Semeando"/"Problemas" ficavam fora da vista em tela estreita. O índice do Config tem quatro grupos mais dois links de saída — em 390px, 358px de espaço para 644px de conteúdo, ou seja metade escondida, inclusive "Torrent search" e os dois links, que são o único caminho até Prioridades e Notificações a partir dessa tela. A faixa do herói é diferente porque a lista de downloads ativos não tem teto: nenhum layout põe N torrents na tela, e aí rolar é o degrade correto.
+
+Nenhuma das duas leva `min-w-0`: o mínimo automático do item é o min-content (a pill/rótulo mais largo), que é exatamente o piso desejado — com `min-w-0` o item voltaria a estourar em vez de quebrar.
+
+No índice do Config os divisores são `w-full`, então a quebra acontece neles: as três fileiras resultantes (grupos do dia a dia / grupo avançado / links de saída) são a arquitetura da tela, que no desktop a coluna diz implicitamente.
+
+**Revisão:** até 2026-08-11 esta decisão listava o índice do Config no lado "rolável", classificando-o como "lista longa e homogênea". Estava errado nos fatos — são seis itens, não uma lista longa, e a medição mostrou metade fora da tela. O critério acima ("finito vs. ilimitado") é o que substitui aquele.
+
+**Don't "fix" by:** devolver `shrink-0` à fileira do Status "para os botões não encolherem" (é o bug de volta — `shrink-0` no CONTAINER trava a quebra; o que protege o rótulo é `shrink-0` no filho, e aqui não é nem necessário); devolver `overflow-x-auto` a qualquer das três "por consistência com a faixa do herói" (o herói resolve outro problema — lista sem teto); tirar o `shrink-0` dos itens (passariam a encolher e o rótulo quebraria no meio, em vez de o item inteiro descer de linha); trocar o índice do Config por um `<select>` no mobile (`<option>` não estiliza, então o ponto de "falta preencher" viraria texto, e os dois links de saída deixariam de ser `<a>` — perdendo abrir-em-nova-aba, que é o motivo de serem `<a>`).
 
 ---
 
