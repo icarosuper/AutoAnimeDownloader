@@ -10,7 +10,7 @@ type nyaaSearchFunc func(title string) ([]nyaa.TorrentResult, error)
 
 type nyaaSearcher struct {
 	searchBatch         func(titles anilist.Title, synonyms []string, customQuery string) []nyaa.TorrentResult
-	searchSingleEpisode func(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string) []nyaa.TorrentResult
+	searchSingleEpisode func(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string, totalEpisodes int) []nyaa.TorrentResult
 	searchMovie         func(titles anilist.Title, isFormatMovie bool, customQuery string) []nyaa.TorrentResult
 	searchMultiple      func(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult
 }
@@ -133,11 +133,12 @@ func searchNyaaWithVariants(titles anilist.Title, customQuery string, searchFn n
 	return nil
 }
 
-func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string) []nyaa.TorrentResult {
+// totalEpisodes vai para o nyaa apenas para decidir o zero-padding da query (0 = desconhecido).
+func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string, totalEpisodes int) []nyaa.TorrentResult {
 	season, part := ExtractAnimeSeasonPart(titles, synonyms)
 
 	results := searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
-		return nyaa.ScrapNyaa(title, ep.Episode, season, part)
+		return nyaa.ScrapNyaa(title, ep.Episode, season, part, totalEpisodes)
 	}, "single episode")
 
 	if len(results) > 0 {
@@ -148,7 +149,7 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 	// com numeração contínua. Só aplica quando part >= 2 (gate obrigatório).
 	if offset := ComputeEpisodeOffset(relations, part); offset > 0 {
 		results = searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
-			return nyaa.ScrapNyaa(title, ep.Episode+offset, season, nil)
+			return nyaa.ScrapNyaa(title, ep.Episode+offset, season, nil, totalEpisodes)
 		}, "single episode (offset fallback)")
 	}
 

@@ -45,7 +45,7 @@ func animeWithEpisodes(n int, status anilist.MediaStatus, totalKnown bool, forma
 func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearcher {
 	return nyaaSearcher{
 		searchBatch: func(anilist.Title, []string, string) []nyaa.TorrentResult { return batch },
-		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string) []nyaa.TorrentResult {
+		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string, int) []nyaa.TorrentResult {
 			return single
 		},
 		searchMovie:    func(anilist.Title, bool, string) []nyaa.TorrentResult { return movie },
@@ -137,6 +137,25 @@ func TestWillBatch_ReleasingStaysLimited(t *testing.T) {
 
 	if len(result.newEpisodes) != 12 {
 		t.Errorf("esperava 12 episódios, obteve %d", len(result.newEpisodes))
+	}
+}
+
+// Formato One Piece: RELEASING, Media.Episodes == nil, 1100 episódios no ar. O tamanho da série
+// tem de chegar na busca de episódio (é ele que liga o zero-padding da query) — e Media.Episodes
+// sozinho não serviria, porque é justamente nil na série longa em andamento.
+func TestSingleEpisodeSearch_ReceivesSeriesLength(t *testing.T) {
+	anime := animeWithEpisodes(1100, anilist.MediaStatusReleasing, false, "")
+	got := 0
+	searcher := searcherFor(nil, nil, nil, nil)
+	searcher.searchSingleEpisode = func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ string, totalEpisodes int) []nyaa.TorrentResult {
+		got = totalEpisodes
+		return nil
+	}
+
+	processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
+
+	if got != 1100 {
+		t.Errorf("esperava 1100 como tamanho da série na busca de episódio, obteve %d", got)
 	}
 }
 

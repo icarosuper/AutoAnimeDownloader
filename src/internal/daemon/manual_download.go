@@ -198,7 +198,7 @@ func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episode
 		return files.EpisodeStruct{}, err
 	}
 
-	results := searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, customQuery)
+	results := searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, customQuery, anilist.LastAiredEpisode(details.mediaList))
 	var magnets []string
 	for _, result := range results {
 		magnets = append(magnets, result.MagnetLink)

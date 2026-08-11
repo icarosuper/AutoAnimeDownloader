@@ -284,37 +284,80 @@ func deduplicateByMagnet(results []TorrentResult) []TorrentResult {
 	return unique
 }
 
+// longSeriesEpisodes é o total de episódios a partir do qual a busca por episódio também
+// tenta a query com zero-padding. Ver episodeQueries.
+const longSeriesEpisodes = 100
+
+// episodeQueries devolve as queries de busca do episódio: a simples ("one piece 1") e, em
+// série longa, também a com padding de 3 dígitos ("one piece 001").
+//
+// Sem padding, `q=one piece 1` casa tudo que contém "1" e, ordenado por seeders, as primeiras
+// centenas de linhas são os episódios 1160+ — o episódio 1 não aparece. Grupos numeram série
+// longa com padding (`[Judas] One Piece 001-574`, `[Erai-raws] Naruto Shippuuden - 001 ~ 079`).
+//
+// É variante ADICIONAL, não substituição: padding é convenção, não regra, e a query simples
+// continua pegando quem numera solto. Só entra acima de longSeriesEpisodes porque cada variante
+// custa fetches, e episódio >= 100 já tem 3 dígitos (padding não mudaria nada).
+func episodeQueries(query string, episode, totalEpisodes int) []string {
+	queries := []string{fmt.Sprintf("%s %d", query, episode)}
+	if totalEpisodes > longSeriesEpisodes && episode < 100 {
+		queries = append(queries, fmt.Sprintf("%s %03d", query, episode))
+	}
+	return queries
+}
+
 // ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio.
 // requestedSeason e requestedPart são extraídos upstream dos dados do Anilist.
-func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *int) ([]TorrentResult, error) {
+// totalEpisodes (opcional) é o total de episódios do anime, usado só para decidir o
+// zero-padding da query — 0/ausente vale como desconhecido.
+func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *int, totalEpisodes ...int) ([]TorrentResult, error) {
+	total := 0
+	if len(totalEpisodes) > 0 {
+		total = totalEpisodes[0]
+	}
+
 	sanitizedRomajiName := reSeasonStrip.ReplaceAllString(animeName, "")
 	sanitizedRomajiName = rePartStrip.ReplaceAllString(sanitizedRomajiName, "")
 
 	query := strings.TrimSpace(sanitizedRomajiName)
 
-	// Construir URL com parâmetros
-	params := url.Values{}
-	params.Set("f", "0")   // Filtro: sem filtro
-	params.Set("c", "1_2") // Categoria: anime (english)
-	// params.Set("q", fmt.Sprintf())     // Query de busca
-	params.Set("q", fmt.Sprintf("%s %d", query, episode)) // Query de busca com episódio
-	params.Set("s", "seeders")                            // Ordenar por seeders
-	params.Set("o", "desc")                               // Ordem decrescente
-
-	baseURL := getNyaaBaseURL()
-	nyaaURL := fmt.Sprintf("%s/?%s", baseURL, params.Encode())
-
-	logger.Logger.Debug().
-		Str("url", nyaaURL).
-		Str("anime_name", animeName).
-		Int("episode", episode).
-		Msg("Searching Nyaa for single episode")
-
-	doc1, err := fetchNyaaPage(nyaaURL)
-	if err != nil {
-		return nil, err
+	buildURL := func(q string) string {
+		params := url.Values{}
+		params.Set("f", "0")       // Filtro: sem filtro
+		params.Set("c", "1_2")     // Categoria: anime (english)
+		params.Set("q", q)         // Query de busca com episódio
+		params.Set("s", "seeders") // Ordenar por seeders
+		params.Set("o", "desc")    // Ordem decrescente
+		return fmt.Sprintf("%s/?%s", getNyaaBaseURL(), params.Encode())
 	}
-	doc2, _ := fetchNyaaPage(nyaaURL + "&p=2") // best-effort; page 2 may not exist
+
+	var docs []*goquery.Document
+	var firstErr error
+	for _, q := range episodeQueries(query, episode, total) {
+		nyaaURL := buildURL(q)
+
+		logger.Logger.Debug().
+			Str("url", nyaaURL).
+			Str("anime_name", animeName).
+			Int("episode", episode).
+			Msg("Searching Nyaa for single episode")
+
+		doc1, err := fetchNyaaPage(nyaaURL)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		docs = append(docs, doc1)
+		if doc2, _ := fetchNyaaPage(nyaaURL + "&p=2"); doc2 != nil { // best-effort; page 2 may not exist
+			docs = append(docs, doc2)
+		}
+	}
+	// Só falha se NENHUMA variante respondeu: uma query que dá erro não pode anular a outra.
+	if len(docs) == 0 {
+		return nil, firstErr
+	}
 
 	var results []TorrentResult
 
@@ -413,9 +456,8 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		})
 	}
 
-	doc1.Find(".torrent-list tbody tr").Each(parseRow)
-	if doc2 != nil {
-		doc2.Find(".torrent-list tbody tr").Each(parseRow)
+	for _, doc := range docs {
+		doc.Find(".torrent-list tbody tr").Each(parseRow)
 	}
 	results = deduplicateByMagnet(results)
 

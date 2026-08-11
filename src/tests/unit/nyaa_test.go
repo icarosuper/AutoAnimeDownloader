@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,20 @@ func mockHtml(options []string) string {
 
 func mockHttpGet(sampleHTML string) func() {
 	return nyaa.MockNyaaHttpGet(func(url string) (*http.Response, error) {
+		r := strings.NewReader(sampleHTML)
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(r),
+			Header:     make(http.Header),
+		}, nil
+	})
+}
+
+// mockHttpGetCapturing é o mockHttpGet que também registra cada URL pedida,
+// para os testes que verificam a query montada e não o resultado.
+func mockHttpGetCapturing(sampleHTML string, urls *[]string) func() {
+	return nyaa.MockNyaaHttpGet(func(url string) (*http.Response, error) {
+		*urls = append(*urls, url)
 		r := strings.NewReader(sampleHTML)
 		return &http.Response{
 			StatusCode: 200,
@@ -119,6 +134,54 @@ func TestNyaaModule_CanGetCorrectAnime_WithSpecialCharactersDifferences(t *testi
 	}
 
 	runEpisodeNameTest(options, t)
+}
+
+// Série longa: grupos numeram com zero-padding ("One Piece - 001"), e a query sem
+// padding afoga o episódio 1 nos 1160+ ordenados por seeders.
+func TestScrapNyaa_LongSeriesAlsoQueriesPaddedEpisode(t *testing.T) {
+	var urls []string
+	restore := mockHttpGetCapturing(mockHtml([]string{"[Group] One Piece - 001 [1080p]"}), &urls)
+	defer restore()
+
+	if _, err := nyaa.ScrapNyaa("One Piece", 1, nil, nil, 1100); err != nil {
+		t.Fatalf("ScrapNyaa error: %v", err)
+	}
+
+	if !slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "q=One+Piece+001") }) {
+		t.Fatalf("esperava uma query com o episódio zero-padded, obtive %v", urls)
+	}
+	if !slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "q=One+Piece+1&") }) {
+		t.Fatalf("a query sem padding não pode ser substituída, obtive %v", urls)
+	}
+}
+
+func TestScrapNyaa_ShortSeriesKeepsPlainEpisode(t *testing.T) {
+	var urls []string
+	restore := mockHttpGetCapturing(mockHtml([]string{"[Group] Takopi - 01 [1080p]"}), &urls)
+	defer restore()
+
+	if _, err := nyaa.ScrapNyaa("Takopi", 1, nil, nil, 12); err != nil {
+		t.Fatalf("ScrapNyaa error: %v", err)
+	}
+
+	if slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "001") }) {
+		t.Fatalf("anime curto não deve gerar query com padding, obtive %v", urls)
+	}
+}
+
+// Sem total de episódios (chamada antiga) o comportamento é o de anime curto.
+func TestScrapNyaa_UnknownTotalKeepsPlainEpisode(t *testing.T) {
+	var urls []string
+	restore := mockHttpGetCapturing(mockHtml([]string{"[Group] Show - 01 [1080p]"}), &urls)
+	defer restore()
+
+	if _, err := nyaa.ScrapNyaa("Show", 1, nil, nil); err != nil {
+		t.Fatalf("ScrapNyaa error: %v", err)
+	}
+
+	if slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "001") }) {
+		t.Fatalf("sem total conhecido não deve haver padding, obtive %v", urls)
+	}
 }
 
 // Um filme não pode ser aceito como episódio: "[DB] Naruto Shippuuden Movie 3"
@@ -792,6 +855,28 @@ func TestIsBatch_DetectsBatchTorrents(t *testing.T) {
 		{
 			name:     "Single episode S01E05",
 			torrent:  "[Group] Anime S01E05 [1080p]",
+			expected: false,
+		},
+		// Faixa no fim do nome, sem espaço depois: visto no Nyaa na busca do
+		// episódio 1 do One Piece (packs de 500 episódios lidos como "episódio 1").
+		{
+			name:     "Range at end of name",
+			torrent:  "One Piece EP 001-501",
+			expected: true,
+		},
+		{
+			name:     "Range before file extension",
+			torrent:  "One Piece 001-501.mkv",
+			expected: true,
+		},
+		{
+			name:     "Range before bracket",
+			torrent:  "[Judas] One Piece 001-574[BD 1080p]",
+			expected: true,
+		},
+		{
+			name:     "Single episode at end of name",
+			torrent:  "Lucky Star 15",
 			expected: false,
 		},
 	}

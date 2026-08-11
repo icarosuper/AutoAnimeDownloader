@@ -92,6 +92,9 @@ func processAnimeEpisodes(
 		episodesToDownload = episodesToDownload[:configs.MaxEpisodesPerAnime]
 	}
 
+	// Tamanho da serie, so para a busca decidir o zero-padding da query do episodio.
+	seriesLength := anilist.LastAiredEpisode(anime)
+
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 
@@ -103,7 +106,7 @@ func processAnimeEpisodes(
 		}
 
 		if len(magnets) == 0 {
-			singleResults := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+			singleResults := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 			for _, tr := range singleResults {
 				magnets = append(magnets, tr.MagnetLink)
 			}

@@ -64,6 +64,13 @@ func EpisodeList(ml MediaList, fromEpisode int) []AiringNode {
 // AniList oferece — nenhuma delas confiavel sozinha: a agenda pode estar clipada ou vazia,
 // nextAiringEpisode e nil em anime terminado, e media.episodes so vale quando o anime terminou
 // (num RELEASING ele e a contagem PREVISTA da temporada inteira, nao o que ja passou).
+// LastAiredEpisode e a versao exportada de lastAiredEpisode. Serve como medida de "tamanho da
+// serie" fora do pacote — media.Episodes nao serve para isso: num RELEASING sem fim anunciado
+// (One Piece) ele e nil, e e exatamente a serie longa que precisa ser reconhecida como tal.
+func LastAiredEpisode(ml MediaList) int {
+	return lastAiredEpisode(ml)
+}
+
 func lastAiredEpisode(ml MediaList) int {
 	last := 0
 	for _, n := range ml.Media.AiringSchedule.Nodes {

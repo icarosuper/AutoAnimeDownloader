@@ -15,7 +15,10 @@ var (
 		regexp.MustCompile(`(?i)\(batch\)|\[batch\]|\s+batch\s+`),
 		regexp.MustCompile(`(?i)\(unofficial\s+batch\)`),
 		regexp.MustCompile(`(?i)\(\d{1,4}\s*[-~]\s*\d{1,4}\)`),
-		regexp.MustCompile(`(?i)\s\d{2,4}\s*[-~]\s*\d{2,4}\s`),
+		// O fim da faixa pode ser espaço, fim do nome, extensão ou colchete: exigir espaço
+		// deixava passar "One Piece EP 001-501" e "One Piece 001-501.mkv" — packs de 500
+		// episódios que a busca de episódio lia como "episódio 1" (ver decisions.md #53).
+		regexp.MustCompile(`(?i)\s\d{2,4}\s*[-~]\s*\d{2,4}(?:\s|$|\.|\[)`),
 		regexp.MustCompile(`(?i)\s\d{2,4}~\d{2,4}\s`),
 		regexp.MustCompile(`(?i)\(complete\)|\[complete\]|\s+complete\s+`),
 		regexp.MustCompile(`(?i)complete\s+series|complete\s+season`),

@@ -901,6 +901,8 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 **(a) Sem o guard de batch, um pack de 220 episódios entra como "episódio 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` casa `- 001` em `extractEpisodeNumber`, e a busca multi-episódio (ao contrário da single) não filtrava batch. Resultado medido: 220 episódios num registro só, com `IsBatch: false`, furando `max_batch_episodes` **e** `max_episodes_per_anime` — e organizado como episódio único (renomeado "Naruto - E01" com `rename_files_for_jellyfin`). Descartar em vez de aceitar como batch porque `ScrapNyaaForBatch` roda **antes** na `resolveSearchStrategy`: um batch que valesse a pena já teria sido pego lá, e o que vaza aqui é exatamente o que o teto rejeitou.
 
+**(a2) O guard só vale se o `isBatch` reconhecer a faixa.** O padrão de faixa exigia espaço DEPOIS do segundo número (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), então `One Piece EP 001-501` e `One Piece 001-501.mkv` passavam como "episódio 1" — o mesmo bug de (a) por outro buraco, medido ao vivo na busca do episódio 1 do One Piece (2 dos 7 candidatos eram packs de 500 episódios). O fim da faixa agora aceita espaço, fim do nome, `.` ou `[`.
+
 **(b) O ramo `!reHasEpisode && !isBatch` de `isMovie` não pode virar guard de episódio.** `reHasEpisode` só cobre `- 05`, `episode 05` e `S01E05`; `extractEpisodeNumber` cobre também `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` e `" 5"`. Chamar `isMovie` inteiro rejeitaria todo release nessas formas (os testes de "Lucky Star EP015 / E015 / 15" pegam isso). Daí o split: `hasMovieMarker` (keywords + OVA/ONA + special) serve os dois lados, e `isMovie` continua sendo o `hasMovieMarker` mais o fallback "não tem marcador de episódio" que só faz sentido na busca de filme.
 
 **(c) `reOvaPattern` precisa de `\b`.** Era `\(?(ova|ona)\)?`, sem boundary: "ona" casa dentro de **Persona**, "ova" dentro de **Nova**. Enquanto o padrão só era usado na direção permissiva (`ScrapNyaaForMovie`) isso passava; como guard de episódio viraria rejeição do anime inteiro.
@@ -950,3 +952,26 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 - Voltar o comparador para `torrentHealthScore` "porque usa mais informação" (ver (a) e (d)).
 - Trocar faixa por razão/tolerância percentual (ver (c)).
 - Migrar `criteria_order` de config existente automaticamente: reordenar silenciosamente a preferência que o usuário gravou é pior que a nota de entrega.
+
+### 56. Série longa busca o episódio também com zero-padding, e o gate é `LastAiredEpisode`
+
+**Location:** `nyaa/nyaa.go` — `episodeQueries`, `longSeriesEpisodes`, `ScrapNyaa`; `anilist/episodes.go` — `LastAiredEpisode`; `daemon/episodes.go` e `daemon/manual_download.go` — `seriesLength` / `totalEpisodes`.
+
+**What it looks like:** `ScrapNyaa` faz duas buscas (`one piece 1` e `one piece 001`) num anime longo, e o "é longo?" vem de `anilist.LastAiredEpisode`, não de `Media.Episodes`.
+
+**Why it's right:**
+
+**(a) `q=one piece 1` nunca acha o episódio 1.** A query casa tudo que contém "1" e, ordenada por seeders, as primeiras centenas de linhas são os episódios 1160-1173. Medido: 375 linhas sem o episódio 1. Grupos numeram série longa com padding (`[Judas] One Piece 001-574`, `[Erai-raws] Naruto Shippuuden - 001 ~ 079`).
+
+**(b) Variante ADICIONAL, não substituição.** Padding é convenção, não regra: quem numera solto (`Show 5`) continua sendo pego pela query simples. As duas listas entram no mesmo pool, deduplicado por magnet.
+
+**(c) O gate é `LastAiredEpisode`, e isso importa.** O plano pedia `Media.Episodes > 100`, mas num RELEASING sem fim anunciado esse campo é **nil** — ou seja, seria nil exatamente no One Piece, o caso que a mudança existe para consertar. `LastAiredEpisode` já combina as três fontes (agenda, `nextAiringEpisode - 1`, e `media.episodes` só quando FINISHED) e devolve ~1173 ali. Coberto por `TestSingleEpisodeSearch_ReceivesSeriesLength`, que usa um anime no formato One Piece (RELEASING, `Media.Episodes == nil`).
+
+**(d) O teto de 100 e o `episode < 100`.** Cada variante custa fetches, então padding só em série longa; e episódio >= 100 já tem 3 dígitos, onde a variante seria idêntica à simples.
+
+**(e) Erro numa variante não anula a outra.** `ScrapNyaa` só devolve erro se NENHUMA variante respondeu; se a página da query com padding falhar, a busca segue com o que a outra trouxe.
+
+**Don't "fix" by:**
+- Trocar o gate por `Media.Episodes` "que é o total de verdade" (ver (c)).
+- Substituir a query simples pela com padding (ver (b)).
+- Sempre buscar as duas formas: dobra o tráfego no Nyaa em todo anime curto, onde padding não muda nada (ver (d)).

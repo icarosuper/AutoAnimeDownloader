@@ -137,7 +137,7 @@ Main verification orchestrator. Key functions:
 | `handleAlreadySavedEpisode(...)` | Re-download if missing from torrents, delete if over limit |
 | `handleSavedEpisodes(...)` | Post-loop: save new, delete watched, delete torrent files |
 | `attemptDownloadWithRetries(...)` | Tries up to `EpisodeRetryLimit` magnets, returns first hash. Returns `""` with **no** `Add` call and no retry when `checkDiskSpace` blocks |
-| `searchNyaaForSingleEpisode(ep, titles, synonyms, relations, customQuery)` | Single ep search — extracts season/part from titles+synonyms, falls back to `ep+offset` (no part filter) if 0 results and PREQUEL has episode count |
+| `searchNyaaForSingleEpisode(ep, titles, synonyms, relations, customQuery, totalEpisodes)` | Single ep search — extracts season/part from titles+synonyms, falls back to `ep+offset` (no part filter) if 0 results and PREQUEL has episode count. `totalEpisodes` (from `anilist.LastAiredEpisode`) only drives the zero-padded query variant |
 | `searchNyaaForBatch(titles, synonyms, customQuery)` | Batch search for finished animes (priority 2) |
 | `searchNyaaForMovie(...)` | Movie search (priority 1) |
 | `searchNyaaForMultipleEpisodes(titles, synonyms, episodes, customQuery)` | Multi-episode search for airing animes (priority 3) |
@@ -401,7 +401,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `MediaRelationNode` struct | `Title`, `Synonyms`, `Episodes *int` — the related anime |
 | `MediaFormat` consts | `TV`, `MOVIE`, `OVA`, `ONA`, etc. |
 | `EpisodeList(ml, fromEpisode)` (`episodes.go`) | **A única fonte de "quais episódios existem"**. Sintetiza a lista de `fromEpisode` até o último no ar, usando o nó real do `airingSchedule` quando existe. Necessária porque a AniList guarda só uma JANELA de ~500 entradas de agenda por mídia: One Piece começa no 1123 e anime antigo/finalizado vem com agenda VAZIA — ver decisions.md #52 |
-| `lastAiredEpisode(ml)` (`episodes.go`) | Combina agenda + `nextAiringEpisode - 1` + `media.episodes` (este só quando FINISHED, pois num RELEASING é a contagem prevista) |
+| `lastAiredEpisode(ml)` / `LastAiredEpisode(ml)` (`episodes.go`) | Combina agenda + `nextAiringEpisode - 1` + `media.episodes` (este só quando FINISHED, pois num RELEASING é a contagem prevista). A versão exportada é a medida de "tamanho da série" usada pela busca de episódio — `media.Episodes` não serve, é nil justamente na série longa em andamento |
 | `MediaListStatus` consts | `CURRENT`, `COMPLETED`, `DROPPED`, `PAUSED`, `PLANNING`, `REPEATING` |
 | `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list with synonyms and relations (used by verification loop) |
 | `GetAnimeInfo(mediaId, usernames)` | Fetches one anime by **media** id with full airing schedule, synonyms, and relations, querying each account and collapsing via `DedupeByMedia`. Returns `(nil, nil)` when no account tracks it — a normal state, not an error (used by `/animes/{id}/episodes`, `refreshOrphanAnimes` and `daemon.RunAnimeDebug`) |
@@ -428,7 +428,9 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
 | `torrentSummaries(results)` | Formats each result as `name \| S:412/L:3 \| 1.4GiB \| t=5 h=4.21` (t = health tier, h = raw score) for debug logging, in the order given (sorted, when logged after `SortTorrentResults`) — the sort-deciding fields, not just the name |
 | `formatSize(bytes)` | Human-readable size for the log only (`?` when the size failed to parse) |
-| `ScrapNyaa(title, episode, season*, part*)` | Scrapes Nyaa for a single episode (2 pages); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil |
+| `ScrapNyaa(title, episode, season*, part*, totalEpisodes...)` | Scrapes Nyaa for a single episode (2 pages **per query variant**); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil. With `totalEpisodes > 100` it also queries the zero-padded episode (`one piece 001`) — see `episodeQueries` and [decisions.md #56](decisions.md) |
+| `episodeQueries(query, episode, totalEpisodes)` | The episode search queries: plain, plus 3-digit zero-padded on a long series (additional, never a replacement) |
+| `longSeriesEpisodes` const | `100` — threshold above which the padded variant is added |
 | `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
 | `ScrapNyaaForMultipleEpisodes(title, eps[], season*, part*)` | Scrapes for multiple specific episodes (2 pages); same batch/movie guards as `ScrapNyaa`; hard-filters by season and part when non-nil |
