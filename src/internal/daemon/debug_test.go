@@ -16,7 +16,9 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 )
 
-type debugMockFileManager struct{}
+type debugMockFileManager struct {
+	settings map[int]files.AnimeSettings
+}
 
 func (m *debugMockFileManager) LoadConfigs() (*files.Config, error)                     { return nil, nil }
 func (m *debugMockFileManager) SaveConfigs(config *files.Config) error                  { return nil }
@@ -33,6 +35,9 @@ func (m *debugMockFileManager) LoadAllAnimeSettings() (map[int]files.AnimeSettin
 	return nil, nil
 }
 func (m *debugMockFileManager) LoadAnimeSettings(id int) (*files.AnimeSettings, error) {
+	if s, ok := m.settings[id]; ok {
+		return &s, nil
+	}
 	return &files.AnimeSettings{}, nil
 }
 func (m *debugMockFileManager) SaveAnimeSettings(id int, s files.AnimeSettings) error { return nil }
@@ -130,7 +135,7 @@ func countWouldSearch(summary *DebugSummary) int {
 // a partir do progresso+1. O debug tem que fazer o mesmo, senao reporta ter buscado o 1123.
 func TestRunAnimeDebug_ClippedSchedule_StartsAtEpisodeOne(t *testing.T) {
 	summary := runDebugWithMocks(t, debugAnilistJSON("RELEASING", 1147, 1123, 1147),
-		&files.Config{MaxEpisodesPerAnime: 12, MaxBatchEpisodes: 30, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}})
+		&files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}})
 
 	if len(summary.Episodes) != 1147 {
 		t.Fatalf("expected 1147 episodes enumerated, got %d", len(summary.Episodes))
@@ -143,29 +148,13 @@ func TestRunAnimeDebug_ClippedSchedule_StartsAtEpisodeOne(t *testing.T) {
 	}
 }
 
-// FINISHED dentro de max_batch_episodes vira batch, e em batch o teto por anime nao se aplica.
-func TestRunAnimeDebug_BatchAnime_IgnoresPerAnimeLimit(t *testing.T) {
-	summary := runDebugWithMocks(t, debugAnilistJSON("FINISHED", 26, 0, 0),
-		&files.Config{MaxEpisodesPerAnime: 12, MaxBatchEpisodes: 30, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}})
+// Sem pack no resultado, o teto por anime vale no debug igual à produção.
+func TestRunAnimeDebug_PerAnimeLimitAppliesWithoutPack(t *testing.T) {
+	summary := runDebugWithMocks(t, debugAnilistJSON("FINISHED", 39, 0, 0),
+		&files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}})
 
-	if len(summary.Episodes) != 26 {
-		t.Fatalf("expected 26 episodes enumerated, got %d", len(summary.Episodes))
-	}
-	if got := countWouldSearch(summary); got != 26 {
-		t.Errorf("expected all 26 episodes searched (batch disables the limit), got %d", got)
-	}
-}
-
-// O par do anterior: acima de max_batch_episodes willBatch e falsa e o teto volta a valer.
-func TestRunAnimeDebug_FinishedAboveBatchLimit_KeepsPerAnimeLimit(t *testing.T) {
-	summary := runDebugWithMocks(t, debugAnilistJSON("FINISHED", 500, 0, 0),
-		&files.Config{MaxEpisodesPerAnime: 12, MaxBatchEpisodes: 30, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}})
-
-	if len(summary.Episodes) != 500 {
-		t.Fatalf("expected 500 episodes enumerated, got %d", len(summary.Episodes))
-	}
 	if got := countWouldSearch(summary); got != 12 {
-		t.Errorf("expected the per-anime limit (12) to apply, got %d searched", got)
+		t.Errorf("esperava 12 episódios selecionados, obteve %d", got)
 	}
 }
 
@@ -198,7 +187,7 @@ func TestRunAnimeDebug_FallsBackToSingleEpisodeSearch(t *testing.T) {
 	})
 	defer restoreAnilist()
 
-	summary, err := RunAnimeDebug(21, &files.Config{MaxEpisodesPerAnime: 3, MaxBatchEpisodes: 30, EpisodeRetryLimit: 3, MinSeeders: 1, AnilistUsernames: []string{"user"}}, &debugMockFileManager{})
+	summary, err := RunAnimeDebug(21, &files.Config{MaxEpisodesPerAnime: 3, EpisodeRetryLimit: 3, MinSeeders: 1, AnilistUsernames: []string{"user"}}, &debugMockFileManager{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -281,5 +270,45 @@ func TestWriteDebugSummary(t *testing.T) {
 	}
 	if len(got.Episodes) != 1 || got.Episodes[0].MagnetsFound != 2 {
 		t.Errorf("unexpected episodes: %+v", got.Episodes)
+	}
+}
+
+// standaloneDebugMediaJSON: resposta de GetMediaByID para um avulso de 5 episodios, todos no ar
+// — o mesmo shape que appendStandaloneAnimes recebe em producao.
+const standaloneDebugMediaJSON = `{"data": {"Media": {
+	"id": 21, "format": "TV", "status": "RELEASING", "episodes": 5,
+	"title": {"english": "My Anime", "romaji": "My Anime"},
+	"synonyms": [], "relations": {"edges": []},
+	"coverImage": {"large": "", "medium": ""},
+	"airingSchedule": {"nodes": [
+		{"id": 1, "episode": 1, "timeUntilAiring": -1},
+		{"id": 2, "episode": 2, "timeUntilAiring": -1},
+		{"id": 3, "episode": 3, "timeUntilAiring": -1},
+		{"id": 4, "episode": 4, "timeUntilAiring": -1},
+		{"id": 5, "episode": 5, "timeUntilAiring": -1}
+	]}
+}}}`
+
+// TestRunAnimeDebug_StandaloneUsesSavedProgress: RunAnimeDebug reproduz o pipeline real (ver
+// doc-comment da funcao), e o pipeline real (appendStandaloneAnimes) injeta o progresso salvo no
+// MediaList sintetico do avulso. Sem a mesma injecao em resolveAnimeDetails, o debug de um avulso
+// sem conta que o acompanhe (cai no fallback GetMediaByID) reportava sempre a partir do episodio
+// 1, mesmo com progresso gravado — o proprio pipeline que a ferramenta existe para espelhar.
+func TestRunAnimeDebug_StandaloneUsesSavedProgress(t *testing.T) {
+	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, standaloneDebugMediaJSON)()
+	defer mockEmptyNyaa()()
+
+	fm := &debugMockFileManager{settings: map[int]files.AnimeSettings{21: {Progress: 3}}}
+	configs := &files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}}
+
+	summary, err := RunAnimeDebug(21, configs, fm)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(summary.Episodes) != 2 {
+		t.Fatalf("progresso 3 de 5 episodios: esperava 2 no resumo (4 e 5), veio %d: %+v", len(summary.Episodes), summary.Episodes)
+	}
+	if summary.Episodes[0].Episode != 4 {
+		t.Errorf("esperava comecar no episodio 4, veio %d", summary.Episodes[0].Episode)
 	}
 }

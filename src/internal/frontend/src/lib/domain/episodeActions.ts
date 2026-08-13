@@ -22,7 +22,7 @@ import type { AnimeEpisodeInfo, TorrentInfo } from '../api/client.js'
  * step; this module only flags that requirement, it doesn't enforce it.
  */
 
-export type EpisodeActionId = 'download' | 'redownload' | 'delete' | 'release' | 'replace'
+export type EpisodeActionId = 'download' | 'redownload' | 'delete' | 'release' | 'replace' | 'watchedHere'
 
 export interface Action {
   id: EpisodeActionId
@@ -43,6 +43,15 @@ const REDOWNLOAD: Action = { id: 'redownload', labelKey: 'redownload', variant: 
 const DELETE: Action = { id: 'delete', labelKey: 'delete', variant: 'warn', destructive: true }
 const RELEASE: Action = { id: 'release', labelKey: 'release', variant: 'ghost' }
 const REPLACE: Action = { id: 'replace', labelKey: 'replace', variant: 'ghost' }
+const WATCHED_HERE: Action = { id: 'watchedHere', labelKey: 'watchedHere', variant: 'ghost' }
+
+export interface EpisodeActionOptions {
+  /**
+   * Anime avulso. "Assisti até aqui" só existe aí: em anime de lista o progresso vem da AniList
+   * e é sobrescrito a cada passe, então gravá-lo à mão salvaria um número que ninguém lê.
+   */
+  standalone?: boolean
+}
 
 /**
  * Classifies one episode (+ its live torrent, if any — joined by the caller via
@@ -53,7 +62,7 @@ const REPLACE: Action = { id: 'replace', labelKey: 'replace', variant: 'ghost' }
  * hand happens to be mid-download — the whole point of that state is that automation defers to
  * them until they release it back.
  */
-export function episodeActions(ep: AnimeEpisodeInfo, torrent: TorrentInfo | undefined): EpisodeActionSet {
+function classify(ep: AnimeEpisodeInfo, torrent: TorrentInfo | undefined): EpisodeActionSet {
   if (ep.is_manually_managed || ep.is_blocked) {
     // Row: "Bloqueado ou gerenciado manualmente"
     return { principal: RELEASE, menu: [DOWNLOAD, DELETE] }
@@ -76,4 +85,19 @@ export function episodeActions(ep: AnimeEpisodeInfo, torrent: TorrentInfo | unde
 
   // Row: "Não lançou"
   return { principal: undefined, menu: [] }
+}
+
+/**
+ * Wraps `classify` with the standalone-only "Assisti até aqui" action. Kept separate from the
+ * cascade above because it isn't a state of the episode itself — it's a capability of the
+ * anime (avulso vs. de lista) that applies on top of whatever state `classify` already picked.
+ */
+export function episodeActions(
+  ep: AnimeEpisodeInfo,
+  torrent: TorrentInfo | undefined,
+  opts: EpisodeActionOptions = {},
+): EpisodeActionSet {
+  const set = classify(ep, torrent)
+  if (!opts.standalone || !ep.is_aired) return set
+  return { ...set, menu: [...set.menu, WATCHED_HERE] }
 }

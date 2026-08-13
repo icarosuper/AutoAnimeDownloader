@@ -1,4 +1,11 @@
-- Melhorar consistencia dos downloads no Nyaa **+0.0.0** (dentro da release atual ainda)
+- Melhorar download em batches pra concluir feature de downloads avulsos **+0.1.0**
+	- @docs/superpowers/specs/2026-08-13-batch-por-filtro-design.md
+	- Paginação da tela de status
+	- Atualizar ReadMe
+- Gerenciamento dos hardlinks **+0.1.0**
+	- Download de batch deve fazer o hardlink dos episódios pra pasta única do anime, misturando com episódios baixados separadamente
+	- Renomear arquivos de batch da mesma forma que os baixados separadamente
+	- Mudar label da config de renomear arquivos -> "Renomear arquivos para deixar padronizado (útil para Plex/Jellyfin)"
 - Fontes alternativas de torrent **+0.1.0**
 	- Fallback pra AnimeTosho quando Nyaa não retorna resultado
 	- Abstrair interface TorrentSource com múltiplas implementações
@@ -12,7 +19,9 @@
 	- Quero um botão que abre a listagem do nyaa dentro do app
 - Integração Jellyfin/Plex — **+0.1.0**
 	- Trigger de library scan após download concluído
-- Windows — **+0.1.0**
-	- Autenticar app
-	- Instalar ao invés de rodar separado
-	- Dar detach e rodar no background
+- Proper release no Windows — **+1.0.0**
+	- Autenticar app com conta Microsoft
+	- Instalar ao invés de rodar de arquivo executável
+	- Dar detach e rodar como serviço no background
+	- Fazer mudanças de ui pra funcionar melhor no Windows
+	- Testar bem

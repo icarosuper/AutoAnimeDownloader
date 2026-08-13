@@ -32,6 +32,7 @@ type mockFileManager struct {
 	loadEpisodesErr   error
 	saveEpisodesErr   error
 	deleteEpisodesErr error
+	animeSettings     map[int]files.AnimeSettings
 }
 
 func (m *mockFileManager) LoadConfigs() (*files.Config, error) {
@@ -163,10 +164,17 @@ func (m *mockFileManager) LoadAllAnimeSettings() (map[int]files.AnimeSettings, e
 }
 
 func (m *mockFileManager) LoadAnimeSettings(animeID int) (*files.AnimeSettings, error) {
+	if settings, ok := m.animeSettings[animeID]; ok {
+		return &settings, nil
+	}
 	return &files.AnimeSettings{}, nil
 }
 
 func (m *mockFileManager) SaveAnimeSettings(animeID int, settings files.AnimeSettings) error {
+	if m.animeSettings == nil {
+		m.animeSettings = map[int]files.AnimeSettings{}
+	}
+	m.animeSettings[animeID] = settings
 	return nil
 }
 
@@ -557,6 +565,32 @@ func TestHandleUpdateConfig_SavePath(t *testing.T) {
 			t.Errorf("SavePath deveria ter sido zerado, veio %q", mockFM.configs.SavePath)
 		}
 	})
+}
+
+// max_episodes_per_anime = 0 passa a significar "sem teto" e deve ser aceito: era o unico teto do
+// projeto que proibia zero.
+func TestSaveConfig_AcceptsZeroMaxEpisodesPerAnime(t *testing.T) {
+	mockFM := &mockFileManager{}
+	handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
+
+	config := files.Config{
+		AnilistUsernames:    []string{"testuser"},
+		CompletedAnimePath:  "/tmp/completed",
+		CheckInterval:       10,
+		MaxEpisodesPerAnime: 0,
+		EpisodeRetryLimit:   5,
+	}
+
+	jsonData, _ := json.Marshal(config)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("esperava 200 para o teto desligado, obteve %d: %s", w.Code, w.Body.String())
+	}
 }
 
 // TestHandleUpdateConfig_NoAniListAccount: conta da AniList deixou de ser obrigatoria. Com

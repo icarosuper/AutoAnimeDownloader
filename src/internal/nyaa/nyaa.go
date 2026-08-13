@@ -130,12 +130,23 @@ type BatchInfo struct {
 func extractBatchInfo(torrentName string) BatchInfo {
 	info := BatchInfo{}
 
-	if matches := reBatchRange.FindStringSubmatch(torrentName); matches != nil {
-		if start, err := strconv.Atoi(matches[1]); err == nil {
-			info.StartEpisode = start
-		}
-		if end, err := strconv.Atoi(matches[2]); err == nil {
-			info.EndEpisode = end
+	// FindStringSubmatchIndex (e nao FindStringSubmatch) porque a guarda precisa do caractere
+	// SEGUINTE ao casamento: reBatchRange casa "720-1080" dentro de "[720-1080p]" e produziria
+	// uma faixa fantasma de 361 episodios.
+	//
+	// ponytail: cobre so o caso dominante (resolucao). Outras faixas fantasma — data
+	// ("2020-2021"), bitrate — so entrariam com um sanitizador de tokens, que nao se paga hoje:
+	// faixa desconhecida cai em EndEpisode == 0, que o chamador ja trata como pack completo.
+	if loc := reBatchRange.FindStringSubmatchIndex(torrentName); loc != nil {
+		end := loc[1]
+		isResolution := end < len(torrentName) && strings.ContainsRune("pPiI", rune(torrentName[end]))
+		if !isResolution {
+			if start, err := strconv.Atoi(torrentName[loc[2]:loc[3]]); err == nil {
+				info.StartEpisode = start
+			}
+			if last, err := strconv.Atoi(torrentName[loc[4]:loc[5]]); err == nil {
+				info.EndEpisode = last
+			}
 		}
 	}
 
@@ -157,6 +168,12 @@ func shouldIgnoreTorrent(name string) bool {
 // IsBatch é uma versão exportável de isBatch para testes
 func IsBatch(name string) bool {
 	return isBatch(name)
+}
+
+// ExtractBatchInfo e a versao exportada de extractBatchInfo: o daemon precisa da faixa de
+// episodios do pack para decidir QUAIS episodios recebem o magnet dele (pickBatches).
+func ExtractBatchInfo(name string) BatchInfo {
+	return extractBatchInfo(name)
 }
 
 // ParseSeeders é a versão exportável de parseSeeders: converte a coluna de
@@ -547,138 +564,116 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 	return sortedResults, nil
 }
 
-// ScrapNyaaForMultipleEpisodes busca torrents para múltiplos episódios simultaneamente.
-// requestedSeason e requestedPart são extraídos upstream dos dados do Anilist.
-func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSeason, requestedPart *int) ([]TorrentResult, error) {
-	sanitizedRomajiName := reSeasonStrip.ReplaceAllString(animeName, "")
-	sanitizedRomajiName = rePartStrip.ReplaceAllString(sanitizedRomajiName, "")
+// ScrapNyaaForAnime busca UMA vez a pagina de resultados do anime e devolve packs e episodios na
+// MESMA lista. As duas buscas separadas que esta funcao substitui montavam a mesma URL
+// (?f=0&c=1_2&q=<titulo>&s=seeders&o=desc) e discordavam so no filtro de linha, o que custava
+// duas descidas de ate max_search_pages sobre o mesmo HTML, por anime, por ciclo.
+//
+// Linha de pack entra com IsBatch: true; linha de episodio entra com Episode != nil. Quem
+// particiona e o daemon (partitionSearchResults), que e onde os tetos de tamanho de pack e de
+// episodio sao diferentes.
+//
+// Devolve UMA lista de proposito: searchNyaaWithVariants para na primeira variante de titulo com
+// resultado, e "resultado" e uma fatia nao-vazia — uma assinatura de par exigiria generaliza-la.
+func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, requestedPart *int) ([]TorrentResult, error) {
+	query := strings.TrimSpace(extractSeasonFromName(animeName))
 
-	query := strings.TrimSpace(sanitizedRomajiName)
-
-	// Construir URL com parâmetros
 	params := url.Values{}
 	params.Set("f", "0")   // Filtro: sem filtro
 	params.Set("c", "1_2") // Categoria: anime (english)
-	// params.Set("q", fmt.Sprintf())     // Query de busca
-	params.Set("q", fmt.Sprintf("%s", query)) // Query de busca com episódio
-	params.Set("s", "seeders")                // Ordenar por seeders
-	params.Set("o", "desc")                   // Ordem decrescente
+	params.Set("q", query)
+	params.Set("s", "seeders")
+	params.Set("o", "desc")
 
-	baseURL := getNyaaBaseURL()
-	nyaaURL := fmt.Sprintf("%s/?%s", baseURL, params.Encode())
+	nyaaURL := fmt.Sprintf("%s/?%s", getNyaaBaseURL(), params.Encode())
 
 	logger.Logger.Debug().
 		Str("url", nyaaURL).
 		Str("anime_name", animeName).
 		Int("episodes_count", len(episodes)).
-		Msg("Searching Nyaa for multiple episodes")
+		Msg("Searching Nyaa for anime (packs + episodes)")
 
 	var results []TorrentResult
 
 	parseRow := func(_ int, s *goquery.Selection) {
-		// Encontrar todas as células (td) na linha atual
 		cells := s.Find("td")
 
-		// Extrair dados de cada célula baseado na posição
-		// Preferir o texto visível do link (nome com espaços). Alguns sites
-		// preenchem o atributo title com pontos em vez de espaços (tests do projeto)
 		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
-		torrentLink := cells.Eq(2).Find("a").Eq(1).AttrOr("href", "")
-
-		// Extrair tamanho (cells.Eq(3) no Nyaa)
-		sizeStr := strings.TrimSpace(cells.Eq(3).Text())
-		size := parseSize(sizeStr)
-
-		seeders := strings.TrimSpace(cells.Eq(5).Text())
-		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
-
-		if name != "" {
-			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
-		}
-
-		// Verificar se o torrent deve ser ignorado (dub, raw, hardcoded, etc.)
-		if shouldIgnoreTorrent(name) {
-			return
-		}
-
-		// Descartar batch: o caminho de batch (ScrapNyaaForBatch) roda antes desta
-		// busca, então um batch que valesse a pena já teria sido pego lá. Sem esse
-		// guard, "Naruto - 001 ~ 220" casa como "episódio 1" e fura os tetos de
-		// max_batch_episodes / max_episodes_per_anime.
-		if isBatch(name) {
-			return
-		}
-
-		// Mesmo motivo do guard em ScrapNyaa: filme/OVA/special casa número de
-		// episódio e entraria como episódio comum.
-		if hasMovieMarker(name) {
-			return
-		}
-
-		// Extrair informações do nome do torrent
-		var animeEpisode *int
-		var season *int
-		var resolution *string
-		var fansub string
-
 		if name == "" {
 			return
 		}
+		logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
 
-		animeEpisode = extractEpisodeNumber(name)
-		season = extractSeason(name)
-		res := extractResolution(name)
-		resolution = &res
-		fansub = extractFansub(name)
-
-		// Filtrar por título base (garantir que o torrent pertence ao anime)
+		if shouldIgnoreTorrent(name) {
+			return
+		}
+		// Filtrar por titulo base (garantir que o torrent pertence ao anime)
 		if query != "" && !titleMatchesQuery(name, query) {
 			return
 		}
 
-		// Filtrar por temporada
+		season := extractSeason(name)
+		part := extractPart(name)
+		res := extractResolution(name)
+
+		row := TorrentResult{
+			Name:       name,
+			Seeders:    strings.TrimSpace(cells.Eq(5).Text()),
+			Leechers:   parseSeeders(strings.TrimSpace(cells.Eq(6).Text())),
+			MagnetLink: cells.Eq(2).Find("a").Eq(1).AttrOr("href", ""),
+			Season:     season,
+			Part:       part,
+			Resolution: &res,
+			Size:       parseSize(strings.TrimSpace(cells.Eq(3).Text())),
+			Fansub:     extractFansub(name),
+		}
+
+		if isBatch(name) {
+			// Temporada no caminho de pack: sem pedido explicito, pack de qualquer temporada
+			// serve. Era o comportamento da busca de batch antiga, e e diferente do caminho de
+			// episodio logo abaixo — por isso os dois filtros nao podem ser fundidos.
+			if requestedSeason != nil && (season == nil || *season != *requestedSeason) {
+				return
+			}
+			if requestedPart != nil && (part == nil || *part != *requestedPart) {
+				return
+			}
+			row.IsBatch = true
+			results = append(results, row)
+			return
+		}
+
+		// Filme/OVA/special nao e episodio: "Naruto Shippuuden Movie 3" casa o padrao " 3 (" de
+		// extractEpisodeNumber e passaria como episodio 3.
+		if hasMovieMarker(name) {
+			return
+		}
+		// Temporada no caminho de episodio: sem pedido explicito, so temporada 1 (ou sem
+		// marcador) passa.
 		if requestedSeason != nil {
 			if season == nil || *season != *requestedSeason {
 				return
 			}
-		} else {
-			if season != nil && *season != 1 {
-				return
-			}
+		} else if season != nil && *season != 1 {
+			return
 		}
-
-		// Filtrar por parte (hard filter)
-		part := extractPart(name)
-		if requestedPart != nil {
-			if part == nil || *part != *requestedPart {
-				return
-			}
-		}
-
-		if animeEpisode == nil {
+		if requestedPart != nil && (part == nil || *part != *requestedPart) {
 			return
 		}
 
-		epIsInWantedEpisodes := slices.Contains(episodes, *animeEpisode)
-		if !epIsInWantedEpisodes {
+		episode := extractEpisodeNumber(name)
+		if episode == nil || !slices.Contains(episodes, *episode) {
 			return
 		}
-
-		// Adicionar resultado ao array
-		results = append(results, TorrentResult{
-			Name:       name,
-			Seeders:    seeders,
-			Leechers:   leechers,
-			MagnetLink: torrentLink,
-			Episode:    animeEpisode,
-			Season:     season,
-			Part:       part,
-			Resolution: resolution,
-			Size:       size,
-			Fansub:     fansub,
-		})
+		row.Episode = episode
+		results = append(results, row)
 	}
 
+	// ponytail: o piso de paginacao conta as duas listas somadas. Uma pagina 1 com 3 packs que o
+	// filtro de tamanho depois descarta encerra a descida sem ter juntado episodio solto nenhum,
+	// onde antes a segunda busca desceria por conta propria. A saida, se aparecer, e empurrar os
+	// filtros para dentro do contador — o que exige o nyaa conhecer a config, que e justamente o
+	// que applyNyaaSettings evita.
 	if err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow)); err != nil {
 		return nil, err
 	}
@@ -688,126 +683,15 @@ func ScrapNyaaForMultipleEpisodes(animeName string, episodes []int, requestedSea
 		Str("anime_name", animeName).
 		Int("results", len(results)).
 		Strs("matched_torrents", torrentSummaries(results)).
-		Msg("Found Nyaa results for multiple episodes")
+		Msg("Found Nyaa results for anime")
 
 	if len(results) == 0 {
-		return nil, nil // Nenhum resultado encontrado
+		return nil, nil
 	}
 
-	// Ordenar resultados por qualidade e fansub
-	sortedResults := SortTorrentResults(results)
-	return sortedResults, nil
-}
-
-// ScrapNyaaForBatch busca torrents de batch (anime completo).
-// season e part são extraídos upstream dos dados do Anilist.
-// Baseado nas regras do documento (Seção 3 do RegrasFilmesBatches.md)
-func ScrapNyaaForBatch(animeName string, season, part *int) ([]TorrentResult, error) {
-	// Extrair temporada do nome se presente
-	sanitizedName := extractSeasonFromName(animeName)
-	query := strings.TrimSpace(sanitizedName)
-
-	// Construir URL com parâmetros
-	params := url.Values{}
-	params.Set("f", "0")   // Filtro: sem filtro
-	params.Set("c", "1_2") // Categoria: anime (english)
-	params.Set("q", query) // Query sem número de episódio
-	params.Set("s", "seeders")
-	params.Set("o", "desc")
-
-	baseURL := getNyaaBaseURL()
-	nyaaURL := fmt.Sprintf("%s/?%s", baseURL, params.Encode())
-
-	logger.Logger.Debug().
-		Str("url", nyaaURL).
-		Str("anime_name", animeName).
-		Msg("Searching Nyaa for batch")
-
-	var results []TorrentResult
-
-	// Parsear linhas da tabela de torrents
-	parseRow := func(_ int, s *goquery.Selection) {
-		cells := s.Find("td")
-
-		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
-		torrentLink := cells.Eq(2).Find("a").Eq(1).AttrOr("href", "")
-		sizeStr := strings.TrimSpace(cells.Eq(3).Text())
-		size := parseSize(sizeStr)
-		seeders := strings.TrimSpace(cells.Eq(5).Text())
-		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
-
-		if name != "" {
-			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
-		}
-
-		// Verificar se o torrent deve ser ignorado (dub, raw, hardcoded, etc.)
-		if shouldIgnoreTorrent(name) {
-			return
-		}
-
-		// Verificar se é batch
-		if !isBatch(name) {
-			return // Ignorar torrents que não são batch
-		}
-
-		// Extrair informações do nome
-		seasonNum := extractSeason(name)
-		partNum := extractPart(name)
-		res := extractResolution(name)
-		resolution := &res
-		fansub := extractFansub(name)
-
-		// Filtrar por título base
-		if query != "" && !titleMatchesQuery(name, query) {
-			return
-		}
-
-		// Filtrar por temporada
-		if season != nil {
-			if seasonNum == nil || *seasonNum != *season {
-				return
-			}
-		}
-
-		// Filtrar por parte (hard filter)
-		if part != nil {
-			if partNum == nil || *partNum != *part {
-				return
-			}
-		}
-
-		// Adicionar resultado
-		results = append(results, TorrentResult{
-			Name:       name,
-			Seeders:    seeders,
-			Leechers:   leechers,
-			MagnetLink: torrentLink,
-			Season:     seasonNum,
-			Part:       partNum,
-			Resolution: resolution,
-			Size:       size,
-			Fansub:     fansub,
-			IsBatch:    true,
-		})
-	}
-
-	if err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow)); err != nil {
-		return nil, err
-	}
-
-	logger.Logger.Debug().
-		Str("anime_name", animeName).
-		Int("results", len(results)).
-		Strs("matched_torrents", torrentSummaries(results)).
-		Msg("Found Nyaa batch results")
-
-	if len(results) == 0 {
-		return nil, nil // Nenhum batch encontrado
-	}
-
-	// Ordenar resultados por qualidade
-	sortedResults := SortTorrentResults(results)
-	return sortedResults, nil
+	// Ordena a lista mista: particionar depois preserva a ordem relativa, entao cada lista sai
+	// ordenada corretamente.
+	return SortTorrentResults(results), nil
 }
 
 // ScrapNyaaForMovie busca torrents de filmes

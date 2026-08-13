@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -222,15 +223,15 @@ func TestScrapNyaa_StopsWhenPageIsEmpty(t *testing.T) {
 }
 
 // Batch lia só a página 1; agora pagina igual à busca de episódio.
-func TestScrapNyaaForBatch_PaginatesLikeEpisodeSearch(t *testing.T) {
+func TestScrapNyaaForAnime_PaginatesLikeEpisodeSearch(t *testing.T) {
 	defer nyaa.SetMaxSearchPages(2)()
 
 	page := mockHtml([]string{"Kemono Jihen (01-12) [Batch] [1080p]"})
 	var urls []string
 	defer mockHttpGetPerURL(func(string) string { return page }, &urls)()
 
-	if _, err := nyaa.ScrapNyaaForBatch("Show", nil, nil); err != nil {
-		t.Fatalf("ScrapNyaaForBatch error: %v", err)
+	if _, err := nyaa.ScrapNyaaForAnime("Show", nil, nil, nil); err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 	if len(urls) != 2 {
 		t.Fatalf("esperava 2 fetches (teto), obtive %d: %v", len(urls), urls)
@@ -593,7 +594,7 @@ func TestSortTorrentResults_WithUnknownResolution(t *testing.T) {
 	}
 }
 
-func TestScrapNyaaForMultipleEpisodes_CanGetMultipleEpisodes(t *testing.T) {
+func TestScrapNyaaForAnime_CanGetMultipleEpisodes(t *testing.T) {
 	options := []string{
 		"My.Show.S01E02.1080p",
 		"My.Show.S01E03.1080p",
@@ -605,18 +606,19 @@ func TestScrapNyaaForMultipleEpisodes_CanGetMultipleEpisodes(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("My.Show", []int{2, 3, 5}, nil, nil)
+	results, err := nyaa.ScrapNyaaForAnime("My.Show", []int{2, 3, 5}, nil, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
-	if len(results) != 3 {
-		t.Fatalf("expected 3 results, got %d", len(results))
+	_, singles := packsAndSingles(results)
+	if len(singles) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(singles))
 	}
 
 	// Verificar que apenas os episódios 2, 3 e 5 foram retornados
 	episodes := make(map[int]bool)
-	for _, r := range results {
+	for _, r := range singles {
 		if r.Episode != nil {
 			episodes[*r.Episode] = true
 		}
@@ -630,7 +632,9 @@ func TestScrapNyaaForMultipleEpisodes_CanGetMultipleEpisodes(t *testing.T) {
 	}
 }
 
-func TestScrapNyaaForMultipleEpisodes_IgnoresBatch(t *testing.T) {
+// O pack nao e mais descartado, e classificado: entra na lista com IsBatch, e nao como
+// "episodio 1" via packsAndSingles.
+func TestScrapNyaaForAnime_ClassifiesBatchInsteadOfDiscarding(t *testing.T) {
 	options := []string{
 		"[Erai-raws] Naruto - 001 ~ 220 [480p][Multiple Subtitle]",
 		"[DB] Naruto Movie 1 (Eng Sub).avi",
@@ -641,25 +645,26 @@ func TestScrapNyaaForMultipleEpisodes_IgnoresBatch(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Naruto", []int{1, 2}, nil, nil)
+	results, err := nyaa.ScrapNyaaForAnime("Naruto", []int{1, 2}, nil, nil)
 	if err != nil {
-		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 
-	for _, r := range results {
-		if strings.Contains(r.Name, "001 ~ 220") {
-			t.Fatalf("batch leaked into multi-episode results: %s", r.Name)
-		}
+	packs, singles := packsAndSingles(results)
+	for _, r := range singles {
 		if strings.Contains(r.Name, "Movie") {
-			t.Fatalf("movie leaked into multi-episode results: %s", r.Name)
+			t.Fatalf("movie leaked into single-episode results: %s", r.Name)
 		}
 	}
-	if len(results) != 1 {
-		t.Fatalf("expected only the single-episode result, got %d: %v", len(results), results)
+	if len(singles) != 1 {
+		t.Fatalf("expected only the single-episode result, got %d: %v", len(singles), singles)
+	}
+	if len(packs) != 1 {
+		t.Fatalf("expected the batch classified as pack, got %d: %v", len(packs), packs)
 	}
 }
 
-func TestScrapNyaaForMultipleEpisodes_CanFilterByAnimeTitle(t *testing.T) {
+func TestScrapNyaaForAnime_CanFilterByAnimeTitle(t *testing.T) {
 	options := testOptions{
 		animeName: "Kemono Friends",
 		episode:   0, // não usado neste teste
@@ -679,17 +684,18 @@ func TestScrapNyaaForMultipleEpisodes_CanFilterByAnimeTitle(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Kemono Friends", []int{2, 5, 10}, nil, nil)
+	results, err := nyaa.ScrapNyaaForAnime("Kemono Friends", []int{2, 5, 10}, nil, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
-	if len(results) == 0 {
+	_, singles := packsAndSingles(results)
+	if len(singles) == 0 {
 		t.Fatalf("expected at least one result")
 	}
 
 	// Verificar que apenas torrents de "Kemono Friends" foram retornados
-	for _, r := range results {
+	for _, r := range singles {
 		if !strings.Contains(strings.ToLower(r.Name), "kemono friends") {
 			t.Fatalf("unexpected anime in results: %s", r.Name)
 		}
@@ -703,22 +709,22 @@ func TestScrapNyaaForMultipleEpisodes_CanFilterByAnimeTitle(t *testing.T) {
 	}
 }
 
-func TestScrapNyaaForMultipleEpisodes_ReturnsNilWhenNoResults(t *testing.T) {
+func TestScrapNyaaForAnime_ReturnsNilWhenNoResults(t *testing.T) {
 	html := mockHtml([]string{"Some.Other.Show.S01E01.1080p"})
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("My.Show", []int{2, 3, 5}, nil, nil)
+	results, err := nyaa.ScrapNyaaForAnime("My.Show", []int{2, 3, 5}, nil, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 	if results != nil {
 		t.Fatalf("expected nil results when no episodes found, got %v", results)
 	}
 }
 
-func TestScrapNyaaForMultipleEpisodes_WithSeasonFiltering(t *testing.T) {
+func TestScrapNyaaForAnime_WithSeasonFiltering(t *testing.T) {
 	options := []string{
 		"Show Season 2 Episode 5",
 		"Show Season 2 Episode 10",
@@ -732,21 +738,22 @@ func TestScrapNyaaForMultipleEpisodes_WithSeasonFiltering(t *testing.T) {
 
 	// Solicitar especificamente Season 2
 	season2 := 2
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Show Season 2", []int{5, 10}, &season2, nil)
+	results, err := nyaa.ScrapNyaaForAnime("Show Season 2", []int{5, 10}, &season2, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
+	_, singles := packsAndSingles(results)
 
 	// Deve retornar apenas os episódios da Season 2
-	for _, r := range results {
+	for _, r := range singles {
 		if r.Season == nil || *r.Season != 2 {
 			t.Fatalf("expected season 2, got %v in %s", r.Season, r.Name)
 		}
 	}
 }
 
-func TestScrapNyaaForMultipleEpisodes_ResultsAreSorted(t *testing.T) {
+func TestScrapNyaaForAnime_ResultsAreSorted(t *testing.T) {
 	options := []string{
 		"Show [SubsPlease] Episode 2 720p",
 		"Show [Judas] Episode 2 1080p",
@@ -758,20 +765,21 @@ func TestScrapNyaaForMultipleEpisodes_ResultsAreSorted(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Show", []int{2}, nil, nil)
+	results, err := nyaa.ScrapNyaaForAnime("Show", []int{2}, nil, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
+	_, singles := packsAndSingles(results)
 
-	if len(results) == 0 {
+	if len(singles) == 0 {
 		t.Fatalf("expected at least one result")
 	}
 
 	// Verificar que os resultados estão ordenados (1080p antes de 720p, SubsPlease primeiro entre 1080p)
 	found1080p := false
 
-	for i, r := range results {
+	for i, r := range singles {
 		if r.Resolution != nil && *r.Resolution == "1080p" {
 			found1080p = true
 			// SubsPlease deve ser o primeiro resultado 1080p
@@ -788,7 +796,7 @@ func TestScrapNyaaForMultipleEpisodes_ResultsAreSorted(t *testing.T) {
 	}
 }
 
-func TestScrapNyaaForMultipleEpisodes_CanGetCorrectAnimeMultipleSeasons(t *testing.T) {
+func TestScrapNyaaForAnime_CanGetCorrectAnimeMultipleSeasons(t *testing.T) {
 	options := testOptions{
 		animeName: "Lucky Star",
 		episode:   0, // não usado neste teste
@@ -811,18 +819,19 @@ func TestScrapNyaaForMultipleEpisodes_CanGetCorrectAnimeMultipleSeasons(t *testi
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForMultipleEpisodes("Lucky Star", []int{5, 10, 15}, nil, nil)
+	results, err := nyaa.ScrapNyaaForAnime("Lucky Star", []int{5, 10, 15}, nil, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForMultipleEpisodes error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
+	_, singles := packsAndSingles(results)
 
-	if len(results) == 0 {
+	if len(singles) == 0 {
 		t.Fatalf("expected at least one result")
 	}
 
 	foundCorrect := make(map[string]bool)
-	for _, r := range results {
+	for _, r := range singles {
 		// Nenhum torrent incorreto deve estar nos resultados
 		for _, incorrect := range options.incorrect {
 			if r.Name == incorrect {
@@ -1077,19 +1086,42 @@ func TestIsMovie_DetectsMovies(t *testing.T) {
 }
 
 func TestExtractBatchInfo_ExtractsRangeAndSeason(t *testing.T) {
-	// Como extractBatchInfo não é exportada, testamos indiretamente
-	// através dos resultados da busca
-	t.Skip("extractBatchInfo is not exported - tested indirectly via ScrapNyaaForBatch")
+	cases := []struct {
+		name       string
+		wantStart  int
+		wantEnd    int
+		wantSeason int
+	}{
+		{"[Judas] Anime 01-12 [1080p]", 1, 12, 0},
+		{"[SubsPlease] Anime (001-100) [1080p]", 1, 100, 0},
+		{"[Group] Anime S2 01-24 [BD]", 1, 24, 2},
+		// Guarda de falso positivo: [720-1080p] nao e faixa de episodio. Sem ela, este pack
+		// completo seria lido como "cobre os episodios 720 a 1080".
+		// "[Group]" (nao "[X]") evita colisao com o guard de numeral romano de temporada
+		// (reRomanSeason le "X" como S10; fora do escopo desta task).
+		{"[Group] Anime Complete Batch [720-1080p]", 0, 0, 0},
+		{"[Group] Anime Complete Batch", 0, 0, 0},
+	}
+
+	for _, tc := range cases {
+		got := nyaa.ExtractBatchInfo(tc.name)
+		if got.StartEpisode != tc.wantStart || got.EndEpisode != tc.wantEnd {
+			t.Errorf("%q: esperava faixa %d-%d, obteve %d-%d", tc.name, tc.wantStart, tc.wantEnd, got.StartEpisode, got.EndEpisode)
+		}
+		if got.Season != tc.wantSeason {
+			t.Errorf("%q: esperava temporada %d, obteve %d", tc.name, tc.wantSeason, got.Season)
+		}
+	}
 }
 
-func TestScrapNyaaForBatch_FindsBatchTorrents(t *testing.T) {
+func TestScrapNyaaForAnime_FindsBatchTorrents(t *testing.T) {
 	correct := []string{
 		"[SubsPlease] Frieren (01-28) [1080p]",
 		"[Erai-Raws] Frieren Batch 01-28 [1080p]",
 		"[Group] Frieren Complete Season [1080p]",
 	}
 	incorrect := []string{
-		"[SubsPlease] Frieren - 05 [1080p]", // Single episode
+		"[SubsPlease] Frieren - 05 [1080p]",     // Single episode
 		"[Group] Different Anime Batch [1080p]", // Different anime
 	}
 
@@ -1097,18 +1129,19 @@ func TestScrapNyaaForBatch_FindsBatchTorrents(t *testing.T) {
 	restore := mockHttpGet(html)
 	defer restore()
 
-	results, err := nyaa.ScrapNyaaForBatch("Frieren", nil, nil)
+	results, err := nyaa.ScrapNyaaForAnime("Frieren", nil, nil, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForBatch error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
+	packs, _ := packsAndSingles(results)
 
-	if len(results) == 0 {
+	if len(packs) == 0 {
 		t.Fatalf("expected at least one batch result")
 	}
 
 	// Verificar que apenas batches foram retornados
-	for _, r := range results {
+	for _, r := range packs {
 		if !nyaa.IsBatch(r.Name) {
 			t.Fatalf("non-batch torrent in results: %s", r.Name)
 		}
@@ -1116,7 +1149,7 @@ func TestScrapNyaaForBatch_FindsBatchTorrents(t *testing.T) {
 
 	// Verificar que todos os torrents corretos foram encontrados
 	foundCorrect := make(map[string]bool)
-	for _, r := range results {
+	for _, r := range packs {
 		for _, correct := range correct {
 			if r.Name == correct {
 				foundCorrect[correct] = true
@@ -1135,14 +1168,14 @@ func TestScrapNyaaForBatch_FindsBatchTorrents(t *testing.T) {
 	}
 }
 
-func TestScrapNyaaForBatch_FiltersBySeason(t *testing.T) {
+func TestScrapNyaaForAnime_FiltersBySeason(t *testing.T) {
 	correct := []string{
 		"[SubsPlease] Machikado Mazoku 2 (01-12) [1080p]",
 		"[Group] Machikado Mazoku S2 Batch [1080p]",
 	}
 	incorrect := []string{
 		"[SubsPlease] Machikado Mazoku (01-12) [1080p]", // Season 1
-		"[Group] Machikado Mazoku 3 Batch [1080p]", // Season 3
+		"[Group] Machikado Mazoku 3 Batch [1080p]",      // Season 3
 	}
 
 	html := mockHtml(append(correct, incorrect...))
@@ -1150,14 +1183,15 @@ func TestScrapNyaaForBatch_FiltersBySeason(t *testing.T) {
 	defer restore()
 
 	season := 2
-	results, err := nyaa.ScrapNyaaForBatch("Machikado Mazoku 2", &season, nil)
+	results, err := nyaa.ScrapNyaaForAnime("Machikado Mazoku 2", nil, &season, nil)
 
 	if err != nil {
-		t.Fatalf("ScrapNyaaForBatch error: %v", err)
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
+	packs, _ := packsAndSingles(results)
 
 	// Verificar que apenas temporada 2 foi retornada
-	for _, r := range results {
+	for _, r := range packs {
 		if r.Season == nil || *r.Season != 2 {
 			t.Fatalf("expected season 2, got %v for torrent: %s", r.Season, r.Name)
 		}
@@ -1190,7 +1224,7 @@ func TestScrapNyaaForMovie_FindsMovieTorrents(t *testing.T) {
 	for _, r := range results {
 		// Verificar que tem Movie no nome ou é um filme conhecido
 		hasMovieKeyword := strings.Contains(strings.ToLower(r.Name), "movie") ||
-		                     strings.Contains(strings.ToLower(r.Name), "gekijouban")
+			strings.Contains(strings.ToLower(r.Name), "gekijouban")
 
 		if !hasMovieKeyword {
 			t.Logf("Warning: Result doesn't contain 'Movie' keyword: %s", r.Name)
@@ -1513,10 +1547,10 @@ func TestNyaaModule_HatarakuS2P2_PartHardFilter(t *testing.T) {
 
 	// Hard filter: com requestedPart=2, torrents sem part marker OU com part=1 são rejeitados
 	html := mockHtml([]string{
-		"[SubsPlease] Hataraku Maou-sama S2 - 01 (1080p)",         // ep=1, part=nil → rejeitado
-		"[EMBER] Hataraku Maou-sama! (Season 2 | Part 01) Batch",  // part=1 → rejeitado (isBatch)
-		"[EMBER] Hataraku Maou-sama! (Season 2 | Part 02) Batch",  // part=2 → rejeitado (isBatch)
-		"[Erai-raws] Hataraku Maou-sama Part 2 - 01 [1080p]",      // part=2, ep=1 → aceito
+		"[SubsPlease] Hataraku Maou-sama S2 - 01 (1080p)",        // ep=1, part=nil → rejeitado
+		"[EMBER] Hataraku Maou-sama! (Season 2 | Part 01) Batch", // part=1 → rejeitado (isBatch)
+		"[EMBER] Hataraku Maou-sama! (Season 2 | Part 02) Batch", // part=2 → rejeitado (isBatch)
+		"[Erai-raws] Hataraku Maou-sama Part 2 - 01 [1080p]",     // part=2, ep=1 → aceito
 	})
 	restore := mockHttpGet(html)
 	defer restore()
@@ -1564,3 +1598,107 @@ func TestNyaaModule_PartFilter_NoPartRequested(t *testing.T) {
 }
 
 func intPtr(n int) *int { return &n }
+
+// packsAndSingles reproduz a particao que o daemon faz sobre a lista unica de ScrapNyaaForAnime,
+// para que os testes das duas buscas antigas continuem valendo sem mudar de asserção.
+func packsAndSingles(results []nyaa.TorrentResult) (packs, singles []nyaa.TorrentResult) {
+	for _, r := range results {
+		switch {
+		case r.IsBatch:
+			packs = append(packs, r)
+		case r.Episode != nil:
+			singles = append(singles, r)
+		}
+	}
+	return packs, singles
+}
+
+// A unificacao nao pode mudar a query: reSeasonNamePatterns (batch) e reSeasonStrip+rePartStrip
+// (multi) removiam o MESMO conjunto (Season N, S N, Nª Season, Cour N, Part N). Este teste e a
+// garantia de que o saneamento unificado nao regride.
+func TestScrapNyaaForAnime_QueryMatchesTheTwoOldSearches(t *testing.T) {
+	titles := []struct{ in, wantQuery string }{
+		{"Show", "Show"},
+		{"Show Season 2", "Show"},
+		{"Show S2", "Show"},
+		{"Show 2nd Season", "Show"},
+		{"Show Cour 2", "Show"},
+		{"Show Part 2", "Show"},
+	}
+
+	for _, tc := range titles {
+		var gotURL string
+		restore := nyaa.MockNyaaHttpGet(func(url string) (*http.Response, error) {
+			gotURL = url
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(mockHtml(nil)))}, nil
+		})
+		if _, err := nyaa.ScrapNyaaForAnime(tc.in, []int{1}, nil, nil); err != nil {
+			t.Fatalf("%q: %v", tc.in, err)
+		}
+		restore()
+
+		if !strings.Contains(gotURL, "q="+url.QueryEscape(tc.wantQuery)+"&") && !strings.HasSuffix(gotURL, "q="+url.QueryEscape(tc.wantQuery)) {
+			t.Errorf("%q: esperava a query %q na URL, obteve %q", tc.in, tc.wantQuery, gotURL)
+		}
+	}
+}
+
+// Uma pagina com pack e episodio devolve os DOIS na mesma lista, distinguiveis por IsBatch /
+// Episode — a particao no daemon reproduz o que as duas funcoes antigas devolviam.
+func TestScrapNyaaForAnime_ReturnsPacksAndEpisodesInOneList(t *testing.T) {
+	html := mockHtml([]string{
+		"[SubsPlease] Frieren (01-28) [1080p]",
+		"[SubsPlease] Frieren - 05 [1080p]",
+		"[SubsPlease] Frieren - 09 [1080p]",
+	})
+	restore := mockHttpGet(html)
+	defer restore()
+
+	results, err := nyaa.ScrapNyaaForAnime("Frieren", []int{5}, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
+	}
+
+	var packs, singles int
+	for _, r := range results {
+		switch {
+		case r.IsBatch:
+			packs++
+		case r.Episode != nil:
+			singles++
+			if *r.Episode != 5 {
+				t.Errorf("episodio fora da lista pedida entrou: %d", *r.Episode)
+			}
+		default:
+			t.Errorf("resultado sem IsBatch e sem Episode: %q", r.Name)
+		}
+	}
+	if packs != 1 {
+		t.Errorf("esperava 1 pack, obteve %d", packs)
+	}
+	if singles != 1 {
+		t.Errorf("esperava 1 episodio (so o 5 foi pedido), obteve %d", singles)
+	}
+}
+
+// O piso de paginacao (enoughCandidates = 3) conta as DUAS listas somadas.
+func TestScrapNyaaForAnime_PaginationFloorCountsBothLists(t *testing.T) {
+	pages := 0
+	restore := nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
+		pages++
+		html := mockHtml([]string{
+			"[G] Show (01-12) [1080p]",
+			"[G] Show (13-24) [1080p]",
+			"[G] Show - 05 [1080p]",
+		})
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(html))}, nil
+	})
+	defer restore()
+
+	if _, err := nyaa.ScrapNyaaForAnime("Show", []int{5}, nil, nil); err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
+	}
+	if pages != 1 {
+		t.Errorf("2 packs + 1 episodio ja atingem o piso: esperava 1 pagina, obteve %d", pages)
+	}
+}

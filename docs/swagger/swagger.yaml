@@ -288,6 +288,8 @@ definitions:
     properties:
       custom_search_query:
         type: string
+      progress:
+        type: integer
     type: object
   files.Config:
     properties:
@@ -331,16 +333,12 @@ definitions:
         items:
           type: string
         type: array
-      max_batch_episodes:
-        description: |-
-          MaxBatchEpisodes e o teto de episodios para usar batch. Acima disso um anime finalizado
-          volta ao caminho episodio-a-episodio (onde MaxEpisodesPerAnime vale). 0 desliga o teto.
-        type: integer
       max_batch_torrent_size_gb:
         description: |-
           MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB descartam da busca torrents acima do teto,
-          em GiB. 0 desliga (default: nao filtrar, pois nao existe numero defensavel sem saber se o
-          usuario quer 1080p web ou remux).
+          em GiB. 0 desliga. O de pack e a guarda UNICA de pack desde que a elegibilidade deixou de
+          ser contagem de episodios: 100 cabe pack completo de serie de temporada em 1080p e nao cabe
+          pack completo de One Piece — para serie longa o que passa e pack parcial.
         type: number
       max_concurrent_downloads:
         description: |-
@@ -356,7 +354,8 @@ definitions:
         description: |-
           MaxEpisodesPerAnime limita quantos episodios de um anime existem ao mesmo tempo, e vale
           APENAS no caminho episodio-a-episodio: um batch e um torrent so, entao limitar registros
-          nao limitaria bytes nem arquivos na biblioteca (ver decisions.md).
+          nao limitaria bytes nem arquivos na biblioteca (ver decisions.md). 0 significa SEM TETO
+          (ver effectiveMax/windowEnd em daemon/episodes.go).
         type: integer
       max_search_pages:
         description: |-

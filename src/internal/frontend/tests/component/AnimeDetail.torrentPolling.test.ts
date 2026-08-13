@@ -18,6 +18,8 @@ vi.mock('../../src/lib/api/client.js', () => ({
   replaceEpisodeWithMagnet: vi.fn(),
   replaceAnimeWithMagnet: vi.fn(),
   updateAnimeSettings: vi.fn(),
+  removeStandaloneAnime: vi.fn(),
+  deleteTorrent: vi.fn(),
 }))
 
 function detailWith(animeId: number, episodeHash: string | undefined): AnimeDetailResponse {

@@ -191,6 +191,39 @@ func TestDownloadStandaloneAnime_DoesNotDeleteTheRestOfTheLibrary(t *testing.T) 
 	}
 }
 
+// TestAppendStandaloneAnimes_InjectsSavedProgress: sem progresso, depois do primeiro pack o
+// avulso para para sempre — nada nunca e "assistido", a poda nunca roda e o rodizio nao tem o
+// que o mova.
+func TestAppendStandaloneAnimes_InjectsSavedProgress(t *testing.T) {
+	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, mediaForAnime500)()
+
+	fm := &mockFileManagerForEpisodes{settings: map[int]files.AnimeSettings{500: {Progress: 48}}}
+
+	merged := appendStandaloneAnimes(fm, nil, []int{500})
+
+	if len(merged) != 1 {
+		t.Fatalf("esperava 1 anime, obteve %d", len(merged))
+	}
+	if merged[0].Progress != 48 {
+		t.Errorf("esperava Progress 48, obteve %d", merged[0].Progress)
+	}
+	if got := firstEpisodeToConsider(merged[0], nil); got != 49 {
+		t.Errorf("a lista deve comecar no 49, obteve %d", got)
+	}
+}
+
+// TestAppendStandaloneAnimes_NoSettingsMeansZeroProgress: sem AnimeSettings gravado, Progress 0
+// — comportamento de antes.
+func TestAppendStandaloneAnimes_NoSettingsMeansZeroProgress(t *testing.T) {
+	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, mediaForAnime500)()
+
+	merged := appendStandaloneAnimes(&mockFileManagerForEpisodes{}, nil, []int{500})
+
+	if len(merged) != 1 || merged[0].Progress != 0 {
+		t.Errorf("esperava Progress 0, obteve %+v", merged)
+	}
+}
+
 // TestDownloadStandaloneAnime_UnknownMedia: id que a AniList nao conhece nao pode virar um
 // download silencioso.
 func TestDownloadStandaloneAnime_UnknownMedia(t *testing.T) {

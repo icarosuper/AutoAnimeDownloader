@@ -97,3 +97,15 @@ describe('episodeActions', () => {
     expect(result.principal?.id).toBe('release')
   })
 })
+
+describe('watchedHere', () => {
+  it('offers "watched up to here" only for standalone animes', () => {
+    const ep = { episode_number: 5, airing_at: 0, time_until_airing: 0, is_aired: true, is_watched: false, is_downloaded: true }
+
+    const standalone = episodeActions(ep, undefined, { standalone: true })
+    expect(standalone.menu.map(a => a.id)).toContain('watchedHere')
+
+    const fromList = episodeActions(ep, undefined)
+    expect(fromList.menu.map(a => a.id)).not.toContain('watchedHere')
+  })
+})

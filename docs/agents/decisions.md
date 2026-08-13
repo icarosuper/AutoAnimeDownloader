@@ -84,7 +84,7 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ### 8. Hard part filter — nil-part torrents rejected when requestedPart is set
 
-**Location:** `internal/nyaa/nyaa.go` — `ScrapNyaa`, `ScrapNyaaForBatch`, `ScrapNyaaForMultipleEpisodes`
+**Location:** `internal/nyaa/nyaa.go` — `ScrapNyaa`, `ScrapNyaaForAnime`
 
 **What it looks like:** When `requestedPart != nil`, torrents whose name has no part marker are rejected, even though they might be the right episode. Looks overly strict.
 
@@ -153,11 +153,11 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ### 14. `nyaaSearcher` — dependency injection for Nyaa search in `processAnimeEpisodes`
 
-**Location:** `internal/daemon/search.go` (`nyaaSearcher` struct + `defaultNyaaSearcher()`); `internal/daemon/episodes.go` (`processAnimeEpisodes`, `resolveSearchStrategy`).
+**Location:** `internal/daemon/search.go` (`nyaaSearcher` struct + `defaultNyaaSearcher()`); `internal/daemon/episodes.go` (`processAnimeEpisodes`).
 
-**What it looks like:** `processAnimeEpisodes` receives a `nyaaSearcher` struct with function-valued fields instead of calling `searchNyaaForBatch`, `searchNyaaForMovie`, etc. directly. Looks like unnecessary indirection — these are pure functions with no state.
+**What it looks like:** `processAnimeEpisodes` receives a `nyaaSearcher` struct with function-valued fields (`searchAnime`, `searchSingleEpisode`, `searchMovie`) instead of calling `searchNyaaForAnime`, `searchNyaaForMovie`, etc. directly. Looks like unnecessary indirection — these are pure functions with no state.
 
-**Why it's right:** The `episodeInTorrents` hash-check fix prevents batch torrents from being re-downloaded in a loop. Without injection, it's impossible to write a test that proves the loop can't recur: a test that calls the real Nyaa makes a live HTTP request, is flaky, and can't observe whether `searchBatch` was invoked. Injection lets the regression test (`TestProcessAnimeEpisodes_BatchNoRedownload`) confirm both that `searchBatch` is never called and that `POST /add` is never sent when all episode hashes already match.
+**Why it's right:** The `episodeInTorrents` hash-check fix prevents batch torrents from being re-downloaded in a loop. Without injection, it's impossible to write a test that proves the loop can't recur: a test that calls the real Nyaa makes a live HTTP request, is flaky, and can't observe whether `searchAnime` was invoked. Injection lets the regression test (`TestProcessAnimeEpisodes_BatchNoRedownload`) confirm both that `searchAnime` is never called and that `POST /add` is never sent when all episode hashes already match.
 
 **Don't "fix" by:** removing the `nyaaSearcher` parameter and going back to direct package calls. That makes the regression test impossible to write, and the loop bug would be undetectable until it reappears in production.
 
@@ -205,7 +205,7 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 **What it looks like:** `main()` parses a flag and, if set, runs a completely different code path (`runDebugAnime`) and returns — skipping the PID file, API server, tray, and daemon loop entirely. Looks like a debug hack that snuck into production entry point.
 
-**Why it's right:** It's a deliberate one-shot diagnostic mode (`make debug-anime ID=<anilistId>` / `go run ./src/cmd/daemon --debug-anime <id>`) for the recurring "why didn't this anime download" problem. It reuses real production functions (`daemon.RunAnimeDebug` → `checkEpisode`, `resolveSearchStrategy`) so the debug output can't drift from actual verification-loop behavior, and it deliberately avoids touching the torrent client so it can run without the daemon up (the torrent client is embedded, so there is nothing external to start either way). See `docs/agents/troubleshooting-downloads.md` Step 0 and `daemon/debug.go`.
+**Why it's right:** It's a deliberate one-shot diagnostic mode (`make debug-anime ID=<anilistId>` / `go run ./src/cmd/daemon --debug-anime <id>`) for the recurring "why didn't this anime download" problem. It reuses real production functions (`daemon.RunAnimeDebug` → `checkEpisode`, `partitionSearchResults`/`pickBatches`) so the debug output can't drift from actual verification-loop behavior, and it deliberately avoids touching the torrent client so it can run without the daemon up (the torrent client is embedded, so there is nothing external to start either way). See `docs/agents/troubleshooting-downloads.md` Step 0 and `daemon/debug.go`.
 
 **Don't "fix" by:** moving this behind the HTTP API (it exists specifically to work without a running daemon) or deleting it as dead code (it's the primary entry point for the fast-path troubleshooting flow).
 
@@ -772,21 +772,21 @@ A URL fica fora porque escape de URL tem regras próprias, e os headers passam p
 
 ---
 
-### 48. `max_episodes_per_anime` nunca limitou batch — agora a regra é explícita, com quatro tetos em volta
+### 48. `max_episodes_per_anime` nunca limitou batch — a regra agora vive na janela de packs, não num teto de contagem
 
-**Location:** `daemon/episodes.go` — `willBatchAnime`, `processAnimeEpisodes` (limite efetivo + tampão), `resolveSearchStrategy`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
+**Ver também:** [`2026-08-13-batch-por-filtro-design.md`](../superpowers/specs/2026-08-13-batch-por-filtro-design.md) — a spec que substituiu o teto de contagem (`max_batch_episodes`) descrito abaixo por elegibilidade decidida pelo resultado da busca. As entradas 59-62 logo após esta documentam o desenho atual em detalhe.
+
+**Location (histórico):** quando esta decisão foi escrita, `daemon/episodes.go` tinha `willBatchAnime` e `resolveSearchStrategy`; ambos foram removidos pela spec de batch-por-filtro. O que existe hoje: `daemon/episodes.go` — `selectEpisodes`, `effectiveMax`, `windowEnd`, `partitionSearchResults`, `pickBatches`, `coveringBatch`, `assignBatches`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
 
 **What it looks like:** um limite por anime que às vezes não se aplica, um filtro de tamanho que deixa passar tamanho zero, uma guarda de disco que só barra o `Add`, e um booleano de "disco baixo" calculado no servidor para o frontend.
 
 **Why it's right:**
 
-**(a) O limite se aplica só episódio a episódio.** Um batch é **um torrent**: um anime finalizado de 24 episódios com o limite em 12 baixava os 24 arquivos, o `organize` hardlinkava os 24, e `episodes.json` registrava 12 — a tela mostrava 12/24 para sempre com os 24 no disco. Limitar registros não limita bytes nem arquivos; só produz contagem mentirosa. Então `willBatchAnime` decide **antes** do loop, e com ele o limite efetivo é ilimitado.
+**(a) O limite se aplica só episódio a episódio.** Um batch é **um torrent**: um anime finalizado de 24 episódios com o limite em 12 baixava os 24 arquivos, o `organize` hardlinkava os 24, e `episodes.json` registrava 12 — a tela mostrava 12/24 para sempre com os 24 no disco. Limitar registros não limita bytes nem arquivos; só produz contagem mentirosa. Então, quando um pack cobre a janela pendente, o segundo `selectEpisodes` roda com o limite levantado (`len(episodes)+1`), e o limite efetivo passa a ser ilimitado para os episódios daquele pack.
 
-O que substitui o teto em batch é `max_batch_episodes` (default 30): Naruto/Bleach/Gintama/Detective Conan deixam de virar um torrent único gigante e voltam ao caminho um-a-um, onde o limite por anime vale. Contagem desconhecida (`Media.Episodes == nil`) **não** é elegível a batch — sem saber o tamanho não há como afirmar que o pack cabe no teto. `max_batch_episodes <= 0` é teto **desligado**, e por isso não entra na comparação como número.
+O que decide elegibilidade a pack hoje **não é mais** um teto de contagem de episódios do anime (`max_batch_episodes`, removido) — é o próprio resultado da busca filtrada: `partitionSearchResults` separa packs de episódios soltos e aplica a cada um o SEU teto de tamanho (`max_batch_torrent_size_gb`/`max_episode_torrent_size_gb`) e o piso de seeders; `pickBatches` escolhe o mínimo de packs que cobre `[primeiroPendente, primeiroPendente + max_episodes_per_anime - 1]` (ou a janela toda, com o teto desligado). Ver entrada 59 para o porquê dessa troca.
 
-O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso um anime de 720 episódios continuaria baixando o pack inteiro para 12 registros — exatamente o defeito.
-
-**(b) O tampão.** Com o limite lançado, se a busca de batch volta vazia (ou o filtro de tamanho a esvazia) a Estratégia 3 assume e baixaria N episódios sem limite. Depois de `resolveSearchStrategy`, se o resultado não é batch, `episodesToDownload` é cortado de volta ao limite; a ordem do `airingSchedule` garante que sobram os mais antigos.
+**(b) O tampão.** Se a busca por pack não cobre a janela pendente (nenhum resultado, ou o filtro de tamanho a esvazia), a seleção original — com o limite por anime valendo — permanece: `episodesToDownload` nunca foi lançado, então não há nada a cortar de volta. A ordem do `airingSchedule` garante que sobram os mais antigos.
 
 **(c) `Size == 0` passa o filtro de tamanho.** É o valor de `nyaa.parseSize` quando o Nyaa muda o formato da coluna. Descartar tamanho desconhecido trocaria "às vezes baixa um torrent grande" por "não baixa nada": um bug de parsing viraria paralisação silenciosa. O filtro roda **depois** da ordenação por prioridade e preserva a ordem, então o escolhido é o melhor **entre os que cabem**.
 
@@ -798,11 +798,72 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 **Don't "fix" by:**
 - Aplicar `max_episodes_per_anime` em batch "para o limite valer sempre": volta a contagem mentirosa.
-- Colocar `totalEpisodes <= configs.MaxBatchEpisodes` sem o guarda de `<= 0`: desligar o teto passaria a ligá-lo para todo mundo.
+- Reintroduzir um teto de contagem de episódios do anime (tipo `max_batch_episodes`) para decidir elegibilidade a pack: contagem de episódios é proxy ruim de tamanho — ver decisions.md #59.
 - Descartar torrent com `Size == 0` "porque tamanho desconhecido é suspeito".
 - Consolidar a guarda de disco num `return` no topo do passe de verificação (ver (d)).
 - Mover a guarda para `torrents.Session.Add` "porque é um site só": o pacote `torrents` não conhece `files.Config`, e passar a config para lá inverte a dependência.
 - Reintroduzir um ratio hardcoded em `lib/utils/status.ts` para economizar um campo na resposta (ver (e)).
+
+### 59. Elegibilidade a batch deixou de ser metadado e virou filtro de resultado
+
+**Location:** `daemon/episodes.go` — `partitionSearchResults`, `pickBatches`, `coveringBatch`; `nyaa/nyaa.go` — `extractBatchInfo`/`ExtractBatchInfo`, `ScrapNyaaForAnime`.
+
+**What it looks like:** nenhuma checagem de `FINISHED`, nenhuma checagem de contagem de episódios do `Media` antes de decidir se um anime "vira pack". A decisão inteira mora do lado de dentro do resultado da busca já filtrado.
+
+**Why it's right:** o que importa para elegibilidade a pack é o torrent que está lá — tamanho, seeders, faixa coberta — e nada disso é conhecido **antes** da busca. Um teto de contagem de episódios (como o antigo `max_batch_episodes`) é proxy ruim de tamanho: medido, 26 episódios em remux passa de 300 GB (furaria qualquer teto de contagem razoável) e 500 episódios em 480p fica em ~80 GB (um teto de contagem baixo bloquearia um pack que caberia tranquilamente). E o gate de `FINISHED` excluía exatamente quem mais depende de pack — uma série longa em `RELEASING` (One Piece, Naruto) nunca teve outro jeito de não acumular 1000+ registros episódio-a-episódio.
+
+Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos e aplica a CADA lista o seu próprio teto de tamanho — `max_batch_torrent_size_gb`/`max_episode_torrent_size_gb` — e o piso de seeders) seguido de `pickBatches` (escolhe o mínimo de packs, entre os que sobraram do filtro, que cobre a janela pendente).
+
+**Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo`/`extractBatchInfo` guarda só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080. Outras faixas fantasma (data tipo "2020-2021", bitrate) só entrariam com um sanitizador de tokens, que não se paga hoje: uma faixa desconhecida cai em `EndEpisode == 0`, que todo chamador já trata como pack completo — o mesmo fallback seguro, não uma faixa errada. Upgrade path: se um novo padrão de faixa fantasma aparecer medido, generalizar o sanitizador em vez de empilhar mais um caso especial no `if isResolution`.
+
+**Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. Upgrade path, se aparecer medido: empurrar os filtros de tamanho/seeders para dentro do contador de paginação, o que exige o pacote `nyaa` conhecer `files.Config` — exatamente o que `applyNyaaSettings` (push, não leitura direta) existe para evitar hoje.
+
+**Don't "fix" by:**
+- Reintroduzir um teto de contagem de episódios do anime: contagem é proxy ruim de tamanho (ver acima), e o gate de `FINISHED` excluía quem mais precisa de pack.
+- Aceitar `EndEpisode == 0` como "faixa 0-0" em vez de "pack completo": um pack real cuja faixa não parseou desapareceria da seleção.
+
+### 60. A janela de packs cobre a partir do primeiro pendente, e o corte é sempre de prefixo
+
+**Location:** `daemon/episodes.go` — `windowEnd`, `pickBatches`, `assignBatches`.
+
+**What it looks like:** `pickBatches(packs, firstPending, windowEnd)` anda um cursor a partir do primeiro episódio pendente, e `assignBatches` para de atribuir magnet no primeiro episódio da lista que nenhum pack escolhido cobre — em vez de dar a todo mundo o magnet do primeiro pack encontrado, ou tentar episódio solto para o resto.
+
+**Why it's right:** sem a janela ancorada no primeiro pendente, `batchResult[0]` iria para todo episódio pendente e o episódio 800 de uma série longa receberia o magnet do pack 1-100 — dado errado, não "sem magnet". Sem o truncamento de prefixo em `assignBatches`, os episódios fora da cobertura cairiam no fallback de episódio solto (`magnetsByEpisode`), que em One Piece dispararia `DownloadFailed`/`ReasonNotFound` para ~1000 episódios **por passada** — nenhum deles vai aparecer solto no Nyaa, então é notificação de erro pura, sem chance de sucesso. O corte é sempre de **prefixo** (nunca "buraco no meio") porque a agenda (`anilist.EpisodeList`) vem em ordem crescente e os packs escolhidos por `pickBatches` são contíguos a partir do cursor — não há como um pack posterior cobrir um episódio anterior sem que `coveringBatch` já o tivesse escolhido primeiro.
+
+**Don't "fix" by:**
+- Aplicar o magnet do primeiro pack achado a todo episódio pendente "porque é um episódio de qualquer forma" — episódio fora da faixa do pack simplesmente não está no `.torrent`.
+- Cair em episódio solto para o que sobra fora da janela: em série longa isso é notificação de erro garantida, não uma tentativa a mais.
+
+### 61. Episódio de pack é imune à poda por limite E ao keep-set de assistidos
+
+**Location:** `daemon/episodes.go` — `handleAlreadySavedEpisode` (guarda de deleção), `buildWatchedKeepSet` (guarda de keep-set).
+
+**What it looks like:** `handleAlreadySavedEpisode` recusa deletar um episódio salvo com `IsBatch: true` mesmo quando ele está acima do limite por anime; `buildWatchedKeepSet` nunca inclui um episódio de pack na lista de candidatos a "manter mesmo assistido".
+
+**Why it's right:** um pack é um torrent só — apagar o registro de UM dos seus episódios não libera byte nenhum, o torrent inteiro continua seedando no disco. Sem a guarda em `handleAlreadySavedEpisode`, o ciclo seguinte ao que trouxe o pack apagaria os registros acima do limite, o gate de espaço reabriria (o registro sumiu, mas o byte não), e o próximo ciclo tentaria baixar de novo — loop de baixar-e-apagar sobre um torrent que nunca saiu do disco. Sem a guarda em `buildWatchedKeepSet`: `watched_episodes_to_keep` não tem granularidade **dentro** de um pack — manter 3 dos 100 episódios de um pack não guarda 3 episódios, guarda o pack inteiro (`allEpisodesInDeleteSet` dá `false` para o grupo inteiro enquanto QUALQUER um dos 100 registros estiver fora do delete-set), então incluir episódios de pack no keep-set não muda o resultado, só confunde a contagem.
+
+O contador (`downloadedEpisodes`) continua incrementando para episódios de pack **abaixo** do limite — só a deleção acima do limite é que é ignorada. É esse incremento normal, mais a imunidade à poda, que dá o **rodízio de packs sucessivos sem nenhuma config nova**: o pack atual acumula registros além do limite (imunes), o próximo ciclo busca de novo, `pickBatches` escolhe o próximo pack ainda não coberto, e assim por diante — só freado por `max_batch_torrent_size_gb` (por torrent) e `checkDiskSpace`.
+
+**Don't "fix" by:**
+- Deletar registros de pack acima do limite "para o limite valer sempre": o torrent continua no disco, e o próximo ciclo baixa de novo (loop de baixar-e-apagar).
+- Dar granularidade ao keep-set dentro de um pack "para respeitar `watched_episodes_to_keep` à risca": a unidade real é o torrent, não o registro — não existe "manter 3 episódios" de um arquivo só.
+
+### 62. Progresso de avulso mora em `AnimeSettings` e é injetado no `MediaList` sintético, não vira caminho paralelo
+
+**Location:** `files/filemanager.go` — `AnimeSettings.Progress`; `api/endpoint_anime_settings.go` — `handleAnimeSettings` (`PUT` parcial); `daemon/standalone.go` / `api/standalone.go` — `withStandaloneProgress` (duas cópias, um por pacote, mesmo contrato); `daemon/manual_download.go` — `resolveAnimeDetails`.
+
+**What it looks like:** `AnimeSettings` (por anime, arquivo separado de `Config`) ganha um campo `Progress int`; toda vez que um `MediaList` sintético de avulso é montado (`appendStandaloneAnimes`, `DownloadStandaloneAnime`, `resolveAnimeDetails` quando `GetAnimeInfo` devolve `nil`), `withStandaloneProgress` sobrescreve `ml.Progress` com o valor salvo antes de o `MediaList` ser usado por qualquer coisa.
+
+**Why it's right:** com o dado morando no mesmo campo que uma entrada de lista real usa, `shouldSkipEpisode` (pula episódio `<= Progress`), `firstEpisodeToConsider` (começa em `Progress + 1`), `buildWatchedKeepSet` (usa `Progress` para achar quais salvos contam como assistidos) e a contagem `EpisodesWatched` da UI funcionam em avulso **sem nenhum `if isStandalone`** — é a mesma leitura de sempre, só que a fonte da verdade para avulso é `AnimeSettings` em vez da AniList. Um caminho paralelo (branch explícito em cada um desses pontos) duplicaria a lógica de "o que é assistido" em quatro lugares e um deles ia divergir cedo ou tarde.
+
+`resolveAnimeDetails` chama `withStandaloneProgress` no MESMO branch de fallback que `appendStandaloneAnimes` usa (`GetAnimeInfo` devolve `nil` → `GetMediaByID`) — sem isso, `RunAnimeDebug` (que passa por `resolveAnimeDetails`) relatava um avulso com progresso gravado como se começasse do episódio 1, divergindo do pipeline real que ele existe para espelhar (decisions.md #58). Nos `ManualDownload*` o efeito é inócuo — eles selecionam episódio por número explícito, não por `Progress` — mas a chamada é a mesma para não depender de qual caminho um chamador futuro escolhe.
+
+O `PUT /animes/{id}/settings` usa ponteiros (`*string`/`*int`) e faz merge parcial: um `PUT` que só manda `custom_search_query` não pode zerar `progress` (e vice-versa) — um `AnimeSettings{}` novo a cada `PUT` apagaria silenciosamente o outro campo. `progress < 0` é rejeitado com 400 na validação do handler, antes do merge.
+
+**Don't "fix" by:**
+- Um branch `if anime.IsStandalone` em `shouldSkipEpisode`/`firstEpisodeToConsider`/`buildWatchedKeepSet` "para deixar explícito": é exatamente a duplicação que injetar no `MediaList` evita.
+- `PUT` substituindo o `AnimeSettings` inteiro em vez de merge parcial: zera o campo que o request não mencionou.
+- Pular `withStandaloneProgress` em `resolveAnimeDetails` "porque `ManualDownload*` não usa `Progress`": `RunAnimeDebug` usa, e os dois passam pelo mesmo caminho.
 
 ### 49. Anime avulso: "acompanhado pela lista" é o snapshot que o daemon PROCESSA, e `DownloadStandaloneAnime` nunca chama `handleSavedEpisodes`
 
@@ -820,7 +881,7 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 **(d) `DownloadStandaloneAnime` não pode chamar `handleSavedEpisodes`.** Ela chama `identifyEpisodesNotInWatching`, que compara **todos** os episódios salvos contra os `checkedEpisodes` recebidos e devolve os não cobertos para deleção. Com os episódios de um único anime na mão e `delete_watched_episodes` ligado, isso apagaria a biblioteca inteira. Pelo mesmo motivo não chama `deleteEpisodesByStatus` nem `DeleteEmptyFolders`: adicionar um anime não é ocasião para apagar nada.
 
-**(e) Um avulso nunca é apagado por status nem por assistido** — e isso é consequência da arquitetura existente, não decisão nova. `deletableMediaIDs` só avalia candidatos que apareceram na lista de alguma conta, e um avulso não aparece em nenhuma; `delete_watched_episodes`/`watched_episodes_to_keep` dependem de `Progress`, que é sempre 0 num avulso. Ele acumula no disco até o usuário deixar de acompanhá-lo — que é o que "avulso" deveria significar.
+**(e) Um avulso nunca é apagado por status.** `deletableMediaIDs` só avalia candidatos que apareceram na lista de alguma conta, e um avulso não aparece em nenhuma. Ele acumula no disco até o usuário deixar de acompanhá-lo, **ou** até marcar manualmente até onde assistiu — ver decisions.md #62 sobre `AnimeSettings.Progress`, que é a exceção deliberada: sem progresso manual `delete_watched_episodes`/`watched_episodes_to_keep` nunca tinham o que podar num avulso.
 
 **(f) A remoção automática consome o registro, e isso pode chegar a apagar arquivo.** Um avulso que depois entra numa lista da AniList sai do arquivo no passe seguinte (a entrada real já vencia o dedupe, então o que o passe baixa não muda). Se **depois disso** o usuário tirar o anime da lista, o registro avulso já foi consumido e os episódios dele passam a cair em `identifyEpisodesNotInWatching` como os de qualquer anime tirado da lista. É a troca aceita: preservar os dois registros exigiria distinguir "avulso ativo" de "avulso dormente" no arquivo, no `AnimeInfo` e na tela, para cobrir um caminho que quem usa avulso não percorre. O `DELETE` explícito fecha a **outra** janela marcando os episódios `ManuallyManaged`.
 
@@ -901,13 +962,13 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 ### 53. Busca de episódio descarta batch e filme, e usa `hasMovieMarker` — não `isMovie`
 
-**Location:** `nyaa/nyaa.go` — `parseRow` de `ScrapNyaa` e de `ScrapNyaaForMultipleEpisodes`, `isMovie`, `hasMovieMarker`; `nyaa/nyaa_regex.go` — `reOvaPattern`.
+**Location:** `nyaa/nyaa.go` — `parseRow` de `ScrapNyaa` e de `ScrapNyaaForAnime` (na época desta decisão, `ScrapNyaaForMultipleEpisodes`, depois fundida em `ScrapNyaaForAnime`), `isMovie`, `hasMovieMarker`; `nyaa/nyaa_regex.go` — `reOvaPattern`.
 
 **What it looks like:** dois guards no começo dos dois `parseRow` de episódio (`isBatch` e `hasMovieMarker`), e um `hasMovieMarker` que é `isMovie` **menos** o ramo final.
 
 **Why it's right:**
 
-**(a) Sem o guard de batch, um pack de 220 episódios entra como "episódio 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` casa `- 001` em `extractEpisodeNumber`, e a busca multi-episódio (ao contrário da single) não filtrava batch. Resultado medido: 220 episódios num registro só, com `IsBatch: false`, furando `max_batch_episodes` **e** `max_episodes_per_anime` — e organizado como episódio único (renomeado "Naruto - E01" com `rename_files_for_jellyfin`). Descartar em vez de aceitar como batch porque `ScrapNyaaForBatch` roda **antes** na `resolveSearchStrategy`: um batch que valesse a pena já teria sido pego lá, e o que vaza aqui é exatamente o que o teto rejeitou.
+**(a) Sem o guard de batch, um pack de 220 episódios entra como "episódio 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` casa `- 001` em `extractEpisodeNumber`, e a busca multi-episódio (ao contrário da single) não filtrava batch. Resultado medido, na época: 220 episódios num registro só, com `IsBatch: false`, furando o teto de batch da época (`max_batch_episodes`, removido pela spec de batch-por-filtro) **e** `max_episodes_per_anime` — e organizado como episódio único (renomeado "Naruto - E01" com `rename_files_for_jellyfin`). Descartar em vez de aceitar como batch porque a busca de pack rodava **antes** na resolução da estratégia: um batch que valesse a pena já teria sido pego lá, e o que vaza aqui é exatamente o que o teto rejeitou. O guard em si (marcar `IsBatch`/descartar packs vazados de dentro do parser de episódio) segue valendo em `ScrapNyaaForAnime` hoje.
 
 **(a2) O guard só vale se o `isBatch` reconhecer a faixa.** O padrão de faixa exigia espaço DEPOIS do segundo número (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), então `One Piece EP 001-501` e `One Piece 001-501.mkv` passavam como "episódio 1" — o mesmo bug de (a) por outro buraco, medido ao vivo na busca do episódio 1 do One Piece (2 dos 7 candidatos eram packs de 500 episódios). O fim da faixa agora aceita espaço, fim do nome, `.` ou `[`.
 
@@ -932,7 +993,7 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 **(b) A assimetria com `filterBySize` é o ponto, não um descuido.** Tamanho desconhecido significa "não sei se cabe", e descartar trocaria "às vezes baixa um torrent grande" por "não baixa nada" — um bug de parsing viraria paralisação silenciosa. Seeders desconhecido é diferente: a coluna é o **único** sinal de que existe alguém semeando, e um torrent sem semeador não completa nunca. Deixar passar não é o lado conservador — é travar o episódio num torrent que não baixa.
 
-**(c) O filtro ficou no daemon, não no `parseRow` do nyaa.** O plano pedia no parse, "antes de qualquer ordenação". Como o sort é estável e os filtros preservam a ordem, o escolhido é o mesmo; e no daemon reusa o padrão do `filterBySize`, vale para as quatro estratégias num ponto só (`filterSearchResults`) e mantém o log `"Found N results"` do nyaa mostrando o torrent morto com seus seeders — que é o que serve para diagnosticar. `nyaa.ParseSeeders` existe só para isso (mesmo padrão de `IsBatch`/`ExtractSeason`).
+**(c) O filtro ficou no daemon, não no `parseRow` do nyaa.** O plano pedia no parse, "antes de qualquer ordenação". Como o sort é estável e os filtros preservam a ordem, o escolhido é o mesmo; e no daemon reusa o padrão do `filterBySize`, vale para todos os call sites de busca num ponto só (`filterSearchResults`) e mantém o log `"Found N results"` do nyaa mostrando o torrent morto com seus seeders — que é o que serve para diagnosticar. `nyaa.ParseSeeders` existe só para isso (mesmo padrão de `IsBatch`/`ExtractSeason`).
 
 **Don't "fix" by:**
 - Fazer `Size == 0` ser descartado "por simetria com os seeders" (ver (b)).
@@ -988,11 +1049,11 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 **Location:** `nyaa/nyaa.go` — `fetchSearchPages`, `parsePagesWith`, `enoughCandidates`, `SetMaxSearchPages`/`ActiveMaxSearchPages`; `files/filemanager.go` — `Config.MaxSearchPages`, `applyNyaaSettings`.
 
-**What it looks like:** um só helper de paginação usado pelas quatro buscas, que desce página por página **sequencialmente** enquanto tiver menos de 3 candidatos aceitos, com teto configurável.
+**What it looks like:** um só helper de paginação usado pelas três buscas (`ScrapNyaa`, `ScrapNyaaForAnime`, `ScrapNyaaForMovie` — na época desta decisão eram quatro, `ScrapNyaaForBatch` e `ScrapNyaaForMultipleEpisodes` depois se fundiram em `ScrapNyaaForAnime`), que desce página por página **sequencialmente** enquanto tiver menos de 3 candidatos aceitos, com teto configurável.
 
 **Why it's right:**
 
-**(a) A página 2 era buscada SEMPRE.** Nas buscas que resolvem na página 1 — a maioria — isso era um fetch jogado fora. É essa economia que paga o teto de 5 páginas sem subir o tráfego médio: um teto fixo de 5 custaria ~1200 fetches por passada (240 buscas × 5) contra o nyaa.si, onde se espera 429/Cloudflare.
+**(a) A página 2 era buscada SEMPRE.** Nas buscas que resolvem na página 1 — a maioria — isso era um fetch jogado fora. É essa economia que paga o teto de 5 páginas sem subir o tráfego médio: um teto fixo de 5 custaria fetches em disparada por passada contra o nyaa.si, onde se espera 429/Cloudflare.
 
 **(b) Piso de candidatos aceitos, não de linhas.** O Nyaa devolve ordenado por seeders desc, então a partir de um punhado de candidatos a página seguinte só traz opção pior; 3 já dá escolha ao ranking. Página **vazia** também encerra: significa que a query acabou, e insistir até o teto seria fetch garantido inútil.
 
@@ -1000,7 +1061,7 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 **(d) Batch e filme entraram no mesmo caminho.** Os dois liam só a página 1 com `httpGet` direto, sem passar por `fetchNyaaPage` — não paginavam e **não apareciam no log**. Agora usam o mesmo helper e ganham o log de página junto.
 
-**(e) NÃO existe orçamento de fetches por anime por passada.** O plano pedia, para que um anime insolúvel não queime o teto toda passada. Medido: o pior caso é uma busca que nunca satisfaz o piso e vai até 5 páginas, ~2,3x os fetches de hoje, e **só** em anime que não encontra nada. O orçamento exigiria estado por anime atravessando `nyaaSearcher` e as quatro funções exportadas do nyaa — plumbing desproporcional ao risco. Se o tráfego incomodar, o caminho mais curto é baixar `max_search_pages`.
+**(e) NÃO existe orçamento de fetches por anime por passada.** O plano pedia, para que um anime insolúvel não queime o teto toda passada. Medido: o pior caso é uma busca que nunca satisfaz o piso e vai até 5 páginas, ~2,3x os fetches de hoje, e **só** em anime que não encontra nada. O orçamento exigiria estado por anime atravessando `nyaaSearcher` e as funções exportadas do nyaa — plumbing desproporcional ao risco. Se o tráfego incomodar, o caminho mais curto é baixar `max_search_pages`.
 
 **Don't "fix" by:**
 - Buscar as páginas 1..N em paralelo "para ficar mais rápido" (ver (a) e (c)).
@@ -1009,17 +1070,17 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 ---
 
-### 58. `RunAnimeDebug` espelha `processAnimeEpisodes`: enumeração, teto de batch e fallback single
+### 58. `RunAnimeDebug` espelha `processAnimeEpisodes`: enumeração, resolução de pack e fallback single
 
-**Location:** `daemon/debug.go` — `RunAnimeDebug`; espelha `daemon/episodes.go` — `processAnimeEpisodes` (linhas 43, 58-61 e 108-113).
+**Location:** `daemon/debug.go` — `RunAnimeDebug`; espelha `daemon/episodes.go` — `processAnimeEpisodes`.
 
-**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, desliga o teto por anime quando `willBatchAnime` é verdadeira, e cai em `searchSingleEpisode` quando o `resolveSearchStrategy` volta sem magnet para um episódio — três trechos duplicados do loop de produção.
+**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, roda a mesma busca por anime + `partitionSearchResults`/`pickBatches` para decidir se um pack cobre a janela (e, se sim, re-roda `selectEpisodes` com o teto levantado), e cai em `searchSingleEpisode` quando nenhum episódio pendente recebeu magnet de pack/filme — três trechos duplicados do loop de produção. Ver a spec `2026-08-13-batch-por-filtro-design.md`: essa entrada documentava `willBatchAnime`/`resolveSearchStrategy`, removidos por essa spec — elegibilidade a pack agora é decidida pelo resultado da busca filtrada, não por metadado do AniList (ver entrada nova sobre isso).
 
 **Why it's right:**
 
 **(a) A agenda crua descreve outro pipeline.** No One Piece a página 1 da agenda vai do 1123 ao 1147; a produção enumera 1..1147 e pega os 12 primeiros pelo teto. Iterando os nós crus, o debug reportava ter buscado "1123 a 1147" — nenhum anime de agenda clipada era medido corretamente, e é exatamente a classe que a `EpisodeList` sintética (#52) existe para cobrir.
 
-**(b) A regra batch↔limite nunca era avaliada.** `willBatchAnime` desliga o teto por anime em `processAnimeEpisodes`; sem chamá-la, o debug era cego justamente à regra que a feature de animes avulsos declara como pré-requisito ("um anime de 1100 episódios adicionado a dedo cai no caminho um-a-um limitado").
+**(b) A regra pack↔limite nunca era avaliada.** `pickBatches`/`assignBatches` levantam o teto por anime em `processAnimeEpisodes` quando um pack cobre a janela; sem rodar o mesmo caminho, o debug era cego justamente à regra que a feature de animes avulsos declara como pré-requisito ("um anime de 1100 episódios adicionado a dedo cai no caminho um-a-um limitado, a menos que um pack cubra a janela").
 
 **(c) Sem o fallback, série longa era falso positivo garantido.** A busca múltipla não leva número de episódio na query (`q=one piece`), e as primeiras páginas ordenadas por seeders são só os episódios recentes — medido: 750 linhas cruas, nenhuma do episódio 1-12. Quem acha o episódio antigo é `searchSingleEpisode`, que carrega o zero-padding (#56). Sem ele o relatório do `debug-batch` marcava One Piece e Naruto Shippuden como "0 magnets" por **não ter buscado**, não por o Nyaa não ter.
 
@@ -1029,5 +1090,5 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 
 **Don't "fix" by:**
 - Voltar a iterar `AiringSchedule.Nodes` "porque é mais simples" — a simplicidade produz um diagnóstico de um pipeline que o daemon não executa.
-- Parar no `resolveSearchStrategy` "porque é a função que decide a estratégia" — ela é só metade da busca; a outra metade é o fallback por episódio.
+- Parar na resolução de pack "porque é a etapa que decide a estratégia" — ela é só metade da busca; a outra metade é o fallback por episódio.
 - Truncar `summary.Episodes` aos que têm `would_search: true` — a contagem "nada buscado" do relatório depende de ver os dois lados.

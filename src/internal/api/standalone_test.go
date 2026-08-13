@@ -140,6 +140,31 @@ func TestHandleAnimes_StandaloneAppearsWithoutDownloadedEpisodes(t *testing.T) {
 	}
 }
 
+// TestHandleAnimes_StandaloneUsesSavedProgress: sem injetar o progresso salvo, a tela mostraria
+// 0 assistidos para um avulso cujo progresso o usuario acabou de gravar em AnimeSettings.
+func TestHandleAnimes_StandaloneUsesSavedProgress(t *testing.T) {
+	defer mockStandaloneAniList(emptyListJSON, standaloneMediaJSON)()
+
+	fm := &mockFileManager{
+		standaloneAnimes: []int{21},
+		animeSettings:    map[int]files.AnimeSettings{21: {Progress: 48}},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil)
+	rec := httptest.NewRecorder()
+
+	handleAnimes(standaloneServer(fm))(rec, req)
+
+	var resp struct {
+		Data []AnimeInfo `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("resposta invalida: %v", err)
+	}
+	if len(resp.Data) != 1 || resp.Data[0].EpisodesWatched != 48 {
+		t.Fatalf("quero episodes_watched 48, veio %+v", resp.Data)
+	}
+}
+
 // TestHandleAnimes_ListedAnimeIsNotStandalone: is_standalone e origem, e um anime de lista nao
 // pode ganhar o chip.
 func TestHandleAnimes_ListedAnimeIsNotStandalone(t *testing.T) {

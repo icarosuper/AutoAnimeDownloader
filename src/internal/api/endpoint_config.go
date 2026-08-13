@@ -106,8 +106,10 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		if config.MaxEpisodesPerAnime <= 0 {
-			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Max episodes per anime must be greater than 0")
+		// max_episodes_per_anime aceita 0 = sem teto, alinhado com os outros tetos do projeto
+		// (max_batch_torrent_size_gb, min_seeders, watched_episodes_to_keep).
+		if config.MaxEpisodesPerAnime < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Max episodes per anime must be non-negative")
 			return
 		}
 
@@ -123,11 +125,6 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 
 		if config.MaxConcurrentDownloads < 0 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Max concurrent downloads must be non-negative")
-			return
-		}
-
-		if config.MaxBatchEpisodes < 0 {
-			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Max batch episodes must be non-negative")
 			return
 		}
 

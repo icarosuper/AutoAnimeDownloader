@@ -46,9 +46,8 @@
     hintWatchedKeep: m.config_hint_watched_keep(),
     labelCheckInterval: m.config_label_check_interval(),
     labelMaxEpisodes: m.config_label_max_episodes(),
+    hintMaxEpisodes: m.config_hint_max_episodes(),
     labelRetryLimit: m.config_label_retry_limit(),
-    labelMaxBatchEpisodes: m.config_label_max_batch_episodes(),
-    hintMaxBatchEpisodes: m.config_hint_max_batch_episodes(),
     labelMaxBatchSize: m.config_label_max_batch_size(),
     hintMaxBatchSize: m.config_hint_max_batch_size(),
     labelMaxEpisodeSize: m.config_label_max_episode_size(),
@@ -112,7 +111,6 @@
     completed_anime_path: "",
     check_interval: 10,
     max_episodes_per_anime: 12,
-    max_batch_episodes: 30,
     max_batch_torrent_size_gb: 0,
     max_episode_torrent_size_gb: 0,
     min_seeders: 1,
@@ -242,7 +240,7 @@
     },
     {
       group: "downloads" as GroupId,
-      ok: config.max_episodes_per_anime > 0,
+      ok: config.max_episodes_per_anime >= 0,
       message: m.config_val_max_episodes,
     },
     {
@@ -259,11 +257,6 @@
       group: "downloads" as GroupId,
       ok: !(config.delete_watched_episodes && config.watched_episodes_to_keep < 0),
       message: m.config_val_watched_keep,
-    },
-    {
-      group: "search" as GroupId,
-      ok: config.max_batch_episodes >= 0,
-      message: m.config_val_max_batch_episodes,
     },
     {
       group: "search" as GroupId,
@@ -574,9 +567,10 @@
               <Input
                 id="max_episodes_per_anime"
                 label={T && T.labelMaxEpisodes || ""}
+                subtitle={T && T.hintMaxEpisodes || ""}
                 type="number"
                 bind:value={config.max_episodes_per_anime}
-                min="1"
+                min="0"
                 required={true}
                 inline={true}
               />
@@ -638,18 +632,6 @@
                 bind:value={config.episode_retry_limit}
                 min="0"
                 required={true}
-                inline={true}
-              />
-            </div>
-
-            <div class="p-4.5">
-              <Input
-                id="max_batch_episodes"
-                label={T && T.labelMaxBatchEpisodes || ""}
-                subtitle={T && T.hintMaxBatchEpisodes || ""}
-                type="number"
-                bind:value={config.max_batch_episodes}
-                min="0"
                 inline={true}
               />
             </div>

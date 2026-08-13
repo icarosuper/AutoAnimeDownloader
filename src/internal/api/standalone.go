@@ -27,7 +27,7 @@ func loadStandaloneSet(fm FileManagerInterface) map[int]bool {
 // avulso e exatamente esse caso — sem o fallback a tela de detalhe dele nao abre. O fallback e
 // condicionado ao conjunto de avulsos de proposito: sem isso qualquer media id da AniList
 // passaria a responder pelas rotas /animes/{id}/*, e o 404 de "esse anime nao e seu" sumiria.
-func resolveMediaList(id int, usernames []string, standalone map[int]bool) (*anilist.MediaList, error) {
+func resolveMediaList(fm FileManagerInterface, id int, usernames []string, standalone map[int]bool) (*anilist.MediaList, error) {
 	ml, err := anilist.GetAnimeInfo(id, usernames)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,11 @@ func resolveMediaList(id int, usernames []string, standalone map[int]bool) (*ani
 	if ml != nil || !standalone[id] {
 		return ml, err
 	}
-	return anilist.GetMediaByID(id)
+	ml, err = anilist.GetMediaByID(id)
+	if err != nil {
+		return nil, err
+	}
+	return withStandaloneProgress(fm, ml), nil
 }
 
 // appendStandaloneEntries junta os avulsos as entradas vindas das listas da AniList, pulando os
@@ -44,7 +48,7 @@ func resolveMediaList(id int, usernames []string, standalone map[int]bool) (*ani
 //
 // covered e atualizado no caminho para que refreshOrphanAnimes nao tente buscar de novo, por
 // conta, um anime que nenhuma conta acompanha.
-func appendStandaloneEntries(entries []anilist.MediaList, standalone, covered map[int]bool) []anilist.MediaList {
+func appendStandaloneEntries(fm FileManagerInterface, entries []anilist.MediaList, standalone, covered map[int]bool) []anilist.MediaList {
 	for id := range standalone {
 		if covered[id] {
 			continue
@@ -55,8 +59,20 @@ func appendStandaloneEntries(entries []anilist.MediaList, standalone, covered ma
 				Msg("Failed to fetch a standalone anime from AniList; leaving it out of this response")
 			continue
 		}
-		entries = append(entries, *ml)
+		entries = append(entries, *withStandaloneProgress(fm, ml))
 		covered[id] = true
 	}
 	return entries
+}
+
+// withStandaloneProgress — ver o gemeo em daemon/standalone.go. Sem ele a tela mostraria 0
+// assistidos para um avulso cujo progresso o usuario acabou de gravar.
+func withStandaloneProgress(fm FileManagerInterface, ml *anilist.MediaList) *anilist.MediaList {
+	if ml == nil {
+		return nil
+	}
+	if s, err := fm.LoadAnimeSettings(ml.Media.Id); err == nil && s != nil {
+		ml.Progress = s.Progress
+	}
+	return ml
 }

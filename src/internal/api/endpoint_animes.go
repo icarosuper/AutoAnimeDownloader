@@ -171,7 +171,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		// Os avulsos entram DEPOIS do dedupe pelo mesmo motivo do daemon: quando o anime tambem
 		// esta numa lista, a entrada real (com progresso) tem de vencer a sintetica.
 		standaloneSet := loadStandaloneSet(server.FileManager)
-		entries = append(anilist.DedupeByMedia(entries), appendStandaloneEntries(nil, standaloneSet, covered)...)
+		entries = append(anilist.DedupeByMedia(entries), appendStandaloneEntries(server.FileManager, nil, standaloneSet, covered)...)
 
 		mergeAniListAnimes(animeMap, entries, config.ExcludedLists)
 
@@ -182,7 +182,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		if mergeFailed {
 			logger.Logger.Warn().Msg("Skipping orphan refresh: AniList list fetch failed, coverage unknown")
 		} else {
-			refreshOrphanAnimes(animeMap, covered, config.ExcludedLists, config.AnilistUsernames, standaloneSet)
+			refreshOrphanAnimes(server.FileManager, animeMap, covered, config.ExcludedLists, config.AnilistUsernames, standaloneSet)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
@@ -218,7 +218,7 @@ const maxConcurrentOrphanRefresh = 5
 // status fell outside the configured allowed sets). These animes stay visible regardless —
 // this only tries to keep their cover/progress/blacklist fields fresh instead of stale/blank.
 // A failed refresh is logged and left as-is; it never fails the overall request.
-func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string, usernames []string, standalone map[int]bool) {
+func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string, usernames []string, standalone map[int]bool) {
 	var orphans []*AnimeInfo
 	for _, info := range animeMap {
 		if info.AnimeID != 0 && !covered[info.AnimeID] {
@@ -238,7 +238,7 @@ func refreshOrphanAnimes(animeMap map[string]*AnimeInfo, covered map[int]bool, e
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			ml, err := resolveMediaList(info.AnimeID, usernames, standalone)
+			ml, err := resolveMediaList(fm, info.AnimeID, usernames, standalone)
 			if err != nil {
 				logger.Logger.Warn().Err(err).Int("anime_id", info.AnimeID).Msg("Failed to refresh orphaned anime, keeping existing data")
 				return

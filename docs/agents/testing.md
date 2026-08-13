@@ -149,6 +149,33 @@ Creating a session is the only thing that binds a **fixed** port — rain's `Def
 
 Run this package with `-race`: `TestSessionManagerConcurrentEnsureAndDelegation` exists specifically to exercise the window where `Ensure`/`Close` could swap the session out from under a delegated call.
 
+### 7. `nyaaSearcher` Injection (`processAnimeEpisodes`)
+
+`nyaaSearcher` (`daemon/search.go`) has three function-valued fields: `searchAnime`, `searchSingleEpisode`, `searchMovie` — no `searchBatch`/`searchMultiple` anymore. `searchAnime` alone returns **both** packs and episodes in one list (mirroring `nyaa.ScrapNyaaForAnime`); production splits them with `daemon.partitionSearchResults`.
+
+`searcherFor` (`daemon/limits_test.go`) builds a fake searcher from separate `batch`/`multiple`/`single`/`movie` slices for test readability, then combines `batch` (tagged `IsBatch: true`) and `multiple` into the one list `searchAnime` returns:
+
+```go
+func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearcher {
+    anime := make([]nyaa.TorrentResult, 0, len(batch)+len(multiple))
+    for _, tr := range batch {
+        tr.IsBatch = true
+        anime = append(anime, tr)
+    }
+    anime = append(anime, multiple...)
+
+    return nyaaSearcher{
+        searchAnime: func(anilist.Title, []string, []int, string) []nyaa.TorrentResult { return anime },
+        searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string, int) []nyaa.TorrentResult {
+            return single
+        },
+        searchMovie: func(anilist.Title, bool, string) []nyaa.TorrentResult { return movie },
+    }
+}
+```
+
+**A pack fixture needs a realistic name** (`"[X] Anime 001-100 [1080p]"`), not a bare `"batch"` string — `pickBatches`/`coveringBatch` read the episode range from the **name** (`nyaa.ExtractBatchInfo`), and a name with no parseable range falls back to "complete pack" (`EndEpisode == 0`), which changes which episodes the pack ends up covering in the test.
+
 ## Never Let Background Work Outlive Its Test
 
 Two entry points start work in a goroutine and return immediately: `handleCheck` (POST `/check`) and `daemon.StartLoop`. **A test that triggers either must wait for it to finish before returning.**

@@ -61,7 +61,7 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.FileManager, server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to manually download episode")
 			JSONDownloadError(w, err, "DOWNLOAD_FAILED")
@@ -277,7 +277,7 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			animeSettings = &files.AnimeSettings{}
 		}
 
-		ep, err := daemon.ManualDownloadEpisode(server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.FileManager, server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to redownload episode")
 			JSONDownloadError(w, err, "REDOWNLOAD_FAILED")
@@ -375,7 +375,7 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to unblock episode")
 		}
 
-		ep, err := daemon.ManualDownloadEpisodeWithMagnet(server.Torrents, animeId, episodeNumber, body.Magnet, configs)
+		ep, err := daemon.ManualDownloadEpisodeWithMagnet(server.FileManager, server.Torrents, animeId, episodeNumber, body.Magnet, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to replace episode with magnet")
 			JSONDownloadError(w, err, "REPLACE_FAILED")
@@ -459,7 +459,7 @@ func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 			}
 		}
 
-		episodes, err := daemon.ManualDownloadAnimeWithMagnet(server.Torrents, animeId, body.Magnet, configs)
+		episodes, err := daemon.ManualDownloadAnimeWithMagnet(server.FileManager, server.Torrents, animeId, body.Magnet, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Msg("Failed to replace anime with magnet")
 			JSONDownloadError(w, err, "REPLACE_FAILED")

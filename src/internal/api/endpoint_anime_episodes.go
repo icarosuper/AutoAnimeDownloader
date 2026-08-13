@@ -76,7 +76,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			return
 		}
 
-		mediaList, err := resolveMediaList(id, config.AnilistUsernames, loadStandaloneSet(server.FileManager))
+		mediaList, err := resolveMediaList(server.FileManager, id, config.AnilistUsernames, loadStandaloneSet(server.FileManager))
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", id).Msg("Failed to fetch anime detail from AniList")
 			JSONInternalError(w, err)

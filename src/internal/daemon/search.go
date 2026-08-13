@@ -9,18 +9,16 @@ import (
 type nyaaSearchFunc func(title string) ([]nyaa.TorrentResult, error)
 
 type nyaaSearcher struct {
-	searchBatch         func(titles anilist.Title, synonyms []string, customQuery string) []nyaa.TorrentResult
+	searchAnime         func(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult
 	searchSingleEpisode func(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string, totalEpisodes int) []nyaa.TorrentResult
 	searchMovie         func(titles anilist.Title, isFormatMovie bool, customQuery string) []nyaa.TorrentResult
-	searchMultiple      func(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult
 }
 
 func defaultNyaaSearcher() nyaaSearcher {
 	return nyaaSearcher{
-		searchBatch:         searchNyaaForBatch,
+		searchAnime:         searchNyaaForAnime,
 		searchSingleEpisode: searchNyaaForSingleEpisode,
 		searchMovie:         searchNyaaForMovie,
-		searchMultiple:      searchNyaaForMultipleEpisodes,
 	}
 }
 
@@ -156,22 +154,17 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 	return results
 }
 
-func searchNyaaForBatch(titles anilist.Title, synonyms []string, customQuery string) []nyaa.TorrentResult {
-	season, part := ExtractAnimeSeasonPart(titles, synonyms)
-	return searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
-		return nyaa.ScrapNyaaForBatch(title, season, part)
-	}, "batch")
-}
-
 func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool, customQuery string) []nyaa.TorrentResult {
 	return searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
 		return nyaa.ScrapNyaaForMovie(title, isFormatMovie)
 	}, "movie")
 }
 
-func searchNyaaForMultipleEpisodes(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult {
+// searchNyaaForAnime e a busca unica por anime: devolve packs e episodios na mesma lista (ver
+// nyaa.ScrapNyaaForAnime).
+func searchNyaaForAnime(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult {
 	season, part := ExtractAnimeSeasonPart(titles, synonyms)
 	return searchNyaaWithVariants(titles, customQuery, func(title string) ([]nyaa.TorrentResult, error) {
-		return nyaa.ScrapNyaaForMultipleEpisodes(title, episodes, season, part)
-	}, "multiple episodes")
+		return nyaa.ScrapNyaaForAnime(title, episodes, season, part)
+	}, "anime")
 }

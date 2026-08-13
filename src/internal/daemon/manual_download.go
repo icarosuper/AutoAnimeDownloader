@@ -54,7 +54,13 @@ type animeDetails struct {
 // funcoes ja exigem um media id e um episode id que so a tela de detalhe fornece, e o resultado
 // e sempre gravado com ManuallyManaged=true — o loop nunca o apaga por nao acompanhar o anime.
 // Um id que nao existe na AniList continua devolvendo erro.
-func resolveAnimeDetails(animeId int, usernames []string) (*animeDetails, error) {
+//
+// O fallback (ml == nil) e o mesmo caminho sintetico de appendStandaloneAnimes: passa por
+// withStandaloneProgress para injetar o progresso salvo. Sem isso RunAnimeDebug relatava um
+// avulso com progresso gravado como se comecasse do episodio 1 — o pipeline de debug divergindo
+// do pipeline real que ele existe para espelhar. Nos chamadores de ManualDownload* o efeito e
+// inocuo: eles selecionam episodio por numero explicito (findEpisodeNode), nao por Progress.
+func resolveAnimeDetails(fm FileManagerInterface, animeId int, usernames []string) (*animeDetails, error) {
 	ml, err := anilist.GetAnimeInfo(animeId, usernames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get anime info: %w", err)
@@ -63,6 +69,7 @@ func resolveAnimeDetails(animeId int, usernames []string) (*animeDetails, error)
 		if ml, err = anilist.GetMediaByID(animeId); err != nil {
 			return nil, fmt.Errorf("failed to get anime info: %w", err)
 		}
+		ml = withStandaloneProgress(fm, ml)
 	}
 	if ml == nil {
 		return nil, fmt.Errorf("anime %d does not exist on AniList", animeId)
@@ -98,12 +105,12 @@ func findEpisodeNode(ml anilist.MediaList, episodeNumber int) *anilist.AiringNod
 
 // ManualDownloadEpisodeWithMagnet downloads a specific episode using a user-supplied magnet link.
 // Skips Nyaa search entirely. Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId int, episodeNumber int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
+func ManualDownloadEpisodeWithMagnet(fm FileManagerInterface, backend torrents.TorrentBackend, animeId int, episodeNumber int, magnet string, configs *files.Config) (files.EpisodeStruct, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
 
-	details, err := resolveAnimeDetails(animeId, configs.AnilistUsernames)
+	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
 	if err != nil {
 		return files.EpisodeStruct{}, err
 	}
@@ -132,12 +139,12 @@ func ManualDownloadEpisodeWithMagnet(backend torrents.TorrentBackend, animeId in
 
 // ManualDownloadAnimeWithMagnet downloads an entire anime using a user-supplied batch magnet link.
 // Marks all aired episodes as downloaded sharing the same torrent hash.
-func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int, magnet string, configs *files.Config) ([]files.EpisodeStruct, error) {
+func ManualDownloadAnimeWithMagnet(fm FileManagerInterface, backend torrents.TorrentBackend, animeId int, magnet string, configs *files.Config) ([]files.EpisodeStruct, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return nil, err
 	}
 
-	details, err := resolveAnimeDetails(animeId, configs.AnilistUsernames)
+	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
 	if err != nil {
 		return nil, err
 	}
@@ -175,12 +182,12 @@ func ManualDownloadAnimeWithMagnet(backend torrents.TorrentBackend, animeId int,
 
 // ManualDownloadEpisode downloads a specific episode manually (called from API).
 // Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisode(backend torrents.TorrentBackend, animeId int, episodeNumber int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
+func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBackend, animeId int, episodeNumber int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
 
-	details, err := resolveAnimeDetails(animeId, configs.AnilistUsernames)
+	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
 	if err != nil {
 		return files.EpisodeStruct{}, err
 	}

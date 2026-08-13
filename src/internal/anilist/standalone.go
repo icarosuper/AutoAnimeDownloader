@@ -91,7 +91,7 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 // aqui venceria a entrada real e o daemon rebaixaria episodios ja assistidos.
 //
 // Os campos pedidos sao os MESMOS de getMediaListEntry (inclusive synonyms, relations e o id
-// de cada no do airingSchedule): resolveSearchStrategy e searchNyaaForSingleEpisode dependem
+// de cada no do airingSchedule): a busca por anime e searchNyaaForSingleEpisode dependem
 // de synonyms e relations (offset de temporada dividida via PREQUEL), e todo o resto do app
 // chaveia episodio pelo id do no.
 //

@@ -144,8 +144,6 @@ export interface Config {
   completed_anime_path: string
   check_interval: number
   max_episodes_per_anime: number
-  /** Acima deste numero de episodios um anime finalizado nao usa batch. 0 desliga. */
-  max_batch_episodes: number
   /** Tetos de tamanho de torrent em GiB. 0 desliga. */
   max_batch_torrent_size_gb: number
   max_episode_torrent_size_gb: number
@@ -278,7 +276,9 @@ export interface AnimeDetailResponse {
 }
 
 export interface AnimeSettings {
-  custom_search_query: string
+  custom_search_query?: string
+  /** Progresso manual — só é lido para anime avulso (o de lista vem da AniList). */
+  progress?: number
 }
 
 export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {

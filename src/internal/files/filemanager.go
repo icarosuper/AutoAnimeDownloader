@@ -80,14 +80,13 @@ type Config struct {
 	CheckInterval      int      `json:"check_interval"`
 	// MaxEpisodesPerAnime limita quantos episodios de um anime existem ao mesmo tempo, e vale
 	// APENAS no caminho episodio-a-episodio: um batch e um torrent so, entao limitar registros
-	// nao limitaria bytes nem arquivos na biblioteca (ver decisions.md).
+	// nao limitaria bytes nem arquivos na biblioteca (ver decisions.md). 0 significa SEM TETO
+	// (ver effectiveMax/windowEnd em daemon/episodes.go).
 	MaxEpisodesPerAnime int `json:"max_episodes_per_anime"`
-	// MaxBatchEpisodes e o teto de episodios para usar batch. Acima disso um anime finalizado
-	// volta ao caminho episodio-a-episodio (onde MaxEpisodesPerAnime vale). 0 desliga o teto.
-	MaxBatchEpisodes int `json:"max_batch_episodes"`
 	// MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB descartam da busca torrents acima do teto,
-	// em GiB. 0 desliga (default: nao filtrar, pois nao existe numero defensavel sem saber se o
-	// usuario quer 1080p web ou remux).
+	// em GiB. 0 desliga. O de pack e a guarda UNICA de pack desde que a elegibilidade deixou de
+	// ser contagem de episodios: 100 cabe pack completo de serie de temporada em 1080p e nao cabe
+	// pack completo de One Piece — para serie longa o que passa e pack parcial.
 	MaxBatchTorrentSizeGB   float64 `json:"max_batch_torrent_size_gb"`
 	MaxEpisodeTorrentSizeGB float64 `json:"max_episode_torrent_size_gb"`
 	// MinSeeders descarta da busca o torrent com menos seeders que isso. 0 desliga. O default
@@ -148,6 +147,11 @@ func (c *Config) DownloadPath() string {
 
 type AnimeSettings struct {
 	CustomSearchQuery string `json:"custom_search_query,omitempty"`
+	// Progress e o progresso MANUAL, e existe para o anime avulso: GetMediaByID devolve
+	// Progress: 0 fixo, e sem progresso nada nunca e "assistido", a poda nunca roda e o rodizio
+	// de packs sucessivos nao tem o que o mova. Ausente le 0, que e o comportamento de antes.
+	// Anime de lista nunca usa este campo: quem manda la e a AniList.
+	Progress int `json:"progress,omitempty"`
 }
 
 type FileManager struct {
@@ -182,7 +186,7 @@ func getDefaultConfig() *Config {
 		AnilistUsernames:       []string{},
 		CheckInterval:          10,
 		MaxEpisodesPerAnime:    12,
-		MaxBatchEpisodes:       30,
+		MaxBatchTorrentSizeGB:  100,
 		MinSeeders:             1,
 		MaxSearchPages:         5,
 		MinFreeDiskPercent:     10,

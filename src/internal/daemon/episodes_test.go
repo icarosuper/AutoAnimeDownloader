@@ -36,6 +36,7 @@ type mockFileManagerForEpisodes struct {
 	standaloneAnimes   []int
 	removedStandalone  []int
 	savedEpisodes      []files.EpisodeStruct
+	settings           map[int]files.AnimeSettings
 }
 
 func (m *mockFileManagerForEpisodes) LoadConfigs() (*files.Config, error) { return nil, nil }
@@ -62,7 +63,10 @@ func (m *mockFileManagerForEpisodes) UnmanageEpisode(files.EpisodeKey) error { r
 func (m *mockFileManagerForEpisodes) LoadAllAnimeSettings() (map[int]files.AnimeSettings, error) {
 	return nil, nil
 }
-func (m *mockFileManagerForEpisodes) LoadAnimeSettings(int) (*files.AnimeSettings, error) {
+func (m *mockFileManagerForEpisodes) LoadAnimeSettings(id int) (*files.AnimeSettings, error) {
+	if s, ok := m.settings[id]; ok {
+		return &s, nil
+	}
 	return nil, nil
 }
 func (m *mockFileManagerForEpisodes) SaveAnimeSettings(int, files.AnimeSettings) error { return nil }
@@ -235,7 +239,7 @@ func TestCheckEpisode_BlacklistedEpisodeMarkedForDeletion(t *testing.T) {
 	}
 
 	downloaded := 0
-	shouldDownload, shouldDelete := checkEpisode(configs, configs.MaxEpisodesPerAnime, ep, anime, true, &downloaded, false, false)
+	shouldDownload, shouldDelete := checkEpisode(configs, configs.MaxEpisodesPerAnime, ep, anime, true, &downloaded, false, false, false)
 
 	if shouldDownload {
 		t.Error("episódio de anime na blacklist não deve ser baixado")
@@ -400,11 +404,12 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 	savedEpisodes := make([]files.EpisodeStruct, 12)
 	for i := range savedEpisodes {
 		savedEpisodes[i] = files.EpisodeStruct{
-			EpisodeNumber: 1000 + i,
-			AnimeID:       animeID,
-			EpisodeHash:   batchHash,
-			AnimeName:     englishTitle,
-			DownloadDate:  time.Now(),
+			EpisodeNumber: i + 1, // deve casar com Episode do node (i+1); numero != Episode dos nodes fazia
+			// alreadySaved dar sempre falso e mascarava o teste (issue pre-existente, fora desta task)
+			AnimeID:      animeID,
+			EpisodeHash:  batchHash,
+			AnimeName:    englishTitle,
+			DownloadDate: time.Now(),
 		}
 	}
 
@@ -416,20 +421,17 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 		},
 	}
 
-	// Mock do Nyaa: se searchBatch for chamado, o teste deve falhar
-	searchBatchCalled := false
+	// Mock do Nyaa: se a busca por anime for chamada, o teste deve falhar
+	searchAnimeCalled := false
 	mockSearcher := nyaaSearcher{
-		searchBatch: func(_ anilist.Title, _ []string, _ string) []nyaa.TorrentResult {
-			searchBatchCalled = true
-			return []nyaa.TorrentResult{{MagnetLink: "magnet:?xt=urn:btih:fakehash"}}
+		searchAnime: func(_ anilist.Title, _ []string, _ []int, _ string) []nyaa.TorrentResult {
+			searchAnimeCalled = true
+			return []nyaa.TorrentResult{{MagnetLink: "magnet:?xt=urn:btih:fakehash", IsBatch: true}}
 		},
 		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ string, _ int) []nyaa.TorrentResult {
 			return nil
 		},
 		searchMovie: func(_ anilist.Title, _ bool, _ string) []nyaa.TorrentResult {
-			return nil
-		},
-		searchMultiple: func(_ anilist.Title, _ []string, _ []int, _ string) []nyaa.TorrentResult {
 			return nil
 		},
 	}
@@ -443,8 +445,8 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 
 	result := processAnimeEpisodes(configs, backend, anime, dlTorrents, savedEpisodes, map[files.EpisodeKey]bool{}, "", mockSearcher)
 
-	if searchBatchCalled {
-		t.Error("searchBatch não deve ser chamado: todos os episódios já estão no cliente pelo hash")
+	if searchAnimeCalled {
+		t.Error("a busca por anime não deve ser chamada: todos os episódios já estão no cliente pelo hash")
 	}
 	if len(backend.List()) > 0 {
 		t.Errorf("Add não deve ser chamado, mas o cliente tem %d torrent(s)", len(backend.List()))
@@ -977,12 +979,11 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 	}
 
 	noResults := nyaaSearcher{
-		searchBatch: func(anilist.Title, []string, string) []nyaa.TorrentResult { return nil },
+		searchAnime: func(anilist.Title, []string, []int, string) []nyaa.TorrentResult { return nil },
 		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string, int) []nyaa.TorrentResult {
 			return nil
 		},
-		searchMovie:    func(anilist.Title, bool, string) []nyaa.TorrentResult { return nil },
-		searchMultiple: func(anilist.Title, []string, []int, string) []nyaa.TorrentResult { return nil },
+		searchMovie: func(anilist.Title, bool, string) []nyaa.TorrentResult { return nil },
 	}
 
 	configs := &files.Config{

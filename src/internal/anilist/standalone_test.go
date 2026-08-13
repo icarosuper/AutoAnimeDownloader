@@ -98,7 +98,7 @@ func TestGetMediaByID_SyntheticEntry(t *testing.T) {
 	if ml.Media.Id != 21 {
 		t.Fatalf("quero media id 21, veio %d", ml.Media.Id)
 	}
-	// resolveSearchStrategy e searchNyaaForSingleEpisode dependem destes tres.
+	// A busca por anime e searchNyaaForSingleEpisode dependem destes tres.
 	if len(ml.Media.Synonyms) != 1 {
 		t.Fatalf("synonyms perdido: %+v", ml.Media.Synonyms)
 	}

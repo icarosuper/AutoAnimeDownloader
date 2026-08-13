@@ -21,6 +21,7 @@
     replaceAnimeWithMagnet,
     updateAnimeSettings,
     removeStandaloneAnime,
+    deleteTorrent,
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
@@ -28,6 +29,7 @@
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
+  import TorrentDeleteDialog from "../components/TorrentDeleteDialog.svelte";
   import ActionMenu, { type ActionMenuItem } from "../components/ui/ActionMenu.svelte";
   import Button from "../components/ui/Button.svelte";
   import Checkbox from "../components/ui/Checkbox.svelte";
@@ -92,6 +94,25 @@
   let customSearchQuery = "";
   let searchQuerySaving = false;
   let searchQueryOpen = false;
+
+  // Progresso manual do avulso. Prefill de `anime.episodes_watched`, que já traz o valor salvo
+  // (o backend injeta AnimeSettings.progress no MediaList sintético).
+  let progressInput = 0;
+  let progressSaving = false;
+  $: progressInput = anime?.episodes_watched ?? 0;
+
+  async function saveProgress(value: number) {
+    progressSaving = true;
+    try {
+      await updateAnimeSettings(animeId, { progress: value });
+      toast.success(m.detail_toast_progress_saved());
+      await loadData(animeId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_toast_progress_error());
+    } finally {
+      progressSaving = false;
+    }
+  }
 
   // Live torrent progress, joined onto episodes below. Fetch failures degrade silently:
   // this is accessory data (mirrors the best-effort join the backend already does in
@@ -218,6 +239,7 @@
     delete: m.detail_btn_delete,
     release: m.detail_btn_release,
     replace: m.detail_btn_replace,
+    watchedHere: m.detail_btn_watched_here,
   };
 
   function actionLabel(action: Action): string {
@@ -240,16 +262,70 @@
       case "delete": return handleDelete(ep);
       case "release": return handleRelease(ep);
       case "replace": return handleReplace(ep);
+      case "watchedHere": return saveProgress(ep.episode_number);
     }
   }
 
   // Uma passada monta tudo que cada linha precisa, para desktop e mobile lerem a MESMA
   // estrutura — é isso que impede as duas cópias de divergirem de novo.
-  $: rows =
-    $locale && allEpisodes.map((ep) => {
-      const torrent = torrentsByEpisode.get(ep.episode_number);
-      const actions = episodeActions(ep, torrent);
-      return {
+  //
+  // Um pack é UMA linha. A regra de detecção é a mesma que o backend já usa em
+  // buildTorrentResponse: mais de um episódio no mesmo info hash é batch, diga o que disser a
+  // flag. Excluir um episódio de dentro de um pack não libera byte nenhum (o hardlink da
+  // biblioteca e a cópia de seed são o mesmo inode) e "Rebaixar" buscaria episódio solto, que
+  // numa série longa não existe — então a linha de grupo oferece só o que é verdade para um pack.
+  //
+  // Nem "Substituir": esse botão chama replaceAnimeWithMagnet, que apaga TODOS os torrents do
+  // anime (endpoint_episode_actions.go), não só os do pack clicado — com packs sucessivos
+  // (001-100 + 101-200), "Substituir" no primeiro destruiria o segundo em silêncio. O mesmo
+  // argumento do comentário acima sobre "Rebaixar" vale aqui: só sobra "Excluir", que já vai por
+  // DELETE /torrents/{hash} e opera exatamente na unidade certa.
+  //
+  // ponytail: buildRows é O(n²) (o .filter() por pack dentro do loop principal) — irrelevante
+  // para o tamanho real de um anime, mas se esta tela um dia listar milhares de episódios em
+  // dezenas de packs, trocar por um Map<hash, AnimeEpisodeInfo[]> montado em uma passada resolve.
+  function buildRows(episodes: AnimeEpisodeInfo[], byEpisode: Map<number, TorrentInfo>) {
+    const counts = new Map<string, number>();
+    for (const ep of episodes) {
+      if (ep.episode_hash) counts.set(ep.episode_hash, (counts.get(ep.episode_hash) ?? 0) + 1);
+    }
+
+    const out = [];
+    const seenPack = new Set<string>();
+
+    for (const ep of episodes) {
+      const hash = ep.episode_hash;
+      if (hash && (counts.get(hash) ?? 0) >= 2) {
+        if (seenPack.has(hash)) continue;
+        seenPack.add(hash);
+
+        const group = episodes.filter((e) => e.episode_hash === hash);
+        const numbers = group.map((e) => e.episode_number);
+        const torrent = byEpisode.get(numbers[0]);
+        out.push({
+          kind: "batch" as const,
+          key: `pack-${hash}`,
+          hash,
+          ep: group[0],
+          torrent,
+          inFlight: !!torrent && !torrent.completed,
+          chip: episodeChip(group[0], torrent),
+          notes: "",
+          meta: episodeMeta(group[0], torrent),
+          principal: undefined,
+          menu: [{ id: "delete", label: m.detail_btn_delete(), destructive: true as const }],
+          title: m.detail_batch_row_title({ first: Math.min(...numbers), last: Math.max(...numbers) }),
+          label: `${Math.min(...numbers)}–${Math.max(...numbers)}`,
+        });
+        continue;
+      }
+
+      const torrent = byEpisode.get(ep.episode_number);
+      const actions = episodeActions(ep, torrent, { standalone: !!anime?.is_standalone });
+      out.push({
+        kind: "episode" as const,
+        key: `ep-${ep.episode_number}`,
+        hash: ep.episode_hash,
         ep,
         torrent,
         inFlight: !!torrent && !torrent.completed,
@@ -259,8 +335,45 @@
         principal: actions.principal,
         menu: menuItems(actions.menu),
         title: ep.episode_name || m.detail_ep_title({ number: ep.episode_number }),
-      };
-    });
+        label: String(ep.episode_number),
+      });
+    }
+
+    return out;
+  }
+
+  $: rows = $locale && buildRows(allEpisodes, torrentsByEpisode);
+
+  // Ação da linha de grupo: só "Excluir", pelo DELETE /torrents/{hash}, que já remove o torrent e
+  // TODOS os registros do grupo como unidade. Nem "Rebaixar" (seria alias de Excluir, já que o
+  // loop rebusca no ciclo seguinte assim que o espaço volta) nem "Substituir" (destruiria packs
+  // irmãos em silêncio — ver o comentário grande em buildRows) fazem sentido aqui, então não há
+  // ramificação por id: o único item do menu de pack já é "delete".
+  //
+  // ponytail: essa ação fica inline aqui, e não em lib/domain/episodeActions.ts, porque hoje só
+  // existe UMA linha de pack em UMA tela, e ela é uma constante fixa (não uma classificação de
+  // estado como o classify() de episodeActions.ts). Se uma segunda tela precisar da mesma decisão
+  // de pack, aí sim vale extrair um packActionSet() exportado de episodeActions.ts.
+  let packDeleteOpen = false;
+  let pendingPackHash = "";
+  let pendingPackLabel = "";
+
+  function openPackDelete(row: { hash?: string; label: string }) {
+    pendingPackHash = row.hash ?? "";
+    pendingPackLabel = row.label;
+    packDeleteOpen = true;
+  }
+
+  async function confirmPackDelete(opts: { keepData: boolean; block: boolean }) {
+    packDeleteOpen = false;
+    try {
+      await deleteTorrent(pendingPackHash, opts);
+      toast.success(m.detail_toast_pack_deleted({ label: pendingPackLabel }));
+      await loadData(animeId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_toast_del_error());
+    }
+  }
 
   async function loadData(id: number) {
     if (!id || id <= 0) {
@@ -583,6 +696,19 @@
   on:confirm={confirmRedownload}
 />
 
+<!-- scope="episode" (não "anime"): DELETE /torrents/{hash} só bloqueia os episódios que
+     compartilham ESTE hash (RemoveTorrentWithEpisodes, daemon/episodes.go) — packs irmãos do
+     mesmo anime continuam vivos. "anime" prometeria um alcance maior do que a operação cobre, e
+     `standalone` fica de fora porque em scope="episode" o diálogo a ignora (checkbox de
+     bloquear/rebaixar episódio, não de destrackear anime). -->
+<TorrentDeleteDialog
+  bind:open={packDeleteOpen}
+  name={pendingPackLabel}
+  scope="episode"
+  on:confirm={(e) => confirmPackDelete(e.detail)}
+  on:cancel={() => (packDeleteOpen = false)}
+/>
+
 <ConfirmDialog
   bind:open={confirmBulkOpen}
   title={m.detail_bulk_confirm_title()}
@@ -687,22 +813,37 @@
 
         {#if anime}
           <p class="mt-2 font-mono text-caption text-subtle">
-            {#if anime.is_standalone}
-              {$locale && m.detail_counts_no_watched({
-                downloaded: anime.episodes_downloaded,
-                total: anime.total_episodes || "?",
-              })}
-            {:else}
-              {$locale && m.detail_counts({
-                downloaded: anime.episodes_downloaded,
-                total: anime.total_episodes || "?",
-                watched: anime.episodes_watched,
-              })}
-            {/if}
+            {$locale && m.detail_counts({
+              downloaded: anime.episodes_downloaded,
+              total: anime.total_episodes || "?",
+              watched: anime.episodes_watched,
+            })}
             {#if detail?.status}
               · {m.detail_anilist_status({ status: detail.status })}
             {/if}
           </p>
+
+          <!-- Avulso não tem progresso na AniList: é aqui que ele mora, e é o progresso que move
+               o rodízio de packs (sem ele, depois do primeiro pack o anime para para sempre). -->
+          {#if anime.is_standalone}
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <label for="standalone-progress" class="text-copy text-body">
+                {$locale && m.detail_progress_label()}
+              </label>
+              <input
+                id="standalone-progress"
+                type="number"
+                min="0"
+                bind:value={progressInput}
+                class="w-20 rounded-field border border-default bg-control px-2 py-1 text-copy text-heading outline-none focus:border-accent"
+                on:keydown={(e) => { if (e.key === 'Enter') saveProgress(progressInput); }}
+              />
+              <Button variant="ghost" disabled={progressSaving} on:click={() => saveProgress(progressInput)}>
+                {progressSaving ? "..." : ($locale && m.common_save())}
+              </Button>
+            </div>
+            <p class="mt-1 text-caption text-subtle">{$locale && m.detail_progress_hint()}</p>
+          {/if}
         {/if}
       </div>
 
@@ -821,21 +962,25 @@
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_actions()}</span>
         </div>
 
-        {#each rows || [] as row (row.ep.episode_number)}
+        {#each rows || [] as row (row.key)}
           {@const isLoading = !!actionLoading[row.ep.episode_number]}
-          {@const isSelected = selectedEpisodes.has(row.ep.episode_number)}
+          {@const isSelected = row.kind === "episode" && selectedEpisodes.has(row.ep.episode_number)}
           <div
             data-episode-row
             class="{EP_GRID} border-b border-divider px-4 py-3 last:border-b-0 {isSelected ? 'bg-accent-tint/[.06]' : ''}"
           >
-            <Checkbox
-              checked={isSelected}
-              label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
-              labelHidden
-              on:change={() => toggleEpisode(row.ep.episode_number)}
-            />
+            {#if row.kind === "episode"}
+              <Checkbox
+                checked={isSelected}
+                label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
+                labelHidden
+                on:change={() => toggleEpisode(row.ep.episode_number)}
+              />
+            {:else}
+              <span></span>
+            {/if}
 
-            <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
+            <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
 
             <div class="min-w-0">
               <p class="truncate text-copy text-heading" title={row.title}>{row.title}</p>
@@ -877,8 +1022,8 @@
               {#if row.menu.length > 0}
                 <ActionMenu
                   items={row.menu}
-                  triggerLabel={m.detail_actions_menu({ number: row.ep.episode_number })}
-                  on:select={(e) => runAction(e.detail as EpisodeActionId, row.ep)}
+                  triggerLabel={row.kind === "batch" ? m.detail_batch_actions_menu() : m.detail_actions_menu({ number: row.ep.episode_number })}
+                  on:select={(e) => row.kind === "batch" ? openPackDelete(row) : runAction(e.detail as EpisodeActionId, row.ep)}
                 />
               {/if}
             </div>
@@ -888,18 +1033,22 @@
 
       <!-- Mobile: mesma definição de linha, empilhada -->
       <div class="divide-y divide-divider lg:hidden">
-        {#each rows || [] as row (row.ep.episode_number)}
+        {#each rows || [] as row (row.key)}
           {@const isLoading = !!actionLoading[row.ep.episode_number]}
-          {@const isSelected = selectedEpisodes.has(row.ep.episode_number)}
+          {@const isSelected = row.kind === "episode" && selectedEpisodes.has(row.ep.episode_number)}
           <div data-episode-row class="p-4 {isSelected ? 'bg-accent-tint/[.06]' : ''}">
             <div class="flex items-start gap-3">
-              <Checkbox
-                checked={isSelected}
-                label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
-                labelHidden
-                on:change={() => toggleEpisode(row.ep.episode_number)}
-              />
-              <span class="font-mono text-[15px] font-bold text-heading">{row.ep.episode_number}</span>
+              {#if row.kind === "episode"}
+                <Checkbox
+                  checked={isSelected}
+                  label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
+                  labelHidden
+                  on:change={() => toggleEpisode(row.ep.episode_number)}
+                />
+              {:else}
+                <span></span>
+              {/if}
+              <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
               <div class="min-w-0 flex-1">
                 <p class="truncate text-copy text-heading">{row.title}</p>
                 {#if row.notes}
@@ -935,8 +1084,8 @@
               {#if row.menu.length > 0}
                 <ActionMenu
                   items={row.menu}
-                  triggerLabel={m.detail_actions_menu({ number: row.ep.episode_number })}
-                  on:select={(e) => runAction(e.detail as EpisodeActionId, row.ep)}
+                  triggerLabel={row.kind === "batch" ? m.detail_batch_actions_menu() : m.detail_actions_menu({ number: row.ep.episode_number })}
+                  on:select={(e) => row.kind === "batch" ? openPackDelete(row) : runAction(e.detail as EpisodeActionId, row.ep)}
                 />
               {/if}
             </div>

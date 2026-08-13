@@ -8,8 +8,12 @@ import (
 	"strconv"
 )
 
+// Os dois campos sao PONTEIROS porque o PUT e parcial: a tela dispara
+// updateAnimeSettings(id, { custom_search_query }) e, com um segundo campo no struct, montar um
+// AnimeSettings do zero zeraria o progresso salvo (e vice-versa).
 type animeSettingsRequest struct {
-	CustomSearchQuery string `json:"custom_search_query"`
+	CustomSearchQuery *string `json:"custom_search_query"`
+	Progress          *int    `json:"progress"`
 }
 
 // @Summary      Get or update anime-specific settings
@@ -50,9 +54,27 @@ func handleAnimeSettings(server *Server) http.HandlerFunc {
 				JSONError(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body")
 				return
 			}
+			if req.Progress != nil && *req.Progress < 0 {
+				JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Progress must be non-negative")
+				return
+			}
 
-			settings := files.AnimeSettings{
-				CustomSearchQuery: req.CustomSearchQuery,
+			existing, err := server.FileManager.LoadAnimeSettings(id)
+			if err != nil {
+				logger.Logger.Error().Err(err).Int("anime_id", id).Msg("Failed to load anime settings")
+				JSONInternalError(w, err)
+				return
+			}
+
+			settings := files.AnimeSettings{}
+			if existing != nil {
+				settings = *existing
+			}
+			if req.CustomSearchQuery != nil {
+				settings.CustomSearchQuery = *req.CustomSearchQuery
+			}
+			if req.Progress != nil {
+				settings.Progress = *req.Progress
 			}
 
 			if err := server.FileManager.SaveAnimeSettings(id, settings); err != nil {

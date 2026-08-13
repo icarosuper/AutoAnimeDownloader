@@ -87,7 +87,6 @@ export const baseConfig = {
     max_episodes_per_anime: 12,
     episode_retry_limit: 3,
     max_concurrent_downloads: 3,
-    max_batch_episodes: 30,
     max_batch_torrent_size_gb: 0,
     max_episode_torrent_size_gb: 0,
     min_seeders: 1,

@@ -63,11 +63,27 @@ func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.M
 			continue
 		}
 
-		merged = append(merged, *ml)
+		merged = append(merged, *withStandaloneProgress(fileManager, ml))
 		inList[mediaID] = true
 	}
 
 	return merged
+}
+
+// withStandaloneProgress da ao MediaList sintetico do avulso o progresso salvo em AnimeSettings.
+//
+// E a alternativa a um caminho paralelo: com o dado no lugar, shouldSkipEpisode,
+// firstEpisodeToConsider, buildWatchedKeepSet, a poda de assistidos e EpisodesWatched funcionam em
+// avulso sem nenhum "if isStandalone". Falha de leitura vale como progresso 0 — que e o
+// comportamento anterior a este campo.
+func withStandaloneProgress(fm FileManagerInterface, ml *anilist.MediaList) *anilist.MediaList {
+	if ml == nil {
+		return nil
+	}
+	if s, err := fm.LoadAnimeSettings(ml.Media.Id); err == nil && s != nil {
+		ml.Progress = s.Progress
+	}
+	return ml
 }
 
 // DownloadStandaloneAnime baixa os episodios ja no ar de um anime avulso na hora em que ele e
@@ -95,6 +111,7 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 	if anime == nil {
 		return 0, fmt.Errorf("anime %d does not exist on AniList", mediaID)
 	}
+	anime = withStandaloneProgress(fm, anime)
 
 	savedEpisodes, err := fm.LoadSavedEpisodes()
 	if err != nil {

@@ -113,7 +113,7 @@ Defaults to `"dev"` if not injected.
 
 `cmd/daemon/main.go` accepts `--debug-anime <anilistId>`: runs `daemon.RunAnimeDebug` (see `daemon/debug.go`) and exits, skipping the PID file / API server / tray / loop entirely. See [Commands](commands.md) and [Troubleshooting Downloads](troubleshooting-downloads.md).
 
-`RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the `willBatchAnime` limit override, and the per-episode `searchSingleEpisode` fallback when `resolveSearchStrategy` yields no magnet — so the debug pass reports the pipeline the daemon actually runs (see [decisions.md #58](decisions.md)).
+`RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the pack search/selection (`partitionSearchResults` + `pickBatches`) that lifts the per-anime limit when it resolves, and the per-episode `searchSingleEpisode` fallback when no batch/movie/single magnet was found — so the debug pass reports the pipeline the daemon actually runs (see [decisions.md #58](decisions.md)).
 
 `scripts/robustness-animes.txt` (curated media IDs, one per line) + `scripts/debug-batch.sh` (`make debug-batch`) run that pass over the whole list and write a triaged `.debug_batch/report.md`.
 
@@ -131,20 +131,27 @@ Main verification orchestrator. Key functions:
 | `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`) |
 | `processAnimeEpisodes(...)` | Per-anime: monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(...))`, decide download/delete por episódio e executa a estratégia de busca |
 | `firstEpisodeToConsider(anime, savedEpisodes)` | Onde a lista começa: `Progress + 1` (avulso tem progresso 0, logo começa no 1), recuando para o menor episódio já salvo — sem o recuo, um salvo abaixo do progresso não é "checado" e a poda o apagaria ignorando `watched_episodes_to_keep` |
-| `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete)` per episode. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited when the anime will batch |
-| `willBatchAnime(configs, anime)` | Batch eligibility: `FINISHED`, not a movie, known episode count within `max_batch_episodes`. Used both to lift the per-anime limit before the episode loop and to gate Strategy 2 in `resolveSearchStrategy` |
+| `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete)` per episode. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited (`len(episodes)+1`) once a pack was picked for this pass |
+| `selectEpisodes(configs, maxEpisodes, anime, episodes, ...)` | Pure selection loop extracted from `processAnimeEpisodes`: per episode, `(shouldDownload, shouldDelete)`. Runs twice in a pass when a pack covers the window — once with the real limit (produces the deletions), once with it lifted (so pack-covered records aren't pruned) |
+| `effectiveMax(configs, episodes)` | `max_episodes_per_anime` if > 0, else `len(episodes)+1` (the "no ceiling" sentinel) |
+| `windowEnd(configs, firstPending)` | Last episode number packs need to cover this pass: `firstPending + max_episodes_per_anime - 1`, or `math.MaxInt` when the ceiling is off |
+| `partitionSearchResults(configs, results)` | Splits `ScrapNyaaForAnime`'s single mixed list into `(packs, singles)` by `IsBatch`/`Episode != nil`, each filtered by its own size ceiling (`max_batch_torrent_size_gb` / `max_episode_torrent_size_gb`) and `min_seeders` |
+| `pickBatches(results, firstPending, windowEnd)` | Minimum set of packs (already sorted/filtered) that covers `[firstPending, windowEnd]`. Batch eligibility comes from this — the search **result**, not anime metadata |
+| `coveringBatch(results, episode)` | First pack in `results` whose range (`nyaa.ExtractBatchInfo`) contains `episode`; a pack with no parseable range (`EndEpisode == 0`) counts as covering everything |
+| `assignBatches(animeTitle, episodes, batches)` | Gives each episode its own pack's magnet; truncates at the first uncovered episode (prefix cut — the schedule is ascending and picked packs are contiguous from `firstPending`) so nothing falls through to the single-episode fallback |
+| `resolveMovie(configs, anime, animeTitle, episodes, customQuery, searcher)` | Movie path: on a hit, every pending episode (or a synthetic episode 1 if there were none) gets the movie's magnet |
+| `magnetsByEpisode(singles, episodes)` | Single-episode fallback: maps each pending episode to the magnets of Nyaa rows whose parsed episode number matches |
 | `filterBySize(results, maxGB)` | Drops Nyaa results above the GiB ceiling, after priority sorting and preserving order (`search.go`). `maxGB <= 0` = off; `Size == 0` (parse failure) passes |
 | `filterBySeeders(results, minSeeders)` | Drops Nyaa results below the seeders floor, same contract (`search.go`). `minSeeders <= 0` = off; an unparseable seeders column counts as `0` and **is** dropped |
-| `filterSearchResults(results, maxGB, minSeeders)` | The pair above, in the order the four search sites apply them |
+| `filterSearchResults(results, maxGB, minSeeders)` | The pair above, applied at all four call sites: movie, packs, single episodes from the anime search, and the single-episode fallback |
 | `checkDiskSpace(configs)` | `ErrInsufficientDiskSpace` when the library volume is below `min_free_disk_percent` (`helpers.go`). A `statfs` error does **not** block. Guards `attemptDownloadWithRetries` and `addAndPrioritize` — never the verification pass |
 | `shouldSkipEpisode(...)` | Skip if: excluded list, already watched, not yet aired |
 | `handleAlreadySavedEpisode(...)` | Re-download if missing from torrents, delete if over limit |
 | `handleSavedEpisodes(...)` | Post-loop: save new, delete watched, delete torrent files |
 | `attemptDownloadWithRetries(...)` | Tries up to `EpisodeRetryLimit` magnets, returns first hash. Returns `""` with **no** `Add` call and no retry when `checkDiskSpace` blocks |
 | `searchNyaaForSingleEpisode(ep, titles, synonyms, relations, customQuery, totalEpisodes)` | Single ep search — extracts season/part from titles+synonyms, falls back to `ep+offset` (no part filter) if 0 results and PREQUEL has episode count. `totalEpisodes` (from `anilist.LastAiredEpisode`) only drives the zero-padded query variant |
-| `searchNyaaForBatch(titles, synonyms, customQuery)` | Batch search for finished animes (priority 2) |
 | `searchNyaaForMovie(...)` | Movie search (priority 1) |
-| `searchNyaaForMultipleEpisodes(titles, synonyms, episodes, customQuery)` | Multi-episode search for airing animes (priority 3) |
+| `searchNyaaForAnime(titles, synonyms, episodes, customQuery)` | The one search behind pack + episode resolution (priority 2): wraps `nyaa.ScrapNyaaForAnime`, which returns packs and episodes in the **same** list — `partitionSearchResults` is what splits them |
 | `ExtractAnimeSeasonPart(title, synonyms)` | Exported: reads english→romaji→synonyms, returns `(season, part *int)` — first non-nil wins independently |
 | `ComputeEpisodeOffset(relations, part)` | Exported: returns PREQUEL episode count when `part >= 2`; 0 otherwise (gate prevents spurious offsets on non-split seasons) |
 | `RemoveEpisodesWithLinks(fm, backend, librarian, keys []files.EpisodeKey) error` | Deletes episodes: removes library hardlinks + seeding torrents, applying the batch guard (`episodes.go`). Returns an error when the record could not be removed from the JSONL (load/delete failure); freeing disk space is best-effort and only logged |
@@ -159,14 +166,13 @@ Main verification orchestrator. Key functions:
 | `DownloadStandaloneAnime(fm, backend, configs, mediaID) (int, error)` | `Ensure` + `processAnimeEpisodes` + `saveEpisodesToFile` for one anime, nothing else. **Must never call `handleSavedEpisodes`** — with a single anime's episodes in hand and `delete_watched_episodes` on, `identifyEpisodesNotInWatching` would wipe the rest of the library (`standalone.go`, decisions.md) |
 
 **Download priority** (in `processAnimeEpisodes`):
-1. Movie → `searchNyaaForMovie` → `skipSubfolder=true`, epName = animeName
-2. Batch (`willBatchAnime` + >1 ep) → `searchNyaaForBatch` → `skipSubfolder=true`, filtered by `max_batch_torrent_size_gb`
-3. Multiple ep search → `searchNyaaForMultipleEpisodes`, filtered by `max_episode_torrent_size_gb`
-4. Single ep fallback → `searchNyaaForSingleEpisode`, same filter
+1. Movie → `resolveMovie`/`searchNyaaForMovie` → `skipSubfolder=true`, epName = animeName
+2. Packs resolved before the episode loop, covering the window from the first pending episode → `searchNyaaForAnime` + `partitionSearchResults` + `pickBatches`/`assignBatches` → `skipSubfolder=true`, filtered by `max_batch_torrent_size_gb`. Eligibility is decided by the filtered search **result** (size, seeders, covered range), not by anime metadata — see decisions.md
+3. Single ep fallback, per still-uncovered episode → `searchNyaaForSingleEpisode`, filtered by `max_episode_torrent_size_gb`
 
-All four also pass through the `min_seeders` floor (`filterSearchResults`).
+All three also pass through the `min_seeders` floor (`filterSearchResults`).
 
-`max_episodes_per_anime` is lifted whenever `willBatchAnime` holds; if the search then does **not** resolve to a batch (empty result, or the size filter emptied it), `processAnimeEpisodes` cuts `episodesToDownload` back to the limit, keeping the oldest episodes.
+`max_episodes_per_anime` is lifted (`selectEpisodes` re-run with `len(episodes)+1`) only once a pack was actually picked for the pass; if no pack covers the window, the original (limited) selection stands and the oldest episodes are what gets kept.
 
 ### `src/internal/daemon/webui.go`
 
@@ -185,7 +191,7 @@ One-shot diagnostic for a single anime, driven by the `--debug-anime` flag on th
 
 | Symbol | Purpose |
 |--------|---------|
-| `RunAnimeDebug(animeId, configs, fileManager)` | Fetches the anime, logs the raw AniList response, runs `checkEpisode` + `resolveSearchStrategy` (real production functions) against live Nyaa, logs raw vs. matched results per episode. Returns a `*DebugSummary` |
+| `RunAnimeDebug(animeId, configs, fileManager)` | Fetches the anime, logs the raw AniList response, runs `checkEpisode` + the same pack search/selection path (`partitionSearchResults`/`pickBatches`) as production against live Nyaa, logs raw vs. matched results per episode. Returns a `*DebugSummary` |
 | `DebugSummary` / `EpisodeDebugResult` structs | JSON-tagged summary written to `summary.json` — per episode, whether it would be searched and how many magnets were found |
 | `NextDebugDir(baseDir, animeId)` | Returns the next unused `.debug_<animeId>_<N>` directory name inside `baseDir` (scans for existing ones, doesn't create it) |
 | `WriteDebugSummary(dir, summary)` | Marshals `DebugSummary` to `<dir>/summary.json` |
@@ -410,7 +416,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list with synonyms and relations (used by verification loop) |
 | `GetAnimeInfo(mediaId, usernames)` | Fetches one anime by **media** id with full airing schedule, synonyms, and relations, querying each account and collapsing via `DedupeByMedia`. Returns `(nil, nil)` when no account tracks it — a normal state, not an error (used by `/animes/{id}/episodes`, `refreshOrphanAnimes` and `daemon.RunAnimeDebug`) |
 | `SearchMedia(term, includeUnreleased)` | `Page(perPage:20){media(search:...)}` — feeds the add-anime search bar. Not cached: every keystroke is a different key, so the debounce is what limits the volume. With `includeUnreleased=false` (the screen's default) the query gains `status_not: NOT_YET_RELEASED`, appended as a **string**, not passed as a null GraphQL variable — see decisions.md |
-| `GetMediaByID(mediaId)` | Reads one anime by media id **without** going through any account's list — the primitive a standalone anime needs (`GetAnimeInfo` returns nil for it). Returns a **synthetic** `MediaList`: only `Media` filled, `Progress: 0`, `Status: ""`, `Id: 0` — the zeros are part of the contract, since `DedupeByMedia` keeps the LOWEST progress. Same fields as `getMediaListEntry` (synonyms, relations, airing-schedule ids) because `resolveSearchStrategy` depends on them. Cached 60s per id |
+| `GetMediaByID(mediaId)` | Reads one anime by media id **without** going through any account's list — the primitive a standalone anime needs (`GetAnimeInfo` returns nil for it). Returns a **synthetic** `MediaList`: only `Media` filled, `Progress: 0`, `Status: ""`, `Id: 0` — the zeros are part of the contract, since `DedupeByMedia` keeps the LOWEST progress. Same fields as `getMediaListEntry` (synonyms, relations, airing-schedule ids) because the search/selection path (`searchNyaaForAnime`, `searchNyaaForSingleEpisode`) depends on them. Cached 60s per id |
 | `GetMediaListStatus(username, mediaId)` | One account's list status for one media; the bool reports whether that account tracks it at all. Only `allAccountsAgreeOnDelete` uses it — see the delete rule below |
 | `GetMediaIDForEntry(mediaListId)` | Legacy entry id → media id. The only thing left that keys by entry id: `MigrateAnimeIDsToMedia`. Returns 0 when the entry no longer exists |
 | `ErrNotFound` | Sentinel for AniList's 404 — lets a by-id lookup tell "was deleted" from "AniList is down" |
@@ -435,16 +441,16 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `ScrapNyaa(title, episode, season*, part*, totalEpisodes...)` | Scrapes Nyaa for a single episode (adaptive pagination **per query variant**); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil. With `totalEpisodes > 100` it also queries the zero-padded episode (`one piece 001`) — see `episodeQueries` and [decisions.md #56](decisions.md) |
 | `episodeQueries(query, episode, totalEpisodes)` | The episode search queries: plain, plus 3-digit zero-padded on a long series (additional, never a replacement) |
 | `longSeriesEpisodes` const | `100` — threshold above which the padded variant is added |
-| `ScrapNyaaForBatch(title, season*, part*)` | Scrapes for batch (completed anime); hard-filters by part when non-nil |
-| `fetchSearchPages(url, floor, accepted, parse)` | Adaptive pagination shared by all four searches: page 1, then deeper only while `accepted() < floor` and the page had rows, up to `ActiveMaxSearchPages()`. Errors only if page 1 fails |
+| `ScrapNyaaForAnime(title, episodes[], season*, part*)` | The single search behind pack + episode resolution: adaptive pagination, filters by the given episode numbers, and returns packs and episodes in the **same** result list — `IsBatch` on a row marks a pack, `Episode != nil` marks a matched single episode. Replaces the old `ScrapNyaaForBatch`/`ScrapNyaaForMultipleEpisodes` split — `daemon.partitionSearchResults` does the splitting the two separate functions used to do |
+| `fetchSearchPages(url, floor, accepted, parse)` | Adaptive pagination shared by all three searches: page 1, then deeper only while `accepted() < floor` and the page had rows, up to `ActiveMaxSearchPages()`. Errors only if page 1 fails |
 | `parsePagesWith(parseRow)` | Adapts a `parseRow` into the `parse` callback of `fetchSearchPages` (returns the row count of the page) |
 | `enoughCandidates` const | `3` — the accepted-candidate floor that stops the descent |
 | `SetMaxSearchPages(n)` / `ActiveMaxSearchPages()` | Page ceiling from `max_search_pages`, pushed by `files.LoadConfigs`; same atomic+restore pattern as `SetPriorities`. Getter never returns < 1 |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
-| `ScrapNyaaForMultipleEpisodes(title, eps[], season*, part*)` | Scrapes for multiple specific episodes (adaptive pagination); same batch/movie guards as `ScrapNyaa`; hard-filters by season and part when non-nil |
 | `hasMovieMarker(name)` | Explicit movie/OVA/special marker check — the part of `isMovie` safe to use as a guard on episode searches (see [Decisions](decisions.md)) |
 | `ExtractSeason(name)` | Exported: extracts season number from torrent name |
 | `ExtractPart(name)` | Exported: extracts part/cour number from torrent name |
+| `ExtractBatchInfo(name)` | Exported version of `extractBatchInfo`: parses a pack's episode range (`StartEpisode`/`EndEpisode`/`Season`/`IsComplete`) out of the torrent name. `daemon.pickBatches`/`coveringBatch` use it to decide which episodes a pack covers. Guards against reading a resolution tag (`[720-1080p]`) as an episode range — see decisions.md. Contract: `EndEpisode == 0` means "unknown range", and every caller treats that as a complete pack |
 | `GenerateSearchTitleVariants(romaji, english)` | Search query variants: clean romaji → original romaji → clean english → original english |
 | `SortTorrentResults(results)` | Sorts by the episode-relevant subset of `ActivePriorities().CriteriaOrder` (default: uncensored → resolution → health tier → fansub → size) |
 | `SortMovieResults(results)` | Sorts by all of `ActivePriorities().CriteriaOrder` (default: uncensored → source → resolution → health tier → codec → fansub → audio → size) |
@@ -454,7 +460,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `httpGet` var | Swappable HTTP func — overridden in tests via `MockNyaaHttpGet` |
 | `getNyaaBaseURL()` | Reads `NYAA_URL` env or defaults to `https://nyaa.si` |
 
-All four `ScrapNyaa*` functions fetch through `fetchNyaaPage`/`fetchSearchPages` (so every page request is logged), log every parsed row at Debug (`"Raw Nyaa row"`, before any filter) and log the matched torrents alongside the count in their final `"Found ..."` log (`matched_torrents`, via `torrentSummaries`) — used by `daemon.RunAnimeDebug` and manual troubleshooting to see what got filtered out.
+All three `ScrapNyaa*` functions fetch through `fetchNyaaPage`/`fetchSearchPages` (so every page request is logged), log every parsed row at Debug (`"Raw Nyaa row"`, before any filter) and log the matched torrents alongside the count in their final `"Found ..."` log (`matched_torrents`, via `torrentSummaries`) — used by `daemon.RunAnimeDebug` and manual troubleshooting to see what got filtered out.
 
 ### `src/internal/nyaa/priorities.go`
 
