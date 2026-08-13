@@ -62,10 +62,22 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 
 	summary := &DebugSummary{AnimeID: animeId, AnimeName: animeTitle}
 
+	// Espelha processAnimeEpisodes: a lista sintetica (nao os nos crus da agenda) e o teto
+	// desligado em batch. Iterar AiringSchedule.Nodes aqui reportaria um pipeline que o daemon
+	// nao executa — no One Piece, "buscou 1123..1147" quando a producao busca a partir do 1.
+	// savedEpisodes e nil de proposito: o debug ja declara que trata todo episodio como
+	// nao-baixado, e sem ele firstEpisodeToConsider resolve para Progress+1.
+	episodes := anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))
+
+	maxEpisodes := configs.MaxEpisodesPerAnime
+	if willBatchAnime(configs, anime) {
+		maxEpisodes = len(episodes) + 1
+	}
+
 	downloadedEpisodes := 0
 	var episodesToDownload []anilist.AiringNode
-	for _, ep := range anime.Media.AiringSchedule.Nodes {
-		shouldDownload, _ := checkEpisode(configs, configs.MaxEpisodesPerAnime, ep, anime, false, &downloadedEpisodes, false, false)
+	for _, ep := range episodes {
+		shouldDownload, _ := checkEpisode(configs, maxEpisodes, ep, anime, false, &downloadedEpisodes, false, false)
 		summary.Episodes = append(summary.Episodes, EpisodeDebugResult{
 			Episode:     ep.Episode,
 			WouldSearch: shouldDownload,
@@ -87,16 +99,34 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		return summary, nil
 	}
 
-	magnetsForEpisodes := resolveSearchStrategy(configs, anime, animeTitle, episodesToDownload, customQuery, defaultNyaaSearcher())
+	searcher := defaultNyaaSearcher()
+	magnetsForEpisodes := resolveSearchStrategy(configs, anime, animeTitle, episodesToDownload, customQuery, searcher)
+
+	// Tamanho da serie, so para a busca decidir o zero-padding da query do episodio.
+	seriesLength := anilist.LastAiredEpisode(anime)
 
 	magnetsByEpisodeNumber := make(map[int]int, len(episodesToDownload))
 	for _, ep := range episodesToDownload {
 		resolved := magnetsForEpisodes[ep.Episode]
-		magnetsByEpisodeNumber[ep.Episode] = len(resolved.magnets)
+		magnets := resolved.magnets
+
+		// Mesmo fallback do processAnimeEpisodes: a busca multipla nao leva numero de episodio na
+		// query, e numa serie longa as primeiras paginas ordenadas por seeders sao so os episodios
+		// recentes. E searchSingleEpisode que carrega o zero-padding (decisions.md #56). Sem esta
+		// chamada o debug reportava "0 magnets" em One Piece/Naruto por nao ter buscado, e nao por
+		// o Nyaa nao ter.
+		if len(magnets) == 0 {
+			singleResults := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+			for _, tr := range singleResults {
+				magnets = append(magnets, tr.MagnetLink)
+			}
+		}
+
+		magnetsByEpisodeNumber[ep.Episode] = len(magnets)
 		logger.Logger.Info().
 			Str("anime", animeTitle).
 			Int("episode", ep.Episode).
-			Int("magnets_found", len(resolved.magnets)).
+			Int("magnets_found", len(magnets)).
 			Msg("Debug result for episode")
 	}
 

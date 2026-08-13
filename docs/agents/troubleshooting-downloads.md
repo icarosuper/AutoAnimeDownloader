@@ -25,6 +25,8 @@ Output goes to `.debug_<anilistId>_<N>/` in the current directory — nothing is
 
 Comparing `debug.jsonl`'s raw rows against its matched set tells you immediately whether the problem is upstream (Nyaa has nothing for this title/episode) or in filtering (Nyaa has it, but it got rejected — see Step 6 for why).
 
+For a whole population at once, `make debug-batch` runs this same pass over `scripts/robustness-animes.txt` and writes a triaged `.debug_batch/report.md` — start there, and only open the `debug.jsonl` of the animes it flags (see [Commands](commands.md)).
+
 **Known limitations** (logged as a warning at the start of every run): episodes are always treated as not-yet-downloaded (no `episodes.json` / torrent-backend check), and excluded-list membership is never evaluated (the single-anime AniList query doesn't fetch custom-list data). If the anime is being skipped for one of those two reasons, this tool won't show it — fall back to Steps 1-8 below.
 
 ---

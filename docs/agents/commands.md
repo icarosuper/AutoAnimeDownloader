@@ -73,6 +73,21 @@ Output lands in `.debug_<anilistId>_<N>/` in the current directory (`N` incremen
 
 Nothing is written to `~/.autoAnimeDownloader` during a debug run. See [Troubleshooting Downloads](troubleshooting-downloads.md) Step 0 for how to read the output.
 
+## Debugging a batch of animes
+
+`make debug-batch` runs the same pass over the curated list in `scripts/robustness-animes.txt` (one media ID per line, `#` comments) and writes a triaged `.debug_batch/report.md`: a table per anime plus four sections — SUSPEITOS (searched, 0 magnets), NADA BUSCADO (no episode selected), ERROS (non-zero exit), and SEM FONTE BOA NO NYAA. Open a `debug.jsonl` only for the animes the report points at.
+
+That last section is the running list of animes Nyaa serves badly — no magnet at all, or a best matched torrent under `WEAK_SEEDERS` (default 10, `WEAK_SEEDERS=25 make debug-batch` to raise it). Seeders come from the `matched_torrents` log line, so the bar is applied to what survived filtering. It's the input for evaluating alternative torrent sources.
+
+```bash
+make debug-batch                        # live network (AniList + Nyaa), takes minutes, requires jq
+bash scripts/debug-batch.sh --report-only   # re-triage the last run's output, no network
+```
+
+**The IDs must be animes the user does NOT follow.** `resolveAnimeDetails` tries `GetAnimeInfo(id, usernames)` before `GetMediaByID`, so an anime in one of your lists is debugged with its real `Progress` — that measures the normal path, not the standalone-anime path the list exists to exercise.
+
+Not a test suite: live network, no pass/fail, so it never gets a `test-` prefix and never enters `scripts/run-all-tests.sh`. Each run wipes `.debug_batch/` — `cp` the `report.md` first to compare two runs. The run uses the real `~/.autoAnimeDownloader/config.json`, and the report's first line records the values used.
+
 ## CLI Notable Flags
 
 ```bash

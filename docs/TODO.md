@@ -1,12 +1,18 @@
-- Player de vídeo imbutido **+0.1.0**
+- Melhorar consistencia dos downloads no Nyaa **+0.0.0** (dentro da release atual ainda)
+- Fontes alternativas de torrent **+0.1.0**
+	- Fallback pra AnimeTosho quando Nyaa não retorna resultado
+	- Abstrair interface TorrentSource com múltiplas implementações
+- Reportar problemas da última verificação pro usuário **+0.1.0**
+	- @docs/superpowers/specs/2026-08-11-relatorio-ultima-verificacao-design.md
+- Tutorializar primeiro acesso do usuário **+0.1.0**
+	- @docs/superpowers/specs/2026-08-11-primeiros-passos-design.md
+- Player de vídeo no frontend **+0.1.0**
 - Modal com lista para substituir torrent **+0.1.0**
 	- Hoje vc tem que trazer um torrent de fora e inserir no campo
 	- Quero um botão que abre a listagem do nyaa dentro do app
-- Fontes alternativas de torrent — **+0.1.0**
-	- Fallback pra AnimeTosho quando Nyaa não retorna resultado
-	- Abstrair interface TorrentSource com múltiplas implementações
 - Integração Jellyfin/Plex — **+0.1.0**
 	- Trigger de library scan após download concluído
 - Windows — **+0.1.0**
+	- Autenticar app
 	- Instalar ao invés de rodar separado
 	- Dar detach e rodar no background

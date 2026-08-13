@@ -2,7 +2,7 @@
 # Cross-platform builds using Docker
 # Works on Linux, macOS, and WSL (Windows Subsystem for Linux)
 
-.PHONY: build package release clean help dev clear-data debug-anime
+.PHONY: build package release clean help dev clear-data debug-anime debug-batch
 .PHONY: build-linuxamd64 build-linuxarm64 build-windows
 .PHONY: package-linuxamd64 package-linuxarm64 package-windows
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
@@ -62,6 +62,7 @@ help:
 	@echo -e "  $(YELLOW)make dev$(NC)                           - Run dev server (frontend + backend)"
 	@echo -e "  $(YELLOW)make clear-data$(NC)                    - Clear local daemon data files"
 	@echo -e "  $(YELLOW)make debug-anime ID=123$(NC)            - Debug why an anime isn't downloading"
+	@echo -e "  $(YELLOW)make debug-batch$(NC)                   - Debug the curated list (scripts/robustness-animes.txt) → .debug_batch/report.md"
 	@echo ""
 	@echo -e "$(GREEN)Supported platforms:$(NC)"
 	@echo -e "  - $(YELLOW)linuxamd64$(NC)  (Linux AMD64)"
@@ -254,6 +255,11 @@ dev:
 # ID is the AniList MediaList ID (same ID used in /api/v1/animes/{id}/episodes).
 debug-anime:
 	@go run ./src/cmd/daemon --debug-anime $(ID)
+
+# Roda o debug-anime sobre scripts/robustness-animes.txt (rede ao vivo, minutos) e escreve
+# .debug_batch/report.md. Nao e suite: sem pass/fail, por isso nao tem prefixo test-.
+debug-batch:
+	@bash scripts/debug-batch.sh
 
 clear-data:
 	@bash scripts/clear_data.sh

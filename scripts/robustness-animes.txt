@@ -1,0 +1,21 @@
+# Populacao curada para `make debug-batch`: um <mediaId> da AniList por linha.
+# Linhas vazias e as que comecam com # sao ignoradas.
+#
+# RESTRICAO: os IDs precisam ser de animes que VOCE NAO ACOMPANHA. resolveAnimeDetails tenta
+# GetAnimeInfo(id, usernames) ANTES do GetMediaByID — se o anime estiver numa lista sua, o debug
+# usa a entrada real (com o Progress real) e a rodada mede o caminho normal, nao o avulso.
+#
+# Confira os IDs na primeira rodada: o report.md imprime o anime_name que a AniList devolveu,
+# entao um ID trocado aparece com nome que nao bate ou na secao ERROS.
+#
+# O arquivo cresce por uso: todo anime que falhar na vida real vira uma linha aqui.
+
+21      # One Piece — longo + RELEASING: agenda clipada, EpisodeList sintetica, zero-padding
+235     # Detective Conan — idem, serie ainda mais longa
+1735    # Naruto Shippuden — longo + FINISHED acima de max_batch_episodes: um-a-um limitado
+1       # Cowboy Bebop — curto (26) + FINISHED dentro do teto: batch, teto por anime desligado.
+        # Anime velho: agenda vazia na AniList, entao tambem exercita a EpisodeList sintetica
+21519   # Kimi no Na wa — filme: isAnimeMovie, episodio falso, hasMovieMarker
+108465  # Mushoku Tensei — split-cour: ExtractAnimeSeasonPart, offset por PREQUEL
+20594   # Sword Art Online II — sequencia em numeral romano: reRomanSeason
+101922  # Kimetsu no Yaiba — postado como "Demon Slayer": variantes de titulo, Jaccard

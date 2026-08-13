@@ -1006,3 +1006,28 @@ O teto também entra no gatilho da Estratégia 2, não só no limite: sem isso u
 - Buscar as páginas 1..N em paralelo "para ficar mais rápido" (ver (a) e (c)).
 - Trocar o piso por "sempre buscar o teto" (ver (a)).
 - Continuar descendo depois de uma página vazia (ver (b)).
+
+---
+
+### 58. `RunAnimeDebug` espelha `processAnimeEpisodes`: enumeração, teto de batch e fallback single
+
+**Location:** `daemon/debug.go` — `RunAnimeDebug`; espelha `daemon/episodes.go` — `processAnimeEpisodes` (linhas 43, 58-61 e 108-113).
+
+**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, desliga o teto por anime quando `willBatchAnime` é verdadeira, e cai em `searchSingleEpisode` quando o `resolveSearchStrategy` volta sem magnet para um episódio — três trechos duplicados do loop de produção.
+
+**Why it's right:**
+
+**(a) A agenda crua descreve outro pipeline.** No One Piece a página 1 da agenda vai do 1123 ao 1147; a produção enumera 1..1147 e pega os 12 primeiros pelo teto. Iterando os nós crus, o debug reportava ter buscado "1123 a 1147" — nenhum anime de agenda clipada era medido corretamente, e é exatamente a classe que a `EpisodeList` sintética (#52) existe para cobrir.
+
+**(b) A regra batch↔limite nunca era avaliada.** `willBatchAnime` desliga o teto por anime em `processAnimeEpisodes`; sem chamá-la, o debug era cego justamente à regra que a feature de animes avulsos declara como pré-requisito ("um anime de 1100 episódios adicionado a dedo cai no caminho um-a-um limitado").
+
+**(c) Sem o fallback, série longa era falso positivo garantido.** A busca múltipla não leva número de episódio na query (`q=one piece`), e as primeiras páginas ordenadas por seeders são só os episódios recentes — medido: 750 linhas cruas, nenhuma do episódio 1-12. Quem acha o episódio antigo é `searchSingleEpisode`, que carrega o zero-padding (#56). Sem ele o relatório do `debug-batch` marcava One Piece e Naruto Shippuden como "0 magnets" por **não ter buscado**, não por o Nyaa não ter.
+
+**(d) `savedEpisodes = nil` é intencional.** `firstEpisodeToConsider` só usa esse argumento para recuar o início abaixo de `Progress + 1`, e o debug já declara — no `ponytail:` e no `Warn` que emite — que trata todo episódio como não-baixado. Com `nil` resolve para `Progress + 1`, que num avulso é 1.
+
+**Trade-off aceito:** `summary.Episodes` passa a ter uma entrada por episódio enumerado (~1147 no One Piece, a maioria com `would_search: false`), e um FINISHED curto entra em batch, alongando a rodada. É o preço da fidelidade; o `report.md` do `debug-batch` agrega.
+
+**Don't "fix" by:**
+- Voltar a iterar `AiringSchedule.Nodes` "porque é mais simples" — a simplicidade produz um diagnóstico de um pipeline que o daemon não executa.
+- Parar no `resolveSearchStrategy` "porque é a função que decide a estratégia" — ela é só metade da busca; a outra metade é o fallback por episódio.
+- Truncar `summary.Episodes` aos que têm `would_search: true` — a contagem "nada buscado" do relatório depende de ver os dois lados.

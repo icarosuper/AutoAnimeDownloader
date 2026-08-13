@@ -113,6 +113,10 @@ Defaults to `"dev"` if not injected.
 
 `cmd/daemon/main.go` accepts `--debug-anime <anilistId>`: runs `daemon.RunAnimeDebug` (see `daemon/debug.go`) and exits, skipping the PID file / API server / tray / loop entirely. See [Commands](commands.md) and [Troubleshooting Downloads](troubleshooting-downloads.md).
 
+`RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the `willBatchAnime` limit override, and the per-episode `searchSingleEpisode` fallback when `resolveSearchStrategy` yields no magnet — so the debug pass reports the pipeline the daemon actually runs (see [decisions.md #58](decisions.md)).
+
+`scripts/robustness-animes.txt` (curated media IDs, one per line) + `scripts/debug-batch.sh` (`make debug-batch`) run that pass over the whole list and write a triaged `.debug_batch/report.md`.
+
 ---
 
 ## Detailed File Map
