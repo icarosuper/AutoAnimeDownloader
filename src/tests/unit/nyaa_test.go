@@ -1101,6 +1101,9 @@ func TestExtractBatchInfo_ExtractsRangeAndSeason(t *testing.T) {
 		// (reRomanSeason le "X" como S10; fora do escopo desta task).
 		{"[Group] Anime Complete Batch [720-1080p]", 0, 0, 0},
 		{"[Group] Anime Complete Batch", 0, 0, 0},
+		// Faixa invertida: o casamento pega "2 - 01" (temporada + primeiro episodio) e daria
+		// 2..1, uma faixa que nao cobre episodio nenhum.
+		{"[Erai-raws] Hibike! Euphonium 2 - 01 ~ 13 [1080p][Multiple Subtitle]", 0, 0, 2},
 	}
 
 	for _, tc := range cases {

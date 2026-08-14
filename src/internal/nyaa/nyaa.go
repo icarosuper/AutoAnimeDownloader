@@ -141,10 +141,13 @@ func extractBatchInfo(torrentName string) BatchInfo {
 		end := loc[1]
 		isResolution := end < len(torrentName) && strings.ContainsRune("pPiI", rune(torrentName[end]))
 		if !isResolution {
-			if start, err := strconv.Atoi(torrentName[loc[2]:loc[3]]); err == nil {
+			start, errStart := strconv.Atoi(torrentName[loc[2]:loc[3]])
+			last, errEnd := strconv.Atoi(torrentName[loc[4]:loc[5]])
+			// Faixa invertida nao e faixa: em "Hibike! Euphonium 2 - 01 ~ 13" o casamento pega
+			// "2 - 01" (numero da temporada + primeiro episodio) e produz 2..1, que nao cobre
+			// episodio nenhum — o pack sumia de pickBatches e um pack pior era baixado no lugar.
+			if errStart == nil && errEnd == nil && last > start {
 				info.StartEpisode = start
-			}
-			if last, err := strconv.Atoi(torrentName[loc[4]:loc[5]]); err == nil {
 				info.EndEpisode = last
 			}
 		}
