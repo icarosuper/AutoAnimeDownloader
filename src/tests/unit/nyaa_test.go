@@ -1705,3 +1705,78 @@ func TestScrapNyaaForAnime_PaginationFloorCountsBothLists(t *testing.T) {
 		t.Errorf("2 packs + 1 episodio ja atingem o piso: esperava 1 pagina, obteve %d", pages)
 	}
 }
+
+// rowWithSize e o getRow com a celula de tamanho preenchida — o getRow padrao deixa td[3] vazia
+// (Size 0), que e justamente o caso que passa livre pelo teto.
+func rowWithSize(name, size string) string {
+	return strings.Replace(getRow(name), "<td></td>\n\t  <td>"+time.Now().Format("2006-01-02 15:04"),
+		"<td>"+size+"</td>\n\t  <td>"+time.Now().Format("2006-01-02 15:04"), 1)
+}
+
+func pageWithRows(rows ...string) string {
+	return `<!doctype html><html><body><table class="torrent-list"><tbody>` +
+		strings.Join(rows, "\n") + `</tbody></table></body></html>`
+}
+
+// Pack acima de max_batch_torrent_size_gb nao pode contar para o piso de paginacao: era o caso
+// One Piece, onde os packs gigantes das primeiras paginas encerravam a descida e os parciais que
+// cabiam nunca eram vistos.
+func TestScrapNyaaForAnime_OversizedBatchDoesNotStopPagination(t *testing.T) {
+	defer nyaa.SetMaxSearchPages(5)()
+	defer nyaa.SetMaxBatchTorrentSizeGB(100)()
+
+	var urls []string
+	defer mockHttpGetPerURL(func(url string) string {
+		if strings.Contains(url, "&p=2") {
+			return pageWithRows(rowWithSize("[G] One Piece 575-782 [1080p] (Batch)", "61.0 GiB"))
+		}
+		if strings.Contains(url, "&p=") {
+			return pageWithRows()
+		}
+		return pageWithRows(
+			rowWithSize("[G] One Piece 001-1100 [1080p] (Batch)", "587.5 GiB"),
+			rowWithSize("[G] One Piece 001-574 [1080p] (Batch)", "171.8 GiB"),
+			rowWithSize("[G] One Piece 0892-1089 [1080p] (Batch)", "190.3 GiB"),
+		)
+	}, &urls)()
+
+	results, err := nyaa.ScrapNyaaForAnime("One Piece", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
+	}
+	if len(urls) < 2 {
+		t.Fatalf("3 packs gigantes nao podem encerrar a descida: esperava >=2 fetches, obtive %d: %v", len(urls), urls)
+	}
+	if len(results) != 1 {
+		t.Fatalf("esperava so o pack de 61 GiB, obtive %d: %v", len(results), results)
+	}
+	if !strings.Contains(results[0].Name, "575-782") {
+		t.Fatalf("esperava o pack parcial de 61 GiB, obtive %q", results[0].Name)
+	}
+}
+
+// Teto desligado (0) mantem o comportamento antigo: pack gigante entra e conta para o piso.
+func TestScrapNyaaForAnime_BatchSizeCeilingOffKeepsOversizedPacks(t *testing.T) {
+	defer nyaa.SetMaxSearchPages(5)()
+	defer nyaa.SetMaxBatchTorrentSizeGB(0)()
+
+	var urls []string
+	defer mockHttpGetPerURL(func(string) string {
+		return pageWithRows(
+			rowWithSize("[G] One Piece 001-1100 [1080p] (Batch)", "587.5 GiB"),
+			rowWithSize("[G] One Piece 001-574 [1080p] (Batch)", "171.8 GiB"),
+			rowWithSize("[G] One Piece 0892-1089 [1080p] (Batch)", "190.3 GiB"),
+		)
+	}, &urls)()
+
+	results, err := nyaa.ScrapNyaaForAnime("One Piece", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("com o teto desligado os 3 packs entram, obtive %d", len(results))
+	}
+	if len(urls) != 1 {
+		t.Fatalf("3 packs aceitos atingem o piso: esperava 1 fetch, obtive %d", len(urls))
+	}
+}

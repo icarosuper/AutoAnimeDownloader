@@ -266,6 +266,37 @@ func ActiveMaxSearchPages() int {
 	return 1
 }
 
+// maxBatchSizeBytes é o teto de tamanho de pack (config max_batch_torrent_size_gb) em BYTES,
+// empurrado por files.LoadConfigs igual a maxSearchPages. O daemon já descarta pack acima do teto
+// em filterBySize, mas descartar SÓ lá é tarde demais: enoughCandidates conta o que a busca
+// aceitou, então três packs gigantes na página 1 encerram a descida e os packs parciais que
+// caberiam ficam nas páginas seguintes, nunca vistos (One Piece: os packs de 587 GiB / 171 GiB
+// param a busca antes dos de 61 GiB / 20 GiB / 16 GiB). Aplicar o teto aqui mantém o contador
+// honesto — só entra na conta pack que o daemon ainda pode usar.
+//
+// 0 desliga, e é o valor padrão: sem push de config (testes, uso do pacote isolado) o
+// comportamento é o de antes.
+var maxBatchSizeBytes atomic.Int64
+
+// SetMaxBatchTorrentSizeGB aplica o teto de tamanho de pack e devolve uma função que restaura o
+// valor anterior (padrão de SetMaxSearchPages). Valor <= 0 desliga o filtro.
+func SetMaxBatchTorrentSizeGB(gb float64) (restore func()) {
+	prev := maxBatchSizeBytes.Load()
+	if gb <= 0 {
+		maxBatchSizeBytes.Store(0)
+	} else {
+		maxBatchSizeBytes.Store(int64(gb * 1024 * 1024 * 1024))
+	}
+	return func() { maxBatchSizeBytes.Store(prev) }
+}
+
+// batchTooBig informa se o pack estoura o teto em uso. Tamanho 0 (não parseado) passa, mesma
+// regra de daemon.filterBySize — um tamanho que não deu para ler não é motivo para descartar.
+func batchTooBig(size int64) bool {
+	max := maxBatchSizeBytes.Load()
+	return max > 0 && size > 0 && size > max
+}
+
 // fetchSearchPages busca a página 1 de nyaaURL e continua para as seguintes ENQUANTO houver
 // linhas e accepted() estiver abaixo de floor, até ActiveMaxSearchPages().
 //
@@ -641,6 +672,16 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			if requestedPart != nil && (part == nil || *part != *requestedPart) {
 				return
 			}
+			// Pack acima do teto sai aqui e não na filterBySize do daemon: aceitá-lo agora
+			// contaria para enoughCandidates e encerraria a descida antes dos packs parciais
+			// que cabem (ver maxBatchSizeBytes).
+			if batchTooBig(row.Size) {
+				logger.Logger.Debug().
+					Str("torrent", name).
+					Int64("size_bytes", row.Size).
+					Msg("Batch above max_batch_torrent_size_gb, skipping row")
+				return
+			}
 			row.IsBatch = true
 			results = append(results, row)
 			return
@@ -672,11 +713,11 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 		results = append(results, row)
 	}
 
-	// ponytail: o piso de paginacao conta as duas listas somadas. Uma pagina 1 com 3 packs que o
-	// filtro de tamanho depois descarta encerra a descida sem ter juntado episodio solto nenhum,
-	// onde antes a segunda busca desceria por conta propria. A saida, se aparecer, e empurrar os
-	// filtros para dentro do contador — o que exige o nyaa conhecer a config, que e justamente o
-	// que applyNyaaSettings evita.
+	// O piso de paginacao conta as duas listas somadas, entao pack que o daemon vai descartar por
+	// tamanho nao pode entrar na conta — e por isso que o teto de pack chega aqui por push
+	// (maxBatchSizeBytes), do mesmo jeito que max_search_pages. O filtro de seeders continua so
+	// no daemon: ele nao trunca a busca da mesma forma, porque o Nyaa ja devolve ordenado por
+	// seeders desc.
 	if err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow)); err != nil {
 		return nil, err
 	}

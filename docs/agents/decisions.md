@@ -816,7 +816,7 @@ Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos 
 
 **Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo`/`extractBatchInfo` guarda só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080. Outras faixas fantasma (data tipo "2020-2021", bitrate) só entrariam com um sanitizador de tokens, que não se paga hoje: uma faixa desconhecida cai em `EndEpisode == 0`, que todo chamador já trata como pack completo — o mesmo fallback seguro, não uma faixa errada. Upgrade path: se um novo padrão de faixa fantasma aparecer medido, generalizar o sanitizador em vez de empilhar mais um caso especial no `if isResolution`.
 
-**Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. Upgrade path, se aparecer medido: empurrar os filtros de tamanho/seeders para dentro do contador de paginação, o que exige o pacote `nyaa` conhecer `files.Config` — exatamente o que `applyNyaaSettings` (push, não leitura direta) existe para evitar hoje.
+**Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. **RESOLVIDO** (ver #59): apareceu medido, em One Piece. O teto de pack passou a ser empurrado para o pacote `nyaa` por `applyNyaaSettings` — o mesmo mecanismo de push de `SetMaxSearchPages`, e não leitura direta de `files.Config` —, e pack acima do teto sai antes de contar para o piso. O filtro de seeders continua só no daemon: o Nyaa devolve ordenado por seeders desc, então ele não trunca a descida do mesmo jeito.
 
 **Don't "fix" by:**
 - Reintroduzir um teto de contagem de episódios do anime: contagem é proxy ruim de tamanho (ver acima), e o gate de `FINISHED` excluía quem mais precisa de pack.
@@ -1092,3 +1092,38 @@ O `PUT /animes/{id}/settings` usa ponteiros (`*string`/`*int`) e faz merge parci
 - Voltar a iterar `AiringSchedule.Nodes` "porque é mais simples" — a simplicidade produz um diagnóstico de um pipeline que o daemon não executa.
 - Parar na resolução de pack "porque é a etapa que decide a estratégia" — ela é só metade da busca; a outra metade é o fallback por episódio.
 - Truncar `summary.Episodes` aos que têm `would_search: true` — a contagem "nada buscado" do relatório depende de ver os dois lados.
+
+---
+
+### 59. O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon
+
+**Location:** `nyaa/nyaa.go` — `maxBatchSizeBytes`, `SetMaxBatchTorrentSizeGB`, `batchTooBig`, aplicado no `parseRow` de `ScrapNyaaForAnime`; e `daemon/search.go` — `filterBySize`, via `partitionSearchResults`.
+
+**What it looks like:** `max_batch_torrent_size_gb` já é aplicado pelo daemon em `filterBySize`, e mesmo assim o pacote `nyaa` recebe o mesmo teto por push (`applyNyaaSettings`) e descarta a linha do pack antes de acrescentá-la ao resultado. Parece filtro duplicado, e o comentário antigo do `ScrapNyaaForAnime` dizia explicitamente que empurrar filtro para dentro do `nyaa` era o que `applyNyaaSettings` evitava.
+
+**Why it's right:** os dois filtros não fazem a mesma coisa, porque rodam em momentos diferentes do algoritmo. O do daemon decide **o que baixar**. O do `nyaa` decide **até onde descer as páginas** — `fetchSearchPages` para quando `accepted()` alcança `enoughCandidates` (3), e `accepted()` conta o que a busca aceitou. Um pack que o daemon vai descartar por tamanho, mas que a busca aceitou, gasta uma das três vagas do piso e encerra a descida cedo demais.
+
+Medido no Nyaa (agosto/2026, `?q=one+piece&s=seeders&o=desc`, que é exatamente a query montada por `ScrapNyaaForAnime`):
+
+| página | pack | tamanho |
+|---|---|---|
+| 1 | (pack completo) | 587,5 GiB |
+| 1 | `[Judas] One Piece 001-574` | 171,8 GiB |
+| 2 | `[Erai-raws] One Piece 0892~1089` | 190,3 GiB |
+| 2 | (pack completo) | 1,3 TiB |
+| 2 | `[Judas] One Piece 783-1023` | 86,2 GiB |
+| 3 | `[Judas] One Piece 575-782` | 61,0 GiB |
+| 3 | `One Piece S01E1109-E1122` | 20,0 GiB |
+| 3 | `[ToonsHub] One Piece EP1144-EP1155` | 16,6 GiB |
+
+Os três primeiros aceitos são todos gigantes, o piso fecha, e os packs de 86 / 61 / 20 / 16 GiB — que **cabem** no teto padrão de 100 — nunca são vistos. O sintoma reportado era "One Piece nunca baixa porque todos os packs achados passam do teto"; a causa não é o teto ser baixo, é a busca parar antes de achar os que cabem. Subir o teto para 200 esconderia o bug e ainda enfileiraria 171 GiB no lugar de 61 GiB.
+
+O push da config para dentro do `nyaa` não é padrão novo: é o mesmo de `SetPriorities` e `SetMaxSearchPages` (o `nyaa` não pode importar `files` — ciclo —, então a config chega por push). O default é `0` (desligado), então o pacote usado sem push se comporta como antes.
+
+**Trade-off aceito:** o teto de pack aparece em dois lugares e precisa continuar coerente entre eles (mesma regra de `Size == 0` passa livre). O do daemon continua sendo a autoridade — se o push não acontecer, nada vaza para download.
+
+**Don't "fix" by:**
+- Remover o filtro do `nyaa` "porque `filterBySize` já faz isso" — é justamente o que quebra a paginação.
+- Remover o filtro do `daemon` "porque agora o `nyaa` já filtra" — `filterBySize` também cobre `max_episode_torrent_size_gb` e é o que garante o resultado quando a config não foi empurrada (testes, uso direto do pacote).
+- Empurrar também `min_seeders` para o `nyaa` "por simetria" — o Nyaa já devolve ordenado por seeders desc, então o filtro de seeders não trunca a descida do mesmo jeito: os melhores vêm primeiro por construção.
+- Subir `max_batch_torrent_size_gb` como "solução" para série longa — ver acima.

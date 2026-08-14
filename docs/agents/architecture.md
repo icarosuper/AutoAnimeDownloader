@@ -446,6 +446,7 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 | `parsePagesWith(parseRow)` | Adapts a `parseRow` into the `parse` callback of `fetchSearchPages` (returns the row count of the page) |
 | `enoughCandidates` const | `3` — the accepted-candidate floor that stops the descent |
 | `SetMaxSearchPages(n)` / `ActiveMaxSearchPages()` | Page ceiling from `max_search_pages`, pushed by `files.LoadConfigs`; same atomic+restore pattern as `SetPriorities`. Getter never returns < 1 |
+| `SetMaxBatchTorrentSizeGB(gb)` / `batchTooBig(size)` | Pack size ceiling from `max_batch_torrent_size_gb`, pushed by `files.LoadConfigs` (same atomic+restore pattern). `ScrapNyaaForAnime` drops an oversized pack row **before** it counts toward `enoughCandidates`, so giant packs can't end the page descent ahead of the partial packs that fit — see [Decisions](decisions.md) #59. Default `0` (off); `Size == 0` passes, same rule as `daemon.filterBySize` |
 | `ScrapNyaaForMovie(title, isMovie)` | Scrapes for movie — sorted by `SortMovieResults` |
 | `hasMovieMarker(name)` | Explicit movie/OVA/special marker check — the part of `isMovie` safe to use as a guard on episode searches (see [Decisions](decisions.md)) |
 | `ExtractSeason(name)` | Exported: extracts season number from torrent name |

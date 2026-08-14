@@ -170,6 +170,7 @@ type FileManager struct {
 func applyNyaaSettings(config *Config) {
 	nyaa.SetPriorities(config.Priorities)
 	nyaa.SetMaxSearchPages(config.MaxSearchPages)
+	nyaa.SetMaxBatchTorrentSizeGB(config.MaxBatchTorrentSizeGB)
 }
 
 func getDefaultConfig() *Config {
