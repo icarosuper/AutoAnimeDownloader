@@ -2,7 +2,7 @@
 
 **Automatically downloads your anime from your Anilist watching list.**
 
-Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for matching torrents, and downloads them with a built-in BitTorrent client — all unattended, from a single self-contained binary (no external torrent client to install or configure). Includes an embedded Svelte web UI for monitoring and configuration.
+Syncs with [Anilist](https://anilist.co) (one or more accounts — or none at all), scrapes [Nyaa](https://nyaa.si) for matching torrents, and downloads them with a built-in BitTorrent client — all unattended, from a single self-contained binary (no external torrent client to install or configure). Includes an embedded Svelte web UI for monitoring, torrent management and configuration.
 
 [![Build Status](https://github.com/icarosuper/AutoAnimeDownloader/workflows/Build/badge.svg)](https://github.com/icarosuper/AutoAnimeDownloader/actions)
 
@@ -26,9 +26,17 @@ Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for ma
 ## Features
 
 - **Automatic Downloads** — monitors your Anilist watching list and downloads new episodes as they air
+- **Multi-account Anilist** — sync several usernames at once; an episode is only deleted once every account has watched it
+- **Standalone animes** — track anime that is in no Anilist list (search + add from the UI), with manual watch progress. An Anilist account is optional; the app runs fine with none
+- **Batch / season packs** — when the Nyaa search returns a pack that covers what's missing, it downloads the pack instead of episode by episode (capped by a configurable torrent size ceiling)
 - **Embedded BitTorrent client** — downloads and seeds internally (via [rain](https://github.com/cenkalti/rain)); no qBittorrent or other external client required
+- **Download queue** — concurrent-download limit with a queue, manual prioritization, pause/resume/announce/delete per torrent or in bulk
+- **Disk-space guard** — stops adding torrents below a configurable free-space percentage; free/total space shown on the dashboard
+- **Smart torrent picking** — configurable ranking (fansub, resolution, source, codec, audio, health), ignore list, minimum seeders, size ceilings and adaptive Nyaa pagination
 - **Jellyfin-ready library** — completed episodes are hardlinked into your library folder (optionally with Jellyfin naming) while the original keeps seeding
-- **Web UI** — modern browser interface for monitoring, configuration, and control
+- **Webhook notifications** — fire templated webhooks on new episode / download completed / download failed, optionally batched into one message per time window
+- **Manual magnet paste** — bypass the search and hand a magnet link straight to the client, per episode or per anime
+- **Web UI** — monitoring, live torrent management, configuration and logs in the browser
 - **CLI** — command-line interface for scripting and advanced users
 - **Real-time Updates** — WebSocket support for live status in the UI
 - **Self-contained** — frontend and torrent client embedded in the binary, no separate server needed
@@ -42,8 +50,8 @@ Syncs with [Anilist](https://anilist.co), scrapes [Nyaa](https://nyaa.si) for ma
 
 ## Requirements
 
-- **Anilist account** (username only, no password needed)
-- A **completed anime path** (the download/seeding directory is derived from it automatically, so it's the only path you configure)
+- A **completed anime path** — the library folder. It's the only required setting; the download/seeding directory (`<completed_anime_path>/.torrents`) is derived from it, so the two always share a filesystem
+- **Anilist account(s)** (usernames only, no password needed) — *optional*: without one you can still add animes manually as standalone
 
 That's it — the BitTorrent client is built in, so there is no qBittorrent (or any other torrent client) to install or configure.
 
@@ -103,9 +111,13 @@ See [all releases](https://github.com/icarosuper/AutoAnimeDownloader/releases) f
 
 Open **http://localhost:8091** in your browser.
 
-- **Status** — daemon status, start/stop control, force episode check
-- **Episodes** — browse downloaded episodes
-- **Config** — Anilist username, paths, intervals
+- **Status** (`#/`) — daemon status, start/stop, force check, download speed, disk space, and the anime list; click an anime for its episodes and per-episode actions
+- **Add anime** (`#/add`) — search Anilist and track an anime that is in no list
+- **Downloads** (`#/downloads`) — live torrents grouped by anime: pause, resume, re-announce, prioritize, delete (single or bulk)
+- **Config** (`#/config`) — library path, Anilist usernames, download rules, torrent search tuning
+- **Priorities** (`#/priorities`) — fansub/resolution/source/codec/audio ranking and ignore list
+- **Notifications** (`#/notifications`) — webhook presets and test firing
+- **Logs** (`#/logs`) — tail the daemon log with level filter and search
 
 ### CLI
 
@@ -150,29 +162,44 @@ Key settings:
 
 | Setting | Description |
 |---|---|
-| Anilist Username | Your Anilist username |
-| Save Path | Download/seeding working directory |
-| Completed Anime Path | Jellyfin library — required, and must be on the same volume as the Save Path (episodes are hardlinked into it) |
+| Completed Anime Path | Jellyfin library — **the only required setting**. Episodes are hardlinked into it; torrents download and seed in `<path>/.torrents` |
+| Anilist Usernames | One or more Anilist usernames to sync (optional) |
 | Check Interval | How often to check for new episodes (minutes) |
+| Download / Delete Statuses | Which Anilist list statuses (`CURRENT`, `COMPLETED`, …) and media statuses (`RELEASING`, `FINISHED`, …) are eligible for download or auto-deletion |
+| Max Episodes per Anime | Ceiling of kept episodes per anime, and the width of the pack-selection window |
+| Max Concurrent Downloads | How many torrents download at once; the rest wait in the queue |
+| Min Free Disk % | Below this, no new torrent is added |
+| Max Batch / Episode Torrent Size | Size ceilings (GiB) dropping oversized results from the search |
+| Min Seeders / Max Search Pages | Nyaa result floor and how deep the paginated search may go |
+| Rename Files for Jellyfin | Name the library hardlink `Anime Name - E05.mkv` |
+| Notifications | Webhook presets and the batching window |
+
+Full field-by-field reference: [Config Reference](docs/agents/config.md).
 
 ## Troubleshooting
 
 **Daemon won't start**
 - Check if port 8091 is in use: `ss -tlnp | grep 8091`
-- Make sure both the save path and completed anime path are set and on the same volume
+- Make sure the completed anime path is set
 - Check service logs: `systemctl --user status autoanimedownloader`
 
 **Downloaded but nothing shows up in the library**
-- The save path and completed anime path must be on the **same filesystem/volume** — completed episodes are hardlinked, which cannot cross volumes
+- The library filesystem must support hardlinks (exFAT/FAT32 and some SMB shares don't) — the daemon rejects such a path on save
 - Check the logs for `Organize:` messages: `autoanimedownloader logs --search Organize`
 
 **Anime not found on Nyaa**
-- The anime title from Anilist may not match Nyaa's naming — set a custom search title in the anime config
+- The anime title from Anilist may not match Nyaa's naming — set a custom search title in the anime's detail page
 - Relax or adjust the subtitle group / resolution filters
 
 **No torrents matching filters**
-- Check your preferred resolution and subtitle group settings
-- Try leaving filters blank to see if any results come back
+- Check your priority lists (resolution, fansub) and the ignore list on `#/priorities`
+- Lower `min_seeders` or raise the size ceilings — results below/above them are dropped before ranking
+
+**Downloads stuck as "queued"**
+- That's the concurrency limit (`max_concurrent_downloads`); raise it, or prioritize a torrent from the Downloads screen
+
+**Nothing is being added anymore**
+- Free space may be below `min_free_disk_percent` — the dashboard shows a low-disk warning while that's the case
 
 **Frontend not loading**
 - The frontend is embedded — if the daemon is running, the UI should work
