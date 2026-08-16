@@ -171,7 +171,7 @@ Key settings:
 | Min Free Disk % | Below this, no new torrent is added |
 | Max Batch / Episode Torrent Size | Size ceilings (GiB) dropping oversized results from the search |
 | Min Seeders / Max Search Pages | Nyaa result floor and how deep the paginated search may go |
-| Rename Files for Jellyfin | Name the library hardlink `Anime Name - E05.mkv` |
+| Rename files to a standard format | Name the library hardlink `Anime Name - E05.mkv`, batch packs included (useful for Plex/Jellyfin) |
 | Notifications | Webhook presets and the batching window |
 
 Full field-by-field reference: [Config Reference](docs/agents/config.md).

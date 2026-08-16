@@ -186,6 +186,13 @@ func ParseSeeders(seedersStr string) int {
 	return parseSeeders(seedersStr)
 }
 
+// ExtractEpisodeNumber e a versao exportada de extractEpisodeNumber: o Librarian usa os mesmos
+// padroes para tirar o numero do episodio do NOME DO ARQUIVO de dentro de um pack, para renomear
+// os arquivos do pack igual aos baixados avulsos.
+func ExtractEpisodeNumber(name string) *int {
+	return extractEpisodeNumber(name)
+}
+
 // ExtractSeason é uma versão exportável de extractSeason para uso externo ao pacote
 func ExtractSeason(name string) *int {
 	return extractSeason(name)

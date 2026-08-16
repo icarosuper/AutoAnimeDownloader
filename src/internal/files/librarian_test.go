@@ -214,8 +214,8 @@ func TestOrganizeBatchRawNames(t *testing.T) {
 	tmp := t.TempDir()
 	dataDir := filepath.Join(tmp, "save", "batchid")
 	completed := filepath.Join(tmp, "completed")
-	writeFile(t, filepath.Join(dataDir, "Anime - 01.mkv"), "a")
-	writeFile(t, filepath.Join(dataDir, "Anime - 02.mkv"), "b")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 01 [1080p].mkv"), "a")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 02 [1080p].mkv"), "b")
 	writeFile(t, filepath.Join(dataDir, "readme.txt"), "not video")
 
 	lib := NewLibrarian(NewOSFileSystem())
@@ -224,7 +224,7 @@ func TestOrganizeBatchRawNames(t *testing.T) {
 		AnimeName:      "Anime",
 		CompletedPath:  completed,
 		IsBatch:        true,
-		RenameJellyfin: true, // ignored for batch
+		RenameJellyfin: false,
 	})
 	if err != nil {
 		t.Fatalf("Organize: %v", err)
@@ -232,7 +232,7 @@ func TestOrganizeBatchRawNames(t *testing.T) {
 	if len(created) != 2 {
 		t.Fatalf("created = %v, want 2 video links (txt skipped)", created)
 	}
-	for _, name := range []string{"Anime - 01.mkv", "Anime - 02.mkv"} {
+	for _, name := range []string{"[Sub] Anime - 01 [1080p].mkv", "[Sub] Anime - 02 [1080p].mkv"} {
 		p := filepath.Join(completed, "Anime", name)
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("expected raw-named link %s: %v", p, err)
@@ -240,6 +240,83 @@ func TestOrganizeBatchRawNames(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(completed, "Anime", "readme.txt")); err == nil {
 		t.Errorf("non-video file should not be linked")
+	}
+}
+
+// Com a flag ligada, os arquivos do pack ganham o MESMO nome dos baixados avulsos, na mesma
+// pasta do anime. O que nao tem numero legivel (NCOP) e o segundo arquivo que cai no mesmo
+// numero ficam com o nome cru — renomear os dois colidiria e um sobrescreveria o outro.
+func TestOrganizeBatchJellyfinNames(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "batchid")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 01 [1080p].mkv"), "a")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 02 [1080p].mkv"), "b")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 02v2 [1080p].mkv"), "c")
+	writeFile(t, filepath.Join(dataDir, "NCOP.mkv"), "d")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	created, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Anime",
+		CompletedPath:  completed,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	})
+	if err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	if len(created) != 4 {
+		t.Fatalf("created = %v, want 4 links", created)
+	}
+	for _, name := range []string{
+		"Anime - E01.mkv",
+		"Anime - E02.mkv",
+		"[Sub] Anime - 02v2 [1080p].mkv", // colisao com E02: nome cru
+		"NCOP.mkv",                       // sem numero: nome cru
+	} {
+		if _, err := os.Stat(filepath.Join(completed, "Anime", name)); err != nil {
+			t.Errorf("expected link %s: %v", name, err)
+		}
+	}
+}
+
+// Pack e avulso do mesmo anime dividem UMA pasta (destDir sai de AnimeName, nunca do nome do
+// torrent) e, com a flag, o mesmo padrao de nome — entao os episodios se misturam em ordem.
+func TestOrganizeBatchAndSingleShareOneFolder(t *testing.T) {
+	tmp := t.TempDir()
+	completed := filepath.Join(tmp, "completed")
+
+	batchDir := filepath.Join(tmp, "save", "batch")
+	writeFile(t, filepath.Join(batchDir, "[Sub] Anime - 01 [1080p].mkv"), "a")
+	singleDir := filepath.Join(tmp, "save", "single")
+	writeFile(t, filepath.Join(singleDir, "[Other] Anime - 02 [720p].mkv"), "b")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: batchDir, AnimeName: "Anime", CompletedPath: completed,
+		IsBatch: true, RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize batch: %v", err)
+	}
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: singleDir, AnimeName: "Anime", CompletedPath: completed,
+		EpisodeNumber: intPtr(2), RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize single: %v", err)
+	}
+
+	entries, err := os.ReadDir(filepath.Join(completed, "Anime"))
+	if err != nil {
+		t.Fatalf("read library folder: %v", err)
+	}
+	var got []string
+	for _, e := range entries {
+		got = append(got, e.Name())
+	}
+	want := []string{"Anime - E01.mkv", "Anime - E02.mkv"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("library folder = %v, want %v", got, want)
 	}
 }
 

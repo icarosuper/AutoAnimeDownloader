@@ -88,6 +88,41 @@ func TestOrganizeTorrent_SingleEpisode(t *testing.T) {
 	}
 }
 
+// O pack tambem passa RenameFilesForJellyfin adiante: dois episodios no mesmo hash marcam
+// IsBatch, e cada arquivo do pack e renomeado pelo numero lido do proprio nome, na mesma pasta
+// que os avulsos usariam.
+func TestOrganizeTorrent_BatchRenamesEachFile(t *testing.T) {
+	dataDir := t.TempDir()
+	for _, name := range []string{"[Sub] My Anime - 01 [1080p].mkv", "[Sub] My Anime - 02 [1080p].mkv"} {
+		if err := os.WriteFile(filepath.Join(dataDir, name), []byte("video"), 0644); err != nil {
+			t.Fatalf("write video: %v", err)
+		}
+	}
+	completed := t.TempDir()
+	const hash = "0123456789abcdef0123456789abcdef01234567"
+
+	backend := torrents.NewFakeBackend()
+	backend.AddCompleted(hash, dataDir)
+
+	fm := &orchestrationFM{
+		saved: []files.EpisodeStruct{
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 1, IsBatch: true},
+			{EpisodeHash: hash, AnimeName: "My Anime", EpisodeNumber: 2, IsBatch: true},
+		},
+		configs: &files.Config{CompletedAnimePath: completed, RenameFilesForJellyfin: true},
+	}
+
+	if ok := organizeTorrent(hash, backend, files.NewLibrarian(files.NewOSFileSystem()), fm, fm.configs); !ok {
+		t.Fatal("organizeTorrent should succeed")
+	}
+
+	for _, name := range []string{"My Anime - E01.mkv", "My Anime - E02.mkv"} {
+		if _, err := os.Stat(filepath.Join(completed, "My Anime", name)); err != nil {
+			t.Errorf("expected library link %s: %v", name, err)
+		}
+	}
+}
+
 func TestOrganizeTorrent_NotCompletedRetries(t *testing.T) {
 	const hash = "0123456789abcdef0123456789abcdef01234567"
 	backend := torrents.NewFakeBackend()

@@ -2,6 +2,7 @@ package files
 
 import (
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/nyaa"
 
 	"encoding/xml"
 	"fmt"
@@ -16,8 +17,9 @@ import (
 // name pointing at the same bytes, so no space is duplicated.
 type Librarian interface {
 	// Organize creates hardlinks for the completed video files of a torrent in the
-	// library. For a single episode with RenameJellyfin it uses the Jellyfin name
-	// ("Anime - E05.mkv"); for a batch (or without the flag) it keeps the raw filename.
+	// library. With RenameJellyfin it uses the Jellyfin name ("Anime - E05.mkv") — from
+	// the record for a single episode, from each file's own name for a batch; a file
+	// whose number can't be read (and everything without the flag) keeps the raw name.
 	// It returns the absolute paths of the library links it created (or that already
 	// existed) so the caller can record them for later removal. It is idempotent: a
 	// destination that is already the same file (same inode) is reported and skipped.
@@ -47,9 +49,10 @@ type OrganizeRequest struct {
 	// EpisodeNumber is used for the Jellyfin name; required when RenameJellyfin is set
 	// for a single episode.
 	EpisodeNumber *int
-	// IsBatch marks multi-episode/movie torrents: hardlink raw, never Jellyfin-renamed.
+	// IsBatch marks multi-episode/movie torrents: the episode number comes from each
+	// file's own name instead of EpisodeNumber.
 	IsBatch bool
-	// RenameJellyfin enables the "Anime - E05.ext" naming for single episodes.
+	// RenameJellyfin enables the "Anime - E05.ext" naming.
 	RenameJellyfin bool
 }
 
@@ -124,22 +127,33 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		return nil, fmt.Errorf("failed to create library folder %s: %w", destDir, err)
 	}
 
-	// Jellyfin naming only applies to a genuine single episode with one video file.
-	// EpisodeNumber == 0 means "missing data" (AniList numbers episodes from 1), so we
-	// fall back to the raw filename instead of colliding every episode on "Anime - E00".
-	useJellyfin := !req.IsBatch && req.RenameJellyfin && req.EpisodeNumber != nil &&
+	// Jellyfin naming for a genuine single episode with one video file. EpisodeNumber == 0
+	// means "missing data" (AniList numbers episodes from 1), so we fall back to the raw
+	// filename instead of colliding every episode on "Anime - E00".
+	singleJellyfin := !req.IsBatch && req.RenameJellyfin && req.EpisodeNumber != nil &&
 		*req.EpisodeNumber > 0 && len(videoFiles) == 1
 
+	used := make(map[string]bool, len(videoFiles))
 	var created []string
 	for _, rel := range videoFiles {
 		src := filepath.Join(req.TorrentDataDir, rel)
 
-		var destName string
-		if useJellyfin {
+		destName := filepath.Base(rel)
+		switch {
+		case singleJellyfin:
 			destName = jellyfinName(req.AnimeName, *req.EpisodeNumber, filepath.Ext(rel))
-		} else {
-			destName = filepath.Base(rel)
+		case req.IsBatch && req.RenameJellyfin:
+			// Pack: o numero sai do proprio nome do arquivo, para os episodios do pack se
+			// misturarem na pasta com os avulsos em vez de manter o nome cru do fansub.
+			// Sem numero legivel (NCOP/NCED, extra, filme) ou com colisao entre dois
+			// arquivos do mesmo pack, fica o nome cru — que e unico dentro do torrent.
+			if n := nyaa.ExtractEpisodeNumber(destName); n != nil {
+				if jf := jellyfinName(req.AnimeName, *n, filepath.Ext(rel)); !used[jf] {
+					destName = jf
+				}
+			}
 		}
+		used[destName] = true
 		dest := filepath.Join(destDir, destName)
 
 		if destInfo, statErr := o.fs.Stat(dest); statErr == nil {

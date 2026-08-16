@@ -88,7 +88,7 @@ test('each group holds its own fields', async ({ page }) => {
   await page.goto('/#/config')
 
   await expect(page.getByLabel(/completed anime path/i)).toBeVisible()
-  await expect(page.getByLabel(/rename files for jellyfin/i)).toBeVisible()
+  await expect(page.getByLabel(/rename files to a standard format/i)).toBeVisible()
   await expect(page.getByLabel(/min free disk space/i)).toBeVisible()
 
   await openGroup(page, /^anilist$/i)
