@@ -109,7 +109,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		episodesToDownload, magnetsForEpisodes = resolveMovie(configs, anime, animeTitle, episodesToDownload, customQuery, searcher)
 	}
 	if magnetsForEpisodes == nil {
-		packs, singles := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(episodesToDownload), customQuery))
+		packs, singles, _ := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(episodesToDownload), customQuery))
 		if !isAnimeMovie(anime) && len(episodesToDownload) > 1 {
 			firstPending := episodesToDownload[0].Episode
 			if batches := pickBatches(packs, firstPending, windowEnd(configs, firstPending)); len(batches) > 0 {
@@ -135,7 +135,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		// chamada o debug reportava "0 magnets" em One Piece/Naruto por nao ter buscado, e nao por
 		// o Nyaa nao ter.
 		if len(magnets) == 0 {
-			singleResults := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+			singleResults, _ := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 			for _, tr := range singleResults {
 				magnets = append(magnets, tr.MagnetLink)
 			}

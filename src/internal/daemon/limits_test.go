@@ -232,13 +232,16 @@ func TestFilterBySize(t *testing.T) {
 		{Name: "medium", Size: 5 * gib},
 	}
 
-	if got := filterBySize(results, 0); len(got) != 4 {
-		t.Errorf("teto 0 não deve filtrar nada, sobraram %d", len(got))
+	if got, dropped := filterBySize(results, 0); len(got) != 4 || dropped != 0 {
+		t.Errorf("teto 0 não deve filtrar nada, sobraram %d e caíram %d", len(got), dropped)
 	}
 
-	got := filterBySize(results, 10)
+	got, dropped := filterBySize(results, 10)
 	if len(got) != 3 {
 		t.Fatalf("esperava 3 resultados, obteve %d (%+v)", len(got), got)
+	}
+	if dropped != 1 {
+		t.Errorf("esperava 1 descartado por tamanho, obteve %d", dropped)
 	}
 	// Size == 0 fica (parsing quebrado não pode virar paralisação) e a ordem é preservada.
 	want := []string{"small", "unknown", "medium"}
@@ -257,15 +260,18 @@ func TestFilterBySeeders(t *testing.T) {
 		{Name: "weak", Seeders: "3"},
 	}
 
-	if got := filterBySeeders(results, 0); len(got) != 4 {
-		t.Errorf("piso 0 não deve filtrar nada, sobraram %d", len(got))
+	if got, dropped := filterBySeeders(results, 0); len(got) != 4 || dropped != 0 {
+		t.Errorf("piso 0 não deve filtrar nada, sobraram %d e caíram %d", len(got), dropped)
 	}
 
 	// Default: só o literalmente morto sai (e "-" conta como 0).
-	got := filterBySeeders(results, 1)
+	got, dropped := filterBySeeders(results, 1)
 	want := []string{"alive", "weak"}
 	if len(got) != len(want) {
 		t.Fatalf("esperava %d resultados, obteve %d (%+v)", len(want), len(got), got)
+	}
+	if dropped != 2 {
+		t.Errorf("esperava 2 descartados por seeders, obteve %d", dropped)
 	}
 	for i, name := range want {
 		if got[i].Name != name {
@@ -273,9 +279,73 @@ func TestFilterBySeeders(t *testing.T) {
 		}
 	}
 
-	if got := filterBySeeders(results, 5); len(got) != 1 || got[0].Name != "alive" {
+	if got, _ := filterBySeeders(results, 5); len(got) != 1 || got[0].Name != "alive" {
 		t.Errorf("piso 5 deveria sobrar só o alive, obteve %+v", got)
 	}
+}
+
+// TestFilterSearchResults_DropStats: o dropStats e a unica coisa que distingue "o Nyaa nao
+// devolveu nada" de "o filtro cortou tudo", e o relatorio da ultima verificacao depende dessa
+// distincao para nao mentir dizendo "nenhum torrent encontrado" quando havia oito.
+func TestFilterSearchResults_DropStats(t *testing.T) {
+	const gib = int64(1024 * 1024 * 1024)
+
+	t.Run("entrada vazia", func(t *testing.T) {
+		got, stats := filterSearchResults(nil, 3, 1)
+		if len(got) != 0 {
+			t.Errorf("esperava lista vazia, obteve %+v", got)
+		}
+		if stats != (dropStats{}) {
+			t.Errorf("esperava dropStats zerado, obteve %+v", stats)
+		}
+	})
+
+	t.Run("corte só por tamanho", func(t *testing.T) {
+		results := []nyaa.TorrentResult{
+			{Name: "huge-a", Size: 8 * gib, Seeders: "50"},
+			{Name: "huge-b", Size: 9 * gib, Seeders: "40"},
+		}
+		got, stats := filterSearchResults(results, 3, 1)
+		if len(got) != 0 {
+			t.Fatalf("esperava lista vazia, obteve %+v", got)
+		}
+		want := dropStats{Input: 2, BySize: 2, BySeeders: 0}
+		if stats != want {
+			t.Errorf("esperava %+v, obteve %+v", want, stats)
+		}
+	})
+
+	t.Run("corte só por seeders", func(t *testing.T) {
+		results := []nyaa.TorrentResult{
+			{Name: "dead-a", Size: 1 * gib, Seeders: "0"},
+			{Name: "dead-b", Size: 1 * gib, Seeders: "0"},
+			{Name: "dead-c", Size: 1 * gib, Seeders: "0"},
+		}
+		got, stats := filterSearchResults(results, 3, 1)
+		if len(got) != 0 {
+			t.Fatalf("esperava lista vazia, obteve %+v", got)
+		}
+		want := dropStats{Input: 3, BySize: 0, BySeeders: 3}
+		if stats != want {
+			t.Errorf("esperava %+v, obteve %+v", want, stats)
+		}
+	})
+
+	t.Run("corte pelos dois", func(t *testing.T) {
+		results := []nyaa.TorrentResult{
+			{Name: "huge", Size: 8 * gib, Seeders: "50"},
+			{Name: "dead", Size: 1 * gib, Seeders: "0"},
+			{Name: "ok", Size: 1 * gib, Seeders: "50"},
+		}
+		got, stats := filterSearchResults(results, 3, 1)
+		if len(got) != 1 || got[0].Name != "ok" {
+			t.Fatalf("esperava só o ok, obteve %+v", got)
+		}
+		want := dropStats{Input: 3, BySize: 1, BySeeders: 1}
+		if stats != want {
+			t.Errorf("esperava %+v, obteve %+v", want, stats)
+		}
+	})
 }
 
 // --- Guarda de espaço em disco ---
@@ -417,4 +487,96 @@ func TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook(t *testing.T) {
 		t.Errorf("nenhum webhook deveria sair para um torrent já organizado, obteve %q", body)
 	case <-time.After(300 * time.Millisecond):
 	}
+}
+
+// TestProcessAnimeEpisodes_Issues: os motivos saem por processAnimeEpisodes, no mesmo canal que
+// ja devolve newEpisodes/checkedEpisodes/keysToDelete. Nenhum coletor global, nenhum mutex novo.
+func TestProcessAnimeEpisodes_Issues(t *testing.T) {
+	const gib = int64(1024 * 1024 * 1024)
+
+	t.Run("todos os candidatos acima do teto", func(t *testing.T) {
+		anime := animeWithEpisodes(1, anilist.MediaStatusReleasing, true, anilist.MediaFormatTV)
+		configs := &files.Config{
+			CompletedAnimePath:      t.TempDir(),
+			MaxEpisodesPerAnime:     12,
+			EpisodeRetryLimit:       3,
+			MaxEpisodeTorrentSizeGB: 3,
+			MinSeeders:              1,
+		}
+		big := []nyaa.TorrentResult{
+			{Name: "huge-a", Size: 8 * gib, Seeders: "50", MagnetLink: fakeMagnet(8001)},
+			{Name: "huge-b", Size: 9 * gib, Seeders: "40", MagnetLink: fakeMagnet(8002)},
+		}
+		searcher := searcherFor(nil, nil, big, nil)
+
+		result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, "", searcher)
+
+		if len(result.issues) != 1 {
+			t.Fatalf("esperava 1 issue, obteve %d (%+v)", len(result.issues), result.issues)
+		}
+		got := result.issues[0]
+		if got.Code != IssueAllAboveSizeLimit {
+			t.Errorf("esperava %q, obteve %q", IssueAllAboveSizeLimit, got.Code)
+		}
+		if got.Candidates != 2 || got.LimitGB != 3 {
+			t.Errorf("detalhes errados: %+v", got)
+		}
+		if got.AnimeID != anime.Media.Id || got.AnimeName == "" {
+			t.Errorf("identificação do anime faltando: %+v", got)
+		}
+	})
+
+	t.Run("busca vazia vira no_torrent_found", func(t *testing.T) {
+		anime := animeWithEpisodes(1, anilist.MediaStatusReleasing, true, anilist.MediaFormatTV)
+		configs := &files.Config{
+			CompletedAnimePath:  t.TempDir(),
+			MaxEpisodesPerAnime: 12,
+			EpisodeRetryLimit:   3,
+			MinSeeders:          1,
+		}
+		searcher := searcherFor(nil, nil, nil, nil)
+
+		result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, "", searcher)
+
+		if len(result.issues) != 1 || result.issues[0].Code != IssueNoTorrentFound {
+			t.Fatalf("esperava um no_torrent_found, obteve %+v", result.issues)
+		}
+	})
+
+	t.Run("limite por anime com batch sem resultado", func(t *testing.T) {
+		anime := animeWithEpisodes(10, anilist.MediaStatusReleasing, true, anilist.MediaFormatTV)
+		configs := &files.Config{
+			CompletedAnimePath:  t.TempDir(),
+			MaxEpisodesPerAnime: 3,
+			EpisodeRetryLimit:   3,
+			MinSeeders:          1,
+		}
+		singles := make([]nyaa.TorrentResult, 3)
+		for i := range singles {
+			ep := i + 1
+			singles[i] = nyaa.TorrentResult{Name: "ep", Size: gib, Seeders: "50", MagnetLink: fakeMagnet(7000 + i), Episode: &ep}
+		}
+		searcher := searcherFor(nil, singles, nil, nil)
+
+		result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, "", searcher)
+
+		var limit *Issue
+		for i := range result.issues {
+			if result.issues[i].Code == IssueMaxEpisodesPerAnime {
+				limit = &result.issues[i]
+			}
+		}
+		if limit == nil {
+			t.Fatalf("esperava um max_episodes_per_anime, obteve %+v", result.issues)
+		}
+		if limit.Downloaded != 3 || limit.Pending != 7 {
+			t.Errorf("esperava downloaded=3 pending=7, obteve %+v", limit)
+		}
+		if limit.BatchSkipped != BatchSkippedNoResult {
+			t.Errorf("esperava batch_skipped=%q, obteve %q", BatchSkippedNoResult, limit.BatchSkipped)
+		}
+		if len(limit.Episodes) != 0 {
+			t.Errorf("limite não carrega números de episódio, obteve %+v", limit.Episodes)
+		}
+	})
 }

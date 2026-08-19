@@ -16,6 +16,8 @@
     startDaemon,
     stopDaemon,
     getTorrents,
+    getLastCheck,
+    type CheckReport,
     type StatusResponse,
     type AnimeInfo,
     type TorrentInfo,
@@ -36,6 +38,7 @@
   import { filterAnimes, sortAnimes, computeNextCheckIn, type SortKey, type SortDir } from "../lib/utils/status.js";
   import { totalSpeeds } from "../lib/utils/torrents.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
+  import { issueMessage, batchNote } from "../lib/domain/checkIssue.js";
   import {
     formatBytes,
     formatDate as formatDateDomain,
@@ -86,11 +89,16 @@
     staleNote: m.status_stale_note(),
     sortAsc: m.status_sort_asc(),
     sortDesc: m.status_sort_desc(),
+    reportProblems: (count: number) => m.lastcheck_section_problems({ count }),
+    reportLimits: (count: number) => m.lastcheck_section_limits({ count }),
   };
 
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
   let torrents: TorrentInfo[] = [];
+  // Relatório do último passe. Buscado junto do poll de torrents que esta tela já mantém —
+  // é a mesma cadência e o mesmo custo de uma requisição a mais por tick.
+  let lastCheck: CheckReport | null = null;
   let checkInterval = 0;
   // Sem biblioteca configurada não há para onde baixar: o botão de adicionar anime nasce
   // desabilitado em vez de deixar o usuário descobrir isso só no 409 do POST.
@@ -116,6 +124,11 @@
   $: nextCheckIn = status
     ? computeNextCheckIn(status.last_check, checkInterval, status.status, now)
     : null;
+
+  $: hasReport = !!lastCheck && (lastCheck.problems.length > 0 || lastCheck.limits.length > 0);
+  // O erro de passe vence o texto genérico quando existe; o genérico continua sendo o fallback
+  // para o instante entre o has_error chegar e o relatório ser buscado.
+  $: passErrorText = lastCheck?.pass_error || (T && T.errorAlert);
 
   // Servidor manda: disk_low é o mesmo limiar que faz o daemon parar de adicionar torrents.
   $: diskSpaceLow = status?.disk_low ?? false;
@@ -250,16 +263,27 @@
   }
 
   async function loadTorrents() {
-    try {
-      torrents = await getTorrents();
+    // allSettled, não all: uma falha do relatório não pode derrubar o poll de torrents, que é
+    // o que alimenta o sparkline.
+    const [torrentsResult, reportResult] = await Promise.allSettled([
+      getTorrents(),
+      getLastCheck(),
+    ]);
+
+    if (torrentsResult.status === "fulfilled") {
+      torrents = torrentsResult.value;
       torrentsStale = false;
       // spec §8: alimentar o histórico SÓ em poll bem-sucedido. Não existe "repetir a última
       // amostra" — o sparkline congelar é o comportamento correto, fingir stream contínuo não.
       speedHistory.push(totalSpeeds(torrents).download);
       stallTracker.sync(torrents, Date.now());
-    } catch (err) {
+    } else {
       torrentsStale = true;
-      console.error("Failed to load torrents:", err);
+      console.error("Failed to load torrents:", torrentsResult.reason);
+    }
+
+    if (reportResult.status === "fulfilled") {
+      lastCheck = reportResult.value;
     }
   }
 
@@ -497,8 +521,57 @@
         role="alert"
         class="flex items-center gap-2 rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
       >
-        {T && T.errorAlert}
+        {passErrorText}
       </div>
+    {/if}
+
+    <!-- Estado vazio é a regra: passe limpo não renderiza nada. Um card permanente anunciando
+         "0 problemas" deixa de ser lido, e aí o dia em que ele tem conteúdo passa batido. -->
+    {#if hasReport && lastCheck}
+      <!-- Dois blocos, não um: problema é falha (âmbar, mesmo tratamento do aviso do detalhe do
+           anime) e limite é a config funcionando como configurada (neutro). Pintar os dois de
+           urgente diria que ter um teto é um defeito, e o usuário passaria a ignorar a cor. -->
+      <section data-testid="last-check-report" class="space-y-3">
+        {#if lastCheck.problems.length > 0}
+          <div class="rounded-card border border-warn-tint/32 bg-warn-tint/12 p-4.5">
+            <p class="font-mono text-mono-label uppercase text-warn">
+              {T && T.reportProblems(lastCheck.problems.length)}
+            </p>
+            <ul class="mt-2 space-y-1.5">
+              {#each lastCheck.problems as issue (`${issue.anime_id}-${issue.code}`)}
+                <li class="text-copy text-heading">
+                  <span class="font-semibold">{issue.anime_name}</span>
+                  {#if issue.episodes && issue.episodes.length > 0}
+                    <span class="text-subtle">
+                      · {$locale && m.lastcheck_episodes({ episodes: issue.episodes.join(", ") })}
+                    </span>
+                  {/if}
+                  <span class="text-warn">· {issueMessage(issue)}</span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+
+        {#if lastCheck.limits.length > 0}
+          <div class="rounded-card border border-default bg-card p-4.5">
+            <p class="font-mono text-mono-label uppercase text-subtle">
+              {T && T.reportLimits(lastCheck.limits.length)}
+            </p>
+            <ul class="mt-2 space-y-1.5">
+              {#each lastCheck.limits as issue (`${issue.anime_id}-${issue.code}`)}
+                <li class="text-copy text-heading">
+                  <span class="font-semibold">{issue.anime_name}</span>
+                  <span class="text-tertiary">· {issueMessage(issue)}</span>
+                  {#if batchNote(issue)}
+                    <span class="text-subtle">· {batchNote(issue)}</span>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+      </section>
     {/if}
 
     <div class="grid gap-3.5 lg:grid-cols-[1.15fr_1fr]">

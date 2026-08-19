@@ -114,5 +114,8 @@ export async function setupStatusPageMocks(
   await page.route('**/api/v1/animes', route => route.fulfill({ json: animes }))
   await page.route('**/api/v1/config', route => route.fulfill({ json: baseConfig }))
   await page.route('**/api/v1/torrents', route => route.fulfill({ json: makeTorrentsResponse() }))
+  await page.route('**/api/v1/last-check', route => route.fulfill({
+    json: { success: true, data: { finished_at: '0001-01-01T00:00:00Z', pass_error: '', problems: [], limits: [] }, error: null },
+  }))
   await page.route('**/api/v1/ws', route => route.abort())
 }

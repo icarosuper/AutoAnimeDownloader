@@ -73,6 +73,7 @@ Key endpoints:
 | Method | Endpoint | Handler func | File |
 |--------|----------|-------------|------|
 | `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — `StatusResponse` carries `disk_total`, `disk_free` and `disk_low` (free below `min_free_disk_percent`, i.e. the daemon stopped adding torrents; the threshold lives server-side only) |
+| `GET` | `/api/v1/last-check` | `handleLastCheck` | `endpoint_last_check.go` — o relatório do último passe automático: `problems` (o que devia ter baixado e não baixou) e `limits` (a config funcionando como configurada), um `Issue` por par (anime, código), ordenado por `anime_name`. `pass_error` é `State.GetLastCheckError()`, e quando ele existe as duas listas estão vazias (`SetLastCheckError` limpa o relatório). Só memória: um passe limpo devolve listas vazias e um `finished_at` zero significa que o daemon ainda não completou um passe. Download manual fica fora — aquele caminho já devolve o erro na própria resposta HTTP |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
 | `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` — `AnimeInfo.is_standalone` marks animes tracked via `standalone_animes` |
@@ -131,19 +132,19 @@ Main verification orchestrator. Key functions:
 | `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`) |
 | `processAnimeEpisodes(...)` | Per-anime: monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(...))`, decide download/delete por episódio e executa a estratégia de busca |
 | `firstEpisodeToConsider(anime, savedEpisodes)` | Onde a lista começa: `Progress + 1` (avulso tem progresso 0, logo começa no 1), recuando para o menor episódio já salvo — sem o recuo, um salvo abaixo do progresso não é "checado" e a poda o apagaria ignorando `watched_episodes_to_keep` |
-| `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete)` per episode. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited (`len(episodes)+1`) once a pack was picked for this pass |
-| `selectEpisodes(configs, maxEpisodes, anime, episodes, ...)` | Pure selection loop extracted from `processAnimeEpisodes`: per episode, `(shouldDownload, shouldDelete)`. Runs twice in a pass when a pack covers the window — once with the real limit (produces the deletions), once with it lifted (so pack-covered records aren't pruned) |
+| `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete, skipCode)` per episode — `skipCode` é `IssueMaxEpisodesPerAnime` quando o limite por anime barrou o episódio e `""` em todo skip normal. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited (`len(episodes)+1`) once a pack was picked for this pass |
+| `selectEpisodes(configs, maxEpisodes, anime, episodes, ...)` | Pure selection loop extracted from `processAnimeEpisodes`: per episode, `(shouldDownload, shouldDelete, skipCode)`. Runs twice in a pass when a pack covers the window — once with the real limit (produces the deletions), once with it lifted (so pack-covered records aren't pruned). O `episodeSelection` devolvido carrega também `downloaded`/`limitSkipped`, o par de que o `Issue` de `max_episodes_per_anime` é montado — vem do resultado FINAL, então na segunda passada (limite levantado) `limitSkipped` é zero, que é o certo |
 | `effectiveMax(configs, episodes)` | `max_episodes_per_anime` if > 0, else `len(episodes)+1` (the "no ceiling" sentinel) |
 | `windowEnd(configs, firstPending)` | Last episode number packs need to cover this pass: `firstPending + max_episodes_per_anime - 1`, or `math.MaxInt` when the ceiling is off |
-| `partitionSearchResults(configs, results)` | Splits `ScrapNyaaForAnime`'s single mixed list into `(packs, singles)` by `IsBatch`/`Episode != nil`, each filtered by its own size ceiling (`max_batch_torrent_size_gb` / `max_episode_torrent_size_gb`) and `min_seeders` |
+| `partitionSearchResults(configs, results)` | Splits `ScrapNyaaForAnime`'s single mixed list into `(packs, singles, packStats)` by `IsBatch`/`Episode != nil`, each filtered by its own size ceiling (`max_batch_torrent_size_gb` / `max_episode_torrent_size_gb`) and `min_seeders`. `packStats` (`dropStats`) descreve o que o filtro fez com as linhas de PACK e só com elas — é o que distingue "a busca não devolveu pack nenhum" de "o teto cortou todos" |
 | `pickBatches(results, firstPending, windowEnd)` | Minimum set of packs (already sorted/filtered) that covers `[firstPending, windowEnd]`. Batch eligibility comes from this — the search **result**, not anime metadata |
 | `coveringBatch(results, episode)` | First pack in `results` whose range (`nyaa.ExtractBatchInfo`) contains `episode`; a pack with no parseable range (`EndEpisode == 0`) counts as covering everything |
 | `assignBatches(animeTitle, episodes, batches)` | Gives each episode its own pack's magnet; truncates at the first uncovered episode (prefix cut — the schedule is ascending and picked packs are contiguous from `firstPending`) so nothing falls through to the single-episode fallback |
 | `resolveMovie(configs, anime, animeTitle, episodes, customQuery, searcher)` | Movie path: on a hit, every pending episode (or a synthetic episode 1 if there were none) gets the movie's magnet |
 | `magnetsByEpisode(singles, episodes)` | Single-episode fallback: maps each pending episode to the magnets of Nyaa rows whose parsed episode number matches |
-| `filterBySize(results, maxGB)` | Drops Nyaa results above the GiB ceiling, after priority sorting and preserving order (`search.go`). `maxGB <= 0` = off; `Size == 0` (parse failure) passes |
-| `filterBySeeders(results, minSeeders)` | Drops Nyaa results below the seeders floor, same contract (`search.go`). `minSeeders <= 0` = off; an unparseable seeders column counts as `0` and **is** dropped |
-| `filterSearchResults(results, maxGB, minSeeders)` | The pair above, applied at all four call sites: movie, packs, single episodes from the anime search, and the single-episode fallback |
+| `filterBySize(results, maxGB)` | Devolve `([]nyaa.TorrentResult, int)` — o `int` é quantos descartou. Drops Nyaa results above the GiB ceiling, after priority sorting and preserving order (`search.go`). `maxGB <= 0` = off; `Size == 0` (parse failure) passes |
+| `filterBySeeders(results, minSeeders)` | Devolve `([]nyaa.TorrentResult, int)`, mesmo contrato. Drops Nyaa results below the seeders floor, same contract (`search.go`). `minSeeders <= 0` = off; an unparseable seeders column counts as `0` and **is** dropped |
+| `filterSearchResults(results, maxGB, minSeeders)` | The pair above, applied at all four call sites: movie, packs, single episodes from the anime search, and the single-episode fallback. Devolve `([]nyaa.TorrentResult, dropStats)`: é o que distingue "o Nyaa não devolveu nada" de "o filtro cortou tudo" |
 | `checkDiskSpace(configs)` | `ErrInsufficientDiskSpace` when the library volume is below `min_free_disk_percent` (`helpers.go`). A `statfs` error does **not** block. Guards `attemptDownloadWithRetries` and `addAndPrioritize` — never the verification pass |
 | `shouldSkipEpisode(...)` | Skip if: excluded list, already watched, not yet aired |
 | `handleAlreadySavedEpisode(...)` | Re-download if missing from torrents, delete if over limit |
@@ -238,6 +239,13 @@ One-time, idempotent migration off the legacy `save_path` field. See decisions.m
 
 Called from `cmd/daemon/main.go` (boot, before the verification loop starts) and from the top of `AnimeVerification` (`verification.go`) on every pass, before the hardlink probe. `verification.go` reloads the config immediately after calling it, since migration persists a changed config that the rest of the pass must see.
 
+### `src/internal/daemon/report.go`
+
+- `Issue` / `CheckReport` — os tipos do relatório da última verificação, serializados direto pelo endpoint `/last-check`. Campos de detalhe achatados com `omitempty` (nunca um `map[string]any`: não gera Swagger nem tipo TS utilizável).
+- Códigos: `IssueAllAboveSizeLimit`, `IssueNoSeeders`, `IssueNoTorrentFound`, `IssueDiskFull`, `IssueTorrentRejected` (problemas) e `IssueMaxEpisodesPerAnime` (limite). `BatchSkippedNoResult` / `BatchSkippedAboveSizeLimit` / `BatchSkippedNoCoverage` são detalhe do limite, não códigos.
+- `searchIssue(...)` — a cascata de precedência dos três problemas de busca (ver decisions.md #60).
+- `aggregateIssues(raw)` — um `Issue` por par (anime, código), separado em problemas e limites, ordenado por `AnimeName`.
+
 ### `src/internal/daemon/state.go`
 
 Thread-safe daemon state. Key types:
@@ -245,7 +253,9 @@ Thread-safe daemon state. Key types:
 | Symbol | Purpose |
 |--------|---------|
 | `Status` (string enum) | `stopped` / `running` / `checking` |
-| `State` struct | Holds `status`, `lastCheck`, `lastCheckError`, notifier |
+| `State` struct | Holds `status`, `lastCheck`, `lastCheckError`, `lastCheckReport`, notifier |
+| `SetLastCheckReport(CheckReport)` / `GetLastCheckReport() CheckReport` | O relatório do último passe, em memória. `GetLastCheckReport` devolve **valor**, para o handler poder preencher `pass_error` sem escrever no objeto compartilhado |
+| `SetLastCheckError(err)` | **Limpa** `lastCheckReport`. Consequência: `SetLastCheckReport` tem de ser chamado depois do `SetLastCheckError(nil)` do fim do passe (ver decisions.md #61) |
 | `StateNotifier` interface | `NotifyStateChange(status, lastCheck, hasError)` — WebSocket subscribes |
 | `State.GetAll()` | Returns `(status, lastCheck, hasError)` atomically |
 | `State.SetStatus(s)` | Sets status and fires notifier if changed |

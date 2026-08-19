@@ -22,10 +22,12 @@
     updateAnimeSettings,
     removeStandaloneAnime,
     deleteTorrent,
+    getLastCheck,
     type AnimeDetailResponse,
     type AnimeEpisodeInfo,
     type AnimeInfo,
     type TorrentInfo,
+    type Issue,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
@@ -44,6 +46,7 @@
   import { statusLabel } from "../lib/utils/torrentStatus.js";
   import { episodeActions, type Action, type EpisodeActionId } from "../lib/domain/episodeActions.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
+  import { issueMessage, batchNote } from "../lib/domain/checkIssue.js";
   import {
     formatDate as formatDateDomain,
     formatEta,
@@ -118,6 +121,15 @@
   // this is accessory data (mirrors the best-effort join the backend already does in
   // handleTorrents), so the page must never break because of it.
   let torrents: TorrentInfo[] = [];
+  // Só as entradas deste anime. Mesma chamada do Status, filtrada por anime_id: um endpoint com
+  // dois consumidores em vez da mesma informação espalhada por três formas que precisariam
+  // concordar entre si.
+  let animeIssues: Issue[] = [];
+  // Só problema marca episódio: limite não tem "episódios afetados" (o daemon parou de
+  // considerar episódios ao atingir a conta).
+  $: issueByEpisode = new Map<number, Issue>(
+    animeIssues.flatMap((i) => (i.episodes ?? []).map((n) => [n, i] as [number, Issue])),
+  );
   let torrentPollTimer: ReturnType<typeof setTimeout> | null = null;
   let torrentPollStarted = false;
   let torrentPollAnimeId: number | null = null;
@@ -213,11 +225,14 @@
   }
 
   /** Nota secundária sob o título: flags do episódio, na forma de frase, não de ícone mudo. */
-  function episodeNotes(ep: AnimeEpisodeInfo): string {
+  function episodeNotes(ep: AnimeEpisodeInfo, issue: Issue | undefined): string {
     const notes: string[] = [];
     if (ep.is_watched) notes.push(m.detail_badge_watched());
     if (ep.is_manually_managed) notes.push(m.detail_flag_no_delete_short());
     if (ep.is_blocked) notes.push(m.detail_flag_no_download_short());
+    // A marca do relatório vai na mesma linha das outras notas: é uma frase curta, não um
+    // estado ao vivo — deriveAnimeChip fica fora disto de propósito (ver decisions.md).
+    if (issue) notes.push(m.detail_lastcheck_episode_note());
     return notes.join(" · ");
   }
 
@@ -330,7 +345,7 @@
         torrent,
         inFlight: !!torrent && !torrent.completed,
         chip: episodeChip(ep, torrent),
-        notes: episodeNotes(ep),
+        notes: episodeNotes(ep, issueByEpisode.get(ep.episode_number)),
         meta: episodeMeta(ep, torrent),
         principal: actions.principal,
         menu: menuItems(actions.menu),
@@ -342,7 +357,7 @@
     return out;
   }
 
-  $: rows = $locale && buildRows(allEpisodes, torrentsByEpisode);
+  $: rows = $locale && issueByEpisode && buildRows(allEpisodes, torrentsByEpisode);
 
   // Ação da linha de grupo: só "Excluir", pelo DELETE /torrents/{hash}, que já remove o torrent e
   // TODOS os registros do grupo como unidade. Nem "Rebaixar" (seria alias de Excluir, já que o
@@ -590,13 +605,30 @@
   // torrent, 15s otherwise. Re-scheduled (not a bare setInterval) so the delay can change
   // between ticks without ever running two timers at once.
   async function pollTorrents() {
+    // allSettled pelo mesmo motivo do Status: uma falha do relatório não pode derrubar o poll
+    // de torrents (nem o reagendamento dele).
+    const [torrentsResult, reportResult] = await Promise.allSettled([
+      getTorrents(),
+      getLastCheck(),
+    ]);
+
+    // O finally continua sendo o que garante o reagendamento: allSettled nunca rejeita, mas
+    // stallTracker.sync pode lançar, e sem o finally o poll pararia de vez em vez de se
+    // recuperar no tick seguinte.
     try {
-      torrents = await getTorrents();
-      lastPollAt = Date.now();
-      stallTracker.sync(torrents, lastPollAt);
-    } catch (err) {
-      // Best-effort accessory data — no toast, keep the last known snapshot.
-      console.error("Failed to load torrents:", err);
+      if (torrentsResult.status === "fulfilled") {
+        torrents = torrentsResult.value;
+        lastPollAt = Date.now();
+        stallTracker.sync(torrents, lastPollAt);
+      } else {
+        // Best-effort accessory data — no toast, keep the last known snapshot.
+        console.error("Failed to load torrents:", torrentsResult.reason);
+      }
+
+      if (reportResult.status === "fulfilled") {
+        const report = reportResult.value;
+        animeIssues = [...report.problems, ...report.limits].filter((i) => i.anime_id === animeId);
+      }
     } finally {
       scheduleNextTorrentPoll();
     }
@@ -938,6 +970,23 @@
           <Button variant="ghost" on:click={() => (selectedEpisodes = new Set())}>
             {$locale && m.detail_bulk_deselect_all()}
           </Button>
+        </div>
+      {/if}
+
+      {#if animeIssues.length > 0}
+        <div
+          data-testid="anime-last-check"
+          role="status"
+          class="mb-3 rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
+        >
+          <p>{$locale && m.detail_lastcheck_notice()}</p>
+          <ul class="mt-1 space-y-1 text-caption">
+            {#each animeIssues as issue (issue.code)}
+              <li>
+                {issueMessage(issue)}{#if batchNote(issue)} · {batchNote(issue)}{/if}
+              </li>
+            {/each}
+          </ul>
         </div>
       {/if}
 

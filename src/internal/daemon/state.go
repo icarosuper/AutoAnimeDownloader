@@ -24,6 +24,12 @@ type State struct {
 
 	lastCheck      time.Time
 	lastCheckError error
+	// lastCheckReport e o relatorio do ULTIMO passe. So memoria: createStartFunc chama
+	// AnimeVerification imediatamente ao iniciar (loop.go, antes do primeiro time.After),
+	// entao apos um restart ele se reconstroi em segundos. Um arquivo custaria persistencia,
+	// migracao e a possibilidade de mostrar um relatorio de dias atras como se fosse do ultimo
+	// passe.
+	lastCheckReport CheckReport
 
 	notifier StateNotifier
 }
@@ -92,6 +98,12 @@ func (s *State) GetLastCheckError() error {
 func (s *State) SetLastCheckError(err error) {
 	s.mu.Lock()
 	s.lastCheckError = err
+	// Limpar aqui, e nao em cada saida antecipada: as sete saidas de AnimeVerification ja
+	// chamam esta funcao, entao nenhuma delas precisa de linha nova. E a semantica e a certa —
+	// um passe que abortou antes de olhar anime nenhum nao tem relatorio por anime, tem
+	// pass_error. Consequencia deliberada: SetLastCheckError(nil) no fim do passe tambem limpa,
+	// entao SetLastCheckReport TEM de vir depois dele (ver AnimeVerification e decisions.md).
+	s.lastCheckReport = CheckReport{}
 	notifier := s.notifier
 	statusSnapshot, lastCheckSnapshot, hasErrorSnapshot := s.notifyChange()
 	s.mu.Unlock()
@@ -111,4 +123,19 @@ func (s *State) GetAll() (status Status, lastCheck time.Time, hasError bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.status, s.lastCheck, s.lastCheckError != nil
+}
+
+func (s *State) SetLastCheckReport(r CheckReport) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastCheckReport = r
+}
+
+// GetLastCheckReport devolve VALOR, nao ponteiro: o handler precisa preencher pass_error na
+// resposta sem escrever no objeto compartilhado. As slices continuam sendo as mesmas, e isso e
+// seguro porque um CheckReport publicado nunca e mutado — o passe seguinte publica um novo.
+func (s *State) GetLastCheckReport() CheckReport {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastCheckReport
 }

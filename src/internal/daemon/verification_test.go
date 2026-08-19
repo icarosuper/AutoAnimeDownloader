@@ -1,15 +1,19 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/nyaa"
+	"AutoAnimeDownloader/src/internal/torrents"
 )
 
 func TestSearchAnilist_FiltersByMediaStatus(t *testing.T) {
@@ -212,5 +216,105 @@ func TestDeletableMediaIDs_OnlyConsidersAnimesOnDisk(t *testing.T) {
 
 	if len(got) != 0 {
 		t.Errorf("esperava nenhum candidato sem episodios em disco, veio %v", got)
+	}
+}
+
+// reportPassAniList mocks AniList with one releasing anime whose episode 1 already aired, so a
+// full pass has exactly one episode to look for.
+func reportPassAniList(t *testing.T) {
+	t.Helper()
+	const body = `{"data": {"Page": {"mediaList": [
+		{"id": 1, "status": "CURRENT", "progress": 0, "customLists": {}, "media": {
+			"id": 900, "format": "TV", "status": "RELEASING", "episodes": 12,
+			"title": {"english": "Report Anime", "romaji": "Report Anime"},
+			"synonyms": [], "relations": {"edges": []},
+			"airingSchedule": {"nodes": [{"id": 1, "episode": 1, "timeUntilAiring": -100, "airingAt": 1}]}
+		}}
+	]}}}`
+	restore := anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	t.Cleanup(restore)
+}
+
+// emptyNyaa makes every Nyaa page come back with no rows, so the pass finds no torrent.
+func emptyNyaa(t *testing.T) {
+	t.Helper()
+	restore := nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(strings.NewReader(`<html><body><table class="torrent-list"><tbody></tbody></table></body></html>`)),
+			Header:     make(http.Header),
+		}, nil
+	})
+	t.Cleanup(restore)
+}
+
+func reportPassConfig(t *testing.T) *files.Config {
+	t.Helper()
+	base := t.TempDir()
+	return &files.Config{
+		AnilistUsernames:      []string{"tester"},
+		SavePath:              base + "/downloads",
+		CompletedAnimePath:    base + "/library",
+		CheckInterval:         10,
+		DownloadStatuses:      []string{"CURRENT"},
+		DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+		MaxEpisodesPerAnime:   12,
+		EpisodeRetryLimit:     1,
+		MinSeeders:            1,
+	}
+}
+
+// TestAnimeVerification_PublishesReport: o relatorio e publicado DEPOIS do SetLastCheckError(nil)
+// do fim do passe. Se a ordem inverter, SetLastCheckError limpa o que acabou de ser publicado e
+// o relatorio nunca aparece — que e o unico jeito de esta feature falhar silenciosamente.
+func TestAnimeVerification_PublishesReport(t *testing.T) {
+	reportPassAniList(t)
+	emptyNyaa(t)
+
+	fm := &lifecycleFM{configs: reportPassConfig(t)}
+	state := NewState()
+
+	AnimeVerification(context.Background(), fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
+
+	report := state.GetLastCheckReport()
+	if report.FinishedAt.IsZero() {
+		t.Fatal("o passe completo deve publicar um relatório com finished_at preenchido")
+	}
+	if len(report.Problems) == 0 {
+		t.Fatalf("esperava ao menos um problema, obteve %+v", report)
+	}
+	if report.Problems[0].Code != IssueNoTorrentFound {
+		t.Errorf("esperava %q, obteve %q", IssueNoTorrentFound, report.Problems[0].Code)
+	}
+}
+
+// TestAnimeVerification_CancelledLeavesNoReport: passe interrompido nao deixa relatorio — ele
+// estava incompleto, e um relatorio parcial diria "so este anime teve problema" quando os outros
+// nem chegaram a ser olhados.
+func TestAnimeVerification_CancelledLeavesNoReport(t *testing.T) {
+	reportPassAniList(t)
+	emptyNyaa(t)
+
+	fm := &lifecycleFM{configs: reportPassConfig(t)}
+	state := NewState()
+	// Semear o relatorio do passe ANTERIOR: sem isso o teste passaria com o State recem-criado
+	// mesmo se a limpeza inteira fosse apagada, porque um State novo ja nasce com o relatorio
+	// zerado. O que precisa ser travado e que o passe interrompido NAO deixa o relatorio velho
+	// na tela.
+	state.SetLastCheckReport(CheckReport{
+		FinishedAt: time.Now(),
+		Problems:   []Issue{{AnimeID: 1, AnimeName: "Anterior", Code: IssueNoTorrentFound}},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	AnimeVerification(ctx, fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
+
+	report := state.GetLastCheckReport()
+	if !report.FinishedAt.IsZero() || len(report.Problems) != 0 || len(report.Limits) != 0 {
+		t.Errorf("passe cancelado não deve deixar relatório, obteve %+v", report)
 	}
 }

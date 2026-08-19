@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import AnimeDetail from '../../src/routes/AnimeDetail.svelte'
@@ -19,7 +19,17 @@ vi.mock('../../src/lib/api/client.js', () => ({
   replaceAnimeWithMagnet: vi.fn(),
   updateAnimeSettings: vi.fn(),
   removeStandaloneAnime: vi.fn(),
+  getLastCheck: vi.fn(),
 }))
+
+// O relatório da última verificação é buscado no mesmo tick do poll de torrents; um relatório
+// vazio é o default de todos os testes que não são sobre ele.
+beforeEach(() => {
+  vi.mocked(client.getLastCheck).mockResolvedValue({
+    finished_at: '0001-01-01T00:00:00Z', pass_error: '', problems: [], limits: [],
+  })
+})
+
 
 function animeInfo(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
   return {

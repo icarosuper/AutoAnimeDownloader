@@ -929,6 +929,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/last-check": {
+            "get": {
+                "description": "Returns why the last automatic pass did not download episodes, aggregated per anime. ` + "`" + `problems` + "`" + ` are things that should have downloaded and did not; ` + "`" + `limits` + "`" + ` are the configuration working as configured. ` + "`" + `pass_error` + "`" + ` is non-empty when the pass itself aborted, and then both lists are empty. A clean pass answers 200 with two empty lists; a ` + "`" + `finished_at` + "`" + ` of zero means the daemon has not completed a pass yet. Manual downloads are out of scope — those report their failure in their own HTTP response.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "status"
+                ],
+                "summary": "Get the last verification report",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/api.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/daemon.CheckReport"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/logs": {
             "get": {
                 "description": "Returns the last N lines from the daemon log file",
@@ -1912,6 +1953,79 @@ const docTemplate = `{
                 },
                 "progress": {
                     "type": "integer"
+                }
+            }
+        },
+        "daemon.CheckReport": {
+            "type": "object",
+            "properties": {
+                "finished_at": {
+                    "type": "string",
+                    "example": "2026-08-19T12:00:00Z"
+                },
+                "limits": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/daemon.Issue"
+                    }
+                },
+                "pass_error": {
+                    "type": "string",
+                    "example": ""
+                },
+                "problems": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/daemon.Issue"
+                    }
+                }
+            }
+        },
+        "daemon.Issue": {
+            "type": "object",
+            "properties": {
+                "anime_id": {
+                    "type": "integer",
+                    "example": 269
+                },
+                "anime_name": {
+                    "type": "string",
+                    "example": "Bleach"
+                },
+                "batch_skipped": {
+                    "type": "string",
+                    "example": "no_result"
+                },
+                "candidates": {
+                    "type": "integer",
+                    "example": 8
+                },
+                "code": {
+                    "type": "string",
+                    "example": "all_above_size_limit"
+                },
+                "downloaded": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "episodes": {
+                    "description": "Episodes so e preenchido em PROBLEMA: um problema acontece num episodio (ele foi buscado,\nos candidatos foram avaliados, aquele episodio nao baixou). O limite e o contrario — o\ndaemon parou de considerar episodios ao atingir a conta, entao nao existe \"os episodios\nafetados\", existe uma quantidade que sobrou (Downloaded/Pending).",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "limit_gb": {
+                    "type": "number",
+                    "example": 3
+                },
+                "min_seeders": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "pending": {
+                    "type": "integer",
+                    "example": 35
                 }
             }
         },

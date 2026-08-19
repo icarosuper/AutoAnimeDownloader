@@ -25,6 +25,12 @@ type episodeSelection struct {
 	toDownload   []anilist.AiringNode
 	keysToDelete []files.EpisodeKey
 	checked      []files.EpisodeKey
+	// downloaded e limitSkipped sao o par que o relatorio publica como "baixou N, sobraram M".
+	// Vem do resultado FINAL de selectEpisodes de proposito: quando um pack foi escolhido a
+	// selecao roda de novo com o limite levantado, e ai limitSkipped e zero — que e o certo,
+	// porque naquele anime o limite nao barrou nada.
+	downloaded   int
+	limitSkipped int
 }
 
 // selectEpisodes decide, para cada episodio da lista, se ele deve ser baixado ou apagado.
@@ -52,7 +58,11 @@ func selectEpisodes(
 		savedEp := savedEpisodesFullMap[key]
 		isInTorrents := episodeInTorrents(savedEp.EpisodeHash, torrentsHashSet)
 
-		shouldDownload, shouldDelete := checkEpisode(configs, maxEpisodes, ep, anime, savedEpisodesMap[key], &downloadedEpisodesOfAnime, isInTorrents, keepSet[key], savedEp.IsBatch)
+		shouldDownload, shouldDelete, skipCode := checkEpisode(configs, maxEpisodes, ep, anime, savedEpisodesMap[key], &downloadedEpisodesOfAnime, isInTorrents, keepSet[key], savedEp.IsBatch)
+
+		if skipCode == IssueMaxEpisodesPerAnime {
+			sel.limitSkipped++
+		}
 
 		if shouldDownload && !blockedMap[key] {
 			sel.toDownload = append(sel.toDownload, ep)
@@ -60,6 +70,8 @@ func selectEpisodes(
 			sel.keysToDelete = append(sel.keysToDelete, key)
 		}
 	}
+
+	sel.downloaded = downloadedEpisodesOfAnime
 
 	return sel
 }
@@ -118,20 +130,25 @@ func processAnimeEpisodes(
 	sel := selectEpisodes(configs, effectiveMax(configs, episodes), anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
 
 	var magnetsForEpisodes map[int]resolvedMagnets
+	// batchSkipped e o porque de max_episodes_per_anime estar valendo neste anime. Fica fora do
+	// if porque o relatorio o publica la embaixo, depois de sel ter sido possivelmente refeito.
+	batchSkipped := ""
 
 	if isAnimeMovie(anime) {
 		sel.toDownload, magnetsForEpisodes = resolveMovie(configs, anime, animeTitle, sel.toDownload, customQuery, searcher)
 	}
 
 	if magnetsForEpisodes == nil && len(sel.toDownload) > 0 {
-		packs, singles := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(sel.toDownload), customQuery))
+		packs, singles, packStats := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(sel.toDownload), customQuery))
 
 		// Elegibilidade a pack: nao e filme, tem mais de um episodio pendente e a busca FILTRADA
 		// devolveu pack que cobre a janela. Nada disso e metadado do AniList — e o torrent que
 		// esta la que decide (ver decisions.md).
 		if !isAnimeMovie(anime) && len(sel.toDownload) > 1 {
 			firstPending := sel.toDownload[0].Episode
-			if batches := pickBatches(packs, firstPending, windowEnd(configs, firstPending)); len(batches) > 0 {
+			batches := pickBatches(packs, firstPending, windowEnd(configs, firstPending))
+			switch {
+			case len(batches) > 0:
 				logger.Logger.Info().
 					Str("anime", animeTitle).
 					Int("packs", len(batches)).
@@ -143,6 +160,12 @@ func processAnimeEpisodes(
 				// acabou de trazer.
 				sel = selectEpisodes(configs, len(episodes)+1, anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
 				sel.toDownload, magnetsForEpisodes = assignBatches(animeTitle, sel.toDownload, batches)
+			case packStats.Input == 0:
+				batchSkipped = BatchSkippedNoResult
+			case len(packs) == 0:
+				batchSkipped = BatchSkippedAboveSizeLimit
+			default:
+				batchSkipped = BatchSkippedNoCoverage
 			}
 		}
 
@@ -154,6 +177,20 @@ func processAnimeEpisodes(
 	result.checkedEpisodes = sel.checked
 	result.keysToDelete = sel.keysToDelete
 	episodesToDownload := sel.toDownload
+
+	// O limite so vira linha do relatorio quando ele de fato barrou algo. Quando um pack foi
+	// escolhido, a segunda selecao roda com o limite levantado e limitSkipped e zero — que e o
+	// certo: naquele anime o limite nao impediu nada.
+	if sel.limitSkipped > 0 {
+		result.issues = append(result.issues, Issue{
+			AnimeID:      anime.Media.Id,
+			AnimeName:    animeTitle,
+			Code:         IssueMaxEpisodesPerAnime,
+			Downloaded:   sel.downloaded,
+			Pending:      sel.limitSkipped,
+			BatchSkipped: batchSkipped,
+		})
+	}
 
 	// Tamanho da serie, so para a busca decidir o zero-padding da query do episodio.
 	seriesLength := anilist.LastAiredEpisode(anime)
@@ -168,8 +205,15 @@ func processAnimeEpisodes(
 			epName = resolved.overrideName
 		}
 
+		// ponytail: o dropStats do fallback por episodio e a UNICA fonte da cascata de problemas —
+		// nem partitionSearchResults nem resolveMovie alimentam o relatorio. E ele quem da a
+		// ultima palavra sobre este episodio: se achou magnet nao houve problema, se nao achou e o
+		// corte dele que descreve por que. Se um dia o pack precisar do proprio codigo, o caminho
+		// e passar o packStats para ca em vez de sobrescrever este.
+		var searchStats dropStats
 		if len(magnets) == 0 {
-			singleResults := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+			var singleResults []nyaa.TorrentResult
+			singleResults, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 			for _, tr := range singleResults {
 				magnets = append(magnets, tr.MagnetLink)
 			}
@@ -183,6 +227,7 @@ func processAnimeEpisodes(
 			logger.Logger.Warn().
 				Str("episode", epName).
 				Msg("No torrent found for episode")
+			result.issues = append(result.issues, searchIssue(anime.Media.Id, animeTitle, ep.Episode, searchStats, configs))
 			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, notifications.ReasonNotFound)
 			continue
 		}
@@ -207,9 +252,21 @@ func processAnimeEpisodes(
 			// the finished files into the library and fires the completion webhook.
 		} else {
 			reason := notifications.ReasonDownloadRejected
+			issue := Issue{
+				AnimeID:    anime.Media.Id,
+				AnimeName:  animeTitle,
+				Episodes:   []int{ep.Episode},
+				Code:       IssueTorrentRejected,
+				Candidates: len(magnets),
+			}
 			if errors.Is(checkDiskSpace(configs), ErrInsufficientDiskSpace) {
 				reason = notifications.ReasonNoDiskSpace
+				issue.Code = IssueDiskFull
+				// Disco cheio nao e sobre os magnets: nenhum foi tentado (attemptDownloadWithRetries
+				// sai antes do primeiro Add), entao "N candidatos" seria numero sem significado.
+				issue.Candidates = 0
 			}
+			result.issues = append(result.issues, issue)
 			// O batch de notificacoes (BatchWindowSeconds) junta os N episodios do passe numa
 			// mensagem so, entao disco cheio nao vira enxurrada.
 			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, reason)
@@ -233,7 +290,7 @@ func resolveMovie(configs *files.Config, anime anilist.MediaList, animeTitle str
 		Str("anime", animeTitle).
 		Msg("Detected movie - searching for movie torrent")
 
-	movieResult := filterSearchResults(searcher.searchMovie(anime.Media.Title, true, customQuery), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+	movieResult, _ := filterSearchResults(searcher.searchMovie(anime.Media.Title, true, customQuery), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 	if len(movieResult) == 0 {
 		return episodes, nil
 	}
@@ -333,7 +390,12 @@ func batchNames(batches []nyaa.TorrentResult) []string {
 // a cada uma o SEU teto de tamanho: os dois tetos sao independentes (um pack de 40 GiB continua
 // valido com max_episode_torrent_size_gb = 1.5). A ordem relativa vinda de SortTorrentResults e
 // preservada, entao cada lista sai ordenada por qualidade.
-func partitionSearchResults(configs *files.Config, results []nyaa.TorrentResult) (packs, singles []nyaa.TorrentResult) {
+//
+// packStats descreve o que o filtro fez com as linhas de PACK, e so com elas: e ele que responde
+// se "nao houve batch" foi porque a busca nao devolveu pack nenhum ou porque todos foram cortados
+// pelo teto. O relatorio usa isso como campo de detalhe do limite por anime.
+func partitionSearchResults(configs *files.Config, results []nyaa.TorrentResult) ([]nyaa.TorrentResult, []nyaa.TorrentResult, dropStats) {
+	var packs, singles []nyaa.TorrentResult
 	for _, tr := range results {
 		switch {
 		case tr.IsBatch:
@@ -342,8 +404,9 @@ func partitionSearchResults(configs *files.Config, results []nyaa.TorrentResult)
 			singles = append(singles, tr)
 		}
 	}
-	return filterSearchResults(packs, configs.MaxBatchTorrentSizeGB, configs.MinSeeders),
-		filterSearchResults(singles, configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+	filteredPacks, packStats := filterSearchResults(packs, configs.MaxBatchTorrentSizeGB, configs.MinSeeders)
+	filteredSingles, _ := filterSearchResults(singles, configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+	return filteredPacks, filteredSingles, packStats
 }
 
 // pickBatches devolve o minimo de packs que cobre [firstPending, windowEnd], em ordem.
@@ -440,15 +503,20 @@ func firstEpisodeToConsider(anime anilist.MediaList, savedEpisodes []files.Episo
 
 // checkEpisode decide se um episodio deve ser baixado ou apagado. maxEpisodes e o limite
 // EFETIVO por anime, calculado pelo chamador: em batch ele vem ilimitado (ver processAnimeEpisodes).
-func checkEpisode(configs *files.Config, maxEpisodes int, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool, keepWatched, isBatch bool) (shouldDownload bool, shouldDelete bool) {
+//
+// skipCode e o motivo do skip QUANDO ele entra no relatorio da ultima verificacao, e "" no resto.
+// A condicao fica aqui, e nao no chamador que tem o mesmo ponteiro, para a regra nao existir em
+// dois lugares e discordar depois.
+func checkEpisode(configs *files.Config, maxEpisodes int, ep anilist.AiringNode, anime anilist.MediaList, alreadySaved bool, downloadedEpisodes *int, isInTorrents bool, keepWatched, isBatch bool) (shouldDownload bool, shouldDelete bool, skipCode string) {
 	epName := fmt.Sprintf("%s - Episode %d", getAnimeTitleSafe(anime), ep.Episode)
 
 	if shouldSkipEpisode(configs, ep, anime, epName) {
-		return false, alreadySaved && !keepWatched
+		return false, alreadySaved && !keepWatched, ""
 	}
 
 	if alreadySaved {
-		return handleAlreadySavedEpisode(maxEpisodes, downloadedEpisodes, isInTorrents, isBatch, epName)
+		download, del := handleAlreadySavedEpisode(maxEpisodes, downloadedEpisodes, isInTorrents, isBatch, epName)
+		return download, del, ""
 	}
 
 	if *downloadedEpisodes >= maxEpisodes {
@@ -457,11 +525,11 @@ func checkEpisode(configs *files.Config, maxEpisodes int, ep anilist.AiringNode,
 			Int("downloaded_episodes", *downloadedEpisodes).
 			Int("max_episodes", maxEpisodes).
 			Msg("Skipping episode: max episodes per anime reached")
-		return false, false
+		return false, false, IssueMaxEpisodesPerAnime
 	}
 
 	*downloadedEpisodes++
-	return true, false
+	return true, false, ""
 }
 
 func shouldSkipEpisode(configs *files.Config, ep anilist.AiringNode, anime anilist.MediaList, epName string) bool {

@@ -1127,3 +1127,41 @@ O push da config para dentro do `nyaa` não é padrão novo: é o mesmo de `SetP
 - Remover o filtro do `daemon` "porque agora o `nyaa` já filtra" — `filterBySize` também cobre `max_episode_torrent_size_gb` e é o que garante o resultado quando a config não foi empurrada (testes, uso direto do pacote).
 - Empurrar também `min_seeders` para o `nyaa` "por simetria" — o Nyaa já devolve ordenado por seeders desc, então o filtro de seeders não trunca a descida do mesmo jeito: os melhores vêm primeiro por construção.
 - Subir `max_batch_torrent_size_gb` como "solução" para série longa — ver acima.
+
+---
+
+### 60. A precedência dos códigos do relatório é cascata, não conjunto
+
+**Location:** `daemon/report.go` — `searchIssue`.
+
+**What it looks like:** um episódio pode satisfazer três condições ao mesmo tempo — todos os candidatos acima do teto, todos abaixo do piso de seeders, e `len(magnets) == 0`. `searchIssue` escolhe **um** código com um `switch` cuja ordem parece arbitrária, e ignora que as outras condições também são verdadeiras.
+
+**Why it's right:** a ordem é a regra de negócio. Quando um filtro esvazia a lista, "nenhum torrent encontrado" **também** é verdade — e é a resposta menos acionável das três, além de mentirosa: havia oito. "Todos os candidatos tinham 8 GB e seu teto é 3 GB" diz ao usuário o que fazer (subir o teto, ou ajustar a query customizada). "Nenhum torrent encontrado" não diz nada, e manda ele procurar no Nyaa um torrent que já tinha sido achado.
+
+Mesma disciplina da cascata de `deriveAnimeChip` (`lib/domain/animeState.ts`): a primeira condição que casa vence, e a ordem é a regra.
+
+**Trade-off aceito:** um episódio cortado pelos dois filtros aparece só como `all_above_size_limit`. É deliberado — o usuário resolve um de cada vez, e o de tamanho é o que ele controla diretamente.
+
+**Don't "fix" by:**
+- Devolver uma lista de códigos "porque as três condições valem" — a UI passaria a mostrar três linhas por episódio, duas delas ruído.
+- Reordenar para pôr `no_torrent_found` primeiro "porque é o caso mais comum" — comum não é o critério; acionável é.
+- Alimentar a cascata com o `packStats` de `partitionSearchResults` — o pack é decidido para o anime, não para o episódio, e o fallback por episódio é quem dá a última palavra sobre aquele episódio.
+
+---
+
+### 61. `SetLastCheckError` limpa o relatório da última verificação
+
+**Location:** `daemon/state.go` — `SetLastCheckError`; `daemon/verification.go` — a ordem `SetLastCheckError(nil)` → `SetLastCheckReport(...)`.
+
+**What it looks like:** um setter de erro que também apaga um campo não relacionado, e um `SetLastCheckReport` que **precisa** vir depois de um `SetLastCheckError(nil)` que já rodou três linhas antes. Parece acoplamento acidental, e a correção "óbvia" é separar as duas coisas.
+
+**Why it's right:** as sete saídas antecipadas de `AnimeVerification` (config incompleta, migração do `save_path`, probe de hardlink, backend não inicializado, `Ensure`, migração de ids, AniList) já chamam `SetLastCheckError`. Com a limpeza dentro dela, **nenhuma delas precisa de linha nova** — e nenhuma pode esquecer. E a semântica é a certa: um passe que abortou antes de olhar anime nenhum não tem relatório por anime, tem `pass_error`. Sem a limpeza, a tela mostraria os problemas do passe *anterior* lado a lado com um erro de passe novo, sugerindo que os dois vieram da mesma verificação.
+
+A segunda consequência é igualmente desejada: o cancelamento (`verification.go`, no `select` do `ctx.Done()`) chama `SetLastCheckError(nil)` e retorna, então **passe interrompido não deixa relatório** — ele estava incompleto, e um relatório parcial diria "só este anime teve problema" quando os outros nem chegaram a ser olhados.
+
+**Trade-off aceito:** a ordem das duas chamadas no fim de `AnimeVerification` é significativa e não é óbvia lendo só aquele trecho. É por isso que existe um teste dedicado (`TestSetLastCheckReport_AfterClearingError`) travando exatamente essa ordem.
+
+**Don't "fix" by:**
+- Tirar a limpeza de dentro de `SetLastCheckError` e pôr uma chamada explícita em cada saída antecipada — sete lugares para esquecer um.
+- Mover `SetLastCheckReport` para antes do `SetLastCheckError(nil)` "porque lê melhor" — o relatório é apagado no instante seguinte e a feature inteira vira silêncio.
+- Persistir o relatório em disco para "sobreviver ao restart" — `createStartFunc` chama `AnimeVerification` imediatamente ao iniciar (`loop.go`, antes do primeiro `time.After`), então ele se reconstrói em segundos; um arquivo custaria persistência, migração e a chance de mostrar um relatório de dias atrás como se fosse do último passe.

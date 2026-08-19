@@ -291,6 +291,62 @@ definitions:
       progress:
         type: integer
     type: object
+  daemon.CheckReport:
+    properties:
+      finished_at:
+        example: "2026-08-19T12:00:00Z"
+        type: string
+      limits:
+        items:
+          $ref: '#/definitions/daemon.Issue'
+        type: array
+      pass_error:
+        example: ""
+        type: string
+      problems:
+        items:
+          $ref: '#/definitions/daemon.Issue'
+        type: array
+    type: object
+  daemon.Issue:
+    properties:
+      anime_id:
+        example: 269
+        type: integer
+      anime_name:
+        example: Bleach
+        type: string
+      batch_skipped:
+        example: no_result
+        type: string
+      candidates:
+        example: 8
+        type: integer
+      code:
+        example: all_above_size_limit
+        type: string
+      downloaded:
+        example: 12
+        type: integer
+      episodes:
+        description: |-
+          Episodes so e preenchido em PROBLEMA: um problema acontece num episodio (ele foi buscado,
+          os candidatos foram avaliados, aquele episodio nao baixou). O limite e o contrario — o
+          daemon parou de considerar episodios ao atingir a conta, entao nao existe "os episodios
+          afetados", existe uma quantidade que sobrou (Downloaded/Pending).
+        items:
+          type: integer
+        type: array
+      limit_gb:
+        example: 3
+        type: number
+      min_seeders:
+        example: 1
+        type: integer
+      pending:
+        example: 35
+        type: integer
+    type: object
   files.Config:
     properties:
       anilist_username:
@@ -1061,6 +1117,36 @@ paths:
       summary: Stop daemon
       tags:
       - daemon
+  /last-check:
+    get:
+      consumes:
+      - application/json
+      description: Returns why the last automatic pass did not download episodes,
+        aggregated per anime. `problems` are things that should have downloaded and
+        did not; `limits` are the configuration working as configured. `pass_error`
+        is non-empty when the pass itself aborted, and then both lists are empty.
+        A clean pass answers 200 with two empty lists; a `finished_at` of zero means
+        the daemon has not completed a pass yet. Manual downloads are out of scope
+        — those report their failure in their own HTTP response.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/api.SuccessResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/daemon.CheckReport'
+              type: object
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
+      summary: Get the last verification report
+      tags:
+      - status
   /logs:
     get:
       consumes:

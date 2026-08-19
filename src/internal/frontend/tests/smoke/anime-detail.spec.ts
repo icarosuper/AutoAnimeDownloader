@@ -64,6 +64,11 @@ const rows = '[data-episode-row]:visible'
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/animes', route => route.fulfill({ json: mockAnimes }))
   await page.route('**/api/v1/animes/123/episodes', route => route.fulfill({ json: mockDetail }))
+  // Sem esta rota a página bate no servidor real e o poll silencioso engole o erro: a tela
+  // funciona, mas o teste passaria por acidente.
+  await page.route('**/api/v1/last-check', route => route.fulfill({
+    json: { success: true, data: { finished_at: '0001-01-01T00:00:00Z', pass_error: '', problems: [], limits: [] }, error: null },
+  }))
   await page.route('**/api/v1/ws', route => route.abort())
 })
 

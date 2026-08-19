@@ -228,8 +228,37 @@ export interface TorrentInfo {
   seeded_for_seconds: number
 }
 
+/** Uma linha do relatório da última verificação: um par (anime, código). */
+export interface Issue {
+  anime_id: number
+  anime_name: string
+  /** Só vem em problema. Limite não tem "episódios afetados" — tem downloaded/pending. */
+  episodes?: number[]
+  code: string
+  candidates?: number
+  limit_gb?: number
+  min_seeders?: number
+  downloaded?: number
+  pending?: number
+  batch_skipped?: string
+}
+
+/** O relatório do ÚLTIMO passe, e só dele. Não é histórico. */
+export interface CheckReport {
+  finished_at: string
+  pass_error: string
+  problems: Issue[]
+  limits: Issue[]
+}
+
 export async function getStatus(): Promise<StatusResponse> {
   return apiRequest<StatusResponse>('GET', '/status')
+}
+
+export async function getLastCheck(): Promise<CheckReport> {
+  // Polled junto do poll de torrents do Status e do AnimeDetail: uma falha transitória deve
+  // degradar em silêncio em vez de tostar a cada tick.
+  return apiRequest<CheckReport>('GET', '/last-check', null, { silent: true })
 }
 
 export async function getConfig(): Promise<Config> {

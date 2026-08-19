@@ -6,6 +6,18 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 )
 
+// dropStats conta o que os filtros de busca descartaram numa chamada.
+//
+// Existe porque "a lista voltou vazia" tem tres causas diferentes e so o contador as distingue:
+// o relatorio da ultima verificacao precisa poder dizer "oito candidatos, todos acima de 3 GB"
+// em vez de "nenhum torrent encontrado" — que e verdade tambem, e e a resposta menos acionavel
+// das tres. Input e quantos entraram, ANTES de qualquer filtro.
+type dropStats struct {
+	Input     int
+	BySize    int
+	BySeeders int
+}
+
 type nyaaSearchFunc func(title string) ([]nyaa.TorrentResult, error)
 
 type nyaaSearcher struct {
@@ -28,9 +40,9 @@ func defaultNyaaSearcher() nyaaSearcher {
 // o melhor entre os que cabem. Size == 0 passa: e o valor de nyaa.parseSize quando o Nyaa muda o
 // formato da coluna, e descartar tamanho desconhecido trocaria "as vezes baixa um torrent grande"
 // por "nao baixa nada" — um bug de parsing viraria paralisacao silenciosa.
-func filterBySize(results []nyaa.TorrentResult, maxGB float64) []nyaa.TorrentResult {
+func filterBySize(results []nyaa.TorrentResult, maxGB float64) ([]nyaa.TorrentResult, int) {
 	if maxGB <= 0 || len(results) == 0 {
-		return results
+		return results, 0
 	}
 	maxBytes := int64(maxGB * 1024 * 1024 * 1024)
 	filtered := make([]nyaa.TorrentResult, 0, len(results))
@@ -50,7 +62,7 @@ func filterBySize(results []nyaa.TorrentResult, maxGB float64) []nyaa.TorrentRes
 		}
 		filtered = append(filtered, tr)
 	}
-	return filtered
+	return filtered, len(results) - len(filtered)
 }
 
 // filterBySeeders descarta torrents com menos de minSeeders. minSeeders <= 0 desliga o filtro.
@@ -60,9 +72,9 @@ func filterBySize(results []nyaa.TorrentResult, maxGB float64) []nyaa.TorrentRes
 // do Nyaa e o unico sinal de que existe alguem semeando, e um torrent sem semeador nao baixa nunca
 // — deixar passar troca "nao escolhe esse" por "trava o episodio num torrent morto", que foi
 // exatamente o que aconteceu com o unico candidato do Naruto Shippuuden episodio 3 (0 peers).
-func filterBySeeders(results []nyaa.TorrentResult, minSeeders int) []nyaa.TorrentResult {
+func filterBySeeders(results []nyaa.TorrentResult, minSeeders int) ([]nyaa.TorrentResult, int) {
 	if minSeeders <= 0 || len(results) == 0 {
-		return results
+		return results, 0
 	}
 	filtered := make([]nyaa.TorrentResult, 0, len(results))
 	for _, tr := range results {
@@ -76,13 +88,15 @@ func filterBySeeders(results []nyaa.TorrentResult, minSeeders int) []nyaa.Torren
 		}
 		filtered = append(filtered, tr)
 	}
-	return filtered
+	return filtered, len(results) - len(filtered)
 }
 
 // filterSearchResults aplica os dois filtros de busca (teto de tamanho + piso de seeders) na
-// ordem em que os quatro pontos de busca precisam deles.
-func filterSearchResults(results []nyaa.TorrentResult, maxGB float64, minSeeders int) []nyaa.TorrentResult {
-	return filterBySeeders(filterBySize(results, maxGB), minSeeders)
+// ordem em que os quatro pontos de busca precisam deles, e devolve o que cada um cortou.
+func filterSearchResults(results []nyaa.TorrentResult, maxGB float64, minSeeders int) ([]nyaa.TorrentResult, dropStats) {
+	bySize, sizeDropped := filterBySize(results, maxGB)
+	final, seedersDropped := filterBySeeders(bySize, minSeeders)
+	return final, dropStats{Input: len(results), BySize: sizeDropped, BySeeders: seedersDropped}
 }
 
 func buildTitleVariants(titles anilist.Title, customQuery string) []string {

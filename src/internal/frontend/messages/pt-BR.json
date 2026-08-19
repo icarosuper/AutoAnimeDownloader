@@ -400,5 +400,20 @@
   "detail_untrack_msg": "Ele não será mais verificado em busca de episódios novos.",
   "detail_untrack_delete_files": "Apagar arquivos baixados",
   "detail_untrack_confirm": "Deixar de acompanhar",
-  "detail_untrack_done": "Não está mais acompanhando este anime"
+  "detail_untrack_done": "Não está mais acompanhando este anime",
+  "lastcheck_section_problems": "Problemas ({count})",
+  "lastcheck_section_limits": "Limites aplicados ({count})",
+  "lastcheck_episodes": "ep. {episodes}",
+  "lastcheck_all_above_size_limit": "{candidates} torrents encontrados, todos acima do teto de {limit} GB.",
+  "lastcheck_no_seeders": "{candidates} torrents encontrados, nenhum com pelo menos {seeders} seeders.",
+  "lastcheck_no_torrent_found": "Nenhum torrent encontrado no Nyaa.",
+  "lastcheck_disk_full": "Espaço em disco insuficiente.",
+  "lastcheck_torrent_rejected": "O cliente de torrent recusou todos os {candidates} magnets.",
+  "lastcheck_max_episodes_per_anime": "Limite por anime atingido: {downloaded} baixados, {pending} na espera.",
+  "lastcheck_batch_no_result": "Nenhum torrent de batch foi encontrado para este anime.",
+  "lastcheck_batch_above_size_limit": "Um batch foi encontrado, mas está acima do teto de tamanho de batch.",
+  "lastcheck_batch_no_coverage": "Os batches encontrados não cobrem os episódios pendentes.",
+  "lastcheck_unknown": "Motivo desconhecido ({code}).",
+  "detail_lastcheck_notice": "A última verificação não conseguiu baixar episódios deste anime.",
+  "detail_lastcheck_episode_note": "não baixou na última verificação"
 }

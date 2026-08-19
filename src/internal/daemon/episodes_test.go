@@ -239,7 +239,7 @@ func TestCheckEpisode_BlacklistedEpisodeMarkedForDeletion(t *testing.T) {
 	}
 
 	downloaded := 0
-	shouldDownload, shouldDelete := checkEpisode(configs, configs.MaxEpisodesPerAnime, ep, anime, true, &downloaded, false, false, false)
+	shouldDownload, shouldDelete, _ := checkEpisode(configs, configs.MaxEpisodesPerAnime, ep, anime, true, &downloaded, false, false, false)
 
 	if shouldDownload {
 		t.Error("episódio de anime na blacklist não deve ser baixado")
@@ -1056,5 +1056,105 @@ func TestFirstEpisodeToConsider(t *testing.T) {
 				t.Errorf("quero %d, veio %d", tc.want, got)
 			}
 		})
+	}
+}
+
+// TestCheckEpisode_SkipCode: so o limite por anime entra no relatorio. Todo skip normal
+// (lista excluida, ja assistido, ainda nao lancado) devolve "" — um anime em dia gera dezenas
+// deles por passe, e se entrassem no relatorio os problemas reais se perderiam no ruido.
+func TestCheckEpisode_SkipCode(t *testing.T) {
+	title := "SkipCode Anime"
+	base := anilist.MediaList{
+		Id:       400,
+		Progress: 2,
+		Media: anilist.Media{
+			Id:    400,
+			Title: anilist.Title{English: &title},
+		},
+	}
+
+	t.Run("limite por anime atingido", func(t *testing.T) {
+		configs := &files.Config{MaxEpisodesPerAnime: 2}
+		downloaded := 2
+		ep := anilist.AiringNode{ID: 1, Episode: 5, TimeUntilAiring: -100}
+
+		shouldDownload, shouldDelete, code := checkEpisode(configs, 2, ep, base, false, &downloaded, false, false, false)
+
+		if shouldDownload || shouldDelete {
+			t.Errorf("limite atingido não baixa nem apaga, obteve (%v, %v)", shouldDownload, shouldDelete)
+		}
+		if code != IssueMaxEpisodesPerAnime {
+			t.Errorf("esperava %q, obteve %q", IssueMaxEpisodesPerAnime, code)
+		}
+	})
+
+	t.Run("já assistido", func(t *testing.T) {
+		configs := &files.Config{MaxEpisodesPerAnime: 12}
+		downloaded := 0
+		ep := anilist.AiringNode{ID: 2, Episode: 1, TimeUntilAiring: -100}
+
+		_, _, code := checkEpisode(configs, 12, ep, base, false, &downloaded, false, false, false)
+
+		if code != "" {
+			t.Errorf("skip normal não entra no relatório, obteve %q", code)
+		}
+	})
+
+	t.Run("ainda não lançado", func(t *testing.T) {
+		configs := &files.Config{MaxEpisodesPerAnime: 12}
+		downloaded := 0
+		ep := anilist.AiringNode{ID: 3, Episode: 9, TimeUntilAiring: 3600}
+
+		_, _, code := checkEpisode(configs, 12, ep, base, false, &downloaded, false, false, false)
+
+		if code != "" {
+			t.Errorf("skip normal não entra no relatório, obteve %q", code)
+		}
+	})
+
+	t.Run("episódio baixável", func(t *testing.T) {
+		configs := &files.Config{MaxEpisodesPerAnime: 12}
+		downloaded := 0
+		ep := anilist.AiringNode{ID: 4, Episode: 5, TimeUntilAiring: -100}
+
+		shouldDownload, _, code := checkEpisode(configs, 12, ep, base, false, &downloaded, false, false, false)
+
+		if !shouldDownload {
+			t.Error("esperava shouldDownload=true")
+		}
+		if code != "" {
+			t.Errorf("episódio baixado não tem motivo de skip, obteve %q", code)
+		}
+	})
+}
+
+// TestSelectEpisodes_CountsLimitSkips: e do resultado FINAL de selectEpisodes que o relatorio
+// tira downloaded/pending. Com 10 episodios pendentes e teto 3, sobram 7.
+func TestSelectEpisodes_CountsLimitSkips(t *testing.T) {
+	title := "Limit Count Anime"
+	nodes := make([]anilist.AiringNode, 10)
+	for i := range nodes {
+		nodes[i] = anilist.AiringNode{ID: 500 + i, Episode: i + 1, TimeUntilAiring: -100}
+	}
+	anime := anilist.MediaList{
+		Id: 500,
+		Media: anilist.Media{
+			Id:             500,
+			Title:          anilist.Title{English: &title},
+			AiringSchedule: anilist.AiringSchedule{Nodes: nodes},
+		},
+	}
+	configs := &files.Config{MaxEpisodesPerAnime: 3}
+
+	sel := selectEpisodes(configs, 3, anime, nodes, map[files.EpisodeKey]bool{}, map[files.EpisodeKey]files.EpisodeStruct{}, map[string]bool{}, nil, nil)
+
+	if len(sel.toDownload) != 3 {
+		t.Fatalf("esperava 3 para baixar, obteve %d", len(sel.toDownload))
+	}
+	if sel.downloaded != 3 {
+		t.Errorf("esperava downloaded=3, obteve %d", sel.downloaded)
+	}
+	if sel.limitSkipped != 7 {
+		t.Errorf("esperava limitSkipped=7, obteve %d", sel.limitSkipped)
 	}
 }

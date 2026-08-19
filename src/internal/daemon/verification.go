@@ -16,6 +16,10 @@ type animeProcessResult struct {
 	newEpisodes     []files.EpisodeStruct
 	checkedEpisodes []files.EpisodeKey
 	keysToDelete    []files.EpisodeKey
+	// issues sao os motivos pelos quais este anime deixou de baixar algo. Vem pelo canal que ja
+	// existe de proposito: um *passReport compartilhado entre as goroutines de
+	// maxConcurrentAnimes precisaria de mutex, e o fan-in ja resolve isso de graca.
+	issues []Issue
 }
 
 // maxConcurrentAnimes limits simultaneous Nyaa HTTP searches to avoid rate limiting.
@@ -278,10 +282,12 @@ outer:
 
 	var newEpisodes []files.EpisodeStruct
 	var checkedEpisodes []files.EpisodeKey
+	var issues []Issue
 	for r := range resultCh {
 		newEpisodes = append(newEpisodes, r.newEpisodes...)
 		checkedEpisodes = append(checkedEpisodes, r.checkedEpisodes...)
 		keysToDelete = append(keysToDelete, r.keysToDelete...)
+		issues = append(issues, r.issues...)
 	}
 
 	select {
@@ -304,6 +310,16 @@ outer:
 
 	state.SetLastCheck(time.Now())
 	state.SetLastCheckError(nil)
+
+	// DEPOIS do SetLastCheckError, nunca antes: ele limpa o relatorio (ver state.go). O
+	// cancelamento acima tambem chama SetLastCheckError(nil) e retorna, entao passe interrompido
+	// nao deixa relatorio — que e o certo, ele estava incompleto.
+	problems, limits := aggregateIssues(issues)
+	state.SetLastCheckReport(CheckReport{
+		FinishedAt: time.Now(),
+		Problems:   problems,
+		Limits:     limits,
+	})
 
 	if err := fileManager.DeleteEmptyFolders(configs.CompletedAnimePath); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to delete empty folders")

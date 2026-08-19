@@ -90,6 +90,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	// API routes - apply JSON middleware only to API routes
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/v1/status", handleStatus(s))
+	apiMux.HandleFunc("/api/v1/last-check", handleLastCheck(s))
 	apiMux.HandleFunc("/api/v1/config", handleConfig(s))
 	apiMux.HandleFunc("/api/v1/config/priorities/defaults", handlePriorityDefaults(s))
 	apiMux.HandleFunc("/api/v1/animes", handleAnimes(s))
