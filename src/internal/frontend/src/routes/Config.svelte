@@ -23,6 +23,11 @@
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
+  import {
+    ONBOARDING_STEP_IDS,
+    onboardingDismissed,
+    onboardingDone,
+  } from "../lib/stores/onboarding.js";
 
   type GroupId = "library" | "anilist" | "downloads" | "search";
 
@@ -82,6 +87,9 @@
       CANCELLED: m.config_status_cancelled(),
       HIATUS:    m.config_status_hiatus(),
     } as Record<string, string>,
+    onboardingRestoreLabel: m.onboarding_restore_label(),
+    onboardingRestoreHint: m.onboarding_restore_hint(),
+    onboardingRestoreButton: m.onboarding_restore_button(),
     btnRunCheck: m.config_btn_run_check(),
     btnSave: m.config_btn_save(),
     btnSaving: m.config_btn_saving(),
@@ -179,18 +187,44 @@
   let saving = false;
   let showMissingConfigBanner = false;
 
+  /**
+   * A app é um SPA de hash, então a query pode estar em `?a=b#/config` (raro) ou depois do `?`
+   * DENTRO do hash (`#/config?a=b`, o caminho normal). Os params são resolvidos UMA vez e
+   * todos os parâmetros saem dali: com um `return` por ramo, cada parâmetro novo teria que ser
+   * lido nos dois lugares, e os dois poderiam divergir.
+   */
+  function resolveParams(): URLSearchParams | null {
+    if (typeof window === "undefined") return null;
+    if (window.location.search) return new URLSearchParams(window.location.search);
+    const hashParts = window.location.hash.split("?");
+    return hashParts.length > 1 ? new URLSearchParams(hashParts[1]) : null;
+  }
+
+  // O card também some quando o usuário marca os três passos à mão, então trazer de volta é
+  // limpar as duas coisas — só zerar a dispensa deixaria o botão sem efeito visível.
+  $: onboardingHidden =
+    $onboardingDismissed || ONBOARDING_STEP_IDS.every((id) => $onboardingDone.includes(id));
+
+  function restoreOnboarding() {
+    onboardingDismissed.set(false);
+    onboardingDone.reset();
+  }
+
   function checkQueryParams() {
-    if (typeof window === "undefined") return;
-    const search = window.location.search;
-    const hash = window.location.hash;
-    if (search) {
-      showMissingConfigBanner = new URLSearchParams(search).has("missingConfig");
-      return;
-    }
-    const hashParts = hash.split("?");
-    if (hashParts.length > 1) {
-      showMissingConfigBanner = new URLSearchParams(hashParts[1]).has("missingConfig");
-    }
+    const params = resolveParams();
+    if (!params) return;
+
+    showMissingConfigBanner = params.has("missingConfig");
+
+    // A validação usa o array `groups` que a tela já monta — uma segunda lista de ids sairia
+    // de dia com ele. Valor desconhecido é ignorado e `activeGroup` fica no default
+    // "library": sem a guarda, um link velho ou digitado errado deixaria a tela num grupo que
+    // não renderiza nada.
+    //
+    // Sem conflito com a validação: `firstValidationError()` só mexe em `activeGroup` no
+    // clique de Salvar, e isto roda no `onMount`.
+    const group = params.get("group");
+    if (group && groups.some((g) => g.id === group)) activeGroup = group as GroupId;
   }
 
   async function loadConfig() {
@@ -535,6 +569,28 @@
                 inline={true}
                 suffix="%"
               />
+            </div>
+
+            <!-- Caminho de volta do card de primeiros passos. NÃO é campo de config: não entra
+                 em `requiredChecks` nem no corpo do PUT — é preferência de UI, por navegador.
+                 O divisor sai de graça do `divide-y` do container. `Input`/`Toggle` não servem
+                 aqui porque os dois fazem `bind:` num campo de `config`, e não há campo.
+
+                 O desabilitado é sobre a DISPENSA, não sobre o card estar visível: com os três
+                 itens verdes o card não aparece de qualquer forma, e um botão habilitado aqui
+                 seria um clique sem efeito visível. -->
+            <div class="flex flex-wrap items-center justify-between gap-3 p-4.5">
+              <div class="min-w-0">
+                <p class="text-[14.5px] font-bold text-heading">{T && T.onboardingRestoreLabel}</p>
+                <p class="text-caption text-subtle">{T && T.onboardingRestoreHint}</p>
+              </div>
+              <Button
+                variant="ghost"
+                disabled={!onboardingHidden}
+                on:click={restoreOnboarding}
+              >
+                {T && T.onboardingRestoreButton}
+              </Button>
             </div>
           {/if}
 

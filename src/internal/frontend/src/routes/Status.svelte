@@ -39,6 +39,12 @@
   import { totalSpeeds } from "../lib/utils/torrents.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
   import { issueMessage, batchNote } from "../lib/domain/checkIssue.js";
+  import { onboardingSteps, allDone } from "../lib/domain/onboarding.js";
+  import {
+    ONBOARDING_STEP_IDS,
+    onboardingDismissed,
+    onboardingDone,
+  } from "../lib/stores/onboarding.js";
   import {
     formatBytes,
     formatDate as formatDateDomain,
@@ -89,6 +95,13 @@
     staleNote: m.status_stale_note(),
     sortAsc: m.status_sort_asc(),
     sortDesc: m.status_sort_desc(),
+    onboardingTitle: m.onboarding_title(),
+    onboardingDismiss: m.onboarding_dismiss(),
+    onboardingOr: m.onboarding_or(),
+    onboardingActionConfigure: m.onboarding_action_configure(),
+    onboardingActionConnectAnilist: m.onboarding_action_connect_anilist(),
+    onboardingActionAddAnime: m.onboarding_action_add_anime(),
+    onboardingActionCheckNow: m.onboarding_action_check_now(),
     reportProblems: (count: number) => m.lastcheck_section_problems({ count }),
     reportLimits: (count: number) => m.lastcheck_section_limits({ count }),
   };
@@ -101,8 +114,12 @@
   let lastCheck: CheckReport | null = null;
   let checkInterval = 0;
   // Sem biblioteca configurada não há para onde baixar: o botão de adicionar anime nasce
-  // desabilitado em vez de deixar o usuário descobrir isso só no 409 do POST.
-  let libraryConfigured = true;
+  // desabilitado em vez de deixar o usuário descobrir isso só no 409 do POST. Durante o load
+  // ele fica habilitado para não piscar desabilitado antes do `getConfig()` responder.
+  // O caminho cru e os usernames, além do booleano: `onboardingSteps` recebe a config, não um
+  // booleano já cozido. Nenhuma requisição nova — os dois já vêm do mesmo `getConfig()`.
+  let completedPath = "";
+  let anilistUsernames: string[] = [];
   let loading = true;
   let actionLoading = false;
   let search = "";
@@ -129,6 +146,40 @@
   // O erro de passe vence o texto genérico quando existe; o genérico continua sendo o fallback
   // para o instante entre o has_error chegar e o relatório ser buscado.
   $: passErrorText = lastCheck?.pass_error || (T && T.errorAlert);
+  $: onboarding = onboardingSteps(
+    { completed_anime_path: completedPath, anilist_usernames: anilistUsernames },
+    animes,
+    status,
+  );
+  // Derivado do mesmo lugar que o item ① do card: um `Boolean(completedPath)` paralelo não
+  // apara espaços, e aí o card pediria a pasta enquanto o botão de adicionar anime já estava
+  // habilitado — a contradição que tirar a regra do componente existe para evitar.
+  $: libraryConfigured = loading || onboarding.library;
+  // Título e dica de cada passo na ordem em que são numerados. Reativo porque `checkInterval`
+  // chega depois do `getConfig()` e `$locale` pode mudar em tempo de execução.
+  $: onboardingList = [
+    {
+      id: ONBOARDING_STEP_IDS[0],
+      title: $locale && m.onboarding_step_library(),
+      hint: $locale && m.onboarding_step_library_hint(),
+    },
+    {
+      id: ONBOARDING_STEP_IDS[1],
+      title: $locale && m.onboarding_step_source(),
+      hint: $locale && m.onboarding_step_source_hint(),
+    },
+    {
+      id: ONBOARDING_STEP_IDS[2],
+      title: $locale && m.onboarding_step_check(),
+      hint: $locale && m.onboarding_step_check_hint({ minutes: checkInterval }),
+    },
+  ];
+  // Três saídas: marcar os três à mão, dispensar, ou o daemon já estar de fato configurado e
+  // rodando (aí o card nunca aparece, para não ensinar o óbvio a quem já usa o app).
+  $: showOnboarding =
+    !allDone(onboarding) &&
+    !$onboardingDismissed &&
+    !ONBOARDING_STEP_IDS.every((id) => $onboardingDone.includes(id));
 
   // Servidor manda: disk_low é o mesmo limiar que faz o daemon parar de adicionar torrents.
   $: diskSpaceLow = status?.disk_low ?? false;
@@ -298,7 +349,8 @@
       status = statusData;
       animes = animesData;
       checkInterval = configData.check_interval;
-      libraryConfigured = Boolean(configData.completed_anime_path);
+      completedPath = configData.completed_anime_path ?? "";
+      anilistUsernames = configData.anilist_usernames ?? [];
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load data");
     } finally {
@@ -523,6 +575,101 @@
       >
         {passErrorText}
       </div>
+    {/if}
+
+    <!-- Primeiros passos. Card de acento (não a caixa neutra do resto da tela) porque ele
+         compete com o herói e com o relatório pela primeira olhada, e perde se parecer com
+         eles. Some quando o usuário marca os três, quando dispensa, ou quando o daemon já
+         está configurado e rodando. Nenhuma requisição nova: tudo vem do que
+         `loadInitialData` já buscou. A dispensa é por navegador (localStorage), não campo do
+         config.json — ver decisions.md.
+
+         Opacidade em colchetes (`/[.10]`): o Tailwind só gera as opacidades da escala padrão
+         (…/40, /50…), então `/12` e `/28` viram classe morta e o card fica sem fundo nenhum. -->
+    {#if showOnboarding}
+      <section
+        data-testid="onboarding-card"
+        class="rounded-card border border-accent-tint/40 bg-accent-tint/[.10] p-4.5"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="font-mono text-mono-label uppercase text-accent">{T && T.onboardingTitle}</p>
+          <!-- Botão de TEXTO, não um "×": num card de três itens o × lê como "fechar até
+               recarregar", e o comportamento é permanente. O rótulo tem que dizer isso. -->
+          <button
+            type="button"
+            class="text-caption text-subtle underline-offset-2 transition-colors hover:text-body hover:underline"
+            on:click={() => onboardingDismissed.set(true)}
+          >
+            {T && T.onboardingDismiss}
+          </button>
+        </div>
+
+        <ol class="mt-3.5 space-y-3">
+          {#each onboardingList as step, i (step.id)}
+            {@const done = $onboardingDone.includes(step.id)}
+            <li class="flex items-start gap-3">
+              <!-- O número É a caixa de marcar: um checkbox separado ao lado de um badge
+                   numerado seriam dois marcadores para um estado só. Marcar é MANUAL — derivar
+                   do estado do daemon deixava os passos 1 e 3 verdes numa instalação nova,
+                   antes de o usuário ter lido qualquer coisa. -->
+              <label class="relative mt-0.5 shrink-0 cursor-pointer">
+                <input
+                  type="checkbox"
+                  class="peer absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  checked={done}
+                  aria-label={step.title}
+                  on:change={() => onboardingDone.toggle(step.id)}
+                />
+                <span
+                  class="inline-flex h-5 w-5 items-center justify-center rounded-full border font-mono text-[11px] font-bold peer-focus-visible:ring-2 peer-focus-visible:ring-accent {done
+                    ? 'border-accent bg-accent text-on-accent'
+                    : 'border-accent-tint/40 bg-card text-accent'}"
+                  aria-hidden="true">{done ? "✓" : i + 1}</span
+                >
+              </label>
+              <div class="min-w-0 flex-1">
+                <p class="text-copy font-semibold {done ? 'text-subtle line-through' : 'text-heading'}">
+                  {step.title}
+                </p>
+                <p class="mt-0.5 text-caption text-subtle">{step.hint}</p>
+                {#if !done}
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    {#if step.id === "library"}
+                      <!-- `library` já é o grupo inicial de Configurações, então sem `?group=`. -->
+                      <Button href="#/config" variant="ghost">{T && T.onboardingActionConfigure}</Button>
+                    {:else if step.id === "source"}
+                      <!-- DUAS ações, com um "ou" no meio: são caminhos alternativos, e sem o
+                           "ou" a dupla lê como duas etapas obrigatórias. O botão de adicionar
+                           herda o mesmo bloqueio do cabeçalho quando não há biblioteca. -->
+                      <Button href="#/config?group=anilist" variant="ghost">
+                        {T && T.onboardingActionConnectAnilist}
+                      </Button>
+                      <span class="text-caption text-subtle">{T && T.onboardingOr}</span>
+                      {#if libraryConfigured}
+                        <Button href="#/add" variant="ghost">{T && T.onboardingActionAddAnime}</Button>
+                      {:else}
+                        <!-- Tooltip no wrapper: um botão desabilitado não emite eventos de
+                             mouse (mesmo padrão do cabeçalho desta tela e do NavRail). -->
+                        <div class="tooltip tooltip-bottom" data-tip={$locale && m.add_library_required()}>
+                          <Button variant="ghost" disabled>{T && T.onboardingActionAddAnime}</Button>
+                        </div>
+                      {/if}
+                    {:else}
+                      <Button
+                        variant="ghost"
+                        on:click={handleCheck}
+                        disabled={status.status === "checking" || actionLoading}
+                      >
+                        {T && T.onboardingActionCheckNow}
+                      </Button>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            </li>
+          {/each}
+        </ol>
+      </section>
     {/if}
 
     <!-- Estado vazio é a regra: passe limpo não renderiza nada. Um card permanente anunciando

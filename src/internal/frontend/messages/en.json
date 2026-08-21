@@ -415,5 +415,21 @@
   "lastcheck_batch_no_coverage": "The batches found do not cover the pending episodes.",
   "lastcheck_unknown": "Unknown reason ({code}).",
   "detail_lastcheck_notice": "The last verification could not download episodes of this anime.",
-  "detail_lastcheck_episode_note": "not downloaded in the last check"
+  "detail_lastcheck_episode_note": "not downloaded in the last check",
+  "onboarding_title": "First steps",
+  "onboarding_step_library": "Pick the library folder",
+  "onboarding_step_library_hint": "Where the episodes get saved.",
+  "onboarding_step_source": "Pick the animes to follow",
+  "onboarding_step_source_hint": "Your whole AniList list, or one anime at a time.",
+  "onboarding_step_check": "Wait for the first check",
+  "onboarding_step_check_hint": "Every {minutes} min the daemon downloads what's missing. Nothing else to do.",
+  "onboarding_dismiss": "Don't show again",
+  "onboarding_or": "or",
+  "onboarding_action_configure": "Pick the folder",
+  "onboarding_action_connect_anilist": "Connect your AniList",
+  "onboarding_action_add_anime": "+ Add an anime",
+  "onboarding_action_check_now": "Check now",
+  "onboarding_restore_label": "First steps",
+  "onboarding_restore_hint": "The intro card on the Status screen.",
+  "onboarding_restore_button": "Show again"
 }

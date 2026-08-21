@@ -415,5 +415,21 @@
   "lastcheck_batch_no_coverage": "Os batches encontrados não cobrem os episódios pendentes.",
   "lastcheck_unknown": "Motivo desconhecido ({code}).",
   "detail_lastcheck_notice": "A última verificação não conseguiu baixar episódios deste anime.",
-  "detail_lastcheck_episode_note": "não baixou na última verificação"
+  "detail_lastcheck_episode_note": "não baixou na última verificação",
+  "onboarding_title": "Primeiros passos",
+  "onboarding_step_library": "Escolha a pasta da biblioteca",
+  "onboarding_step_library_hint": "Onde os episódios são salvos.",
+  "onboarding_step_source": "Escolha os animes que quer acompanhar",
+  "onboarding_step_source_hint": "Sua lista da AniList inteira, ou um anime por vez.",
+  "onboarding_step_check": "Aguarde a primeira verificação",
+  "onboarding_step_check_hint": "A cada {minutes} min o daemon baixa o que falta. Você não precisa fazer mais nada.",
+  "onboarding_dismiss": "Não mostrar mais",
+  "onboarding_or": "ou",
+  "onboarding_action_configure": "Escolha a pasta",
+  "onboarding_action_connect_anilist": "Conecte sua AniList",
+  "onboarding_action_add_anime": "+ Adicione um anime",
+  "onboarding_action_check_now": "Verifique agora",
+  "onboarding_restore_label": "Primeiros passos",
+  "onboarding_restore_hint": "O card de introdução na tela de Status.",
+  "onboarding_restore_button": "Mostrar novamente"
 }

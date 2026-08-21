@@ -1165,3 +1165,39 @@ A segunda consequência é igualmente desejada: o cancelamento (`verification.go
 - Tirar a limpeza de dentro de `SetLastCheckError` e pôr uma chamada explícita em cada saída antecipada — sete lugares para esquecer um.
 - Mover `SetLastCheckReport` para antes do `SetLastCheckError(nil)` "porque lê melhor" — o relatório é apagado no instante seguinte e a feature inteira vira silêncio.
 - Persistir o relatório em disco para "sobreviver ao restart" — `createStartFunc` chama `AnimeVerification` imediatamente ao iniciar (`loop.go`, antes do primeiro `time.After`), então ele se reconstrói em segundos; um arquivo custaria persistência, migração e a chance de mostrar um relatório de dias atrás como se fosse do último passe.
+
+---
+
+### 63. A dispensa do card de primeiros passos mora no `localStorage`, não no `config.json`
+
+**Location:** `src/internal/frontend/src/lib/stores/onboarding.ts`; consumido por `routes/Status.svelte` (condição de render) e `routes/Config.svelte` (o botão "Mostrar novamente").
+
+**What it looks like:** uma preferência do usuário que o app inteiro respeita, guardada no navegador em vez de no arquivo que o daemon já lê e escreve. Parece uma inconsistência — todo o resto da configuração está em `config.json`, e a "correção" óbvia é criar um campo `tutorial_dismissed` lá.
+
+**Why it's right:** não é configuração do daemon; é preferência de UI, e o daemon não tem nada a fazer com ela. Um campo em `config.json` entraria no schema que o servidor valida, no corpo do `PUT /config` e — se alguém fosse coerente — no `requiredChecks` da tela de Configurações, três lugares para um booleano que só o navegador consome. E ele valeria para **todos** os dispositivos de uma vez: quem dispensou no desktop nunca mais veria o card no celular, onde ainda não conhece o app. `localStorage` é por navegador, que é exatamente o escopo certo, e é a mesma escolha que `theme` e `locale` já fazem neste frontend.
+
+**Trade-off aceito:** trocar de navegador traz o card de volta, e limpar o storage do site também. Para um app self-hosted de um usuário só, ver de novo um card de três linhas é barato; o inverso — não conseguir vê-lo num dispositivo novo — é o caro.
+
+Esconder o card com a biblioteca vazia deixa o app inoperante, e mesmo assim a dispensa é permanente: o passe de verificação continua abrindo `#/config?missingConfig=true` e o banner de lá continua aparecendo. É esse backstop que torna a dispensa permanente segura de oferecer.
+
+**Don't "fix" by:**
+- Criar `tutorial_dismissed` em `config.json` "para seguir o usuário" — põe preferência de UI num schema do daemon e uniformiza dispositivos que deveriam ser independentes.
+- Trocar o botão "Não mostrar mais" por um `×` "porque é o padrão de card" — num card de três itens o `×` lê como "fechar até recarregar", e o comportamento é permanente. O rótulo é a documentação do comportamento.
+- Fazer o card sumir sozinho depois de N dias/visitas — some quando o usuário marca os três, quando dispensa, ou quando a instalação já está configurada e rodando; tempo não significa nada.
+
+---
+
+### 64. Os passos do card de primeiros passos são marcados à mão, não derivados do estado do daemon
+
+**Location:** `src/internal/frontend/src/lib/stores/onboarding.ts` (`onboardingDone`); pintado por `routes/Status.svelte`.
+
+**What it looks like:** o app **sabe** se a pasta está configurada e se o passe já rodou — `lib/domain/onboarding.ts` calcula exatamente isso — e mesmo assim os checkmarks do card saem de uma lista guardada no `localStorage` que o usuário preenche clicando. Parece estado duplicado, e a "correção" óbvia é derivar os três dos dados que a tela já tem.
+
+**Why it's right:** foi o que a primeira versão fazia, e numa instalação nova os passos ① e ③ nasciam verdes sozinhos — a pasta da biblioteca tem default e o passe de verificação roda a cada 10 minutos sem ninguém pedir. O tutorial aparecia dois terços concluído antes de o usuário ter lido a primeira linha, o que ao mesmo tempo mente sobre o que ele fez e tira o motivo de ler o resto. Marcar é a leitura confirmada, não o estado do disco.
+
+A derivação continua existindo, mas com outro papel: `allDone(onboardingSteps(...))` é o portão de "esta instalação já está configurada e rodando, não ensine o óbvio", então quem já usa o app nunca vê o card. Dois usos, uma fonte de verdade cada.
+
+**Don't "fix" by:**
+- Derivar os checkmarks de novo "para não duplicar estado" — é exatamente o bug que isto conserta.
+- Marcar o passo automaticamente quando a ação dele é feita no app (configurou a pasta → marca ①) — volta ao mesmo lugar para quem já tinha a pasta configurada, e faz o card se mexer sozinho enquanto está sendo lido.
+- Trocar os números por ícones de status — a numeração é o que diz que há uma ordem; o número dobra de caixa de marcar justamente para não haver dois marcadores para um estado só.

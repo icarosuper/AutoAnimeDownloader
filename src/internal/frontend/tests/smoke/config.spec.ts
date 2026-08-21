@@ -256,3 +256,28 @@ test('the index links navigate to Priorities and Notifications', async ({ page }
   await sideIndex(page).getByRole('link', { name: /notifications/i }).click()
   await expect(page).toHaveURL(/#\/notifications$/)
 })
+
+// O `?group=` é o alvo do botão "Connect AniList" do card de primeiros passos (tela de Status).
+// A validação usa o array `groups` que a tela já monta, então um id desconhecido não pode
+// deixar a tela num grupo que não renderiza nada — cai no default `library`.
+test('?group=anilist abre a tela no grupo Anilist', async ({ page }) => {
+  await page.goto('/#/config?group=anilist')
+
+  await expect(page.getByLabel(/usernames/i)).toBeVisible()
+  await expect(page.getByLabel(/completed anime path/i)).toHaveCount(0)
+})
+
+test('?group= com valor desconhecido cai no grupo Library', async ({ page }) => {
+  await page.goto('/#/config?group=naoexiste')
+
+  await expect(page.getByLabel(/completed anime path/i)).toBeVisible()
+})
+
+// Os dois parâmetros saem do MESMO URLSearchParams — antes cada ramo lia só `missingConfig` e
+// o primeiro dava `return`, então ler os dois juntos é exatamente o que pode ter regredido.
+test('?missingConfig=true&group=downloads mostra o banner E abre o grupo Downloads', async ({ page }) => {
+  await page.goto('/#/config?missingConfig=true&group=downloads')
+
+  await expect(page.getByRole('alert')).toBeVisible()
+  await expect(page.getByLabel(/check interval/i)).toBeVisible()
+})
