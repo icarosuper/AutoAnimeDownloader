@@ -39,6 +39,20 @@ type AnimeInfo struct {
 	// lista da AniList. E ORIGEM, nao estado de download — por isso a tela o mostra num chip
 	// proprio ao lado do chip derivado, nunca dentro dele.
 	IsStandalone bool `json:"is_standalone,omitempty"`
+	// NextAiringAt e o unix timestamp da estreia do proximo episodio, 0 quando nao ha nenhum
+	// agendado (anime terminado/cancelado). E o TIMESTAMP de proposito, e nao o timeUntilAiring
+	// da AniList: o front conta para tras sozinho, entao o numero nao congela junto com a
+	// resposta em cache.
+	NextAiringAt int64 `json:"next_airing_at,omitempty" example:"1740394800"`
+}
+
+// nextAiringAt le o timestamp do proximo episodio. nextAiringEpisode e nil em anime terminado,
+// e a AniList tambem devolve nil durante o hiato entre temporadas.
+func nextAiringAt(next *anilist.AiringNode) int64 {
+	if next == nil {
+		return 0
+	}
+	return next.AiringAt
 }
 
 func extractAnimeName(episodeName string) string {
@@ -263,6 +277,7 @@ func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo
 			info.EpisodesWatched = ml.Progress
 			info.CoverImage = coverImage
 			info.IsBlacklisted = isBlacklisted
+			info.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
 		}(info)
 	}
 	wg.Wait()
@@ -364,6 +379,7 @@ func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.Media
 			existing.EpisodesWatched = ml.Progress
 			existing.CoverImage = coverImage
 			existing.IsBlacklisted = isBlacklisted
+			existing.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
 			continue
 		}
 
@@ -375,6 +391,7 @@ func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.Media
 			TotalEpisodes:    totalEpisodes,
 			CoverImage:       coverImage,
 			IsBlacklisted:    isBlacklisted,
+			NextAiringAt:     nextAiringAt(ml.Media.NextAiringEpisode),
 		}
 	}
 }

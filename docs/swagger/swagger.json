@@ -1772,6 +1772,11 @@
                     "type": "string",
                     "example": "Naruto"
                 },
+                "next_airing_at": {
+                    "description": "NextAiringAt e o unix timestamp da estreia do proximo episodio, 0 quando nao ha nenhum\nagendado (anime terminado/cancelado). E o TIMESTAMP de proposito, e nao o timeUntilAiring\nda AniList: o front conta para tras sozinho, entao o numero nao congela junto com a\nresposta em cache.",
+                    "type": "integer",
+                    "example": 1740394800
+                },
                 "total_episodes": {
                     "type": "integer",
                     "example": 12

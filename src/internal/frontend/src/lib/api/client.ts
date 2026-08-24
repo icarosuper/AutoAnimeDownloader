@@ -206,6 +206,12 @@ export interface AnimeInfo {
   is_blacklisted?: boolean
   /** Acompanhado pelo arquivo de avulsos, e não por uma lista do AniList. Origem, não estado. */
   is_standalone?: boolean
+  /**
+   * Unix timestamp (segundos) da estreia do próximo episódio; ausente quando não há episódio
+   * agendado. É timestamp, e não uma contagem regressiva pronta, para o countdown não congelar
+   * junto com a resposta em cache — quem renderiza conta para trás no cliente.
+   */
+  next_airing_at?: number
 }
 
 /** Motivos pelos quais um anime não pode ser adicionado como avulso — vêm prontos do servidor. */

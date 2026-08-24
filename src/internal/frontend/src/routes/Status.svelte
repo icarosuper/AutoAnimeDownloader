@@ -38,6 +38,7 @@
   import { filterAnimes, sortAnimes, computeNextCheckIn, type SortKey, type SortDir } from "../lib/utils/status.js";
   import { totalSpeeds } from "../lib/utils/torrents.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
+  import { formatRelative, nextAiringIn } from "../lib/utils/relativeTime.js";
   import { issueMessage, batchNote } from "../lib/domain/checkIssue.js";
   import { passErrorMessage } from "../lib/domain/passError.js";
   import { onboardingSteps, allDone } from "../lib/domain/onboarding.js";
@@ -83,6 +84,7 @@
     colName: m.status_col_name(),
     colState: m.status_col_state(),
     colProgress: m.status_col_progress(),
+    colNextAiring: m.status_col_next_airing(),
     colLastDownload: m.status_col_last_download(),
     emptyTitle: m.status_empty_title(),
     emptyDesc: m.status_empty_desc(),
@@ -275,6 +277,10 @@
         chipText: chipLabel(chip),
         breakdown: b,
         legend: legendFor(b),
+        // Cru ("em 2 dias"), nao a frase pronta: no desktop ele cai numa coluna que ja tem
+        // o rotulo "Proximo ep." em cima, e repetir ali ficaria "Proximo ep. | Prox. ep. em
+        // 2 dias". O card mobile, que nao tem cabecalho de coluna, monta a frase inteira.
+        nextAiringWhen: nextAiringIn(anime.next_airing_at, now, $locale),
         href: anime.anime_id ? `#/status/${anime.anime_id}` : undefined,
         lastDownload: formatTimeAgo(anime.last_download_date) || formatDate(anime.last_download_date),
       };
@@ -425,17 +431,9 @@
     if (!dateString) return "";
     const date = new Date(dateString);
     if (isNaN(date.getTime()) || date.getFullYear() < 2010) return "";
-    const diffMs = now - date.getTime();
-    const diffSeconds = Math.floor(diffMs / 1000);
-    const diffMinutes = Math.floor(diffSeconds / 60);
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    const rtf = new Intl.RelativeTimeFormat($locale, { numeric: "auto" });
-    if (diffSeconds < 60) return rtf.format(-diffSeconds, "second");
-    if (diffMinutes < 60) return rtf.format(-diffMinutes, "minute");
-    if (diffHours < 24) return rtf.format(-diffHours, "hour");
-    return rtf.format(-diffDays, "day");
+    return formatRelative(date.getTime(), now, $locale);
   }
+
 
   function ringMeta(t: TorrentInfo): string {
     const eta = formatEta(t.eta_seconds, fmtLocale);
@@ -478,7 +476,7 @@
   // A soma das colunas fixas + gaps + padding é ~754px, e é por isso que a tabela só aparece a
   // partir de `lg` (1024px): em `md` (768px) sobrariam ~628px e as colunas vazariam da tela.
   // Abaixo disso entram os cards empilhados.
-  const LIST_GRID = "grid grid-cols-[44px_minmax(0,1fr)_190px_minmax(290px,340px)_150px] items-center gap-3";
+  const LIST_GRID = "grid grid-cols-[44px_minmax(0,1fr)_190px_minmax(290px,340px)_130px_150px] items-center gap-3";
 </script>
 
 <div class="space-y-4.5">
@@ -973,6 +971,7 @@
               </span>
               <span class="sr-only">{$locale && sortHint("episodes_watched")}</span>
             </button>
+            <span class="font-mono text-mono-label uppercase text-subtle">{T && T.colNextAiring}</span>
             <button
               type="button"
               class="flex items-center gap-1 text-left font-mono text-mono-label uppercase text-subtle transition-colors hover:text-body"
@@ -1018,6 +1017,7 @@
                 total={row.breakdown.total}
                 legend={row.legend}
               />
+              <span class="truncate font-mono text-[12px] text-subtle">{row.nextAiringWhen}</span>
               <span class="flex items-center justify-between gap-1 font-mono text-[12px] text-subtle">
                 {row.lastDownload}
                 {#if row.href}
@@ -1060,7 +1060,9 @@
                       legend={row.legend}
                     />
                   </div>
-                  <p class="mt-1.5 font-mono text-[12px] text-subtle">{row.lastDownload}</p>
+                  <p class="mt-1.5 font-mono text-[12px] text-subtle">
+                    {row.lastDownload}{#if row.nextAiringWhen} · {m.next_airing({ when: row.nextAiringWhen })}{/if}
+                  </p>
                 </div>
               </div>
             </svelte:element>

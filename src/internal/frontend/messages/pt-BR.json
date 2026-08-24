@@ -447,5 +447,7 @@
   "passerror_config": "A última verificação não rodou porque não foi possível ler a configuração.",
   "passerror_storage": "A última verificação não rodou por uma falha ao ler os dados do app.",
   "passerror_unknown": "A última verificação não chegou ao fim.",
-  "passerror_details": "Detalhes técnicos"
+  "passerror_details": "Detalhes técnicos",
+  "next_airing": "Próx. ep. {when}",
+  "status_col_next_airing": "Próximo ep."
 }

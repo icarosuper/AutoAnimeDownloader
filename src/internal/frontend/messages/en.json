@@ -447,5 +447,7 @@
   "passerror_config": "The last check did not run because the configuration could not be read.",
   "passerror_storage": "The last check did not run because the app's data could not be read.",
   "passerror_unknown": "The last check did not finish.",
-  "passerror_details": "Technical details"
+  "passerror_details": "Technical details",
+  "next_airing": "Next ep. {when}",
+  "status_col_next_airing": "Next ep."
 }

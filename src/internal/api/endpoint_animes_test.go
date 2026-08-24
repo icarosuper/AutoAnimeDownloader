@@ -591,3 +591,56 @@ func TestCountPendingEpisodes(t *testing.T) {
 		})
 	}
 }
+
+// TestNextAiringAt cobre o campo que alimenta o "Próximo episódio em X" do card: ele vem do
+// nextAiringEpisode da AniList, que e NIL em anime terminado e nos hiatos entre temporadas.
+// Os dois caminhos do merge (entrada nova e entrada que ja tinha episodio baixado) precisam
+// preencher o mesmo campo — foi por isso que a leitura virou um helper so.
+func TestNextAiringAt(t *testing.T) {
+	str := func(s string) *string { return &s }
+	entry := func(id int, next *anilist.AiringNode) anilist.MediaList {
+		return anilist.MediaList{
+			Media: anilist.Media{
+				Id:                id,
+				Title:             anilist.Title{English: str("Anime")},
+				Status:            anilist.MediaStatusReleasing,
+				NextAiringEpisode: next,
+			},
+		}
+	}
+
+	t.Run("entrada nova recebe o timestamp", func(t *testing.T) {
+		animeMap := map[string]*AnimeInfo{}
+		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, &anilist.AiringNode{Episode: 5, AiringAt: 1740394800})}, nil)
+
+		if got := animeMap["Anime"].NextAiringAt; got != 1740394800 {
+			t.Errorf("next_airing_at = %d, esperado 1740394800", got)
+		}
+	})
+
+	t.Run("entrada ja existente tambem e atualizada", func(t *testing.T) {
+		existing := &AnimeInfo{AnimeID: 1, Name: "Anime", EpisodesDownloaded: 3}
+		animeMap := map[string]*AnimeInfo{"Anime": existing}
+		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, &anilist.AiringNode{Episode: 5, AiringAt: 1740394800})}, nil)
+
+		if existing.NextAiringAt != 1740394800 {
+			t.Errorf("next_airing_at = %d, esperado 1740394800", existing.NextAiringAt)
+		}
+	})
+
+	t.Run("nextAiringEpisode nil sai como zero e some do JSON", func(t *testing.T) {
+		animeMap := map[string]*AnimeInfo{}
+		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, nil)}, nil)
+
+		if got := animeMap["Anime"].NextAiringAt; got != 0 {
+			t.Errorf("next_airing_at = %d, esperado 0 para anime sem episodio agendado", got)
+		}
+		body, err := json.Marshal(*animeMap["Anime"])
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if strings.Contains(string(body), "next_airing_at") {
+			t.Errorf("omitempty deveria sumir com o campo, veio %s", body)
+		}
+	})
+}

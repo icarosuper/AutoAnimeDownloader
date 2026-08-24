@@ -148,6 +148,14 @@ definitions:
       name:
         example: Naruto
         type: string
+      next_airing_at:
+        description: |-
+          NextAiringAt e o unix timestamp da estreia do proximo episodio, 0 quando nao ha nenhum
+          agendado (anime terminado/cancelado). E o TIMESTAMP de proposito, e nao o timeUntilAiring
+          da AniList: o front conta para tras sozinho, entao o numero nao congela junto com a
+          resposta em cache.
+        example: 1740394800
+        type: integer
       total_episodes:
         example: 12
         type: integer

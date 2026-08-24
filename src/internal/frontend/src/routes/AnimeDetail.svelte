@@ -44,6 +44,7 @@
   import { locale } from "../lib/stores/locale.js";
   import { indexTorrentsByEpisode } from "../lib/utils/torrentsByEpisode.js";
   import { statusLabel } from "../lib/utils/torrentStatus.js";
+  import { nextAiringIn } from "../lib/utils/relativeTime.js";
   import { episodeActions, type Action, type EpisodeActionId } from "../lib/domain/episodeActions.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
   import { issueMessage, batchNote } from "../lib/domain/checkIssue.js";
@@ -137,6 +138,10 @@
   // seeds"; atualizar por tick de relógio faria a tela inteira recalcular de segundo em
   // segundo sem que nenhum dado tivesse mudado.
   let lastPollAt = Date.now();
+
+  // Contagem regressiva do próximo episódio. Ancorada em `lastPollAt` pela mesma razão do
+  // comentário acima — o texto é em horas/dias, nada aqui justifica um tick de segundo.
+  $: nextAiringWhen = $locale ? nextAiringIn(anime?.next_airing_at, lastPollAt, $locale) : "";
 
   $: allEpisodes = detail?.episodes ?? [];
   $: torrentsByEpisode = indexTorrentsByEpisode(torrents, allEpisodes);
@@ -852,6 +857,9 @@
             })}
             {#if detail?.status}
               · {m.detail_anilist_status({ status: detail.status })}
+            {/if}
+            {#if nextAiringWhen}
+              · {m.next_airing({ when: nextAiringWhen })}
             {/if}
           </p>
 

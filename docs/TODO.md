@@ -1,6 +1,8 @@
 - Fontes alternativas de torrent **+0.1.0**
-	- Fallback pra AnimeTosho quando Nyaa não retorna resultado
-	- Abstrair interface TorrentSource com múltiplas implementações
+	- ~~Fallback pra AnimeTosho~~ — descartado: é espelho do Nyaa (mesmo infohash/swarm), não ordena
+	  por seeders e o `seeders` é cache de ~22 dias. Ver `agents/sources.md`
+	- Antes de abstrair `TorrentSource`: responder a Etapa 0 — existe fonte com infohash **diferente**
+	  e peers vivos onde o Nyaa está morto? Só o TokyoTosho tem sinal (mas o RSS não expõe seeders)
 - Player de vídeo no frontend **+0.1.0**
 - Modal com lista para substituir torrent **+0.1.0**
 	- Hoje vc tem que trazer um torrent de fora e inserir no campo
