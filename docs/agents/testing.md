@@ -9,8 +9,10 @@ go test -v -run TestName ./src/tests/unit/       # single test
 
 # integration (requires Docker)
 make test-backend-integration
-# or directly:
-docker compose -f docker/docker-compose.test.yml up --build --abort-on-container-exit
+# or directly — `--exit-code-from test` is NOT optional: with --abort-on-container-exit
+# alone, compose returns 0 even when the suite fails.
+docker compose -f docker/docker-compose.test.yml up --build \
+    --abort-on-container-exit --exit-code-from test
 ```
 
 **Always run `go test ./...` after any code change.**

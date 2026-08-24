@@ -17,11 +17,9 @@
 // @title           Auto Anime Downloader API
 // @version         1.0
 // @description     REST API for Auto Anime Downloader daemon
-// @termsOfService  http://swagger.io/terms/
 
-// @contact.name   API Support
-// @contact.url    http://www.swagger.io/support
-// @contact.email  support@swagger.io
+// @contact.name   AutoAnimeDownloader on GitHub
+// @contact.url    https://github.com/icarosuper/AutoAnimeDownloader/issues
 
 // @license.name  GPL-3.0
 // @license.url   https://www.gnu.org/licenses/gpl-3.0.html

@@ -575,14 +575,12 @@ definitions:
 host: localhost:8091
 info:
   contact:
-    email: support@swagger.io
-    name: API Support
-    url: http://www.swagger.io/support
+    name: AutoAnimeDownloader on GitHub
+    url: https://github.com/icarosuper/AutoAnimeDownloader/issues
   description: REST API for Auto Anime Downloader daemon
   license:
     name: GPL-3.0
     url: https://www.gnu.org/licenses/gpl-3.0.html
-  termsOfService: http://swagger.io/terms/
   title: Auto Anime Downloader API
   version: "1.0"
 paths:

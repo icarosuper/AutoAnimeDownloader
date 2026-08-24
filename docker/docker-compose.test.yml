@@ -34,9 +34,12 @@ services:
 
   daemon:
     image: test-daemon
+    # A MESMA imagem de producao que a CI constroi (build.yml taggeia docker/Dockerfile como
+    # test-daemon e sobe com --no-build). Havia um Dockerfile.test que stubava o frontend:
+    # rodar local e rodar na CI exercitavam imagens diferentes.
     build:
       context: ..
-      dockerfile: docker/Dockerfile.test
+      dockerfile: docker/Dockerfile
     dns:
       - 8.8.8.8
       - 1.1.1.1
