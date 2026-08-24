@@ -58,6 +58,10 @@ EXPOSE 8091
 ENV ENVIRONMENT=prod
 ENV PORT=:8091
 
+# ${PORT} ja inclui os dois pontos (":8091"), entao a URL fica http://localhost:8091/...
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD wget -qO- "http://localhost${PORT}/api/v1/status" >/dev/null || exit 1
+
 # Use entrypoint script
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
