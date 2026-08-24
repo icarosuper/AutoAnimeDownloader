@@ -113,7 +113,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		if !isAnimeMovie(anime) && len(episodesToDownload) > 1 {
 			firstPending := episodesToDownload[0].Episode
 			if batches := pickBatches(packs, firstPending, windowEnd(configs, firstPending)); len(batches) > 0 {
-				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, episodesToDownload, batches)
+				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, mediaTotalEpisodes(anime), episodesToDownload, batches)
 			}
 		}
 		if magnetsForEpisodes == nil {

@@ -25,7 +25,21 @@ type animeProcessResult struct {
 // maxConcurrentAnimes limits simultaneous Nyaa HTTP searches to avoid rate limiting.
 const maxConcurrentAnimes = 5
 
+// verificationMu serializa os passes. O passe le episodes.json UMA vez no comeco e so escreve no
+// fim (Fase 3), entao dois passes simultaneos — o do loop e o do POST /check, ou dois /check —
+// enxergam a mesma lista velha e baixam tudo de novo: foi assim que um anime ja coberto por um
+// pack ganhou torrents avulsos dos mesmos episodios, e a escrita do segundo passe sobrescreveu os
+// registros do pack. Passe concorrente e DESCARTADO, nao enfileirado: ele leria o mesmo estado
+// que o passe em andamento ja esta corrigindo, e o proximo tick do loop cobre o que faltar.
+var verificationMu sync.Mutex
+
 func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State, jobQueue *JobQueue, backend torrents.TorrentBackend, librarian files.Librarian) {
+	if !verificationMu.TryLock() {
+		logger.Logger.Info().Msg("Verification already running; skipping this trigger")
+		return
+	}
+	defer verificationMu.Unlock()
+
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")

@@ -119,10 +119,7 @@ func processAnimeEpisodes(
 	episodes := anilist.EpisodeList(anime, firstEpisodeToConsider(anime, savedEpisodes))
 	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, anime.Media.Id, episodes, savedEpisodesFullMap, anime.Progress)
 
-	totalEpisodes := 0
-	if anime.Media.Episodes != nil {
-		totalEpisodes = *anime.Media.Episodes
-	}
+	totalEpisodes := mediaTotalEpisodes(anime)
 
 	// A primeira selecao e a que vale quando nao ha pack, e e ela que produz as delecoes por
 	// limite: com o limite levantado por palpite, handleAlreadySavedEpisode nunca disparava e
@@ -159,7 +156,7 @@ func processAnimeEpisodes(
 				// cobrir o pack INTEIRO, senao a contagem mente e a poda apagaria o que o pack
 				// acabou de trazer.
 				sel = selectEpisodes(configs, len(episodes)+1, anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
-				sel.toDownload, magnetsForEpisodes = assignBatches(animeTitle, sel.toDownload, batches)
+				sel.toDownload, magnetsForEpisodes = assignBatches(animeTitle, totalEpisodes, sel.toDownload, batches)
 			case packStats.Input == 0:
 				batchSkipped = BatchSkippedNoResult
 			case len(packs) == 0:
@@ -245,6 +242,8 @@ func processAnimeEpisodes(
 				EpisodeName:        epName,
 				EpisodeNumber:      ep.Episode,
 				IsBatch:            skipSubfolder,
+				BatchStart:         resolved.batchStart,
+				BatchEnd:           resolved.batchEnd,
 				DownloadDate:       time.Now(),
 			})
 			// Completion is handled event-driven: the session's onComplete callback (and
@@ -280,6 +279,11 @@ type resolvedMagnets struct {
 	magnets       []string
 	skipSubfolder bool
 	overrideName  string
+	// batchStart/batchEnd: a faixa do pack lida do nome do torrent, 0 quando desconhecida. Vai
+	// para o registro salvo porque a tela nao consegue reconstrui-la depois — os episodios ja
+	// assistidos nao viram registro, e o min/max dos que viram mente sobre o pack.
+	batchStart int
+	batchEnd   int
 }
 
 // resolveMovie e o caminho de filme, inalterado: quando o filme e achado, todo episodio pendente
@@ -317,6 +321,15 @@ func resolveMovie(configs *files.Config, anime anilist.MediaList, animeTitle str
 	return episodes, result
 }
 
+// mediaTotalEpisodes e a contagem que o AniList declara, 0 quando ela nao existe (serie em
+// exibicao sem total anunciado).
+func mediaTotalEpisodes(anime anilist.MediaList) int {
+	if anime.Media.Episodes == nil {
+		return 0
+	}
+	return *anime.Media.Episodes
+}
+
 // assignBatches da a cada episodio o magnet do SEU pack e devolve so os episodios cobertos.
 //
 // O truncamento e obrigatorio: sem ele, os episodios fora da cobertura cairiam em episodio solto e
@@ -327,7 +340,12 @@ func resolveMovie(configs *files.Config, anime anilist.MediaList, animeTitle str
 // O overrideName leva a faixa quando ela e conhecida: dois packs do mesmo anime no mesmo ciclo
 // apareceriam com nomes identicos na tela de downloads. O nome da PASTA da biblioteca nao muda —
 // Organize usa AnimeName, nunca EpisodeName.
-func assignBatches(animeTitle string, episodes []anilist.AiringNode, batches []nyaa.TorrentResult) ([]anilist.AiringNode, map[int]resolvedMagnets) {
+//
+// totalEpisodes e a faixa registrada para pack SEM faixa no nome ("(Season 1+OVA) [Batch]"): ele
+// foi escolhido como pack completo — e por isso que coveringBatch o deixa cobrir qualquer
+// episodio —, entao a faixa dele e 1..total. 0 (total desconhecido) deixa a faixa zerada e quem
+// exibe cai no min/max dos registros.
+func assignBatches(animeTitle string, totalEpisodes int, episodes []anilist.AiringNode, batches []nyaa.TorrentResult) ([]anilist.AiringNode, map[int]resolvedMagnets) {
 	result := make(map[int]resolvedMagnets, len(episodes))
 	var covered []anilist.AiringNode
 
@@ -338,14 +356,19 @@ func assignBatches(animeTitle string, episodes []anilist.AiringNode, batches []n
 		}
 
 		name := animeTitle
-		if info := nyaa.ExtractBatchInfo(batch.Name); info.EndEpisode > 0 {
+		info := nyaa.ExtractBatchInfo(batch.Name)
+		if info.EndEpisode > 0 {
 			name = fmt.Sprintf("%s %d-%d", animeTitle, info.StartEpisode, info.EndEpisode)
+		} else if totalEpisodes > 0 {
+			info.StartEpisode, info.EndEpisode = 1, totalEpisodes
 		}
 
 		result[ep.Episode] = resolvedMagnets{
 			magnets:       []string{batch.MagnetLink},
 			skipSubfolder: true,
 			overrideName:  name,
+			batchStart:    info.StartEpisode,
+			batchEnd:      info.EndEpisode,
 		}
 		covered = append(covered, ep)
 	}

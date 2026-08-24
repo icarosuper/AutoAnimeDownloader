@@ -310,18 +310,47 @@
       if (ep.episode_hash) counts.set(ep.episode_hash, (counts.get(ep.episode_hash) ?? 0) + 1);
     }
 
+    // Um pack por hash, com a faixa que ele de fato cobre. A faixa vem do registro (lida do nome
+    // do torrent no download), e não do min/max dos episódios salvos: os já assistidos nunca viram
+    // registro, então o min/max encolhe o pack — um 01-11 baixado com 5 assistidos virava "6–11".
+    // Sem faixa salva (registro antigo) o min/max continua sendo o melhor palpite.
+    const packs = new Map<string, { first: number; last: number }>();
+    for (const ep of episodes) {
+      const hash = ep.episode_hash;
+      if (!hash || (counts.get(hash) ?? 0) < 2 || packs.has(hash)) continue;
+      const numbers = episodes.filter((e) => e.episode_hash === hash).map((e) => e.episode_number);
+      packs.set(hash, {
+        first: ep.batch_start || Math.min(...numbers),
+        last: ep.batch_end || Math.max(...numbers),
+      });
+    }
+
+    // O pack engole os episódios de dentro da faixa que não têm torrent próprio — tipicamente os
+    // já assistidos, que nunca viraram registro. Eles ESTÃO no pack: o torrent traz os arquivos e
+    // o Organize hardlinka o diretório inteiro na biblioteca, então uma linha "Baixar" para eles
+    // oferecia um segundo torrent do que já está vindo. Não lançado não é engolido — o pack que
+    // está no disco não pode conter o que não foi ao ar.
+    const coveringPack = (ep: AnimeEpisodeInfo) => {
+      if (ep.episode_hash) return ep.episode_hash;
+      if (!ep.is_aired) return undefined;
+      for (const [hash, range] of packs) {
+        if (ep.episode_number >= range.first && ep.episode_number <= range.last) return hash;
+      }
+      return undefined;
+    };
+
     const out = [];
     const seenPack = new Set<string>();
 
     for (const ep of episodes) {
-      const hash = ep.episode_hash;
+      const hash = coveringPack(ep);
       if (hash && (counts.get(hash) ?? 0) >= 2) {
         if (seenPack.has(hash)) continue;
         seenPack.add(hash);
 
         const group = episodes.filter((e) => e.episode_hash === hash);
-        const numbers = group.map((e) => e.episode_number);
-        const torrent = byEpisode.get(numbers[0]);
+        const torrent = byEpisode.get(group[0].episode_number);
+        const { first, last } = packs.get(hash)!;
         out.push({
           kind: "batch" as const,
           key: `pack-${hash}`,
@@ -334,8 +363,8 @@
           meta: episodeMeta(group[0], torrent),
           principal: undefined,
           menu: [{ id: "delete", label: m.detail_btn_delete(), destructive: true as const }],
-          title: m.detail_batch_row_title({ first: Math.min(...numbers), last: Math.max(...numbers) }),
-          label: `${Math.min(...numbers)}–${Math.max(...numbers)}`,
+          title: m.detail_batch_row_title({ first, last }),
+          label: `${first}–${last}`,
         });
         continue;
       }
@@ -354,7 +383,10 @@
         meta: episodeMeta(ep, torrent),
         principal: actions.principal,
         menu: menuItems(actions.menu),
-        title: ep.episode_name || m.detail_ep_title({ number: ep.episode_number }),
+        // Sempre o título localizado. Não existe título de episódio em lugar nenhum: o AniList
+        // não o expõe por episódio, e o `episode_name` do registro salvo é o rótulo de log do
+        // download ("Anime - Episode 7"), que a API não devolve mais.
+        title: m.detail_ep_title({ number: ep.episode_number }),
         label: String(ep.episode_number),
       });
     }

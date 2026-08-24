@@ -20,7 +20,6 @@ type AnimeEpisodeInfo struct {
 	IsWatched         bool   `json:"is_watched"`
 	IsDownloaded      bool   `json:"is_downloaded"`
 	DownloadDate      string `json:"download_date,omitempty"`
-	EpisodeName       string `json:"episode_name,omitempty"`
 	IsManuallyManaged bool   `json:"is_manually_managed,omitempty"`
 	IsBlocked         bool   `json:"is_blocked,omitempty"`
 	// EpisodeHash is the saved episode's torrent info hash. It is what lets the anime detail
@@ -30,6 +29,14 @@ type AnimeEpisodeInfo struct {
 	// entirely. Joining by hash instead, single and batch episodes use the same path. Empty
 	// (and omitted via omitempty) when the episode has no saved record.
 	EpisodeHash string `json:"episode_hash,omitempty"`
+	// BatchStart/BatchEnd sao a faixa REAL do pack a que este episodio pertence, lida do nome do
+	// torrent no download. A tela nao consegue deduzi-la da lista: os episodios ja assistidos nao
+	// viram registro, entao o min/max dos registros de um mesmo hash encolhe o pack (um 01-11
+	// baixado com 5 assistidos aparecia como "6-11"). Pack sem faixa no nome ("(Season 1+OVA)
+	// [Batch]") conta como completo e vale 1..total. Omitidas quando 0 — registro antigo, ou nem
+	// o total do AniList e conhecido —, e ai o min/max volta a ser o melhor palpite.
+	BatchStart int `json:"batch_start,omitempty"`
+	BatchEnd   int `json:"batch_end,omitempty"`
 }
 
 type AnimeDetailResponse struct {
@@ -106,18 +113,20 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 
 		type downloadedInfo struct {
 			date            string
-			name            string
 			manuallyManaged bool
 			hash            string
+			batchStart      int
+			batchEnd        int
 		}
 		downloadedByEpisode := make(map[int]downloadedInfo)
 		for _, ep := range allEpisodes {
 			if ep.AnimeID == id {
 				downloadedByEpisode[ep.EpisodeNumber] = downloadedInfo{
 					date:            ep.DownloadDate.Format(time.RFC3339),
-					name:            ep.EpisodeName,
 					manuallyManaged: ep.ManuallyManaged,
 					hash:            ep.EpisodeHash,
+					batchStart:      ep.BatchStart,
+					batchEnd:        ep.BatchEnd,
 				}
 			}
 		}
@@ -141,9 +150,10 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			if downloaded, ok := downloadedByEpisode[node.Episode]; ok {
 				info.IsDownloaded = true
 				info.DownloadDate = downloaded.date
-				info.EpisodeName = downloaded.name
 				info.IsManuallyManaged = downloaded.manuallyManaged
 				info.EpisodeHash = downloaded.hash
+				info.BatchStart = downloaded.batchStart
+				info.BatchEnd = downloaded.batchEnd
 			}
 
 			episodes = append(episodes, info)

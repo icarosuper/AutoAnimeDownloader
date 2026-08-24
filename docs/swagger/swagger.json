@@ -1692,14 +1692,18 @@
                 "airing_at": {
                     "type": "integer"
                 },
+                "batch_end": {
+                    "type": "integer"
+                },
+                "batch_start": {
+                    "description": "BatchStart/BatchEnd sao a faixa REAL do pack a que este episodio pertence, lida do nome do\ntorrent no download. A tela nao consegue deduzi-la da lista: os episodios ja assistidos nao\nviram registro, entao o min/max dos registros de um mesmo hash encolhe o pack (um 01-11\nbaixado com 5 assistidos aparecia como \"6-11\"). Pack sem faixa no nome (\"(Season 1+OVA)\n[Batch]\") conta como completo e vale 1..total. Omitidas quando 0 — registro antigo, ou nem\no total do AniList e conhecido —, e ai o min/max volta a ser o melhor palpite.",
+                    "type": "integer"
+                },
                 "download_date": {
                     "type": "string"
                 },
                 "episode_hash": {
                     "description": "EpisodeHash is the saved episode's torrent info hash. It is what lets the anime detail\nscreen join in live torrent progress exactly: a batch torrent's saved episodes all carry\nthe same hash but episode_number is meaningless for matching a torrent to them (the\ntorrent itself has no single episode number), so joining by number would miss batches\nentirely. Joining by hash instead, single and batch episodes use the same path. Empty\n(and omitted via omitempty) when the episode has no saved record.",
-                    "type": "string"
-                },
-                "episode_name": {
                     "type": "string"
                 },
                 "episode_number": {

@@ -320,10 +320,12 @@ export interface AnimeEpisodeInfo {
   is_watched: boolean
   is_downloaded: boolean
   download_date?: string
-  episode_name?: string
   is_manually_managed?: boolean
   is_blocked?: boolean
   episode_hash?: string
+  /** Faixa real do pack (do nome do torrent). Ausente/0 = desconhecida — cai no min/max. */
+  batch_start?: number
+  batch_end?: number
 }
 
 export interface AnimeDetailResponse {

@@ -167,3 +167,156 @@ describe('AnimeDetail — a pack is one row', () => {
     expect(client.replaceAnimeWithMagnet).not.toHaveBeenCalled()
   })
 })
+
+describe('AnimeDetail — the pack row shows the pack\'s real range', () => {
+  // O bug: com 5 episódios já assistidos, o daemon só registra 6..11 do pack 01-11, e a linha
+  // era rotulada pelo min/max dos registros — "Episódios 6–11" para um pack que tem 1 a 11.
+  it('labels the row with batch_start/batch_end, not the saved min/max', async () => {
+    const episodes = [6, 7, 8, 9, 10, 11].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'pack',
+      batch_start: 1, batch_end: 11,
+    }))
+
+    const detail: AnimeDetailResponse = { anime_id: 42, total_episodes: 11, progress: 5, status: 'REPEATING', episodes }
+    vi.mocked(client.getAnimeDetail).mockResolvedValue(detail)
+    vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
+    vi.mocked(client.getTorrents).mockResolvedValue([])
+
+    const { getAllByText, queryAllByText } = render(AnimeDetail, { props: { params: { id: '42' } } })
+    await tick(); await tick()
+
+    expect(getAllByText(/1\s*[–-]\s*11/).length).toBeGreaterThan(0)
+    expect(queryAllByText(/6\s*[–-]\s*11/).length).toBe(0)
+  })
+
+  // Pack sem faixa conhecida (nome sem "01-11"): o backend manda os campos zerados/ausentes e o
+  // min/max dos registros continua sendo o melhor palpite.
+  it('falls back to the saved min/max when the range is unknown', async () => {
+    const episodes = [3, 4, 5].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'pack',
+    }))
+
+    const detail: AnimeDetailResponse = { anime_id: 42, total_episodes: 5, progress: 2, status: 'CURRENT', episodes }
+    vi.mocked(client.getAnimeDetail).mockResolvedValue(detail)
+    vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
+    vi.mocked(client.getTorrents).mockResolvedValue([])
+
+    const { getAllByText } = render(AnimeDetail, { props: { params: { id: '42' } } })
+    await tick(); await tick()
+
+    expect(getAllByText(/3\s*[–-]\s*5/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('AnimeDetail — episode rows are labelled for the user, not for the daemon', () => {
+  // A linha usa sempre o título localizado. Ela já mostrou o `episode_name` do registro salvo —
+  // que é o rótulo de log do download ("Anime - Episode 7"), nunca um título de episódio —, e o
+  // resultado era "Episódio 7" virar rótulo interno assim que o download começava. O campo saiu
+  // da API; o que este teste tranca é o rótulo da linha.
+  it('shows the localized episode title even for an episode already downloading', async () => {
+    const episodes = [
+      { episode_number: 1, airing_at: 0, time_until_airing: 0, is_aired: true, is_watched: false, is_downloaded: false },
+      {
+        episode_number: 2, airing_at: 0, time_until_airing: 0, is_aired: true, is_watched: false,
+        is_downloaded: true, episode_hash: 'solo',
+      },
+    ]
+
+    const detail: AnimeDetailResponse = { anime_id: 42, total_episodes: 2, progress: 0, status: 'CURRENT', episodes }
+    vi.mocked(client.getAnimeDetail).mockResolvedValue(detail)
+    vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
+    vi.mocked(client.getTorrents).mockResolvedValue([])
+
+    const { getAllByText } = render(AnimeDetail, { props: { params: { id: '42' } } })
+    await tick(); await tick()
+
+    // Locale dos testes é en: "Episode 2", e a asserção é de texto EXATO.
+    expect(getAllByText('Episode 2').length).toBeGreaterThan(0)
+  })
+})
+
+describe('AnimeDetail — a pack row swallows the episodes inside its range', () => {
+  // Os episódios assistidos não têm registro salvo (o daemon nunca os baixa), mas estão DENTRO do
+  // pack: o torrent traz os arquivos e o Organize hardlinka o diretório inteiro na biblioteca.
+  // Mostrá-los como linhas soltas com "Baixar" oferecia um segundo torrent do que já está vindo.
+  it('folds watched episodes inside the range into the pack row', async () => {
+    const watched = [1, 2, 3, 4, 5].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: true, is_downloaded: false,
+    }))
+    const packed = [6, 7, 8, 9, 10, 11].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'pack',
+      batch_start: 1, batch_end: 11,
+    }))
+
+    const detail: AnimeDetailResponse = {
+      anime_id: 42, total_episodes: 11, progress: 5, status: 'REPEATING', episodes: [...watched, ...packed],
+    }
+    vi.mocked(client.getAnimeDetail).mockResolvedValue(detail)
+    vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
+    vi.mocked(client.getTorrents).mockResolvedValue([])
+
+    const { container, getAllByText } = render(AnimeDetail, { props: { params: { id: '42' } } })
+    await tick(); await tick()
+
+    // Desktop e mobile renderizam a mesma definição: 1 linha por vista, e só ela.
+    expect(container.querySelectorAll('[data-episode-row]').length).toBe(1 * 2)
+    expect(getAllByText(/1\s*[–-]\s*11/).length).toBeGreaterThan(0)
+  })
+
+  // Episódio ainda não lançado dentro da faixa NÃO é engolido: o pack que está no disco não pode
+  // conter o que não foi ao ar, e a linha "Em breve" é o que diz quando ele chega.
+  it('keeps an unaired episode inside the range as its own row', async () => {
+    const packed = [1, 2].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'pack',
+      batch_start: 1, batch_end: 4,
+    }))
+    const upcoming = [3, 4].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 3600,
+      is_aired: false, is_watched: false, is_downloaded: false,
+    }))
+
+    const detail: AnimeDetailResponse = {
+      anime_id: 42, total_episodes: 4, progress: 0, status: 'CURRENT', episodes: [...packed, ...upcoming],
+    }
+    vi.mocked(client.getAnimeDetail).mockResolvedValue(detail)
+    vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
+    vi.mocked(client.getTorrents).mockResolvedValue([])
+
+    const { container } = render(AnimeDetail, { props: { params: { id: '42' } } })
+    await tick(); await tick()
+
+    // 1 linha de pack + os 2 não lançados, nas duas vistas.
+    expect(container.querySelectorAll('[data-episode-row]').length).toBe(3 * 2)
+  })
+
+  // Episódio dentro da faixa com torrent PRÓPRIO (baixado avulso antes do pack) mantém a linha
+  // dele: ele é outro torrent, com progresso e ações próprias.
+  it('keeps an episode that has its own torrent as its own row', async () => {
+    const packed = [1, 2, 3].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'pack',
+      batch_start: 1, batch_end: 4,
+    }))
+    const solo = {
+      episode_number: 4, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'solo',
+    }
+
+    const detail: AnimeDetailResponse = {
+      anime_id: 42, total_episodes: 4, progress: 0, status: 'CURRENT', episodes: [...packed, solo],
+    }
+    vi.mocked(client.getAnimeDetail).mockResolvedValue(detail)
+    vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
+    vi.mocked(client.getTorrents).mockResolvedValue([])
+
+    const { container } = render(AnimeDetail, { props: { params: { id: '42' } } })
+    await tick(); await tick()
+
+    expect(container.querySelectorAll('[data-episode-row]').length).toBe(2 * 2)
+  })
+})

@@ -45,6 +45,14 @@ type EpisodeStruct struct {
 	// IsBatch marks episodes that came from a batch/movie torrent (multiple episodes share
 	// one EpisodeHash; library files keep raw names, never Jellyfin-renamed).
 	IsBatch bool `json:"is_batch,omitempty"`
+	// BatchStart/BatchEnd sao a faixa REAL do pack, lida do nome do torrent na hora do download.
+	// Sem ela a tela de detalhe reconstruia a faixa pelo min/max dos episodios SALVOS, que sao so
+	// os pendentes: um pack 01-11 baixado com 5 episodios ja assistidos aparecia como "6-11".
+	// Pack sem faixa no nome foi escolhido como pack COMPLETO, entao vale 1..total. Zero
+	// (registro antigo, ou nem o total do AniList e conhecido) significa desconhecida — quem
+	// exibe cai no min/max.
+	BatchStart int `json:"batch_start,omitempty"`
+	BatchEnd   int `json:"batch_end,omitempty"`
 	// LibraryPaths are the hardlink paths created in the completed-anime library by
 	// JobOrganize. Empty means "not yet organized" — the marker JobOrganize uses to fire
 	// the completion webhook and write-back exactly once (idempotent across restarts).

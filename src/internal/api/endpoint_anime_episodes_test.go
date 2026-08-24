@@ -165,3 +165,46 @@ func TestHandleAnimeEpisodes_ListsEpisodesOutsideTheAniListWindow(t *testing.T) 
 		t.Error("o episódio 12 ainda não foi ao ar")
 	}
 }
+
+// A faixa do pack vai para a tela pelo registro salvo, não pelo min/max dos episódios listados:
+// com 5 assistidos, um pack 01-11 só tem registro de 6..11 e o min/max mentiria. Omitida
+// (omitempty) para episódio avulso, que não tem faixa nenhuma.
+func TestHandleAnimeEpisodes_BatchRange(t *testing.T) {
+	defer mockAnimeDetail()()
+
+	fm := &mockFileManager{episodes: []files.EpisodeStruct{
+		{
+			EpisodeNumber: 1, AnimeID: 21, EpisodeHash: "pack", EpisodeName: "Test Anime 1-11",
+			IsBatch: true, BatchStart: 1, BatchEnd: 11, DownloadDate: time.Now(),
+		},
+		{
+			EpisodeNumber: 2, AnimeID: 21, EpisodeHash: "solo", EpisodeName: "Test Anime - Episode 2",
+			DownloadDate: time.Now(),
+		},
+	}}
+	server := &Server{FileManager: fm}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/animes/21/episodes", nil)
+	req.SetPathValue("id", "21")
+	w := httptest.NewRecorder()
+	handleAnimeEpisodes(server)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var response SuccessResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	episodes := response.Data.(map[string]interface{})["episodes"].([]interface{})
+	ep1 := episodes[0].(map[string]interface{})
+	if ep1["batch_start"] != float64(1) || ep1["batch_end"] != float64(11) {
+		t.Errorf("esperava batch_start=1 batch_end=11, obteve %v-%v", ep1["batch_start"], ep1["batch_end"])
+	}
+
+	ep2 := episodes[1].(map[string]interface{})
+	if _, present := ep2["batch_start"]; present {
+		t.Errorf("batch_start deve ser omitido para episódio avulso, obteve %v", ep2["batch_start"])
+	}
+}

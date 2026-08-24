@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -316,5 +317,73 @@ func TestAnimeVerification_CancelledLeavesNoReport(t *testing.T) {
 	report := state.GetLastCheckReport()
 	if !report.FinishedAt.IsZero() || len(report.Problems) != 0 || len(report.Limits) != 0 {
 		t.Errorf("passe cancelado não deve deixar relatório, obteve %+v", report)
+	}
+}
+
+// blockingFM segura o passe dentro de LoadSavedEpisodes até ser liberado, para que um segundo
+// passe seja disparado com o primeiro comprovadamente em andamento.
+type blockingFM struct {
+	lifecycleFM
+	blocked atomic.Bool
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (m *blockingFM) LoadSavedEpisodes() ([]files.EpisodeStruct, error) {
+	saved, err := m.lifecycleFM.LoadSavedEpisodes()
+	if m.blocked.CompareAndSwap(false, true) {
+		close(m.entered)
+		<-m.release
+	}
+	return saved, err
+}
+
+func (m *blockingFM) loads() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.loadedSavedCount
+}
+
+// Dois passes simultâneos (o do loop + o do POST /check) liam episodes.json no início e só
+// escreviam no fim: o segundo enxergava a lista ANTES dos downloads do primeiro e baixava tudo de
+// novo — foi assim que um anime já coberto por um pack ganhou torrents avulsos dos mesmos
+// episódios, sobrescrevendo os registros do pack. Passe concorrente é descartado.
+func TestAnimeVerification_SkipsWhenAnotherPassIsRunning(t *testing.T) {
+	reportPassAniList(t)
+	emptyNyaa(t)
+
+	fm := &blockingFM{
+		lifecycleFM: lifecycleFM{configs: reportPassConfig(t)},
+		entered:     make(chan struct{}),
+		release:     make(chan struct{}),
+	}
+	state := NewState()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		AnimeVerification(context.Background(), fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
+	}()
+
+	select {
+	case <-fm.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("o primeiro passe não começou")
+	}
+	before := fm.loads()
+
+	AnimeVerification(context.Background(), fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
+
+	if got := fm.loads(); got != before {
+		t.Errorf("o passe concorrente deveria ter sido descartado, mas leu os episódios salvos (%d -> %d)", before, got)
+	}
+
+	close(fm.release)
+	<-done
+
+	// E o passe seguinte, já com o primeiro terminado, roda normalmente.
+	AnimeVerification(context.Background(), fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
+	if got := fm.loads(); got <= before {
+		t.Errorf("terminado o primeiro passe, o próximo deve rodar (leituras: %d -> %d)", before, got)
 	}
 }

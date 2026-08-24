@@ -1286,3 +1286,16 @@ A causa viaja **dentro** do erro (sentinelas embrulhadas com `%w`), e não num p
 - Trocar o banner de outage por toast "porque é erro" — toast some, o outage não; a tela continua errada depois que ele sumiu.
 - Mandar frase pronta do Go em vez de código, "porque é uma string só" — o daemon não sabe o locale do navegador, e foi assim que o JSON cru chegou à tela.
 - Remover o `<details>` do texto cru "porque o usuário não entende" — quem abre issue precisa dele, e recolhido ele não atrapalha quem não precisa.
+
+### 67. Passe de verificação é um por vez, e o concorrente é descartado — não enfileirado
+
+`AnimeVerification` pega `verificationMu.TryLock()` e **volta na hora** se outro passe está rodando.
+
+O passe lê `episodes.json` **uma vez** no começo (fase 1) e só escreve no fim (fase 3, sequencial). Dois passes simultâneos — o do loop e o do `POST /check`, dois `/check`, ou um `/check` logo depois de um `UpdateInterval` — enxergam a mesma lista velha: o segundo não vê nada do que o primeiro acabou de baixar e baixa tudo **de novo**. Foi assim que um anime já coberto por um pack (`01 ~ 11`, episódios 6..11 registrados) ganhou torrents avulsos dos episódios 10 e 11, e a escrita do segundo passe sobrescreveu os registros do pack com os hashes avulsos — dois torrents dos mesmos episódios no disco e a tela mostrando o pack e os avulsos lado a lado.
+
+Descartar, e não enfileirar, é deliberado: o passe descartado leria exatamente o estado que o passe em andamento está corrigindo, e o próximo tick do loop cobre o que faltar. Enfileirar só adiaria a mesma leitura velha.
+
+**Don't "fix" by:**
+- Recarregar `episodes.json` no meio do passe "para ver o que o outro salvou" — a janela continua aberta entre a leitura e a escrita, e as duas escritas continuam brigando.
+- Trocar por `Lock()` (enfileirar) — vira uma fila de passes redundantes que rodam com estado velho, cada um segurando o próximo.
+- Tirar o `TryLock` porque "o `POST /check` já roda em goroutine" — a goroutine é o que cria a concorrência, não o que a resolve.

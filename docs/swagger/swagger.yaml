@@ -76,6 +76,17 @@ definitions:
     properties:
       airing_at:
         type: integer
+      batch_end:
+        type: integer
+      batch_start:
+        description: |-
+          BatchStart/BatchEnd sao a faixa REAL do pack a que este episodio pertence, lida do nome do
+          torrent no download. A tela nao consegue deduzi-la da lista: os episodios ja assistidos nao
+          viram registro, entao o min/max dos registros de um mesmo hash encolhe o pack (um 01-11
+          baixado com 5 assistidos aparecia como "6-11"). Pack sem faixa no nome ("(Season 1+OVA)
+          [Batch]") conta como completo e vale 1..total. Omitidas quando 0 — registro antigo, ou nem
+          o total do AniList e conhecido —, e ai o min/max volta a ser o melhor palpite.
+        type: integer
       download_date:
         type: string
       episode_hash:
@@ -86,8 +97,6 @@ definitions:
           torrent itself has no single episode number), so joining by number would miss batches
           entirely. Joining by hash instead, single and batch episodes use the same path. Empty
           (and omitted via omitempty) when the episode has no saved record.
-        type: string
-      episode_name:
         type: string
       episode_number:
         description: |-
