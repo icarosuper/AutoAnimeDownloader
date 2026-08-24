@@ -51,6 +51,10 @@
     pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json',                     method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}',                                                      events: [...ALL_EVENTS] },
     slack:    { name: 'Slack',    url: 'https://hooks.slack.com/services/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"text":"*{{title}}*\\n{{message}}"}',                                                                                                                   events: [...ALL_EVENTS] },
     apprise:  { name: 'Apprise',  url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG',                    method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","body":"{{message}}"}',                                                                                                             events: [...ALL_EVENTS] },
+    // Nao sao notificacoes: disparam um scan da biblioteca. So em download_completed — nao ha o que
+    // escanear quando o episodio foi apenas detectado ou o download falhou.
+    jellyfin: { name: 'Jellyfin', url: 'http://YOUR_JELLYFIN_URL/Library/Refresh',                     method: 'POST', headers: { 'X-Emby-Token': 'CHANGE_API_KEY' },                  body: '',                                                                                                                                                      events: ['download_completed'] },
+    plex:     { name: 'Plex',     url: 'http://YOUR_PLEX_URL/library/sections/CHANGE_ID/refresh?X-Plex-Token=CHANGE_TOKEN', method: 'GET', headers: {},                                 body: '',                                                                                                                                                      events: ['download_completed'] },
   };
 
   const bodyPlaceholder = '{"message":"{{message}}"}';

@@ -5,8 +5,6 @@
 - Modal com lista para substituir torrent **+0.1.0**
 	- Hoje vc tem que trazer um torrent de fora e inserir no campo
 	- Quero um botão que abre a listagem do nyaa dentro do app
-- Integração Jellyfin/Plex — **+0.1.0**
-	- Trigger de library scan após download concluído
 - Proper release no Windows — **+1.0.0**
 	- Autenticar app com conta Microsoft
 	- Instalar ao invés de rodar de arquivo executável

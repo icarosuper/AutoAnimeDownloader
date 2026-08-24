@@ -44,7 +44,7 @@ Reorderable lists that drive torrent ranking during search (fansub groups, resol
 
 ### Notifications (`/notifications`)
 
-Webhook configuration: add/edit/remove webhook presets (name, URL, method, headers, body template), pick which events trigger each one (new episode, download failed, download completed), and send a test request. Template variables like `{{title}}`/`{{message}}` are documented in [Config Reference](../agents/config.md#webhook-template-variables).
+Webhook configuration: add/edit/remove webhook presets (name, URL, method, headers, body template), pick which events trigger each one (new episode, download failed, download completed), and send a test request. Presets include the usual notification services plus **Jellyfin** and **Plex** — those two fire a library scan on `download_completed` instead of a message (fill in the URL, the token and, for Plex, the library section id). Template variables like `{{title}}`/`{{message}}` are documented in [Config Reference](../agents/config.md#webhook-template-variables).
 
 ### Logs (`/logs`)
 
