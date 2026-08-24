@@ -48,8 +48,8 @@ func NewFakeBackend() *FakeBackend {
 }
 
 // Ensure is a no-op for the fake (no real session to create), but records the path so tests
-// can assert which save path a caller opened the session at — MigrateSavePath opens the OLD
-// path before moving the data, and that ordering is the whole point of the migration.
+// can assert which download path a caller opened the session at, and whether it opened one
+// at all (see endpoint_standalone_animes_test.go).
 func (f *FakeBackend) Ensure(savePath string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

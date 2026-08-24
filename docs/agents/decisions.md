@@ -331,7 +331,7 @@ Ordering detail: `ensureStartupSession` runs **after** `jobQueue.Start()`. Creat
 
 **Don't "fix" by:** removing the `Ensure` from the verification pass (breaks the incomplete-config boot and reacting to `completed_anime_path` changes), removing the startup call (stops seeding whenever the loop is stopped), moving startup reconciliation out of the verification pass, or calling `ensureStartupSession` before `jobQueue.Start()`.
 
-**Amendment (see #31):** `daemon.MigrateSavePath` now runs in `main.go` between `jobQueue.Start()` and `ensureStartupSession`, converting a legacy `save_path` installation to the single-folder model by moving its data under the derived download path. If migration fails, `ensureStartupSession` is **skipped entirely** for that boot: the data may still be sitting at the legacy path, so opening the session at the new derived `DownloadPath()` would resume every torrent against an empty directory and re-download the whole library. The verification pass keeps retrying the migration on each tick until it succeeds; only then does a session get created.
+**Amendment (see #31):** `daemon.MigrateSavePath` used to run in `main.go` between `jobQueue.Start()` and `ensureStartupSession`, and `ensureStartupSession` was skipped for the whole boot when it failed. Both are **gone** (2026-08-24, see the amendment on #31): `ensureStartupSession` now runs unconditionally right after `jobQueue.Start()`.
 
 ---
 
@@ -451,7 +451,23 @@ mid-download renders an empty progress bar for its whole paused lifetime.
 
 **Why it's right:** a restrição de mesmo-filesystem do `#21` era uma armadilha que só aparecia como erro no save; derivando o caminho ela vira invariante. Dois campos obrigatórios sem diferença clara confundiam o usuário, para quem só a biblioteca importa. `ProbePath` continua existindo porque exFAT/FAT32/alguns SMB não têm hardlink nenhum. O `.ignore` + o prefixo com ponto mantêm o Jellyfin fora da pasta de download.
 
-**Don't "fix" by:** reintroduzir `save_path` como campo de config ou variável de ambiente (re-arma a migração a cada boot); tirar a zeragem de `SavePath` no `PUT /config`; deixar `MigrateSavePath` seguir em frente quando o rename falha (rebaixa tudo em silêncio); tirar a guarda que faz `DeleteEmptyFolders` pular `.torrents`.
+**Don't "fix" by:** reintroduzir `save_path` como campo de config ou variável de ambiente; tirar a guarda que faz `DeleteEmptyFolders` pular `.torrents`.
+
+**Amendment (2026-08-24): a migração foi REMOVIDA.** `daemon.MigrateSavePath`, o campo
+`Config.SavePath`, a zeragem dele no `PUT /config` e os seis testes de migração não existem mais.
+O que sobrou da decisão é só o caminho derivado (`Config.DownloadPath`).
+
+Consequência que precisa ficar explícita: uma instalação que **ainda não migrou** (um
+`config.json` com `save_path` preenchido, de uma versão anterior) perde o vínculo com os dados.
+O campo agora é desconhecido, o JSON o ignora, a rain abre o caminho derivado, acha vazio e
+**rebaixa a biblioteca inteira**. Mover `<save_path>/*` para `<completed_anime_path>/.torrents`
+antes de subir a versão nova passou a ser um passo manual, documentado no README.
+
+As três coisas que a migração garantia e agora ninguém garante: o rename preserva inode (seed e
+hardlinks sobrevivem), o marcador de raiz (`torrents.RootMarkerName`) viaja junto com os dados —
+sem isso o `Ensure` seguinte enxerga troca de pasta e zera os `LibraryPaths` (ver #34) — e a
+operação era idempotente com retry a cada passe. Quem reintroduzir a migração precisa dos três,
+não só do rename.
 
 ---
 
@@ -520,7 +536,7 @@ Três propriedades que caíram de graça e são intencionais:
 
 **Emenda à decisão 29:** `clearLibraryPathsAfterRootSwap` zera `LibraryPaths` — justamente o que a #29 proíbe. A proibição continua valendo para arquivo faltando: o que ela protege é a exclusão deliberada de **um** episódio da biblioteca, que um cheque por `Stat` a cada passe ressuscitaria para sempre. Uma troca de raiz é outro evento: sumiu a pasta inteira para onde os registros apontam, o daemon já está rebaixando o conteúdo dela, e a detecção dispara **uma vez por troca** — nunca vira o laço de ressurreição da #29. Sem essa limpeza a recuperação fica pela metade: os torrents rebaixam, mas os episódios organizados antes da troca ficam com `LibraryPaths` órfão e nunca voltam para a biblioteca.
 
-**Don't "fix" by:** devolver a flag no retorno do `Ensure` em vez do latch (ver acima); trocar os marcadores por comparação de inode (`syscall.Stat_t.Ino` não existe no Windows); tratar erro de leitura do marcador como "sumiu" (uma falha de permissão passaria a apagar os registros da biblioteca — por isso `readRootID` só engole `IsNotExist`); fazer a limpeza de `LibraryPaths` a cada passe em vez de só na troca (aí sim vira a violação da #29); tirar o rename do marcador em `MigrateSavePath` (a migração preserva os hardlinks por rename e passaria a parecer uma troca).
+**Don't "fix" by:** devolver a flag no retorno do `Ensure` em vez do latch (ver acima); trocar os marcadores por comparação de inode (`syscall.Stat_t.Ino` não existe no Windows); tratar erro de leitura do marcador como "sumiu" (uma falha de permissão passaria a apagar os registros da biblioteca — por isso `readRootID` só engole `IsNotExist`); fazer a limpeza de `LibraryPaths` a cada passe em vez de só na troca (aí sim vira a violação da #29); ~~tirar o rename do marcador em `MigrateSavePath`~~ (a migração foi removida em 2026-08-24 — ver #31; se ela voltar, o rename do marcador volta a ser obrigatório pelo mesmo motivo).
 
 ---
 
@@ -1155,7 +1171,7 @@ Mesma disciplina da cascata de `deriveAnimeChip` (`lib/domain/animeState.ts`): a
 
 **What it looks like:** um setter de erro que também apaga um campo não relacionado, e um `SetLastCheckReport` que **precisa** vir depois de um `SetLastCheckError(nil)` que já rodou três linhas antes. Parece acoplamento acidental, e a correção "óbvia" é separar as duas coisas.
 
-**Why it's right:** as sete saídas antecipadas de `AnimeVerification` (config incompleta, migração do `save_path`, probe de hardlink, backend não inicializado, `Ensure`, migração de ids, AniList) já chamam `SetLastCheckError`. Com a limpeza dentro dela, **nenhuma delas precisa de linha nova** — e nenhuma pode esquecer. E a semântica é a certa: um passe que abortou antes de olhar anime nenhum não tem relatório por anime, tem `pass_error`. Sem a limpeza, a tela mostraria os problemas do passe *anterior* lado a lado com um erro de passe novo, sugerindo que os dois vieram da mesma verificação.
+**Why it's right:** as saídas antecipadas de `AnimeVerification` (config incompleta, probe de hardlink, backend não inicializado, `Ensure`, migração de ids, AniList — eram sete até a migração do `save_path` sair, ver #31) já chamam `SetLastCheckError`. Com a limpeza dentro dela, **nenhuma delas precisa de linha nova** — e nenhuma pode esquecer. E a semântica é a certa: um passe que abortou antes de olhar anime nenhum não tem relatório por anime, tem `pass_error`. Sem a limpeza, a tela mostraria os problemas do passe *anterior* lado a lado com um erro de passe novo, sugerindo que os dois vieram da mesma verificação.
 
 A segunda consequência é igualmente desejada: o cancelamento (`verification.go`, no `select` do `ctx.Done()`) chama `SetLastCheckError(nil)` e retorna, então **passe interrompido não deixa relatório** — ele estava incompleto, e um relatório parcial diria "só este anime teve problema" quando os outros nem chegaram a ser olhados.
 

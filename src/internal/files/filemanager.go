@@ -78,10 +78,6 @@ type NotificationsConfig struct {
 }
 
 type Config struct {
-	// SavePath e um campo LEGADO, lido apenas por daemon.MigrateSavePath. O diretorio de
-	// download deixou de ser configuravel e passou a ser derivado (ver DownloadPath). O
-	// omitempty faz o campo sumir do config.json assim que a migracao o zera.
-	SavePath           string   `json:"save_path,omitempty" swaggerignore:"true"`
 	CompletedAnimePath string   `json:"completed_anime_path"`
 	AnilistUsername    string   `json:"anilist_username,omitempty"`
 	AnilistUsernames   []string `json:"anilist_usernames"`
@@ -190,7 +186,6 @@ func getDefaultConfig() *Config {
 	}
 
 	return &Config{
-		SavePath:               "",
 		CompletedAnimePath:     completedPath,
 		AnilistUsernames:       []string{},
 		CheckInterval:          10,

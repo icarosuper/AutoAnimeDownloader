@@ -57,13 +57,17 @@ There is no `save_path` field. The download/seeding working directory is **deriv
 
 Torrents download and keep seeding there (rain's `DataDir`, layout `<DownloadPath()>/<torrent-id>/...`); on completion, video files are hardlinked out into `completed_anime_path` itself (the Jellyfin library). Because the download directory is a subfolder of the library, the two are guaranteed to share a filesystem — the old "must be on the same volume" requirement is now an architectural invariant rather than something the user can misconfigure. `Librarian.ProbePath(completed_anime_path)` still runs (on config save and on every verification pass) to catch filesystems that don't support hardlinks at all (exFAT/FAT32, some SMB shares), unrelated to the cross-volume case.
 
-**Automatic migration:** installations upgrading from a version that still had a configured `save_path` are migrated automatically and idempotently by `daemon.MigrateSavePath` (`internal/daemon/migration.go`), which runs at boot and at the top of every verification pass. It moves (renames, same filesystem) each torrent's data directory from the old `save_path` into the derived download path, then clears `SavePath` and persists the config. See decisions.md #31.
+**No automatic migration.** `daemon.MigrateSavePath` used to move a legacy `save_path`'s torrent
+folders into the derived download path at boot; it was **removed** along with the `SavePath` field.
+A `config.json` that still carries `save_path` loads fine (JSON ignores unknown fields) and the key
+disappears on the next save, but its data is **not** moved — rain opens the derived path, finds it
+empty and re-downloads. Moving the folder is now a manual, pre-upgrade step. See decisions.md #31.
 
 ## Removed Field
 
 `qbittorrent_url` (and its `QBITTORRENT_URL` env override) was **removed** when the external qBittorrent dependency was replaced by an embedded BitTorrent client. Old configs that still contain the key load fine (JSON ignores unknown fields) and the key disappears on the next save.
 
-`save_path` was **removed** as a user-configurable field (see "Download Path" above). It survives in the `Config` struct only as a legacy, `omitempty` field read by the migration; `PUT /config` always zeroes it, and it no longer appears in `config.json` once migrated.
+`save_path` was **removed** entirely — first as a user-configurable field (the download directory is derived, see "Download Path" above), then as a struct field once the migration that read it was deleted. Old configs carrying the key load fine and the key disappears on the next save.
 
 ## Required Fields
 
@@ -82,7 +86,6 @@ Default: `completed_anime_path` starts as `~/Animes` (`getDefaultConfig()`), so 
 - `check_interval` — > 0
 - `episode_retry_limit`, `watched_episodes_to_keep`, `max_concurrent_downloads`, `max_episodes_per_anime`, `max_batch_torrent_size_gb`, `max_episode_torrent_size_gb`, `min_seeders`, `max_search_pages` — >= 0 (`max_episodes_per_anime` and `max_batch_torrent_size_gb` treat `0` as "off"; see their field descriptions above)
 - `min_free_disk_percent` — 0..99
-- `save_path` is always zeroed on the incoming config before it is persisted, regardless of what the client sends
 
 ## Per-Anime Settings (`AnimeSettings`)
 

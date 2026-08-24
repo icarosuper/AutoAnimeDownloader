@@ -200,6 +200,9 @@ func TestManager_LoadConfigs_WithNonExistentFile(t *testing.T) {
 
 func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 	mockFS := NewMockFileSystem()
+	// save_path e qbittorrent_url sao campos REMOVIDOS: continuam na fixture de proposito,
+	// provando que um config.json escrito por versao antiga ainda carrega (JSON ignora
+	// campo desconhecido) em vez de quebrar o boot.
 	configJSON := `{
 		"save_path": "/anime",
 		"anilist_username": "testuser",
@@ -219,9 +222,6 @@ func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if config.SavePath != "/anime" {
-		t.Errorf("expected SavePath '/anime', got '%s'", config.SavePath)
-	}
 	if len(config.AnilistUsernames) != 1 || config.AnilistUsernames[0] != "testuser" {
 		t.Errorf("expected AnilistUsernames ['testuser'], got %v", config.AnilistUsernames)
 	}
@@ -271,8 +271,8 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
 
 	config := &files.Config{
-		SavePath:              "/test",
 		AnilistUsernames:      []string{"user123"},
+		CompletedAnimePath:    "/test",
 		CheckInterval:         15,
 		MaxEpisodesPerAnime:   10,
 		EpisodeRetryLimit:     5,
@@ -294,8 +294,8 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 	contentStr := string(content)
 
 	// Verificar alguns campos no JSON
-	if !strings.Contains(contentStr, `"save_path": "/test"`) {
-		t.Error("expected save_path in JSON")
+	if !strings.Contains(contentStr, `"completed_anime_path": "/test"`) {
+		t.Error("expected completed_anime_path in JSON")
 	}
 	if !strings.Contains(contentStr, `"user123"`) {
 		t.Error("expected user123 in anilist_usernames JSON")

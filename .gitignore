@@ -18,6 +18,9 @@ node_modules/
 runtime/
 !runtime/.gitkeep
 
+# Runtime logs (the real one lives in ~/.autoAnimeDownloader/)
+daemon.log
+
 # Environment variables
 .env
 

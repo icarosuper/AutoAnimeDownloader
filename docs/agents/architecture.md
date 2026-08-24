@@ -62,7 +62,7 @@ Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state file
 - **Library (Jellyfin):** when a torrent completes, its video files are **hardlinked** into `<completed_anime_path>/<AnimeName>/` — one folder **per AniList entry**, season/cour marker kept (`sanitizeName`, decisions.md #45), plus a `tvshow.nfo` carrying the AniList id. With `RenameFilesForJellyfin`, every file gets the Jellyfin name `"Anime Name - E05.mkv"` — a single episode from its record, a batch file from the episode number parsed out of its own filename (`nyaa.ExtractEpisodeNumber`); files with no readable number (NCOP/NCED, extras, movies) and two files of one pack landing on the same number keep the raw filename. The hardlink shares bytes with the seeded copy, so no space is duplicated.
 - **Same volume, by construction:** the download directory lives inside `completed_anime_path`, so the old cross-filesystem failure mode is now structurally impossible. `Librarian.ProbePath(completedPath)` still validates that the filesystem supports hardlinks at all (exFAT/FAT32/some SMB shares don't) — it runs on config save and on every verification pass (decisions.md #26).
 - **Deletion** frees space by removing **both** links: the library hardlink (`Librarian.RemoveFromLibrary`) and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). A batch torrent shared by multiple episodes is only removed once **all** its episodes are deleted (batch guard).
-- **Migration:** an installation upgrading from a version with a configured `save_path` has its torrent data folders moved (renamed, same filesystem) into the derived download path by `daemon.MigrateSavePath` (`internal/daemon/migration.go`), then `SavePath` is cleared. Idempotent — runs at boot (`cmd/daemon/main.go`) and at the top of every verification pass (`verification.go`), so a config saved mid-migration is picked up on the next pass.
+- **No `save_path` migration.** `daemon.MigrateSavePath` used to move a legacy `save_path`'s torrent folders into the derived download path at boot and at the top of every pass; it was removed along with the `Config.SavePath` field. An old `config.json` still carrying the key loads (JSON ignores unknown fields) but its data is **not** moved — moving it is a manual pre-upgrade step. See decisions.md #31.
 
 ## API
 
@@ -235,11 +235,10 @@ Deferred job queue for async library organization. Decouples the hardlink-into-l
 
 ### `src/internal/daemon/migration.go`
 
-One-time, idempotent migration off the legacy `save_path` field. See decisions.md #31 for the full "why".
+Migrations that run at boot and at the top of the verification pass. The `save_path` migration that used to live here was removed with the field — see decisions.md #31.
 
 | Symbol | Purpose |
 |--------|---------|
-| `MigrateSavePath(fs, fm, backend)` | No-op if `Config.SavePath` is empty. Otherwise: opens a temporary torrent session at the **old** `save_path`, lists its `DataDir`s, renames each one into `Config.DownloadPath()`, then clears `SavePath` and saves the config. Renames (not copies) — same filesystem is guaranteed because the old hardlink probe always required it. Aborts without clearing `SavePath` if any rename fails, so a retry (next boot / next verification pass) picks up where it left off |
 | `isAncestorOrEqual(dir, child)` | Guards against renaming a directory into itself — relevant for Docker's default layout, where the library nested inside the old save path |
 
 Called from `cmd/daemon/main.go` (boot, before the verification loop starts) and from the top of `AnimeVerification` (`verification.go`) on every pass, before the hardlink probe. `verification.go` reloads the config immediately after calling it, since migration persists a changed config that the rest of the pass must see.
@@ -283,7 +282,7 @@ All persistence. Key types:
 
 | Symbol | Purpose |
 |--------|---------|
-| `Config` struct | All user settings — maps to `config.json`. `SavePath` is a **legacy** field (`omitempty`), read only by `daemon.MigrateSavePath`; it is zeroed as soon as migration runs or `PUT /config` is called |
+| `Config` struct | All user settings — maps to `config.json`. There is no `save_path`: the download directory is derived by `Config.DownloadPath()` |
 | `Config.DownloadPath()` | Derives the download/seeding directory: `filepath.Join(CompletedAnimePath, ".torrents")` (`downloadDirName` const). Computed on every call, not stored |
 | `EpisodeKey` struct | `AnimeID`, `Episode` — **a identidade de um episódio** em todo o app (arquivo de episódios, bloqueados, rotas da API). `EpisodeStruct.Key()` a produz |
 | `EpisodeStruct` struct | `AnimeID`, `EpisodeHash`, `EpisodeName`, `DownloadDate`, `ManuallyManaged`, `EpisodeNumber int`, `IsBatch bool`, `BatchStart`/`BatchEnd int` (faixa real do pack: lida do nome do torrent, ou 1..total quando o pack não traz faixa e por isso vale como completo; 0 = desconhecida), `LibraryPaths []string` (hardlink paths in the library, set once organized) |
@@ -579,7 +578,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `TorrentBackend.PrioritizeAll(hashes)` | Batch form, applied **in the order received** — one call, because N `Prioritize` calls would front-push past each other and reverse the batch. Unknown/completed hashes are ignored, not rejected. Backs the group and bulk "Priorizar" buttons |
 | `TorrentBackend.SetMaxActiveDownloads(n)` | Caps concurrent **incomplete** torrents; `0` disables the cap. Fed by `Config.MaxConcurrentDownloads` |
 | `TorrentBackend.ConsumeRootSwap()` | Reports **and clears** a swap latched by `Ensure`: the download folder was moved/trashed/replaced. Latched rather than returned by `Ensure` because the manual-download endpoints call `Ensure` too and must not swallow it — only the verification pass consumes it (decisions.md #34) |
-| `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<save_path>/<id>`), `Completed`, `Status` (API slug from `statusSlug`), plus progress fields (`BytesCompleted/Total/Uploaded`, `DownloadSpeed`, `UploadSpeed`, `PeersTotal`, `PiecesHave/Total`, `ETASeconds`, `SeededForSeconds`, `AddedAt`) — all filled from a single `Stats()` call per torrent in `toInfo`. `QueuePosition` is the exception: 1-based place in the queue's waiting line, written by `queue.markQueued`, `0` = not waiting |
+| `TorrentInfo` struct | Backend-agnostic snapshot: `Hash` (join key with `EpisodeHash`), `Name`, `DataDir` (`<download-path>/<id>`), `Completed`, `Status` (API slug from `statusSlug`), plus progress fields (`BytesCompleted/Total/Uploaded`, `DownloadSpeed`, `UploadSpeed`, `PeersTotal`, `PiecesHave/Total`, `ETASeconds`, `SeededForSeconds`, `AddedAt`) — all filled from a single `Stats()` call per torrent in `toInfo`. `QueuePosition` is the exception: 1-based place in the queue's waiting line, written by `queue.markQueued`, `0` = not waiting |
 
 **`status.go`**
 
@@ -592,7 +591,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | Symbol | Purpose |
 |--------|---------|
-| `Session` struct | Wraps a `torrent.Session`; `DataDir=save_path`, `Database=session.db`, `DataDirIncludesTorrentID=true`, RPC disabled |
+| `Session` struct | Wraps a `torrent.Session`; `DataDir=Config.DownloadPath()`, `Database=session.db`, `DataDirIncludesTorrentID=true`, RPC disabled |
 | `NewSession(savePath, databasePath)` | Creates the embedded client |
 | `Session.Add/List/Get/Remove/Pause/Resume/Announce/SetCallbacks/Close` | Implement `TorrentBackend` |
 | `toInfo(t)` | Builds a `TorrentInfo` from one `t.Stats()` call; `Completed` comes from `completedFromStats`, not from `Status` |
@@ -617,7 +616,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 | Symbol | Purpose |
 |--------|---------|
-| `SessionManager` struct | Owns the current `Session`; recreates it when `save_path` changes **or when the download root was swapped**; keeps `session.db` stable across changes |
+| `SessionManager` struct | Owns the current `Session`; recreates it when the download path changes **or when the download root was swapped**; keeps `session.db` stable across changes |
 | `NewSessionManager(dbPath)` | Constructor; derives `download_root.id` and `queue.json` from `dbPath`'s folder, and loads the persisted queue |
 | `SessionManager.Ensure(savePath)` | Creates/recreates the session; returns `true` when a new session was made (caller reconciles); latches `pendingSwap`; `ErrSessionNotReady` if `savePath==""` |
 | `SessionManager.ConsumeRootSwap()` | Reads and clears `pendingSwap` |
@@ -645,7 +644,7 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 | `FakeBackend.Announce(hash)` | Records the call in `announceCalls`; error if the hash is absent |
 | `FakeBackend.AnnounceCalls()` | Returns the hashes passed to `Announce`, in order — for test assertions |
 | `FakeBackend.RootSwapped` | Makes `Ensure` report a swapped root, so daemon-side recovery is testable without a real session |
-| `FakeBackend.EnsureCalls()` | Returns the save paths passed to `Ensure`, in order — used by migration tests to prove a session was opened at the **old** `save_path` |
+| `FakeBackend.EnsureCalls()` | Returns the paths passed to `Ensure`, in order — used to assert which download path a caller opened the session at, and whether it opened one at all |
 | `FakeBackend.AddCompleted(hash, dataDir)` / `CompleteTorrent(hash, dataDir)` / `FailTorrent(hash, err)` | Test helpers to drive completion/failure callbacks |
 
 ### `src/internal/notifications/notifications.go`

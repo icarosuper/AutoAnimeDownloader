@@ -78,12 +78,6 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			config.AnilistUsername = ""
 		}
 
-		// save_path deixou de ser configuravel: o diretorio de download e derivado da
-		// biblioteca. Zerar aqui e a vedacao que impede a API de reintroduzir o campo e
-		// re-armar daemon.MigrateSavePath a cada boot. A migracao so pode ser disparada
-		// por um config.json escrito por uma versao anterior, que e o caso de uso.
-		config.SavePath = ""
-
 		// anilist_usernames NAO e validado: uma instalacao que so usa animes avulsos nunca
 		// configura conta nenhuma (decisions.md #49).
 

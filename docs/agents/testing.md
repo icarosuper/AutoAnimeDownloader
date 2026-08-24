@@ -192,7 +192,7 @@ A leaked goroutine keeps running `AnimeVerification` for the rest of the package
 
 Pass `daemon.LoopControl.Done` read **before** any `UpdateInterval` call: the field is a snapshot taken at construction, and `UpdateInterval` starts a fresh goroutine with a fresh channel while the field still points at the original.
 
-Any test that lets `AnimeVerification` run to completion must also stub AniList — `t.Cleanup(anilist.MockAniListDo(...))`, registered **before** the goroutine's own cleanup so it is undone last — and point `SavePath`/`CompletedAnimePath` at `t.TempDir()`. Otherwise the pass hits the live API and creates the configured folders on the developer's real disk.
+Any test that lets `AnimeVerification` run to completion must also stub AniList — `t.Cleanup(anilist.MockAniListDo(...))`, registered **before** the goroutine's own cleanup so it is undone last — and point `CompletedAnimePath` at `t.TempDir()` (the download path is derived from it). Otherwise the pass hits the live API and creates the configured folders on the developer's real disk.
 
 ## Docker Mock Servers
 

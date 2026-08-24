@@ -42,7 +42,6 @@ func (m *mockFileManager) LoadConfigs() (*files.Config, error) {
 	if m.configs == nil {
 		return &files.Config{
 			AnilistUsernames:      []string{"testuser"},
-			SavePath:              "/tmp/test",
 			CompletedAnimePath:    "/tmp/completed",
 			CheckInterval:         10,
 			MaxEpisodesPerAnime:   12,
@@ -260,7 +259,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 	t.Run("PUT with valid config succeeds", func(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:      []string{"newuser"},
-			SavePath:              "/tmp/newpath",
 			CompletedAnimePath:    "/tmp/newcompleted",
 			CheckInterval:         15,
 			MaxEpisodesPerAnime:   20,
@@ -339,7 +337,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 	t.Run("PUT with missing anilist_username returns 400", func(t *testing.T) {
 		config := files.Config{
-			SavePath:            "/tmp/test",
 			CheckInterval:       10,
 			MaxEpisodesPerAnime: 12,
 		}
@@ -372,7 +369,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 	t.Run("PUT with invalid check_interval returns 400", func(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:    []string{"testuser"},
-			SavePath:            "/tmp/test",
 			CompletedAnimePath:  "/tmp/completed",
 			CheckInterval:       0,
 			MaxEpisodesPerAnime: 12,
@@ -393,7 +389,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 	t.Run("PUT with missing completed_anime_path returns 400", func(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:    []string{"testuser"},
-			SavePath:            "/tmp/test",
 			CheckInterval:       10,
 			MaxEpisodesPerAnime: 12,
 		}
@@ -420,7 +415,6 @@ func TestHandleUpdateConfig(t *testing.T) {
 
 		config := files.Config{
 			AnilistUsernames:    []string{"testuser"},
-			SavePath:            "/vol1/save",
 			CompletedAnimePath:  "/vol2/completed",
 			CheckInterval:       10,
 			MaxEpisodesPerAnime: 12,
@@ -475,7 +469,6 @@ func TestHandleConfig(t *testing.T) {
 	t.Run("PUT method calls handleUpdateConfig", func(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:      []string{"testuser"},
-			SavePath:              "/tmp/test",
 			CompletedAnimePath:    "/tmp/completed",
 			CheckInterval:         10,
 			MaxEpisodesPerAnime:   12,
@@ -507,9 +500,9 @@ func TestHandleConfig(t *testing.T) {
 	})
 }
 
-func TestHandleUpdateConfig_SavePath(t *testing.T) {
-	// save_path deixou de ser exigido: o diretorio de download e derivado da biblioteca.
-	t.Run("PUT sem save_path e aceito", func(t *testing.T) {
+func TestHandleUpdateConfig_NoSavePath(t *testing.T) {
+	// Nao existe save_path: o diretorio de download e derivado da biblioteca.
+	t.Run("PUT com so completed_anime_path e aceito", func(t *testing.T) {
 		mockFM := &mockFileManager{}
 		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
 
@@ -533,38 +526,6 @@ func TestHandleUpdateConfig_SavePath(t *testing.T) {
 		}
 	})
 
-	// A vedacao: um cliente antigo mandando save_path nao pode reintroduzir o campo, senao
-	// daemon.MigrateSavePath re-arma a cada boot.
-	t.Run("PUT com save_path persiste o campo vazio", func(t *testing.T) {
-		mockFM := &mockFileManager{}
-		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
-
-		config := files.Config{
-			AnilistUsernames:    []string{"testuser"},
-			SavePath:            "/tmp/legado",
-			CompletedAnimePath:  "/tmp/completed",
-			CheckInterval:       10,
-			MaxEpisodesPerAnime: 12,
-			EpisodeRetryLimit:   5,
-		}
-
-		jsonData, _ := json.Marshal(config)
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData))
-		req.Header.Set("Content-Type", "application/json")
-		w := httptest.NewRecorder()
-
-		handler(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("Expected status code %d, got %d (body: %s)", http.StatusOK, w.Code, w.Body.String())
-		}
-		if mockFM.configs == nil {
-			t.Fatal("o config nao foi persistido")
-		}
-		if mockFM.configs.SavePath != "" {
-			t.Errorf("SavePath deveria ter sido zerado, veio %q", mockFM.configs.SavePath)
-		}
-	})
 }
 
 // max_episodes_per_anime = 0 passa a significar "sem teto" e deve ser aceito: era o unico teto do

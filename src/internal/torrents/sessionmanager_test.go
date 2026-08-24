@@ -24,7 +24,7 @@ func newTestManager(t *testing.T) (*SessionManager, string, string) {
 	return m, filepath.Join(base, "downloads-a"), filepath.Join(base, "downloads-b")
 }
 
-// Lazy creation: the daemon boots with an incomplete config (no SavePath), so no session
+// Lazy creation: the daemon boots with an incomplete config (no library), so no session
 // exists and every delegated call reports ErrSessionNotReady instead of panicking.
 func TestSessionManagerLazyCreation(t *testing.T) {
 	m, _, _ := newTestManager(t)

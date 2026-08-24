@@ -119,8 +119,8 @@ func getWebUiURL() string {
 // animes avulsos (decisions.md #49) o app funciona inteiro sem lista nenhuma, e exigir uma
 // conta so para o passe rodar deixaria essa instalacao presa na tela de configuracao.
 func isConfigComplete(config *files.Config) bool {
-	// SavePath e legado: uma instalacao migrada tem esse campo zerado, entao a checagem
-	// usa o caminho de download derivado (Config.DownloadPath), nao SavePath diretamente.
+	// O diretorio de download e derivado da biblioteca (Config.DownloadPath), entao checar
+	// o derivado cobre o unico campo que o usuario configura.
 	return config.DownloadPath() != ""
 }
 

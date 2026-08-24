@@ -61,21 +61,6 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		return
 	}
 
-	// Converte instalacoes antigas antes de qualquer coisa tocar o caminho de download.
-	// Abortar aqui e deliberado: seguir para o caminho novo com os dados no antigo faria
-	// a rain reverificar, achar nada e rebaixar tudo.
-	if err := MigrateSavePath(files.NewOSFileSystem(), fileManager, backend); err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to migrate the legacy save path; skipping verification")
-		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseStorage, err))
-		return
-	}
-	configs, err = fileManager.LoadConfigs()
-	if err != nil {
-		logger.Logger.Error().Err(err).Msg("Failed to reload configs after migration; skipping verification")
-		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseConfig, err))
-		return
-	}
-
 	// A biblioteca e montada com hardlinks. O endpoint de save da config sonda isso, mas
 	// configs escritos antes deste upgrade (ou direto no config.json pelo
 	// docker/entrypoint.sh) nunca passaram por ele. Sem esta porta um filesystem sem

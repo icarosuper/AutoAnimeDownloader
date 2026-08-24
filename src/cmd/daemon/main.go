@@ -304,19 +304,6 @@ func main() {
 	)
 	jobQueue.SetOrchestration(torrentManager, librarian)
 	jobQueue.Start()
-	// Converte uma instalacao antiga (save_path configurado) para o modelo de pasta unica,
-	// movendo os dados. Roda DEPOIS de jobQueue.Start(), entao Start() ja carregou a lista
-	// de jobs persistida antes da sessao temporaria de migracao existir: se essa sessao
-	// disparar uma conclusao espuria, ela NAO e descartada por Start(). O risco e limitado
-	// e se autocorrige: um job de organize afetado bate em ErrSessionNotReady ou num DataDir
-	// obsoleto, falha, e o passe de verificacao tenta de novo. Uma falha na migracao em si
-	// tambem nao e fatal aqui — mas o boot so pode abrir a sessao real (ensureStartupSession)
-	// no caminho derivado se a migracao teve sucesso; caso contrario os dados ainda estao no
-	// caminho antigo e abrir a sessao no novo caminho reverificaria tudo a 0%.
-	migrationErr := daemon.MigrateSavePath(files.NewOSFileSystem(), fileManager, torrentManager)
-	if migrationErr != nil {
-		logger.Logger.Error().Err(migrationErr).Msg("Failed to migrate the legacy save path; the verification pass will retry")
-	}
 	// Converte os AnimeID gravados de id de entrada para id de midia (decisions.md #43). Roda
 	// no boot, e nao so no passe de verificacao, porque a API ja comeca a servir /animes antes
 	// do primeiro tick — e com os ids no formato antigo a listagem duplica animes que estao em
@@ -344,18 +331,10 @@ func main() {
 	// with the process and is independent of the daemon loop (stopping the loop from the
 	// WebUI must not stop seeding). Runs after jobQueue.Start() because arming the resume
 	// listeners can fire a completion immediately, and Start() reloads jobs from disk over
-	// whatever is in memory. With no save path configured the session stays lazy: the Ensure
+	// whatever is in memory. With no library configured the session stays lazy: the Ensure
 	// in the verification pass creates it once the config is saved. Startup reconciliation
 	// stays in the verification pass (safety net) and runs on its first tick.
-	//
-	// Skipped when the migration above failed: the data may still be sitting at the legacy
-	// save path, so opening rain at the derived DownloadPath() now would resume every
-	// torrent against an empty directory and re-download the whole library. Leaving the
-	// session lazy here keeps the verification pass retrying the migration on each tick
-	// until it succeeds (see decisions.md #31).
-	if migrationErr == nil {
-		ensureStartupSession(torrentManager, fileManager)
-	}
+	ensureStartupSession(torrentManager, fileManager)
 
 	state := daemon.NewState()
 

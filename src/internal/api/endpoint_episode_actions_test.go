@@ -224,7 +224,6 @@ func newRealEpisodeStore(t *testing.T) *realEpisodeStore {
 		),
 		configs: &files.Config{
 			AnilistUsernames:   []string{"testuser"},
-			SavePath:           filepath.Join(dir, "save"),
 			CompletedAnimePath: filepath.Join(dir, "completed"),
 			CheckInterval:      10,
 			EpisodeRetryLimit:  5,

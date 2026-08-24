@@ -10,15 +10,15 @@ import (
 )
 
 // ErrSessionNotReady is returned by SessionManager methods when no underlying session
-// exists yet (config incomplete — no SavePath).
+// exists yet (config incomplete — no library configured).
 var ErrSessionNotReady = errors.New("torrent session not ready (incomplete config)")
 
 // SessionManager owns the embedded torrent Session's lifecycle. It implements
 // TorrentBackend by delegating to the current session, so every call site injects one
 // uniform backend and never sees the create/recreate logic.
 //
-// The daemon can start without a complete config (no SavePath), in which case no session
-// exists until Ensure is first called with a valid SavePath. Changing SavePath at runtime
+// The daemon can start without a complete config (no library configured), in which case no
+// session exists until Ensure is first called with a valid path. Changing that path at runtime
 // closes the old session and opens a new one at the new DataDir.
 //
 // The mutex is an RWMutex and is held for the whole duration of every delegated call
@@ -53,7 +53,7 @@ var _ queueOps = (*SessionManager)(nil)
 var _ TorrentBackend = (*SessionManager)(nil)
 
 // NewSessionManager creates a manager. dbPath is the resume database location, kept stable
-// across SavePath changes so resume data survives. The download-root id file lives next to
+// across download-path changes so resume data survives. The download-root id file lives next to
 // it, for the same reason: it must stay put while the download folder moves.
 func NewSessionManager(dbPath string) *SessionManager {
 	m := &SessionManager{
@@ -106,7 +106,7 @@ func (m *SessionManager) ensure(savePath string) (bool, error) {
 			logger.Logger.Warn().Str("save_path", savePath).
 				Msg("The download folder was moved, trashed or replaced; recreating the torrent session so the files are redownloaded at the configured path")
 		} else {
-			logger.Logger.Info().Str("old", m.savePath).Str("new", savePath).Msg("SavePath changed, recreating torrent session")
+			logger.Logger.Info().Str("old", m.savePath).Str("new", savePath).Msg("Download path changed, recreating torrent session")
 		}
 		if err := m.session.Close(); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Error closing previous torrent session")

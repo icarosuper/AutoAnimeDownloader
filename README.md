@@ -55,7 +55,11 @@ Syncs with [Anilist](https://anilist.co) (one or more accounts — or none at al
 
 That's it — the BitTorrent client is built in, so there is no qBittorrent (or any other torrent client) to install or configure.
 
-> **Upgrading from a qBittorrent-based version?** See the [Migration Guide](docs/guides/migration-embedded-torrent.md) — `completed_anime_path` is now required. There is no separate `save_path` field anymore: the download directory lives nested inside `completed_anime_path` (same volume by construction), and any pre-existing torrent data at a legacy `save_path` is migrated into the new location automatically on first boot after upgrading.
+> **Upgrading from a very old (qBittorrent-based) version?** `completed_anime_path` is now
+> required, and the download directory lives nested inside it (`<completed_anime_path>/.torrents`).
+> The automatic migration off the old `save_path` has been **removed** — if you are coming from a
+> version that still had `save_path`, move that folder's contents into `<completed_anime_path>/.torrents`
+> yourself before starting, or the torrents will re-download from scratch.
 
 > **Ports:** the embedded client listens on a default port range (20000–30000) and finds peers via DHT/PEX. There is no automatic port forwarding (UPnP/NAT-PMP); forwarding a port is optional and only improves inbound connectivity.
 
@@ -103,9 +107,8 @@ sudo make uninstall-global
 
 Download `AutoAnimeDownloader_Windows_v*.exe` from the [latest release](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest) and run it — no installation needed.
 
-Access the web UI at **http://localhost:8091**.
-
-For running as a Windows Service, see the [Development Guide](docs/guides/development.md#windows-service-install).
+Access the web UI at **http://localhost:8091**. It runs in the foreground — there is no
+Windows installer or background service yet.
 
 See [all releases](https://github.com/icarosuper/AutoAnimeDownloader/releases) for older versions.
 

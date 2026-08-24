@@ -256,7 +256,6 @@ func reportPassConfig(t *testing.T) *files.Config {
 	base := t.TempDir()
 	return &files.Config{
 		AnilistUsernames:      []string{"tester"},
-		SavePath:              base + "/downloads",
 		CompletedAnimePath:    base + "/library",
 		CheckInterval:         10,
 		DownloadStatuses:      []string{"CURRENT"},

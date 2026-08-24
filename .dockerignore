@@ -1,15 +1,6 @@
 .git/
 .gitignore
 node_modules/
-dist/
-*.md
-!README.md
-docs/*.md
-docs/*.json
-docs/*.yaml
-!docs/docs.go
-src/tests/
-*_test.go
 .env
 .env.*
 .vscode/
@@ -21,4 +12,21 @@ src/tests/
 build/
 test-data/
 data/
+daemon.log
+.debug_*/
 
+# Docs: markdown at any depth. docs/swagger/ stays — cmd/daemon/main.go imports docs.go.
+# (The old `*.md` / `docs/*.md` pair only matched the root and docs/ top level, so
+# docs/agents/ and docs/guides/ were shipped in every build context.)
+**/*.md
+docs/swagger/swagger.json
+docs/swagger/swagger.yaml
+
+# Tests
+src/tests/
+**/*_test.go
+
+# NOTE: do not broaden this to src/internal/frontend/dist — Dockerfile.build.{amd64,arm64,
+# windows} expect the frontend to be ALREADY BUILT there and copied in with the context.
+# Only docker/Dockerfile builds it in its own stage.
+dist/

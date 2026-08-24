@@ -229,7 +229,6 @@ func TestAnimeVerification_NoHardlinkSupportAbortsPass(t *testing.T) {
 
 	fm := &lifecycleFM{configs: &files.Config{
 		AnilistUsernames:   []string{"tester"},
-		SavePath:           t.TempDir(),
 		CompletedAnimePath: t.TempDir(),
 		CheckInterval:      10,
 	}}
@@ -257,7 +256,6 @@ func TestAnimeVerification_ValidPathsRunPass(t *testing.T) {
 	base := t.TempDir()
 	fm := &lifecycleFM{configs: &files.Config{
 		AnilistUsernames:   []string{"tester"},
-		SavePath:           base + "/downloads",
 		CompletedAnimePath: base + "/library",
 		CheckInterval:      10,
 	}}

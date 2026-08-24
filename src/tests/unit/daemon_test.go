@@ -504,7 +504,6 @@ func createValidConfigJSON(t *testing.T) []byte {
 	t.Helper()
 	base := t.TempDir()
 	config := &files.Config{
-		SavePath:              filepath.Join(base, "save"),
 		CompletedAnimePath:    filepath.Join(base, "completed"),
 		AnilistUsername:       "testuser",
 		AnilistUsernames:      []string{"testuser"},

@@ -37,7 +37,6 @@ func TestHandleCheck(t *testing.T) {
 	state.SetStatus(daemon.StatusStopped)
 	mockFM := &mockFileManager{configs: &files.Config{
 		AnilistUsernames:      []string{"testuser"},
-		SavePath:              filepath.Join(tmp, "downloads"),
 		CompletedAnimePath:    filepath.Join(tmp, "completed"),
 		CheckInterval:         10,
 		MaxEpisodesPerAnime:   12,

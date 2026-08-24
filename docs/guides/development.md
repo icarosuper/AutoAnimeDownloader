@@ -34,7 +34,7 @@ AutoAnimeDownloader/
 │       └── mocks/           # Mock servers (Anilist, Nyaa)
 ├── docs/                     # Documentation
 ├── scripts/                  # Build, dev, and test scripts
-├── infra/                    # systemd/NSSM service files and installers
+├── infra/linux/              # systemd unit, desktop entry and the installer Makefile shipped in the release zip
 └── build/                    # Build outputs (gitignored)
 ```
 
@@ -99,15 +99,9 @@ swag init -g src/cmd/daemon/main.go -o docs/swagger
 
 ## Windows Service Install
 
-To run the daemon as a Windows service (via [NSSM](https://nssm.cc/download)):
-
-```powershell
-# Run PowerShell as Administrator
-cd infra\windows
-.\install.ps1
-```
-
-`.\uninstall.ps1` removes it. See `infra/windows/install.ps1` for what it configures if you need to do it manually.
+Not supported yet. The Windows release is a bare `.exe` you run in the foreground — there is
+no installer and no service wrapper. Running detached as a background service is tracked in
+`docs/TODO.md` under "Proper release no Windows".
 
 ## Contributing
 
