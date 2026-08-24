@@ -4,7 +4,7 @@
 
 Syncs with [Anilist](https://anilist.co) (one or more accounts — or none at all), scrapes [Nyaa](https://nyaa.si) for matching torrents, and downloads them with a built-in BitTorrent client — all unattended, from a single self-contained binary (no external torrent client to install or configure). Includes an embedded Svelte web UI for monitoring, torrent management and configuration.
 
-[![Build Status](https://github.com/icarosuper/AutoAnimeDownloader/workflows/Build/badge.svg)](https://github.com/icarosuper/AutoAnimeDownloader/actions)
+[![CI](https://github.com/icarosuper/AutoAnimeDownloader/actions/workflows/build.yml/badge.svg)](https://github.com/icarosuper/AutoAnimeDownloader/actions/workflows/build.yml)
 
 ---
 
@@ -80,7 +80,9 @@ Grab the zip for your architecture from the [latest release](https://github.com/
 ```bash
 unzip AutoAnimeDownloader_Linux_x86_v*.zip
 cd AutoAnimeDownloader_Linux_x86_v*
-make install
+make install-user          # ~/.local/bin, no sudo
+# or:
+sudo make install-global   # /usr/local/bin, system-wide
 ```
 
 This installs:
@@ -90,9 +92,11 @@ This installs:
 
 Access the web UI at **http://localhost:8091**.
 
-**Uninstall:**
+**Uninstall:** use the counterpart of how you installed.
 ```bash
-make uninstall
+make uninstall-user
+# or:
+sudo make uninstall-global
 ```
 
 ### Windows
@@ -135,7 +139,7 @@ See the [CLI Guide](docs/guides/cli.md) for the full reference.
 
 ## Building from Source
 
-**Prerequisites:** Go 1.25+, Node.js 20+, npm, make (Linux)
+**Prerequisites:** Go 1.25+, Bun (not npm), make (Linux/macOS/WSL), Docker (only for the cross-platform `make build`)
 
 The frontend must be built before the Go binaries, as it's embedded into the daemon.
 
@@ -143,11 +147,13 @@ The frontend must be built before the Go binaries, as it's embedded into the dae
 git clone https://github.com/icarosuper/AutoAnimeDownloader.git
 cd AutoAnimeDownloader
 
-# Linux/macOS/WSL
+# Linux/macOS/WSL (cross-builds all platforms via Docker)
 make build
 
-# Windows
-.\scripts\build.ps1
+# Any platform, no Docker — builds for the host only
+cd src/internal/frontend && bun install && bun run build && cd ../../..
+go build -o build/autoanimedownloader-daemon ./src/cmd/daemon
+go build -o build/autoanimedownloader ./src/cmd/cli
 ```
 
 See the [Build Guide](docs/guides/build.md) for full details including cross-compilation and Docker builds.

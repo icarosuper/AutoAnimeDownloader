@@ -122,13 +122,18 @@ Defaults to `"dev"` if not injected.
 
 ## Detailed File Map
 
-### `src/internal/daemon/daemon.go`
+### `src/internal/daemon/` — núcleo do passe
 
-Main verification orchestrator. Key functions:
+There is no `daemon.go`. The orchestrator is spread over `loop.go` (the goroutine loop),
+`verification.go` (the pass itself), `episodes.go` (per-episode selection and removal),
+`search.go` (Nyaa search + filters), `helpers.go` (config/disk guards), `manual_download.go`
+(the API-driven downloads) and `standalone.go`. The table below is the package's key
+functions; the parenthesised file name says where each one lives.
 
 | Function | Purpose |
 |----------|---------|
-| `StartLoop(p)` | Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
+
+| `StartLoop(p)` | (`loop.go`) Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
 | `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`). **Um passe por vez**: pega `verificationMu.TryLock()` e volta na hora se outro já está rodando (ver decisions.md #67) |
 | `processAnimeEpisodes(...)` | Per-anime: monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(...))`, decide download/delete por episódio e executa a estratégia de busca |
 | `firstEpisodeToConsider(anime, savedEpisodes)` | Onde a lista começa: `Progress + 1` (avulso tem progresso 0, logo começa no 1), recuando para o menor episódio já salvo — sem o recuo, um salvo abaixo do progresso não é "checado" e a poda o apagaria ignorando `watched_episodes_to_keep` |
@@ -184,7 +189,7 @@ All three also pass through the `min_seeders` floor (`filterSearchResults`).
 
 ### `src/internal/daemon/standalone.go`
 
-Standalone animes (animes tracked without being in any AniList list). `appendStandaloneAnimes` and `DownloadStandaloneAnime` are listed in the `daemon.go` symbol table above; both are documented in [decisions.md #49](decisions.md).
+Standalone animes (animes tracked without being in any AniList list). `appendStandaloneAnimes` and `DownloadStandaloneAnime` are listed in the package symbol table above; both are documented in [decisions.md #49](decisions.md).
 
 ### `src/internal/daemon/debug.go`
 
@@ -259,6 +264,18 @@ Thread-safe daemon state. Key types:
 | `StateNotifier` interface | `NotifyStateChange(status, lastCheck, hasError)` — WebSocket subscribes |
 | `State.GetAll()` | Returns `(status, lastCheck, hasError)` atomically |
 | `State.SetStatus(s)` | Sets status and fires notifier if changed |
+
+### `src/internal/daemon/passerror.go`
+
+Códigos de causa de um passe abortado. O backend manda **código**, o frontend monta a frase
+(mesma fronteira que `lib/domain/checkIssue.ts`) — antes disso o banner da tela de Status
+despejava o `error.Error()` cru, às vezes um JSON de resposta da AniList.
+
+| Symbol | Purpose |
+|--------|---------|
+| `PassErrConfig` / `PassErrSetup` / `PassErrLibrary` / `PassErrTorrent` / `PassErrAnilist` / `PassErrStorage` / `PassErrUnknown` | Os códigos exportados, consumidos pelo `GET /last-check` e pelo frontend |
+| `errCause*` (unexported) | Sentinelas embrulhadas no erro no sítio do aborto — o código viaja **dentro** do erro, não num parâmetro novo de `SetLastCheckError` |
+| `passErrorCode(err)` | Traduz o erro embrulhado no código. Um sítio novo que esqueça de embrulhar cai em `PassErrUnknown`, que tem frase própria — degrada, não quebra |
 
 ### `src/internal/files/filemanager.go`
 
@@ -409,6 +426,13 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 - `WebSocketManager.NotifyStateChange(status, lastCheck, hasError)` — implements `StateNotifier`, broadcasts to all clients
 - `WebSocketManager.SetStateGetter(fn)` — wires initial state on new connection
 
+### `src/internal/api/client.go`
+
+HTTP client **for** the daemon's own REST API, used by the CLI binary (`cmd/cli`) — not by the
+daemon itself. `NewClient(baseURL)` plus `doRequest`/`parseResponse` and one method per command:
+`GetStatus`, `GetConfig`, `UpdateConfig`, `GetAnimes`, `GetEpisodes`, `TriggerCheck`,
+`StartLoop`, `StopLoop`.
+
 ### `src/internal/anilist/anilist.go`
 
 | Symbol | Purpose |
@@ -440,6 +464,20 @@ Actions: `download`, `redownload`, `delete` (+ block), `release` (unblock + unma
 ### `src/internal/anilist/standalone.go`
 
 `SearchMedia(term)`, `GetMediaByID(id)`, `MediaSearchResult` and `mediaByIDCache` — the two queries the standalone-anime feature needs, both listed in the `anilist.go` symbol table above.
+
+### `src/internal/anilist/health.go`
+
+Saúde da AniList, exposta ao frontend como **código** (nunca frase pronta — o daemon não sabe o
+locale do navegador), pela mesma razão de `daemon/passerror.go`.
+
+| Symbol | Purpose |
+|--------|---------|
+| `Health` struct | Estado corrente: `state`, `message`, `retryAt` |
+| `CurrentHealth()` | Lê o estado atual (`atomic.Pointer`, sem lock) |
+| `setHealth` / `clearHealth` (unexported) | Gravam/limpam o estado a partir das respostas HTTP |
+| `firstError(body)` | Extrai `(status, message)` do primeiro erro GraphQL do corpo — a AniList devolve 200 com erro no body |
+| `classify(status)` | Mapeia o status HTTP no código de estado |
+| `retryAfter(headerValue)` | Lê o `Retry-After` do rate limit (30 req/min) |
 
 ### `src/internal/nyaa/nyaa.go`
 
@@ -636,6 +674,45 @@ Embedded BitTorrent client (`github.com/cenkalti/rain/v2`) behind a `TorrentBack
 
 - `Logger` global — zerolog instance, writes to console + rotating `daemon.log`
 - `InitDebug(filePath)` — like `Init(true)` but the structured JSONL trace goes to `filePath` instead of `daemon.log`. Used by `--debug-anime` so one-shot debug runs never touch `~/.autoAnimeDownloader`. Returns a `close func() error`
+
+### `src/internal/cli/`
+
+Daemon lifecycle control for the CLI binary (`cmd/cli` is the only importer). Everything below
+lives in `process.go`, except the two build-tagged `getSysProcAttr` variants. Prefers the
+platform service manager and falls back to a PID file (`daemon.pid`, in the config folder).
+
+| Symbol | Purpose |
+|--------|---------|
+| `IsRunning()` / `Start(daemonBinary)` / `Stop()` / `GetPID()` | The exported surface — `loop start`/`loop stop`/`status` sit on top of these |
+| `startWithSystemd` / `stopWithSystemd` / `isRunningWithSystemd` (unexported) | Linux path via `autoanimedownloader.service` (systemd **user** unit), used when `isSystemdAvailable()` |
+| `startWithWindowsService` / `stopWithWindowsService` / `isRunningWithWindowsService` | Windows path via the `AutoAnimeDownloader` service, used when `isWindowsServiceAvailable()` |
+| `isRunningWithPID` | Last-resort path when no service manager answers |
+| `getSysProcAttr()` | Build-tagged detach flags — `process_unix.go` (`!windows`) vs `process_windows.go` |
+
+### `src/internal/tray/`
+
+System tray icon. Build-tagged: the real implementation needs CGO, so a stub keeps the
+CGO-free build (which CI asserts in `build.yml`) compiling.
+
+| File | Purpose |
+|------|---------|
+| `tray.go` (`cgo && !notray`) | `TrayManager` — `NewTrayManager(apiPort)`, `Start()`, `WaitForShutdown()`; menu opens the Web UI (`daemon.WebUIURL`) and triggers a check |
+| `tray_stub.go` (`!cgo \|\| notray`) | Same `TrayManager` API, does nothing. This is what a `CGO_ENABLED=0` binary gets |
+| `icon.go` | `GetIconData()` over the embedded `icon.png` (also copied into the Linux release zip by `make package-*`) |
+
+On Linux the daemon only starts the tray when `DISPLAY` is non-empty (`cmd/daemon/main.go`).
+
+### `src/internal/version/version.go`
+
+`Version` string, `"dev"` by default, overwritten at build time via
+`-ldflags "-X AutoAnimeDownloader/src/internal/version.Version=$VERSION"` (see
+`docker/Dockerfile.build.*` and `scripts/build.sh`).
+
+### `src/internal/frontend/embed.go`
+
+`DistFS` — the `//go:embed dist/*` of the built frontend. `dist/` must exist before
+`go build`, which is why the frontend always builds first (see [Build Guide](../guides/build.md)).
+`api.Server.handleStaticFiles` serves it through `fs.Sub(DistFS, "dist")`.
 
 ### `src/internal/frontend/src/`
 

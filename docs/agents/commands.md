@@ -44,11 +44,11 @@ make release PLATFORM=linuxamd64    # build + package in one step
 
 # The actual Docker logic lives in scripts/build.sh <platform> <version>
 # Makefile delegates to it — don't add build logic directly to Makefile targets
-
-# Linux installation
-make install    # install daemon, CLI, and systemd service
-make uninstall
 ```
+
+The Linux install targets are **not** in this Makefile — they ship inside the release zip
+(`infra/linux/Makefile`): `make install-user` / `sudo make install-global`, and the matching
+`uninstall-user` / `uninstall-global`.
 
 ## Running the Daemon
 

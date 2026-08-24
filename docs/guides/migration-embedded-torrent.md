@@ -9,25 +9,26 @@ single self-contained process — you no longer install, run, or configure qBitt
 1. **Set `completed_anime_path` (now required).** The daemon will not run until it is set.
    If it is empty, the app opens the config page and waits. Set it in the WebUI, CLI
    (`config set completed_anime_path <path>`), or `config.json`.
-2. **Put `completed_anime_path` on the SAME volume/filesystem as `save_path`.** Completed
-   episodes are **hardlinked** into the completed folder (the Jellyfin library), and
-   hardlinks cannot cross filesystems. The config-save step verifies this and rejects
-   cross-device paths with a clear error. (Docker: make sure both paths are under the same
-   bind mount / volume.)
+2. **Nothing to do about `save_path`.** It is no longer a configurable field: the
+   download/seeding directory is **derived** as `<completed_anime_path>/.torrents`, so the
+   two always share a filesystem by construction. A pre-existing `save_path` in an old
+   `config.json` is migrated automatically on first boot (`daemon.MigrateSavePath`) and then
+   cleared. What is still checked is that `completed_anime_path` sits on a filesystem that
+   supports hardlinks at all — exFAT/FAT32 and some SMB shares are rejected on save.
 3. **Point your media server at `completed_anime_path`.** This is the biggest behavior
    change — see below.
 
 ## Behavior changes
 
 - **The library is now `completed_anime_path`, for *all* episodes.** Previously only
-  *finished* animes were moved there and *ongoing* episodes were renamed in place in
+  *finished* animes were moved there and *ongoing* episodes were renamed in place in the old
   `save_path`. Now **every** completed episode (ongoing or finished) is hardlinked into
-  `completed_anime_path`. `save_path` is only the download/seeding working directory. If
-  your Jellyfin/Plex library pointed at `save_path`, repoint it at `completed_anime_path`,
-  or it will look empty after upgrading.
-- **Files keep seeding from `save_path`** and are hardlinked (not copied) into the library,
-  so no extra disk space is used. Deleting a watched episode removes **both** links to
-  actually free space.
+  `completed_anime_path`. If your Jellyfin/Plex library pointed at the old `save_path`,
+  repoint it at `completed_anime_path`, or it will look empty after upgrading.
+- **Files keep seeding from the download directory** (`<completed_anime_path>/.torrents`,
+  hidden from the Jellyfin scanner) and are hardlinked (not copied) into the library, so no
+  extra disk space is used. Deleting a watched episode removes **both** links to actually
+  free space.
 - **Batch torrents:** a watched episode that belongs to a multi-episode batch keeps its
   library link until the *entire* batch torrent is removed (all its episodes deleted). This
   is intentional — see `docs/agents/decisions.md`.
@@ -47,9 +48,12 @@ single self-contained process — you no longer install, run, or configure qBitt
 - `qbittorrent_url` config field is **removed**. Old `config.json` files still load (unknown
   JSON fields are ignored); the key disappears on the next save.
 - The `QBITTORRENT_URL` environment variable / override is **removed**.
+- `save_path` is **removed** as a user-configurable field too — see `docs/agents/config.md`
+  ("Download Path"). It survives in the struct only as a legacy `omitempty` field read by
+  the migration, and disappears from `config.json` once migrated.
 - Resume data (piece bitfields) lives in `~/.autoAnimeDownloader/session.db`
-  (`%APPDATA%\.autoAnimeDownloader\session.db` on Windows), kept outside `save_path` so it
-  survives a `save_path` change.
+  (`%APPDATA%\.autoAnimeDownloader\session.db` on Windows), kept in the config folder
+  rather than alongside the downloads so it survives a library move.
 
 ## Networking
 

@@ -5,7 +5,7 @@ How to build AutoAnimeDownloader from source.
 ## Prerequisites
 
 - **Go** 1.25+
-- **Bun** (frontend package manager/build tool)
+- **Bun** (frontend package manager/build tool — not npm)
 - **Docker** — only needed for the Makefile's cross-platform builds
 - **make** (Linux/macOS/WSL)
 
@@ -29,13 +29,12 @@ Output lands in `build/linux-amd64/`, `build/linux-arm64/`, `build/windows-amd64
 
 `VERSION` defaults to `git describe --tags --always --dirty`; override with `make build VERSION=1.2.3`.
 
-## Windows native build (no Docker)
+## Windows
 
-```powershell
-.\scripts\build.ps1
-```
-
-Builds directly on Windows with the tray icon. For cross-platform builds from Windows, use WSL or Docker Desktop with `make build`.
+There is no native Windows build script. Build from Windows either through WSL / Docker Desktop
+with `make build PLATFORM=windows` (produces the tray-enabled binary, cross-compiled with
+mingw-w64 inside `docker/Dockerfile.build.windows`), or with the manual `go build` below
+(host-only, no tray icon).
 
 ## Manual build (single platform, no Docker)
 

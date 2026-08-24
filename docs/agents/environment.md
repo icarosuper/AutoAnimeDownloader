@@ -21,6 +21,30 @@ These override values from `config.json`. Useful for Docker/CI:
 
 > `docker/entrypoint.sh` no longer reads a `SAVE_PATH` env var to template the initial `config.json` — the download directory is derived from `COMPLETED_ANIME_PATH` (see `docs/agents/config.md` — Download Path). If `SAVE_PATH` is still set in a Docker Compose file or `.env`, the entrypoint simply ignores it; it no longer appears in the generated config.
 
+## Docker entrypoint (initial `config.json`)
+
+Read **only** by `docker/entrypoint.sh`, which templates the first `config.json` on container
+start. They are not read by the Go code, and they do nothing after the file exists unless
+`FORCE_CONFIG_UPDATE` is set (which rewrites the whole file — see the caveat below).
+
+| Variable | Default | Config key written | Notes |
+|----------|---------|--------------------|-------|
+| `COMPLETED_ANIME_PATH` | `/app/downloads/completed` | `completed_anime_path` | The library folder. Point it at a mounted volume — the image only creates `/app/data` |
+| `ANILIST_USERNAMES` | `""` | `anilist_usernames` (array) | Comma-separated; `"a, b"` → `["a","b"]`, empty → `[]` |
+| `ANILIST_USERNAME` | `""` | — | **Legacy**, accepted as a fallback for `ANILIST_USERNAMES`. Still writes the plural key |
+| `EXCLUDED_LISTS` | `""` | `excluded_lists` (array) | Comma-separated, same conversion |
+| `EXCLUDED_LIST` | `""` | — | **Legacy** fallback for `EXCLUDED_LISTS`, same as above |
+| `CHECK_INTERVAL` | `10` | `check_interval` | |
+| `MAX_EPISODES_PER_ANIME` | `12` | `max_episodes_per_anime` | |
+| `EPISODE_RETRY_LIMIT` | `5` | `episode_retry_limit` | |
+| `DELETE_WATCHED_EPISODES` | `true` | `delete_watched_episodes` | `true`/`1` → `true`, anything else → `false` |
+| `FORCE_CONFIG_UPDATE` | — (unset) | — | When non-empty, overwrites an existing `config.json` |
+
+> The generated file carries **7 of the ~25 fields** in `Config`. That is safe on creation —
+> `LoadConfigs` unmarshals over `getDefaultConfig()`, so the absent fields keep their defaults —
+> but `FORCE_CONFIG_UPDATE` rewrites the *whole* file, discarding everything the user set
+> through the UI or CLI. See `docs/TODO-competitive.md`.
+
 ## OS / Path
 
 | Variable | Where | Description |
