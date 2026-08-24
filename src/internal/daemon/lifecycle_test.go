@@ -286,9 +286,13 @@ func TestAnimeVerification_IncompleteConfigStillReportsMissingConfig(t *testing.
 
 	AnimeVerification(context.Background(), fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 
-	err := state.GetLastCheckError()
-	if err == nil || !strings.Contains(err.Error(), "missing required configuration") {
-		t.Fatalf("expected the missing-configuration error, got %v", err)
+	// Asserted by CAUSE, not by the message text: the message is what the user reads and is
+	// free to change, while the code is what the frontend switches on (see passerror.go).
+	if err := state.GetLastCheckError(); err == nil {
+		t.Fatal("expected the missing-configuration error, got nil")
+	}
+	if got := state.GetLastCheckErrorCode(); got != PassErrSetup {
+		t.Fatalf("pass error code = %q, want %q", got, PassErrSetup)
 	}
 	if fm.passRan() {
 		t.Error("verification must not run the pass with an incomplete config")

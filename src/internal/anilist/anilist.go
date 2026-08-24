@@ -101,6 +101,9 @@ func clearCaches() {
 	customListsCache.clear()
 	frontendListCache.clear()
 	mediaByIDCache.clear()
+	// A saude tambem e estado de pacote: sem zerar aqui, um teste que simula 403 deixaria o
+	// proximo teste enxergando a AniList fora do ar.
+	health.Store(&Health{State: HealthOK})
 }
 
 type AniListResponse struct {
@@ -284,14 +287,36 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 		return nil, ErrNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
-		logger.Logger.Warn().Int("status_code", resp.StatusCode).Msg("Anilist returned non-200 status")
-		return nil, fmt.Errorf("API returned status code: %d", resp.StatusCode)
+		// O corpo carrega o motivo real (rate limit vs. API desligada vs. query invalida);
+		// sem ele o log vira um numero sem diagnostico. A mensagem tambem alimenta o banner:
+		// um 403 de IP bloqueado explica o motivo por escrito, e so a AniList sabe qual e.
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		_, message := firstError(snippet)
+		setHealth(classify(resp.StatusCode), message, retryAfter(resp.Header.Get("Retry-After")))
+		logger.Logger.Warn().Int("status_code", resp.StatusCode).Str("body", string(snippet)).Msg("Anilist returned non-200 status")
+		// A mensagem extraida, e nao o corpo cru: o erro sobe ate a tela do usuario, e um dump
+		// de JSON com locations e column nao diz nada a ninguem. O corpo inteiro continua no log
+		// acima, que e onde ele serve para alguma coisa.
+		if message == "" {
+			message = strings.TrimSpace(string(snippet))
+		}
+		return nil, fmt.Errorf("anilist returned %d: %s", resp.StatusCode, message)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading response: %v", err)
 	}
+
+	// Um 200 pode carregar erro no envelope — a doc da AniList e explicita quanto a isso. Sem
+	// esta leitura o caso vira resposta vazia sem diagnostico. Nao e o mesmo problema do
+	// customLists null da decisions.md #11: aquele volta 200 SEM campo errors. Ver #65.
+	if status, message := firstError(body); status != 0 {
+		setHealth(classify(status), message, time.Time{})
+		logger.Logger.Warn().Int("graphql_status", status).Str("message", message).Msg("Anilist returned an error inside a 200 response")
+		return nil, fmt.Errorf("API returned error %d: %s", status, message)
+	}
+	clearHealth()
 
 	logger.Logger.Debug().Int("status_code", resp.StatusCode).Int("body_size", len(body)).Msg("Anilist response received")
 

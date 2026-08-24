@@ -1,5 +1,23 @@
 basePath: /api/v1
 definitions:
+  anilist.Health:
+    properties:
+      message:
+        description: |-
+          Message e a mensagem CRUA da AniList. Um 403 de IP bloqueado traz o motivo escrito para
+          ser lido por humano; e a unica informacao que o frontend nao tem como reconstruir.
+        type: string
+      retry_at:
+        description: |-
+          RetryAt vem do Retry-After de um 429. Zero quando nao se aplica: so o rate limit informa
+          quanto falta, e e o que permite mostrar contagem regressiva em vez de "tente mais tarde".
+        type: string
+      since:
+        type: string
+      state:
+        example: ok
+        type: string
+    type: object
   api.AniListSearchResult:
     properties:
       block_reason:
@@ -178,6 +196,13 @@ definitions:
     type: object
   api.StatusResponse:
     properties:
+      anilist:
+        allOf:
+        - $ref: '#/definitions/anilist.Health'
+        description: |-
+          Anilist e o ultimo estado conhecido da AniList, gravado por QUALQUER chamada (passe do
+          daemon ou poll do frontend). Viaja aqui, e nao num endpoint proprio, porque /status ja e
+          polled e ja e o payload que o WebSocket empurra — ver decisions.md #66.
       disk_free:
         example: 128849018880
         type: integer
@@ -303,6 +328,13 @@ definitions:
       pass_error:
         example: ""
         type: string
+      pass_error_code:
+        description: |-
+          PassErrorCode e a CAUSA do aborto, para o frontend montar a frase. PassError continua
+          carregando o texto cru, que a tela mostra recolhido: sem ele um usuario que quer abrir
+          issue nao tem o que colar. Ver passerror.go.
+        example: anilist
+        type: string
       problems:
         items:
           $ref: '#/definitions/daemon.Issue'
@@ -326,6 +358,11 @@ definitions:
         example: all_above_size_limit
         type: string
       downloaded:
+        description: |-
+          Downloaded e quantos episodios CONSUMIRAM uma vaga sob o teto, nao quantos baixaram neste
+          passe: handleAlreadySavedEpisode tambem incrementa o contador para episodio ja salvo. E o
+          numero certo para a frase "baixou N, sobraram M" — os N ja estao na biblioteca —, mas quem
+          ler isso como "downloads deste passe" vai se enganar.
         example: 12
         type: integer
       episodes:

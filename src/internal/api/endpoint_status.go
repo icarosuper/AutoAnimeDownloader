@@ -1,6 +1,7 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/version"
 	"net/http"
@@ -18,6 +19,10 @@ type StatusResponse struct {
 	// PAROU de adicionar torrents. Calculado no servidor de proposito: um limiar duplicado no
 	// frontend acabaria discordando do que o daemon esta fazendo.
 	DiskLow bool `json:"disk_low" example:"false"`
+	// Anilist e o ultimo estado conhecido da AniList, gravado por QUALQUER chamada (passe do
+	// daemon ou poll do frontend). Viaja aqui, e nao num endpoint proprio, porque /status ja e
+	// polled e ja e o payload que o WebSocket empurra — ver decisions.md #66.
+	Anilist anilist.Health `json:"anilist"`
 }
 
 // @Summary      Get daemon status
@@ -55,6 +60,7 @@ func handleStatus(server *Server) http.HandlerFunc {
 			DiskTotal: diskTotal,
 			DiskFree:  diskFree,
 			DiskLow:   diskLow,
+			Anilist:   anilist.CurrentHealth(),
 		}
 
 		JSONSuccess(w, http.StatusOK, response)

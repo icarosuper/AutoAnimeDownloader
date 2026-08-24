@@ -13,6 +13,7 @@
   // a troca em JS, só um dos dois é montado por vez.
   import { onDestroy, onMount } from 'svelte'
   import { location } from 'svelte-spa-router'
+  import SystemBanner from './SystemBanner.svelte'
   import Toasts from '../Toasts.svelte'
   import NavRail from './NavRail.svelte'
   import NavTabBar from './NavTabBar.svelte'
@@ -44,6 +45,10 @@
   {/if}
 
   <div class="flex min-w-0 flex-1 flex-col">
+    <!-- Banner de sistema: acima do conteúdo e fora do <main>, porque ele fala sobre a página
+         inteira (o daemon caiu, a AniList caiu), não sobre a rota atual. -->
+    <SystemBanner />
+
     <!-- Page Content — no {#key $locale} here; each route handles its own reactivity -->
     <main class="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-8 sm:px-6 md:pb-8 lg:px-8">
       <slot />

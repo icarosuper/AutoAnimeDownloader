@@ -1602,6 +1602,26 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "anilist.Health": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "description": "Message e a mensagem CRUA da AniList. Um 403 de IP bloqueado traz o motivo escrito para\nser lido por humano; e a unica informacao que o frontend nao tem como reconstruir.",
+                    "type": "string"
+                },
+                "retry_at": {
+                    "description": "RetryAt vem do Retry-After de um 429. Zero quando nao se aplica: so o rate limit informa\nquanto falta, e e o que permite mostrar contagem regressiva em vez de \"tente mais tarde\".",
+                    "type": "string"
+                },
+                "since": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string",
+                    "example": "ok"
+                }
+            }
+        },
         "api.AniListSearchResult": {
             "type": "object",
             "properties": {
@@ -1820,6 +1840,14 @@ const docTemplate = `{
         "api.StatusResponse": {
             "type": "object",
             "properties": {
+                "anilist": {
+                    "description": "Anilist e o ultimo estado conhecido da AniList, gravado por QUALQUER chamada (passe do\ndaemon ou poll do frontend). Viaja aqui, e nao num endpoint proprio, porque /status ja e\npolled e ja e o payload que o WebSocket empurra — ver decisions.md #66.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/anilist.Health"
+                        }
+                    ]
+                },
                 "disk_free": {
                     "type": "integer",
                     "example": 128849018880
@@ -1973,6 +2001,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": ""
                 },
+                "pass_error_code": {
+                    "description": "PassErrorCode e a CAUSA do aborto, para o frontend montar a frase. PassError continua\ncarregando o texto cru, que a tela mostra recolhido: sem ele um usuario que quer abrir\nissue nao tem o que colar. Ver passerror.go.",
+                    "type": "string",
+                    "example": "anilist"
+                },
                 "problems": {
                     "type": "array",
                     "items": {
@@ -2005,6 +2038,7 @@ const docTemplate = `{
                     "example": "all_above_size_limit"
                 },
                 "downloaded": {
+                    "description": "Downloaded e quantos episodios CONSUMIRAM uma vaga sob o teto, nao quantos baixaram neste\npasse: handleAlreadySavedEpisode tambem incrementa o contador para episodio ja salvo. E o\nnumero certo para a frase \"baixou N, sobraram M\" — os N ja estao na biblioteca —, mas quem\nler isso como \"downloads deste passe\" vai se enganar.",
                     "type": "integer",
                     "example": 12
                 },

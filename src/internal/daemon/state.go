@@ -95,6 +95,13 @@ func (s *State) GetLastCheckError() error {
 	return s.lastCheckError
 }
 
+// GetLastCheckErrorCode devolve a causa classificada do ultimo aborto, "" quando nao houve.
+func (s *State) GetLastCheckErrorCode() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return passErrorCode(s.lastCheckError)
+}
+
 func (s *State) SetLastCheckError(err error) {
 	s.mu.Lock()
 	s.lastCheckError = err

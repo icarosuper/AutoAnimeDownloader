@@ -1201,3 +1201,88 @@ A derivação continua existindo, mas com outro papel: `allDone(onboardingSteps(
 - Derivar os checkmarks de novo "para não duplicar estado" — é exatamente o bug que isto conserta.
 - Marcar o passo automaticamente quando a ação dele é feita no app (configurou a pasta → marca ①) — volta ao mesmo lugar para quem já tinha a pasta configurada, e faz o card se mexer sozinho enquanto está sendo lido.
 - Trocar os números por ícones de status — a numeração é o que diz que há uma ordem; o número dobra de caixa de marcar justamente para não haver dois marcadores para um estado só.
+
+---
+
+### 65. O orçamento da AniList é gasto pelo refresh de órfãos, não pelo passe do daemon — e o campo `errors` de um 200 não é lido
+
+**Location:** `src/internal/anilist/anilist.go` (`sendAnilistRequest`, `ttlCache`); `src/internal/api/endpoint_animes.go` (`refreshOrphanAnimes`); `src/internal/daemon/verification.go` (`searchAnilist`).
+
+**Documentação oficial:** [errors](https://github.com/AniList/docs/blob/master/docs/guide/graphql/errors.md), [rate-limiting](https://github.com/AniList/docs/blob/master/docs/guide/rate-limiting.md), [considerations](https://github.com/AniList/docs/blob/master/docs/guide/considerations.md). **Os números de lá não são copiados para cá de propósito** — o limite documentado é 90/min mas hoje está degradado para 30/min, e a própria doc chama isso de temporário. Número copiado apodrece em silêncio e alguém dimensiona cache por ele seis meses depois. A doc é a fonte; aqui fica só o que é nosso.
+
+**O que parece:** o daemon é o que fala com a AniList, então o passe de verificação parece ser o consumidor do limite, e os TTLs de `ttlCache` parecem cautela genérica.
+
+**Por que está certo:** medindo por minuto, por conta configurada:
+
+| Origem | Requisições | Observação |
+|---|---|---|
+| Passe do daemon | ~0,3/min | 3 por passe (`GetCustomListsMap` + `GetAllCurrentAnime` de download + `GetAllCurrentAnime` de delete), a cada `check_interval` (default 10 min) |
+| Poll de `/animes` | ≤1,2/min | `GetFrontendAnimeList` (TTL 60s) + `GetCustomListsMap` (TTL 5min) |
+| `refreshOrphanAnimes` | **1 por anime órfão** | `GetMediaByID`, até 5 concorrentes, TTL 60s |
+
+O passe do daemon é ruído. Quem estoura o limite é o refresh de órfãos: um `GetMediaByID` por anime baixado que a busca filtrada não cobriu, disparado **a cada poll do frontend**. Numa biblioteca com dezenas de animes fora dos status configurados, isso é uma rajada de dezenas de requisições — e a AniList tem um *burst limiter* separado do limite por minuto, que pune exatamente esse formato.
+
+É por isso que `mergeFailed` pula o refresh (`endpoint_animes.go:182`) em vez de tratar "não coberto" como "precisa refresh": com a lista falhada, todo anime baixado vira órfão aparente, e a rajada resultante realimenta a falha. Os TTLs de `frontendListCache` e `customListsCache` também não são cautela genérica — são o que torna o custo do poll **independente do número de abas abertas**. Sem eles, duas abas e duas contas já eram ~16 req/min só de frontend parado.
+
+**O campo `errors` de um 200 nunca é lido.** A doc é explícita: um 200 pode carregar erro no envelope. `sendAnilistRequest` desserializa direto no struct de dados e descarta `errors`, então esse caso hoje vira resposta vazia sem diagnóstico. **Isto não é a causa do `customLists` null da decisão #11** — aquele foi verificado por curl e volta 200 *sem* campo `errors`, é orçamento de complexidade. São dois problemas distintos com o mesmo sintoma aparente, e confundi-los faz procurar a correção no lugar errado.
+
+**Taxonomia documentada** (`errors[].status` quando presente, senão o HTTP):
+
+| Código | Significado | Recuperável sozinho? |
+|---|---|---|
+| 429 | Rate limit. Timeout de 1 min, com `Retry-After` e `X-RateLimit-Reset` | Sim |
+| 403 | API desligada por instabilidade | Só quando a AniList voltar |
+| 403 (mensagem custom) | IP bloqueado manualmente | Não |
+| 400 | Query inválida / campo inexistente → o schema mudou, é bug nosso | Não |
+| 404 | ID não existe | Não é falha — vira `ErrNotFound` |
+| 5xx | Erro interno da AniList | Sim, transitório |
+
+`errors[].validation` só existe em mutation; o app é somente-leitura e ignora.
+
+**Don't "fix" by:**
+- Otimizar o passe do daemon "porque ele fala com a AniList" — ele custa 0,3 req/min; o ganho é zero e o risco não.
+- Fazer `refreshOrphanAnimes` rodar mesmo com a lista falhada, "para a tela não ficar desatualizada" — é o loop de realimentação que produziu o 429 original.
+- Remover os TTLs porque "o daemon só busca a cada 10 minutos" — quem busca a cada 30 segundos é cada aba do frontend.
+- Copiar o limite atual da AniList para cá como constante — ele é temporário e muda sem aviso.
+
+---
+
+### 66. Banner é estado degradado; toast é falha de ação — e o banner tem três fontes com precedência, não três banners
+
+**Location:** política para `components/shell/AppShell.svelte` (slot único de banner) e `lib/api/client.ts` (`ApiError`, opção `silent`).
+
+**O que parece:** cada origem de erro quer o seu aviso, e a saída óbvia é empilhar — um banner de AniList, um de backend, o de WebSocket que já existe em `routes/Downloads.svelte:554`.
+
+**Por que está certo:** a distinção não é a gravidade, é a **duração**:
+
+- **Toast** — falhou uma ação que o usuário pediu (salvar config, adicionar anime). Já existe, já funciona, some sozinho.
+- **Banner** — o estado está degradado entre polls e explica por que a tela inteira parece errada. Persiste enquanto o estado persistir e **some no primeiro sucesso**, nunca por timer.
+
+O valor do banner não é reportar o erro: é explicar por que a lista está incompleta ou velha. Hoje `/animes` responde 200 com uma conta faltando e o usuário conclui que sumiu anime.
+
+As fontes são independentes, mas **empilhar é errado**: se o backend não responde, a saúde da AniList é informação velha vinda do último poll bem-sucedido, e mostrá-la ao lado de "daemon não responde" é ruído contraditório. Precedência, do mais a montante para o mais a jusante (`lib/domain/systemBanner.ts`, `pickBanner`):
+
+1. **Backend inalcançável** (`fetch` não recebeu resposta) — nada abaixo disso é observável.
+2. **Backend respondendo 5xx** — bug nosso.
+3. **AniList indisponível** (403/5xx) — banner mudo, "tente mais tarde".
+4. **AniList em rate limit** (429) — contagem regressiva derivada do `Retry-After`, que é o único caso em que se sabe o tempo exato.
+
+Mostra-se **um**, o de maior precedência.
+
+**O banner de WebSocket de `routes/Downloads.svelte` continua onde está.** Ele fala sobre aquela tela — o progresso ali é empurrado por WS e fica defasado sem ele —, enquanto o `SystemBanner` fala sobre o app inteiro. Consolidá-los exigiria mover a posse do `WebSocketClient` para o `AppShell` (hoje instanciado em `Status` e `Downloads`), o que é uma refatoração de outro assunto. A ausência do daemon já é coberta pelo estado `unreachable`, que vem do HTTP.
+
+**O botão de reportar só aparece em bug nosso** — backend 5xx, e 400 da AniList (schema mudou, nenhuma espera resolve). Um 429 ou um outage não são bug: botão de reportar ali só gera issue que se fecha com "é a AniList", e treina o usuário a ignorar o botão quando ele importa.
+
+**Ponto cego que isto fecha:** `getLastCheck` e `getTorrents` passam `silent: true` para não tostar a cada tick. Correto para toast — mas hoje significa que um 5xx repetido nesses endpoints é **invisível para sempre**. A saúde do backend é derivada de falhas *consecutivas* por endpoint (≥2), não de uma falha isolada, e por isso convive com `silent` sem reintroduzir o spam.
+
+**O `pass_error` segue a mesma regra.** O banner de passe abortado da tela de Status mostrava `err.Error()` cru — que, com a AniList fora do ar, era o corpo JSON da resposta inteiro (`{"errors":[{"message":…,"locations":[{"line":1,"column":1}]}]}`) na cara do usuário. `CheckReport` ganhou `pass_error_code`, classificado em `daemon/passerror.go`, e a frase é montada em `lib/domain/passError.ts`. O texto cru continua em `pass_error` e é mostrado **recolhido** num `<details>`: é a única coisa colável numa issue, mas não pode ser a primeira coisa que se lê.
+
+A causa viaja **dentro** do erro (sentinelas embrulhadas com `%w`), e não num parâmetro novo de `SetLastCheckError`: são ~15 chamadas, a maioria passando `nil` para limpar, e nenhuma delas precisou mudar. Um sítio de aborto novo que esqueça de embrulhar cai em `unknown`, que tem frase própria — degrada, não quebra.
+
+**Don't "fix" by:**
+- Empilhar os banners "porque são problemas diferentes" — com o backend fora, o estado da AniList na tela é mentira datada.
+- Fazer o banner sumir por timer — o estado ou acabou (chegou um 200) ou não acabou.
+- Pôr botão de reportar em todo banner "por simetria" — reportar rate limit é reportar comportamento normal.
+- Trocar o banner de outage por toast "porque é erro" — toast some, o outage não; a tela continua errada depois que ele sumiu.
+- Mandar frase pronta do Go em vez de código, "porque é uma string só" — o daemon não sabe o locale do navegador, e foi assim que o JSON cru chegou à tela.
+- Remover o `<details>` do texto cru "porque o usuário não entende" — quem abre issue precisa dele, e recolhido ele não atrapalha quem não precisa.

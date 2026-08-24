@@ -39,6 +39,7 @@
   import { totalSpeeds } from "../lib/utils/torrents.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
   import { issueMessage, batchNote } from "../lib/domain/checkIssue.js";
+  import { passErrorMessage } from "../lib/domain/passError.js";
   import { onboardingSteps, allDone } from "../lib/domain/onboarding.js";
   import {
     ONBOARDING_STEP_IDS,
@@ -145,7 +146,12 @@
   $: hasReport = !!lastCheck && (lastCheck.problems.length > 0 || lastCheck.limits.length > 0);
   // O erro de passe vence o texto genérico quando existe; o genérico continua sendo o fallback
   // para o instante entre o has_error chegar e o relatório ser buscado.
-  $: passErrorText = lastCheck?.pass_error || (T && T.errorAlert);
+  // A frase vem do CÓDIGO, nunca do texto cru do Go — que chegava a despejar o JSON de
+  // resposta da AniList no banner. O cru continua acessível, recolhido, para quem for reportar.
+  $: passErrorText = lastCheck?.pass_error_code
+    ? passErrorMessage(lastCheck.pass_error_code)
+    : T && T.errorAlert;
+  $: passErrorRaw = lastCheck?.pass_error ?? "";
   $: onboarding = onboardingSteps(
     { completed_anime_path: completedPath, anilist_usernames: anilistUsernames },
     animes,
@@ -571,9 +577,19 @@
     {#if status.has_error && status.status !== "checking"}
       <div
         role="alert"
-        class="flex items-center gap-2 rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
+        class="rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
       >
-        {passErrorText}
+        <p>{passErrorText}</p>
+        {#if passErrorRaw}
+          <!-- Recolhido, e não escondido: o texto cru é a única coisa colável numa issue, mas
+               ele não pode ser a primeira coisa que o usuário lê. -->
+          <details class="mt-1.5">
+            <summary class="cursor-pointer text-caption opacity-70 hover:opacity-100">
+              {$locale && m.passerror_details()}
+            </summary>
+            <p class="mt-1 break-words font-mono text-caption opacity-70">{passErrorRaw}</p>
+          </details>
+        {/if}
       </div>
     {/if}
 

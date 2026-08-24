@@ -29,7 +29,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
-		state.SetLastCheckError(err)
+		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseConfig, err))
 		return
 	}
 
@@ -43,7 +43,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			}
 		}()
 
-		state.SetLastCheckError(fmt.Errorf("missing required configuration for daemon (completed anime path)"))
+		state.SetLastCheckError(fmt.Errorf("%w: falta a pasta da biblioteca", errCauseSetup))
 		return
 	}
 
@@ -52,13 +52,13 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// a rain reverificar, achar nada e rebaixar tudo.
 	if err := MigrateSavePath(files.NewOSFileSystem(), fileManager, backend); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to migrate the legacy save path; skipping verification")
-		state.SetLastCheckError(err)
+		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseStorage, err))
 		return
 	}
 	configs, err = fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to reload configs after migration; skipping verification")
-		state.SetLastCheckError(err)
+		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseConfig, err))
 		return
 	}
 
@@ -73,14 +73,14 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			logger.Logger.Error().Err(err).
 				Str("completed_anime_path", configs.CompletedAnimePath).
 				Msg("Completed anime path failed the hardlink probe; skipping verification")
-			state.SetLastCheckError(err)
+			state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseLibrary, err))
 			return
 		}
 	}
 
 	if backend == nil {
 		logger.Logger.Error().Msg("Torrent backend not initialized; skipping verification")
-		state.SetLastCheckError(fmt.Errorf("torrent backend not initialized"))
+		state.SetLastCheckError(fmt.Errorf("%w: não inicializado", errCauseTorrent))
 		return
 	}
 
@@ -96,7 +96,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// recreated if the save path changed or if the download folder was swapped underneath).
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to initialize embedded torrent session")
-		state.SetLastCheckError(err)
+		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseTorrent, err))
 		return
 	}
 	// Latched by Ensure, here or in an earlier manual-download call: the folder the session
@@ -112,7 +112,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// disco casa com a AniList, e um passe nesse estado rebaixaria a biblioteca inteira.
 	if err := MigrateAnimeIDsToMedia(fileManager); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to migrate anime IDs to AniList media IDs; skipping verification")
-		state.SetLastCheckError(err)
+		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseStorage, err))
 		return
 	}
 
@@ -207,11 +207,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	fetchWg.Wait()
 
 	if errAnilist != nil {
-		state.SetLastCheckError(errAnilist)
+		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseAnilist, errAnilist))
 		return
 	}
 	if errEpisodes != nil {
-		state.SetLastCheckError(errEpisodes)
+		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseStorage, errEpisodes))
 		return
 	}
 

@@ -24,6 +24,7 @@ func handleLastCheck(server *Server) http.HandlerFunc {
 		report := server.State.GetLastCheckReport()
 		if err := server.State.GetLastCheckError(); err != nil {
 			report.PassError = err.Error()
+			report.PassErrorCode = server.State.GetLastCheckErrorCode()
 		}
 
 		JSONSuccess(w, http.StatusOK, report)

@@ -1,4 +1,5 @@
 import { toasts } from '../stores/toasts.js'
+import { backendHealth } from '../stores/backendHealth.js'
 
 // Usa o host atual da página quando não há variável de ambiente definida
 // Isso permite que o frontend funcione tanto localmente quanto quando acessado remotamente
@@ -90,9 +91,14 @@ async function apiRequest<T>(
       )
     }
 
+    backendHealth.recordSuccess(endpoint)
     return data.data
   } catch (error) {
     console.error('API request failed:', error)
+    // Antes de qualquer toast: um 5xx repetido num endpoint com `silent: true` era INVISÍVEL —
+    // o app degradava em silêncio e o usuário só via números parados. A saúde do backend é
+    // contada aqui justamente porque este é o único ponto por onde toda requisição passa.
+    backendHealth.recordFailure(endpoint, responseStatus)
     if (!opts.silent) {
       const isAnilistEndpoint = /\/animes\/\d+\/episodes$/.test(endpoint)
       const message =
@@ -117,6 +123,21 @@ export interface StatusResponse {
   /** Livre abaixo de min_free_disk_percent: o daemon parou de adicionar torrents. Calculado no
    *  servidor de proposito — um limiar duplicado no frontend discordaria do daemon. */
   disk_low: boolean
+  /** Opcional de propósito: o `status_update` do WebSocket carrega só três campos, e a Status
+   *  sintetiza um StatusResponse a partir dele. Ausente também num daemon mais antigo que o
+   *  frontend. Quem consome trata ausência como "sem informação", nunca como "está tudo bem". */
+  anilist?: AnilistHealth
+}
+
+/** Último estado conhecido da AniList, gravado por qualquer chamada (passe do daemon ou poll do
+ *  frontend). Código, nunca frase pronta: o daemon não sabe o locale do navegador. */
+export interface AnilistHealth {
+  state: 'ok' | 'rate_limited' | 'outage' | 'app_bug'
+  /** Mensagem crua da AniList — um 403 de IP bloqueado traz o motivo escrito para ser lido. */
+  message?: string
+  /** Fim do timeout de 429, derivado do Retry-After. Ausente quando não se aplica. */
+  retry_at?: string
+  since?: string
 }
 
 export interface WebhookPreset {
@@ -247,12 +268,17 @@ export interface Issue {
 export interface CheckReport {
   finished_at: string
   pass_error: string
+  /** Causa classificada do aborto. O frontend monta a frase a partir DAQUI; `pass_error` é o
+   *  texto cru, mostrado recolhido para quem for abrir uma issue. */
+  pass_error_code?: string
   problems: Issue[]
   limits: Issue[]
 }
 
-export async function getStatus(): Promise<StatusResponse> {
-  return apiRequest<StatusResponse>('GET', '/status')
+export async function getStatus(opts: { silent?: boolean } = {}): Promise<StatusResponse> {
+  // `silent` para quem faz poll: o AppShell consulta a cada 30s só para alimentar o banner, e
+  // um daemon fora do ar não pode virar um toast a cada meio minuto.
+  return apiRequest<StatusResponse>('GET', '/status', null, opts)
 }
 
 export async function getLastCheck(): Promise<CheckReport> {

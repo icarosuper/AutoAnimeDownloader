@@ -61,8 +61,12 @@ type Issue struct {
 type CheckReport struct {
 	FinishedAt time.Time `json:"finished_at" example:"2026-08-19T12:00:00Z"`
 	PassError  string    `json:"pass_error" example:""`
-	Problems   []Issue   `json:"problems"`
-	Limits     []Issue   `json:"limits"`
+	// PassErrorCode e a CAUSA do aborto, para o frontend montar a frase. PassError continua
+	// carregando o texto cru, que a tela mostra recolhido: sem ele um usuario que quer abrir
+	// issue nao tem o que colar. Ver passerror.go.
+	PassErrorCode string  `json:"pass_error_code" example:"anilist"`
+	Problems      []Issue `json:"problems"`
+	Limits        []Issue `json:"limits"`
 }
 
 // isLimitCode separa as duas categorias. Hoje ha um unico codigo de limite; a funcao existe para

@@ -431,5 +431,21 @@
   "onboarding_action_check_now": "Check now",
   "onboarding_restore_label": "First steps",
   "onboarding_restore_hint": "The intro card on the Status screen.",
-  "onboarding_restore_button": "Show again"
+  "onboarding_restore_button": "Show again",
+  "banner_backend_unreachable": "No connection to the daemon. Check that it is running — this screen will not update until it is back.",
+  "banner_backend_error": "The daemon responded with an error. This is an app bug; the data on screen may be incomplete.",
+  "banner_anilist_outage": "AniList is down right now — nothing on your end. Your list may look out of date until it's back; the daemon will resume downloading on its own.",
+  "banner_anilist_rate_limited": "AniList rate limit reached. Back to normal in {seconds}s.",
+  "banner_anilist_rate_limited_no_eta": "AniList rate limit reached. Back to normal in about a minute.",
+  "banner_anilist_app_bug": "The app is sending a query AniList no longer accepts. Update the app; if you are already on the latest version, please report it.",
+  "banner_report": "Report",
+  "banner_update_hint": "Update the app",
+  "passerror_anilist": "The last check did not run because AniList did not respond. It retries on its own next cycle.",
+  "passerror_setup": "The last check did not run because the library folder is not configured yet.",
+  "passerror_library": "The last check did not run because the library folder does not support hardlinks. Pick a folder on the same disk as the downloads.",
+  "passerror_torrent_backend": "The last check did not run because the torrent client failed to start. Restart the app.",
+  "passerror_config": "The last check did not run because the configuration could not be read.",
+  "passerror_storage": "The last check did not run because the app's data could not be read.",
+  "passerror_unknown": "The last check did not finish.",
+  "passerror_details": "Technical details"
 }
