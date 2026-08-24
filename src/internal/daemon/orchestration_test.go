@@ -663,3 +663,36 @@ func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
 		}
 	})
 }
+
+// O AnimeTotalEpisodes do registro chega ao Librarian: sem ele, um pack de season 2 com
+// numeracao continua entraria na biblioteca como E13/E14 numa pasta de 2 episodios.
+func TestOrganizeTorrent_BatchContinuousNumbering(t *testing.T) {
+	dataDir := t.TempDir()
+	for _, name := range []string{"[Sub] My Anime S2 - 13 [1080p].mkv", "[Sub] My Anime S2 - 14 [1080p].mkv"} {
+		if err := os.WriteFile(filepath.Join(dataDir, name), []byte(name), 0644); err != nil {
+			t.Fatalf("write video: %v", err)
+		}
+	}
+	completed := t.TempDir()
+	const hash = "0123456789abcdef0123456789abcdef01234567"
+
+	backend := torrents.NewFakeBackend()
+	backend.AddCompleted(hash, dataDir)
+
+	fm := &orchestrationFM{
+		saved: []files.EpisodeStruct{
+			{EpisodeHash: hash, AnimeName: "My Anime Season 2", AnimeTotalEpisodes: 2, EpisodeNumber: 1, IsBatch: true},
+			{EpisodeHash: hash, AnimeName: "My Anime Season 2", AnimeTotalEpisodes: 2, EpisodeNumber: 2, IsBatch: true},
+		},
+		configs: &files.Config{CompletedAnimePath: completed, RenameFilesForJellyfin: true},
+	}
+
+	if ok := organizeTorrent(hash, backend, files.NewLibrarian(files.NewOSFileSystem()), fm, fm.configs); !ok {
+		t.Fatal("organizeTorrent should succeed")
+	}
+	for _, name := range []string{"My Anime Season 2 - E01.mkv", "My Anime Season 2 - E02.mkv"} {
+		if _, err := os.Stat(filepath.Join(completed, "My Anime Season 2", name)); err != nil {
+			t.Errorf("expected library link %s: %v", name, err)
+		}
+	}
+}

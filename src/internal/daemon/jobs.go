@@ -363,6 +363,7 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 		CompletedPath:  configs.CompletedAnimePath,
 		IsBatch:        isBatch,
 		RenameJellyfin: configs.RenameFilesForJellyfin,
+		TotalEpisodes:  matched[0].AnimeTotalEpisodes,
 	}
 	if !isBatch {
 		ep := matched[0].EpisodeNumber

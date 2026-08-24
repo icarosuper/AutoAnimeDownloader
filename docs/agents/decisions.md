@@ -1299,3 +1299,19 @@ Descartar, e não enfileirar, é deliberado: o passe descartado leria exatamente
 - Recarregar `episodes.json` no meio do passe "para ver o que o outro salvou" — a janela continua aberta entre a leitura e a escrita, e as duas escritas continuam brigando.
 - Trocar por `Lock()` (enfileirar) — vira uma fila de passes redundantes que rodam com estado velho, cada um segurando o próximo.
 - Tirar o `TryLock` porque "o `POST /check` já roda em goroutine" — a goroutine é o que cria a concorrência, não o que a resolve.
+
+### 68. Numeração do pack: o offset é adivinhado dos próprios arquivos, e a colisão de basename usa o caminho relativo
+
+**Location:** `internal/files/librarian.go` — `packEpisodeOffset` e a guarda `if used[destName]` em `Organize`; `internal/daemon/jobs.go` — `OrganizeRequest.TotalEpisodes`. Testes em `librarian_test.go` (`TestOrganizeBatch*`, `TestPackEpisodeOffset`) e `orchestration_test.go` (`TestOrganizeTorrent_BatchContinuousNumbering`).
+
+**(a) O offset sai dos arquivos, não da AniList.** Pack de season >= 2 passa pelo filtro de season (`nyaa.go`, ramo `isBatch`) carregando o marcador no nome do torrent, mas os arquivos lá dentro podem estar numerados continuamente (13-24 para uma entrada de 12 episódios). Como cada season é uma entrada própria com numeração começando em 1 (decisão #45), esses arquivos entravam na biblioteca como `E13`..`E24` numa pasta que o Jellyfin conhece com 12 episódios.
+
+A fonte *correta* do offset é a contagem de episódios do PREQUEL — o que `daemon.ComputeEpisodeOffset` já calcula na busca —, mas ela não existe no organize: o job só tem o hash e os registros de `episodes.json`. Trazê-la pediria campo novo em `EpisodeStruct` (com migração) ou uma requisição à AniList dentro do job. `packEpisodeOffset` evita as duas: usa `AnimeTotalEpisodes`, que **já** está gravado no registro, e só desloca com evidência inequívoca — **todo** arquivo numerado acima do total da entrada **e** pelo menos um arquivo por episódio. Isso é um pack completo que começa no episódio 1 da season, então `min - 1` é o offset.
+
+Os dois guardas importam: sem o "todo arquivo acima do total", um extra numerado 13 num pack 01-12 deslocaria a season inteira; sem o "pelo menos um arquivo por episódio", um pack parcial (23-24 de uma season de 12) seria tratado como completo e viraria `E01`/`E02` em vez de `E11`/`E12`. Pack parcial com numeração contínua fica **como está** — errado, mas não *mais* errado, e é o caso raro.
+
+**(b) A colisão de basename passou a desempatar pelo caminho relativo.** `collectVideoFiles` achata subpastas e o destino saía de `filepath.Base(rel)`. Num pack multi-season com uma subpasta por season, `Season 1/Anime - 01.mkv` e `Season 2/Anime - 01.mkv` apontavam para o mesmo destino, e o segundo caía no ramo de "bytes diferentes com o mesmo nome" (feito para redownload/replace) **removendo o hardlink do primeiro**: um episódio sumia da biblioteca e `created` gravava o mesmo caminho duas vezes. O `used` já existia, mas só protegia o nome Jellyfin. Agora ele é checado para *qualquer* destino e o desempate é o caminho relativo, que é único dentro do torrent.
+
+O ramo de substituição continua intacto para o que ele foi feito: colisão entre execuções diferentes de `Organize`. O que mudou é só a colisão **dentro da mesma execução**, que nunca é uma substituição legítima.
+
+**Don't "fix" by:** aplicar o offset sem os dois guardas "porque pack contínuo é comum"; usar `max - total` no lugar de `min - 1` (concorda no pack completo e erra no pack parcial do começo da season); chamar a AniList de dentro do `JobOrganize` para pegar o PREQUEL; criar subpasta `Season NN/` na biblioteca para "resolver a numeração" (decisão #45); deduplicar a colisão de basename sobrescrevendo "porque o arquivo é o mesmo anime".

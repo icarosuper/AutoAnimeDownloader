@@ -602,3 +602,147 @@ func TestProbePath(t *testing.T) {
 		}
 	})
 }
+
+// Pack multi-season: collectVideoFiles achata as subpastas, entao dois arquivos com o MESMO
+// basename apontariam para o mesmo destino e o segundo removeria o link do primeiro — um
+// episodio sumia da biblioteca. O caminho relativo desempata.
+func TestOrganizeBatchSameBasenameInSubfoldersKeepsBothLinks(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "batchid")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "Season 1", "[Sub] Anime - 01 [1080p].mkv"), "s1e1")
+	writeFile(t, filepath.Join(dataDir, "Season 2", "[Sub] Anime - 01 [1080p].mkv"), "s2e1")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	created, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Anime",
+		CompletedPath:  completed,
+		IsBatch:        true,
+	})
+	if err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	if len(created) != 2 {
+		t.Fatalf("created = %v, want 2 links", created)
+	}
+	if created[0] == created[1] {
+		t.Fatalf("both files landed on the same library path: %v", created)
+	}
+	for path, want := range map[string]string{
+		filepath.Join(completed, "Anime", "[Sub] Anime - 01 [1080p].mkv"):            "s1e1",
+		filepath.Join(completed, "Anime", "Season 2 - [Sub] Anime - 01 [1080p].mkv"): "s2e1",
+	} {
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("expected link %s: %v", path, err)
+			continue
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", path, got, want)
+		}
+	}
+}
+
+// Pack de season >= 2 com numeracao continua (arquivos 13-24 para uma entrada de 12 episodios):
+// o numero do arquivo e absoluto, o da ENTRADA da AniList comeca em 1.
+func TestOrganizeBatchContinuousNumberingMapsToEntryNumbers(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "batchid")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime S2 - 13 [1080p].mkv"), "a")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime S2 - 14 [1080p].mkv"), "b")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Anime Season 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  2,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	for _, name := range []string{"Anime Season 2 - E01.mkv", "Anime Season 2 - E02.mkv"} {
+		if _, err := os.Stat(filepath.Join(completed, "Anime Season 2", name)); err != nil {
+			t.Errorf("expected link %s: %v", name, err)
+		}
+	}
+}
+
+// A traducao so vale com evidencia inequivoca. Um extra numerado acima do total (13 num pack
+// 01-12) mantem o minimo em 1: nada e deslocado.
+func TestOrganizeBatchExtraAboveTotalDoesNotShift(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "batchid")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 01 [1080p].mkv"), "a")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 02 [1080p].mkv"), "b")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime - 13 [1080p].mkv"), "c")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Anime",
+		CompletedPath:  completed,
+		TotalEpisodes:  2,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	for _, name := range []string{"Anime - E01.mkv", "Anime - E02.mkv", "Anime - E13.mkv"} {
+		if _, err := os.Stat(filepath.Join(completed, "Anime", name)); err != nil {
+			t.Errorf("expected link %s: %v", name, err)
+		}
+	}
+}
+
+// Pack incompleto (menos arquivos que o total da entrada) nao da para afirmar que comeca no
+// episodio 1 da season: fica como esta.
+func TestOrganizeBatchIncompletePackDoesNotShift(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "batchid")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime S2 - 23 [1080p].mkv"), "a")
+	writeFile(t, filepath.Join(dataDir, "[Sub] Anime S2 - 24 [1080p].mkv"), "b")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Anime Season 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  12,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	for _, name := range []string{"Anime Season 2 - E23.mkv", "Anime Season 2 - E24.mkv"} {
+		if _, err := os.Stat(filepath.Join(completed, "Anime Season 2", name)); err != nil {
+			t.Errorf("expected link %s: %v", name, err)
+		}
+	}
+}
+
+func TestPackEpisodeOffset(t *testing.T) {
+	cases := []struct {
+		name    string
+		numbers []int
+		total   int
+		want    int
+	}{
+		{"pack completo de season 2 com numeracao continua", []int{13, 14, 15}, 3, 12},
+		{"pack completo numerado a partir de 1", []int{1, 2, 3}, 3, 0},
+		{"extra acima do total nao desloca", []int{1, 2, 13}, 2, 0},
+		{"pack incompleto nao desloca", []int{23, 24}, 12, 0},
+		{"total desconhecido nao desloca", []int{13, 14}, 0, 0},
+		{"sem arquivos numerados", nil, 12, 0},
+	}
+	for _, c := range cases {
+		if got := packEpisodeOffset(c.numbers, c.total); got != c.want {
+			t.Errorf("%s: packEpisodeOffset(%v, %d) = %d, want %d", c.name, c.numbers, c.total, got, c.want)
+		}
+	}
+}

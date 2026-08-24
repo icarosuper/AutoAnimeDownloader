@@ -13,6 +13,21 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 3. **Regenerate Swagger**: if API changed → `swag init -g src/cmd/daemon/main.go -o docs/swagger`
 4. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
 
+## Important — Código ruim no caminho
+
+Achou código ruim **perto** do que você está mexendo — mal escrito, deprecado, não utilizado,
+desatualizado, não otimizado, duplicado, comentário mentindo sobre o código — **pergunte antes de
+agir**. Sempre as três opções, e o usuário escolhe:
+
+1. **aproveitar e ajustar agora**
+2. **só deixar um TODO** (no código, junto do trecho)
+3. **ignorar**
+
+Nunca decida sozinho por nenhuma das três — nem "arrumo de passagem porque é rápido", nem "deixo
+quieto porque está fora do escopo". Diga o que é, onde está (`arquivo:linha`) e por que é ruim, em
+uma ou duas linhas, e pergunte. Vale para o que você encontra de passagem; o que o pedido do
+usuário já cobre não é "de passagem", é o trabalho.
+
 ## Docs
 
 - [Architecture](docs/agents/architecture.md) — read when navigating code or adding features; update when adding packages, symbols, or API endpoints; maps all packages, symbols, data flow, API endpoints

@@ -18,8 +18,10 @@ import (
 type Librarian interface {
 	// Organize creates hardlinks for the completed video files of a torrent in the
 	// library. With RenameJellyfin it uses the Jellyfin name ("Anime - E05.mkv") — from
-	// the record for a single episode, from each file's own name for a batch; a file
-	// whose number can't be read (and everything without the flag) keeps the raw name.
+	// the record for a single episode, from each file's own name for a batch (traduzido
+	// para a numeracao da entrada quando o pack numera continuamente, ver
+	// packEpisodeOffset); a file whose number can't be read (and everything without the
+	// flag) keeps the raw name.
 	// It returns the absolute paths of the library links it created (or that already
 	// existed) so the caller can record them for later removal. It is idempotent: a
 	// destination that is already the same file (same inode) is reported and skipped.
@@ -54,6 +56,9 @@ type OrganizeRequest struct {
 	IsBatch bool
 	// RenameJellyfin enables the "Anime - E05.ext" naming.
 	RenameJellyfin bool
+	// TotalEpisodes e o total de episodios da ENTRADA da AniList. Usado so para detectar pack
+	// com numeracao continua (ver packEpisodeOffset); zero = desconhecido, nada e deslocado.
+	TotalEpisodes int
 }
 
 type organizer struct {
@@ -95,6 +100,33 @@ func stripInvalidChars(name string) string {
 	return sanitized
 }
 
+// packEpisodeOffset devolve quanto subtrair do numero lido no nome do arquivo para chegar ao
+// numero da ENTRADA da AniList. Pack de season >= 2 com numeracao continua (arquivos 13-24 para
+// uma entrada de 12 episodios) e o caso; qualquer outro devolve 0.
+//
+// ponytail: heuristica sobre os proprios arquivos, sem consultar a AniList no organize. So
+// dispara com evidencia inequivoca — TODO arquivo numerado acima do total da entrada E pelo
+// menos um arquivo por episodio, ou seja, pack completo que comeca no episodio 1 da season. Um
+// extra numerado 13 num pack 01-12 mantem o minimo em 1 e nao desloca nada. Pack PARCIAL com
+// numeracao continua fica como esta; se virar requisito, o caminho e persistir o offset (a
+// contagem de episodios do PREQUEL, ja calculada em daemon.ComputeEpisodeOffset) no
+// EpisodeStruct em vez de adivinhar aqui.
+func packEpisodeOffset(numbers []int, totalEpisodes int) int {
+	if totalEpisodes <= 0 || len(numbers) < totalEpisodes {
+		return 0
+	}
+	lowest := numbers[0]
+	for _, n := range numbers {
+		if n < lowest {
+			lowest = n
+		}
+	}
+	if lowest <= totalEpisodes {
+		return 0
+	}
+	return lowest - 1
+}
+
 // jellyfinName returns "Anime - E05.ext".
 func jellyfinName(animeName string, episodeNumber int, ext string) string {
 	return fmt.Sprintf("%s - E%02d%s", sanitizeName(animeName), episodeNumber, ext)
@@ -133,6 +165,17 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 	singleJellyfin := !req.IsBatch && req.RenameJellyfin && req.EpisodeNumber != nil &&
 		*req.EpisodeNumber > 0 && len(videoFiles) == 1
 
+	var packOffset int
+	if req.IsBatch && req.RenameJellyfin {
+		var numbers []int
+		for _, rel := range videoFiles {
+			if n := nyaa.ExtractEpisodeNumber(filepath.Base(rel)); n != nil {
+				numbers = append(numbers, *n)
+			}
+		}
+		packOffset = packEpisodeOffset(numbers, req.TotalEpisodes)
+	}
+
 	used := make(map[string]bool, len(videoFiles))
 	var created []string
 	for _, rel := range videoFiles {
@@ -146,12 +189,19 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 			// Pack: o numero sai do proprio nome do arquivo, para os episodios do pack se
 			// misturarem na pasta com os avulsos em vez de manter o nome cru do fansub.
 			// Sem numero legivel (NCOP/NCED, extra, filme) ou com colisao entre dois
-			// arquivos do mesmo pack, fica o nome cru — que e unico dentro do torrent.
+			// arquivos do mesmo pack, fica o nome cru.
 			if n := nyaa.ExtractEpisodeNumber(destName); n != nil {
-				if jf := jellyfinName(req.AnimeName, *n, filepath.Ext(rel)); !used[jf] {
+				if jf := jellyfinName(req.AnimeName, *n-packOffset, filepath.Ext(rel)); !used[jf] {
 					destName = jf
 				}
 			}
+		}
+		// Dois arquivos do MESMO torrent com o mesmo basename (pack multi-season com uma
+		// subpasta por season, achatada por collectVideoFiles) apontariam para o mesmo dest, e o
+		// segundo cairia no ramo de "bytes diferentes" removendo o link do primeiro — um episodio
+		// sumia da biblioteca. O caminho relativo e unico dentro do torrent.
+		if used[destName] {
+			destName = strings.ReplaceAll(rel, string(filepath.Separator), " - ")
 		}
 		used[destName] = true
 		dest := filepath.Join(destDir, destName)
