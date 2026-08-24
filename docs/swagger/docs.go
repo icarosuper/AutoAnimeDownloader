@@ -1732,6 +1732,16 @@ const docTemplate = `{
         "api.AnimeInfo": {
             "type": "object",
             "properties": {
+                "alt_names": {
+                    "description": "AltNames sao os outros titulos do mesmo anime (romaji, ingles, nativo/kanji e sinonimos),\nsem o proprio Name. Existe so para a busca da dashboard casar com o nome que o usuario\nconhece; nada renderiza esta lista.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "ワンピース"
+                    ]
+                },
                 "anime_id": {
                     "type": "integer",
                     "example": 12345

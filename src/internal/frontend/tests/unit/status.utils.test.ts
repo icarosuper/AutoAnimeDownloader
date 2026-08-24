@@ -53,6 +53,24 @@ describe('filterAnimes', () => {
     expect(result[0].name).toBe('Naruto ongoing')
   })
 
+  it('acha o anime por qualquer titulo alternativo (kanji, romaji, sinonimo)', () => {
+    const animes = [
+      makeAnime({ name: 'Attack on Titan', alt_names: ['Shingeki no Kyojin', '進撃の巨人', 'AoT'] }),
+      makeAnime({ name: 'Bleach' }),
+    ]
+    for (const term of ['shingeki', '進撃', 'aot', 'Attack']) {
+      expect(filterAnimes(animes, term, false).map(a => a.name)).toEqual(['Attack on Titan'])
+    }
+    expect(filterAnimes(animes, 'xyz', false)).toHaveLength(0)
+  })
+
+  it('ignora acento e largura de caractere no termo e no titulo', () => {
+    const animes = [makeAnime({ name: 'Kimi no Na wa.', alt_names: ['Ｙｏｕｒ Ｎａｍｅ．', 'Poké'] })]
+    expect(filterAnimes(animes, 'your name', false)).toHaveLength(1)
+    expect(filterAnimes(animes, 'poke', false)).toHaveLength(1)
+    expect(filterAnimes(animes, 'pokè', false)).toHaveLength(1)
+  })
+
   it('keeps only standalone animes when filterStandalone is true', () => {
     const animes = [
       makeAnime({ name: 'Avulso', is_standalone: true }),

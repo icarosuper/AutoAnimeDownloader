@@ -44,6 +44,34 @@ type AnimeInfo struct {
 	// da AniList: o front conta para tras sozinho, entao o numero nao congela junto com a
 	// resposta em cache.
 	NextAiringAt int64 `json:"next_airing_at,omitempty" example:"1740394800"`
+	// AltNames sao os outros titulos do mesmo anime (romaji, ingles, nativo/kanji e sinonimos),
+	// sem o proprio Name. Existe so para a busca da dashboard casar com o nome que o usuario
+	// conhece; nada renderiza esta lista.
+	AltNames []string `json:"alt_names,omitempty" example:"ワンピース"`
+}
+
+// altNames junta todas as variantes de titulo de um Media, tirando vazios, repetidos e o nome
+// que ja vai em AnimeInfo.Name. Sem normalizacao — quem compara e o front (lib/utils/status.ts).
+func altNames(media anilist.Media, displayName string) []string {
+	candidates := make([]string, 0, 3+len(media.Synonyms))
+	for _, p := range []*string{media.Title.Romaji, media.Title.English, media.Title.Native} {
+		if p != nil {
+			candidates = append(candidates, *p)
+		}
+	}
+	candidates = append(candidates, media.Synonyms...)
+
+	seen := map[string]bool{strings.ToLower(strings.TrimSpace(displayName)): true}
+	var out []string
+	for _, c := range candidates {
+		name := strings.TrimSpace(c)
+		if name == "" || seen[strings.ToLower(name)] {
+			continue
+		}
+		seen[strings.ToLower(name)] = true
+		out = append(out, name)
+	}
+	return out
 }
 
 // nextAiringAt le o timestamp do proximo episodio. nextAiringEpisode e nil em anime terminado,
@@ -278,6 +306,7 @@ func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo
 			info.CoverImage = coverImage
 			info.IsBlacklisted = isBlacklisted
 			info.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
+			info.AltNames = altNames(ml.Media, info.Name)
 		}(info)
 	}
 	wg.Wait()
@@ -380,6 +409,7 @@ func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.Media
 			existing.CoverImage = coverImage
 			existing.IsBlacklisted = isBlacklisted
 			existing.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
+			existing.AltNames = altNames(ml.Media, name)
 			continue
 		}
 
@@ -392,6 +422,7 @@ func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.Media
 			CoverImage:       coverImage,
 			IsBlacklisted:    isBlacklisted,
 			NextAiringAt:     nextAiringAt(ml.Media.NextAiringEpisode),
+			AltNames:         altNames(ml.Media, name),
 		}
 	}
 }

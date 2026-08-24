@@ -112,6 +112,7 @@ func GetMediaByID(mediaID int) (*MediaList, error) {
 				title {
 					english
 					romaji
+					native
 				}
 				synonyms
 				relations {

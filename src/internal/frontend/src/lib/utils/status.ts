@@ -3,14 +3,23 @@ import type { AnimeInfo } from '../api/client.js'
 export type SortKey = 'name' | 'episodes_watched' | 'last_download_date'
 export type SortDir = 'asc' | 'desc'
 
+/**
+ * NFKD + remocao de diacriticos: faz "Kimi no Na wa" casar com "kimi no na wa" e katakana de
+ * largura completa casar com o normal. Kanji passa intacto.
+ */
+const normalizeName = (s: string) => s.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+
 export function filterAnimes(
   animes: AnimeInfo[],
   search: string,
   filterUnwatched: boolean,
   filterStandalone = false,
 ): AnimeInfo[] {
+  const term = normalizeName(search.trim())
   return animes.filter(a => {
-    if (!a.name.toLowerCase().includes(search.toLowerCase())) return false
+    // Busca por QUALQUER titulo do anime — o usuario pode conhecer so o romaji, o kanji ou um
+    // sinonimo, enquanto o card mostra o ingles.
+    if (term && ![a.name, ...(a.alt_names ?? [])].some(n => normalizeName(n).includes(term))) return false
     if (filterUnwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false
     if (filterStandalone && !a.is_standalone) return false
     return true

@@ -212,6 +212,8 @@ export interface AnimeInfo {
    * junto com a resposta em cache — quem renderiza conta para trás no cliente.
    */
   next_airing_at?: number
+  /** Outros titulos do mesmo anime (romaji, ingles, kanji, sinonimos). So a busca usa. */
+  alt_names?: string[]
 }
 
 /** Motivos pelos quais um anime não pode ser adicionado como avulso — vêm prontos do servidor. */

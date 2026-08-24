@@ -176,6 +176,9 @@ type Media struct {
 type Title struct {
 	English *string `json:"english"`
 	Romaji  *string `json:"romaji"`
+	// Native e o titulo no idioma original (kanji, na pratica). So a busca da dashboard usa —
+	// o daemon monta as queries do Nyaa com romaji/english, ver search.go.
+	Native *string `json:"native"`
 }
 
 type MediaRelationNode struct {
@@ -396,6 +399,7 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 						title {
 							english
 							romaji
+							native
 						}
 						synonyms
 						relations {
@@ -460,7 +464,9 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 						title {
 							english
 							romaji
+							native
 						}
+						synonyms
 						episodes
 						status
 						coverImage {
@@ -631,6 +637,7 @@ func getMediaListEntry(userName string, mediaId int) (*AniListResponse, error) {
 						title {
 							english
 							romaji
+							native
 						}
 						synonyms
 						relations {

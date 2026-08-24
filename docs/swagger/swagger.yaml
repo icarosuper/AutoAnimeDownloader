@@ -110,6 +110,16 @@ definitions:
     type: object
   api.AnimeInfo:
     properties:
+      alt_names:
+        description: |-
+          AltNames sao os outros titulos do mesmo anime (romaji, ingles, nativo/kanji e sinonimos),
+          sem o proprio Name. Existe so para a busca da dashboard casar com o nome que o usuario
+          conhece; nada renderiza esta lista.
+        example:
+        - ワンピース
+        items:
+          type: string
+        type: array
       anime_id:
         example: 12345
         type: integer

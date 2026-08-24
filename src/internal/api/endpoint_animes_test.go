@@ -644,3 +644,53 @@ func TestNextAiringAt(t *testing.T) {
 		}
 	})
 }
+
+// TestAltNames cobre a lista que alimenta a busca da dashboard: o card mostra um titulo so
+// (ingles, quando existe), mas o usuario pode procurar pelo romaji, pelo kanji ou por um
+// sinonimo — todos precisam sair no payload, sem repetir o nome que ja esta em Name.
+func TestAltNames(t *testing.T) {
+	str := func(s string) *string { return &s }
+	media := anilist.Media{
+		Title:    anilist.Title{English: str("Attack on Titan"), Romaji: str("Shingeki no Kyojin"), Native: str("進撃の巨人")},
+		Synonyms: []string{"AoT", "  ", "attack on titan", "Shingeki no Kyojin"},
+	}
+
+	got := altNames(media, "Attack on Titan")
+	want := []string{"Shingeki no Kyojin", "進撃の巨人", "AoT"}
+	if len(got) != len(want) {
+		t.Fatalf("altNames = %q, esperado %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("altNames = %q, esperado %q", got, want)
+		}
+	}
+
+	if got := altNames(anilist.Media{Title: anilist.Title{Romaji: str("Solo")}}, "Solo"); len(got) != 0 {
+		t.Fatalf("titulo unico nao devia virar alt_name: %q", got)
+	}
+}
+
+// TestMergeAniListAnimesAltNames garante que os dois caminhos do merge preenchem alt_names —
+// e o de entrada existente e o que importa: anime ja baixado e o caso comum na dashboard.
+func TestMergeAniListAnimesAltNames(t *testing.T) {
+	str := func(s string) *string { return &s }
+	entry := anilist.MediaList{Media: anilist.Media{
+		Id:       1,
+		Title:    anilist.Title{English: str("Anime"), Native: str("アニメ")},
+		Status:   anilist.MediaStatusReleasing,
+		Synonyms: []string{"Anime the Animation"},
+	}}
+
+	animeMap := map[string]*AnimeInfo{}
+	mergeAniListAnimes(animeMap, []anilist.MediaList{entry}, nil)
+	if len(animeMap["Anime"].AltNames) != 2 {
+		t.Errorf("entrada nova sem alt_names: %q", animeMap["Anime"].AltNames)
+	}
+
+	existing := &AnimeInfo{AnimeID: 1, Name: "Anime", EpisodesDownloaded: 3}
+	mergeAniListAnimes(map[string]*AnimeInfo{"Anime": existing}, []anilist.MediaList{entry}, nil)
+	if len(existing.AltNames) != 2 {
+		t.Errorf("entrada existente sem alt_names: %q", existing.AltNames)
+	}
+}
