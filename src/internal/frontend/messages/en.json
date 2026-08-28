@@ -450,6 +450,5 @@
   "next_airing": "Next ep. {when}",
   "status_col_next_airing": "Next ep.",
   "files_waiting_metadata": "Waiting for the torrent metadata",
-  "files_toggle": "Show or hide the files of {name}",
-  "files_ep_label": "Ep {number}"
+  "files_toggle": "Show or hide the files of {name}"
 }

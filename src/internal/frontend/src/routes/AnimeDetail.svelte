@@ -760,7 +760,7 @@
   }
 
   const EP_GRID =
-    "grid grid-cols-[28px_88px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
+    "grid grid-cols-[28px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
 </script>
 
 <ConfirmDialog
@@ -1056,7 +1056,6 @@
             labelHidden
             on:change={toggleSelectAll}
           />
-          <span class="font-mono text-mono-label uppercase text-subtle">#</span>
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_episode()}</span>
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_state()}</span>
           <!-- "Detalhes", não "Data de download": esta coluna mostra o dado mais informativo
@@ -1085,30 +1084,30 @@
               <span></span>
             {/if}
 
-            {#if row.kind === "batch" && row.hash}
-              <!-- Só a linha de pack ganha seta: o painel é a primeira vez que a tela mostra o que o
-                   pack REALMENTE contém (a faixa exibida vem do NOME do torrent). -->
-              <button
-                type="button"
-                class="flex items-center gap-1 font-mono text-[15px] font-bold text-heading"
-                aria-expanded={openPackFiles.has(row.hash)}
-                aria-label={$locale ? m.files_toggle({ name: row.title }) : ""}
-                on:click={() => row.hash && togglePackFiles(row.hash)}
-              >
-                <svelte:component
-                  this={openPackFiles.has(row.hash) ? ChevronDown : ChevronRight}
-                  size={14}
-                  strokeWidth={2}
-                  class="shrink-0 text-subtle"
-                />
-                {row.label}
-              </button>
-            {:else}
-              <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
-            {/if}
-
             <div class="min-w-0">
-              <p class="truncate text-copy text-heading" title={row.title}>{row.title}</p>
+              {#if row.kind === "batch" && row.hash}
+                <!-- Só a linha de pack ganha seta: o painel é a primeira vez que a tela mostra o
+                     que o pack REALMENTE contém (a faixa exibida vem do NOME do torrent). Ela
+                     mora no título porque não existe mais coluna "#": o número e o título diziam
+                     a mesma coisa em duas tipografias. -->
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-1.5 text-left"
+                  aria-expanded={openPackFiles.has(row.hash)}
+                  aria-label={$locale ? m.files_toggle({ name: row.title }) : ""}
+                  on:click={() => row.hash && togglePackFiles(row.hash)}
+                >
+                  <svelte:component
+                    this={openPackFiles.has(row.hash) ? ChevronDown : ChevronRight}
+                    size={14}
+                    strokeWidth={2}
+                    class="shrink-0 text-subtle"
+                  />
+                  <span class="truncate text-copy text-heading">{row.title}</span>
+                </button>
+              {:else}
+                <p class="truncate text-copy text-heading" title={row.title}>{row.title}</p>
+              {/if}
               {#if row.notes}
                 <p class="truncate text-caption text-subtle">{row.notes}</p>
               {/if}
@@ -1154,7 +1153,13 @@
             </div>
           </div>
           {#if row.kind === "batch" && row.hash && openPackFiles.has(row.hash)}
-            <TorrentFiles hash={row.hash} mode="episodes" tick={filesTick} />
+            <TorrentFiles
+              hash={row.hash}
+              mode="episodes"
+              tick={filesTick}
+              gridClass={EP_GRID}
+              chip={row.chip}
+            />
           {/if}
         {/each}
       </div>
@@ -1177,11 +1182,11 @@
                 <span></span>
               {/if}
               {#if row.kind === "batch" && row.hash}
-                <!-- Só a linha de pack ganha seta: o painel é a primeira vez que a tela mostra o que o
-                     pack REALMENTE contém (a faixa exibida vem do NOME do torrent). -->
+                <!-- Mesma decisão do desktop: a seta mora no título, e não numa coluna "#"
+                     que repetiria o número que o título já diz. -->
                 <button
                   type="button"
-                  class="flex items-center gap-1 font-mono text-[15px] font-bold text-heading"
+                  class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                   aria-expanded={openPackFiles.has(row.hash)}
                   aria-label={$locale ? m.files_toggle({ name: row.title }) : ""}
                   on:click={() => row.hash && togglePackFiles(row.hash)}
@@ -1192,17 +1197,16 @@
                     strokeWidth={2}
                     class="shrink-0 text-subtle"
                   />
-                  {row.label}
+                  <span class="truncate text-copy text-heading">{row.title}</span>
                 </button>
               {:else}
-                <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-copy text-heading">{row.title}</p>
+                  {#if row.notes}
+                    <p class="truncate text-caption text-subtle">{row.notes}</p>
+                  {/if}
+                </div>
               {/if}
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-copy text-heading">{row.title}</p>
-                {#if row.notes}
-                  <p class="truncate text-caption text-subtle">{row.notes}</p>
-                {/if}
-              </div>
             </div>
 
             <div class="mt-2.5">
@@ -1239,7 +1243,7 @@
             </div>
           </div>
           {#if row.kind === "batch" && row.hash && openPackFiles.has(row.hash)}
-            <TorrentFiles hash={row.hash} mode="episodes" tick={filesTick} />
+            <TorrentFiles hash={row.hash} mode="episodes" tick={filesTick} chip={row.chip} />
           {/if}
         {/each}
       </div>

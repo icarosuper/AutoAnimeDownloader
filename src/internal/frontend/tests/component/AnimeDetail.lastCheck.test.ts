@@ -91,10 +91,11 @@ describe('AnimeDetail — motivo da última verificação', () => {
     expect(rows.length).toBe(4)
     const marked = rows.filter((r) => /not downloaded in the last check|não baixou na última verificação/i.test(r.textContent ?? ''))
     expect(marked.length).toBe(2)
-    // A marca está na linha do episódio 2, nunca na do 1: o número vem do <span> do label,
-    // não de um "2" solto em qualquer lugar do texto da linha.
+    // A marca está na linha do episódio 2, nunca na do 1: o número vem do TÍTULO da linha,
+    // não de um "2" solto em qualquer lugar do texto dela. (Era o <span> da coluna "#", que
+    // saiu da tela — ela repetia em outra tipografia o número que o título já diz.)
     for (const row of marked) {
-      expect(row.querySelector('span.font-mono')?.textContent).toBe('2')
+      expect(row.querySelector('p.text-heading')?.textContent?.trim()).toMatch(/^(Episode|Episódio) 2$/)
     }
   })
 })
