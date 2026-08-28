@@ -186,24 +186,28 @@ func getDefaultConfig() *Config {
 	}
 
 	return &Config{
-		CompletedAnimePath:     completedPath,
-		AnilistUsernames:       []string{},
-		CheckInterval:          10,
-		MaxEpisodesPerAnime:    12,
-		MaxBatchTorrentSizeGB:  100,
-		MinSeeders:             1,
-		MaxSearchPages:         5,
-		MinFreeDiskPercent:     10,
-		EpisodeRetryLimit:      5,
-		MaxConcurrentDownloads: 3,
-		DeleteWatchedEpisodes:  true,
-		WatchedEpisodesToKeep:  0,
-		ExcludedLists:          []string{},
-		DownloadStatuses:       []string{"CURRENT", "REPEATING"},
-		DownloadMediaStatuses:  []string{"RELEASING", "FINISHED"},
-		DeleteStatuses:         []string{},
-		Notifications:          NotificationsConfig{Webhooks: []WebhookPreset{}, BatchWindowSeconds: 60},
-		Priorities:             nyaa.DefaultPriorities(),
+		CompletedAnimePath:    completedPath,
+		AnilistUsernames:      []string{},
+		CheckInterval:         10,
+		MaxEpisodesPerAnime:   12,
+		MaxBatchTorrentSizeGB: 100,
+		// Passa WEB-DL (~1,4 GB) e encode de BD (~2 GB), barra BDRemux (~6-8 GB).
+		MaxEpisodeTorrentSizeGB: 5,
+		MinSeeders:              3,
+		MaxSearchPages:          5,
+		MinFreeDiskPercent:      10,
+		EpisodeRetryLimit:       5,
+		MaxConcurrentDownloads:  3,
+		DeleteWatchedEpisodes:   true,
+		// DeleteWatchedEpisodes vem ligado de fábrica: sem folga o episódio some assim que
+		// é marcado como assistido. Dois perdoam "marquei errado" e "quis rever".
+		WatchedEpisodesToKeep: 2,
+		ExcludedLists:         []string{},
+		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
+		DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+		DeleteStatuses:        []string{},
+		Notifications:         NotificationsConfig{Webhooks: []WebhookPreset{}, BatchWindowSeconds: 60},
+		Priorities:            nyaa.DefaultPriorities(),
 	}
 }
 
