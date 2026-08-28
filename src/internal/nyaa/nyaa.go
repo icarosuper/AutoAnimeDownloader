@@ -903,16 +903,39 @@ func extractPart(name string) *int {
 	return nil
 }
 
-// extractResolution extrai a resolução do nome do torrent
+// canonicalResolutions mapeia os apelidos de resolução nos tokens canônicos das listas
+// de Priorities. Sem isso "4k" e "2160p" são a mesma resolução ocupando dois índices
+// diferentes da lista, e qual vence depende só de como o grupo escreveu o nome do torrent.
+// "8k" fica de fora de propósito: continua sendo devolvido cru e, por não estar na lista
+// default, ranqueia como o pior — que é o tratamento certo para uma resolução que não
+// existe em anime.
+var canonicalResolutions = map[string]string{"4k": "2160p", "uhd": "2160p", "fhd": "1080p", "hd": "720p"}
+
+// extractResolution extrai a resolução do nome do torrent, já canonicalizada
+// (mesmo contrato de extractCodec, que devolve "HEVC" para "x265").
 func extractResolution(name string) string {
 	for _, p := range reResolutionPatterns {
 		matches := p.re.FindStringSubmatch(name)
 		if len(matches) > 1 {
-			return strings.ToLower(matches[1])
+			res := strings.ToLower(matches[1])
+			if canon, ok := canonicalResolutions[res]; ok {
+				return canon
+			}
+			// "1920x1080" -> "1080p": a altura é o que nomeia a resolução.
+			if _, height, ok := strings.Cut(res, "x"); ok {
+				return height + "p"
+			}
+			return res
 		}
 	}
 	return ""
 }
+
+// ExtractResolution é a versão exportável de extractResolution para testes.
+func ExtractResolution(name string) string { return extractResolution(name) }
+
+// ExtractCodec é a versão exportável de extractCodec para testes.
+func ExtractCodec(name string) string { return extractCodec(name) }
 
 // parseNyaaDate parseia a string de data do Nyaa para um objeto time.Time
 func parseNyaaDate(dateString string) (time.Time, error) {
@@ -1016,13 +1039,10 @@ func audioPriority(audio string) int {
 	return priorityIndex(ActivePriorities().Audio, audio)
 }
 
-// SortTorrentResults ordena os torrents por qualidade
-// Critérios de ordenação (em ordem de prioridade):
-// 1. Uncensored (conteúdo uncensored tem prioridade)
-// 2. Resolução (1080p > 720p > 480p > ...)
-// 3. Fansub (SubsPlease > Erai-raws > ...)
-// 4. Seeders (mais seeders é melhor)
-// 5. Tamanho (menor é melhor para mesma qualidade)
+// SortTorrentResults ordena os torrents por qualidade, aplicando os critérios de
+// CriteriaOrder que valem para episódio (episodeCriteria): uncensored, resolução,
+// codec, health, fansub e tamanho. Só `source` fica de fora — episódio semanal é
+// WEB-DL em ~todos os casos, então o critério nunca desempataria nada.
 // Baseado nas regras do Nyaa (Seção 8 do documento de regras)
 func SortTorrentResults(results []TorrentResult) []TorrentResult {
 	return sortByCriteria(results, filterCriteria(ActivePriorities().CriteriaOrder, episodeCriteria))

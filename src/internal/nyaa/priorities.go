@@ -34,11 +34,19 @@ func DefaultPriorities() Priorities {
 			"subsplease", "erai-raws", "judas", "toonshub", "asw",
 			"ember", "hd-zone", "kamig", "remix", "aniverse", "dub", "raw",
 		},
-		Resolutions: []string{"1080p", "720p", "480p", "4k", "8k", "fhd", "uhd", "hd", "2160p", "1440p"},
-		Sources:     []string{"bd", "bdrip", "bdremux", "web-dl", "webrip", "tv", "dvd", "hdtv"},
-		Codecs:      []string{"hevc", "av1", "x265", "h.264", "x264", "xvid"},
-		Audio:       []string{"flac", "dts-hd", "truehd", "ddp", "aac", "ac3", "mp3"},
-		IgnoreList:  []string{"[dub]", "[raw]", "[hardcoded]", "[hc]", "re-encode"},
+		// Só os tokens canônicos que extractResolution consegue devolver: "4k"/"uhd" viram
+		// "2160p", "fhd" vira "1080p", "hd" vira "720p". 4K abaixo de 720p é deliberado —
+		// anime em 4K é quase sempre upscale de um master 1080p.
+		Resolutions: []string{"1080p", "720p", "1440p", "2160p", "480p"},
+		// BDRemux é o bitstream intocado do disco; BDRip é reencode.
+		Sources: []string{"bdremux", "bd", "bdrip", "web-dl", "webrip", "tv", "dvd", "hdtv"},
+		// H.264 primeiro: toca direto em qualquer player, sem transcode no servidor (que
+		// queima a legenda no vídeo e a dessincroniza). Quem prefere arquivo menor troca
+		// pelo preset na tela de prioridades. "x265"/"x264" não entram porque extractCodec
+		// já canonicaliza para "hevc"/"h.264" — seriam tokens inertes.
+		Codecs:     []string{"h.264", "hevc", "av1", "xvid"},
+		Audio:      []string{"flac", "dts-hd", "truehd", "ddp", "aac", "ac3", "mp3"},
+		IgnoreList: []string{"[dub]", "[raw]", "[hardcoded]", "[hc]", "re-encode"},
 	}
 }
 
@@ -92,11 +100,15 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"uncensored": func(a, b TorrentResult) int { return boolBetter(isUncensored(a.Name), isUncensored(b.Name)) },
 	"resolution": func(a, b TorrentResult) int { return resCompare(a, b) },
 	"fansub":     func(a, b TorrentResult) int { return fansubPriority(a.Name) - fansubPriority(b.Name) },
-	"source":     func(a, b TorrentResult) int { return sourcePriority(extractSource(a.Name)) - sourcePriority(extractSource(b.Name)) },
-	"codec":      func(a, b TorrentResult) int { return codecPriority(extractCodec(a.Name)) - codecPriority(extractCodec(b.Name)) },
-	"audio":      func(a, b TorrentResult) int { return audioPriority(extractAudio(a.Name)) - audioPriority(extractAudio(b.Name)) },
-	"health":     func(a, b TorrentResult) int { return healthTier(b) - healthTier(a) }, // faixa maior é melhor
-	"size":       func(a, b TorrentResult) int { return sizeCompare(a, b) },
+	"source": func(a, b TorrentResult) int {
+		return sourcePriority(extractSource(a.Name)) - sourcePriority(extractSource(b.Name))
+	},
+	"codec": codecCompare,
+	"audio": func(a, b TorrentResult) int {
+		return audioPriority(extractAudio(a.Name)) - audioPriority(extractAudio(b.Name))
+	},
+	"health": func(a, b TorrentResult) int { return healthTier(b) - healthTier(a) }, // faixa maior é melhor
+	"size":   func(a, b TorrentResult) int { return sizeCompare(a, b) },
 }
 
 // healthTierFloors são os pisos das faixas de saúde: seeders 0 / 1-4 / 5-19 / 20-99 /
@@ -132,6 +144,20 @@ func boolBetter(a, b bool) int {
 		return -1
 	}
 	return 1
+}
+
+// codecCompare desempata por codec, mas só quando os DOIS nomes trazem uma tag de codec.
+// Nome sem tag ("[SubsPlease] Anime - 07 (1080p) [HASH].mkv" não diz H.264 em lugar nenhum)
+// devolve empate em vez de ir para o fim: priorityIndex trata token desconhecido como o pior,
+// e sem essa guarda todo release sem tag perderia para qualquer x265 tagueado — justamente o
+// contrário do que a lista de codecs configura. Mesma regra do tamanho ilegível em
+// filterBySize: dado que não deu para ler não é motivo para punir o release.
+func codecCompare(a, b TorrentResult) int {
+	ca, cb := extractCodec(a.Name), extractCodec(b.Name)
+	if ca == "" || cb == "" {
+		return 0
+	}
+	return codecPriority(ca) - codecPriority(cb)
 }
 
 // resCompare reproduz a lógica atual: ambos com resolução → por índice;
@@ -183,7 +209,7 @@ func sortByCriteria(results []TorrentResult, criteria []string) []TorrentResult 
 	return sorted
 }
 
-var episodeCriteria = map[string]bool{"uncensored": true, "resolution": true, "fansub": true, "health": true, "size": true}
+var episodeCriteria = map[string]bool{"uncensored": true, "resolution": true, "codec": true, "fansub": true, "health": true, "size": true}
 
 func filterCriteria(order []string, allowed map[string]bool) []string {
 	out := make([]string, 0, len(order))

@@ -110,3 +110,86 @@ func TestCriteriaOrder_FansubBeforeResolution(t *testing.T) {
 		t.Fatalf("expected SubsPlease first when fansub outranks resolution, got %s", sorted[0].Name)
 	}
 }
+
+// Codec entra no sort de episódio (episodeCriteria) e vem antes de fansub na ordem
+// default, então a lista de codecs decide entre dois releases 1080p da mesma faixa de saúde.
+func TestCodec_DecidesEpisodeSortBeforeFansub(t *testing.T) {
+	defer nyaa.SetPriorities(nyaa.Priorities{
+		CriteriaOrder: nyaa.DefaultPriorities().CriteriaOrder,
+		Fansubs:       nyaa.DefaultPriorities().Fansubs,
+		Resolutions:   nyaa.DefaultPriorities().Resolutions,
+		Codecs:        []string{"h.264", "hevc"},
+	})()
+
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[Judas] Anime - 01 1080p x265", Resolution: &r1080, Seeders: "100"},
+		{Name: "[Ember] Anime - 01 1080p x264", Resolution: &r1080, Seeders: "100"},
+	}
+
+	sorted := nyaa.SortTorrentResults(results)
+	if !strings.Contains(sorted[0].Name, "Ember") {
+		t.Fatalf("x264 no topo da lista de codecs deve vencer o x265, obteve %s", sorted[0].Name)
+	}
+}
+
+// Nome sem tag de codec (padrão do SubsPlease) não pode perder por isso: priorityIndex
+// trata token desconhecido como o pior, e codec roda ANTES de fansub. Sem a guarda de
+// codecCompare o SubsPlease perderia para qualquer x265 tagueado.
+func TestCodec_UntaggedNameIsNotPenalized(t *testing.T) {
+	defer nyaa.SetPriorities(nyaa.Priorities{
+		CriteriaOrder: nyaa.DefaultPriorities().CriteriaOrder,
+		Fansubs:       nyaa.DefaultPriorities().Fansubs,
+		Resolutions:   nyaa.DefaultPriorities().Resolutions,
+		Codecs:        nyaa.DefaultPriorities().Codecs, // hevc primeiro
+	})()
+
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[Judas] Anime - 01 (1080p) [x265]", Resolution: &r1080, Seeders: "100"},
+		{Name: "[SubsPlease] Anime - 01 (1080p) [ABCD1234].mkv", Resolution: &r1080, Seeders: "100"},
+	}
+
+	sorted := nyaa.SortTorrentResults(results)
+	if !strings.Contains(sorted[0].Name, "SubsPlease") {
+		t.Fatalf("release sem tag de codec deve empatar no codec e deixar o fansub decidir, obteve %s", sorted[0].Name)
+	}
+}
+
+// O teste que torna a classe do bug do "x264" impossível: todo token das listas default
+// precisa ser algo que o extrator consiga devolver. "x265" ficou anos na lista de codecs
+// sem nunca casar com nada, porque extractCodec canonicaliza para "hevc" — config inerte,
+// invisível. Agora quebra o CI.
+func TestDefaultPriorities_TokensAreReachable(t *testing.T) {
+	d := nyaa.DefaultPriorities()
+
+	for _, codec := range d.Codecs {
+		got := strings.ToLower(nyaa.ExtractCodec("[Group] Anime - 01 [" + codec + "]"))
+		if got != codec {
+			t.Errorf("codec default %q é inerte: extractCodec devolve %q", codec, got)
+		}
+	}
+	for _, res := range d.Resolutions {
+		got := strings.ToLower(nyaa.ExtractResolution("[Group] Anime - 01 (" + res + ")"))
+		if got != res {
+			t.Errorf("resolução default %q é inerte: extractResolution devolve %q", res, got)
+		}
+	}
+}
+
+func TestExtractResolution_Canonicalizes(t *testing.T) {
+	cases := map[string]string{
+		"[Group] Anime - 01 [4K]":        "2160p",
+		"[Group] Anime - 01 [UHD]":       "2160p",
+		"[Group] Anime - 01 [2160p]":     "2160p",
+		"[Group] Anime - 01 [1920x1080]": "1080p",
+		"[Group] Anime - 01 [FHD]":       "1080p",
+		"[Group] Anime - 01 [1080p]":     "1080p",
+		"[Group] Anime - 01 [HD]":        "720p",
+	}
+	for name, want := range cases {
+		if got := nyaa.ExtractResolution(name); got != want {
+			t.Errorf("ExtractResolution(%q) = %q, want %q", name, got, want)
+		}
+	}
+}
