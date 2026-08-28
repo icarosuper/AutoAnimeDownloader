@@ -273,6 +273,13 @@ definitions:
           "—"; 0 would be the lie "nothing downloaded".
         example: 780000000
         type: integer
+      codec:
+        description: |-
+          Codec is the video codec read from the FILE'S OWN HEADER (Matroska/EBML), not from its
+          name — most releases simply do not write it in the name. "" (omitted) whenever it cannot
+          be answered: not an .mkv, not finished downloading, or the header is not on disk yet.
+        example: HEVC
+        type: string
       episode:
         description: |-
           Episode comes from nyaa.ExtractEpisodeNumber over the FILE NAME — the same cascade the

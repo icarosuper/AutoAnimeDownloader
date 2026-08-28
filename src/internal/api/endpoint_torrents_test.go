@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -732,5 +734,106 @@ func TestHandleTorrentFilesRejectsEmptyHash(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+// --- codec lido do cabeçalho do arquivo ---
+
+// tinyMKV monta o menor Matroska que responde "qual o codec de vídeo": cabeçalho EBML, Segment,
+// Tracks, um TrackEntry de vídeo. A montagem detalhada (trilhas fora de ordem, pulo de
+// elemento gordo, arquivo truncado) é testada em files/mkv_test.go — aqui o que se prova é o
+// LIGAMENTO: o handler junta DataDir + Path e só lê arquivo completo.
+func tinyMKV(codecID string) []byte {
+	elem := func(id []byte, payload []byte) []byte {
+		out := append([]byte{}, id...)
+		n := uint32(len(payload))
+		out = append(out, 0x10|byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
+		return append(out, payload...)
+	}
+	trackEntry := elem([]byte{0xAE}, append(
+		elem([]byte{0x83}, []byte{0x01}), // TrackType = vídeo
+		elem([]byte{0x86}, []byte(codecID))...,
+	))
+	tracks := elem([]byte{0x16, 0x54, 0xAE, 0x6B}, trackEntry)
+	header := elem([]byte{0x1A, 0x45, 0xDF, 0xA3}, []byte{0x42, 0x82, 0x88, 'm', 'a', 't', 'r', 'o', 's', 'k', 'a'})
+	return append(header, elem([]byte{0x18, 0x53, 0x80, 0x67}, tracks)...)
+}
+
+func TestHandleTorrentFilesReadsTheCodecFromTheFileHeader(t *testing.T) {
+	dir := t.TempDir()
+	content := tinyMKV("V_MPEGH/ISO/HEVC")
+	if err := os.WriteFile(filepath.Join(dir, "ep07.mkv"), content, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	backend := torrents.NewFakeBackend()
+	backend.AddCompleted(hashA, dir)
+	size := int64(len(content))
+	backend.SetFiles(hashA, []torrents.FileInfo{
+		{Path: "ep07.mkv", Size: size, BytesCompleted: &size},
+	})
+	server := &Server{Torrents: backend, FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashA))
+
+	items := decodeTorrentList(t, w)
+	if len(items) != 1 {
+		t.Fatalf("Expected 1 file, got %d", len(items))
+	}
+	if items[0]["codec"] != "HEVC" {
+		t.Errorf("codec = %v, want HEVC", items[0]["codec"])
+	}
+}
+
+// O rain não baixa sequencial: um arquivo a 90% pode estar sem exatamente as primeiras peças,
+// que é onde mora o cabeçalho. Ler antes do fim devolveria lixo ou nada — nem se tenta.
+func TestHandleTorrentFilesSkipsTheCodecWhileTheFileIsIncomplete(t *testing.T) {
+	dir := t.TempDir()
+	content := tinyMKV("V_MPEGH/ISO/HEVC")
+	if err := os.WriteFile(filepath.Join(dir, "ep07.mkv"), content, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	backend := torrents.NewFakeBackend()
+	backend.AddCompleted(hashA, dir)
+	partial := int64(len(content) - 1)
+	backend.SetFiles(hashA, []torrents.FileInfo{
+		{Path: "ep07.mkv", Size: int64(len(content)), BytesCompleted: &partial},
+	})
+	server := &Server{Torrents: backend, FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashA))
+
+	items := decodeTorrentList(t, w)
+	if _, present := items[0]["codec"]; present {
+		t.Errorf("codec = %v, want the field omitted", items[0]["codec"])
+	}
+}
+
+// Formato diferente de mkv sai sem codec: MP4 tem estrutura análoga mas exigiria um segundo
+// parser, e em anime é praticamente tudo mkv.
+func TestHandleTorrentFilesSkipsTheCodecForNonMKV(t *testing.T) {
+	dir := t.TempDir()
+	content := tinyMKV("V_MPEGH/ISO/HEVC")
+	if err := os.WriteFile(filepath.Join(dir, "ep07.mp4"), content, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	backend := torrents.NewFakeBackend()
+	backend.AddCompleted(hashA, dir)
+	size := int64(len(content))
+	backend.SetFiles(hashA, []torrents.FileInfo{
+		{Path: "ep07.mp4", Size: size, BytesCompleted: &size},
+	})
+	server := &Server{Torrents: backend, FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashA))
+
+	items := decodeTorrentList(t, w)
+	if _, present := items[0]["codec"]; present {
+		t.Errorf("codec = %v, want the field omitted", items[0]["codec"])
 	}
 }

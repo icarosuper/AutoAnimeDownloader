@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"path/filepath"
 	"sort"
 	"strconv"
 )
@@ -161,6 +162,10 @@ type TorrentFileResponse struct {
 	// pieces, so FileStats() fails while Files() still answers). null is "unknown", rendered as
 	// "—"; 0 would be the lie "nothing downloaded".
 	BytesCompleted *int64 `json:"bytes_completed" example:"780000000"`
+	// Codec is the video codec read from the FILE'S OWN HEADER (Matroska/EBML), not from its
+	// name — most releases simply do not write it in the name. "" (omitted) whenever it cannot
+	// be answered: not an .mkv, not finished downloading, or the header is not on disk yet.
+	Codec string `json:"codec,omitempty" example:"HEVC"`
 	// Episode comes from nyaa.ExtractEpisodeNumber over the FILE NAME — the same cascade the
 	// Librarian uses to rename a pack's files. null when nothing matches.
 	Episode *int `json:"episode" example:"3"`
@@ -192,8 +197,10 @@ func handleTorrentFiles(server *Server) http.HandlerFunc {
 		}
 
 		// Same presence check as torrentAction: a torrent missing from the session is a clean
-		// 404, not a 500 built from the backend's error string.
-		if _, ok := server.Torrents.Get(hash); !ok {
+		// 404, not a 500 built from the backend's error string. The snapshot is kept for
+		// DataDir, which is where the files actually live on disk.
+		info, ok := server.Torrents.Get(hash)
+		if !ok {
 			JSONError(w, http.StatusNotFound, "TORRENT_NOT_FOUND", "Torrent not found")
 			return
 		}
@@ -215,11 +222,27 @@ func handleTorrentFiles(server *Server) http.HandlerFunc {
 				// número errado ou nada. Medido no pack do Erai-raws de Mushoku Tensei II: o
 				// caminho completo dá nil em TODO arquivo, o nome do arquivo dá o episódio certo.
 				Episode: nyaa.ExtractEpisodeNumber(path.Base(f.Path)),
+				Codec:   videoCodecOf(info.DataDir, f),
 			})
 		}
 
 		JSONSuccess(w, http.StatusOK, out)
 	}
+}
+
+// videoCodecOf reads the codec out of the file's own header, and only when that is both
+// possible and cheap: the file has to be COMPLETE, because rain does not download
+// sequentially — a file at 90% may well be missing exactly the first pieces, where the
+// Matroska header lives. Everything else answers "" and the UI shows nothing.
+//
+// ponytail: re-read on every poll tick of an open panel (~13 opens of a few KB every 2s for a
+// season pack). Negligible next to the torrent traffic itself; if it ever shows up, cache it
+// by path — the header of a finished file does not change.
+func videoCodecOf(dataDir string, f torrents.FileInfo) string {
+	if dataDir == "" || f.BytesCompleted == nil || *f.BytesCompleted < f.Size {
+		return ""
+	}
+	return files.VideoCodec(filepath.Join(dataDir, f.Path))
 }
 
 // torrentAction is the shared shape of the three per-torrent controls: POST only, hash from

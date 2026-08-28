@@ -266,6 +266,13 @@ export interface TorrentFile {
   bytes_completed: number | null
   /** Número extraído do NOME DO ARQUIVO pelo backend; null quando nada casa. */
   episode: number | null
+  /**
+   * Codec de vídeo lido do CABEÇALHO do arquivo (Matroska/EBML), não do nome — a maior parte
+   * dos releases não escreve o codec no nome. Ausente quando não dá para responder: não é
+   * `.mkv`, ou ainda não terminou de baixar (o rain não baixa sequencial, então o cabeçalho
+   * pode não estar no disco).
+   */
+  codec?: string
 }
 
 /** Uma linha do relatório da última verificação: um par (anime, código). */

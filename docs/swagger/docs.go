@@ -1987,6 +1987,11 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 780000000
                 },
+                "codec": {
+                    "description": "Codec is the video codec read from the FILE'S OWN HEADER (Matroska/EBML), not from its\nname — most releases simply do not write it in the name. \"\" (omitted) whenever it cannot\nbe answered: not an .mkv, not finished downloading, or the header is not on disk yet.",
+                    "type": "string",
+                    "example": "HEVC"
+                },
                 "episode": {
                     "description": "Episode comes from nyaa.ExtractEpisodeNumber over the FILE NAME — the same cascade the\nLibrarian uses to rename a pack's files. null when nothing matches.",
                     "type": "integer",
