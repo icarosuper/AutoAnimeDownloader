@@ -44,6 +44,59 @@ não uma refatoração.
 interface HTML. Nenhuma das alternativas medidas (RSS do Nyaa, JSON do AnimeTosho) ordena por
 seeders. O goquery não é dívida acidental — é o preço da única interface que ordena.
 
+### Página de detalhe (`/view/<id>`) — o que ela acrescenta
+
+Medido em 28/ago/2026 em `nyaa.si/view/1323474` (`[Judas] One Piece 001-574`, upload de jan/2021,
+171.8 GiB, 574 arquivos) — pior caso de propósito: pack gigante e antigo.
+
+| Campo só do detalhe | Serve? |
+|---|---|
+| **Lista de arquivos** (`div.torrent-file-list`, `<li>` com nome + `span.file-size`) | **Sim.** Os 574 arquivos vieram completos, com nome e tamanho, em árvore de pastas. |
+| `Completed` (snatches; 8723 no caso) | Sinal de saúde fraco — não decide nada que `Seeders` já não decida. |
+| Submitter, info hash, categoria | Já derivados do nome/magnet pelo daemon. |
+| Descrição do uploader (fonte, áudio, subs, notas) | Texto livre. Heurística ruidosa em cima de prosa de fansub — não vale contra `ShouldIgnore`, que decide por nome. |
+
+Flag trusted/remake **não** exige o detalhe: já vem na classe do `<tr>` da listagem
+(`success`/`danger`).
+
+**Custo medido:** 175 KB por página de detalhe, contra 119 KB de uma listagem inteira com 75
+linhas. Ou seja: buscar detalhe de todas as linhas custaria ~110x uma busca.
+
+**A diferença que importa contra o AnimeTosho:** a lista de arquivos do Nyaa é gerada do próprio
+`.torrent` e **funciona em conteúdo antigo**. O `files[]` do AnimeTosho não (vem `[]` para entrada
+velha — ver a ressalva na seção dele). Para o problema de série longa, a fonte certa da lista de
+arquivos é o próprio Nyaa, não o AnimeTosho.
+
+### Que caso de busca vale a pena
+
+- **Episódio individual — não.** Um arquivo. Nenhuma entrada nova para a decisão.
+- **Filme — quase nada.** Só distinguiria um resultado "filme" que na verdade é pasta de BD com
+  extras ou coletânea. Marginal.
+- **Pack — sim, e é o único que paga.** Duas coisas, de pesos bem diferentes:
+
+**1. Cobertura real do pack — isso é bug, não melhoria.** `extractBatchInfo`
+(`internal/nyaa/nyaa.go`) lê a faixa só do **nome**. Faixa desconhecida vira `EndEpisode == 0`, e
+daí `coveringBatch` (`internal/daemon/episodes.go`) trata o pack como completo, `pickBatches` para
+o cursor ali e `assignBatches` grava `batchStart/batchEnd = 1..total`. Cada episódio da janela vira
+um `EpisodeStruct` apontando para o hash do pack. Se um `"(Season 1+OVA) [Batch]"` cobre só 1-12 e
+a janela era 1-50, os 38 restantes ficam **registrados como baixados**: o Librarian linka apenas os
+arquivos que existem e nada reconcilia os registros com o disco depois, então esses episódios nunca
+voltam para a busca. A lista de arquivos responde a cobertura real ANTES de adicionar o torrent.
+
+**2. Teto por episódio em vez de por tamanho total** — mudança de política, não correção. O pack
+acima reprova em qualquer `max_batch_torrent_size_gb` sadio, mas dá ~300 MiB/episódio, que é ótimo.
+**Não economiza download:** o `rain` não seleciona arquivo (ver "O que NÃO resolve" do AnimeTosho),
+então o pack inteiro desce do mesmo jeito — muda só o critério de aceitar. Só vale se o teto atual
+estiver reprovando pack que o usuário quer.
+
+**Como manter barato, se for implementado:** só linha de **pack**, e só quando o dado muda a
+decisão — nome sem faixa (`EndEpisode == 0`) ou pack acima do teto. Dá ~1-3 requisições por anime.
+E **fora do `parseRow`**, depois do sort/filtro: dentro do loop de página vira uma requisição por
+linha.
+
+**O que continua sem resposta:** swarm morto, seleção de arquivo dentro do pack (limitação do
+`rain`), e ordenação.
+
 ---
 
 ## AnimeTosho — bom complemento, mau substituto
@@ -116,9 +169,10 @@ Também não resolve swarm morto (mesmo infohash) nem substitui a ordenação po
 
 ### Quando ele vale
 
-Como fonte **adicional**, quando aparecer requisito que o HTML do Nyaa não atende: `files[]` do
-pack antes de baixar (problema de série longa), ou match por `anidb_aid` em vez de string de
-título. Como **substituto** do Nyaa hoje, não vale: ganho de parsing, perda de ordenação e de
+Como fonte **adicional**, quando aparecer requisito que o HTML do Nyaa não atende: match por
+`anidb_aid` em vez de string de título. **`files[]` saiu dessa lista** (medido 28/ago): a página
+de detalhe do próprio Nyaa entrega a lista de arquivos e, ao contrário daqui, funciona em conteúdo
+antigo — ver "Página de detalhe" na seção do Nyaa. Como **substituto** do Nyaa hoje, não vale: ganho de parsing, perda de ordenação e de
 frescor de seeders.
 
 ---
@@ -144,7 +198,9 @@ frescor de seeders.
 3. **Responder a Etapa 0 antes de escrever adapter** — "existe fonte com infohash **diferente** e
    peers **vivos** onde o Nyaa está morto?". Só o TokyoTosho tem sinal para isso. Enquanto não for
    medido, arquitetura de múltiplas fontes é especulação.
-4. **AnimeTosho como fonte adicional** — quando `files[]` do pack ou match por `anidb_aid` virar
-   requisito. Não como substituto.
+4. **Lista de arquivos do pack, se virar requisito** — vem da página de detalhe do **Nyaa**
+   (`/view/<id>`), não do AnimeTosho: só ela funciona em pack antigo. Escopo e custo na seção
+   "Página de detalhe" acima. O AnimeTosho como fonte adicional só sobra para match por
+   `anidb_aid`. Nenhum dos dois como substituto.
 5. **Debrid/Usenet** — só se seleção por arquivo virar requisito de verdade. É troca de
    *protocolo*, e é a saída se a Etapa 0 for refutada.

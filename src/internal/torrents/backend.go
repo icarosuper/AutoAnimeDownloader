@@ -58,6 +58,18 @@ type TorrentInfo struct {
 	QueuePosition int
 }
 
+// FileInfo é um arquivo dentro de um torrent.
+type FileInfo struct {
+	// Path é o caminho relativo CRU, como está no metadata — é o que o usuário lê para saber
+	// fansub, resolução e codec. Nunca traduzido para "Ep NN": o nome cru é o dado procurado.
+	Path string
+	Size int64
+	// BytesCompleted é nil quando o progresso por arquivo é desconhecido: com o torrent parado
+	// a rain libera as pieces e FileStats() falha, enquanto Files() continua respondendo. nil é
+	// "não sei", que a UI mostra como "—"; 0 seria a mentira "nada baixado".
+	BytesCompleted *int64
+}
+
 // TorrentBackend abstracts the embedded BitTorrent client so the daemon and the tests
 // share one seam. In production it is implemented by SessionManager, which owns the
 // lazily-created rain-backed Session and delegates every method to it (Session itself has
@@ -90,6 +102,9 @@ type TorrentBackend interface {
 	List() []TorrentInfo
 	// Get returns the torrent with the given info hash, if present.
 	Get(hash string) (TorrentInfo, bool)
+	// Files lista os arquivos do torrent. Slice vazio (sem erro) quando o metadata ainda não
+	// chegou — um magnet recém-adicionado não tem lista, e isso é estado normal, não falha.
+	Files(hash string) ([]FileInfo, error)
 	// Remove deletes a torrent. With keepData=false the seeding copy on disk is also removed.
 	Remove(hash string, keepData bool) error
 	// Pause stops a torrent (rain's Torrent.Stop). It does not block: the torrent enters

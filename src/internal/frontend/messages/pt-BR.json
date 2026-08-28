@@ -351,7 +351,6 @@
   "downloads_group_select": "Selecionar todos os torrents de {name}",
   "downloads_group_count": "{count} torrent(s)",
   "downloads_group_problems": "{count} travados",
-  "downloads_col_hash": "Hash",
   "downloads_col_status": "Estado",
   "downloads_col_episode": "Ep.",
   "downloads_sort_by": "Ordenar por",
@@ -449,5 +448,8 @@
   "passerror_unknown": "A última verificação não chegou ao fim.",
   "passerror_details": "Detalhes técnicos",
   "next_airing": "Próx. ep. {when}",
-  "status_col_next_airing": "Próximo ep."
+  "status_col_next_airing": "Próximo ep.",
+  "files_waiting_metadata": "Aguardando a metadata do torrent",
+  "files_toggle": "Mostrar ou esconder os arquivos de {name}",
+  "files_ep_label": "Ep {number}"
 }

@@ -117,8 +117,10 @@ describe('AnimeDetail — a pack is one row', () => {
     expect(rows.length).toBeGreaterThan(0)
     for (const row of rows) {
       // No principal Button at all in a pack row — "Delete" only exists inside the "..." menu.
+      // The two buttons filtered out are not actions: `aria-haspopup` is the "..." trigger and
+      // `aria-expanded` is the file-list toggle (read-only panel, see TorrentFiles.svelte).
       const buttons = within(row as HTMLElement).queryAllByRole('button').filter(
-        (b) => !b.getAttribute('aria-haspopup'),
+        (b) => !b.getAttribute('aria-haspopup') && !b.hasAttribute('aria-expanded'),
       )
       expect(buttons).toHaveLength(0)
       expect(within(row as HTMLElement).queryByText(/substituir|replace/i)).toBeNull()

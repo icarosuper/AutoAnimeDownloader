@@ -106,6 +106,36 @@ func (s *Session) Get(hash string) (TorrentInfo, bool) {
 	return toInfo(t), true
 }
 
+// Files prefere FileStats() (que traz o progresso por arquivo) e cai para Files() quando o
+// torrent está parado — a rain libera t.pieces no Stop(), o que faz FileStats() falhar, mas
+// t.info sobrevive e Files() segue respondendo. Sem metadata nenhum dos dois responde, e aí a
+// lista vazia é a resposta certa: um magnet recém-adicionado ainda não sabe o que traz.
+func (s *Session) Files(hash string) ([]FileInfo, error) {
+	t := s.ses.GetTorrent(hash)
+	if t == nil {
+		return nil, fmt.Errorf("torrent %s not found", hash)
+	}
+
+	if stats, err := t.FileStats(); err == nil {
+		out := make([]FileInfo, 0, len(stats))
+		for _, fs := range stats {
+			done := fs.BytesCompleted
+			out = append(out, FileInfo{Path: fs.Path(), Size: fs.Length(), BytesCompleted: &done})
+		}
+		return out, nil
+	}
+
+	files, err := t.Files()
+	if err != nil {
+		return nil, nil
+	}
+	out := make([]FileInfo, 0, len(files))
+	for _, f := range files {
+		out = append(out, FileInfo{Path: f.Path(), Size: f.Length()})
+	}
+	return out, nil
+}
+
 func (s *Session) Remove(hash string, keepData bool) error {
 	if err := s.ses.RemoveTorrent(hash, keepData); err != nil {
 		return fmt.Errorf("failed to remove torrent %s: %w", hash, err)

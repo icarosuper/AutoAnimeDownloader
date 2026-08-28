@@ -1445,6 +1445,77 @@
                 }
             }
         },
+        "/torrents/{hash}/files": {
+            "get": {
+                "description": "Returns the files inside a torrent, in the order the release was built (not re-sorted), with the raw path, size, per-file progress and the episode number extracted from the file name. bytes_completed is null for a paused torrent (rain frees the piece data, so per-file progress is unavailable) and the list is empty while the metadata has not arrived yet.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "torrents"
+                ],
+                "summary": "List a torrent's files",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Torrent info hash",
+                        "name": "hash",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/api.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/api.TorrentFileResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method Not Allowed",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/torrents/{hash}/pause": {
             "post": {
                 "description": "Stops a torrent. Does not block: the torrent enters the \"stopping\" state and only reaches \"stopped\" up to ~5s later, once the stop event reaches the trackers. The paused state is persisted and survives a daemon restart.",
@@ -1902,6 +1973,29 @@
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "api.TorrentFileResponse": {
+            "type": "object",
+            "properties": {
+                "bytes_completed": {
+                    "description": "BytesCompleted is null when per-file progress is unknown (paused torrent: rain frees the\npieces, so FileStats() fails while Files() still answers). null is \"unknown\", rendered as\n\"—\"; 0 would be the lie \"nothing downloaded\".",
+                    "type": "integer",
+                    "example": 780000000
+                },
+                "episode": {
+                    "description": "Episode comes from nyaa.ExtractEpisodeNumber over the FILE NAME — the same cascade the\nLibrarian uses to rename a pack's files. null when nothing matches.",
+                    "type": "integer",
+                    "example": 3
+                },
+                "path": {
+                    "type": "string",
+                    "example": "[Judas] Frieren - S01E03.mkv"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 1490000000
                 }
             }
         },

@@ -52,6 +52,9 @@ func TestSessionManagerLazyCreation(t *testing.T) {
 	if _, ok := m.Get("0123456789abcdef0123456789abcdef01234567"); ok {
 		t.Error("Get without session should report not found")
 	}
+	if _, err := m.Files("0123456789abcdef0123456789abcdef01234567"); !errors.Is(err, ErrSessionNotReady) {
+		t.Errorf("Files without session = %v, want ErrSessionNotReady", err)
+	}
 	// Closing a manager that never had a session is a no-op, not an error.
 	if err := m.Close(); err != nil {
 		t.Errorf("Close without session = %v, want nil", err)

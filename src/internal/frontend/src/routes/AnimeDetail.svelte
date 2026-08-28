@@ -32,6 +32,7 @@
   import Loading from "../components/Loading.svelte";
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import TorrentDeleteDialog from "../components/TorrentDeleteDialog.svelte";
+  import TorrentFiles from "../components/TorrentFiles.svelte";
   import ActionMenu, { type ActionMenuItem } from "../components/ui/ActionMenu.svelte";
   import Button from "../components/ui/Button.svelte";
   import Checkbox from "../components/ui/Checkbox.svelte";
@@ -667,8 +668,23 @@
         animeIssues = [...report.problems, ...report.limits].filter((i) => i.anime_id === animeId);
       }
     } finally {
+      // Só os painéis ABERTOS refazem a lista de arquivos, e no mesmo tick deste poll.
+      filesTick += 1;
       scheduleNextTorrentPoll();
     }
+  }
+
+  // Painel de arquivos da linha de pack. Ela é a única linha COM LACUNA: episódio com torrent
+  // próprio já mostra progresso individual (episodeMeta), e os episódios de dentro de um pack
+  // são engolidos numa linha só de propósito — não há linha por episódio ali para receber barra
+  // sem expandir. Estado local, efêmero, fora da URL.
+  let openPackFiles = new Set<string>();
+  let filesTick = 0;
+
+  function togglePackFiles(hash: string) {
+    const next = new Set(openPackFiles);
+    next.has(hash) ? next.delete(hash) : next.add(hash);
+    openPackFiles = next;
   }
 
   function scheduleNextTorrentPoll() {
@@ -744,7 +760,7 @@
   }
 
   const EP_GRID =
-    "grid grid-cols-[28px_52px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
+    "grid grid-cols-[28px_88px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
 </script>
 
 <ConfirmDialog
@@ -1069,7 +1085,27 @@
               <span></span>
             {/if}
 
-            <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
+            {#if row.kind === "batch" && row.hash}
+              <!-- Só a linha de pack ganha seta: o painel é a primeira vez que a tela mostra o que o
+                   pack REALMENTE contém (a faixa exibida vem do NOME do torrent). -->
+              <button
+                type="button"
+                class="flex items-center gap-1 font-mono text-[15px] font-bold text-heading"
+                aria-expanded={openPackFiles.has(row.hash)}
+                aria-label={$locale ? m.files_toggle({ name: row.title }) : ""}
+                on:click={() => row.hash && togglePackFiles(row.hash)}
+              >
+                <svelte:component
+                  this={openPackFiles.has(row.hash) ? ChevronDown : ChevronRight}
+                  size={14}
+                  strokeWidth={2}
+                  class="shrink-0 text-subtle"
+                />
+                {row.label}
+              </button>
+            {:else}
+              <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
+            {/if}
 
             <div class="min-w-0">
               <p class="truncate text-copy text-heading" title={row.title}>{row.title}</p>
@@ -1117,6 +1153,9 @@
               {/if}
             </div>
           </div>
+          {#if row.kind === "batch" && row.hash && openPackFiles.has(row.hash)}
+            <TorrentFiles hash={row.hash} mode="episodes" tick={filesTick} />
+          {/if}
         {/each}
       </div>
 
@@ -1137,7 +1176,27 @@
               {:else}
                 <span></span>
               {/if}
-              <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
+              {#if row.kind === "batch" && row.hash}
+                <!-- Só a linha de pack ganha seta: o painel é a primeira vez que a tela mostra o que o
+                     pack REALMENTE contém (a faixa exibida vem do NOME do torrent). -->
+                <button
+                  type="button"
+                  class="flex items-center gap-1 font-mono text-[15px] font-bold text-heading"
+                  aria-expanded={openPackFiles.has(row.hash)}
+                  aria-label={$locale ? m.files_toggle({ name: row.title }) : ""}
+                  on:click={() => row.hash && togglePackFiles(row.hash)}
+                >
+                  <svelte:component
+                    this={openPackFiles.has(row.hash) ? ChevronDown : ChevronRight}
+                    size={14}
+                    strokeWidth={2}
+                    class="shrink-0 text-subtle"
+                  />
+                  {row.label}
+                </button>
+              {:else}
+                <span class="font-mono text-[15px] font-bold text-heading">{row.label}</span>
+              {/if}
               <div class="min-w-0 flex-1">
                 <p class="truncate text-copy text-heading">{row.title}</p>
                 {#if row.notes}
@@ -1179,6 +1238,9 @@
               {/if}
             </div>
           </div>
+          {#if row.kind === "batch" && row.hash && openPackFiles.has(row.hash)}
+            <TorrentFiles hash={row.hash} mode="episodes" tick={filesTick} />
+          {/if}
         {/each}
       </div>
     </section>

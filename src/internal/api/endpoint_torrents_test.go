@@ -581,3 +581,156 @@ func TestHandleTorrentDeleteInvalidKeepDataReturns400(t *testing.T) {
 		t.Errorf("Expected %d, got %d", http.StatusBadRequest, w.Code)
 	}
 }
+
+// --- GET /torrents/{hash}/files ---
+
+func filesRequest(hash string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/torrents/"+hash+"/files", nil)
+	req.SetPathValue("hash", hash)
+	return req
+}
+
+func int64Ptr(v int64) *int64 { return &v }
+
+func TestHandleTorrentFilesListsPathsWithEpisodeNumbers(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	backend.SetFiles(hashA, []torrents.FileInfo{
+		{Path: "[Judas] Frieren - S01E03.mkv", Size: 1490000000, BytesCompleted: int64Ptr(780000000)},
+		{Path: "NCOP01.mkv", Size: 212000000, BytesCompleted: int64Ptr(212000000)},
+	})
+	server := &Server{Torrents: backend, FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashA))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d", http.StatusOK, w.Code)
+	}
+	items := decodeTorrentList(t, w)
+	if len(items) != 2 {
+		t.Fatalf("Expected 2 files, got %d", len(items))
+	}
+	// A ordem é a do metadata, não reordenada: é a ordem em que o release foi montado.
+	if items[0]["path"] != "[Judas] Frieren - S01E03.mkv" {
+		t.Errorf("path = %v", items[0]["path"])
+	}
+	if items[0]["episode"] != float64(3) {
+		t.Errorf("episode = %v, want 3", items[0]["episode"])
+	}
+	if items[0]["bytes_completed"] != float64(780000000) {
+		t.Errorf("bytes_completed = %v", items[0]["bytes_completed"])
+	}
+	if items[1]["episode"] != nil {
+		t.Errorf("episode for NCOP01.mkv = %v, want null", items[1]["episode"])
+	}
+}
+
+// Torrent parado: a rain libera as pieces, FileStats() falha e só sobra Files() — sem
+// progresso por arquivo. O JSON tem que dizer "não sei" (null), não "nada baixado" (0).
+func TestHandleTorrentFilesPausedTorrentHasNullBytesCompleted(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	backend.SetFiles(hashA, []torrents.FileInfo{{Path: "ep01.mkv", Size: 100}})
+	server := &Server{Torrents: backend, FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashA))
+
+	items := decodeTorrentList(t, w)
+	if len(items) != 1 {
+		t.Fatalf("Expected 1 file, got %d", len(items))
+	}
+	raw, ok := items[0]["bytes_completed"]
+	if !ok {
+		t.Fatal("bytes_completed missing from the payload")
+	}
+	if raw != nil {
+		t.Errorf("bytes_completed = %v, want null", raw)
+	}
+}
+
+// Metadata ainda não chegou: 200 com "data": [], nunca "data": null nem erro.
+func TestHandleTorrentFilesWithoutMetadataReturnsEmptyArray(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	server := &Server{Torrents: backend, FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashA))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d", http.StatusOK, w.Code)
+	}
+	if items := decodeTorrentList(t, w); len(items) != 0 {
+		t.Errorf("Expected 0 files, got %d", len(items))
+	}
+}
+
+// A pasta do pack costuma carregar a faixa no nome ("… - 00 ~ 12 [1080p]/…"), que envenena a
+// cascata de regexes: o caminho completo devolve nil em todo arquivo. O número tem que sair do
+// NOME DO ARQUIVO. Caso real, pack do Erai-raws de Mushoku Tensei II.
+func TestHandleTorrentFilesEpisodeComesFromTheFileNameNotTheFolder(t *testing.T) {
+	backend := torrents.NewFakeBackend()
+	if _, err := backend.Add(magnetA); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	const dir = "[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu - 00 ~ 12 [1080p][Multiple Subtitle]"
+	backend.SetFiles(hashA, []torrents.FileInfo{
+		{Path: dir + "/[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu - 07 [1080p][Multiple Subtitle].mkv", Size: 1},
+	})
+	server := &Server{Torrents: backend, FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashA))
+
+	items := decodeTorrentList(t, w)
+	if len(items) != 1 {
+		t.Fatalf("Expected 1 file, got %d", len(items))
+	}
+	if items[0]["episode"] != float64(7) {
+		t.Errorf("episode = %v, want 7", items[0]["episode"])
+	}
+}
+
+func TestHandleTorrentFilesUnknownHashReturns404(t *testing.T) {
+	server := &Server{Torrents: torrents.NewFakeBackend(), FileManager: &mockFileManager{}}
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, filesRequest(hashB))
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestHandleTorrentFilesRejectsNonGet(t *testing.T) {
+	server := &Server{Torrents: torrents.NewFakeBackend(), FileManager: &mockFileManager{}}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/torrents/"+hashA+"/files", nil)
+	req.SetPathValue("hash", hashA)
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected %d, got %d", http.StatusMethodNotAllowed, w.Code)
+	}
+}
+
+func TestHandleTorrentFilesRejectsEmptyHash(t *testing.T) {
+	server := &Server{Torrents: torrents.NewFakeBackend(), FileManager: &mockFileManager{}}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/torrents//files", nil)
+
+	w := httptest.NewRecorder()
+	handleTorrentFiles(server)(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}

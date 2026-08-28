@@ -30,6 +30,9 @@ type FakeBackend struct {
 	// RemovedKeepData records the keepData argument passed to Remove, keyed by hash, so tests
 	// can assert what the caller actually asked for even though the fake itself ignores it.
 	RemovedKeepData map[string]bool
+	// files is what Files(hash) returns, filled by SetFiles. A hash with no entry has no
+	// metadata yet — an empty list, which is the real backend's answer in that state too.
+	files map[string][]FileInfo
 	// prioritizeCalls records every Prioritize(hash) for assertions.
 	prioritizeCalls []string
 	// MaxActiveDownloads records the last SetMaxActiveDownloads(n). The fake does NOT
@@ -44,6 +47,7 @@ func NewFakeBackend() *FakeBackend {
 	return &FakeBackend{
 		torrents:        make(map[string]*TorrentInfo),
 		RemovedKeepData: make(map[string]bool),
+		files:           make(map[string][]FileInfo),
 	}
 }
 
@@ -133,6 +137,19 @@ func (f *FakeBackend) Remove(hash string, keepData bool) error {
 	f.RemovedKeepData[hash] = keepData
 	delete(f.torrents, hash)
 	return nil
+}
+
+// SetFiles defines what Files(hash) returns for a torrent.
+func (f *FakeBackend) SetFiles(hash string, files []FileInfo) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.files[hash] = files
+}
+
+func (f *FakeBackend) Files(hash string) ([]FileInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.files[hash], nil
 }
 
 func (f *FakeBackend) Pause(hash string) error {

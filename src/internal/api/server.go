@@ -123,6 +123,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/pause", handleTorrentPause(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/resume", handleTorrentResume(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/announce", handleTorrentAnnounce(s))
+	apiMux.HandleFunc("/api/v1/torrents/{hash}/files", handleTorrentFiles(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/prioritize", handleTorrentPrioritize(s))
 	apiMux.HandleFunc("/api/v1/notifications/webhooks/{name}/test", handleNotificationWebhookTest(s))
 

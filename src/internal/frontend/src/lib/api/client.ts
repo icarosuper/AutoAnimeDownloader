@@ -257,6 +257,17 @@ export interface TorrentInfo {
   seeded_for_seconds: number
 }
 
+/** Um arquivo de dentro de um torrent. */
+export interface TorrentFile {
+  /** Caminho relativo CRU, como está no metadata — fansub, resolução e codec saem daqui. */
+  path: string
+  size: number
+  /** null = desconhecido (torrent parado: o rain libera as peças). Não é "nada baixado". */
+  bytes_completed: number | null
+  /** Número extraído do NOME DO ARQUIVO pelo backend; null quando nada casa. */
+  episode: number | null
+}
+
 /** Uma linha do relatório da última verificação: um par (anime, código). */
 export interface Issue {
   anime_id: number
@@ -400,6 +411,17 @@ export async function getTorrents(): Promise<TorrentInfo[]> {
   // AnimeDetail.svelte (2s/15s adaptive) — a transient failure must degrade silently rather
   // than toast on every tick.
   return apiRequest<TorrentInfo[]>('GET', '/torrents', null, { silent: true })
+}
+
+/**
+ * Arquivos de dentro de um torrent. Buscado SOB DEMANDA (ao expandir a linha), nunca embutido
+ * no `GET /torrents`: aquele é um poll de 2s, e enfiar a lista nele multiplicaria o payload
+ * por N para um dado que quase sempre ninguém está olhando.
+ *
+ * `silent` porque o painel aberto se refaz no mesmo tick de poll da tela.
+ */
+export async function getTorrentFiles(hash: string): Promise<TorrentFile[]> {
+  return apiRequest<TorrentFile[]>('GET', `/torrents/${hash}/files`, null, { silent: true })
 }
 
 export async function pauseTorrent(hash: string): Promise<void> {

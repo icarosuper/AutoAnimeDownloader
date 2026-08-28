@@ -4,10 +4,12 @@ import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path"
 	"sort"
 	"strconv"
 )
@@ -147,6 +149,77 @@ func buildTorrentResponse(t torrents.TorrentInfo, eps []files.EpisodeStruct) Tor
 		resp.EpisodeNumber = &n
 	}
 	return resp
+}
+
+// TorrentFileResponse is one file inside a torrent. Path is the RAW relative path from the
+// metadata — the whole point of the panel is reading fansub, resolution and codec off it, so
+// it is never rewritten into "Ep NN".
+type TorrentFileResponse struct {
+	Path string `json:"path" example:"[Judas] Frieren - S01E03.mkv"`
+	Size int64  `json:"size" example:"1490000000"`
+	// BytesCompleted is null when per-file progress is unknown (paused torrent: rain frees the
+	// pieces, so FileStats() fails while Files() still answers). null is "unknown", rendered as
+	// "—"; 0 would be the lie "nothing downloaded".
+	BytesCompleted *int64 `json:"bytes_completed" example:"780000000"`
+	// Episode comes from nyaa.ExtractEpisodeNumber over the FILE NAME — the same cascade the
+	// Librarian uses to rename a pack's files. null when nothing matches.
+	Episode *int `json:"episode" example:"3"`
+}
+
+// @Summary      List a torrent's files
+// @Description  Returns the files inside a torrent, in the order the release was built (not re-sorted), with the raw path, size, per-file progress and the episode number extracted from the file name. bytes_completed is null for a paused torrent (rain frees the piece data, so per-file progress is unavailable) and the list is empty while the metadata has not arrived yet.
+// @Tags         torrents
+// @Accept       json
+// @Produce      json
+// @Param        hash  path      string  true  "Torrent info hash"
+// @Success      200   {object}  SuccessResponse{data=[]TorrentFileResponse}
+// @Failure      400   {object}  SuccessResponse
+// @Failure      404   {object}  SuccessResponse
+// @Failure      405   {object}  SuccessResponse
+// @Failure      500   {object}  SuccessResponse
+// @Router       /torrents/{hash}/files [get]
+func handleTorrentFiles(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET method is allowed")
+			return
+		}
+
+		hash := r.PathValue("hash")
+		if hash == "" {
+			JSONError(w, http.StatusBadRequest, "INVALID_HASH", "Torrent hash is required")
+			return
+		}
+
+		// Same presence check as torrentAction: a torrent missing from the session is a clean
+		// 404, not a 500 built from the backend's error string.
+		if _, ok := server.Torrents.Get(hash); !ok {
+			JSONError(w, http.StatusNotFound, "TORRENT_NOT_FOUND", "Torrent not found")
+			return
+		}
+
+		list, err := server.Torrents.Files(hash)
+		if err != nil {
+			JSONInternalError(w, err)
+			return
+		}
+
+		out := make([]TorrentFileResponse, 0, len(list))
+		for _, f := range list {
+			out = append(out, TorrentFileResponse{
+				Path:           f.Path,
+				Size:           f.Size,
+				BytesCompleted: f.BytesCompleted,
+				// path.Base, não o caminho inteiro: a PASTA do pack costuma carregar a faixa
+				// ("… - 00 ~ 12 [1080p]/…"), e a cascata de regexes lida sobre ela devolve o
+				// número errado ou nada. Medido no pack do Erai-raws de Mushoku Tensei II: o
+				// caminho completo dá nil em TODO arquivo, o nome do arquivo dá o episódio certo.
+				Episode: nyaa.ExtractEpisodeNumber(path.Base(f.Path)),
+			})
+		}
+
+		JSONSuccess(w, http.StatusOK, out)
+	}
 }
 
 // torrentAction is the shared shape of the three per-torrent controls: POST only, hash from

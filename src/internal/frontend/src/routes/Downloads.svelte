@@ -7,7 +7,7 @@
   // grupos estão recolhidos (ver o comentário de `ViewState` em torrentFilters.ts).
   import { onMount, onDestroy } from "svelte";
   import { querystring, replace } from "svelte-spa-router";
-  import { ChevronDown, ChevronsUp, Pause, Play, RefreshCw, Trash2 } from "@lucide/svelte";
+  import { ChevronDown, ChevronRight, ChevronsUp, Pause, Play, RefreshCw, Trash2 } from "@lucide/svelte";
   import {
     getAnimes,
     getTorrents,
@@ -43,6 +43,7 @@
   import Loading from "../components/Loading.svelte";
   import DownloadsToolbar from "../components/DownloadsToolbar.svelte";
   import TorrentDeleteDialog from "../components/TorrentDeleteDialog.svelte";
+  import TorrentFiles from "../components/TorrentFiles.svelte";
   import Button from "../components/ui/Button.svelte";
   import Checkbox from "../components/ui/Checkbox.svelte";
   import Chip from "../components/ui/Chip.svelte";
@@ -71,7 +72,6 @@
     colEta: m.downloads_col_eta(),
     colPeers: m.downloads_col_peers(),
     colActions: m.downloads_col_actions(),
-    colHash: m.downloads_col_hash(),
     colStatus: m.downloads_col_status(),
     colEpisode: m.downloads_col_episode(),
     sortBy: m.downloads_sort_by(),
@@ -241,12 +241,6 @@
     syncUrl();
   }
 
-  /** Hash truncado no formato do artboard: `a3f9c1e8…7b2d`. */
-  function shortHash(hash: string): string {
-    if (hash.length <= 16) return hash;
-    return `${hash.slice(0, 8)}…${hash.slice(-4)}`;
-  }
-
   /**
    * Cor da barra agregada do grupo. A primeira versão usava sempre `accent` (salvo problemas),
    * o que pintava de roxo um grupo 100% concluído — lendo como "ainda baixando" ao lado de
@@ -278,7 +272,25 @@
       console.error("Failed to load torrents:", err);
     } finally {
       loading = false;
+      // Só os painéis ABERTOS refazem a lista de arquivos, e no mesmo tick do poll da tela.
+      // A lista nunca entra no GET /torrents: seria multiplicar o payload de um poll de 2s
+      // por N para um dado que quase sempre ninguém está olhando.
+      filesTick += 1;
     }
+  }
+
+  // Terceiro nível do accordion: grupo por anime → linha de torrent → arquivos. Vale para
+  // TODA linha, inclusive torrent de episódio único — o arquivo de dentro traz fansub,
+  // resolução e codec, que o nome do torrent nem sempre repete.
+  // Estado local, não na URL: é efêmero ("deixa eu ver o que veio"), diferente do filtro e
+  // dos grupos recolhidos, que o usuário compartilha em link.
+  let openFiles = new Set<string>();
+  let filesTick = 0;
+
+  function toggleFiles(hash: string) {
+    const next = new Set(openFiles);
+    next.has(hash) ? next.delete(hash) : next.add(hash);
+    openFiles = next;
   }
 
   async function loadCovers() {
@@ -499,7 +511,7 @@
   // descreve acontecia exatamente na faixa 768–880px. `lg` (1024px) é o primeiro breakpoint que
   // realmente cabe. Mesmo critério da lista de animes em Status.svelte (ver LIST_GRID).
   const ROW_GRID =
-    "flex flex-wrap items-center gap-x-3 gap-y-2 lg:grid lg:grid-cols-[28px_56px_128px_120px_minmax(120px,1fr)_150px_104px] lg:items-center lg:gap-3";
+    "flex flex-wrap items-center gap-x-3 gap-y-2 lg:grid lg:grid-cols-[28px_78px_128px_minmax(120px,1fr)_150px_104px] lg:items-center lg:gap-3";
   /** Recuo das linhas dentro do grupo — 66px no desktop, só o padding do card no mobile. */
   const ROW_INDENT = "pl-4 pr-4 lg:pl-[66px]";
 </script>
@@ -630,7 +642,6 @@
           <span></span>
           <span class="font-mono text-mono-label uppercase text-subtle">{T && T.colEpisode}</span>
           <span class="font-mono text-mono-label uppercase text-subtle">{T && T.colStatus}</span>
-          <span class="font-mono text-mono-label uppercase text-subtle">{T && T.colHash}</span>
           <button
             type="button"
             class="text-left font-mono text-mono-label uppercase text-subtle hover:text-body"
@@ -788,7 +799,22 @@
                     on:change={() => toggleSelect(t.hash)}
                   />
 
-                  <span class="font-mono text-[13px] font-bold text-heading">
+                  <!-- Seta de expandir + rótulo do episódio no mesmo alvo: o número sozinho
+                       não era clicável, e um sexto botão na coluna de ações (que já tem cinco
+                       em 104px) transbordaria. -->
+                  <button
+                    type="button"
+                    class="flex items-center gap-1 font-mono text-[13px] font-bold text-heading"
+                    aria-expanded={openFiles.has(t.hash)}
+                    aria-label={$locale ? m.files_toggle({ name: t.name }) : ""}
+                    on:click={() => toggleFiles(t.hash)}
+                  >
+                    <svelte:component
+                      this={openFiles.has(t.hash) ? ChevronDown : ChevronRight}
+                      size={14}
+                      strokeWidth={2}
+                      class="shrink-0 text-subtle"
+                    />
                     {#if t.is_batch}
                       {T && T.batch}
                     {:else if t.episode_number !== null}
@@ -796,7 +822,7 @@
                     {:else}
                       —
                     {/if}
-                  </span>
+                  </button>
 
                   <!-- A posição na fila entra no chip que já existe, sem coluna nova. Ela NÃO
                        entra em `statusLabel()`: o filtro de status da toolbar chama a mesma
@@ -812,8 +838,6 @@
                           : statusLabel(t.status))}
                     </Chip>
                   </span>
-
-                  <span class="truncate font-mono text-[12px] text-subtle" title={t.hash}>{shortHash(t.hash)}</span>
 
                   <div class="w-full min-w-0 lg:w-auto">
                     <!-- bytes_total fica em 0 até a metadata chegar; sem ela o percentual não
@@ -914,6 +938,9 @@
                     </div>
                   </div>
                 </div>
+                {#if openFiles.has(t.hash)}
+                  <TorrentFiles hash={t.hash} mode="raw" tick={filesTick} />
+                {/if}
               {/each}
             {/if}
           </div>

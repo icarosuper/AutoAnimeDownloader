@@ -368,6 +368,15 @@ func (m *SessionManager) Announce(hash string) error {
 	return m.session.Announce(hash)
 }
 
+func (m *SessionManager) Files(hash string) ([]FileInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session == nil {
+		return nil, ErrSessionNotReady
+	}
+	return m.session.Files(hash)
+}
+
 func (m *SessionManager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
