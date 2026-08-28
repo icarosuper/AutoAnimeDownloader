@@ -156,6 +156,10 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 		if len(cfg.DownloadMediaStatuses) != 2 || cfg.DownloadMediaStatuses[0] != "RELEASING" || cfg.DownloadMediaStatuses[1] != "FINISHED" {
 			t.Fatalf("expected default DownloadMediaStatuses [RELEASING FINISHED], got %v", cfg.DownloadMediaStatuses)
 		}
+		// Teto de episódio ausente do default era invisível: zero value válido = ilimitado.
+		if cfg.MaxEpisodeTorrentSizeGB == 0 {
+			t.Fatal("expected a default MaxEpisodeTorrentSizeGB, got 0 (unlimited)")
+		}
 
 		// modify and save
 		cfg.CheckInterval = 42
