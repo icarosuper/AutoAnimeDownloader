@@ -1,6 +1,7 @@
 - Atualizar README
 - Criar landing page
 - Publicar imagem no docker
+- Parear features do webApp na cli
 - Proper release no Windows — **+1.0.0**
 	- Autenticar app com conta Microsoft
 	- Instalar ao invés de rodar de arquivo executável

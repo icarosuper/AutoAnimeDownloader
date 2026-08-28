@@ -1331,3 +1331,110 @@ Os dois guardas importam: sem o "todo arquivo acima do total", um extra numerado
 O ramo de substituição continua intacto para o que ele foi feito: colisão entre execuções diferentes de `Organize`. O que mudou é só a colisão **dentro da mesma execução**, que nunca é uma substituição legítima.
 
 **Don't "fix" by:** aplicar o offset sem os dois guardas "porque pack contínuo é comum"; usar `max - total` no lugar de `min - 1` (concorda no pack completo e erra no pack parcial do começo da season); chamar a AniList de dentro do `JobOrganize` para pegar o PREQUEL; criar subpasta `Season NN/` na biblioteca para "resolver a numeração" (decisão #45); deduplicar a colisão de basename sobrescrevendo "porque o arquivo é o mesmo anime".
+
+### 69. `codec` passou a valer para episódio, e nome sem tag de codec empata em vez de perder
+
+`episodeCriteria` (`nyaa/priorities.go`) filtra `CriteriaOrder` para os critérios que fazem sentido
+num episódio, e `codec` estava **fora**: a lista `priorities.codecs` aparecia na tela de Priorities e
+no `config.json` sem afetar download de episódio nenhum — só `SortMovieResults` a lia. Como o
+default é `["hevc","av1",...]`, o codec do episódio era decidido de raspão pelo `fansub`
+(Judas/Ember são x265 10-bit; SubsPlease/Erai-raws são H264), e o usuário não tinha alavanca
+nenhuma. Quem assiste por um cliente sem decode de HEVC (navegador — Chrome e Firefox não trazem
+HEVC por licenciamento) paga isso como transcode no servidor, que além de queimar CPU **queima a
+legenda ASS no vídeo** e dessincroniza. `codec` agora está em `episodeCriteria`.
+
+**Só `source` continua fora.** Episódio semanal é WEB-DL em praticamente todo release; o critério
+nunca desempataria nada e só gastaria uma comparação.
+
+**A guarda que faz a mudança não sair pela culatra:** `priorityIndex` devolve `len(list)` para token
+desconhecido, ou seja, **o pior**. E `extractCodec` devolve `""` para nome sem tag de codec — que é
+exatamente o padrão do SubsPlease (`[SubsPlease] Anime - 07 (1080p) [HASH].mkv` não diz H264 em
+lugar algum). Com `codec` antes de `fansub` na ordem default, ligar o critério cru faria todo
+release sem tag perder para qualquer x265 tagueado: o **oposto** do que a lista de codecs configura.
+Por isso `codecCompare` devolve empate quando qualquer um dos dois nomes não tem tag, deixando o
+critério seguinte decidir. É a mesma regra que `sizeCompare`/`resCompare` já aplicam para dado
+ausente, e a mesma de `filterBySize` (`nyaa.go`): dado que não deu para ler não é motivo para punir
+o release.
+
+**Tokens canônicos.** `extractCodec` só devolve `HEVC`, `AV1`, `H.264` e `XviD` (`reCodecPatterns`
+mapeia `x265`→`HEVC` e `x264`→`H.264`). As entradas `"x265"` e `"x264"` do default de
+`priorities.codecs` portanto **nunca casam com nada** — são inertes. Configurar preferência por
+H264 exige escrever `h.264`, não `x264`.
+
+**Don't "fix" by:** tirar a guarda de `codecCompare` "porque sem tag é sem tag"; pôr `source` em
+`episodeCriteria` junto; mover `codec` para depois de `fansub` no default para contornar o problema
+do token desconhecido (esconde o mesmo bug em vez de resolvê-lo).
+
+### 70. Resolução canonicaliza no extrator, e os presets de codec são reordenação no frontend
+
+**Location:** `nyaa/nyaa.go` — `extractResolution`, `canonicalResolutions`; `nyaa/priorities.go` —
+defaults de `Resolutions`/`Codecs`/`Sources`; `frontend/src/lib/domain/priorityPresets.ts`;
+`frontend/src/routes/Priorities.svelte`.
+
+**(a) A canonicalização vive em `extractResolution`, não na ordem da lista.** `extractCodec` já
+devolvia token canônico (`x265` → `HEVC`) e `extractResolution` devolvia a captura crua. Essa
+assimetria **era** o bug: `4k` e `2160p` são a mesma resolução e ocupavam dois índices diferentes do
+default, então qual vencia dependia só de como o grupo escreveu o nome do torrent; `1920x1080` é
+capturável pelo regex, não existia na lista, e ranqueava como o pior. Resolver isso reordenando a
+lista (pondo `4k` ao lado de `2160p`) não resolve nada: continuam sendo dois itens que o usuário
+pode separar de novo com as setas da tela, e a duplicata segue representável. Canonicalizando na
+saída do extrator ela deixa de existir, e a lista default encurta para cinco itens legíveis.
+
+**Não quebra config existente.** A lista antiga já tem `1080p`, `720p`, `480p` e `2160p` — os
+canônicos. `4k`, `uhd`, `fhd`, `hd` e `8k` viram inalcançáveis mas inofensivos, e um release 4K de
+um usuário antigo passa a casar com o `2160p` que ele já tem.
+
+**`8k` fica fora da lista de propósito**, não por esquecimento: o padrão `\b(8K)\b` continua
+existindo, o token continua sendo devolvido cru, e por não estar na lista ranqueia como o pior —
+tratamento certo para uma resolução que não existe em anime.
+
+**(b) Preset de codec é reordenação no frontend, não dado servido pelo backend.** Só o frontend
+consome (o CLI não menciona priorities); um endpoint existiria para servir a si mesmo — ~60 linhas
+em seis arquivos, mudança de forma da resposta e `swag init`, contra ~30 linhas num arquivo só.
+
+E preset **promove** tokens que já estão na lista do usuário em vez de carimbar um array literal:
+typo vira no-op em vez de config inerte, token adicionado à mão desce em vez de sumir, e os tokens
+canônicos continuam existindo num lugar só (`reCodecPatterns`). Preset é carimbo de uma vez, não
+modo guardado: nada novo em `config.json`, nenhum estado "custom", nenhuma regra de precedência —
+depois de aplicado vira lista comum e editável, salva pelo botão que já existe.
+
+**Só `codecs` ganha presets.** `resolutions` tem default certo e duas setas na UI; `fansubs` é
+gosto, não eixo técnico; `sources` e `audio` não afetam episódio (marcados "só filmes" na tela);
+`criteria_order` é arma carregada (#55); `ignore_list` é aditiva, não ranking.
+
+**Descartado: preset "priorizar qualidade".** Para anime em exibição — que é o que
+`DownloadStatuses: [CURRENT, REPEATING]` baixa — SubsPlease e Erai-raws fazem remux do stream do
+Crunchyroll/HIDIVE, sem reencode: isso já é o teto da fonte, e qualquer arquivo maior do mesmo
+episódio é reencode (perda de geração) ou upscale. O primeiro caso já é barrado por `re-encode` no
+`ignore_list` default. Para backlog o eixo existe, mas é **fonte** (BD vs WEB), não compressão.
+
+**O teste que fecha a classe do bug:** `TestDefaultPriorities_TokensAreReachable`
+(`tests/unit/priorities_test.go`) exige que todo token das listas default seja algo que
+`ExtractCodec`/`ExtractResolution` consigam devolver. Foi assim que `x265`/`x264` ficaram anos como
+config inerte e invisível (#69); agora quebra o CI.
+
+**Limitação conhecida, deliberada:** nenhuma mudança de default alcança instalação existente —
+`LoadConfigs` desserializa por cima de `getDefaultConfig()`. As listas se atualizam pelos botões
+"resetar" que já existem na tela; `MaxEpisodeTorrentSizeGB`, `WatchedEpisodesToKeep` e `MinSeeders`
+pedem uma edição manual, uma vez. Não há migração automática, pelo mesmo motivo de #47
+(`BatchWindowSeconds`): mudar comportamento num update sem ninguém pedir.
+
+**(c) Na tela, tirar um token da lista virou um checkbox, não um `✕`.** Token ausente da lista já
+é tratado como o pior (`priorityIndex` devolve `len(list)`), então "remover" nunca foi remover — era
+mandar para o fim, com o efeito colateral de o item sumir da tela e não haver como trazê-lo de
+volta a não ser digitando o token exato de novo (e digitar errado dá config inerte). Agora cada
+linha tem um checkbox: desmarcado sai do array salvo e fica visível, apagado, no fim da lista.
+
+O `✕` sobrou só para o que **não** está no default servido por `GET /config/priorities/defaults`:
+o que o usuário digitou e o legado inerte de um `config.json` antigo (`x265`, `4k`, `8k`) — que é
+justamente o que precisa de uma forma de sair. E `criteria_order` perdeu o campo de adicionar: é conjunto
+fechado — `sortByCriteria` pula em silêncio o critério que não está em `criterionCompare` e não há
+validação no `PUT /config` —, então texto livre ali só produzia config inerte, e com o checkbox os
+oito critérios já estão sempre na tela, marcados ou não. Não há o que adicionar.
+
+**Don't "fix" by:** devolver a captura crua em `extractResolution` e "arrumar" a ordem da lista;
+repor `4k`/`uhd`/`fhd`/`hd`/`8k` no default; criar endpoint de presets; guardar o preset escolhido
+em `config.json`; escrever os defaults novos por cima de um `config.json` existente; pôr o `✕` de
+volta nos tokens canônicos "porque o checkbox é um clique a mais"; devolver o campo de adicionar a
+`criteria_order` (nem como texto livre, nem como select de um enum duplicado no frontend); validar
+`criteria_order` no backend para "poder" aceitar texto livre de novo.
