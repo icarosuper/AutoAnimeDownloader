@@ -8,17 +8,27 @@
     type Priorities,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
+  import Checkbox from "../components/ui/Checkbox.svelte";
   import { toast } from "../lib/stores/toast.js";
+  import { PRESETS, applyPreset } from "../lib/domain/priorityPresets.js";
 
-  const LISTS: { key: keyof Priorities; label: string }[] = [
+  // scope: a lista existe mas não vale para episódio — só SortMovieResults lê source e áudio.
+  const LISTS: { key: keyof Priorities; label: string; scope?: string }[] = [
     { key: "criteria_order", label: "Ordem dos critérios" },
     { key: "fansubs", label: "Fansubs" },
     { key: "resolutions", label: "Resoluções" },
-    { key: "sources", label: "Source" },
+    { key: "sources", label: "Source", scope: "só filmes" },
     { key: "codecs", label: "Codec" },
-    { key: "audio", label: "Áudio" },
+    { key: "audio", label: "Áudio", scope: "só filmes" },
     { key: "ignore_list", label: "Lista de bloqueio" },
   ];
+
+  // Linha fixa em vez de tooltip: tooltip não existe em touch, e esta tela é usada no celular.
+  const NOTES: Partial<Record<keyof Priorities, string>> = {
+    criteria_order: "As entradas source e audio não valem para episódio — só para filmes.",
+    codecs:
+      "H.264 toca direto em qualquer player; HEVC/AV1 ocupam menos espaço mas viram transcode no navegador, o que dessincroniza a legenda.",
+  };
 
   let config: Config | null = null;
   let defaults: Priorities | null = null;
@@ -49,6 +59,31 @@
     config = config;
   }
 
+  /**
+   * As linhas da lista: o que está salvo (marcado, na ordem) seguido dos tokens canônicos
+   * que ficaram de fora (desmarcados, no fim). Token ausente da lista já é tratado como o
+   * pior pelo backend (`priorityIndex` devolve `len(list)`), então "desmarcado no fim" é
+   * exatamente o que desmarcar significa — e nada some da tela, que era o problema do X.
+   *
+   * `custom` = não está no default: o que o usuário digitou, mais o legado inerte de um
+   * config.json antigo (`x265`, `4k`). Só esses podem ser removidos de vez.
+   */
+  function rows(key: keyof Priorities, list: string[], def: Priorities | null) {
+    const canon = def?.[key] ?? [];
+    return [
+      ...list.map((item) => ({ item, on: true, custom: !canon.includes(item) })),
+      ...canon.filter((v) => !list.includes(v)).map((item) => ({ item, on: false, custom: false })),
+    ];
+  }
+
+  function toggle(key: keyof Priorities, item: string, on: boolean) {
+    if (!config) return;
+    config.priorities[key] = on
+      ? [...config.priorities[key], item]
+      : config.priorities[key].filter((v) => v !== item);
+    config = config;
+  }
+
   function remove(key: keyof Priorities, i: number) {
     if (!config) return;
     config.priorities[key] = config.priorities[key].filter((_, idx) => idx !== i);
@@ -61,6 +96,12 @@
     if (!v || config.priorities[key].includes(v)) return;
     config.priorities[key] = [...config.priorities[key], v];
     newItem[key] = "";
+    config = config;
+  }
+
+  function preset(key: keyof Priorities, first: string[]) {
+    if (!config) return;
+    config.priorities[key] = applyPreset(config.priorities[key], first);
     config = config;
   }
 
@@ -104,11 +145,15 @@
     <Loading message="Carregando..." />
   {:else if config}
     <div class="space-y-4">
-      {#each LISTS as { key, label } (key)}
+      {#each LISTS as { key, label, scope } (key)}
+        {@const items = rows(key, config.priorities[key], defaults)}
         <div class="card bg-base-200 border border-base-300">
           <div class="card-body p-5 gap-3">
             <div class="flex items-center justify-between">
-              <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{label}</h2>
+              <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">
+                {label}
+                {#if scope}<span class="normal-case tracking-normal font-normal text-base-content/40">({scope})</span>{/if}
+              </h2>
               <button
                 type="button"
                 on:click={() => resetList(key)}
@@ -118,45 +163,79 @@
               </button>
             </div>
 
-            {#if config.priorities[key].length > 0}
+            {#if PRESETS[key]}
+              <div class="flex flex-wrap gap-2">
+                {#each PRESETS[key] ?? [] as p (p.key)}
+                  <button
+                    type="button"
+                    on:click={() => preset(key, p.first)}
+                    title={p.desc}
+                    class="px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs font-medium transition-colors"
+                  >
+                    {p.label}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+
+            {#if items.length > 0}
               <ol class="flex flex-col gap-1.5">
-                {#each config.priorities[key] as item, i (item)}
-                  <li class="flex items-center gap-2 bg-base-100 rounded-md px-3 py-1.5">
-                    <span class="text-xs text-base-content/40 w-5 text-right">{i + 1}</span>
-                    <span class="flex-1 text-sm text-base-content">{item}</span>
-                    <button
-                      type="button"
-                      on:click={() => move(key, i, -1)}
-                      disabled={i === 0}
-                      aria-label="Mover {item} para cima"
-                      class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      on:click={() => move(key, i, 1)}
-                      disabled={i === config.priorities[key].length - 1}
-                      aria-label="Mover {item} para baixo"
-                      class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      on:click={() => remove(key, i)}
-                      aria-label="Remover {item}"
-                      class="text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                      </svg>
-                    </button>
+                {#each items as row, i (row.item)}
+                  <li class="flex items-center gap-2 bg-base-100 rounded-md px-3 py-1.5 {row.on ? '' : 'opacity-50'}">
+                    <Checkbox
+                      checked={row.on}
+                      disabled={row.custom}
+                      label={row.custom ? `${row.item} — adicionado por você, remova no ✕` : `Usar ${row.item}`}
+                      labelHidden
+                      on:change={() => toggle(key, row.item, !row.on)}
+                    />
+                    <span class="text-xs text-base-content/40 w-5 text-right">{row.on ? i + 1 : ""}</span>
+                    <span class="flex-1 text-sm text-base-content">{row.item}</span>
+                    {#if row.on}
+                      <button
+                        type="button"
+                        on:click={() => move(key, i, -1)}
+                        disabled={i === 0}
+                        aria-label="Mover {row.item} para cima"
+                        class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        on:click={() => move(key, i, 1)}
+                        disabled={i === config.priorities[key].length - 1}
+                        aria-label="Mover {row.item} para baixo"
+                        class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        ↓
+                      </button>
+                    {/if}
+                    {#if row.custom}
+                      <button
+                        type="button"
+                        on:click={() => remove(key, i)}
+                        aria-label="Remover {row.item}"
+                        class="text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
+                    {/if}
                   </li>
                 {/each}
               </ol>
             {/if}
 
+            {#if NOTES[key]}
+              <p class="text-xs text-base-content/50">{NOTES[key]}</p>
+            {/if}
+
+            <!-- criteria_order é conjunto fechado (sortByCriteria pula em silêncio o critério que
+                 não conhece) e todo critério já aparece acima, marcado ou desmarcado: não há o que
+                 adicionar, e texto livre ali só produziria config inerte. -->
+            {#if key !== "criteria_order"}
             <div class="flex gap-2">
               <input
                 type="text"
@@ -173,6 +252,7 @@
                 +
               </button>
             </div>
+            {/if}
           </div>
         </div>
       {/each}
