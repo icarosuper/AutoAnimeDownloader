@@ -1661,15 +1661,38 @@ duplicação da lógica de merge, e ela começa na primeira query.
 
 ### 74. A unidade do guard de exclusão de pack é o conteúdo do torrent, não a lista de registros
 
-**Location:** `internal/daemon/episodes.go` (`canRemoveTorrent`, `declaredSpan`, `handleSavedEpisodes`).
-Fixado por `TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent`,
-`TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack` e
+**Location:** `internal/daemon/episodes.go` (`canRemoveTorrent`, `hasUnclaimedContent`,
+`declaredSpan`, `forgettableKeys`, `handleSavedEpisodes`). Fixado por
+`TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent`,
+`TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack`,
+`TestRemoveEpisodesAndLinks_RemovesPackDownloadedMidWatch`,
+`TestRemoveEpisodesAndLinks_KeepsRecordsOfHeldPack`,
+`TestRemoveEpisodesAndLinks_RemovesPackOnceEveryCourClaimsIt`,
+`TestRemoveTorrentWithEpisodes_ForcesPastTheUnclaimedGuard` e
 `TestHandleSavedEpisodes_NewEpisodesProtectSharedTorrent` (`internal/daemon/episodes_test.go`).
 
 **What it looks like:** o guard que decide se um torrent compartilhado pode sair não pergunta mais
-só "todo registro deste hash está no delete set?". Ele também compara a **contagem de registros**
-com a faixa que os próprios registros declaram (`BatchStart`/`BatchEnd`), e recusa a remoção quando
-a faixa é maior. Além disso, `handleSavedEpisodes` passa `savedEpisodes ∪ newEpisodes` para
+só "todo registro deste hash está no delete set?". Ele também compara a faixa declarada pelos
+registros (`BatchStart`/`BatchEnd`) com os episódios **reivindicados** pelas entradas do grupo, e
+recusa a remoção quando sobra conteúdo sem dono (`hasUnclaimedContent`). Três peças fazem a conta
+fechar:
+
+- **Quem reivindica é a entrada, pelo `AnimeTotalEpisodes` dela** — não o número de registros.
+  Registro só nasce para episódio que o daemon baixou: um pack `01-11` pego com progresso 5 tem 6
+  registros, e um episódio bloqueado encurta o grupo do mesmo jeito. Os episódios que a entrada não
+  registrou são dela igual. Registro antigo não traz o total (`0`); aí a contagem de registros
+  daquele `anime_id` é o que sobra, que é o comportamento anterior a esta correção.
+- **`declaredSpan` mede por `anime_id`, não na união** — cada entrada grava a faixa na *sua*
+  numeração local (#79), então `1..23` sob o cour 1 e `-10..12` sob o cour 2 são o mesmo pack de 23
+  episódios; unir os dois daria 34, um pack que não existe.
+- **O registro do pack que ficou no disco não é apagado** (`forgettableKeys`). Ele é o único lugar
+  onde a faixa declarada existe — sem ele nenhum cour futuro consegue adotar o pack
+  (`findCoveringPack` exige a faixa, #78) e a conta de conteúdo reivindicado nunca mais fecha.
+
+`removeEpisodesAndLinks` ganhou um parâmetro `force` para a exclusão **manual** de torrent
+(`RemoveTorrentWithEpisodes`, #32): ali a unidade de exclusão é o torrent e quem decidiu foi o
+usuário — sem isso o clique devolveria sucesso sem apagar nada. O passe automático nunca usa
+`force`. Além disso, `handleSavedEpisodes` passa `savedEpisodes ∪ newEpisodes` para
 `removeEpisodesAndLinks`, não só o snapshot pré-passe.
 
 **Why it's right:** "todo registro" não é "todo o conteúdo". Um pack de **season** baixado sob o
@@ -1681,13 +1704,17 @@ conteúdo que o usuário nunca viu. O agravante do mesmo passe é a metade do sn
 infohash e os registros novos existem só em `newEpisodes` — invisíveis para o guard, que apagava o
 arquivo recém-adotado.
 
-Compara-se span contra a **contagem** de registros, e não contra os números em si, porque um mesmo
-hash pode ter registros de media ids diferentes, cada um na sua numeração local (é exatamente o
-caso do pack de season). Comparar `1..23` com `1..12` sem converter seria comparar réguas
-diferentes; contar registros é a aproximação que não precisa da conversão.
+**Por que não a contagem de registros** (foi a primeira versão desta decisão, e vazava disco): ela
+confunde "episódio de outro cour, que ninguém baixou" com "episódio desta entrada que o daemon não
+precisou registrar". Um pack `01-11` de uma entrada de 11 episódios, pego com progresso 5, tem 6
+registros; `6 < 11` marcava conteúdo sem dono **para sempre**, o torrent nunca saía do disco e os
+registros eram apagados assim mesmo — um pack órfão permanente, que é o oposto da proteção que o
+guard existe para dar. Comparar os **números** dos episódios também não serve: o mesmo hash pode
+ter registros de media ids diferentes, cada um na sua régua. O total da entrada é o único dado que
+diz quanto do pack pertence a ela sem precisar de conversão.
 
-**Teto conhecido (`ponytail:` no código):** pack sem faixa no nome grava `BatchStart == 0`
-(desconhecida) e continua indetectável — o guard cai no comportamento antigo. Sair disso exige a
+**Teto conhecido (`ponytail:` no código):** pack sem faixa no nome grava `BatchEnd == 0`
+(desconhecida, ver `hasDeclaredRange` em #79) e continua indetectável — o guard cai no comportamento antigo. Sair disso exige a
 lista de arquivos do torrent (item da página de detalhe do Nyaa em `docs/TODO.md`).
 
 **Don't "fix" by:** derivar a faixa do min/max dos episódios salvos (é a informação que falta, não
@@ -1873,8 +1900,7 @@ se a busca reencontrasse o mesmo torrent (`Session.Add` reusa o infohash). Isso 
 resto da máquina funcionar sem nenhuma exceção nova: a #74 passa a enxergar os irmãos do outro
 cour, e `organizeTorrent` hardlinka os arquivos que nunca tiveram dono — ele já trata grupo
 parcialmente organizado sem re-notificar. A faixa é **copiada como o dono a declara** (é a do nome
-do torrent), nunca convertida: `declaredSpan` compara o span da união com a **contagem** de
-registros justamente porque as numerações locais divergem entre cours.
+do torrent), nunca convertida.
 
 **A semente do índice inclui os `anime_id` de `episodes.json`, não só os do passe.** O cour
 anterior está `COMPLETED` e por isso saiu do universo do passe — e é o offset **dele** que

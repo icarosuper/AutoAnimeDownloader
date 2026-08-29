@@ -107,9 +107,7 @@ func TestCoverageOwnership_SeasonPackCoversNextCour(t *testing.T) {
 		if ep.AnimeID != cour2ID || ep.EpisodeHash != seasonHash || !ep.IsBatch {
 			t.Fatalf("registro adotado errado: %+v", ep)
 		}
-		// A faixa e copiada como o dono a declara: e a do NOME do torrent, e declaredSpan compara
-		// o span da uniao com a CONTAGEM de registros justamente porque as numeracoes locais
-		// diferem entre os cours.
+		// A faixa e copiada como o dono a declara: e a do NOME do torrent.
 		if ep.BatchStart != 1 || ep.BatchEnd != 23 {
 			t.Fatalf("faixa do registro adotado deveria ser 1-23, obteve %d-%d", ep.BatchStart, ep.BatchEnd)
 		}

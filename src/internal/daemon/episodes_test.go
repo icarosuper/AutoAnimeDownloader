@@ -1191,7 +1191,7 @@ func TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); !ok {
@@ -1207,11 +1207,101 @@ func TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); ok {
 		t.Error("pack com a faixa inteira registrada e no delete set deve ser removido")
+	}
+}
+
+// packRange monta os registros dos episodios first..last de uma entrada com total episodios, todos
+// no mesmo hash e declarando a faixa start..end do pack.
+func packRange(animeID, first, last, total, start, end int, hash string) []files.EpisodeStruct {
+	eps := make([]files.EpisodeStruct, 0, last-first+1)
+	for i := first; i <= last; i++ {
+		eps = append(eps, files.EpisodeStruct{
+			AnimeID: animeID, AnimeTotalEpisodes: total, EpisodeNumber: i, EpisodeHash: hash,
+			IsBatch: true, BatchStart: start, BatchEnd: end,
+		})
+	}
+	return eps
+}
+
+// O vazamento que a contagem de registros criava: um pack 01-11 pego com progresso 5 nasce com 6
+// registros, e comparar 6 com o span 11 dava "conteudo sem dono" para sempre — o torrent nunca
+// saia do disco e os registros eram apagados assim mesmo. Quem reivindica o pack e o total de
+// episodios da ENTRADA (11), nao o numero de registros.
+func TestRemoveEpisodesAndLinks_RemovesPackDownloadedMidWatch(t *testing.T) {
+	const hash = "4444444444444444444444444444444444444444"
+	saved := packRange(108465, 6, 11, 11, 1, 11, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("os 11 episodios do pack pertencem a entrada: o torrent deve sair do disco")
+	}
+	if len(fm.deletedEpisodeKeys) != len(saved) {
+		t.Errorf("esperava os %d registros apagados junto, obteve %d", len(saved), len(fm.deletedEpisodeKeys))
+	}
+}
+
+// O registro e o unico lugar onde a faixa declarada do pack existe. Apaga-lo com o torrent ainda
+// no disco deixa o pack orfao: nenhum cour futuro consegue adota-lo (findCoveringPack exige a
+// faixa) e a conta de conteudo reivindicado nunca mais fecha.
+func TestRemoveEpisodesAndLinks_KeepsRecordsOfHeldPack(t *testing.T) {
+	const hash = "5555555555555555555555555555555555555555"
+	saved := packRange(108465, 1, 11, 11, 1, 23, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); !ok {
+		t.Fatal("pack com o cour 2 sem dono deve sobreviver")
+	}
+	if len(fm.deletedEpisodeKeys) != 0 {
+		t.Errorf("o registro carrega a faixa do pack que ficou: esperava nenhum apagado, obteve %d", len(fm.deletedEpisodeKeys))
+	}
+}
+
+// O ciclo fecha: com o cour 2 adotado, os dois cours juntos reivindicam os 23 episodios do pack e
+// o torrent sai inteiro. A faixa de cada um esta na numeracao local DELE (1..23 e -10..12), e e
+// por isso que declaredSpan mede por anime_id — unindo os dois daria um pack de 34.
+func TestRemoveEpisodesAndLinks_RemovesPackOnceEveryCourClaimsIt(t *testing.T) {
+	const hash = "6666666666666666666666666666666666666666"
+	saved := append(packRange(108465, 1, 11, 11, 1, 23, hash), packRange(127720, 1, 12, 12, -10, 12, hash)...)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("com os dois cours no delete set nao sobra conteudo sem dono: o torrent deve sair")
+	}
+}
+
+// "Excluir torrent" e manual e a unidade de exclusao ali e o torrent. O guard que segura o pack no
+// passe automatico nao pode transformar o clique do usuario em sucesso sem efeito nenhum.
+func TestRemoveTorrentWithEpisodes_ForcesPastTheUnclaimedGuard(t *testing.T) {
+	const hash = "7777777777777777777777777777777777777777"
+	saved := packRange(108465, 1, 11, 11, 1, 23, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := RemoveTorrentWithEpisodes(fm, backend, testLibrarian(), hash, RemoveTorrentOptions{}); err != nil {
+		t.Fatalf("RemoveTorrentWithEpisodes: %v", err)
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("exclusao manual de torrent deve remover o torrent, conteudo sem dono ou nao")
+	}
+	if len(fm.deletedEpisodeKeys) != len(saved) {
+		t.Errorf("esperava os %d registros apagados, obteve %d", len(saved), len(fm.deletedEpisodeKeys))
 	}
 }
 

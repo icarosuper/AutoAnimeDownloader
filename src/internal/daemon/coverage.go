@@ -110,9 +110,7 @@ func adoptCoveredEpisodes(
 			EpisodeNumber:      ep.Episode,
 			IsBatch:            true,
 			// A faixa e copiada como o dono a declara — ela e a do NOME do torrent, e o mesmo
-			// hash pode ter registros de media ids em numeracoes locais diferentes. E o que
-			// declaredSpan (episodes.go) espera: ele compara o span da uniao com a CONTAGEM de
-			// registros, nunca com os numeros de episodio.
+			// hash pode ter registros de media ids em numeracoes locais diferentes.
 			BatchStart:   owner.BatchStart,
 			BatchEnd:     owner.BatchEnd,
 			DownloadDate: time.Now(),
