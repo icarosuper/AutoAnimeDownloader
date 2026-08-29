@@ -362,8 +362,12 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   se a busca reencontrasse o mesmo torrent. Sem isso o F1 continuaria sem enxergar os irmãos do
   outro cour e os arquivos sem dono nunca seriam hardlinkados; com isso, `organizeTorrent` já
   trata o caso (grupo parcialmente organizado, sem re-notificar) e nenhuma exceção nova precisou
-  existir. (b) A faixa é **copiada como o dono a declara**, nunca convertida para a numeração
-  local do adotante — é o que `declaredSpan` (#74) espera. (c) Duas portas que o plano não citava
+  existir. (b) ~~A faixa é **copiada como o dono a declara**, nunca convertida para a numeração
+  local do adotante — é o que `declaredSpan` (#74) espera.~~ **Errado, corrigido depois:** a faixa
+  é **convertida** para a numeração local de quem adota. Ela é lida de volta somando o offset do
+  `anime_id` do próprio registro, então copiá-la deslocava a faixa e fazia um terceiro cour achar
+  cobertura para episódio que o pack não tem. O `declaredSpan` do #74 também mudou junto (mede por
+  `anime_id`, não na união). Ver `decisions.md` #74 e #78. (c) Duas portas que o plano não citava
   e que são obrigatórias: o torrent tem que estar **vivo na sessão** (adotar hash morto deixa
   episódio com dono e sem arquivo) e o anime pedido **não pode ser filme** (`prequelOf` só segue
   TV, então um filme pós-season herda o offset dela e o "episódio 1" dele cai dentro da faixa do

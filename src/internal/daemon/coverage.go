@@ -4,7 +4,6 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
-	"fmt"
 	"time"
 )
 
@@ -88,10 +87,19 @@ func adoptCoveredEpisodes(
 
 	var adopted []files.EpisodeStruct
 	for _, ep := range pending {
-		owner := findCoveringPack(savedEpisodes, seriesIndex, torrentsHashSet, series, series.Offset+ep.Episode)
+		owner, ownerOffset := findCoveringPack(savedEpisodes, seriesIndex, torrentsHashSet, series, series.Offset+ep.Episode)
 		if owner == nil {
 			continue
 		}
+
+		// A faixa e CONVERTIDA para a numeracao local de quem adota, nunca copiada como o dono
+		// a declara. Todo registro guarda a faixa na regua da SUA entrada (packAxis.localRange,
+		// decisions.md #79) e e assim que ela e lida de volta — findCoveringPack soma o offset
+		// do anime_id do proprio registro. Copiar 1..23 do cour 1 para debaixo do cour 2 faria
+		// esse registro ser lido como o absoluto 12..34: um cour 3 acharia cobertura para
+		// episodio que o pack nao tem, e ficaria com dono e sem arquivo.
+		delta := ownerOffset - series.Offset
+		batchStart, batchEnd := owner.BatchStart+delta, owner.BatchEnd+delta
 
 		logger.Logger.Info().
 			Str("anime", animeTitle).
@@ -106,21 +114,20 @@ func adoptCoveredEpisodes(
 			AnimeTotalEpisodes: totalEpisodes,
 			AnimeName:          animeTitle,
 			EpisodeHash:        owner.EpisodeHash,
-			EpisodeName:        fmt.Sprintf("%s %d-%d", animeTitle, owner.BatchStart, owner.BatchEnd),
+			EpisodeName:        packDisplayName(animeTitle, batchStart, batchEnd),
 			EpisodeNumber:      ep.Episode,
 			IsBatch:            true,
-			// A faixa e copiada como o dono a declara — ela e a do NOME do torrent, e o mesmo
-			// hash pode ter registros de media ids em numeracoes locais diferentes.
-			BatchStart:   owner.BatchStart,
-			BatchEnd:     owner.BatchEnd,
-			DownloadDate: time.Now(),
+			BatchStart:         batchStart,
+			BatchEnd:           batchEnd,
+			DownloadDate:       time.Now(),
 		})
 	}
 	return adopted
 }
 
 // findCoveringPack devolve o registro de pack, em QUALQUER anime_id, cuja faixa declarada contem
-// absEp no eixo absoluto — e cujo torrent ainda esta na sessao.
+// absEp no eixo absoluto — e cujo torrent ainda esta na sessao. Junto vem o offset do dono, que e
+// o que permite reescrever a faixa na regua de quem adota.
 //
 // Tres portas, todas obrigatorias: faixa declarada (pack sem faixa no nome grava BatchEnd == 0,
 // e desconhecida nao e "cobre tudo" — mesmo teto de canRemoveTorrent), torrent vivo (adotar um
@@ -133,7 +140,7 @@ func findCoveringPack(
 	torrentsHashSet map[string]bool,
 	series anilist.Series,
 	absEp int,
-) *files.EpisodeStruct {
+) (*files.EpisodeStruct, int) {
 	for i := range savedEpisodes {
 		ep := &savedEpisodes[i]
 		if !hasDeclaredRange(*ep) {
@@ -147,10 +154,10 @@ func findCoveringPack(
 			continue
 		}
 		if owner.Offset+ep.BatchStart <= absEp && absEp <= owner.Offset+ep.BatchEnd {
-			return ep
+			return ep, owner.Offset
 		}
 	}
-	return nil
+	return nil, 0
 }
 
 // dropAdopted tira da lista os episodios que a adocao ja resolveu.

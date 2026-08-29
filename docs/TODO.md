@@ -12,7 +12,7 @@
   prioridade não bastarem. Veredito e medições em `docs/agents/decisions.md` #73
 - Parear features do webApp na cli
 - Adicionar integração com MyAnimeList
-- Melhorar experiencia de baixar animes grandes
+- Melhorar experiencia de baixar animes grandes (provavelmente tirar campo de progresso do frontend)
 - **Melhorar a experiência de instalação** — opções medidas e ordenadas em
   `docs/distribuicao.md`: publicar imagem no ghcr (maior ganho, o Dockerfile já existe),
   depois um `install.sh` via curl. `go install`, Homebrew, Scoop, .deb/.rpm e Flatpak

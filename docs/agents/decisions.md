@@ -1880,7 +1880,8 @@ franquia (#71).
 ### 78. A unidade de posse de um torrent é a cobertura no eixo absoluto, não a chave `(anime_id, episódio)`
 
 **Location:** `src/internal/daemon/coverage.go` — `resolveSeriesIndex`, `adoptCoveredEpisodes`,
-`findCoveringPack`, `dropAdopted`; chamada em `processAnimeEpisodes` (`episodes.go`) e em
+`findCoveringPack`, `dropAdopted`; `packDisplayName` (`episodes.go`), compartilhado com
+`assignBatches`; chamada em `processAnimeEpisodes` (`episodes.go`) e em
 `DownloadStandaloneAnime` (`standalone.go`). Travado por `coverage_test.go`. Consome a #77; é o
 outro lado da #74.
 
@@ -1900,7 +1901,12 @@ se a busca reencontrasse o mesmo torrent (`Session.Add` reusa o infohash). Isso 
 resto da máquina funcionar sem nenhuma exceção nova: a #74 passa a enxergar os irmãos do outro
 cour, e `organizeTorrent` hardlinka os arquivos que nunca tiveram dono — ele já trata grupo
 parcialmente organizado sem re-notificar. A faixa é **copiada como o dono a declara** (é a do nome
-do torrent), nunca convertida.
+do torrent) e **convertida para a numeração local de quem adota** — `findCoveringPack` devolve o
+offset do dono junto com o registro justamente para isso. Todo registro guarda a faixa na régua da
+sua própria entrada (#79) e é assim que ela é lida de volta; copiar `1..23` do cour 1 para debaixo
+do cour 2 (offset 11) faria esse registro ser lido como o absoluto `12..34`, e um cour 3 acharia
+cobertura para episódio que o pack não tem — marcado como baixado, nunca buscado, arquivo
+inexistente. Pinado por `TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour`.
 
 **A semente do índice inclui os `anime_id` de `episodes.json`, não só os do passe.** O cour
 anterior está `COMPLETED` e por isso saiu do universo do passe — e é o offset **dele** que

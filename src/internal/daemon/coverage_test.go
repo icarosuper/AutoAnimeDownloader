@@ -107,10 +107,43 @@ func TestCoverageOwnership_SeasonPackCoversNextCour(t *testing.T) {
 		if ep.AnimeID != cour2ID || ep.EpisodeHash != seasonHash || !ep.IsBatch {
 			t.Fatalf("registro adotado errado: %+v", ep)
 		}
-		// A faixa e copiada como o dono a declara: e a do NOME do torrent.
-		if ep.BatchStart != 1 || ep.BatchEnd != 23 {
-			t.Fatalf("faixa do registro adotado deveria ser 1-23, obteve %d-%d", ep.BatchStart, ep.BatchEnd)
+		// A faixa e CONVERTIDA para a regua do cour 2: o pack 1..23 do cour 1 (offset 0) e
+		// -10..12 sob o cour 2 (offset 11). E exatamente o que assignBatches gravaria se a
+		// busca reencontrasse o mesmo torrent (packAxis.localRange, decisions.md #79).
+		if ep.BatchStart != -10 || ep.BatchEnd != 12 {
+			t.Fatalf("faixa do registro adotado deveria ser -10-12, obteve %d-%d", ep.BatchStart, ep.BatchEnd)
 		}
+		if ep.EpisodeName != "Mushoku Tensei: Isekai Ittara Honki Dasu Part 2 1-12" {
+			t.Fatalf("nome exibido nao pode vazar a faixa negativa, obteve %q", ep.EpisodeName)
+		}
+	}
+}
+
+// A faixa gravada e lida de volta somando o offset do anime_id do PROPRIO registro. Se a adocao
+// copiasse a faixa do dono sem converter, o registro do cour 2 (1..23 sob offset 11) seria lido
+// como o absoluto 12..34 e um terceiro cour acharia cobertura para episodio que o pack nao tem —
+// marcado como baixado, nunca buscado, arquivo inexistente.
+func TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour(t *testing.T) {
+	const cour3ID = 146065
+	index := map[int]anilist.Series{
+		cour1ID: {Key: cour1ID, Offset: 0},
+		cour2ID: {Key: cour1ID, Offset: 11},
+		cour3ID: {Key: cour1ID, Offset: 23},
+	}
+	hashes := map[string]bool{seasonHash: true}
+	pending := anilist.EpisodeList(cour2Anime(12), 1)
+
+	adopted := adoptCoveredEpisodes(cour2Anime(12), "Cour 2", 12, pending, seasonPackOnDisk(), index, hashes)
+	if len(adopted) != 12 {
+		t.Fatalf("esperava os 12 do cour 2 adotados, obteve %d", len(adopted))
+	}
+
+	// O cour 3 comeca no absoluto 24, um passo depois do fim do pack.
+	cour3 := cour2Anime(13)
+	cour3.Id, cour3.Media.Id = cour3ID, cour3ID
+	saved := append(seasonPackOnDisk(), adopted...)
+	if leaked := adoptCoveredEpisodes(cour3, "Cour 3", 13, anilist.EpisodeList(cour3, 1), saved, index, hashes); len(leaked) != 0 {
+		t.Fatalf("o pack termina no absoluto 23: o cour 3 nao pode adotar nada, adotou %d (ep %d)", len(leaked), leaked[0].EpisodeNumber)
 	}
 }
 

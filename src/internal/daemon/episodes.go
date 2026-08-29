@@ -370,7 +370,7 @@ func assignBatches(animeTitle string, axis packAxis, episodes []anilist.AiringNo
 
 		name := animeTitle
 		if info.EndEpisode > 0 {
-			name = fmt.Sprintf("%s %d-%d", animeTitle, max(1, info.StartEpisode), info.EndEpisode)
+			name = packDisplayName(animeTitle, info.StartEpisode, info.EndEpisode)
 		} else if axis.totalEpisodes > 0 {
 			info.StartEpisode, info.EndEpisode = 1, axis.totalEpisodes
 		}
@@ -386,6 +386,15 @@ func assignBatches(animeTitle string, axis packAxis, episodes []anilist.AiringNo
 	}
 
 	return covered, result
+}
+
+// packDisplayName e o nome exibido de um registro de pack.
+//
+// O comeco e clampado em 1 porque a faixa GRAVADA pode comecar em zero ou abaixo — um pack de
+// season gravado sob um cour posterior comeca antes do episodio 1 daquela entrada (#79). A faixa
+// negativa e correta como dado e ilegivel como texto: "Anime -10-12" nao diz nada.
+func packDisplayName(animeTitle string, start, end int) string {
+	return fmt.Sprintf("%s %d-%d", animeTitle, max(1, start), end)
 }
 
 // magnetsByEpisode e o caminho de episodio solto: cada episodio recebe os magnets das linhas que
