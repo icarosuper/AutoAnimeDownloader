@@ -117,6 +117,7 @@ func clearCaches() {
 	customListsCache.clear()
 	frontendListCache.clear()
 	mediaByIDCache.clear()
+	seriesCache.clear()
 	// A saude tambem e estado de pacote: sem zerar aqui, um teste que simula 403 deixaria o
 	// proximo teste enxergando a AniList fora do ar. Mesma coisa para a leitura de orcamento:
 	// um teste que simula o balde no fim travaria o gate do teste seguinte.

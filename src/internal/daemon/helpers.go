@@ -248,6 +248,11 @@ func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, par
 // PREQUEL e com Episodes preenchido, mas não fazem parte da contagem que os fansubs seguem.
 // Na dúvida devolve 0 — offset errado manda a busca para um episódio inexistente, enquanto
 // offset ausente cai na numeração relativa, que é o que boa parte dos grupos usa.
+//
+// TODO(F8): a mesma seleção de "primeiro PREQUEL de TV/TV_SHORT" vive em anilist.prequelOf
+// (anilist/series.go), que caminha a cadeia INTEIRA em vez de um salto. Não unificar antes do
+// F8, que rebaixa esta função a uma das hipóteses de numeração de pack; se o F8 for descartado,
+// esta passa a chamar a de lá.
 func ComputeEpisodeOffset(relations anilist.MediaRelations, part *int) int {
 	if part == nil || *part < 2 {
 		return 0

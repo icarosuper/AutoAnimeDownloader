@@ -482,6 +482,24 @@ daemon itself. `NewClient(baseURL)` plus `doRequest`/`parseResponse` and one met
 
 `SearchMedia(term)`, `GetMediaByID(id)`, `GetMediaByIDs(ids)`, `mediaByIDFields`, `MediaSearchResult` and `mediaByIDCache` — the queries the standalone-anime feature needs, all listed in the `anilist.go` symbol table above. `mediaByIDFields` is the field block both media-by-id queries share, so the single and batch paths can never drift apart.
 
+### `src/internal/anilist/series.go`
+
+O **eixo absoluto por série**: a numeração contínua que atravessa cour e part, e que boa parte
+dos grupos usa nos nomes de arquivo. A AniList não tem id de franquia — a cadeia de `PREQUEL` é a
+única fonte (decisions.md #71), e como uma query só expande 2 níveis de `relations`, resolver a
+cadeia é um BFS, não uma leitura. Ver decisions.md #77.
+
+| Symbol | Purpose |
+|--------|---------|
+| `Series` struct | `Key` (media id da **raiz** da cadeia — a identidade de série que o schema não oferece) e `Offset` (episódios acumulados antes deste anime). O episódio absoluto é `Offset + ep` |
+| `GetSeriesIndex(ids, priority)` | Resolve o eixo de cada id pedido. A semente vem pronta de quem chama — `anilist` não pode importar `files`, e o conjunto certo (animes do passe ∪ `anime_id` de `episodes.json`) só o daemon conhece. Id **ausente** do mapa = a AniList não devolveu; o erro não invalida o que já foi resolvido, mesmo contrato de `GetMediaByIDs` |
+| `walkSeries(seed, priority)` (unexported) | O BFS. Cada media buscada ensina **dois** elos (níveis 0 e 1 da resposta, os únicos em posição autoritativa); o avô, cujo `relations` veio cortado, volta para a fronteira em vez de virar raiz. Agnóstico à profundidade: o teto de 2 é comportamento observado, não contrato |
+| `recordLink` / `prequelOf` / `resolveSeries` (unexported) | Gravam o elo `{PrequelID, Episodes}`, escolhem o `PREQUEL` de `TV`/`TV_SHORT` (mesma regra de `daemon.ComputeEpisodeOffset`, decisions.md #9) e somam a cadeia para trás. Ancestral desconhecido ou ciclo param a soma ali — na dúvida, o menor offset |
+| `seriesCache` / `seriesTTL` | `ttlCache[seriesLink]` de 24h, por media id. Só grava nó `FINISHED` **com** contagem de episódios: o dado é imutável e a caminhada é monotônica. Em memória, sem arquivo — o warm-up inteiro custa uns poucos requests |
+
+Sem chamador em produção ainda: F6 entrega só o dado. Quem semeia (o daemon, com os ids do passe
+mais os de `episodes.json`) entra com a posse por cobertura.
+
 ### `src/internal/anilist/health.go`
 
 Saúde da AniList, exposta ao frontend como **código** (nunca frase pronta — o daemon não sabe o

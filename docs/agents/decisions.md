@@ -1606,7 +1606,9 @@ episódio à mão: são requisições raras e caras de recusar, e sacrificá-las
 nenhum. `GetFrontendAnimeList` recusado serve o cache **vencido** (`ttlCache.getStale`) em vez de
 derrubar o poll; os outros descartáveis já tratam falha parcial como dado ausente.
 
-Nenhum chamador de warm-up existe ainda — ele entra com o F6.
+Nenhum chamador de warm-up existe ainda. `GetSeriesIndex` (#77) já recebe a `Priority`, mas
+ninguém a chama em produção: o warm-up entra junto com a posse por cobertura, que é quem monta
+a semente.
 
 **Don't "fix" by:** adicionar `x/time/rate` ou qualquer token bucket client-side (adivinha em vez de
 medir, e não contabiliza os erros dos outros consumidores); contar só respostas 200; depender de
@@ -1788,3 +1790,62 @@ Aí a mudança é de duas linhas: continuar o laço quando `partitionSearchResul
 **Don't "fix" by:** rodar todas as variantes sempre e unir os resultados (paga N buscas por anime
 para o ganho medido acima, que é zero), nem inverter a ordem das variantes (`GenerateSearchTitleVariants`
 põe o romaji primeiro porque é ele que casa a maioria dos releases).
+
+---
+
+### 77. O eixo absoluto por série é um BFS de duas em duas gerações, e o nível cortado volta para a fila
+
+**Location:** `src/internal/anilist/series.go` — `Series`, `GetSeriesIndex`, `walkSeries`,
+`recordLink`, `prequelOf`, `resolveSeries`, `seriesCache`. Travado por `series_test.go`.
+Implementa o que a #71 mediu; a #9 é o *gate* do offset de uma part só.
+
+**O que parece:** para saber o episódio absoluto de um cour basta ler `relations` do anime e
+somar os episódios do `PREQUEL` — que é o que `daemon.ComputeEpisodeOffset` faz.
+
+**Por que não basta.** `ComputeEpisodeOffset` anda **um** salto e só quando o título declara
+`Part >= 2`. Isso cobre `Shingeki no Kyojin: The Final Season Part 2` → `+16`, mas não a série:
+o absoluto real desse cour é `76..87`, que exige somar as **cinco** entradas anteriores. Como uma
+query da AniList expande no máximo 2 níveis de `relations` (#71), resolver uma cadeia de 7 níveis
+não é uma leitura — é uma caminhada.
+
+**O desenho, em três regras:**
+
+1. **Cada request anda duas gerações, não uma.** A resposta de um media traz o `relations` dele
+   (nível 0) e o do prequel dele (nível 1), ambos autoritativos. Daí saem **dois** elos gravados e
+   **três** contagens de episódio por media buscada. `Page(media(id_in: [...]))` com até 50 ids
+   custa a mesma unidade de orçamento que um id só (#72), então a largura é de graça e a única
+   dimensão que custa é a altura: `ceil(altura/2)` rodadas.
+2. **O avô volta para a fila.** O nó do nível 2 vem com id, formato e contagem confiáveis, mas seu
+   `relations` chega como `edges: []` — o corte, indistinguível de "não tem prequel" (#71).
+   Gravá-lo como raiz produz offset **silenciosamente errado**: no fixture do Shingeki, o Final
+   Season Part 2 daria `38..49` em vez de `76..87`. Por isso `recordLink` só é chamada nos níveis
+   0 e 1, e o nível 2 é reenfileirado. Só nó gravado por `recordLink` entra no cache — um nó de
+   nível 2 sabe quantos episódios tem, mas não quem vem antes dele, e meio fato não é fato.
+3. **O loop é agnóstico à profundidade.** O teto de 2 é comportamento observado, não contrato:
+   consome o que vier, enfileira o que faltar. Uma AniList que passe a expandir 3 níveis só faria
+   a caminhada terminar em menos rodadas, sem mudar uma linha.
+
+**O cache é de 24h porque o dado é imutável e a caminhada é monotônica.** Só ancestrais entram, e
+ancestral de anime terminado também terminou: um `FINISHED` com contagem de episódios não ganha
+episódio nem prequel novo. Nó `RELEASING` ou sem contagem (`episodes: null`, não lançado) conta
+como 0 e **não** é persistido — congelar esse zero por 24h deslocaria a série inteira para baixo
+no dia em que a contagem aparecesse. Em memória, sem arquivo: o warm-up inteiro custa uns poucos
+requests, então persistir em disco seria invalidação e migração a troco de nada.
+
+**Ausente ≠ raiz, nos dois sentidos.** Id que a AniList não devolve fica **fora** do mapa (mesmo
+contrato de `GetMediaByIDs`), e ancestral desconhecido no meio da cadeia para a soma ali. As duas
+escolhas erram para o **menor** offset de propósito: offset ausente cai na numeração relativa,
+que boa parte dos grupos usa; offset errado manda a busca para um episódio que não existe (#71).
+
+**As cadeias medidas viraram fixture de teste, não markdown** — Mushoku Tensei (4 níveis),
+Shingeki no Kyojin (6) e Monogatari (7). A validação forte é o Shingeki: `76..87` é exatamente a
+numeração que SubsPlease e Erai-raws usam nos arquivos. O teste semeia **só as pontas** de cada
+cadeia: semear todos os ids faria cada ancestral chegar como nível 0 e o corte nunca seria
+exercitado — verificado por mutação, a versão anterior do teste passava com o bug da regra 2.
+
+**Don't "fix" by:** tratar `edges: []` como raiz; assumir profundidade 2 como contrato; buscar um
+ancestral por request (a altura vira o custo, e o orçamento da AniList é 30/min); cachear nó de
+nível 2, `RELEASING` ou sem contagem; persistir o offset em disco ou no registro do episódio (ver
+a alternativa descartada em `docs/problemas/index.md`, F7 — valor persistido apodrece quando a
+AniList corrige uma contagem, e o derivado se autocorrige no TTL seguinte); trocar a caminhada por
+`search:` com o nome da franquia (#71).

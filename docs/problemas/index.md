@@ -254,24 +254,24 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
 
 ## Onda 2 — o eixo absoluto por série
 
-- [ ] **F6 · Base: `seriesKey` + `absEp`** (só o dado, nenhum consumidor muda)
+- [x] **F6 · Base: `seriesKey` + `absEp`** (só o dado, nenhum consumidor muda)
   *Onde:* `src/internal/anilist` — query nova + BFS + `ttlCache`.
-  - [ ] **Conjunto-semente = animes do passe ∪ `anime_id` distintos em `episodes.json`** (decisão do
+  - [x] **Conjunto-semente = animes do passe ∪ `anime_id` distintos em `episodes.json`** (decisão do
         F7, abaixo). Quem monta a semente é o **daemon**, que passa a lista de ids pronta: `anilist`
         não pode importar `files`, e é essa restrição que define a assinatura pública do F6
-  - [ ] BFS com `Page(media(id_in: [...]))` e `relations` aninhado em 2 níveis; loop **agnóstico à
+  - [x] BFS com `Page(media(id_in: [...]))` e `relations` aninhado em 2 níveis; loop **agnóstico à
         profundidade** (consome o que vier, enfileira o que faltar)
-  - [ ] Marcar quais nodes vieram em posição autoritativa e **re-buscar os do nível cortado** —
+  - [x] Marcar quais nodes vieram em posição autoritativa e **re-buscar os do nível cortado** —
         `edges: []` no nível em que a AniList para de expandir é indistinguível de "sem prequel", e
         confundir os dois produz offset silenciosamente errado
-  - [ ] Filtrar `format ∈ {TV, TV_SHORT}` ao seguir `PREQUEL` (já feito em `ComputeEpisodeOffset`,
+  - [x] Filtrar `format ∈ {TV, TV_SHORT}` ao seguir `PREQUEL` (já feito em `ComputeEpisodeOffset`,
         ver `decisions.md` #9)
-  - [ ] `episodes == nil` (anime não lançado) → trata como 0 e **não** persiste no cache
-  - [ ] Cache em memória, TTL 24h, só grava `FINISHED && episodes != nil` — o dado é imutável e a
+  - [x] `episodes == nil` (anime não lançado) → trata como 0 e **não** persiste no cache
+  - [x] Cache em memória, TTL 24h, só grava `FINISHED && episodes != nil` — o dado é imutável e a
         caminhada é monotônica (só ancestrais entram). Nada de arquivo em disco: o warm-up inteiro
         custa ~4 requests
-  - [ ] Conjunto `known` protege contra ciclo
-  - [ ] **Teste com as cadeias medidas como golden fixture** (é a validação real; em markdown
+  - [x] Conjunto `known` protege contra ciclo
+  - [x] **Teste com as cadeias medidas como golden fixture** (é a validação real; em markdown
         apodrece, em teste quebra o CI):
 
         ```
@@ -298,7 +298,25 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
 
         O Shingeki é a validação forte: `76..87` é exatamente a numeração que SubsPlease e Erai
         usaram nos arquivos do Final Season Part 2.
-  - [ ] Atualizar `architecture.md` com os símbolos novos
+  - [x] Atualizar `architecture.md` com os símbolos novos
+  *Feito em 29/ago/2026.* Diferenças do planejado: **nenhum chamador de warm-up entrou** — F6 é
+  regra de ordenação ("F6 sozinho não muda comportamento nenhum"), e um warm-up no passe mudaria.
+  Quem semeia entra com o F7; a linha do `decisions.md` #72 que dizia "o warm-up entra com o F6"
+  foi corrigida. O tipo devolvido é `Series{Key, Offset}` e **não** tem método `Abs(ep)`: sem
+  consumidor, `Offset + ep` já diz tudo. A semente do F7 (`anime_id` de `episodes.json`) não entra
+  aqui porque nada monta a semente ainda — a assinatura `GetSeriesIndex(ids, priority)` já a
+  aceita, que era o ponto do item. Registrado em `decisions.md` #77.
+
+  *Duplicação deixada de propósito:* `anilist.prequelOf` repete a seleção de "primeiro `PREQUEL` de
+  `TV`/`TV_SHORT`" que `daemon.ComputeEpisodeOffset` já faz. Não unificada aqui porque o F8
+  rebaixa a segunda a uma das hipóteses de numeração de pack, e as duas podem divergir no caminho.
+  Marcada com `TODO(F8)` nas duas funções e listada como item do F8.
+
+  *A fixture pegou um bug do próprio teste:* a primeira versão semeava a cadeia inteira, então todo
+  ancestral chegava como nível 0 da resposta e o corte de 2 níveis nunca era exercitado — um
+  mutante que tratava o nível cortado como raiz passava. O teste agora semeia só as pontas. O mock
+  renderiza exatamente 2 níveis e devolve `edges: []` no terceiro, como a AniList real.
+
   *Custo medido: 28 medias em 4 requests (`ceil(altura/2) + 1`), e quase não cresce com o tamanho
   da lista. Fatos da API em `decisions.md` #71 e #72.*
 
@@ -347,6 +365,15 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
         offset do prequel imediato, offset da série inteira) + **contagem de arquivos como
         desempate** (um pack de 25 arquivos numerado a partir de 1 só pode ser season contínua).
         `ComputeEpisodeOffset` vira uma das hipóteses, não a única
+  - [ ] **Resolver a duplicação que o F6 deixou marcada.** A seleção de "primeiro `PREQUEL` de
+        `TV`/`TV_SHORT`" existe hoje em **dois** lugares: `anilist.prequelOf` (`series.go`, caminha
+        a cadeia inteira) e `daemon.ComputeEpisodeOffset` (`helpers.go`, um salto só, gated por
+        `part >= 2`). Os dois carregam um `TODO(F8)` apontando um para o outro. Não foram
+        unificados no F6 de propósito: é este item que decide o destino delas — se
+        `ComputeEpisodeOffset` vira "hipótese offset do prequel imediato", as duas podem divergir
+        legitimamente; se a heurística não precisar dela, ela sai. **Se o F8 for descartado como o
+        F3 foi, unificar as duas e apagar os dois TODOs** — sem o F8 não sobra motivo para a
+        duplicação existir
   - [ ] Na dúvida, resolver para **0**: offset ausente cai na numeração relativa, que boa parte dos
         grupos usa; offset errado manda a busca para episódio inexistente
   - [ ] Absorve o `Part 1 + Part 2` do `extractPart` — cobertura por range não lê marcador de part
