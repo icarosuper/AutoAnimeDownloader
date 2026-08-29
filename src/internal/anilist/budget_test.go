@@ -97,6 +97,33 @@ func TestBudgetRecordedOnErrorResponse(t *testing.T) {
 	}
 }
 
+// TestCustomListsServesStaleCacheWhenRefused e o par do teste abaixo, e ele existe porque a
+// assimetria entre os dois quebrava a blacklist: a lista sai do cache vencido e responde com
+// sucesso, mas o customLists recusado voltava nil e o merge de GET /animes concluia que nenhum
+// anime esta em lista excluida.
+func TestCustomListsServesStaleCacheWhenRefused(t *testing.T) {
+	remaining := "29"
+	restore := MockAniListDo(func(*http.Request) (*http.Response, error) {
+		return respond(200, `{"data":{"Page":{"mediaList":[{"id":7,"customLists":{"Blacklist":true}}]}}}`,
+			map[string]string{"X-RateLimit-Remaining": remaining}), nil
+	})
+	defer restore()
+
+	statuses := []string{"CURRENT"}
+	if m := GetCustomListsMap("user", statuses, PriorityDisposable); len(m) != 1 {
+		t.Fatalf("primeira busca deveria popular o cache, veio %+v", m)
+	}
+
+	// Vence o cache e afunda o orcamento: a proxima chamada e recusada pelo gate.
+	customListsCache.set("user\x00CURRENT", map[int]CustomLists{7: {"Blacklist": true}}, -time.Second)
+	budget.Store(&budgetReading{remaining: 1, at: time.Now()})
+
+	m := GetCustomListsMap("user", statuses, PriorityDisposable)
+	if !m[7]["Blacklist"] {
+		t.Fatalf("esperava a entrada vencida com a blacklist, veio %+v", m)
+	}
+}
+
 // TestFrontendListServesStaleCacheWhenRefused trava o fallback da tabela da decisions.md #72: o
 // poll do frontend recusado serve a leitura vencida em vez de derrubar a tela.
 func TestFrontendListServesStaleCacheWhenRefused(t *testing.T) {

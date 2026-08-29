@@ -120,6 +120,8 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 **Effect when broken:** `customLists` is always `null` → `animeIsInExcludedList` never matches → blacklisted animes (e.g. in the "AutoDownloader" custom list used to block titles) are downloaded anyway and the frontend block icon is never shown.
 
+**Gate de orçamento:** quando o chamador passa `PriorityDisposable` e o gate recusa, a função serve a leitura **vencida** do cache em vez de devolver `nil` — ver #72, "O par do poll degrada junto ou não degrada".
+
 **Cache:** `GetCustomListsMap` caches results keyed by `username + statuses` (`ttlCache`, ver decisions.md #46). Uma resposta com pelo menos um `CustomLists` não-nulo fica 5 minutos (`customListsTTL`); uma resposta vazia fica só 30 segundos (`customListsEmptyTTL`), porque "vazio" tanto pode ser uma conta sem custom lists quanto um campo que a AniList degradou. Antes o vazio não era cacheado de jeito nenhum, e aí uma conta sem custom lists gerava um request por poll do frontend — exatamente o amplificador que estourava o limite. A leitura do cache acontece antes da busca, então nenhuma resposta degradada chega a evictar uma entrada ainda válida.
 
 **Overlay guard:** `if cl, ok := clMap[ml.Id]; ok && len(cl) > 0 { ml.CustomLists = cl }` — the `len(cl) > 0` guard ensures that a rate-limited nil response from `GetCustomListsMap` (which would produce an empty map entry) never silently clears data that `GetAllCurrentAnime` might have returned correctly on a lucky call.
@@ -1575,7 +1577,7 @@ degradar:
 | Chamador | Criticidade | Ação com orçamento baixo |
 |---|---|---|
 | Passe do daemon | alta — perder o passe é episódio não baixado | sempre passa |
-| Poll do frontend (`GetFrontendAnimeList`) | baixa — já tem cache de 60s | recusa e serve cache velho |
+| Poll do frontend (`GetFrontendAnimeList` **e** `GetCustomListsMap`) | baixa — já têm cache (60s e 5min) | recusa e serve cache velho — **as duas**, ou a degradação fica assimétrica |
 | Busca de avulso pela UI | baixa | recusa, com erro visível a quem pediu |
 | Trabalho de warm-up / prefetch | baixa — tem fallback | adia para o próximo passe |
 
@@ -1605,6 +1607,18 @@ daemon **e** toda ação de um clique — abrir a tela de detalhe, adicionar um 
 episódio à mão: são requisições raras e caras de recusar, e sacrificá-las não devolve orçamento
 nenhum. `GetFrontendAnimeList` recusado serve o cache **vencido** (`ttlCache.getStale`) em vez de
 derrubar o poll; os outros descartáveis já tratam falha parcial como dado ausente.
+
+**O par do poll degrada junto ou não degrada.** `fetchAniListEntries` é `GetCustomListsMap` +
+`GetFrontendAnimeList`, e recusar só um dos dois é pior que recusar os dois: a lista sai do cache
+vencido e responde **com sucesso**, o `customLists` volta `nil`, e o merge conclui que nenhum anime
+está em lista excluída. `GET /animes` mostra blacklistado como normal e o `standalone_guard` deixa
+adicionar como avulso o que deveria recusar — tudo numa resposta que parece saudável. Por isso
+`GetCustomListsMap` também serve `getStale` quando o gate recusa
+(`TestCustomListsServesStaleCacheWhenRefused`). Sobra a janela em que não há leitura vencida
+nenhuma (processo recém-subido com o balde já vazio); aí o `nil` volta e o overlay guard da #11
+mantém o que a query complexa tiver trazido. Nulificar a lista inteira nesse caso seria pior: o
+`nil` de `GetCustomListsMap` também acontece em falha de rede, e derrubaria a tela por causa da
+query barata mesmo com a cara respondendo.
 
 Nenhum chamador de warm-up existe ainda. `GetSeriesIndex` (#77) já recebe a `Priority`, mas
 ninguém a chama em produção: o warm-up entra junto com a posse por cobertura, que é quem monta

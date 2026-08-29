@@ -389,6 +389,17 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 		"s": statuses,
 	}, priority)
 	if err != nil {
+		// Recusado pelo gate de orcamento: serve a leitura vencida, igual ao par dela em
+		// GetFrontendAnimeList (decisions.md #72). Sem isso o gate degrada os DOIS lados de
+		// forma assimetrica — a lista sai do cache velho e responde com sucesso, o customLists
+		// volta nil, e o merge de GET /animes conclui "nenhum anime esta na blacklist". A tela
+		// mostra blacklistado como normal e o guard de avulso (standalone_guard.go) deixa
+		// adicionar o que deveria recusar.
+		if errors.Is(err, ErrBudgetLow) {
+			if stale, ok := customListsCache.getStale(key); ok {
+				return stale
+			}
+		}
 		logger.Logger.Warn().Err(err).Str("username", userName).Msg("Failed to fetch customLists map")
 		return nil
 	}
