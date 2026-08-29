@@ -40,6 +40,16 @@ func (c *ttlCache[T]) get(key string) (T, bool) {
 	return zero, false
 }
 
+// getStale devolve a entrada IGNORANDO o TTL. So o gate de orcamento usa: quando uma leitura
+// descartavel e recusada, servir o dado vencido e melhor que devolver erro para a tela (ver
+// decisions.md #72). Nada mais deve chamar — quem le por get espera dado fresco.
+func (c *ttlCache[T]) getStale(key string) (T, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	value, ok := c.data[key]
+	return value, ok
+}
+
 func (c *ttlCache[T]) set(key string, value T, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -108,8 +118,10 @@ func clearCaches() {
 	frontendListCache.clear()
 	mediaByIDCache.clear()
 	// A saude tambem e estado de pacote: sem zerar aqui, um teste que simula 403 deixaria o
-	// proximo teste enxergando a AniList fora do ar.
+	// proximo teste enxergando a AniList fora do ar. Mesma coisa para a leitura de orcamento:
+	// um teste que simula o balde no fim travaria o gate do teste seguinte.
 	health.Store(&Health{State: HealthOK})
+	budget.Store(nil)
 }
 
 type AniListResponse struct {
@@ -273,7 +285,12 @@ func DedupeByMedia(list []MediaList) []MediaList {
 
 type RequestVariables map[string]any
 
-func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, error) {
+func sendAnilistRequest[T any](query string, variables RequestVariables, priority Priority) (*T, error) {
+	if !budgetAllows(priority) {
+		logger.Logger.Debug().Msg("Skipping a disposable Anilist request: the rate limit budget is low")
+		return nil, ErrBudgetLow
+	}
+
 	jsonData, err := json.Marshal(GraphQLRequest{Query: query, Variables: variables})
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling request: %v", err)
@@ -292,6 +309,7 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 		return nil, fmt.Errorf("error making request: %v", err)
 	}
 	defer resp.Body.Close()
+	recordBudget(resp.Header)
 
 	if resp.StatusCode == http.StatusNotFound {
 		// A AniList responde 404 quando o objeto pedido nao existe (por exemplo, uma entrada de
@@ -344,7 +362,7 @@ func sendAnilistRequest[T any](query string, variables RequestVariables) (*T, er
 // GetCustomListsMap fetches a lightweight map of MediaList ID → CustomLists via a minimal query.
 // Results are cached for 5 minutes so repeated calls (e.g. from the API endpoint) don't hit
 // Anilist's rate limit. Only a response with at least one non-null CustomLists entry is cached.
-func GetCustomListsMap(userName string, statuses []string) map[int]CustomLists {
+func GetCustomListsMap(userName string, statuses []string, priority Priority) map[int]CustomLists {
 	key := userName + "\x00" + strings.Join(statuses, "\x00")
 
 	if result, ok := customListsCache.get(key); ok {
@@ -368,7 +386,7 @@ func GetCustomListsMap(userName string, statuses []string) map[int]CustomLists {
 		"u": userName,
 		"t": "ANIME",
 		"s": statuses,
-	})
+	}, priority)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Str("username", userName).Msg("Failed to fetch customLists map")
 		return nil
@@ -454,7 +472,7 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 		"statuses": statuses,
 	}
 
-	return sendAnilistRequest[AniListResponse](query, variables)
+	return sendAnilistRequest[AniListResponse](query, variables, PriorityCritical)
 }
 
 // GetFrontendAnimeList alimenta /api/v1/animes, que o frontend faz poll a cada 30s por aba.
@@ -516,8 +534,16 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 		"statuses": statuses,
 	}
 
-	resp, err := sendAnilistRequest[AniListResponse](query, variables)
+	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityDisposable)
 	if err != nil {
+		// Recusado pelo gate de orcamento: esta lista muda quando o usuario mexe na AniList, e
+		// nao a cada 30s. Servir a leitura vencida deixa a tela funcionando e devolve o balde
+		// para o passe do daemon, que e o unico que nao pode ser adiado. Ver decisions.md #72.
+		if errors.Is(err, ErrBudgetLow) {
+			if stale, ok := frontendListCache.getStale(key); ok {
+				return frontendListResponse(stale), nil
+			}
+		}
 		return nil, err
 	}
 
@@ -581,7 +607,7 @@ func GetAnimeInfoByIDs(mediaIds []int, usernames []string) (map[int]*MediaList, 
 			resp, err := sendAnilistRequest[AniListResponse](query, RequestVariables{
 				"userName": username,
 				"mediaIds": chunk,
-			})
+			}, PriorityDisposable)
 			if err != nil {
 				logger.Logger.Warn().Err(err).Str("username", username).Int("media_ids", len(chunk)).
 					Msg("Failed to fetch a batch of anime info for account")
@@ -612,11 +638,11 @@ func GetAnimeInfoByIDs(mediaIds []int, usernames []string) (map[int]*MediaList, 
 // anime was removed from the lists but its episodes are still on disk), not an error. An error
 // is only returned when every account's request failed, so the caller can tell "not tracked"
 // from "AniList is down".
-func GetAnimeInfo(mediaId int, usernames []string) (*MediaList, error) {
+func GetAnimeInfo(mediaId int, usernames []string, priority Priority) (*MediaList, error) {
 	var entries []MediaList
 	var lastErr error
 	for _, username := range usernames {
-		resp, err := getMediaListEntry(username, mediaId)
+		resp, err := getMediaListEntry(username, mediaId, priority)
 		if err != nil {
 			logger.Logger.Warn().Err(err).Str("username", username).Int("media_id", mediaId).
 				Msg("Failed to fetch anime info for account")
@@ -662,7 +688,7 @@ func GetMediaIDForEntry(mediaListId int) (int, error) {
 		} `json:"data"`
 	}
 
-	resp, err := sendAnilistRequest[response](query, RequestVariables{"mediaListId": mediaListId})
+	resp, err := sendAnilistRequest[response](query, RequestVariables{"mediaListId": mediaListId}, PriorityCritical)
 	if errors.Is(err, ErrNotFound) {
 		return 0, nil
 	}
@@ -692,7 +718,7 @@ func GetMediaListStatus(username string, mediaId int) (MediaListStatus, bool, er
 	resp, err := sendAnilistRequest[AniListResponse](query, RequestVariables{
 		"userName": username,
 		"mediaId":  mediaId,
-	})
+	}, PriorityCritical)
 	if err != nil {
 		return "", false, err
 	}
@@ -702,7 +728,7 @@ func GetMediaListStatus(username string, mediaId int) (MediaListStatus, bool, er
 	return resp.Data.Page.MediaList[0].Status, true, nil
 }
 
-func getMediaListEntry(userName string, mediaId int) (*AniListResponse, error) {
+func getMediaListEntry(userName string, mediaId int, priority Priority) (*AniListResponse, error) {
 	query := `
 		query GetAnimeEpisodes($userName: String, $mediaId: Int) {
 			Page {
@@ -720,5 +746,5 @@ func getMediaListEntry(userName string, mediaId int) (*AniListResponse, error) {
 	return sendAnilistRequest[AniListResponse](query, RequestVariables{
 		"userName": userName,
 		"mediaId":  mediaId,
-	})
+	}, priority)
 }

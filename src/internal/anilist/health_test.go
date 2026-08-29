@@ -74,7 +74,7 @@ func TestHealthClassification(t *testing.T) {
 			})
 			defer restore()
 
-			if _, err := sendAnilistRequest[AniListResponse]("query{}", nil); err == nil {
+			if _, err := sendAnilistRequest[AniListResponse]("query{}", nil, PriorityCritical); err == nil {
 				t.Fatal("esperava erro, veio nil")
 			}
 
@@ -100,7 +100,7 @@ func TestHealthRetryAtFromHeader(t *testing.T) {
 	})
 	defer restore()
 
-	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil)
+	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil, PriorityCritical)
 
 	got := CurrentHealth().RetryAt
 	if got.IsZero() {
@@ -123,13 +123,13 @@ func TestHealthClearsOnFirstGoodResponse(t *testing.T) {
 	})
 	defer restore()
 
-	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil)
+	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil, PriorityCritical)
 	if CurrentHealth().State != HealthOutage {
 		t.Fatalf("esperava outage, veio %q", CurrentHealth().State)
 	}
 
 	fail = false
-	if _, err := sendAnilistRequest[AniListResponse]("query{}", nil); err != nil {
+	if _, err := sendAnilistRequest[AniListResponse]("query{}", nil, PriorityCritical); err != nil {
 		t.Fatalf("resposta boa devolveu erro: %v", err)
 	}
 	if got := CurrentHealth(); got.State != HealthOK {
@@ -145,11 +145,11 @@ func TestHealthSincePreservedAcrossRepeatedFailures(t *testing.T) {
 	})
 	defer restore()
 
-	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil)
+	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil, PriorityCritical)
 	first := CurrentHealth().Since
 
 	time.Sleep(5 * time.Millisecond)
-	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil)
+	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil, PriorityCritical)
 
 	if got := CurrentHealth().Since; !got.Equal(first) {
 		t.Errorf("Since virou %v, esperado continuar em %v", got, first)
@@ -164,7 +164,7 @@ func TestNotFoundIsNotDegradedHealth(t *testing.T) {
 	})
 	defer restore()
 
-	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil)
+	_, _ = sendAnilistRequest[AniListResponse]("query{}", nil, PriorityCritical)
 
 	if got := CurrentHealth().State; got != HealthOK {
 		t.Errorf("estado = %q, esperado %q", got, HealthOK)

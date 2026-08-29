@@ -85,7 +85,7 @@ func TestGetMediaByID_SyntheticEntry(t *testing.T) {
 		"airingSchedule":{"nodes":[{"id":10,"episode":1,"timeUntilAiring":-100,"airingAt":123}]}
 	}}}`)()
 
-	ml, err := GetMediaByID(21)
+	ml, err := GetMediaByID(21, PriorityCritical)
 	if err != nil {
 		t.Fatalf("GetMediaByID: %v", err)
 	}
@@ -116,17 +116,17 @@ func TestGetMediaByID_CachesWithinTTL(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Media":{"id":21,"title":{"romaji":"X"}}}}`)()
 
-	if _, err := GetMediaByID(21); err != nil {
+	if _, err := GetMediaByID(21, PriorityCritical); err != nil {
 		t.Fatalf("primeira busca: %v", err)
 	}
-	if _, err := GetMediaByID(21); err != nil {
+	if _, err := GetMediaByID(21, PriorityCritical); err != nil {
 		t.Fatalf("segunda busca: %v", err)
 	}
 	if calls != 1 {
 		t.Fatalf("quero 1 request, veio %d", calls)
 	}
 
-	if _, err := GetMediaByID(22); err != nil {
+	if _, err := GetMediaByID(22, PriorityCritical); err != nil {
 		t.Fatalf("outro id: %v", err)
 	}
 	if calls != 2 {
@@ -139,7 +139,7 @@ func TestGetMediaByID_NotFound(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Media":null}}`)()
 
-	ml, err := GetMediaByID(999999)
+	ml, err := GetMediaByID(999999, PriorityCritical)
 	if err != nil {
 		t.Fatalf("Media null nao e erro: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestGetMediaByIDs_SingleRequestForManyIDs(t *testing.T) {
 		{"id":23,"title":{"romaji":"C"}}
 	]}}}`)()
 
-	medias, err := GetMediaByIDs([]int{21, 22, 23})
+	medias, err := GetMediaByIDs([]int{21, 22, 23}, PriorityCritical)
 	if err != nil {
 		t.Fatalf("GetMediaByIDs: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestGetMediaByIDs_AbsentIDIsNilNotMissing(t *testing.T) {
 	var sent []string
 	defer mockCapturing(&sent, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"A"}}]}}}`)()
 
-	medias, err := GetMediaByIDs([]int{21, 999999})
+	medias, err := GetMediaByIDs([]int{21, 999999}, PriorityCritical)
 	if err != nil {
 		t.Fatalf("id omitido nao e erro: %v", err)
 	}
@@ -221,10 +221,10 @@ func TestGetMediaByIDs_CachesPerID(t *testing.T) {
 		`{"data":{"Page":{"media":[{"id":23,"title":{"romaji":"C"}}]}}}`,
 	)()
 
-	if _, err := GetMediaByIDs([]int{21, 22}); err != nil {
+	if _, err := GetMediaByIDs([]int{21, 22}, PriorityCritical); err != nil {
 		t.Fatalf("primeira busca: %v", err)
 	}
-	if _, err := GetMediaByIDs([]int{21, 22, 23}); err != nil {
+	if _, err := GetMediaByIDs([]int{21, 22, 23}, PriorityCritical); err != nil {
 		t.Fatalf("segunda busca: %v", err)
 	}
 	if len(sent) != 2 {
@@ -235,7 +235,7 @@ func TestGetMediaByIDs_CachesPerID(t *testing.T) {
 	}
 
 	// O cache e o mesmo de GetMediaByID: quem buscou em lote nao paga de novo no lookup avulso.
-	if _, err := GetMediaByID(22); err != nil {
+	if _, err := GetMediaByID(22, PriorityCritical); err != nil {
 		t.Fatalf("GetMediaByID: %v", err)
 	}
 	if len(sent) != 2 {
@@ -254,7 +254,7 @@ func TestGetMediaByIDs_ChunksAtPageSize(t *testing.T) {
 		ids = append(ids, 1000+i)
 	}
 
-	medias, err := GetMediaByIDs(ids)
+	medias, err := GetMediaByIDs(ids, PriorityCritical)
 	if err != nil {
 		t.Fatalf("GetMediaByIDs: %v", err)
 	}

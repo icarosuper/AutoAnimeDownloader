@@ -2,6 +2,8 @@ package anilist
 
 import (
 	"encoding/json"
+	"errors"
+	"net/http"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -113,4 +115,71 @@ func retryAfter(headerValue string) time.Time {
 		return time.Time{}
 	}
 	return time.Now().Add(time.Duration(secs) * time.Second)
+}
+
+// Priority declara o quanto uma chamada a AniList pode ser sacrificada quando o orcamento de
+// requisicoes esta no fim. NAO ha valor padrao: o parametro e obrigatorio em toda chamada, e
+// e por isso que ele existe como parametro em vez de wrapper — uma query nova nao consegue
+// compilar sem alguem decidir a criticidade dela. Ver decisions.md #72.
+type Priority int
+
+const (
+	// PriorityCritical nunca e recusada pelo gate. E o passe do daemon e toda acao que um
+	// usuario disparou e esta esperando: recusar aqui e episodio nao baixado ou botao que nao
+	// funciona.
+	PriorityCritical Priority = iota
+	// PriorityDisposable e recusada quando o orcamento cai abaixo do piso. E o trafego que se
+	// repete sozinho — poll do frontend, busca por tecla digitada — e que tem para onde cair:
+	// cache vencido, o proximo poll, ou um erro visivel a quem digitou.
+	PriorityDisposable
+)
+
+// ErrBudgetLow e a recusa do gate. Nao e falha da AniList: nenhuma requisicao chegou a sair, e
+// a saude do pacote continua como estava.
+var ErrBudgetLow = errors.New("anilist: request budget is low, disposable call refused")
+
+const (
+	// budgetFloor e quantas requisicoes o gate reserva para o trafego critico. O limite medido
+	// e 30/min por IP (decisions.md #72) e um passe do daemon custa alguns requests; deixar um
+	// terco do balde de lado e o suficiente para ele nunca esbarrar no poll do frontend.
+	budgetFloor = 10
+	// budgetValidity e a validade de uma leitura, e e a SAIDA OBRIGATORIA do gate: o balde da
+	// AniList reseta inteiro em <= 60s e nada nos avisa disso. Sem a validade, um orcamento
+	// baixo recusaria todo mundo, ninguem emitiria requisicao, nenhuma leitura nova chegaria e
+	// o gate ficaria travado para sempre.
+	budgetValidity = 60 * time.Second
+)
+
+type budgetReading struct {
+	remaining int
+	at        time.Time
+}
+
+var budget atomic.Pointer[budgetReading]
+
+// recordBudget guarda o X-RateLimit-Remaining de uma resposta. Chamado em TODA resposta,
+// inclusive erro: um 404 e uma query invalida consomem cota igual a um 200 (decisions.md #72),
+// entao um contador que so olhasse sucesso ficaria otimista exatamente quando as coisas ja
+// estao indo mal. O header e autoritativo porque ja soma os outros consumidores do mesmo IP —
+// nenhum contador nosso enxerga isso.
+func recordBudget(header http.Header) {
+	remaining, err := strconv.Atoi(header.Get("X-RateLimit-Remaining"))
+	if err != nil {
+		return
+	}
+	budget.Store(&budgetReading{remaining: remaining, at: time.Now()})
+}
+
+// budgetAllows decide se uma chamada pode sair agora. Nunca bloqueia esperando: o poll do
+// frontend roda dentro de um handler HTTP, e pendurar a goroutine ate o balde encher penduraria
+// a tela junto.
+func budgetAllows(priority Priority) bool {
+	if priority == PriorityCritical {
+		return true
+	}
+	reading := budget.Load()
+	if reading == nil || time.Since(reading.at) >= budgetValidity {
+		return true
+	}
+	return reading.remaining >= budgetFloor
 }

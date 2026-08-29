@@ -80,8 +80,8 @@ func TestGetCustomListsMap_CachesEmptyResult(t *testing.T) {
 	defer mockList(&calls, `{"data":{"Page":{"mediaList":[{"id":1,"customLists":null}]}}}`)()
 
 	statuses := []string{"CURRENT"}
-	GetCustomListsMap("user", statuses)
-	GetCustomListsMap("user", statuses)
+	GetCustomListsMap("user", statuses, PriorityCritical)
+	GetCustomListsMap("user", statuses, PriorityCritical)
 
 	if calls != 1 {
 		t.Fatalf("esperava 1 request para a AniList, obteve %d", calls)

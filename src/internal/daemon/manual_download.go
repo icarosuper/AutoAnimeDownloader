@@ -61,12 +61,12 @@ type animeDetails struct {
 // do pipeline real que ele existe para espelhar. Nos chamadores de ManualDownload* o efeito e
 // inocuo: eles selecionam episodio por numero explicito (findEpisodeNode), nao por Progress.
 func resolveAnimeDetails(fm FileManagerInterface, animeId int, usernames []string) (*animeDetails, error) {
-	ml, err := anilist.GetAnimeInfo(animeId, usernames)
+	ml, err := anilist.GetAnimeInfo(animeId, usernames, anilist.PriorityCritical)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get anime info: %w", err)
 	}
 	if ml == nil {
-		if ml, err = anilist.GetMediaByID(animeId); err != nil {
+		if ml, err = anilist.GetMediaByID(animeId, anilist.PriorityCritical); err != nil {
 			return nil, fmt.Errorf("failed to get anime info: %w", err)
 		}
 		ml = withStandaloneProgress(fm, ml)

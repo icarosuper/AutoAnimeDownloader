@@ -28,14 +28,14 @@ func loadStandaloneSet(fm FileManagerInterface) map[int]bool {
 // condicionado ao conjunto de avulsos de proposito: sem isso qualquer media id da AniList
 // passaria a responder pelas rotas /animes/{id}/*, e o 404 de "esse anime nao e seu" sumiria.
 func resolveMediaList(fm FileManagerInterface, id int, usernames []string, standalone map[int]bool) (*anilist.MediaList, error) {
-	ml, err := anilist.GetAnimeInfo(id, usernames)
+	ml, err := anilist.GetAnimeInfo(id, usernames, anilist.PriorityCritical)
 	if err != nil {
 		return nil, err
 	}
 	if ml != nil || !standalone[id] {
 		return ml, err
 	}
-	ml, err = anilist.GetMediaByID(id)
+	ml, err = anilist.GetMediaByID(id, anilist.PriorityCritical)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func appendStandaloneEntries(fm FileManagerInterface, entries []anilist.MediaLis
 		return entries
 	}
 
-	medias, err := anilist.GetMediaByIDs(pending)
+	medias, err := anilist.GetMediaByIDs(pending, anilist.PriorityDisposable)
 	if err != nil {
 		logger.Logger.Warn().Err(err).
 			Msg("Failed to fetch standalone animes from AniList; leaving the missing ones out of this response")

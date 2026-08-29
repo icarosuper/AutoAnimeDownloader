@@ -328,7 +328,7 @@ func refreshStandaloneOrphans(fm FileManagerInterface, medias map[int]*anilist.M
 		return
 	}
 
-	fetched, err := anilist.GetMediaByIDs(pending)
+	fetched, err := anilist.GetMediaByIDs(pending, anilist.PriorityDisposable)
 	if err != nil {
 		logger.Logger.Warn().Err(err).Int("standalone_orphans", len(pending)).
 			Msg("Failed to refresh some standalone orphans, keeping existing data")
@@ -384,7 +384,7 @@ func computeAnimeFields(title anilist.Title, status anilist.MediaStatus, episode
 // "nenhum anime coberto" de "cobertura desconhecida"; o refresh de orfaos depende disso.
 func fetchAniListEntries(username string, statuses []string, mediaStatuses []string) []anilist.MediaList {
 	// Fetch customLists via cached minimal query before the complex query that may null it out.
-	clMap := anilist.GetCustomListsMap(username, statuses)
+	clMap := anilist.GetCustomListsMap(username, statuses, anilist.PriorityDisposable)
 
 	resp, err := anilist.GetFrontendAnimeList(username, statuses)
 	if err != nil {

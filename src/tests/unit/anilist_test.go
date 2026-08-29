@@ -31,7 +31,7 @@ func TestAniListModule_GetAnimeInfo_ParsesSynonymsAndRelations(t *testing.T) {
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -113,7 +113,7 @@ func TestAniListModule_GetAnimeInfo_ParsesMediaID(t *testing.T) {
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -138,7 +138,7 @@ func TestAniListModule_GetAnimeInfo_CollapsesAccountsKeepingLowestProgress(t *te
 	})
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"accountA", "accountB"})
+	ml, err := anilist.GetAnimeInfo(21, []string{"accountA", "accountB"}, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -152,7 +152,7 @@ func TestAniListModule_GetAnimeInfo_NotTrackedReturnsNil(t *testing.T) {
 	restore := mockAniListResponse(`{"data": {"Page": {"mediaList": []}}}`, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -170,7 +170,7 @@ func TestAniListModule_GetAnimeInfo_ParsesCustomLists(t *testing.T) {
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"})
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

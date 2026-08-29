@@ -58,7 +58,7 @@ func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.M
 		return merged
 	}
 
-	medias, err := anilist.GetMediaByIDs(pending)
+	medias, err := anilist.GetMediaByIDs(pending, anilist.PriorityCritical)
 	if err != nil {
 		logger.Logger.Warn().Err(err).
 			Msg("Failed to fetch standalone animes from AniList; skipping the missing ones this pass")
@@ -116,7 +116,7 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 		return 0, err
 	}
 
-	anime, err := anilist.GetMediaByID(mediaID)
+	anime, err := anilist.GetMediaByID(mediaID, anilist.PriorityCritical)
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch anime %d from AniList: %w", mediaID, err)
 	}

@@ -209,14 +209,14 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   *Independente de todo o resto; é um 429 esperando acontecer hoje. Medições em `decisions.md` #65
   e #72.*
 
-- [ ] **F5 · Gate de orçamento por prioridade**
+- [x] **F5 · Gate de orçamento por prioridade**
   *Onde:* `src/internal/anilist/anilist.go` — `sendAnilistRequest`; estado ao lado de `health.go`.
-  - [ ] Gravar `X-RateLimit-Remaining` + instante da leitura em **toda** resposta, inclusive erro
-  - [ ] Piso por criticidade: passe do daemon sempre passa; poll do frontend serve cache velho;
+  - [x] Gravar `X-RateLimit-Remaining` + instante da leitura em **toda** resposta, inclusive erro
+  - [x] Piso por criticidade: passe do daemon sempre passa; poll do frontend serve cache velho;
         busca de avulso pela UI recusa com erro visível; warm-up adia
-  - [ ] **Validade de 60s na leitura** — sem isso o gate se auto-trava: se todos recusarem, ninguém
+  - [x] **Validade de 60s na leitura** — sem isso o gate se auto-trava: se todos recusarem, ninguém
         emite request e o processo nunca descobre que o balde resetou
-  - [ ] Não bloquear goroutine esperando (o poll roda dentro de handler HTTP)
+  - [x] Não bloquear goroutine esperando (o poll roda dentro de handler HTTP)
 
   > **Decisão fechada (29/ago/2026): parâmetro de prioridade em TODOS os call sites**, com um enum
   > de dois valores (crítico / descartável). São 9 diffs de produção + 7 em `health_test.go`, todos
@@ -234,8 +234,19 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   > **Consequência para quem implementa:** toda query nova é obrigada a declarar sua criticidade
   > para compilar. Isso é a feature, não o custo.
 
-  - [ ] Atualizar `decisions.md` #72 com o desenho como implementado (hoje ele registra a medição e
+  - [x] Atualizar `decisions.md` #72 com o desenho como implementado (hoje ele registra a medição e
         o desenho proposto, não o código)
+
+  *Feito em 29/ago/2026.* Diferenças do planejado: (a) a `Priority` não parou em
+  `sendAnilistRequest` — subiu para as **quatro** funções públicas de chamador misto
+  (`GetCustomListsMap`, `GetAnimeInfo`, `GetMediaByID`, `GetMediaByIDs`), que daemon e frontend
+  chamam com criticidades opostas; fixar a criticidade dentro delas mataria metade da feature (o
+  poll de `/animes` nunca degradaria) ou quebraria o passe. (b) A linha divisória que emergiu não é
+  "daemon vs. frontend", é **"se repete sozinho vs. alguém está esperando"**: `SearchMedia` (uma
+  query por tecla) é descartável, mas adicionar avulso, abrir a tela de detalhe e baixar episódio à
+  mão são críticos — recusá-los não devolve orçamento nenhum e quebra um clique. (c) O "serve cache
+  velho" exigiu um `ttlCache.getStale`, porque o `get` existente não distingue vencido de ausente.
+  Nenhum chamador de warm-up existe ainda; ele entra com o F6. Registrado em `decisions.md` #72.
 
   *Vale por si só, e torna o F6 seguro por construção. Desenho e medições em `decisions.md` #72.*
 

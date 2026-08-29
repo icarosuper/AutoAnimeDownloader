@@ -508,7 +508,7 @@ func searchAnilist(fileManager FileManagerInterface, configs *files.Config, stan
 	var lastErr error
 	for _, username := range configs.AnilistUsernames {
 		// Fetch customLists first via a minimal query (before the complex query that may null it out).
-		clMap := anilist.GetCustomListsMap(username, configs.DownloadStatuses)
+		clMap := anilist.GetCustomListsMap(username, configs.DownloadStatuses, anilist.PriorityCritical)
 
 		resp, err := anilist.GetAllCurrentAnime(username, configs.DownloadStatuses)
 		if err != nil {

@@ -1521,9 +1521,10 @@ na caminhada (ver #9).
 
 ### 72. O orçamento da AniList se mede pelos headers da resposta, não por um contador nosso
 
-**Location:** `src/internal/anilist/anilist.go` — `sendAnilistRequest`; `health.go` — `retryAfter`,
-classificação `HealthRateLimited`. Complementa a #65, que mede **quem** gasta; aqui está **como
-saber quanto sobrou**.
+**Location:** `src/internal/anilist/anilist.go` — `sendAnilistRequest`; `health.go` — `Priority`,
+`ErrBudgetLow`, `recordBudget`, `budgetAllows`, `retryAfter`, classificação `HealthRateLimited`.
+Fixado por `budget_test.go`. Complementa a #65, que mede **quem** gasta; aqui está **como saber
+quanto sobrou**.
 
 **O que parece:** para não tomar 429, o caminho natural é um limiter client-side
 (`golang.org/x/time/rate`) ou uma fila que segura requisição quando o consumo estimado passa do
@@ -1583,10 +1584,37 @@ descobre que o balde resetou. A leitura precisa de validade — passados 60s da 
 tratar o orçamento como cheio de novo. É para isso que a medição do reset serve, e é o que impede o
 gate de se auto-travar.
 
+**Como ficou implementado** (29/ago/2026). `recordBudget` guarda `X-RateLimit-Remaining` e o
+instante num `atomic.Pointer`, logo depois do `httpDo` — antes de qualquer ramo de status, para o
+404 e o 400 contarem. `budgetAllows` é o gate, no topo de `sendAnilistRequest`: crítico passa
+sempre; descartável passa se a leitura estiver vencida (60s) ou se `remaining >= budgetFloor`
+(10 de 30). A recusa é `ErrBudgetLow` na hora — nunca espera.
+
+`Priority` é **parâmetro obrigatório** de `sendAnilistRequest` e sobe até as quatro funções
+públicas de chamador misto (`GetCustomListsMap`, `GetAnimeInfo`, `GetMediaByID`, `GetMediaByIDs`),
+que o daemon e o frontend chamam com criticidades opostas. As demais fixam a sua no corpo. Não há
+default implícito, e essa é a feature: uma query nova não compila sem alguém decidir. A alternativa
+descartada era um wrapper com `sendAnilistRequest` virando "prioridade normal" — diff menor, mas
+cria exatamente a classe de config inerte da #69.
+
+**A linha divisória não é "daemon vs. frontend", é "se repete sozinho vs. alguém está esperando".**
+Descartável é o tráfego recorrente com fallback: o poll de `/animes` (`GetFrontendAnimeList`,
+`GetCustomListsMap`, `GetAnimeInfoByIDs`, e o `GetMediaByIDs` de `appendStandaloneEntries` e
+`refreshStandaloneOrphans`) e a busca por tecla digitada (`SearchMedia`). Crítico é o passe do
+daemon **e** toda ação de um clique — abrir a tela de detalhe, adicionar um avulso, baixar um
+episódio à mão: são requisições raras e caras de recusar, e sacrificá-las não devolve orçamento
+nenhum. `GetFrontendAnimeList` recusado serve o cache **vencido** (`ttlCache.getStale`) em vez de
+derrubar o poll; os outros descartáveis já tratam falha parcial como dado ausente.
+
+Nenhum chamador de warm-up existe ainda — ele entra com o F6.
+
 **Don't "fix" by:** adicionar `x/time/rate` ou qualquer token bucket client-side (adivinha em vez de
 medir, e não contabiliza os erros dos outros consumidores); contar só respostas 200; depender de
 `X-RateLimit-Reset`; bloquear a goroutine esperando o balde encher dentro de um handler HTTP;
-recusar *todos* os chamadores quando o orçamento está baixo, sem a validade de 60s.
+recusar *todos* os chamadores quando o orçamento está baixo, sem a validade de 60s; dar um default
+à `Priority` (wrapper, valor zero "seguro", ou derivar da query — `GetAllCurrentAnime` e
+`GetFrontendAnimeList` podem ser a mesma query com criticidades opostas); usar `getStale` fora do
+fallback do gate.
 
 ---
 

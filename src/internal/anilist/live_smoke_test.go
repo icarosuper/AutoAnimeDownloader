@@ -14,7 +14,7 @@ func TestLive_EpisodeList(t *testing.T) {
 	}
 	// 21 = ONE PIECE (agenda clipada), 16498 = Shingeki no Kyojin e 20 = NARUTO (agenda vazia).
 	for _, id := range []int{21, 16498, 20} {
-		ml, err := GetMediaByID(id)
+		ml, err := GetMediaByID(id, PriorityCritical)
 		if err != nil || ml == nil {
 			t.Fatalf("media %d: %v", id, err)
 		}

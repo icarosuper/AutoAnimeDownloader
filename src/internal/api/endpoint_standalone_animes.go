@@ -74,7 +74,7 @@ func handleStandaloneAnimeAdd(server *Server) http.HandlerFunc {
 
 		// E tambem o que valida que o id existe e e ANIME, e de onde sai o total de episodios
 		// que blockReason precisa.
-		media, err := anilist.GetMediaByID(body.MediaID)
+		media, err := anilist.GetMediaByID(body.MediaID, anilist.PriorityCritical)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("media_id", body.MediaID).Msg("Failed to fetch media from AniList")
 			JSONInternalError(w, err)

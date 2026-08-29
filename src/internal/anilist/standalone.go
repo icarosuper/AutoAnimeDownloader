@@ -8,9 +8,15 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// mediaByIDCache guarda as leituras por media id de animes avulsos. GET /api/v1/animes sofre
-// poll de 30s por aba aberta e passa a chamar GetMediaByID uma vez por avulso — sem cache
-// isso vira o mesmo caminho para o 429 que frontendListCache fechou (ver decisions.md #57).
+// mediaByIDCache guarda as leituras por media id de animes avulsos, e e compartilhado por
+// GetMediaByID e GetMediaByIDs — chaveado POR ID, nunca por lote, senao um avulso novo
+// invalidaria a leitura de todos os outros.
+//
+// O caminho que ele protege e o de GET /api/v1/animes, que sofre poll de 30s por aba aberta e
+// le a lista inteira de avulsos a cada vez. Desde o lote (decisions.md #65 e #72) isso e UMA
+// query por 50 ids, e nao mais uma por avulso; o cache continua valendo porque com ele o poll
+// so vai a rede quando algum id vence — o mesmo motivo pelo qual frontendListCache existe
+// (decisions.md #57).
 var mediaByIDCache = newTTLCache[*MediaList]()
 
 const mediaByIDTTL = 60 * time.Second
@@ -75,7 +81,7 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 		} `json:"data"`
 	}
 
-	resp, err := sendAnilistRequest[response](query, RequestVariables{"q": term})
+	resp, err := sendAnilistRequest[response](query, RequestVariables{"q": term}, PriorityDisposable)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +148,7 @@ const mediaByIDFields = `
 // de avulsos; este aqui fica para o lookup de um id so.
 //
 // (nil, nil) quando a AniList nao conhece o id.
-func GetMediaByID(mediaID int) (*MediaList, error) {
+func GetMediaByID(mediaID int, priority Priority) (*MediaList, error) {
 	key := strconv.Itoa(mediaID)
 	if cached, ok := mediaByIDCache.get(key); ok {
 		return copyMediaList(cached), nil
@@ -160,7 +166,7 @@ func GetMediaByID(mediaID int) (*MediaList, error) {
 		} `json:"data"`
 	}
 
-	resp, err := sendAnilistRequest[response](query, RequestVariables{"id": mediaID})
+	resp, err := sendAnilistRequest[response](query, RequestVariables{"id": mediaID}, priority)
 	if errors.Is(err, ErrNotFound) {
 		mediaByIDCache.set(key, nil, mediaByIDTTL)
 		return nil, nil
@@ -193,7 +199,7 @@ func GetMediaByID(mediaID int) (*MediaList, error) {
 //   - id ausente do mapa: nao deu para buscar (rede, 429). So esse caso vem com erro.
 //
 // O erro devolvido NAO invalida o mapa: as paginas que passaram antes dele ja estao la.
-func GetMediaByIDs(ids []int) (map[int]*MediaList, error) {
+func GetMediaByIDs(ids []int, priority Priority) (map[int]*MediaList, error) {
 	// O cache continua por id, e nao por lote: chaveado pelo lote, um avulso novo invalidaria
 	// a leitura de todos os outros.
 	found := make(map[int]*MediaList, len(ids))
@@ -230,7 +236,7 @@ func GetMediaByIDs(ids []int) (map[int]*MediaList, error) {
 	for start := 0; start < len(missing); start += anilistMaxPerPage {
 		chunk := missing[start:min(start+anilistMaxPerPage, len(missing))]
 
-		resp, err := sendAnilistRequest[response](query, RequestVariables{"ids": chunk})
+		resp, err := sendAnilistRequest[response](query, RequestVariables{"ids": chunk}, priority)
 		if err != nil {
 			return found, err
 		}
