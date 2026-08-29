@@ -554,7 +554,14 @@ func pickBatches(results []nyaa.TorrentResult, axis packAxis, firstPending, wind
 }
 
 // coveringBatch devolve o primeiro pack da lista que cobre o episodio E a faixa dele ja convertida
-// para a numeracao local da entrada. Pack sem faixa no nome (EndEpisode == 0) conta como completo.
+// para a numeracao local da entrada.
+//
+// Pack sem faixa no nome (EndEpisode == 0) sai daqui SEM passar pelo eixo: nao ha numero para
+// converter, entao ele conta como completo. E aqui que o filtro de part relaxado (nyaa.go) fica
+// sem rede: pack sem faixa e sem marcador passa la e passa aqui, seja ele da season inteira ou so
+// da Part 1. Aceitar e a escolha medida (sources.md, "Granularidade e numeracao dos packs": pack
+// sem part e o formato normal), e o desempate que falta e a lista de arquivos da pagina de
+// detalhe — teto conhecido da decisions.md #79, item no docs/TODO.md.
 func coveringBatch(results []nyaa.TorrentResult, axis packAxis, episode int) (*nyaa.TorrentResult, nyaa.BatchInfo) {
 	for i := range results {
 		info := nyaa.ExtractBatchInfo(results[i].Name)

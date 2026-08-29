@@ -1968,6 +1968,15 @@ queremos a 2). Sem marcador, o pack passa e quem decide é a **cobertura da faix
 episódio mantém o filtro duro: ali o marcador é o único jeito de distinguir o "- 05" de uma part do
 "- 05" da outra.
 
+**Teto conhecido — pack sem marcador de part E sem faixa no nome não é decidido por ninguém.**
+`coveringBatch` devolve esse pack sem consultar o eixo (não há número para converter) e ele vale
+como completo, então "quem decide é a cobertura" vale para o pack **com** faixa, não para esse.
+Um `[Group] Anime S4 [Batch]` que na prática é só a Part 1 passa igual ao pack da season inteira —
+antes desta decisão ele era rejeitado no scraper, e rejeitá-lo era pior: zerava os packs de toda
+entrada "Part N", que é o problema 1 acima. Aceitar é a escolha medida; o desempate que falta é a
+**lista de arquivos da página de detalhe do Nyaa** (item do `docs/TODO.md`), que diz quantos
+arquivos o pack tem e com que numeração. Enquanto ela não existir, a ambiguidade fica.
+
 **`packAxis` são três hipóteses e um desempate.** Como não dá para ler a convenção do nome, o
 daemon testa quanto somar ao número local para chegar à régua do grupo: **0** (relativa à entrada),
 **`ComputeEpisodeOffset`** (contínua pela season — o total do prequel imediato) e

@@ -680,8 +680,14 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			// part nao e pack errado — e o formato normal de lancamento, porque o pack e da
 			// season inteira e a AniList e que quebra a season em cours (sources.md,
 			// "Granularidade e numeracao dos packs"). Exigir o marcador zerava os packs de
-			// toda entrada "Part N". Quem decide se o pack serve e a cobertura da faixa, no
-			// daemon (packAxis).
+			// toda entrada "Part N".
+			//
+			// Dali para a frente quem decide e a cobertura da faixa, no daemon (packAxis) —
+			// menos para o pack que TAMBEM nao traz faixa no nome. Esse nao tem numero nenhum
+			// para conferir e vale como pack completo (daemon.coveringBatch), entao nada
+			// distingue o pack da season inteira do pack so da Part 1: os dois passam. E o
+			// teto conhecido da #79, e a lista de arquivos da pagina de detalhe do Nyaa e o
+			// unico desempate que resolveria (docs/TODO.md).
 			if requestedPart != nil && part != nil && *part != *requestedPart {
 				return
 			}
