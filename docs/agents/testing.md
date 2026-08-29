@@ -17,7 +17,7 @@ docker compose -f docker/docker-compose.test.yml up --build \
 
 **Always run `go test ./...` after any code change.**
 
-`go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions.md). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
+`go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions.md#23-integration-tests-skip-unless-daemon_url-is-set-explicitly). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
 
 Mesmo gate, mesma razão, para o smoke contra a AniList de verdade:
 
@@ -25,7 +25,7 @@ Mesmo gate, mesma razão, para o smoke contra a AniList de verdade:
 AAD_LIVE_ANILIST=1 go test ./src/internal/anilist/ -run Live -v
 ```
 
-`live_smoke_test.go` mede o que nenhum mock prova: o tamanho da JANELA de `airingSchedule` que a AniList devolve (One Piece começa no episódio 1123; anime antigo volta com agenda vazia) — a premissa de `EpisodeList`, ver [Decisions #52](decisions.md). Rode-o quando mexer em `anilist/episodes.go`.
+`live_smoke_test.go` mede o que nenhum mock prova: o tamanho da JANELA de `airingSchedule` que a AniList devolve (One Piece começa no episódio 1123; anime antigo volta com agenda vazia) — a premissa de `EpisodeList`, ver [Decisions #52](decisions.md#52-a-lista-de-episódios-é-sintetizada-e-a-chave-de-um-episódio-é-anime-número). Rode-o quando mexer em `anilist/episodes.go`.
 
 ## Test Structure
 
@@ -86,7 +86,7 @@ backend.FailTorrent("abcd...hash", err)              // fires onFailed
 
 `FakeBackend.Remove` on an unknown hash is a **no-op returning `nil`**, deliberately mirroring rain's `RemoveTorrent` (which returns `(nil, nil)` for an id absent from its map). Don't assert an error there — the fake used to return one, and since `removeEpisodesAndLinks` and `HandleTorrentFailure` both log a `Warn` when `Remove` fails, that made tests observe warnings production never emits.
 
-Library hardlinking is likewise tested through the `files.Librarian` interface (`NewLibrarian`) backed by a `MockFileSystem`, so `Organize`/`ProbePaths` can be exercised without touching a real disk. Two cases need a **real** disk instead (`t.TempDir()` + `OSFileSystem`), because they turn on file identity and link counts that an in-memory fake cannot model: `Organize`'s same-inode vs. different-inode branch (decision 28), and "deleting an episode removes both links" (`TestRemoveEpisodesAndLinks_RealHardlinks`).
+Library hardlinking is likewise tested through the `files.Librarian` interface (`NewLibrarian`) backed by a `MockFileSystem`, so `Organize`/`ProbePath` can be exercised without touching a real disk. Two cases need a **real** disk instead (`t.TempDir()` + `OSFileSystem`), because they turn on file identity and link counts that an in-memory fake cannot model: `Organize`'s same-inode vs. different-inode branch (decision 28), and "deleting an episode removes both links" (`TestRemoveEpisodesAndLinks_RealHardlinks`).
 
 ### 3. In-Memory FileSystem
 

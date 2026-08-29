@@ -150,8 +150,8 @@ Search [nyaa.si](https://nyaa.si) manually with each variant to find which one (
 
 If the Nyaa URL returns results but none reach `attemptDownloadWithRetries`, results are being dropped somewhere in the scraping/filtering pipeline. Trace through `nyaa/nyaa.go`:
 
-**6a. Ignore patterns** (`reIgnorePatterns` in `nyaa_regex.go`):
-Dub, raw, hardcoded, HC, re-encode are dropped. Check if the available torrents on Nyaa for this anime are all in one of these categories.
+**6a. Ignore list** (`ShouldIgnore` in `nyaa/priorities.go`):
+Any substring in `priorities.ignore_list` discards the release, case-insensitive — by default `[dub]`, `[raw]`, `[hardcoded]`, `[hc]`, `re-encode`. Check if the torrents Nyaa has for this anime are all in one of those categories. The list is **user-editable** (Priorities screen), so read the running `config.json`, not the defaults, before concluding a release should have passed.
 
 **6b. Episode number extraction** (`reEpisodePatterns`):
 For single-episode searches, a torrent is only kept if its extracted episode number matches the target. Check if the torrent names on Nyaa use an unusual pattern not covered by `reEpisodePatterns`.
@@ -160,7 +160,7 @@ For single-episode searches, a torrent is only kept if its extracted episode num
 If `ExtractAnimeSeasonPart` returns a season or part, results are filtered to match. Check if the season/part extracted from the title is correct. A wrong extraction causes all results to be dropped. Watch for sequels titled with only a roman numeral (e.g. "... II") — `extractSeason` (`nyaa.go`) has a roman-numeral fallback (`reRomanSeason` in `nyaa_regex.go`, decision 20) precisely because fansub releases for these often carry no other season marker; if a new roman-numeral case still fails, check whether the numeral is spelled differently in the torrent name than in the AniList title.
 
 **6d. Batch detection** (`reBatchPatterns`):
-Single-episode searches drop batch torrents. If Nyaa only has a pack available, the single-episode search will return nothing (correct behavior — the pack search/selection path, run earlier over the same anime search, should have caught it first; see [decisions.md #59-61](decisions.md)).
+Single-episode searches drop batch torrents. If Nyaa only has a pack available, the single-episode search will return nothing (correct behavior — the pack search/selection path, run earlier over the same anime search, should have caught it first; see [decisions.md #59-61](decisions.md#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado)).
 
 **6e. Title match / Jaccard filtering** (`titleMatchesQuery` in `nyaa_match.go`):
 This check runs before episode/season/batch filters and rejects torrents in two ways:

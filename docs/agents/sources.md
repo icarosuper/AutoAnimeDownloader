@@ -27,7 +27,7 @@ não uma refatoração.
 - **`s=seeders&o=desc` é péssimo para pack de série longa.** A ordenação enterra pack de 40-100
   seeders sob centenas de episódios semanais com 200-1000 seeders. Medido em One Piece: o pack
   parcial mais útil (61 GiB) só aparece na **página 3**. Foi a causa do bug de "One Piece nunca
-  baixa" — ver `decisions.md` #59.
+  baixa" — ver `decisions.md` #80.
 - **Tem RSS** (`?page=rss`), com tags próprias de seeders/leechers/infohash/size — mais barato de
   parsear que HTML e imune a mudança de layout. **Mas não substitui o HTML** (medido 16/ago):
 
@@ -176,7 +176,7 @@ Mapeia quase 1:1 em `nyaa.TorrentResult` — some o goquery e some a fragilidade
 - **Não ordena por seeders.** `order=seeders-d` é aceito e **silenciosamente ignorado** (volta ao
   default, timestamp desc). Só `order=size-d` funciona. Com 75 itens/página, varrer 5 páginas viria
   a ser "os 375 uploads mais recentes que citam o nome" — o pior caso possível para anime antigo, e
-  reintroduziria o bug de `decisions.md` #59 numa forma pior. (`page=N` **funciona**, ao contrário
+  reintroduziria o bug de `decisions.md` #80 numa forma pior. (`page=N` **funciona**, ao contrário
   do RSS do Nyaa.)
 - **O campo `seeders` é cache velho.** Em `?q=cowboy+bebop`, a idade de `tracker_updated` teve
   mediana de **22 dias** e máximo de **95 dias**. Comparação dos topos no mesmo instante:
@@ -237,7 +237,7 @@ frescor de seeders.
 
 ## Ordem recomendada
 
-1. **Corrigir a busca de pack no Nyaa** — feito, ver `decisions.md` #59. Era bug, não falta de
+1. **Corrigir a busca de pack no Nyaa** — feito, ver `decisions.md` #80. Era bug, não falta de
    fonte.
 2. **Não trocar o Nyaa por nada agora.** Nem RSS (perde ordenação e paginação) nem AnimeTosho
    (perde ordenação, seeders em cache de ~22 dias). O ganho seria de parsing; o custo é a busca.

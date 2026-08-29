@@ -43,7 +43,7 @@ start. They are not read by the Go code, and they do nothing after the file exis
 > The generated file carries **7 of the ~25 fields** in `Config`. That is safe on creation —
 > `LoadConfigs` unmarshals over `getDefaultConfig()`, so the absent fields keep their defaults —
 > but `FORCE_CONFIG_UPDATE` rewrites the *whole* file, discarding everything the user set
-> through the UI or CLI. See `docs/TODO-competitive.md`.
+> through the UI or CLI.
 
 ## OS / Path
 

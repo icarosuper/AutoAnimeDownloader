@@ -2,6 +2,94 @@
 
 Patterns that look wrong but are intentional. Read before "fixing" anything.
 
+## Índice
+
+As entradas **não estão em ordem numérica** no arquivo — use este índice, ou `grep -n "^### 59\."`.
+Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo inteiro.
+
+- [**#1** — Var-swap mocking for anilist and nyaa HTTP clients](#1-var-swap-mocking-for-anilist-and-nyaa-http-clients)
+- [**#2** — FileManagerInterface declared twice](#2-filemanagerinterface-declared-twice)
+- [**#3** — JSONL format for episodes.json with full-file rewrite on save](#3-jsonl-format-for-episodesjson-with-full-file-rewrite-on-save)
+- [**#4** — cancelPtr / donePtr pointer mutation for runtime interval updates](#4-cancelptr--doneptr-pointer-mutation-for-runtime-interval-updates)
+- [**#5** — State notifier called outside the mutex lock](#5-state-notifier-called-outside-the-mutex-lock)
+- [**#6** — Non-blocking send on WebSocket broadcast channel](#6-non-blocking-send-on-websocket-broadcast-channel)
+- [**#7** — Never-closing channel as headless tray fallback](#7-never-closing-channel-as-headless-tray-fallback)
+- [**#8** — Hard part filter — nil-part torrents rejected when requestedPart is set](#8-hard-part-filter--nil-part-torrents-rejected-when-requestedpart-is-set)
+- [**#9** — PREQUEL offset gate requires part ≥ 2](#9-prequel-offset-gate-requires-part--2)
+- [**#10** — "Cour N" treated as Part N, not as a distinct concept](#10-cour-n-treated-as-part-n-not-as-a-distinct-concept)
+- [**#11** — GetCustomListsMap — separate lightweight query + cache for customLists](#11-getcustomlistsmap--separate-lightweight-query--cache-for-customlists)
+- [**#12** — Build logic lives in scripts/build.sh, not in Makefile targets](#12-build-logic-lives-in-scriptsbuildsh-not-in-makefile-targets)
+- [**#13** — GetFrontendAnimeList — separate lighter Anilist query for the API endpoint](#13-getfrontendanimelist--separate-lighter-anilist-query-for-the-api-endpoint)
+- [**#14** — nyaaSearcher — dependency injection for Nyaa search in processAnimeEpisodes](#14-nyaasearcher--dependency-injection-for-nyaa-search-in-processanimeepisodes)
+- [**#15** — atomic.Pointer[Priorities] package-level global in nyaa](#15-atomicpointerpriorities-package-level-global-in-nyaa)
+- [**#16** — anime_id é o AniList **media** ID (foi o MediaList entry ID até a migração)](#16-anime_id-é-o-anilist-media-id-foi-o-medialist-entry-id-até-a-migração)
+- [**#17** — --debug-anime early-exit branch in cmd/daemon/main.go](#17---debug-anime-early-exit-branch-in-cmddaemonmaingo)
+- [**#18** — extractTitleTokens truncates the torrent name at the first episode/season marker before tokenizing](#18-extracttitletokens-truncates-the-torrent-name-at-the-first-episodeseason-marker-before-tokenizing)
+- [**#19** — Disk space is read via OS stat on CompletedAnimePath](#19-disk-space-is-read-via-os-stat-on-completedanimepath)
+- [**#20** — extractSeason has a roman-numeral fallback kept out of reSeasonPatterns](#20-extractseason-has-a-roman-numeral-fallback-kept-out-of-reseasonpatterns)
+- [**#21** — Embedded torrent client + hardlink-into-library model (replaces qBittorrent)](#21-embedded-torrent-client--hardlink-into-library-model-replaces-qbittorrent)
+- [**#22** — Organize everything to completed_anime_path, and the batch-hygiene deletion limitation](#22-organize-everything-to-completed_anime_path-and-the-batch-hygiene-deletion-limitation)
+- [**#23** — Integration tests skip unless DAEMON_URL is set explicitly](#23-integration-tests-skip-unless-daemon_url-is-set-explicitly)
+- [**#24** — A failed torrent is dropped from the session and re-added by the next pass — no blacklist](#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist)
+- [**#25** — Seeding is created at startup and is independent of the daemon loop](#25-seeding-is-created-at-startup-and-is-independent-of-the-daemon-loop)
+- [**#26** — The hardlink probe runs on every verification pass, not just on config save](#26-the-hardlink-probe-runs-on-every-verification-pass-not-just-on-config-save)
+- [**#27** — saveEpisodesToFile merges by hand — it uses neither SaveEpisodesToFile nor a bare UpsertEpisodes](#27-saveepisodestofile-merges-by-hand--it-uses-neither-saveepisodestofile-nor-a-bare-upsertepisodes)
+- [**#28** — Organize replaces a library file that has the same name but different bytes](#28-organize-replaces-a-library-file-that-has-the-same-name-but-different-bytes)
+- [**#29** — Startup reconciliation keys off empty LibraryPaths, not off the hardlink missing from disk](#29-startup-reconciliation-keys-off-empty-librarypaths-not-off-the-hardlink-missing-from-disk)
+- [**#30** — Progress data comes from one Stats() per torrent, pulled only while a screen is open](#30-progress-data-comes-from-one-stats-per-torrent-pulled-only-while-a-screen-is-open)
+- [**#31** — Diretório de download derivado da biblioteca](#31-diretório-de-download-derivado-da-biblioteca)
+- [**#32** — DELETE /torrents/{hash}: default é apagar + bloquear, keep_data é binário, não há endpoint de lote](#32-delete-torrentshash-default-é-apagar--bloquear-keep_data-é-binário-não-há-endpoint-de-lote)
+- [**#33** — daisyUI fica travado na v4 enquanto o Tailwind for v3 (e o inline de progresso não pode olhar is_downloaded)](#33-daisyui-fica-travado-na-v4-enquanto-o-tailwind-for-v3-e-o-inline-de-progresso-não-pode-olhar-is_downloaded)
+- [**#34** — Troca da pasta de download é detectada por marcador duplo, e derruba a sessão da rain](#34-troca-da-pasta-de-download-é-detectada-por-marcador-duplo-e-derruba-a-sessão-da-rain)
+- [**#35** — os.SameFile no Windows resolve o arquivo tarde, então FileInfo não é snapshot em teste](#35-ossamefile-no-windows-resolve-o-arquivo-tarde-então-fileinfo-não-é-snapshot-em-teste)
+- [**#36** — AppShell escolhe rail vs tab bar em JS (matchMedia), não com hidden md:flex/md:hidden](#36-appshell-escolhe-rail-vs-tab-bar-em-js-matchmedia-não-com-hidden-mdflexmdhidden)
+- [**#37** — Tabelas de largura fixa só a partir de lg, e min-w-0 obrigatório em item de grid que contém faixa rolável](#37-tabelas-de-largura-fixa-só-a-partir-de-lg-e-min-w-0-obrigatório-em-item-de-grid-que-contém-faixa-rolável)
+- [**#38** — Em cabeçalho flex-wrap, o item flex-1 leva min-w-[240px] — e não min-w-0](#38-em-cabeçalho-flex-wrap-o-item-flex-1-leva-min-w-240px--e-não-min-w-0)
+- [**#39** — Faixa de escolhas FINITA quebra linha (flex-wrap); faixa de conteúdo ILIMITADO rola](#39-faixa-de-escolhas-finita-quebra-linha-flex-wrap-faixa-de-conteúdo-ilimitado-rola)
+- [**#40** — O z-30 do NavRail não é redundante com o z-50 do painel do MoreMenu](#40-o-z-30-do-navrail-não-é-redundante-com-o-z-50-do-painel-do-moremenu)
+- [**#41** — A fila de downloads contém TODOS os incompletos, é persistida, e queued é o único slug que a rain não produz](#41-a-fila-de-downloads-contém-todos-os-incompletos-é-persistida-e-queued-é-o-único-slug-que-a-rain-não-produz)
+- [**#42** — Todo estado persistido do FileManager grava com temp+rename sob m.mu, e fetchAniListEntries devolve nil de propósito](#42-todo-estado-persistido-do-filemanager-grava-com-temprename-sob-mmu-e-fetchanilistentries-devolve-nil-de-propósito)
+- [**#43** — A identidade de um anime é Media.Id; status é uma pergunta POR CONTA (download = OR, deleção = AND)](#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)
+- [**#44** — O tvshow.nfo é escrito DEPOIS dos hardlinks, nunca sobrescreve, e falhar nele não falha o organize](#44-o-tvshownfo-é-escrito-depois-dos-hardlinks-nunca-sobrescreve-e-falhar-nele-não-falha-o-organize)
+- [**#45** — Uma pasta de biblioteca por ENTRADA da AniList — o marcador de season fica no nome](#45-uma-pasta-de-biblioteca-por-entrada-da-anilist--o-marcador-de-season-fica-no-nome)
+- [**#46** — GetFrontendAnimeList é cacheado por 60s — o poll de /api/v1/animes é o que estoura a AniList](#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)
+- [**#47** — Notificações são agrupadas por janela, e o body é escapado só quando o preset é JSON](#47-notificações-são-agrupadas-por-janela-e-o-body-é-escapado-só-quando-o-preset-é-json)
+- [**#48** — max_episodes_per_anime nunca limitou batch — a regra agora vive na janela de packs, não num teto de contagem](#48-max_episodes_per_anime-nunca-limitou-batch--a-regra-agora-vive-na-janela-de-packs-não-num-teto-de-contagem)
+- [**#49** — Anime avulso: "acompanhado pela lista" é o snapshot que o daemon PROCESSA, e DownloadStandaloneAnime nunca chama handleSavedEpisodes](#49-anime-avulso-acompanhado-pela-lista-é-o-snapshot-que-o-daemon-processa-e-downloadstandaloneanime-nunca-chama-handlesavedepisodes)
+- [**#50** — Busca de avulso: o filtro de não lançados é server-side e por concatenação, e o card bloqueado vira link em vez de beco sem saída](#50-busca-de-avulso-o-filtro-de-não-lançados-é-server-side-e-por-concatenação-e-o-card-bloqueado-vira-link-em-vez-de-beco-sem-saída)
+- [**#51** — Episódio aceita 4 dígitos, exceto entre colchetes](#51-episódio-aceita-4-dígitos-exceto-entre-colchetes)
+- [**#52** — A lista de episódios é sintetizada, e a chave de um episódio é (anime, número)](#52-a-lista-de-episódios-é-sintetizada-e-a-chave-de-um-episódio-é-anime-número)
+- [**#53** — Busca de episódio descarta batch e filme, e usa hasMovieMarker — não isMovie](#53-busca-de-episódio-descarta-batch-e-filme-e-usa-hasmoviemarker--não-ismovie)
+- [**#54** — Piso de seeders: seeders ilegível é descartado, tamanho ilegível passa](#54-piso-de-seeders-seeders-ilegível-é-descartado-tamanho-ilegível-passa)
+- [**#55** — health compara FAIXA de seeders, e vem antes de fansub](#55-health-compara-faixa-de-seeders-e-vem-antes-de-fansub)
+- [**#56** — Série longa busca o episódio também com zero-padding, e o gate é LastAiredEpisode](#56-série-longa-busca-o-episódio-também-com-zero-padding-e-o-gate-é-lastairedepisode)
+- [**#57** — Paginação adaptativa: sequencial, com piso de candidatos, sem orçamento por anime](#57-paginação-adaptativa-sequencial-com-piso-de-candidatos-sem-orçamento-por-anime)
+- [**#58** — RunAnimeDebug espelha processAnimeEpisodes: enumeração, resolução de pack e fallback single](#58-runanimedebug-espelha-processanimeepisodes-enumeração-resolução-de-pack-e-fallback-single)
+- [**#59** — Elegibilidade a batch deixou de ser metadado e virou filtro de resultado](#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado)
+- [**#60** — A janela de packs cobre a partir do primeiro pendente, e o corte é sempre de prefixo](#60-a-janela-de-packs-cobre-a-partir-do-primeiro-pendente-e-o-corte-é-sempre-de-prefixo)
+- [**#61** — Episódio de pack é imune à poda por limite E ao keep-set de assistidos](#61-episódio-de-pack-é-imune-à-poda-por-limite-e-ao-keep-set-de-assistidos)
+- [**#62** — Progresso de avulso mora em AnimeSettings e é injetado no MediaList sintético, não vira caminho paralelo](#62-progresso-de-avulso-mora-em-animesettings-e-é-injetado-no-medialist-sintético-não-vira-caminho-paralelo)
+- [**#63** — A dispensa do card de primeiros passos mora no localStorage, não no config.json](#63-a-dispensa-do-card-de-primeiros-passos-mora-no-localstorage-não-no-configjson)
+- [**#64** — Os passos do card de primeiros passos são marcados à mão, não derivados do estado do daemon](#64-os-passos-do-card-de-primeiros-passos-são-marcados-à-mão-não-derivados-do-estado-do-daemon)
+- [**#65** — O orçamento da AniList é gasto pelo refresh de órfãos, não pelo passe do daemon — e o campo errors de um 200 não é lido](#65-o-orçamento-da-anilist-é-gasto-pelo-refresh-de-órfãos-não-pelo-passe-do-daemon--e-o-campo-errors-de-um-200-não-é-lido)
+- [**#66** — Banner é estado degradado; toast é falha de ação — e o banner tem três fontes com precedência, não três banners](#66-banner-é-estado-degradado-toast-é-falha-de-ação--e-o-banner-tem-três-fontes-com-precedência-não-três-banners)
+- [**#67** — Passe de verificação é um por vez, e o concorrente é descartado — não enfileirado](#67-passe-de-verificação-é-um-por-vez-e-o-concorrente-é-descartado--não-enfileirado)
+- [**#68** — Numeração do pack: o offset é adivinhado dos próprios arquivos, e a colisão de basename usa o caminho relativo](#68-numeração-do-pack-o-offset-é-adivinhado-dos-próprios-arquivos-e-a-colisão-de-basename-usa-o-caminho-relativo)
+- [**#69** — codec passou a valer para episódio, e nome sem tag de codec empata em vez de perder](#69-codec-passou-a-valer-para-episódio-e-nome-sem-tag-de-codec-empata-em-vez-de-perder)
+- [**#70** — Resolução canonicaliza no extrator, e os presets de codec são reordenação no frontend](#70-resolução-canonicaliza-no-extrator-e-os-presets-de-codec-são-reordenação-no-frontend)
+- [**#71** — A AniList não tem id de franquia: a cadeia de PREQUEL é a única fonte, e busca por nome é armadilha](#71-a-anilist-não-tem-id-de-franquia-a-cadeia-de-prequel-é-a-única-fonte-e-busca-por-nome-é-armadilha)
+- [**#72** — O orçamento da AniList se mede pelos headers da resposta, não por um contador nosso](#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso)
+- [**#73** — O frontend não busca direto na AniList, mesmo podendo](#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo)
+- [**#74** — A unidade do guard de exclusão de pack é o conteúdo do torrent, não a lista de registros](#74-a-unidade-do-guard-de-exclusão-de-pack-é-o-conteúdo-do-torrent-não-a-lista-de-registros)
+- [**#75** — O corte no marcador e a primeira tentativa do match de titulo, nao a unica](#75-o-corte-no-marcador-e-a-primeira-tentativa-do-match-de-titulo-nao-a-unica)
+- [**#76** — searchNyaaWithVariants para na primeira variante que devolve qualquer resultado — medido, e fica assim](#76-searchnyaawithvariants-para-na-primeira-variante-que-devolve-qualquer-resultado--medido-e-fica-assim)
+- [**#77** — O eixo absoluto por série é um BFS de duas em duas gerações, e o nível cortado volta para a fila](#77-o-eixo-absoluto-por-série-é-um-bfs-de-duas-em-duas-gerações-e-o-nível-cortado-volta-para-a-fila)
+- [**#78** — A unidade de posse de um torrent é a cobertura no eixo absoluto, não a chave (anime_id, episódio)](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)
+- [**#79** — A escolha de pack pergunta "cobre a janela?", não "é da part N?" — e a numeração do pack é palpite entre três hipóteses](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)
+- [**#80** — O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon](#80-o-teto-de-tamanho-de-pack-é-aplicado-duas-vezes-na-busca-do-nyaa-e-no-filtro-do-daemon)
+- [**#81** — A precedência dos códigos do relatório é cascata, não conjunto](#81-a-precedência-dos-códigos-do-relatório-é-cascata-não-conjunto)
+- [**#82** — SetLastCheckError limpa o relatório da última verificação](#82-setlastcheckerror-limpa-o-relatório-da-última-verificação)
+
 ---
 
 ### 1. Var-swap mocking for anilist and nyaa HTTP clients
@@ -26,7 +114,7 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 ### 3. JSONL format for `episodes.json` with full-file rewrite on save
 
-**What it looks like:** The file is JSONL (one JSON object per line) but `saveEpisodesToFileJSON` rewrites the entire file, not just appends new lines.
+**What it looks like:** The file is JSONL (one JSON object per line) but `saveEpisodesToFile` rewrites the entire file, not just appends new lines.
 
 **Why it's right:** JSONL allows line-by-line parsing and provides backward compatibility with the old plain-text episode format (fallback parser in `parser.go`). Full rewrite on save is intentional: it avoids partial-write corruption — if a true append fails mid-write, the file is left in a mixed state. Read-modify-write with `WriteFile` is atomic at the OS level on the platforms we target.
 
@@ -343,7 +431,7 @@ Ordering detail: `ensureStartupSession` runs **after** `jobQueue.Start()`. Creat
 
 ### 26. The hardlink probe runs on every verification pass, not just on config save
 
-**Location:** `internal/daemon/verification.go` — the `librarian.ProbePaths` gate right after `isConfigComplete`; also `internal/api/endpoint_config.go` (`PUT /config`).
+**Location:** `internal/daemon/verification.go` — the `librarian.ProbePath` gate right after `isConfigComplete`; also `internal/api/endpoint_config.go` (`PUT /config`).
 
 **What it looks like:** Every pass writes a probe file to `save_path`, hardlinks it into `completed_anime_path` and deletes both — real disk I/O on a hot loop, duplicating a validation the config endpoint already performs.
 
@@ -838,7 +926,7 @@ Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos 
 
 **Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo`/`extractBatchInfo` guarda só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080. Outras faixas fantasma (data tipo "2020-2021", bitrate) só entrariam com um sanitizador de tokens, que não se paga hoje: uma faixa desconhecida cai em `EndEpisode == 0`, que todo chamador já trata como pack completo — o mesmo fallback seguro, não uma faixa errada. Upgrade path: se um novo padrão de faixa fantasma aparecer medido, generalizar o sanitizador em vez de empilhar mais um caso especial no `if isResolution`.
 
-**Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. **RESOLVIDO** (ver #59): apareceu medido, em One Piece. O teto de pack passou a ser empurrado para o pacote `nyaa` por `applyNyaaSettings` — o mesmo mecanismo de push de `SetMaxSearchPages`, e não leitura direta de `files.Config` —, e pack acima do teto sai antes de contar para o piso. O filtro de seeders continua só no daemon: o Nyaa devolve ordenado por seeders desc, então ele não trunca a descida do mesmo jeito.
+**Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. **RESOLVIDO** (ver #80): apareceu medido, em One Piece. O teto de pack passou a ser empurrado para o pacote `nyaa` por `applyNyaaSettings` — o mesmo mecanismo de push de `SetMaxSearchPages`, e não leitura direta de `files.Config` —, e pack acima do teto sai antes de contar para o piso. O filtro de seeders continua só no daemon: o Nyaa devolve ordenado por seeders desc, então ele não trunca a descida do mesmo jeito.
 
 **Don't "fix" by:**
 - Reintroduzir um teto de contagem de episódios do anime: contagem é proxy ruim de tamanho (ver acima), e o gate de `FINISHED` excluía quem mais precisa de pack.
@@ -1117,7 +1205,7 @@ O `PUT /animes/{id}/settings` usa ponteiros (`*string`/`*int`) e faz merge parci
 
 ---
 
-### 59. O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon
+### 80. O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon
 
 **Location:** `nyaa/nyaa.go` — `maxBatchSizeBytes`, `SetMaxBatchTorrentSizeGB`, `batchTooBig`, aplicado no `parseRow` de `ScrapNyaaForAnime`; e `daemon/search.go` — `filterBySize`, via `partitionSearchResults`.
 
@@ -1152,7 +1240,7 @@ O push da config para dentro do `nyaa` não é padrão novo: é o mesmo de `SetP
 
 ---
 
-### 60. A precedência dos códigos do relatório é cascata, não conjunto
+### 81. A precedência dos códigos do relatório é cascata, não conjunto
 
 **Location:** `daemon/report.go` — `searchIssue`.
 
@@ -1171,7 +1259,7 @@ Mesma disciplina da cascata de `deriveAnimeChip` (`lib/domain/animeState.ts`): a
 
 ---
 
-### 61. `SetLastCheckError` limpa o relatório da última verificação
+### 82. `SetLastCheckError` limpa o relatório da última verificação
 
 **Location:** `daemon/state.go` — `SetLastCheckError`; `daemon/verification.go` — a ordem `SetLastCheckError(nil)` → `SetLastCheckReport(...)`.
 
