@@ -1158,3 +1158,84 @@ func TestSelectEpisodes_CountsLimitSkips(t *testing.T) {
 		t.Errorf("esperava limitSkipped=7, obteve %d", sel.limitSkipped)
 	}
 }
+
+// --- F1: guard de exclusao de pack ---
+
+// packRecords monta N registros de pack (episodios 1..n) de um mesmo anime, todos apontando para
+// o mesmo hash e declarando a faixa start..end.
+func packRecords(animeID, n, start, end int, hash string) []files.EpisodeStruct {
+	eps := make([]files.EpisodeStruct, 0, n)
+	for i := 1; i <= n; i++ {
+		eps = append(eps, files.EpisodeStruct{
+			AnimeID: animeID, EpisodeNumber: i, EpisodeHash: hash,
+			IsBatch: true, BatchStart: start, BatchEnd: end,
+		})
+	}
+	return eps
+}
+
+func keysOf(eps []files.EpisodeStruct) []files.EpisodeKey {
+	keys := make([]files.EpisodeKey, 0, len(eps))
+	for _, ep := range eps {
+		keys = append(keys, ep.Key())
+	}
+	return keys
+}
+
+// Defeito B: pack de season (1..23) baixado sob o cour 1, que so registrou 11 episodios. Assistir
+// o cour 1 poe os 11 registros no delete set, mas os 12 episodios do cour 2 estao no torrent sem
+// registro nenhum — apagar levaria o conteudo do cour 2 junto.
+func TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent(t *testing.T) {
+	const hash = "1111111111111111111111111111111111111111"
+	saved := packRecords(108465, 11, 1, 23, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); !ok {
+		t.Error("pack que declara 1..23 com so 11 registros tem conteudo sem dono: o torrent deve sobreviver")
+	}
+}
+
+// Nao-regressao: pack que declara 1..12 com os 12 registros no delete set nao tem conteudo sem
+// dono — sai inteiro, como sempre saiu. E isso que libera espaco para o pack seguinte.
+func TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack(t *testing.T) {
+	const hash = "2222222222222222222222222222222222222222"
+	saved := packRecords(108465, 12, 1, 12, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("pack com a faixa inteira registrada e no delete set deve ser removido")
+	}
+}
+
+// Defeito A: o mesmo passe adota o pack sob um media id novo (cour 2) e poda os registros do cour
+// 1. O snapshot que chega em handleSavedEpisodes e PRE-passe, entao os registros novos so estao em
+// newEpisodes — sem inclui-los no guard, o torrent recem-adotado e apagado.
+//
+// Sem faixa declarada (BatchStart 0) de proposito: assim o teste isola o defeito A do defeito B.
+func TestHandleSavedEpisodes_NewEpisodesProtectSharedTorrent(t *testing.T) {
+	const hash = "3333333333333333333333333333333333333333"
+	saved := packRecords(108465, 11, 0, 0, hash)
+	newEps := packRecords(127720, 12, 0, 0, hash)
+
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	handleSavedEpisodes(fm, &files.Config{DeleteWatchedEpisodes: true}, backend, testLibrarian(), handleEpisodesData{
+		savedEpisodes:   saved,
+		keysToDelete:    keysOf(saved),
+		checkedEpisodes: append(keysOf(saved), keysOf(newEps)...),
+		newEpisodes:     newEps,
+	})
+
+	if _, ok := backend.Get(hash); !ok {
+		t.Error("o torrent adotado pelos registros novos do mesmo passe deve sobreviver a poda dos antigos")
+	}
+}

@@ -96,7 +96,7 @@ func TestSelectEpisodes_BatchStateDoesNotChurn(t *testing.T) {
 }
 
 // watched_episodes_to_keep quebraria o rodizio: manter 3 dos 100 de um pack nao guarda 3
-// episodios, guarda o pack inteiro (allEpisodesInDeleteSet daria false e o torrent ficaria).
+// episodios, guarda o pack inteiro (canRemoveTorrent daria false e o torrent ficaria).
 func TestBuildWatchedKeepSet_IgnoresBatchRecords(t *testing.T) {
 	anime := animeWithEpisodes(100, anilist.MediaStatusReleasing, false, "")
 	savedFull := make(map[files.EpisodeKey]files.EpisodeStruct, 100)
@@ -122,7 +122,7 @@ func TestBuildWatchedKeepSet_IgnoresBatchRecords(t *testing.T) {
 }
 
 // Rodizio completo: com pack 1-100 salvo e progresso 100, os 100 registros entram no delete set,
-// allEpisodesInDeleteSet passa e o torrent inteiro sai — e e isso que libera o espaco para o
+// canRemoveTorrent passa e o torrent inteiro sai — e e isso que libera o espaco para o
 // 101-200 no ciclo seguinte. Com progresso 50, nada sai (ha irmaos vivos) e nada novo entra.
 func TestSelectEpisodes_PackRotation(t *testing.T) {
 	anime := animeWithEpisodes(200, anilist.MediaStatusReleasing, false, "")
@@ -159,7 +159,7 @@ func TestSelectEpisodes_PackRotation(t *testing.T) {
 	for _, ep := range savedFull {
 		group = append(group, ep)
 	}
-	if !allEpisodesInDeleteSet(group, deleteSet) {
+	if !canRemoveTorrent(group, deleteSet) {
 		t.Errorf("com progresso 100 o grupo inteiro deve sair (%d de 100 no delete set)", len(deleteSet))
 	}
 

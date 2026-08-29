@@ -274,13 +274,13 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 
 ### 22. Organize everything to `completed_anime_path`, and the batch-hygiene deletion limitation
 
-**Location:** `internal/daemon/jobs.go` (`organizeTorrent`), `internal/daemon/episodes.go` (`removeEpisodesAndLinks`, `allEpisodesInDeleteSet`). Pinned with real files on disk by `TestRemoveEpisodesAndLinks_RealHardlinks` (`internal/daemon/orchestration_test.go`), whose subtests separate the batch asymmetry (torrent *and* library files kept while a sibling survives) from the non-batch shared-hash case (library link removed, torrent kept).
+**Location:** `internal/daemon/jobs.go` (`organizeTorrent`), `internal/daemon/episodes.go` (`removeEpisodesAndLinks`, `canRemoveTorrent`). Pinned with real files on disk by `TestRemoveEpisodesAndLinks_RealHardlinks` (`internal/daemon/orchestration_test.go`), whose subtests separate the batch asymmetry (torrent *and* library files kept while a sibling survives) from the non-batch shared-hash case (library link removed, torrent kept).
 
 **What it looks like:** (a) *Every* completed torrent — ongoing or finished — is hardlinked into `completed_anime_path`, not just finished animes. (b) When deleting a watched episode that belongs to a **batch** torrent, its library hardlink is **kept** until the entire batch is deleted, which looks like a leak.
 
 **Why it's right (behavior change):** Previously only FINISHED animes were moved to `completed_anime_path`, while ongoing episodes were renamed in place inside `save_path`. Now `save_path` is purely the download/seeding working directory and `completed_anime_path` is the Jellyfin library — so *every* completed torrent gets organized into the library, uniformly, via the single idempotent `organize` job. This removes the ongoing-vs-finished special case and gives Jellyfin one consistent library path to watch.
 
-**Why it's right (batch guard):** Deletion frees space by removing both the library hardlink and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). For a **single-episode** torrent that maps cleanly to one library file, both links are removed. For a **batch** torrent shared by many episodes, the raw batch filenames can't be safely mapped back to one specific episode — removing "the file for episode 5" risks deleting the wrong file. So per-episode library removal is **skipped for batches**; the batch's library files (and the seeding torrent) are only removed once **all** of that torrent's episodes are in the delete set (`allEpisodesInDeleteSet`). While any sibling episode survives, the batch torrent and its library links stay. The small space cost of keeping a shared batch around a bit longer is preferred over the correctness risk of deleting the wrong episode's file.
+**Why it's right (batch guard):** Deletion frees space by removing both the library hardlink and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). For a **single-episode** torrent that maps cleanly to one library file, both links are removed. For a **batch** torrent shared by many episodes, the raw batch filenames can't be safely mapped back to one specific episode — removing "the file for episode 5" risks deleting the wrong file. So per-episode library removal is **skipped for batches**; the batch's library files (and the seeding torrent) are only removed once **all** of that torrent's episodes are in the delete set (`canRemoveTorrent` — que desde #74 também exige que o pack não cubra episódios sem registro). While any sibling episode survives, the batch torrent and its library links stay. The small space cost of keeping a shared batch around a bit longer is preferred over the correctness risk of deleting the wrong episode's file.
 
 **Don't "fix" by:** trying to delete individual episode files out of a batch torrent's library folder (raw filenames aren't reliably episode-addressable), or removing a batch torrent while siblings still reference it (breaks the survivors' library links and stops seeding for episodes still wanted).
 
@@ -858,7 +858,7 @@ Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos 
 
 **What it looks like:** `handleAlreadySavedEpisode` recusa deletar um episódio salvo com `IsBatch: true` mesmo quando ele está acima do limite por anime; `buildWatchedKeepSet` nunca inclui um episódio de pack na lista de candidatos a "manter mesmo assistido".
 
-**Why it's right:** um pack é um torrent só — apagar o registro de UM dos seus episódios não libera byte nenhum, o torrent inteiro continua seedando no disco. Sem a guarda em `handleAlreadySavedEpisode`, o ciclo seguinte ao que trouxe o pack apagaria os registros acima do limite, o gate de espaço reabriria (o registro sumiu, mas o byte não), e o próximo ciclo tentaria baixar de novo — loop de baixar-e-apagar sobre um torrent que nunca saiu do disco. Sem a guarda em `buildWatchedKeepSet`: `watched_episodes_to_keep` não tem granularidade **dentro** de um pack — manter 3 dos 100 episódios de um pack não guarda 3 episódios, guarda o pack inteiro (`allEpisodesInDeleteSet` dá `false` para o grupo inteiro enquanto QUALQUER um dos 100 registros estiver fora do delete-set), então incluir episódios de pack no keep-set não muda o resultado, só confunde a contagem.
+**Why it's right:** um pack é um torrent só — apagar o registro de UM dos seus episódios não libera byte nenhum, o torrent inteiro continua seedando no disco. Sem a guarda em `handleAlreadySavedEpisode`, o ciclo seguinte ao que trouxe o pack apagaria os registros acima do limite, o gate de espaço reabriria (o registro sumiu, mas o byte não), e o próximo ciclo tentaria baixar de novo — loop de baixar-e-apagar sobre um torrent que nunca saiu do disco. Sem a guarda em `buildWatchedKeepSet`: `watched_episodes_to_keep` não tem granularidade **dentro** de um pack — manter 3 dos 100 episódios de um pack não guarda 3 episódios, guarda o pack inteiro (`canRemoveTorrent` dá `false` para o grupo inteiro enquanto QUALQUER um dos 100 registros estiver fora do delete-set), então incluir episódios de pack no keep-set não muda o resultado, só confunde a contagem.
 
 O contador (`downloadedEpisodes`) continua incrementando para episódios de pack **abaixo** do limite — só a deleção acima do limite é que é ignorada. É esse incremento normal, mais a imunidade à poda, que dá o **rodízio de packs sucessivos sem nenhuma config nova**: o pack atual acumula registros além do limite (imunes), o próximo ciclo busca de novo, `pickBatches` escolhe o próximo pack ainda não coberto, e assim por diante — só freado por `max_batch_torrent_size_gb` (por torrent) e `checkDiskSpace`.
 
@@ -1620,3 +1620,41 @@ rate limit voltar a apertar.
 
 **Don't "fix" by:** mover só "uma query pequena" para o frontend como meio-termo — o custo é a
 duplicação da lógica de merge, e ela começa na primeira query.
+
+---
+
+### 74. A unidade do guard de exclusão de pack é o conteúdo do torrent, não a lista de registros
+
+**Location:** `internal/daemon/episodes.go` (`canRemoveTorrent`, `declaredSpan`, `handleSavedEpisodes`).
+Fixado por `TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent`,
+`TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack` e
+`TestHandleSavedEpisodes_NewEpisodesProtectSharedTorrent` (`internal/daemon/episodes_test.go`).
+
+**What it looks like:** o guard que decide se um torrent compartilhado pode sair não pergunta mais
+só "todo registro deste hash está no delete set?". Ele também compara a **contagem de registros**
+com a faixa que os próprios registros declaram (`BatchStart`/`BatchEnd`), e recusa a remoção quando
+a faixa é maior. Além disso, `handleSavedEpisodes` passa `savedEpisodes ∪ newEpisodes` para
+`removeEpisodesAndLinks`, não só o snapshot pré-passe.
+
+**Why it's right:** "todo registro" não é "todo o conteúdo". Um pack de **season** baixado sob o
+cour 1 (que só tem 11 episódios na AniList) grava 11 registros mas carrega 23 episódios de arquivo
+— os 12 do cour 2 não têm registro nenhum porque ainda não foram baixados. Assistir o cour 1
+colocava os 11 registros no delete set, o guard concluía "ninguém sobrevive" e apagava do disco um
+conteúdo que o usuário nunca viu. O agravante do mesmo passe é a metade do snapshot: quando o cour
+2 vira `CURRENT` e o passe escolhe o mesmo pack para o media id novo, `Session.Add` reusa o
+infohash e os registros novos existem só em `newEpisodes` — invisíveis para o guard, que apagava o
+arquivo recém-adotado.
+
+Compara-se span contra a **contagem** de registros, e não contra os números em si, porque um mesmo
+hash pode ter registros de media ids diferentes, cada um na sua numeração local (é exatamente o
+caso do pack de season). Comparar `1..23` com `1..12` sem converter seria comparar réguas
+diferentes; contar registros é a aproximação que não precisa da conversão.
+
+**Teto conhecido (`ponytail:` no código):** pack sem faixa no nome grava `BatchStart == 0`
+(desconhecida) e continua indetectável — o guard cai no comportamento antigo. Sair disso exige a
+lista de arquivos do torrent (item da página de detalhe do Nyaa em `docs/TODO.md`).
+
+**Don't "fix" by:** derivar a faixa do min/max dos episódios salvos (é a informação que falta, não
+uma que dá para reconstruir — foi o bug que motivou `BatchStart`/`BatchEnd` existirem), nem
+recarregar `episodes.json` dentro de `removeEpisodesAndLinks` (a Fase 3 é sequencial de propósito e
+já tem os dois pedaços em memória).

@@ -14,14 +14,19 @@
 - Reavaliar o frontend buscar direto na AniList — **só** se `id_in` em lote nos avulsos e o gate por
   prioridade não bastarem. Veredito e medições em `docs/agents/decisions.md` #73
 - Parear features do webApp na cli
+- Adicionar integração com MyAnimeList
 - Melhorar experiencia de baixar animes grandes
-- Publicar imagem no docker
+- **Melhorar a experiência de instalação** — opções medidas e ordenadas em
+  `docs/distribuicao.md`: publicar imagem no ghcr (maior ganho, o Dockerfile já existe),
+  depois um `install.sh` via curl. `go install`, Homebrew, Scoop, .deb/.rpm e Flatpak
+  avaliados e descartados lá
 - Mecanismo de bug report
 - Atualizar README
-- Criar landing page
 - Proper release no Windows — **+1.0.0**
 	- Autenticar app com conta Microsoft
 	- Instalar ao invés de rodar de arquivo executável
 	- Dar detach e rodar como serviço no background
 	- Fazer mudanças de ui pra funcionar melhor no Windows
 	- Testar bem
+- Criar landing page
+- Divulgar

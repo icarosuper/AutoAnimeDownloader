@@ -487,7 +487,7 @@ func buildWatchedKeepSet(n int, animeID int, episodes []anilist.AiringNode, save
 		key := files.EpisodeKey{AnimeID: animeID, Episode: ep.Episode}
 		saved, ok := savedEpisodesFullMap[key]
 		// Registro de pack fica FORA do keep-set: manter 3 dos 100 de um pack nao guarda 3
-		// episodios, guarda o pack inteiro — allEpisodesInDeleteSet daria false, o torrent ficaria
+		// episodios, guarda o pack inteiro — canRemoveTorrent daria false, o torrent ficaria
 		// no disco, o espaco nao voltaria e o pack seguinte nunca viria. O keep-set nao tem a
 		// granularidade que promete dentro de um pack.
 		if ep.Episode <= progress && ok && !saved.IsBatch {
@@ -768,8 +768,13 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 
 	if configs.DeleteWatchedEpisodes {
 		allKeys := append(append([]files.EpisodeKey{}, data.keysToDelete...), episodesNotInWatching...)
+		// data.savedEpisodes e o snapshot PRE-passe: os registros que saveEpisodesToFile acabou
+		// de gravar sao invisiveis nele. Se um deles reusou o hash de um pack cujos registros
+		// antigos estao saindo agora, o guard de torrent concluiria "ninguem sobrevive" e apagaria
+		// o arquivo que o passe acabou de adotar.
+		saved := append(append([]files.EpisodeStruct{}, data.savedEpisodes...), data.newEpisodes...)
 		// Best-effort: a failure here must not abort the verification pass.
-		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allKeys, data.savedEpisodes, false); err != nil {
+		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allKeys, saved, false); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
 		}
 	}
@@ -811,7 +816,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 			if !deleteSet[ep.Key()] {
 				continue
 			}
-			removingTorrent := ep.EpisodeHash == "" || allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet)
+			removingTorrent := ep.EpisodeHash == "" || canRemoveTorrent(byHash[ep.EpisodeHash], deleteSet)
 			if ep.IsBatch && !removingTorrent {
 				// Keep batch library files while siblings survive (can't identify a single
 				// episode's raw-named file safely). Freed only when the whole torrent goes.
@@ -831,7 +836,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 		if !deleteSet[ep.Key()] || ep.EpisodeHash == "" || removedHashes[ep.EpisodeHash] {
 			continue
 		}
-		if allEpisodesInDeleteSet(byHash[ep.EpisodeHash], deleteSet) {
+		if canRemoveTorrent(byHash[ep.EpisodeHash], deleteSet) {
 			if err := backend.Remove(ep.EpisodeHash, keepData); err != nil {
 				logger.Logger.Warn().Err(err).Str("hash", ep.EpisodeHash).Msg("Failed to remove torrent")
 			} else {
@@ -848,9 +853,17 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 	return nil
 }
 
-// allEpisodesInDeleteSet reports whether every episode in the group is in the delete set
-// (i.e. no sibling survives, so the shared torrent can be removed).
-func allEpisodesInDeleteSet(group []files.EpisodeStruct, deleteSet map[files.EpisodeKey]bool) bool {
+// canRemoveTorrent reports whether the shared torrent can be removed: nenhum registro do grupo
+// sobrevive ao delete set E o pack nao carrega conteudo sem dono.
+//
+// A segunda condicao existe porque "todo registro" nao e "todo o conteudo": um pack que declara
+// 1..23 no nome mas so tem 11 registros cobre 12 episodios que nunca tiveram registro nenhum — o
+// cour 2, que ainda nao foi baixado. Com so a primeira condicao, assistir o cour 1 apagava do
+// disco o cour 2 inteiro.
+//
+// ponytail: pack sem faixa no nome grava BatchStart == 0 (desconhecida) e continua indetectavel.
+// Sair disso exige a lista de arquivos do torrent (item da pagina de detalhe em docs/TODO.md).
+func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKey]bool) bool {
 	if len(group) == 0 {
 		return true
 	}
@@ -859,7 +872,34 @@ func allEpisodesInDeleteSet(group []files.EpisodeStruct, deleteSet map[files.Epi
 			return false
 		}
 	}
-	return true
+	return len(group) >= declaredSpan(group)
+}
+
+// declaredSpan e o tamanho da faixa que os registros do grupo declaram cobrir, na uniao. Registro
+// sem faixa (BatchStart == 0) nao entra: desconhecida nao e vazia, so nao ajuda. 0 quando nenhum
+// registro declara faixa — ai a comparacao com len(group) e sempre verdadeira, que e o
+// comportamento antigo.
+//
+// Compara-se span contra a CONTAGEM de registros, nao contra os numeros em si, porque um mesmo
+// hash pode ter registros de media ids diferentes, cada um na sua numeracao local (pack de season
+// baixado sob o cour 1 e depois reusado pelo cour 2).
+func declaredSpan(group []files.EpisodeStruct) int {
+	minStart, maxEnd := 0, 0
+	for _, ep := range group {
+		if ep.BatchStart <= 0 || ep.BatchEnd < ep.BatchStart {
+			continue
+		}
+		if minStart == 0 || ep.BatchStart < minStart {
+			minStart = ep.BatchStart
+		}
+		if ep.BatchEnd > maxEnd {
+			maxEnd = ep.BatchEnd
+		}
+	}
+	if minStart == 0 {
+		return 0
+	}
+	return maxEnd - minStart + 1
 }
 
 func identifyEpisodesNotInWatching(savedEpisodes []files.EpisodeStruct, checkedEpisodes []files.EpisodeKey) []files.EpisodeKey {

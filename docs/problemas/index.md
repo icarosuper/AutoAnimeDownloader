@@ -48,10 +48,19 @@ Ao terminar uma feature, antes de qualquer outra coisa:
 4. **`swag init -g src/cmd/daemon/main.go -o docs/swagger`** se a API mudou.
 5. **Marcar o item aqui** (`- [ ]` → `- [x]`), com uma linha do que ficou diferente do planejado,
    se ficou.
+6. **Sugerir o título do commit**, seguindo a convenção do repositório (conferida no `git log`):
+   `tipo: descrição em PT-BR, no infinitivo, minúscula, sem ponto final`. Tipos em uso: `feat`,
+   `fix`, `refactor`, `test`, `docs`, `chore` (e `chore!` para breaking change). Sugerir **um**
+   título, não uma lista de opções — se o diff não couber em um título, é sinal de que virou mais
+   de uma feature e o problema é o diff, não o título.
+   Exemplos no formato certo, para as features deste plano: `fix: preservar pack cujo conteúdo
+   excede os episódios registrados` (F1), `fix: não descartar título alternativo no match do Nyaa`
+   (F2), `feat: buscar avulsos da AniList em lote` (F4).
 
 Depois disso: **PARAR e devolver para revisão humana.** Reportar o que foi feito, o resultado dos
-testes (a saída, não "passou"), e o que ficou de fora — e esperar. **Não commitar, não fazer push,
-não começar a próxima feature.** O commit é manual, feito pelo usuário depois de revisar o diff.
+testes (a saída, não "passou"), o que ficou de fora, e o título de commit sugerido — e esperar.
+**Não commitar, não fazer push, não começar a próxima feature.** O commit é manual, feito pelo
+usuário depois de revisar o diff.
 
 Isso não é cerimônia: várias destas features mexem em código que **apaga arquivo do disco** (F1) ou
 muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna cada um revisável, e
@@ -61,7 +70,7 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
 
 ## Onda 0 — parar a perda de dados
 
-- [ ] **F1 · Guard de exclusão de pack**
+- [x] **F1 · Guard de exclusão de pack**
   *Onde:* `src/internal/daemon/episodes.go` — `allEpisodesInDeleteSet`, `removeEpisodesAndLinks`,
   `handleSavedEpisodes`.
 
@@ -72,13 +81,13 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   > guard varrer toda a `downloaded_episodes`" é no-op: já é assim. Os dois defeitos reais são
   > outros, abaixo.
 
-  - [ ] **Defeito A — o snapshot é pré-passe.** `handleSavedEpisodes` chama
+  - [x] **Defeito A — o snapshot é pré-passe.** `handleSavedEpisodes` chama
         `saveEpisodesToFile(data.newEpisodes)` e logo depois passa `data.savedEpisodes` (lido antes
         do passe) para `removeEpisodesAndLinks`. Os registros recém-criados para outro media id
         apontando para o mesmo hash são invisíveis para o guard. Corrigir incluindo
         `data.newEpisodes` no `byHash`.
         *Isso conserta só o agravante do mesmo passe.*
-  - [ ] **Defeito B — o guard confunde "todos os registros" com "todo o conteúdo".**
+  - [x] **Defeito B — o guard confunde "todos os registros" com "todo o conteúdo".**
         `allEpisodesInDeleteSet` conclui "nada sobrevive" quando todo registro **existente** do hash
         está no delete set. É falso quando o pack cobre episódios que **não têm registro nenhum** —
         exatamente o cour 2, que ainda não foi baixado. Comparar a cobertura do delete set com a
@@ -89,12 +98,18 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
         **Teto conhecido:** pack sem faixa no nome grava `BatchStart == 0` (desconhecida) e continua
         indetectável — fica como está hoje. Marcar com comentário `ponytail:`, e é mais um uso para
         a lista de arquivos da página de detalhe (ver `TODO.md`).
-  - [ ] Teste (defeito B): pack `BatchStart=1, BatchEnd=23` com 11 registros, todos os 11 no delete
+  - [x] Teste (defeito B): pack `BatchStart=1, BatchEnd=23` com 11 registros, todos os 11 no delete
         set → torrent e dados sobrevivem
-  - [ ] Teste (defeito A): mesmo passe salva `{Y,1..12}` no mesmo hash e poda `{X,1..11}` → torrent
+  - [x] Teste (defeito A): mesmo passe salva `{Y,1..12}` no mesmo hash e poda `{X,1..11}` → torrent
         sobrevive
-  - [ ] Teste de não-regressão: pack `BatchStart=1, BatchEnd=12` com os 12 registros no delete set
+  - [x] Teste de não-regressão: pack `BatchStart=1, BatchEnd=12` com os 12 registros no delete set
         → torrent **é** removido (o comportamento atual, que está certo)
+
+  *Feito em 29/ago/2026.* Diferenças do planejado: `allEpisodesInDeleteSet` foi renomeada para
+  `canRemoveTorrent` (o nome antigo passou a mentir — ela agora devolve `false` com todos os
+  registros no delete set); a comparação de cobertura usa a **contagem** de registros contra o span
+  declarado (`declaredSpan`), não os números de episódio, porque um mesmo hash pode ter registros de
+  media ids em numerações locais diferentes. Registrado em `decisions.md` #74.
 
   *Por que primeiro:* é o único item que apaga arquivo do disco, e os itens de busca aumentam a
   frequência dele.
