@@ -315,13 +315,17 @@
     // do torrent no download), e não do min/max dos episódios salvos: os já assistidos nunca viram
     // registro, então o min/max encolhe o pack — um 01-11 baixado com 5 assistidos virava "6–11".
     // Sem faixa salva (registro antigo) o min/max continua sendo o melhor palpite.
+    //
+    // O início é preso em 1: um pack de season baixado sob um cour posterior é gravado com início
+    // ≤ 0 na numeração local desta entrada (é o que a posse por cobertura precisa), e "-10–12" não
+    // diz nada na tela — o que interessa aqui é a fatia deste anime.
     const packs = new Map<string, { first: number; last: number }>();
     for (const ep of episodes) {
       const hash = ep.episode_hash;
       if (!hash || (counts.get(hash) ?? 0) < 2 || packs.has(hash)) continue;
       const numbers = episodes.filter((e) => e.episode_hash === hash).map((e) => e.episode_number);
       packs.set(hash, {
-        first: ep.batch_start || Math.min(...numbers),
+        first: Math.max(1, ep.batch_start || Math.min(...numbers)),
         last: ep.batch_end || Math.max(...numbers),
       });
     }

@@ -137,6 +137,12 @@ valiosa **antes** de baixar, não só depois.
 cobre as duas metades, mas um extrator que devolve o primeiro número que casar lê `1`. Ler marcador
 de part é sempre frágil; perguntar "esse pack cobre a janela pendente?" não é.
 
+> **Implementado** (29/ago/2026, `decisions.md` #79): no caminho de pack o marcador de part só
+> rejeita conflito declarado, `extractPart` devolve `nil` para nome com duas parts, e as três
+> hipóteses de numeração desta seção viraram `daemon.packAxis` — com o span do nome no lugar da
+> contagem de arquivos como desempate. A contagem de arquivos da página de detalhe continua sendo o
+> desempate mais forte, e continua no `TODO.md`.
+
 ---
 
 ## AnimeTosho — bom complemento, mau substituto

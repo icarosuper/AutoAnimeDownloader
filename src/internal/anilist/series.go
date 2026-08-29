@@ -205,10 +205,10 @@ func recordLink(known map[int]seriesLink, node seriesNode) *seriesNode {
 // PREQUEL e com Episodes preenchido, mas nao entram na contagem que os grupos seguem — mesma
 // regra de daemon.ComputeEpisodeOffset (decisions.md #9 e #71).
 //
-// TODO(F8): esta regra de selecao esta duplicada aqui e em daemon.ComputeEpisodeOffset
-// (daemon/helpers.go). Nao unificar antes do F8: o plano rebaixa ComputeEpisodeOffset a UMA das
-// hipoteses de numeracao de pack, e as duas podem divergir de proposito no caminho. Se o F8 for
-// descartado, unificar — extrair daqui a selecao e fazer o daemon chamar.
+// A regra de selecao e a mesma de daemon.ComputeEpisodeOffset, e as duas seguem separadas de
+// proposito: aqui ela caminha a cadeia INTEIRA (offset absoluto da serie), la ela da UM salto
+// (total do prequel imediato). Sao as duas hipoteses distintas de numeracao de pack em
+// daemon.packAxis, entao unifica-las apagaria a distincao (decisions.md #79).
 func prequelOf(node seriesNode) *seriesNode {
 	for i := range node.Relations.Edges {
 		edge := &node.Relations.Edges[i]

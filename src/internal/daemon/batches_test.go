@@ -25,13 +25,13 @@ func names(results []nyaa.TorrentResult) []string {
 func TestPickBatches_OnePackCoversTheWindow(t *testing.T) {
 	results := []nyaa.TorrentResult{pack("[X] Anime 001-100 [1080p]", 1), pack("[X] Anime 101-200 [1080p]", 2)}
 
-	if got := names(pickBatches(results, 150, 161)); len(got) != 1 || got[0] != "[X] Anime 101-200 [1080p]" {
+	if got := names(pickBatches(results, packAxis{}, 150, 161)); len(got) != 1 || got[0] != "[X] Anime 101-200 [1080p]" {
 		t.Errorf("primeiro pendente 150 deve escolher só o segundo pack, obteve %v", got)
 	}
-	if got := names(pickBatches(results, 1, 12)); len(got) != 1 || got[0] != "[X] Anime 001-100 [1080p]" {
+	if got := names(pickBatches(results, packAxis{}, 1, 12)); len(got) != 1 || got[0] != "[X] Anime 001-100 [1080p]" {
 		t.Errorf("primeiro pendente 1 deve escolher só o primeiro pack, obteve %v", got)
 	}
-	if got := pickBatches(results, 500, 511); len(got) != 0 {
+	if got := pickBatches(results, packAxis{}, 500, 511); len(got) != 0 {
 		t.Errorf("sem pack que cubra, esperava vazio (o fluxo cai em episódio solto), obteve %v", names(got))
 	}
 }
@@ -40,7 +40,7 @@ func TestPickBatches_OnePackCoversTheWindow(t *testing.T) {
 func TestPickBatches_WindowCrossingTheBoundaryPicksBoth(t *testing.T) {
 	results := []nyaa.TorrentResult{pack("[X] Anime 001-100 [1080p]", 1), pack("[X] Anime 101-200 [1080p]", 2)}
 
-	got := names(pickBatches(results, 95, 106))
+	got := names(pickBatches(results, packAxis{}, 95, 106))
 	if len(got) != 2 || got[0] != "[X] Anime 001-100 [1080p]" || got[1] != "[X] Anime 101-200 [1080p]" {
 		t.Errorf("esperava os dois packs em ordem, obteve %v", got)
 	}
@@ -53,7 +53,7 @@ func TestPickBatches_CeilingOffCoversEverything(t *testing.T) {
 		pack("[X] Anime 201-300 [1080p]", 3),
 	}
 
-	if got := pickBatches(results, 1, math.MaxInt); len(got) != 3 {
+	if got := pickBatches(results, packAxis{}, 1, math.MaxInt); len(got) != 3 {
 		t.Errorf("com o teto desligado esperava os três packs, obteve %v", names(got))
 	}
 }
@@ -63,7 +63,7 @@ func TestPickBatches_CeilingOffCoversEverything(t *testing.T) {
 func TestPickBatches_RespectsQualityOrder(t *testing.T) {
 	results := []nyaa.TorrentResult{pack("[Good] Anime 001-100 [1080p]", 1), pack("[Worse] Anime 001-100 [480p]", 2)}
 
-	got := names(pickBatches(results, 1, 12))
+	got := names(pickBatches(results, packAxis{}, 1, 12))
 	if len(got) != 1 || got[0] != "[Good] Anime 001-100 [1080p]" {
 		t.Errorf("esperava o primeiro da lista ordenada, obteve %v", got)
 	}
@@ -74,7 +74,7 @@ func TestPickBatches_RespectsQualityOrder(t *testing.T) {
 func TestPickBatches_Terminates(t *testing.T) {
 	results := []nyaa.TorrentResult{pack("[X] Anime 50-60 [1080p]", 1)}
 
-	got := pickBatches(results, 55, math.MaxInt)
+	got := pickBatches(results, packAxis{}, 55, math.MaxInt)
 	if len(got) != 1 {
 		t.Errorf("esperava exatamente 1 pack, obteve %d (%v)", len(got), names(got))
 	}
@@ -84,7 +84,7 @@ func TestPickBatches_Terminates(t *testing.T) {
 func TestPickBatches_UnknownRangeCountsAsComplete(t *testing.T) {
 	results := []nyaa.TorrentResult{pack("[X] Anime Complete Batch", 1), pack("[X] Anime 001-100", 2)}
 
-	got := pickBatches(results, 1, math.MaxInt)
+	got := pickBatches(results, packAxis{}, 1, math.MaxInt)
 	if len(got) != 1 || got[0].Name != "[X] Anime Complete Batch" {
 		t.Errorf("esperava só o pack completo, obteve %v", names(got))
 	}
@@ -98,7 +98,7 @@ func TestAssignBatches_EachEpisodeGetsItsOwnPack(t *testing.T) {
 	second := pack("[X] Anime 101-200 [1080p]", 2)
 
 	episodes := anilist.EpisodeList(anime, 1)
-	covered, magnets := assignBatches("Anime", 0, episodes, []nyaa.TorrentResult{first, second})
+	covered, magnets := assignBatches("Anime", packAxis{}, episodes, []nyaa.TorrentResult{first, second})
 
 	if len(covered) != 200 {
 		t.Fatalf("esperava 200 episódios cobertos, obteve %d", len(covered))
@@ -123,7 +123,7 @@ func TestAssignBatches_TruncatesUncoveredEpisodes(t *testing.T) {
 	anime := animeWithEpisodes(500, anilist.MediaStatusReleasing, false, "")
 	episodes := anilist.EpisodeList(anime, 1)
 
-	covered, magnets := assignBatches("Anime", 0, episodes, []nyaa.TorrentResult{pack("[X] Anime 001-100 [1080p]", 1)})
+	covered, magnets := assignBatches("Anime", packAxis{}, episodes, []nyaa.TorrentResult{pack("[X] Anime 001-100 [1080p]", 1)})
 
 	if len(covered) != 100 {
 		t.Fatalf("esperava 100 episódios cobertos, obteve %d", len(covered))
@@ -141,7 +141,7 @@ func TestAssignBatches_UnknownRangeUsesAnimeTitle(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	episodes := anilist.EpisodeList(anime, 1)
 
-	covered, magnets := assignBatches("Anime", 0, episodes, []nyaa.TorrentResult{pack("[X] Anime Complete Batch", 1)})
+	covered, magnets := assignBatches("Anime", packAxis{}, episodes, []nyaa.TorrentResult{pack("[X] Anime Complete Batch", 1)})
 
 	if len(covered) != 26 {
 		t.Fatalf("esperava 26 episódios cobertos, obteve %d", len(covered))
@@ -158,7 +158,7 @@ func TestAssignBatches_CarriesTheRealRange(t *testing.T) {
 	anime := animeWithEpisodes(11, anilist.MediaStatusFinished, true, "")
 	episodes := anilist.EpisodeList(anime, 6)
 
-	_, magnets := assignBatches("Anime", 0, episodes, []nyaa.TorrentResult{pack("[X] Anime 01-11 [1080p]", 1)})
+	_, magnets := assignBatches("Anime", packAxis{}, episodes, []nyaa.TorrentResult{pack("[X] Anime 01-11 [1080p]", 1)})
 
 	if magnets[6].batchStart != 1 || magnets[6].batchEnd != 11 {
 		t.Errorf("esperava a faixa do pack (1-11), obteve %d-%d", magnets[6].batchStart, magnets[6].batchEnd)
@@ -172,7 +172,7 @@ func TestAssignBatches_UnknownRangeCoversTheWholeSeries(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	episodes := anilist.EpisodeList(anime, 6)
 
-	_, magnets := assignBatches("Anime", 26, episodes, []nyaa.TorrentResult{pack("[X] Anime Complete Batch", 1)})
+	_, magnets := assignBatches("Anime", packAxis{totalEpisodes: 26}, episodes, []nyaa.TorrentResult{pack("[X] Anime Complete Batch", 1)})
 
 	if magnets[6].batchStart != 1 || magnets[6].batchEnd != 26 {
 		t.Errorf("pack completo deve valer a série inteira (1-26), obteve %d-%d", magnets[6].batchStart, magnets[6].batchEnd)
@@ -184,7 +184,7 @@ func TestAssignBatches_UnknownRangeAndUnknownTotalLeavesZeroes(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusReleasing, false, "")
 	episodes := anilist.EpisodeList(anime, 1)
 
-	_, magnets := assignBatches("Anime", 0, episodes, []nyaa.TorrentResult{pack("[X] Anime Complete Batch", 1)})
+	_, magnets := assignBatches("Anime", packAxis{}, episodes, []nyaa.TorrentResult{pack("[X] Anime Complete Batch", 1)})
 
 	if magnets[1].batchStart != 0 || magnets[1].batchEnd != 0 {
 		t.Errorf("faixa e total desconhecidos devem ficar zerados, obteve %d-%d", magnets[1].batchStart, magnets[1].batchEnd)

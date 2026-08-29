@@ -150,7 +150,8 @@ func processAnimeEpisodes(
 		// esta la que decide (ver decisions.md).
 		if !isAnimeMovie(anime) && len(sel.toDownload) > 1 {
 			firstPending := sel.toDownload[0].Episode
-			batches := pickBatches(packs, firstPending, windowEnd(configs, firstPending))
+			axis := newPackAxis(anime, seriesIndex, totalEpisodes)
+			batches := pickBatches(packs, axis, firstPending, windowEnd(configs, firstPending))
 			switch {
 			case len(batches) > 0:
 				logger.Logger.Info().
@@ -164,7 +165,7 @@ func processAnimeEpisodes(
 				// acabou de trazer.
 				sel = selectEpisodes(configs, len(episodes)+1, anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
 				sel.toDownload = dropAdopted(sel.toDownload, adopted)
-				sel.toDownload, magnetsForEpisodes = assignBatches(animeTitle, totalEpisodes, sel.toDownload, batches)
+				sel.toDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, sel.toDownload, batches)
 			case packStats.Input == 0:
 				batchSkipped = BatchSkippedNoResult
 			case len(packs) == 0:
@@ -349,26 +350,29 @@ func mediaTotalEpisodes(anime anilist.MediaList) int {
 // apareceriam com nomes identicos na tela de downloads. O nome da PASTA da biblioteca nao muda —
 // Organize usa AnimeName, nunca EpisodeName.
 //
-// totalEpisodes e a faixa registrada para pack SEM faixa no nome ("(Season 1+OVA) [Batch]"): ele
-// foi escolhido como pack completo — e por isso que coveringBatch o deixa cobrir qualquer
+// axis.totalEpisodes e a faixa registrada para pack SEM faixa no nome ("(Season 1+OVA) [Batch]"):
+// ele foi escolhido como pack completo — e por isso que coveringBatch o deixa cobrir qualquer
 // episodio —, entao a faixa dele e 1..total. 0 (total desconhecido) deixa a faixa zerada e quem
 // exibe cai no min/max dos registros.
-func assignBatches(animeTitle string, totalEpisodes int, episodes []anilist.AiringNode, batches []nyaa.TorrentResult) ([]anilist.AiringNode, map[int]resolvedMagnets) {
+//
+// A faixa GRAVADA e a convertida para a numeracao local (packAxis.localRange) e pode comecar em
+// zero ou abaixo; o nome exibido corta em 1, porque "-10-12" nao diz nada a quem le a tela e o
+// que interessa ali e a fatia que esta entrada recebe.
+func assignBatches(animeTitle string, axis packAxis, episodes []anilist.AiringNode, batches []nyaa.TorrentResult) ([]anilist.AiringNode, map[int]resolvedMagnets) {
 	result := make(map[int]resolvedMagnets, len(episodes))
 	var covered []anilist.AiringNode
 
 	for _, ep := range episodes {
-		batch := coveringBatch(batches, ep.Episode)
+		batch, info := coveringBatch(batches, axis, ep.Episode)
 		if batch == nil {
 			break
 		}
 
 		name := animeTitle
-		info := nyaa.ExtractBatchInfo(batch.Name)
 		if info.EndEpisode > 0 {
-			name = fmt.Sprintf("%s %d-%d", animeTitle, info.StartEpisode, info.EndEpisode)
-		} else if totalEpisodes > 0 {
-			info.StartEpisode, info.EndEpisode = 1, totalEpisodes
+			name = fmt.Sprintf("%s %d-%d", animeTitle, max(1, info.StartEpisode), info.EndEpisode)
+		} else if axis.totalEpisodes > 0 {
+			info.StartEpisode, info.EndEpisode = 1, axis.totalEpisodes
 		}
 
 		result[ep.Episode] = resolvedMagnets{
@@ -440,23 +444,98 @@ func partitionSearchResults(configs *files.Config, results []nyaa.TorrentResult)
 	return filteredPacks, filteredSingles, packStats
 }
 
+// packAxis sao as reguas em que o pack pode estar numerado, expressas como quanto somar ao numero
+// LOCAL da entrada para chegar ao numero que o grupo usou no nome.
+//
+// Existe porque nao ha uma convencao, ha quatro (sources.md, "Granularidade e numeracao dos
+// packs"): o mesmo pack de season aparece como "00 ~ 12" (reinicia por season), "1..12" (reinicia
+// por part), "1..25" (continua pela season inteira) ou "76..87" (absoluta pela serie). Nenhum
+// grupo anuncia qual adotou, entao mapear e sempre palpite — sao tres hipoteses e um desempate.
+//
+// O zero-value reproduz o comportamento antigo (so a hipotese relativa, sem desempate), que e o
+// que os pontos sem informacao de serie querem.
+type packAxis struct {
+	// altDeltas sao as hipoteses ALEM da relativa. Delta 0 e sempre tentado primeiro e e a
+	// resposta na duvida: offset ausente cai na numeracao relativa, que boa parte dos grupos usa,
+	// enquanto offset errado escolhe um pack que nao tem o episodio.
+	altDeltas []int
+	// totalEpisodes e a contagem da ENTRADA, o desempate entre hipoteses (ver localRange).
+	totalEpisodes int
+}
+
+// newPackAxis monta as hipoteses de numeracao para um anime.
+func newPackAxis(anime anilist.MediaList, seriesIndex map[int]anilist.Series, totalEpisodes int) packAxis {
+	axis := packAxis{totalEpisodes: totalEpisodes}
+	add := func(d int) {
+		if d <= 0 {
+			return
+		}
+		for _, existing := range axis.altDeltas {
+			if existing == d {
+				return
+			}
+		}
+		axis.altDeltas = append(axis.altDeltas, d)
+	}
+
+	// "Continua pela season": o pack comeca no primeiro episodio da season, que e a entrada do
+	// prequel imediato. E aqui que ComputeEpisodeOffset entra — como UMA hipotese, nao como a
+	// unica verdade (decisions.md #79).
+	_, part := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.Synonyms)
+	add(ComputeEpisodeOffset(anime.Media.Relations, part))
+	// "Absoluta pela serie": o eixo do indice de series (decisions.md #77).
+	add(seriesIndex[anime.Media.Id].Offset)
+
+	return axis
+}
+
+// localRange converte a faixa declarada no nome do pack para a numeracao local da entrada,
+// escolhendo entre as hipoteses. Devolve false quando nenhuma cobre o episodio pedido.
+//
+// So concorre hipotese que de fato cobre o episodio. Entre as que cobrem, ganha a que faz o pack
+// TERMINAR no ultimo episodio da entrada: e o desempate por contagem de sources.md — um pack de 25
+// episodios sob uma entrada de 12 nao pode ser um pack local, e um de 12 sob a mesma entrada nao
+// pode ser outra coisa. Sem ele o delta 0 casaria os dois, e o "1..25" seria gravado como se
+// comecasse no episodio 1 DESTA entrada — mentindo para a posse por cobertura (decisions.md #78).
+//
+// O comeco convertido pode ser <= 0, e isso e correto: um pack de season baixado sob o cour 2
+// comeca antes do episodio 1 daquela entrada. Quem le a faixa gravada usa hasDeclaredRange, que
+// tem o FIM como sentinela justamente por isso.
+func (a packAxis) localRange(info nyaa.BatchInfo, episode int) (nyaa.BatchInfo, bool) {
+	var chosen nyaa.BatchInfo
+	found := false
+	for _, d := range append([]int{0}, a.altDeltas...) {
+		if info.StartEpisode > episode+d || episode+d > info.EndEpisode {
+			continue
+		}
+		local := info
+		local.StartEpisode, local.EndEpisode = info.StartEpisode-d, info.EndEpisode-d
+		if a.totalEpisodes > 0 && local.EndEpisode == a.totalEpisodes {
+			return local, true
+		}
+		if !found {
+			chosen, found = local, true
+		}
+	}
+	return chosen, found
+}
+
 // pickBatches devolve o minimo de packs que cobre [firstPending, windowEnd], em ordem.
 //
 // results ja vem ordenado por SortTorrentResults e ja filtrado por tamanho e seeders, entao "o
 // primeiro que cobre o cursor" e "o melhor que cobre o cursor" — e por isso a escolha de pack
 // deixou de ser decidida por metadado do AniList e passou a ser decidida pelo resultado da busca.
 //
-// Termina sempre: coveringBatch so devolve pack com EndEpisode >= cursor, entao o cursor cresce
-// estritamente a cada volta e nenhum pack pode ser escolhido duas vezes.
-func pickBatches(results []nyaa.TorrentResult, firstPending, windowEnd int) []nyaa.TorrentResult {
+// Termina sempre: coveringBatch so devolve pack com EndEpisode >= cursor (ja convertido), entao o
+// cursor cresce estritamente a cada volta e nenhum pack pode ser escolhido duas vezes.
+func pickBatches(results []nyaa.TorrentResult, axis packAxis, firstPending, windowEnd int) []nyaa.TorrentResult {
 	var picked []nyaa.TorrentResult
 	for cursor := firstPending; cursor <= windowEnd; {
-		next := coveringBatch(results, cursor)
+		next, info := coveringBatch(results, axis, cursor)
 		if next == nil {
 			break
 		}
 		picked = append(picked, *next)
-		info := nyaa.ExtractBatchInfo(next.Name)
 		if info.EndEpisode == 0 {
 			break // faixa desconhecida vale como pack completo: cobre o resto da janela
 		}
@@ -465,16 +544,19 @@ func pickBatches(results []nyaa.TorrentResult, firstPending, windowEnd int) []ny
 	return picked
 }
 
-// coveringBatch devolve o primeiro pack da lista que cobre o episodio. Pack sem faixa no nome
-// (EndEpisode == 0) conta como completo.
-func coveringBatch(results []nyaa.TorrentResult, episode int) *nyaa.TorrentResult {
+// coveringBatch devolve o primeiro pack da lista que cobre o episodio E a faixa dele ja convertida
+// para a numeracao local da entrada. Pack sem faixa no nome (EndEpisode == 0) conta como completo.
+func coveringBatch(results []nyaa.TorrentResult, axis packAxis, episode int) (*nyaa.TorrentResult, nyaa.BatchInfo) {
 	for i := range results {
 		info := nyaa.ExtractBatchInfo(results[i].Name)
-		if info.EndEpisode == 0 || (info.StartEpisode <= episode && episode <= info.EndEpisode) {
-			return &results[i]
+		if info.EndEpisode == 0 {
+			return &results[i], info
+		}
+		if local, ok := axis.localRange(info, episode); ok {
+			return &results[i], local
 		}
 	}
-	return nil
+	return nil, nyaa.BatchInfo{}
 }
 
 // episodeNumbers e a lista de numeros que a busca por anime usa para filtrar linha de episodio.
@@ -869,7 +951,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 // cour 2, que ainda nao foi baixado. Com so a primeira condicao, assistir o cour 1 apagava do
 // disco o cour 2 inteiro.
 //
-// ponytail: pack sem faixa no nome grava BatchStart == 0 (desconhecida) e continua indetectavel.
+// ponytail: pack sem faixa no nome grava BatchEnd == 0 (desconhecida) e continua indetectavel.
 // Sair disso exige a lista de arquivos do torrent (item da pagina de detalhe em docs/TODO.md).
 func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKey]bool) bool {
 	if len(group) == 0 {
@@ -883,28 +965,37 @@ func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKe
 	return len(group) >= declaredSpan(group)
 }
 
+// hasDeclaredRange reporta se o registro traz a faixa do pack.
+//
+// O sentinela de "desconhecida" e o FIM, nao o comeco: comeco zero ou negativo e faixa legitima —
+// "[Erai-raws] … - 00 ~ 12" comeca no zero, e um pack de season gravado sob um cour posterior
+// comeca ANTES do episodio 1 daquela entrada, na numeracao local dela (ver packAxis.localRange).
+func hasDeclaredRange(ep files.EpisodeStruct) bool {
+	return ep.BatchEnd > 0 && ep.BatchEnd >= ep.BatchStart
+}
+
 // declaredSpan e o tamanho da faixa que os registros do grupo declaram cobrir, na uniao. Registro
-// sem faixa (BatchStart == 0) nao entra: desconhecida nao e vazia, so nao ajuda. 0 quando nenhum
-// registro declara faixa — ai a comparacao com len(group) e sempre verdadeira, que e o
-// comportamento antigo.
+// sem faixa nao entra: desconhecida nao e vazia, so nao ajuda. 0 quando nenhum registro declara
+// faixa — ai a comparacao com len(group) e sempre verdadeira, que e o comportamento antigo.
 //
 // Compara-se span contra a CONTAGEM de registros, nao contra os numeros em si, porque um mesmo
 // hash pode ter registros de media ids diferentes, cada um na sua numeracao local (pack de season
 // baixado sob o cour 1 e depois reusado pelo cour 2).
 func declaredSpan(group []files.EpisodeStruct) int {
-	minStart, maxEnd := 0, 0
+	minStart, maxEnd, found := 0, 0, false
 	for _, ep := range group {
-		if ep.BatchStart <= 0 || ep.BatchEnd < ep.BatchStart {
+		if !hasDeclaredRange(ep) {
 			continue
 		}
-		if minStart == 0 || ep.BatchStart < minStart {
+		if !found || ep.BatchStart < minStart {
 			minStart = ep.BatchStart
 		}
-		if ep.BatchEnd > maxEnd {
+		if !found || ep.BatchEnd > maxEnd {
 			maxEnd = ep.BatchEnd
 		}
+		found = true
 	}
-	if minStart == 0 {
+	if !found {
 		return 0
 	}
 	return maxEnd - minStart + 1

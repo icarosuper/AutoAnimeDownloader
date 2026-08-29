@@ -112,8 +112,11 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		packs, singles, _ := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(episodesToDownload), customQuery))
 		if !isAnimeMovie(anime) && len(episodesToDownload) > 1 {
 			firstPending := episodesToDownload[0].Episode
-			if batches := pickBatches(packs, firstPending, windowEnd(configs, firstPending)); len(batches) > 0 {
-				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, mediaTotalEpisodes(anime), episodesToDownload, batches)
+			// Mesmo eixo de numeracao da producao: sem ele o debug reportaria "nenhum pack cobre"
+			// para toda entrada cujo pack esta numerado pela season ou pela serie (packAxis).
+			axis := newPackAxis(anime, resolveSeriesIndex([]int{animeId}, nil), mediaTotalEpisodes(anime))
+			if batches := pickBatches(packs, axis, firstPending, windowEnd(configs, firstPending)); len(batches) > 0 {
+				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, episodesToDownload, batches)
 			}
 		}
 		if magnetsForEpisodes == nil {

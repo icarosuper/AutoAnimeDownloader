@@ -1393,8 +1393,14 @@ func TestExtractPart_ExtractsFromVariousFormats(t *testing.T) {
 		{"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 07 [1080p]", intPtr(2)},
 		{"[EMBER] Hataraku Maou-sama! (2023) (Season 2 | Part 02) [1080p]", intPtr(2)},
 		{"[EMBER] Hataraku Maou-sama! (2022) (Season 2 | Part 01) [1080p]", intPtr(1)},
-		{"[DB] NieR:Automata Ver1.1a (Season 1 Part 1+2) [Dual Audio]", intPtr(1)},
-		{"[EMBER] Shingeki no Kyojin (2023) (Season 4 Part 03+04) [BDRip]", intPtr(3)},
+		// Nome que declara DUAS parts nao e da primeira: o pack cobre as duas metades, e devolver
+		// a primeira fazia o filtro de part rejeita-lo justamente para a segunda. Sem numero unico
+		// quem decide e a cobertura da faixa (daemon.packAxis, decisions.md #79).
+		{"[DB] NieR:Automata Ver1.1a (Season 1 Part 1+2) [Dual Audio]", nil},
+		{"[EMBER] Shingeki no Kyojin (2023) (Season 4 Part 03+04) [BDRip]", nil},
+		{"[Fuchs] Anime - S02 (Season 2) (Part 1 + Part 2) [BDRip]", nil},
+		// Duas declaracoes do MESMO numero continuam sendo aquele numero.
+		{"[EMBER] Hataraku Maou-sama! (Season 2 | Part 02) (Part 2) [1080p]", intPtr(2)},
 		// Títulos Anilist (para ExtractAnimeSeasonPart)
 		{"Shingeki no Kyojin Season 3 Part 2", intPtr(2)},
 		{"Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", intPtr(2)},
@@ -1604,6 +1610,42 @@ func intPtr(n int) *int { return &n }
 
 // packsAndSingles reproduz a particao que o daemon faz sobre a lista unica de ScrapNyaaForAnime,
 // para que os testes das duas buscas antigas continuem valendo sem mudar de asserção.
+// Pack SEM marcador de part sobrevive a uma busca de "Part 2": o pack e da season inteira (a
+// AniList e que quebra a season em cours), e exigir o marcador zerava os packs de toda entrada
+// "Part N" — foi o que deixou Mushoku Tensei II Part 2 sem nenhum pack. So conflito declarado
+// rejeita; quem decide se o pack serve e a cobertura da faixa, no daemon (decisions.md #79).
+func TestScrapNyaaForAnime_PackWithoutPartMarkerSurvivesPartRequest(t *testing.T) {
+	options := []string{
+		"[Judas] Mushoku Tensei - 01 ~ 23 [BD 1080p][Batch]",
+		"[EMBER] Mushoku Tensei (Season 1 | Part 1) 01 ~ 11 [1080p][Batch]",
+		"[EMBER] Mushoku Tensei (Season 1 | Part 2) 01 ~ 12 [1080p][Batch]",
+	}
+
+	restore := mockHttpGet(mockHtml(options))
+	defer restore()
+
+	part2 := 2
+	results, err := nyaa.ScrapNyaaForAnime("Mushoku Tensei", []int{1}, nil, &part2)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
+	}
+
+	packs, _ := packsAndSingles(results)
+	got := make(map[string]bool, len(packs))
+	for _, p := range packs {
+		got[p.Name] = true
+	}
+	if !got[options[0]] {
+		t.Fatalf("pack sem marcador de part deveria sobreviver, obteve %v", got)
+	}
+	if got[options[1]] {
+		t.Fatalf("pack da part 1 nao deveria sobreviver a uma busca da part 2, obteve %v", got)
+	}
+	if !got[options[2]] {
+		t.Fatalf("pack da part 2 deveria sobreviver, obteve %v", got)
+	}
+}
+
 func packsAndSingles(results []nyaa.TorrentResult) (packs, singles []nyaa.TorrentResult) {
 	for _, r := range results {
 		switch {

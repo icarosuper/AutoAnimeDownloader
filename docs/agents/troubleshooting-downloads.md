@@ -209,16 +209,21 @@ Os três culpados já vistos, todos na mesma investigação:
   título alternativo que vem depois dele (grupos entre parênteses, segmentos separados por barra).
   Se você ainda vir um pack morrer neste filtro, verifique se o título alternativo está num formato
   que `altTitleCandidates` não enxerga — colchetes e texto solto ficam de fora de propósito.
-- **Filtro duro de part matando pack de season inteira.** Com `requestedPart != nil`, pack sem
-  marcador de part explícito é descartado — e pack de season inteira normalmente não tem esse
-  marcador, embora contenha os episódios pedidos. Ver `sources.md`, "Granularidade e numeração dos
-  packs".
-- **`extractPart` lendo `Part 1 + Part 2` como `1`.** Devolve o primeiro número que casa, então um
-  pack que cobre as duas metades é descartado para a busca da part 2.
+- ~~**Filtro duro de part matando pack de season inteira.**~~ **CORRIGIDO** (decisions.md #79): no
+  caminho de pack, `part` só rejeita **conflito declarado** — pack sem marcador passa, porque pack
+  de season inteira normalmente não tem esse marcador embora contenha os episódios pedidos. Ver
+  `sources.md`, "Granularidade e numeração dos packs".
+- ~~**`extractPart` lendo `Part 1 + Part 2` como `1`.**~~ **CORRIGIDO** (decisions.md #79): nome que
+  declara duas parts devolve `nil`, e quem decide passa a ser a cobertura da faixa.
+- **A faixa do pack não bate com a numeração da entrada.** O pack existe, sobreviveu aos filtros, e
+  `pickBatches` ainda não o escolhe: o nome dele está em outra régua (season contínua, absoluta pela
+  série). Rode `newPackAxis`/`localRange` (`daemon/episodes.go`) com o total de episódios da entrada
+  e veja se alguma hipótese cobre — se nenhuma cobre, é a heurística que precisa de mais uma, e o
+  desempate é a contagem de arquivos do pack.
 
 **Comparação que fecha o diagnóstico rápido:** rode o mesmo passo na entrada **irmã** sem "Part" no
-título (a Part 1 da mesma season). Se ela acha pack e a Part 2 não, `requestedPart != nil` está no
-caminho — o filtro de part nem roda na irmã.
+título (a Part 1 da mesma season). Se ela acha pack e a Part 2 não, ainda há um filtro dependente de
+part no caminho — ele não roda na irmã.
 
 Verifique também se a variante de título certa chegou a ser tentada: `searchNyaaWithVariants`
 (`daemon/search.go`) **para na primeira variante que devolve qualquer resultado**, e

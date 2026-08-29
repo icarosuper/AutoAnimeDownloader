@@ -124,7 +124,7 @@ func adoptCoveredEpisodes(
 // findCoveringPack devolve o registro de pack, em QUALQUER anime_id, cuja faixa declarada contem
 // absEp no eixo absoluto — e cujo torrent ainda esta na sessao.
 //
-// Tres portas, todas obrigatorias: faixa declarada (pack sem faixa no nome grava BatchStart == 0,
+// Tres portas, todas obrigatorias: faixa declarada (pack sem faixa no nome grava BatchEnd == 0,
 // e desconhecida nao e "cobre tudo" — mesmo teto de canRemoveTorrent), torrent vivo (adotar um
 // hash que nao existe mais deixaria o episodio com registro e sem arquivo, invisivel para a
 // redescida) e MESMA serie (sem a comparacao de Key, "absoluto 12" casaria com o pack de qualquer
@@ -138,7 +138,7 @@ func findCoveringPack(
 ) *files.EpisodeStruct {
 	for i := range savedEpisodes {
 		ep := &savedEpisodes[i]
-		if ep.BatchStart <= 0 || ep.BatchEnd < ep.BatchStart {
+		if !hasDeclaredRange(*ep) {
 			continue
 		}
 		if !episodeInTorrents(ep.EpisodeHash, torrentsHashSet) {

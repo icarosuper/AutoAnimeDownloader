@@ -1911,3 +1911,67 @@ faixa desconhecida, com o torrent fora da sessão ou sem checar `Series.Key`; mo
 dentro de `selectEpisodes` (ela roda duas vezes — duplicaria os registros); notificar
 `NewEpisode`/`DownloadCompleted` numa adoção (nada foi baixado, e o webhook de conclusão já saiu
 quando o pack pousou).
+
+### 79. A escolha de pack pergunta "cobre a janela?", não "é da part N?" — e a numeração do pack é palpite entre três hipóteses
+
+**Location:** `src/internal/daemon/episodes.go` — `packAxis`, `newPackAxis`, `packAxis.localRange`,
+`coveringBatch`, `pickBatches`, `assignBatches`, `hasDeclaredRange`, `declaredSpan`;
+`src/internal/nyaa/nyaa.go` — `extractPart`, `declaredParts` e o ramo `isBatch` de
+`ScrapNyaaForAnime`. Travado por `packaxis_test.go` e pelas tabelas de `nyaa_test.go`. Consome a
+#77 (eixo absoluto) e é o outro lado da #78 (posse por cobertura).
+
+**O problema.** A AniList quebra a season em cours/parts, cada entrada numerando a partir de 1; os
+grupos lançam o pack da **season inteira** e cada um escolhe a régua que quiser (`sources.md`,
+"Granularidade e numeração dos packs": reinicia por season, reinicia por part, contínua pela
+season, absoluta pela série). Duas consequências, as duas medidas em Mushoku Tensei:
+
+1. **O filtro duro de part zerava os packs de toda entrada "Part N".** Com `requestedPart != nil`,
+   pack **sem** marcador de part era descartado — e pack de season inteira normalmente não tem esse
+   marcador, embora contenha os episódios pedidos.
+2. **A faixa do nome era lida na régua errada.** `01 ~ 23` sob uma entrada de 12 episódios era
+   comparada com `1..12` como se fosse a mesma numeração.
+
+**A regra:** no caminho de pack, `part` só rejeita **conflito declarado** (o pack diz "Part 1" e
+queremos a 2). Sem marcador, o pack passa e quem decide é a **cobertura da faixa**. O caminho de
+episódio mantém o filtro duro: ali o marcador é o único jeito de distinguir o "- 05" de uma part do
+"- 05" da outra.
+
+**`packAxis` são três hipóteses e um desempate.** Como não dá para ler a convenção do nome, o
+daemon testa quanto somar ao número local para chegar à régua do grupo: **0** (relativa à entrada),
+**`ComputeEpisodeOffset`** (contínua pela season — o total do prequel imediato) e
+**`anilist.Series.Offset`** (absoluta pela série, #77). Só concorre hipótese que de fato **cobre o
+episódio pedido**; entre as que cobrem ganha a que faz o pack **terminar no último episódio da
+entrada**. Esse desempate é a "contagem de arquivos" de `sources.md` expressa pelo span do nome: um
+pack de 25 episódios sob uma entrada de 12 não pode ser local, um de 12 sob a mesma entrada não pode
+ser outra coisa. Na dúvida (nenhuma bate o fim), vale o delta 0: offset ausente cai na numeração
+relativa, que boa parte dos grupos usa, enquanto offset errado escolhe um pack que não tem o
+episódio.
+
+**A faixa GRAVADA é a convertida, e pode começar em zero ou abaixo.** Um pack de season baixado sob
+o cour 2 começa antes do episódio 1 daquela entrada: `-12..12` é a representação correta, e é ela
+que faz `owner.Offset + BatchStart` (#78) devolver a faixa absoluta certa e `declaredSpan` (#74)
+contar os 25 episódios de conteúdo do pack. Por isso o sentinela de "faixa desconhecida" passou a
+ser o **fim** (`hasDeclaredRange`: `BatchEnd > 0`) e não mais `BatchStart <= 0` — que já mentia
+sobre `[Erai-raws] … - 00 ~ 12`. Só o **nome exibido** corta o começo em 1: "-10-12" não diz nada
+na tela, e o que interessa ali é a fatia desta entrada.
+
+**`extractPart` devolve `nil` para nome com duas parts.** "(Part 1 + Part 2)", "(Part 1+2)" e
+"(Season 4 Part 03+04)" cobrem as duas metades; devolver o primeiro número fazia o pack ser
+rejeitado justamente para a segunda. Sem número único, quem decide é a cobertura.
+
+**As duas seleções de "primeiro PREQUEL de TV/TV_SHORT" continuam duplicadas de propósito.**
+`anilist.prequelOf` caminha a cadeia **inteira** (hipótese "absoluta pela série");
+`daemon.ComputeEpisodeOffset` dá **um** salto e é gated por `part >= 2` (hipótese "contínua pela
+season"). São hipóteses diferentes do mesmo palpite — unificá-las apagaria a distinção que a
+heurística usa. Os `TODO(F8)` que apontavam um para o outro viraram esta nota.
+
+**Medição (29/ago/2026).** `make debug-batch` sobre `scripts/robustness-animes.txt`: episódios
+buscados e encontrados idênticos aos da rodada anterior nos 8 animes (só seeders variaram, dado
+vivo). Nos casos motivadores, todos com 12/12 magnets: `166873` e `127720` (Mushoku Tensei) e
+`131681` (AoT Final Season Part 2), onde o pack `[EMBER] … (Season 4 Part 03+04)` passou a
+sobreviver ao filtro.
+
+**Don't "fix" by:** voltar a exigir marcador de part no caminho de pack; relaxar o filtro de part
+no caminho de **episódio**; tratar começo de faixa ≤ 0 como desconhecido; converter a faixa gravada
+"para ficar positiva" (quebra #74 e #78); acrescentar hipótese de numeração sem desempate que a
+distinga das outras; unificar `prequelOf` com `ComputeEpisodeOffset`.

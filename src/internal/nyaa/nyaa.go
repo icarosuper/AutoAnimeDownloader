@@ -676,7 +676,13 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			if requestedSeason != nil && (season == nil || *season != *requestedSeason) {
 				return
 			}
-			if requestedPart != nil && (part == nil || *part != *requestedPart) {
+			// Part no caminho de pack: so rejeita CONFLITO declarado. Pack sem marcador de
+			// part nao e pack errado — e o formato normal de lancamento, porque o pack e da
+			// season inteira e a AniList e que quebra a season em cours (sources.md,
+			// "Granularidade e numeracao dos packs"). Exigir o marcador zerava os packs de
+			// toda entrada "Part N". Quem decide se o pack serve e a cobertura da faixa, no
+			// daemon (packAxis).
+			if requestedPart != nil && part != nil && *part != *requestedPart {
 				return
 			}
 			// Pack acima do teto sai aqui e não na filterBySize do daemon: aceitá-lo agora
@@ -889,7 +895,16 @@ func extractSeason(name string) *int {
 
 // extractPart extrai o número da parte/cour do nome do torrent ou título Anilist
 // Testa os padrões em ordem de prioridade (mais específico primeiro)
+//
+// Nome que declara MAIS DE UMA part não tem part: "(Part 1 + Part 2)" e "(Season 4 Part 03+04)"
+// cobrem as duas metades, e devolver a primeira que casa fazia o pack ser lido como "da part 1" —
+// justamente o pack que serve para as duas. Sem número único a resposta é nil, e quem decide passa
+// a ser a cobertura da faixa (ver daemon.packAxis e sources.md, item 4).
 func extractPart(name string) *int {
+	if declared := declaredParts(name); len(declared) > 1 {
+		return nil
+	}
+
 	for _, p := range rePartPatterns {
 		matches := p.re.FindStringSubmatch(name)
 		if len(matches) > 1 {
@@ -901,6 +916,19 @@ func extractPart(name string) *int {
 		}
 	}
 	return nil
+}
+
+// declaredParts sao os numeros de part/cour DISTINTOS que o nome declara, sem zero a esquerda.
+func declaredParts(name string) map[int]bool {
+	declared := make(map[int]bool, 2)
+	for _, m := range reAnyPart.FindAllStringSubmatch(name, -1) {
+		for _, group := range m[1:] {
+			if n, err := strconv.Atoi(group); err == nil {
+				declared[n] = true
+			}
+		}
+	}
+	return declared
 }
 
 // canonicalResolutions mapeia os apelidos de resolução nos tokens canônicos das listas

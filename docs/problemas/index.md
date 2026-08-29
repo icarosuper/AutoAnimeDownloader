@@ -374,14 +374,14 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
 
   *Mata o "cour 2 rebaixa o que já está em disco".*
 
-- [ ] **F8 · Busca por cobertura** (consome F6) — **o mais arriscado, por último**
+- [x] **F8 · Busca por cobertura** (consome F6) — **o mais arriscado, por último**
   Filtro duro de part deixa de perguntar "esse pack é da part N?" e passa a perguntar "esse pack
   cobre a janela pendente?" — que é o que `pickBatches` já quer decidir.
-  - [ ] Heurística de mapear a numeração do pack para o eixo absoluto: poucas hipóteses (offset 0,
+  - [x] Heurística de mapear a numeração do pack para o eixo absoluto: poucas hipóteses (offset 0,
         offset do prequel imediato, offset da série inteira) + **contagem de arquivos como
         desempate** (um pack de 25 arquivos numerado a partir de 1 só pode ser season contínua).
         `ComputeEpisodeOffset` vira uma das hipóteses, não a única
-  - [ ] **Resolver a duplicação que o F6 deixou marcada.** A seleção de "primeiro `PREQUEL` de
+  - [x] **Resolver a duplicação que o F6 deixou marcada.** A seleção de "primeiro `PREQUEL` de
         `TV`/`TV_SHORT`" existe hoje em **dois** lugares: `anilist.prequelOf` (`series.go`, caminha
         a cadeia inteira) e `daemon.ComputeEpisodeOffset` (`helpers.go`, um salto só, gated por
         `part >= 2`). Os dois carregam um `TODO(F8)` apontando um para o outro. Não foram
@@ -390,14 +390,30 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
         legitimamente; se a heurística não precisar dela, ela sai. **Se o F8 for descartado como o
         F3 foi, unificar as duas e apagar os dois TODOs** — sem o F8 não sobra motivo para a
         duplicação existir
-  - [ ] Na dúvida, resolver para **0**: offset ausente cai na numeração relativa, que boa parte dos
+  - [x] Na dúvida, resolver para **0**: offset ausente cai na numeração relativa, que boa parte dos
         grupos usa; offset errado manda a busca para episódio inexistente
-  - [ ] Absorve o `Part 1 + Part 2` do `extractPart` — cobertura por range não lê marcador de part
-  - [ ] Testes com os quatro formatos de numeração de `sources.md`
+  - [x] Absorve o `Part 1 + Part 2` do `extractPart` — cobertura por range não lê marcador de part
+  - [x] Testes com os quatro formatos de numeração de `sources.md`
         ("Granularidade e numeração dos packs")
   *Dependência opcional que fortalece muito:* o item do `TODO.md` de scrappar a página de detalhe
   do Nyaa dá a lista de arquivos, que é exatamente o desempate desta heurística. Se os dois forem
   feitos, este depois daquele.
+
+  *Feito em 29/ago/2026.* Diferenças do planejado: (a) o filtro de part **não** saiu do caminho de
+  pack — ele foi rebaixado de "exige marcador" para "rejeita conflito declarado". Cobertura por
+  range sozinha não distingue o pack da Part 1 do pack da Part 2 quando os dois reiniciam em 1, que
+  é o caso comum; o marcador continua sendo o único sinal ali. O que estava errado era rejeitar
+  pack **sem** marcador, que é o formato normal de lançamento. (b) O desempate por contagem de
+  arquivos virou o **span do próprio nome** (`fim - início + 1`), que já está disponível e diz a
+  mesma coisa para pack com faixa no nome; a lista de arquivos da página de detalhe continua sendo
+  o desempate mais forte e continua no `TODO.md`. (c) A regra do desempate é "a hipótese cujo fim
+  cai no último episódio da entrada", não uma comparação de contagem solta. (d) A faixa **gravada**
+  passou a ser a convertida para a numeração local, e ela pode começar em zero ou abaixo — o que
+  obrigou a trocar o sentinela de "faixa desconhecida" de `BatchStart <= 0` para `BatchEnd <= 0`
+  (`hasDeclaredRange`), em `declaredSpan` (#74) e `findCoveringPack` (#78). Sem isso o pack de
+  season gravado sob um cour posterior seria lido como "sem faixa". (e) `extractPart` também
+  absorveu a forma compacta `Part 1+2` / `Part 03+04`, que é a mesma ambiguidade — isso mudou duas
+  expectativas que já existiam em `nyaa_test.go`. Registrado em `decisions.md` #79.
 
 ---
 
