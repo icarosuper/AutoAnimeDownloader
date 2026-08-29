@@ -102,7 +102,9 @@ Patterns that look wrong but are intentional. Read before "fixing" anything.
 
 **Why it's right:** The offset (PREQUEL episode count) is only needed for split-season Part 2 releases where the torrent site numbers episodes globally (e.g. episode 14 on Nyaa when Anilist calls it episode 1 of Part 2). Kaguya-sama Season 2, for example, also has a PREQUEL relation with 12 episodes — applying a +12 offset there would search for episode 13 when the correct episode is 1. The gate `part >= 2` restricts the offset to the specific case it was designed for, preventing all single-season animes with prior seasons from receiving a wrong offset.
 
-**Don't "fix" by:** removing the gate or applying the offset whenever a PREQUEL exists. That breaks every multi-season anime that does not use split-part numbering.
+O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entram na conta. Um filme de recap ou uma OVA também chegam como `PREQUEL` e com `Episodes` preenchido, mas não fazem parte da numeração que os fansubs seguem — somá-los mandaria a busca para um episódio inexistente. Quando não há PREQUEL de TV, o offset é 0 e a busca cai na numeração relativa, que é o que boa parte dos grupos usa. Errar para 0 é barato; errar para um número é uma busca que não acha nada.
+
+**Don't "fix" by:** removing the gate or applying the offset whenever a PREQUEL exists. That breaks every multi-season anime that does not use split-part numbering. Nor by accepting a PREQUEL of any format.
 
 ---
 
@@ -1235,6 +1237,7 @@ A derivação continua existindo, mas com outro papel: `allDone(onboardingSteps(
 | Passe do daemon | ~0,3/min | 3 por passe (`GetCustomListsMap` + `GetAllCurrentAnime` de download + `GetAllCurrentAnime` de delete), a cada `check_interval` (default 10 min) |
 | Poll de `/animes` | ≤1,2/min | `GetFrontendAnimeList` (TTL 60s) + `GetCustomListsMap` (TTL 5min) |
 | `refreshOrphanAnimes` | **1 por anime órfão** | `GetMediaByID`, até 5 concorrentes, TTL 60s |
+| `appendStandaloneEntries` | **1 por avulso** | `GetMediaByID` em loop, TTL 60s cada — o mesmo loop existe nos dois lados (`api/standalone.go` e `daemon/standalone.go`). Medido 28/ago/2026: com 20 avulsos são 20 dos 30 requests do balde, gastos só para montar uma tela |
 
 O passe do daemon é ruído. Quem estoura o limite é o refresh de órfãos: um `GetMediaByID` por anime baixado que a busca filtrada não cobriu, disparado **a cada poll do frontend**. Numa biblioteca com dezenas de animes fora dos status configurados, isso é uma rajada de dezenas de requisições — e a AniList tem um *burst limiter* separado do limite por minuto, que pune exatamente esse formato.
 
@@ -1260,6 +1263,8 @@ O passe do daemon é ruído. Quem estoura o limite é o refresh de órfãos: um 
 - Fazer `refreshOrphanAnimes` rodar mesmo com a lista falhada, "para a tela não ficar desatualizada" — é o loop de realimentação que produziu o 429 original.
 - Remover os TTLs porque "o daemon só busca a cada 10 minutos" — quem busca a cada 30 segundos é cada aba do frontend.
 - Copiar o limite atual da AniList para cá como constante — ele é temporário e muda sem aviso.
+- Estimar o consumo com um contador nosso em vez de ler `X-RateLimit-Remaining` da resposta — ver #72, que mede o balde e mostra por que erro também custa cota.
+- Manter um `GetMediaByID` por id onde cabe `Page(media(id_in: [...]))` — uma query custa 1 unidade independente do número de ids (#72).
 
 ---
 
@@ -1438,3 +1443,180 @@ em `config.json`; escrever os defaults novos por cima de um `config.json` existe
 volta nos tokens canônicos "porque o checkbox é um clique a mais"; devolver o campo de adicionar a
 `criteria_order` (nem como texto livre, nem como select de um enum duplicado no frontend); validar
 `criteria_order` no backend para "poder" aceitar texto livre de novo.
+
+---
+
+### 71. A AniList não tem id de franquia: a cadeia de `PREQUEL` é a única fonte, e busca por nome é armadilha
+
+**Location:** `src/internal/anilist` (queries que pedem `relations`); `daemon.ComputeEpisodeOffset`
+(`daemon/helpers.go`). Complementa a #9, que trata do *gate* do offset; aqui está a **fonte** dele.
+
+**O que parece:** dá para identificar "a série" — a franquia inteira, atravessando cour e part — por
+algum id da AniList, ou, na falta dele, por uma busca por nome (`search: "Monogatari"`).
+
+**Por que está errado — medido por introspecção em 28/ago/2026.** O tipo `Media` tem 55 campos e
+**nenhum** de franquia:
+
+```
+id, idMal, title, type, format, status, description, startDate, endDate, season, seasonYear,
+seasonInt, episodes, duration, chapters, volumes, countryOfOrigin, isLicensed, source, hashtag,
+trailer, updatedAt, coverImage, bannerImage, genres, synonyms, averageScore, meanScore,
+popularity, isLocked, trending, favourites, tags, relations, characters, staff, studios,
+isFavourite, isFavouriteBlocked, isAdult, nextAiringEpisode, airingSchedule, trends,
+externalLinks, streamingEpisodes, rankings, mediaListEntry, reviews, recommendations, stats,
+siteUrl, autoCreateForumThread, isRecommendationBlocked, isReviewBlocked, modNotes
+```
+
+Não existe entidade "série" no schema, e `idMal` tem **a mesma granularidade** (um id por cour). A
+única aresta entre cours é `relations`. Caminhar `relationType == "PREQUEL"` filtrando
+`format ∈ {TV, TV_SHORT}` não é uma opção entre várias — é a única fonte disponível.
+
+**A busca por nome é o atalho que corrompe tudo.** Seria um request só, e foi medida:
+
+- `search: "Monogatari"` → 28 resultados TV, quase todos de outras obras (`Ore Monogatari!!`,
+  `Shouwa Monogatari`, `Perrine Monogatari`, `Gokinjo Monogatari`).
+- `search: "Shingeki no Kyojin"` → 7 resultados, incluindo `Shingeki! Kyojin Chuugakkou` — a
+  paródia chibi de 12 episódios, que entraria em qualquer soma de episódios e deslocaria a série
+  inteira.
+- E não devolve **ordem**: a sequência teria que ser inferida dos títulos, que é exatamente o
+  problema de parsing de string que já derruba packs no `nyaa_match.go`.
+
+O grafo de `relations` é autoritativo; o nome não é.
+
+**Três fatos de `relations` que definem qualquer implementação:**
+
+1. **`Media.relations` não aceita argumentos.** Sem filtro server-side por `relationType`, sem
+   paginação: toda query traz *todos* os edges, e filtrar é sempre trabalho do cliente.
+2. **`relations` pode ser aninhado, mas a AniList corta em 2 níveis.** Testado com profundidades de
+   1 a 8: o corpo satura em 5865 bytes a partir da profundidade 3, e no terceiro nível `relations`
+   vem presente com `edges: []`. Confirmado em Monogatari, Mushoku Tensei e Shingeki: **2 hops de
+   PREQUEL por query, sempre.**
+3. **`edges: []` no nível cortado NÃO significa raiz.** Esta é a armadilha séria: no nível em que a
+   AniList para de expandir, a resposta é indistinguível de um anime que genuinamente não tem
+   prequel. Tratar os dois como iguais para a caminhada cedo e produz um deslocamento
+   **silenciosamente errado**. Quem implementar precisa marcar quais nodes vieram em posição
+   autoritativa (níveis 0 e 1 da query) e re-buscar os do nível cortado antes de concluir qualquer
+   coisa sobre eles. O teto de 2 é comportamento observado, não documentado — o loop deve consumir
+   o que vier e enfileirar o que faltar, sem assumir profundidade nenhuma.
+
+**A cadeia foi validada contra a API real** (28/ago/2026), e a validação forte é o Shingeki: a
+soma acumulada dá `76..87` para o Final Season Part 2, que é **exatamente** a numeração que
+SubsPlease e Erai-raws usam nos arquivos. A cadeia reproduz a convenção real de nomeação sem
+nenhum ajuste. Monogatari (7 níveis, ordem cronológica torta) também fecha coerente.
+
+**Errar para 0 é barato; errar para um número, não.** Offset ausente cai na numeração relativa, que
+boa parte dos grupos usa. Offset errado manda a busca para um episódio que não existe. Toda dúvida
+na caminhada resolve para 0.
+
+**Don't "fix" by:** procurar um id de franquia no schema "que deve existir em algum lugar"; usar
+`idMal` como identidade de série; substituir a caminhada por `search:` com o nome da franquia;
+tratar `edges: []` como raiz; assumir a profundidade 2 como contrato; incluir `MOVIE`/`OVA`/`ONA`
+na caminhada (ver #9).
+
+---
+
+### 72. O orçamento da AniList se mede pelos headers da resposta, não por um contador nosso
+
+**Location:** `src/internal/anilist/anilist.go` — `sendAnilistRequest`; `health.go` — `retryAfter`,
+classificação `HealthRateLimited`. Complementa a #65, que mede **quem** gasta; aqui está **como
+saber quanto sobrou**.
+
+**O que parece:** para não tomar 429, o caminho natural é um limiter client-side
+(`golang.org/x/time/rate`) ou uma fila que segura requisição quando o consumo estimado passa do
+teto.
+
+**Por que está errado.** A AniList devolve o estado do balde em **toda** resposta, e o header é
+estritamente mais preciso que qualquer contador interno. Medido em 28/ago/2026:
+
+```
+media minimo             HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 29
+200 normal               HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 28
+404 (media inexistente)  HTTP 404  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 27
+query invalida           HTTP 400  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 26
+query pesada aninhada    HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 25
+```
+
+Quatro consequências, todas com efeito de projeto:
+
+1. **Erro consome cota.** Um 404 e uma query malformada custam 1 cada. Retry cego em cima de erro
+   queima orçamento, e um contador que só contasse sucessos ficaria otimista exatamente quando as
+   coisas já estão indo mal.
+2. **Complexidade não custa nada.** A query aninhada de 33 KB decrementou 1, igual à query mínima.
+   Não há cobrança por complexidade nem por número de ids: **maximizar trabalho por request é
+   estritamente correto, não há trade-off.** É por isso que `Page(media(id_in: [...]))` (até 50 ids,
+   `perPage` máximo 50) vale sempre que houver um loop de `GetMediaByID`.
+3. **O header é autoritativo porque enxerga os outros consumidores.** Ele já soma o passe do
+   daemon, o poll do frontend e as buscas de avulso — os três disputam o mesmo balde por IP, sem
+   coordenação. Nenhum contador interno chega perto, porque nenhum vê os erros dos outros.
+4. **O balde reseta de uma vez, não desliza.** Medido: `Remaining` foi de 24 → 20 numa rajada,
+   ficou em 19 aos 21s e voltou a **29** aos 41s. É balde fixo com reset discreto, não janela
+   deslizante com recarga gradual — na prática, **o orçamento se recupera inteiro em ≤ 60s**.
+
+**`X-RateLimit-Reset` não pode ser usado.** Ele aparece anunciado em
+`Access-Control-Expose-Headers`, mas **não está presente** em nenhuma resposta 200 observada. A
+tabela da #65 o cita porque a documentação oficial o cita; a medição não o encontrou. Um 429 não
+foi provocado de propósito (ele bloqueia o IP por ~1 min e o daemon do usuário compartilha esse IP),
+então **quais headers um 429 carrega continua não verificado** — o que se sabe é que `health.go` já
+lê `Retry-After`.
+
+**O desenho que decorre disso: reserva por prioridade, não fila.** Gravar `X-RateLimit-Remaining` e
+o instante da leitura num atômico ao lado de `health`, em toda resposta **inclusive erro**, e
+comparar com um piso antes de emitir. Bloquear e esperar é a resposta errada — o poll do frontend
+roda dentro de um handler HTTP e penduraria a tela. A resposta certa é degradar o que é barato
+degradar:
+
+| Chamador | Criticidade | Ação com orçamento baixo |
+|---|---|---|
+| Passe do daemon | alta — perder o passe é episódio não baixado | sempre passa |
+| Poll do frontend (`GetFrontendAnimeList`) | baixa — já tem cache de 60s | recusa e serve cache velho |
+| Busca de avulso pela UI | baixa | recusa, com erro visível a quem pediu |
+| Trabalho de warm-up / prefetch | baixa — tem fallback | adia para o próximo passe |
+
+**A saída obrigatória:** se todo mundo for recusado, ninguém emite request e o processo nunca
+descobre que o balde resetou. A leitura precisa de validade — passados 60s da última observação,
+tratar o orçamento como cheio de novo. É para isso que a medição do reset serve, e é o que impede o
+gate de se auto-travar.
+
+**Don't "fix" by:** adicionar `x/time/rate` ou qualquer token bucket client-side (adivinha em vez de
+medir, e não contabiliza os erros dos outros consumidores); contar só respostas 200; depender de
+`X-RateLimit-Reset`; bloquear a goroutine esperando o balde encher dentro de um handler HTTP;
+recusar *todos* os chamadores quando o orçamento está baixo, sem a validade de 60s.
+
+---
+
+### 73. O frontend não busca direto na AniList, mesmo podendo
+
+**Location:** política para `src/internal/frontend` e `src/internal/api/endpoint_animes.go` — hoje
+todo acesso à AniList passa pelo backend.
+
+**O que parece:** o limite é por IP público, e o frontend é o maior consumidor (ver #65). Se ele
+falasse direto com a AniList, rodando num PC diferente do daemon o consumo cairia noutro balde.
+
+**Os pré-requisitos técnicos existem** — medido em 28/ago/2026, não é o que impede:
+
+- A AniList responde `Access-Control-Allow-Origin: *` e expõe os headers de rate limit em
+  `Access-Control-Expose-Headers`. Um browser pode consultar direto, inclusive lendo o orçamento.
+- O app **não usa token nenhum**: todas as queries são públicas, por username. Não há credencial
+  para vazar para o browser.
+
+**O furo é NAT.** O limite é por IP **público**, não por máquina. Daemon no desktop e browser no
+notebook, na mesma casa, saem pelo mesmo IP → mesmo balde, ganho zero. O alívio só existe quando o
+browser está numa rede genuinamente diferente (celular em dados móveis, acesso remoto, VPN) — o
+cenário menos comum —, e o custo é pago em todos os cenários.
+
+**O custo é duplicação silenciosa.** O frontend teria que replicar em TypeScript o `DedupeByMedia`,
+o merge de `customLists`, o `withStandaloneProgress` e a classificação de health do `health.go`.
+Lógica de Go duplicada em TS diverge sem ninguém perceber, e o daemon continuaria precisando dos
+mesmos dados para o passe: dois caminhos para o mesmo dado, não um.
+
+| | ganho | custo | funciona quando? |
+|---|---|---|---|
+| Frontend busca direto | move o poll para outro IP | lógica duplicada em TS | só se o browser estiver em outra rede |
+| `id_in` em lote nos avulsos | N req/min → 1 | ~10 linhas | sempre |
+
+**Veredito: não fazer.** A ideia aponta para um problema real, mas ataca a fatia errada com o
+instrumento caro. **Reavaliar só se**, depois do `id_in` em lote e do gate por prioridade (#72), o
+rate limit voltar a apertar.
+
+**Don't "fix" by:** mover só "uma query pequena" para o frontend como meio-termo — o custo é a
+duplicação da lógica de merge, e ela começa na primeira query.

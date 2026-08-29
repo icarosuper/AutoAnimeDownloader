@@ -99,6 +99,46 @@ linha.
 
 ---
 
+## Granularidade e numeração dos packs — o que a fonte entrega vs. o que a AniList pede
+
+Medido em 28/ago/2026, a partir das linhas `Raw Nyaa row` de passes reais. Não é detalhe de
+parsing: é a razão de o daemon e a fonte discordarem sobre o que é "um episódio".
+
+**1. Pack é quase sempre de season inteira, não de cour.** A AniList quebra cour/part em **media
+ids separados**, cada um com numeração própria a partir de 1 (ver `decisions.md` #45 e #71). Os
+grupos não seguem esse recorte: o pack lançado cobre a season toda. Consequência prática, medida em
+Mushoku Tensei II Part 2 (`166873`): os únicos packs disponíveis eram de season inteira, e a busca
+montada a partir da entrada "Part 2" os descartou por não trazerem marcador de part explícito. Um
+pack "sem part" não é um pack errado — é o formato normal de lançamento.
+
+**2. Não existe uma convenção de numeração; existem quatro.** Todas observadas no mesmo período:
+
+| Release | Numeração no nome/arquivos | Convenção |
+|---|---|---|
+| `[Erai-raws] … Honki Dasu - 00 ~ 12 [BATCH]` (MT S2 Part 1) | `00 ~ 12` | reinicia por **season** |
+| `[EMBER] … (Season 2 \| Part 2) … (Batch)` (MT S2 Part 2) | `1..12` | reinicia por **part** |
+| `[Diddy] Mushoku Tensei - S02 (BD 1080p HEVC Opus)` | `1..25` | contínua pela **season inteira** |
+| SubsPlease / Erai-raws, AoT Final Season Part 2 | `76..87` | **absoluta pela série** |
+
+A quarta linha é a que costuma surpreender: `76..87` bate exatamente com a soma acumulada dos
+episódios da cadeia de `PREQUEL` na AniList (ver `decisions.md` #71). Ou seja, parte dos grupos usa
+o eixo absoluto da franquia como numeração de arquivo — e nenhum deles anuncia qual convenção
+adotou.
+
+**3. Por isso mapear a numeração do pack é sempre palpite, e o desempate está na contagem de
+arquivos.** Não dá para ler a convenção do nome. Dá para reduzir a poucas hipóteses (offset 0,
+offset do prequel imediato, offset da série inteira) e usar a **quantidade de arquivos** do pack
+para escolher: um pack com 25 arquivos numerado a partir de 1 só pode ser season contínua, não um
+cour de 12. É a mesma evidência que `packEpisodeOffset` já usa no organize (`decisions.md` #68), e
+é o que torna a lista de arquivos da página de detalhe do Nyaa (seção "Página de detalhe", acima)
+valiosa **antes** de baixar, não só depois.
+
+**4. Um "Part 1 + Part 2" no nome não é "part 1".** `[Fuchs] … - S02 … (Season 2) (Part 1 + Part 2)`
+cobre as duas metades, mas um extrator que devolve o primeiro número que casar lê `1`. Ler marcador
+de part é sempre frágil; perguntar "esse pack cobre a janela pendente?" não é.
+
+---
+
 ## AnimeTosho — bom complemento, mau substituto
 
 **Atenção ao domínio.** `animetosho.org` congelou em maio/2026 e não indexa mais nada. A
@@ -200,7 +240,8 @@ frescor de seeders.
    medido, arquitetura de múltiplas fontes é especulação.
 4. **Lista de arquivos do pack, se virar requisito** — vem da página de detalhe do **Nyaa**
    (`/view/<id>`), não do AnimeTosho: só ela funciona em pack antigo. Escopo e custo na seção
-   "Página de detalhe" acima. O AnimeTosho como fonte adicional só sobra para match por
+   "Página de detalhe" acima; o segundo uso, além da cobertura real, é desempatar a convenção de
+   numeração do pack (seção "Granularidade e numeração dos packs"). O AnimeTosho como fonte adicional só sobra para match por
    `anidb_aid`. Nenhum dos dois como substituto.
 5. **Debrid/Usenet** — só se seleção por arquivo virar requisito de verdade. É troca de
    *protocolo*, e é a saída se a Etapa 0 for refutada.

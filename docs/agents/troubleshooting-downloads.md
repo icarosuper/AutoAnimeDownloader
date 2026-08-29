@@ -167,6 +167,47 @@ jaccard        = |intersection| / |union|
 
 If Jaccard < 0.8, add the offending torrent-side tokens to `titleTechnicalTokens` in `nyaa_match.go` (streaming service tags like `nf`/`amzn`/`cr`, codec fragments like `eac3`/`ddp2`, subtitle markers like `multisub`/`multi`/`subs`, etc.).
 
+**6f. Nenhum pack sobrevive — o anime baixa episódio a episódio mesmo com pack no Nyaa**
+
+Sintoma-âncora no log: existem linhas `Attempting to download episode` para todos os episódios, e
+**não existe** a linha `Using batch torrents to cover the pending window` (`daemon/episodes.go`).
+Isso quer dizer que a busca voltou com resultados, mas nenhum pack chegou ao `pickBatches` — o
+problema é filtro, não ausência de pack. Confirme na mesma busca: `Found anime torrents on Nyaa`
+com `results: N` e todos os nomes sendo episódio avulso.
+
+Receita para achar **qual** filtro matou cada pack (foi o que fechou o caso do Mushoku Tensei II
+Part 2, `166873`):
+
+1. Extraia os nomes crus da busca: as linhas `Raw Nyaa row` do passe em
+   `~/.autoAnimeDownloader/daemon.log` (ou do `debug.jsonl` do Step 0).
+2. Rode, para **cada** nome de pack, as funções do pacote `nyaa` que decidem o descarte —
+   `isBatch`, `extractSeason`, `extractPart` e `titleMatchesQuery` — com a query que o daemon usou
+   de verdade (a variante, não o título da AniList).
+3. Monte a tabela `torrent × batch × part × match`. A coluna que der `false` é o filtro culpado, e
+   cada linha pode morrer por um motivo diferente.
+
+Os três culpados já vistos, todos na mesma investigação:
+
+- **`titleMatchesQuery` falso porque `truncateAtFirstMarker` comeu o título alternativo.** Ele corta
+  o nome no primeiro marcador de season; quando o nome traz o romaji entre parênteses **depois**
+  desse marcador (`(Season 2 | Part 2) … (Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2)`), os
+  tokens do romaji somem e o match exige tokens que não sobraram.
+- **Filtro duro de part matando pack de season inteira.** Com `requestedPart != nil`, pack sem
+  marcador de part explícito é descartado — e pack de season inteira normalmente não tem esse
+  marcador, embora contenha os episódios pedidos. Ver `sources.md`, "Granularidade e numeração dos
+  packs".
+- **`extractPart` lendo `Part 1 + Part 2` como `1`.** Devolve o primeiro número que casa, então um
+  pack que cobre as duas metades é descartado para a busca da part 2.
+
+**Comparação que fecha o diagnóstico rápido:** rode o mesmo passo na entrada **irmã** sem "Part" no
+título (a Part 1 da mesma season). Se ela acha pack e a Part 2 não, `requestedPart != nil` está no
+caminho — o filtro de part nem roda na irmã.
+
+Verifique também se a variante de título certa chegou a ser tentada: `searchNyaaWithVariants`
+(`daemon/search.go`) **para na primeira variante que devolve qualquer resultado**, e
+`GenerateSearchTitleVariants` põe o romaji primeiro. Se o romaji trouxe 24 episódios avulsos, a
+variante em inglês — que poderia casar com os packs — nunca rodou.
+
 ---
 
 ## Step 7 — Write a failing test

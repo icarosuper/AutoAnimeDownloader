@@ -185,6 +185,10 @@ type MediaRelationNode struct {
 	Title    Title    `json:"title"`
 	Synonyms []string `json:"synonyms"`
 	Episodes *int     `json:"episodes"`
+	// Format separa a prequel que conta episodios da que nao conta: um filme de recap ou uma
+	// OVA tambem chegam como PREQUEL e com Episodes preenchido, e somar isso no offset joga a
+	// busca para um numero de episodio que nao existe. Ver ComputeEpisodeOffset.
+	Format MediaFormat `json:"format"`
 }
 
 type MediaRelationEdge struct {
@@ -411,6 +415,7 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 									}
 									synonyms
 									episodes
+									format
 								}
 								relationType
 							}
@@ -649,6 +654,7 @@ func getMediaListEntry(userName string, mediaId int) (*AniListResponse, error) {
 									}
 									synonyms
 									episodes
+									format
 								}
 								relationType
 							}

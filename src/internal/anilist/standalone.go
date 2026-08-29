@@ -124,6 +124,7 @@ func GetMediaByID(mediaID int) (*MediaList, error) {
 							}
 							synonyms
 							episodes
+							format
 						}
 						relationType
 					}

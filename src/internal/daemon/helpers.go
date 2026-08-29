@@ -243,14 +243,23 @@ func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, par
 // ComputeEpisodeOffset retorna o total de episódios do PREQUEL quando part >= 2.
 // Usado para converter o progresso relativo do Anilist no número absoluto usado
 // por fansubs com numeração contínua (ex: SubsPlease).
+//
+// Só PREQUEL de TV/TV_SHORT entra na conta: filme de recap, OVA e ONA também chegam como
+// PREQUEL e com Episodes preenchido, mas não fazem parte da contagem que os fansubs seguem.
+// Na dúvida devolve 0 — offset errado manda a busca para um episódio inexistente, enquanto
+// offset ausente cai na numeração relativa, que é o que boa parte dos grupos usa.
 func ComputeEpisodeOffset(relations anilist.MediaRelations, part *int) int {
 	if part == nil || *part < 2 {
 		return 0
 	}
 	for _, edge := range relations.Edges {
-		if edge.RelationType == "PREQUEL" && edge.Node.Episodes != nil {
-			return *edge.Node.Episodes
+		if edge.RelationType != "PREQUEL" || edge.Node.Episodes == nil {
+			continue
 		}
+		if edge.Node.Format != anilist.MediaFormatTV && edge.Node.Format != anilist.MediaFormatTVShort {
+			continue
+		}
+		return *edge.Node.Episodes
 	}
 	return 0
 }

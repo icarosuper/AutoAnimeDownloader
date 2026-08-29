@@ -101,8 +101,12 @@ func classify(status int) string {
 	}
 }
 
-// retryAfter le o cabecalho Retry-After de um 429. A AniList manda segundos (nunca data HTTP),
-// e tambem manda X-RateLimit-Reset com o unix timestamp; o primeiro basta e e mais barato.
+// retryAfter le o cabecalho Retry-After de um 429. A AniList manda segundos (nunca data HTTP).
+//
+// NAO confiar em X-RateLimit-Reset: ele aparece anunciado em Access-Control-Expose-Headers, mas
+// nao veio em nenhuma resposta 200 observada (medido em 2026-08-28). Se ele existe, e so no 429 —
+// nao verificado, porque provocar um 429 bloqueia o IP por ~1min e o daemon compartilha esse IP.
+// X-RateLimit-Limit e X-RateLimit-Remaining, esses sim, vem em TODA resposta, inclusive 400 e 404.
 func retryAfter(headerValue string) time.Time {
 	secs, err := strconv.Atoi(headerValue)
 	if err != nil || secs <= 0 {

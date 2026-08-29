@@ -22,12 +22,16 @@ func makeTitle(english, romaji string) anilist.Title {
 }
 
 func makeRelations(relType string, episodes int) anilist.MediaRelations {
+	return makeRelationsFmt(relType, episodes, anilist.MediaFormatTV)
+}
+
+func makeRelationsFmt(relType string, episodes int, format anilist.MediaFormat) anilist.MediaRelations {
 	eps := episodes
 	return anilist.MediaRelations{
 		Edges: []anilist.MediaRelationEdge{
 			{
 				RelationType: relType,
-				Node:         anilist.MediaRelationNode{Episodes: &eps},
+				Node:         anilist.MediaRelationNode{Episodes: &eps, Format: format},
 			},
 		},
 	}
@@ -162,6 +166,18 @@ func TestExtractAnimeSeasonPart_NoSeasonOrPart(t *testing.T) {
 // ============================================
 // ComputeEpisodeOffset
 // ============================================
+
+func TestComputeEpisodeOffset_NonTVPrequel_ReturnsZero(t *testing.T) {
+	// Um filme de recap ou OVA chega como PREQUEL com Episodes preenchido. Somar isso jogaria
+	// a busca para um episódio que não existe, então não entra na conta.
+	part2 := 2
+	for _, format := range []anilist.MediaFormat{anilist.MediaFormatMovie, anilist.MediaFormatOVA, anilist.MediaFormatONA} {
+		relations := makeRelationsFmt("PREQUEL", 4, format)
+		if got := daemon.ComputeEpisodeOffset(relations, &part2); got != 0 {
+			t.Errorf("format %s: expected offset=0, got %d", format, got)
+		}
+	}
+}
 
 func TestComputeEpisodeOffset_SnKS3P2_Returns12(t *testing.T) {
 	// Anilist id 104578: PREQUEL = SnK S3 (12 episódios)
