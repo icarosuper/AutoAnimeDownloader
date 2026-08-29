@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +77,11 @@ var httpDo = func(req *http.Request) (*http.Response, error) {
 }
 
 var aniListAPIURL = "https://graphql.anilist.co"
+
+// anilistMaxPerPage e o perPage maximo que a AniList aceita numa Page. E o tamanho do lote de
+// toda busca por lista de ids (mediaId_in, id_in): pedir mais que isso numa query so devolveria
+// 50 e faria os ids restantes parecerem apagados.
+const anilistMaxPerPage = 50
 
 // ErrNotFound sinaliza que a AniList respondeu 404: o objeto consultado nao existe.
 var ErrNotFound = errors.New("anilist: not found")
@@ -527,6 +533,77 @@ func frontendListResponse(list []MediaList) *AniListResponse {
 	return resp
 }
 
+// GetAnimeInfoByIDs is the batch twin of GetAnimeInfo: ONE query per account per 50 media ids,
+// instead of one query per anime per account. It is what makes the orphan refresh of
+// GET /animes affordable — that path used to fire one request per downloaded anime the filtered
+// list fetch didn't cover, on EVERY frontend poll, which is the burst decisions.md #65 measured
+// as the dominant consumer of the AniList budget.
+//
+// Same collapse rule as GetAnimeInfo (DedupeByMedia: media fields from whichever account tracks
+// the anime, LOWEST progress among them), applied across accounts AND chunks.
+//
+// A media id no account tracks is simply ABSENT from the map — the normal state of an anime
+// removed from the lists whose episodes are still on disk, not an error. The error is returned
+// when at least one account's request failed, and it does NOT invalidate the map: whatever came
+// back is already in it. The caller decides what a partial answer is worth; it is the same
+// distinction GetAnimeInfo draws between "not tracked" and "AniList is down", just at batch
+// granularity.
+//
+// No cache: this feeds a path already fronted by frontendListCache's poll rhythm, and one query
+// per poll per account is the same order as the list fetch beside it.
+func GetAnimeInfoByIDs(mediaIds []int, usernames []string) (map[int]*MediaList, error) {
+	if len(mediaIds) == 0 || len(usernames) == 0 {
+		return map[int]*MediaList{}, nil
+	}
+
+	// mediaId_in devolve no maximo uma entrada por id, entao um lote de anilistMaxPerPage ids
+	// nunca passa de uma pagina — nao ha paginacao a seguir aqui.
+	query := `
+		query GetAnimeInfoByIDs($userName: String, $mediaIds: [Int]) {
+			Page(perPage: ` + strconv.Itoa(anilistMaxPerPage) + `) {
+				mediaList(userName: $userName, mediaId_in: $mediaIds, type: ANIME) {
+					id
+					status
+					progress
+					customLists
+					media {` + mediaByIDFields + `}
+				}
+			}
+		}
+	`
+
+	var entries []MediaList
+	var lastErr error
+	for _, username := range usernames {
+		for start := 0; start < len(mediaIds); start += anilistMaxPerPage {
+			chunk := mediaIds[start:min(start+anilistMaxPerPage, len(mediaIds))]
+
+			resp, err := sendAnilistRequest[AniListResponse](query, RequestVariables{
+				"userName": username,
+				"mediaIds": chunk,
+			})
+			if err != nil {
+				logger.Logger.Warn().Err(err).Str("username", username).Int("media_ids", len(chunk)).
+					Msg("Failed to fetch a batch of anime info for account")
+				lastErr = err
+				continue
+			}
+			entries = append(entries, resp.Data.Page.MediaList...)
+		}
+	}
+
+	deduped := DedupeByMedia(entries)
+	byMedia := make(map[int]*MediaList, len(deduped))
+	for i := range deduped {
+		byMedia[deduped[i].Media.Id] = &deduped[i]
+	}
+
+	if lastErr != nil {
+		return byMedia, fmt.Errorf("failed to fetch anime info for %d media ids: %w", len(mediaIds), lastErr)
+	}
+	return byMedia, nil
+}
+
 // GetAnimeInfo returns one anime's data by MEDIA id, collapsed across every configured account:
 // the media fields come from whichever account tracks it and Progress is the LOWEST among them
 // (same rule as DedupeByMedia — an episode is only "watched" once every account has seen it).
@@ -634,49 +711,7 @@ func getMediaListEntry(userName string, mediaId int) (*AniListResponse, error) {
 					status
 					progress
 					customLists
-					media {
-						id
-						episodes
-						format
-						status
-						title {
-							english
-							romaji
-							native
-						}
-						synonyms
-						relations {
-							edges {
-								node {
-									title {
-										english
-										romaji
-									}
-									synonyms
-									episodes
-									format
-								}
-								relationType
-							}
-						}
-						coverImage {
-							large
-							medium
-						}
-						airingSchedule {
-							nodes {
-								airingAt
-								timeUntilAiring
-								episode
-								id
-							}
-						}
-						nextAiringEpisode {
-							episode
-							airingAt
-							timeUntilAiring
-						}
-					}
+					media {` + mediaByIDFields + `}
 				}
 			}
 		}

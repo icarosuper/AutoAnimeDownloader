@@ -381,6 +381,76 @@ func TestHandleAnimes(t *testing.T) {
 		}
 	})
 
+	// Regressao do formato inverso da tempestade abaixo: mesmo com a lista OK, um request por
+	// orfao a cada poll de 30s por aba era a maior consumidora do orcamento da AniList
+	// (decisions.md #65) — e o burst limiter dela pune exatamente esse formato.
+	t.Run("Orphan refresh asks AniList once for all orphans, not once per anime", func(t *testing.T) {
+		var batchCalls int32
+		var sentIDs string
+		emptyListBody := `{"data":{"Page":{"mediaList":[]}}}`
+		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+			body := readBody(req)
+			if !strings.Contains(body, "mediaId_in") {
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(emptyListBody))}, nil
+			}
+			atomic.AddInt32(&batchCalls, 1)
+			sentIDs = body
+			entries := `{"data":{"Page":{"mediaList":[
+				{"id":1,"status":"COMPLETED","progress":12,"customLists":{},"media":{"id":991,"episodes":12,"format":"TV","status":"FINISHED","title":{"romaji":"A"},"coverImage":{"large":"http://a","medium":""},"airingSchedule":{"nodes":[]}}},
+				{"id":2,"status":"COMPLETED","progress":12,"customLists":{},"media":{"id":992,"episodes":12,"format":"TV","status":"FINISHED","title":{"romaji":"B"},"coverImage":{"large":"http://b","medium":""},"airingSchedule":{"nodes":[]}}},
+				{"id":3,"status":"COMPLETED","progress":12,"customLists":{},"media":{"id":993,"episodes":12,"format":"TV","status":"FINISHED","title":{"romaji":"C"},"coverImage":{"large":"http://c","medium":""},"airingSchedule":{"nodes":[]}}}
+			]}}}`
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(entries))}, nil
+		})()
+
+		var episodes []files.EpisodeStruct
+		for _, id := range []int{991, 992, 993} {
+			episodes = append(episodes, files.EpisodeStruct{
+				EpisodeNumber: 1, AnimeID: id, AnimeName: "Baixado", EpisodeName: "Baixado - Episode 1",
+				DownloadDate: time.Now(),
+			})
+		}
+
+		serverBatch := &Server{State: state, FileManager: &mockFileManager{
+			episodes: episodes,
+			configs: &files.Config{
+				AnilistUsernames:      []string{"testuser"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+			},
+		}}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil)
+		w := httptest.NewRecorder()
+		handleAnimes(serverBatch)(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if n := atomic.LoadInt32(&batchCalls); n != 1 {
+			t.Fatalf("quero 1 request para os 3 orfaos, veio %d", n)
+		}
+		for _, id := range []string{"991", "992", "993"} {
+			if !strings.Contains(sentIDs, id) {
+				t.Fatalf("o lote precisa levar todos os ids orfaos, faltou %s: %s", id, sentIDs)
+			}
+		}
+
+		var response SuccessResponse
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		animes, ok := response.Data.([]interface{})
+		if !ok || len(animes) != 3 {
+			t.Fatalf("os 3 orfaos precisam continuar visiveis, veio %v", response.Data)
+		}
+		for _, a := range animes {
+			if a.(map[string]interface{})["cover_image"] == "" {
+				t.Fatalf("orfao sem capa: o lote nao chegou nele: %v", a)
+			}
+		}
+	})
+
 	// Regressao: quando a busca da lista falha, fetchAniListEntries devolve nil e o
 	// conjunto "covered" fica vazio — o que fazia TODO anime com episodio baixado virar
 	// orfao e disparar um GetAnimeInfo individual por anime, a cada poll de /api/v1/animes.

@@ -179,10 +179,6 @@ func GetMediaByID(mediaID int) (*MediaList, error) {
 	return copyMediaList(ml), nil
 }
 
-// mediaByIDsPageSize e o perPage maximo que a AniList aceita. Mais avulsos que isso viram mais
-// de uma query — que continuam sendo N/50 requests, nao N.
-const mediaByIDsPageSize = 50
-
 // GetMediaByIDs le varios animes por media id numa unica query. Substitui o loop de
 // GetMediaByID nos dois lugares que percorrem a lista de avulsos inteira — o consumidor
 // dominante do orcamento da AniList (decisions.md #65), que gastava 1 request por avulso a cada
@@ -217,7 +213,7 @@ func GetMediaByIDs(ids []int) (map[int]*MediaList, error) {
 
 	query := `
 		query GetMediaByIDs($ids: [Int]) {
-			Page(perPage: ` + strconv.Itoa(mediaByIDsPageSize) + `) {
+			Page(perPage: ` + strconv.Itoa(anilistMaxPerPage) + `) {
 				media(id_in: $ids, type: ANIME) {` + mediaByIDFields + `}
 			}
 		}
@@ -231,8 +227,8 @@ func GetMediaByIDs(ids []int) (map[int]*MediaList, error) {
 		} `json:"data"`
 	}
 
-	for start := 0; start < len(missing); start += mediaByIDsPageSize {
-		chunk := missing[start:min(start+mediaByIDsPageSize, len(missing))]
+	for start := 0; start < len(missing); start += anilistMaxPerPage {
+		chunk := missing[start:min(start+anilistMaxPerPage, len(missing))]
 
 		resp, err := sendAnilistRequest[response](query, RequestVariables{"ids": chunk})
 		if err != nil {

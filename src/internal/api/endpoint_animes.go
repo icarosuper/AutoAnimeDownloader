@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -251,65 +250,94 @@ func countPendingEpisodes(info *AnimeInfo, downloaded map[int]bool) int {
 	return pending
 }
 
-// maxConcurrentOrphanRefresh bounds concurrent per-anime AniList lookups for orphan refresh,
-// mirroring maxConcurrentAnimes in the daemon's verification loop.
-const maxConcurrentOrphanRefresh = 5
-
 // refreshOrphanAnimes re-fetches AniList-derived fields for already-downloaded animes whose
 // AnimeID wasn't covered by the filtered mergeCurrentAniListAnimes fetch (current list/media
 // status fell outside the configured allowed sets). These animes stay visible regardless —
 // this only tries to keep their cover/progress/blacklist fields fresh instead of stale/blank.
 // A failed refresh is logged and left as-is; it never fails the overall request.
+//
+// TODA a leitura da AniList aqui e em lote: uma query por conta (a cada 50 ids) e, para os
+// avulsos que nenhuma conta acompanha, uma segunda por lote de 50. Era uma requisicao POR ANIME
+// orfao, disparada a cada poll de 30s de cada aba aberta — a rajada que decisions.md #65 mediu
+// como a maior consumidora do orcamento da AniList, e que o burst limiter dela pune. Foi por
+// isso tambem que a versao anterior precisava de um semaforo de concorrencia: com duas queries
+// no total, nao ha mais o que limitar.
 func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string, usernames []string, standalone map[int]bool) {
 	var orphans []*AnimeInfo
+	var ids []int
 	for _, info := range animeMap {
 		if info.AnimeID != 0 && !covered[info.AnimeID] {
 			orphans = append(orphans, info)
+			ids = append(ids, info.AnimeID)
 		}
 	}
 	if len(orphans) == 0 {
 		return
 	}
 
-	sem := make(chan struct{}, maxConcurrentOrphanRefresh)
-	var wg sync.WaitGroup
-	for _, info := range orphans {
-		wg.Add(1)
-		go func(info *AnimeInfo) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			ml, err := resolveMediaList(fm, info.AnimeID, usernames, standalone)
-			if err != nil {
-				logger.Logger.Warn().Err(err).Int("anime_id", info.AnimeID).Msg("Failed to refresh orphaned anime, keeping existing data")
-				return
-			}
-			if ml == nil {
-				// Nenhuma conta acompanha mais este anime; os episodios em disco continuam listados
-				// com os campos que vieram do episodes.json.
-				return
-			}
-
-			name, totalEpisodes, episodesReleased, coverImage, isBlacklisted := computeAnimeFields(
-				ml.Media.Title, ml.Media.Status, ml.Media.Episodes, ml.Media.CoverImage, ml.Media.AiringSchedule, ml.CustomLists, excludedLists,
-			)
-
-			if name != "" {
-				info.Name = name
-			}
-			if info.TotalEpisodes == 0 {
-				info.TotalEpisodes = totalEpisodes
-			}
-			info.EpisodesReleased = episodesReleased
-			info.EpisodesWatched = ml.Progress
-			info.CoverImage = coverImage
-			info.IsBlacklisted = isBlacklisted
-			info.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
-			info.AltNames = altNames(ml.Media, info.Name)
-		}(info)
+	medias, err := anilist.GetAnimeInfoByIDs(ids, usernames)
+	if err != nil {
+		// Parcial: o mapa traz o que respondeu, e cada orfao ausente dele fica com os campos que
+		// vieram do episodes.json. O fallback de avulso NAO roda neste caso — com uma conta
+		// falhada, "nenhuma conta acompanha" e uma conclusao que nao se pode tirar, e tira-la
+		// gastaria mais requisicoes justo quando a AniList ja esta reclamando.
+		logger.Logger.Warn().Err(err).Int("orphans", len(orphans)).
+			Msg("Failed to refresh some orphaned animes, keeping existing data")
+	} else {
+		refreshStandaloneOrphans(fm, medias, ids, standalone)
 	}
-	wg.Wait()
+
+	for _, info := range orphans {
+		ml := medias[info.AnimeID]
+		if ml == nil {
+			// Nenhuma conta acompanha mais este anime; os episodios em disco continuam listados
+			// com os campos que vieram do episodes.json.
+			continue
+		}
+
+		name, totalEpisodes, episodesReleased, coverImage, isBlacklisted := computeAnimeFields(
+			ml.Media.Title, ml.Media.Status, ml.Media.Episodes, ml.Media.CoverImage, ml.Media.AiringSchedule, ml.CustomLists, excludedLists,
+		)
+
+		if name != "" {
+			info.Name = name
+		}
+		if info.TotalEpisodes == 0 {
+			info.TotalEpisodes = totalEpisodes
+		}
+		info.EpisodesReleased = episodesReleased
+		info.EpisodesWatched = ml.Progress
+		info.CoverImage = coverImage
+		info.IsBlacklisted = isBlacklisted
+		info.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
+		info.AltNames = altNames(ml.Media, info.Name)
+	}
+}
+
+// refreshStandaloneOrphans preenche, em medias, os orfaos que nenhuma conta acompanha mas que
+// estao no arquivo de avulsos — o mesmo fallback (e a mesma razao) de resolveMediaList, so que
+// em lote. Sem ele um avulso fora das listas volta a aparecer sem capa e sem nome.
+func refreshStandaloneOrphans(fm FileManagerInterface, medias map[int]*anilist.MediaList, ids []int, standalone map[int]bool) {
+	var pending []int
+	for _, id := range ids {
+		if medias[id] == nil && standalone[id] {
+			pending = append(pending, id)
+		}
+	}
+	if len(pending) == 0 {
+		return
+	}
+
+	fetched, err := anilist.GetMediaByIDs(pending)
+	if err != nil {
+		logger.Logger.Warn().Err(err).Int("standalone_orphans", len(pending)).
+			Msg("Failed to refresh some standalone orphans, keeping existing data")
+	}
+	for id, ml := range fetched {
+		if ml != nil {
+			medias[id] = withStandaloneProgress(fm, ml)
+		}
+	}
 }
 
 // computeAnimeFields derives the AniList-sourced display fields shared by the batch merge loop

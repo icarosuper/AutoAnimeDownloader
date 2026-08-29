@@ -673,9 +673,9 @@ No índice do Config os divisores são `w-full`, então a quebra acontece neles:
 
 **(c) `ParseEpisodes` reportava os DOIS erros** (o formato de texto legado foi removido em #52, então hoje só existe o erro do JSONL). Para um arquivo já migrado o erro do formato antigo é ruído (ele só reclama que a linha é JSON), e reportar só ele escondia a linha JSONL realmente quebrada. A mensagem que produzia — `invalid episode ID '{"episode_id"'` — apontava para a linha 1 de um arquivo cuja linha 1 estava íntegra, e foi o que mais atrasou o diagnóstico do incidente.
 
-**(d) `fetchAniListEntries` devolve `nil` na falha e slice vazio (não-`nil`) no sucesso — e `handleAnimes` depende disso.** `refreshOrphanAnimes` busca um `GetAnimeInfo` individual por anime que ficou fora do conjunto `covered`. Quando a busca da lista falhava, `covered` ficava vazio e **todo anime com episódio baixado virava órfão**: 16 requests por poll de `/api/v1/animes`, ~10 polls por minuto, com o frontend aberto em duas abas. Isso multiplicava um 500 passageiro da AniList em ~200 requests/min contra um limite de 90 (hoje degradado para 30) — e o 429 resultante fazia a busca da lista falhar de novo, fechando o ciclo: o daemon não saía sozinho. Por isso, com qualquer conta falhando, o refresh de órfãos é **pulado inteiro**: sem a lista não dá para saber o que está coberto, e tratar "não coberto" como "precisa refresh" é justamente o amplificador. Os animes continuam visíveis com os dados locais — degradar campo desatualizado é barato, derrubar a AniList não.
+**(d) `fetchAniListEntries` devolve `nil` na falha e slice vazio (não-`nil`) no sucesso — e `handleAnimes` depende disso.** `refreshOrphanAnimes` busca na AniList os animes que ficaram fora do conjunto `covered` (hoje em lote, `GetAnimeInfoByIDs`; até 29/ago/2026, um `GetAnimeInfo` individual por anime). Quando a busca da lista falhava, `covered` ficava vazio e **todo anime com episódio baixado virava órfão**: 16 requests por poll de `/api/v1/animes`, ~10 polls por minuto, com o frontend aberto em duas abas. Isso multiplicava um 500 passageiro da AniList em ~200 requests/min contra um limite de 90 (hoje degradado para 30) — e o 429 resultante fazia a busca da lista falhar de novo, fechando o ciclo: o daemon não saía sozinho. Por isso, com qualquer conta falhando, o refresh de órfãos é **pulado inteiro**: sem a lista não dá para saber o que está coberto, e tratar "não coberto" como "precisa refresh" é justamente o amplificador. **O lote não revoga esta regra**: ele derruba o custo da rajada, mas "cobertura desconhecida" continua sendo o estado em que o refresh não tem o que decidir — e o `mediaId_in` de uma biblioteca inteira ainda é `ceil(N/50)` requisições por conta a cada poll. Os animes continuam visíveis com os dados locais — degradar campo desatualizado é barato, derrubar a AniList não.
 
-**Don't "fix" by:** chamar o método público de dentro de um `...Locked` (deadlock — `sync.Mutex` não é reentrante); "simplificar" `writeAtomic` de volta para `WriteFile` porque "o lock já resolve" (o lock só protege este processo, não protege queda de energia no meio da escrita); fazer `fetchAniListEntries` devolver slice vazio na falha "porque nil é slice vazio em Go" (apaga a distinção entre "nenhum coberto" e "cobertura desconhecida" e ressuscita a tempestade); tratar o skip do refresh de órfãos como perda de funcionalidade e "só limitar a concorrência" (o `maxConcurrentOrphanRefresh` já existe e não ajuda — ele limita o paralelismo, não o total de requests por poll).
+**Don't "fix" by:** chamar o método público de dentro de um `...Locked` (deadlock — `sync.Mutex` não é reentrante); "simplificar" `writeAtomic` de volta para `WriteFile` porque "o lock já resolve" (o lock só protege este processo, não protege queda de energia no meio da escrita); fazer `fetchAniListEntries` devolver slice vazio na falha "porque nil é slice vazio em Go" (apaga a distinção entre "nenhum coberto" e "cobertura desconhecida" e ressuscita a tempestade); tratar o skip do refresh de órfãos como perda de funcionalidade e "só limitar a concorrência" (foi o que o extinto `maxConcurrentOrphanRefresh` fazia, e não ajudava — limitar paralelismo não reduz o total de requests por poll; quem reduziu foi o lote).
 
 ---
 
@@ -759,7 +759,7 @@ O TTL de 60s é seguro porque essa lista só muda quando o usuário mexe na AniL
 - Cachear `GetAllCurrentAnime` junto — esse é o ciclo do daemon, que roda de 10 em 10 min e **precisa** de dado fresco pra decidir download/deleção.
 - Aumentar o intervalo de poll do frontend em vez do cache — não resolve F5, múltiplas abas, nem múltiplos dispositivos na LAN.
 - Devolver a fatia do cache direto "pra economizar a cópia".
-- Cachear também `GetAnimeInfo` do refresh de órfãos: aquele caminho já está desligado quando a lista falha (decisions.md #42d), que é quando ele amplifica.
+- Cachear também o refresh de órfãos (`GetAnimeInfoByIDs`): aquele caminho já está desligado quando a lista falha (decisions.md #42d), que é quando ele amplifica — e desde que virou lote (#65) ele custa 1 requisição por conta por poll, a mesma ordem da busca de lista ao lado, que é cacheada.
 
 ---
 
@@ -1238,10 +1238,12 @@ A derivação continua existindo, mas com outro papel: `allDone(onboardingSteps(
 |---|---|---|
 | Passe do daemon | ~0,3/min | 3 por passe (`GetCustomListsMap` + `GetAllCurrentAnime` de download + `GetAllCurrentAnime` de delete), a cada `check_interval` (default 10 min) |
 | Poll de `/animes` | ≤1,2/min | `GetFrontendAnimeList` (TTL 60s) + `GetCustomListsMap` (TTL 5min) |
-| `refreshOrphanAnimes` | **1 por anime órfão** | `GetMediaByID`, até 5 concorrentes, TTL 60s |
+| `refreshOrphanAnimes` | **1 por conta a cada 50 órfãos** | `GetAnimeInfoByIDs` (`mediaList(mediaId_in:)`), sem cache. Era **1 por anime órfão por conta**, com um semáforo de 5 concorrentes que limitava o paralelismo e não o total. Corrigido 29/ago/2026; o fallback de avulso na mesma função virou um `GetMediaByIDs` |
 | `appendStandaloneEntries` | **1 por lote de 50 avulsos** | `GetMediaByIDs` (`Page(media(id_in:))`), nos dois lados (`api/standalone.go` e `daemon/standalone.go`). Era `GetMediaByID` em loop: medido 28/ago/2026, com 20 avulsos eram 20 dos 30 requests do balde, gastos só para montar uma tela. Corrigido 29/ago/2026; o cache continua **por id**, então o lote e o lookup avulso se aproveitam um do outro |
 
-O passe do daemon é ruído. Quem estoura o limite é o refresh de órfãos: um `GetMediaByID` por anime baixado que a busca filtrada não cobriu, disparado **a cada poll do frontend**. Numa biblioteca com dezenas de animes fora dos status configurados, isso é uma rajada de dezenas de requisições — e a AniList tem um *burst limiter* separado do limite por minuto, que pune exatamente esse formato.
+O passe do daemon é ruído. Quem estourava o limite era o refresh de órfãos: uma requisição por anime baixado que a busca filtrada não cobriu, disparada **a cada poll do frontend**. Numa biblioteca com dezenas de animes fora dos status configurados, isso era uma rajada de dezenas de requisições — e a AniList tem um *burst limiter* separado do limite por minuto, que pune exatamente esse formato. **Corrigido em 29/ago/2026 por lote**, junto com os avulsos: as duas linhas em negrito acima passaram a custar `ceil(N/50)` em vez de `N`.
+
+**`mediaId_in` existe e é o que torna o lote possível** (introspecção + medição, 29/ago/2026). `Page.mediaList` aceita `mediaId_in: [Int]` ao lado de `userName`, devolve **no máximo uma entrada por id** (logo, 50 ids nunca passam de uma página — não há paginação a seguir), **omite** silenciosamente o id que a conta não acompanha, e custa 1 unidade como qualquer query. Duas armadilhas medidas: `userName` inexistente responde **500**, e conta privada responde **404 "Private User"** — nenhum dos dois é 400, então uma query malformada não se distingue de uma conta ruim pelo status.
 
 É por isso que `mergeFailed` pula o refresh (`endpoint_animes.go:182`) em vez de tratar "não coberto" como "precisa refresh": com a lista falhada, todo anime baixado vira órfão aparente, e a rajada resultante realimenta a falha. Os TTLs de `frontendListCache` e `customListsCache` também não são cautela genérica — são o que torna o custo do poll **independente do número de abas abertas**. Sem eles, duas abas e duas contas já eram ~16 req/min só de frontend parado.
 
@@ -1266,7 +1268,7 @@ O passe do daemon é ruído. Quem estoura o limite é o refresh de órfãos: um 
 - Remover os TTLs porque "o daemon só busca a cada 10 minutos" — quem busca a cada 30 segundos é cada aba do frontend.
 - Copiar o limite atual da AniList para cá como constante — ele é temporário e muda sem aviso.
 - Estimar o consumo com um contador nosso em vez de ler `X-RateLimit-Remaining` da resposta — ver #72, que mede o balde e mostra por que erro também custa cota.
-- Manter um `GetMediaByID` por id onde cabe `Page(media(id_in: [...]))` — uma query custa 1 unidade independente do número de ids (#72). Feito nos avulsos (`GetMediaByIDs`); `refreshOrphanAnimes` continua 1 por órfão porque ele passa por `GetAnimeInfo`, que é lista por usuário, não media por id.
+- Voltar a um request por id onde cabe uma lista — `Page(media(id_in: [...]))` para media solta, `mediaList(userName:, mediaId_in: [...])` para entrada de lista. Uma query custa 1 unidade independente do número de ids (#72). Os dois caminhos já são lote: `GetMediaByIDs` e `GetAnimeInfoByIDs`.
 
 ---
 
@@ -1546,8 +1548,9 @@ Quatro consequências, todas com efeito de projeto:
 2. **Complexidade não custa nada.** A query aninhada de 33 KB decrementou 1, igual à query mínima.
    Não há cobrança por complexidade nem por número de ids: **maximizar trabalho por request é
    estritamente correto, não há trade-off.** É por isso que `Page(media(id_in: [...]))` (até 50 ids,
-   `perPage` máximo 50) vale sempre que houver um loop de `GetMediaByID`. Aplicado em
-   `GetMediaByIDs` (29/ago/2026), que é o `id_in` dos avulsos.
+   `perPage` máximo 50) vale sempre que houver um loop de busca por id. Aplicado em
+   `GetMediaByIDs` (avulsos, `media(id_in:)`) e `GetAnimeInfoByIDs` (refresh de órfãos,
+   `mediaList(mediaId_in:)`), ambos em 29/ago/2026.
 3. **O header é autoritativo porque enxerga os outros consumidores.** Ele já soma o passe do
    daemon, o poll do frontend e as buscas de avulso — os três disputam o mesmo balde por IP, sem
    coordenação. Nenhum contador interno chega perto, porque nenhum vê os erros dos outros.

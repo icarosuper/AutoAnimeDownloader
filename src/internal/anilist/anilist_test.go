@@ -1,6 +1,7 @@
 package anilist
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -105,5 +106,94 @@ func TestMockAniListDo_ClearsCaches(t *testing.T) {
 	}
 	if len(resp.Data.Page.MediaList) != 0 {
 		t.Errorf("resposta veio do cache do teste anterior: %+v", resp.Data.Page.MediaList)
+	}
+}
+
+// TestGetAnimeInfoByIDs_ChunksPerAccount: o refresh de orfaos de GET /animes roda a cada poll de
+// 30s por aba. Um request por anime por conta era a rajada da decisions.md #65; o contrato aqui e
+// ceil(ids/50) por conta, e nada mais.
+func TestGetAnimeInfoByIDs_ChunksPerAccount(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Page":{"mediaList":[]}}}`)()
+
+	ids := make([]int, 0, 60)
+	for i := range 60 {
+		ids = append(ids, 1000+i)
+	}
+
+	if _, err := GetAnimeInfoByIDs(ids, []string{"a", "b"}); err != nil {
+		t.Fatalf("GetAnimeInfoByIDs: %v", err)
+	}
+	if calls != 4 {
+		t.Fatalf("60 ids em 2 contas com perPage 50 sao 4 requests, veio %d", calls)
+	}
+}
+
+// TestGetAnimeInfoByIDs_KeepsLowestProgressAcrossAccounts: mesma regra de GetAnimeInfo e de
+// DedupeByMedia — episodio so e "assistido" quando TODAS as contas o assistiram. Sem isso o
+// refresh de orfaos rebaixaria o progresso da conta atrasada.
+func TestGetAnimeInfoByIDs_KeepsLowestProgressAcrossAccounts(t *testing.T) {
+	call := 0
+	defer MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+		call++
+		progress := 10
+		if call == 2 {
+			progress = 3
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body: io.NopCloser(strings.NewReader(fmt.Sprintf(
+				`{"data":{"Page":{"mediaList":[{"id":1,"progress":%d,"media":{"id":21,"title":{"romaji":"X"}}}]}}}`, progress))),
+		}, nil
+	})()
+
+	byMedia, err := GetAnimeInfoByIDs([]int{21}, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("GetAnimeInfoByIDs: %v", err)
+	}
+	if byMedia[21] == nil || byMedia[21].Progress != 3 {
+		t.Fatalf("quero o MENOR progresso das duas contas (3), veio %+v", byMedia[21])
+	}
+}
+
+// TestGetAnimeInfoByIDs_UntrackedIDIsAbsent: id que nenhuma conta acompanha nao esta no mapa —
+// e o estado normal do anime tirado da lista com episodios ainda em disco, nao um erro.
+func TestGetAnimeInfoByIDs_UntrackedIDIsAbsent(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Page":{"mediaList":[{"id":1,"progress":2,"media":{"id":21}}]}}}`)()
+
+	byMedia, err := GetAnimeInfoByIDs([]int{21, 99}, []string{"a"})
+	if err != nil {
+		t.Fatalf("id sem entrada nao e erro: %v", err)
+	}
+	if byMedia[21] == nil {
+		t.Fatal("o id acompanhado precisa estar no mapa")
+	}
+	if _, ok := byMedia[99]; ok {
+		t.Fatalf("o id que ninguem acompanha nao pode estar no mapa, veio %+v", byMedia[99])
+	}
+}
+
+// TestGetAnimeInfoByIDs_PartialFailureKeepsWhatCame: o erro de uma conta nao pode zerar o que a
+// outra respondeu — a tela ficaria sem capa e sem nome em toda a lista por causa de uma conta.
+func TestGetAnimeInfoByIDs_PartialFailureKeepsWhatCame(t *testing.T) {
+	call := 0
+	defer MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+		call++
+		if call == 1 {
+			return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader("rate limited"))}, nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"Page":{"mediaList":[{"id":1,"progress":2,"media":{"id":21}}]}}}`)),
+		}, nil
+	})()
+
+	byMedia, err := GetAnimeInfoByIDs([]int{21}, []string{"a", "b"})
+	if err == nil {
+		t.Fatal("a falha de uma conta precisa ser reportada")
+	}
+	if byMedia[21] == nil {
+		t.Fatal("o erro nao pode invalidar o que a outra conta respondeu")
 	}
 }
