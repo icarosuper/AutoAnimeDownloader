@@ -49,14 +49,30 @@ func resolveMediaList(fm FileManagerInterface, id int, usernames []string, stand
 // covered e atualizado no caminho para que refreshOrphanAnimes nao tente buscar de novo, por
 // conta, um anime que nenhuma conta acompanha.
 func appendStandaloneEntries(fm FileManagerInterface, entries []anilist.MediaList, standalone, covered map[int]bool) []anilist.MediaList {
+	pending := make([]int, 0, len(standalone))
 	for id := range standalone {
-		if covered[id] {
-			continue
+		if !covered[id] {
+			pending = append(pending, id)
 		}
-		ml, err := anilist.GetMediaByID(id)
-		if err != nil || ml == nil {
-			logger.Logger.Warn().Err(err).Int("media_id", id).
-				Msg("Failed to fetch a standalone anime from AniList; leaving it out of this response")
+	}
+	if len(pending) == 0 {
+		return entries
+	}
+
+	medias, err := anilist.GetMediaByIDs(pending)
+	if err != nil {
+		logger.Logger.Warn().Err(err).
+			Msg("Failed to fetch standalone animes from AniList; leaving the missing ones out of this response")
+	}
+
+	for _, id := range pending {
+		ml, ok := medias[id]
+		if !ok {
+			continue // ja avisado pelo erro do lote
+		}
+		if ml == nil {
+			logger.Logger.Warn().Int("media_id", id).
+				Msg("AniList does not know this standalone media id; leaving it out of this response")
 			continue
 		}
 		entries = append(entries, *withStandaloneProgress(fm, ml))

@@ -26,7 +26,8 @@ import (
 //     "avulso dormente") custaria estado novo no arquivo, no AnimeInfo e na tela para cobrir um
 //     caminho que quem usa avulso nao percorre. Quem quiser o anime de volta o adiciona outra vez.
 //
-//  2. Append: cada avulso ainda ausente entra como o MediaList sintetico de GetMediaByID.
+//  2. Append: cada avulso ainda ausente entra como o MediaList sintetico de GetMediaByIDs,
+//     buscados todos numa query so.
 //     Nao ha filtro de media status aqui de proposito — quem pediu o anime a mao quer que ele
 //     seja acompanhado tambem enquanto e NOT_YET_RELEASED, que e metade do sentido da feature.
 func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.MediaList, standaloneIDs []int) []anilist.MediaList {
@@ -39,23 +40,34 @@ func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.M
 		inList[ml.Media.Id] = true
 	}
 
+	pending := make([]int, 0, len(standaloneIDs))
 	for _, mediaID := range standaloneIDs {
-		if inList[mediaID] {
-			if err := fileManager.RemoveStandaloneAnime(mediaID); err != nil {
-				logger.Logger.Warn().Err(err).Int("media_id", mediaID).
-					Msg("Failed to drop the standalone record of an anime now tracked by a list")
-				continue
-			}
-			logger.Logger.Info().Int("media_id", mediaID).
-				Msg("Standalone anime is now in an AniList list; dropped its standalone record")
+		if !inList[mediaID] {
+			pending = append(pending, mediaID)
 			continue
 		}
-
-		ml, err := anilist.GetMediaByID(mediaID)
-		if err != nil {
+		if err := fileManager.RemoveStandaloneAnime(mediaID); err != nil {
 			logger.Logger.Warn().Err(err).Int("media_id", mediaID).
-				Msg("Failed to fetch a standalone anime from AniList; skipping it this pass")
+				Msg("Failed to drop the standalone record of an anime now tracked by a list")
 			continue
+		}
+		logger.Logger.Info().Int("media_id", mediaID).
+			Msg("Standalone anime is now in an AniList list; dropped its standalone record")
+	}
+	if len(pending) == 0 {
+		return merged
+	}
+
+	medias, err := anilist.GetMediaByIDs(pending)
+	if err != nil {
+		logger.Logger.Warn().Err(err).
+			Msg("Failed to fetch standalone animes from AniList; skipping the missing ones this pass")
+	}
+
+	for _, mediaID := range pending {
+		ml, ok := medias[mediaID]
+		if !ok {
+			continue // ja avisado pelo erro do lote
 		}
 		if ml == nil {
 			logger.Logger.Warn().Int("media_id", mediaID).

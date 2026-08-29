@@ -1239,7 +1239,7 @@ A derivação continua existindo, mas com outro papel: `allDone(onboardingSteps(
 | Passe do daemon | ~0,3/min | 3 por passe (`GetCustomListsMap` + `GetAllCurrentAnime` de download + `GetAllCurrentAnime` de delete), a cada `check_interval` (default 10 min) |
 | Poll de `/animes` | ≤1,2/min | `GetFrontendAnimeList` (TTL 60s) + `GetCustomListsMap` (TTL 5min) |
 | `refreshOrphanAnimes` | **1 por anime órfão** | `GetMediaByID`, até 5 concorrentes, TTL 60s |
-| `appendStandaloneEntries` | **1 por avulso** | `GetMediaByID` em loop, TTL 60s cada — o mesmo loop existe nos dois lados (`api/standalone.go` e `daemon/standalone.go`). Medido 28/ago/2026: com 20 avulsos são 20 dos 30 requests do balde, gastos só para montar uma tela |
+| `appendStandaloneEntries` | **1 por lote de 50 avulsos** | `GetMediaByIDs` (`Page(media(id_in:))`), nos dois lados (`api/standalone.go` e `daemon/standalone.go`). Era `GetMediaByID` em loop: medido 28/ago/2026, com 20 avulsos eram 20 dos 30 requests do balde, gastos só para montar uma tela. Corrigido 29/ago/2026; o cache continua **por id**, então o lote e o lookup avulso se aproveitam um do outro |
 
 O passe do daemon é ruído. Quem estoura o limite é o refresh de órfãos: um `GetMediaByID` por anime baixado que a busca filtrada não cobriu, disparado **a cada poll do frontend**. Numa biblioteca com dezenas de animes fora dos status configurados, isso é uma rajada de dezenas de requisições — e a AniList tem um *burst limiter* separado do limite por minuto, que pune exatamente esse formato.
 
@@ -1266,7 +1266,7 @@ O passe do daemon é ruído. Quem estoura o limite é o refresh de órfãos: um 
 - Remover os TTLs porque "o daemon só busca a cada 10 minutos" — quem busca a cada 30 segundos é cada aba do frontend.
 - Copiar o limite atual da AniList para cá como constante — ele é temporário e muda sem aviso.
 - Estimar o consumo com um contador nosso em vez de ler `X-RateLimit-Remaining` da resposta — ver #72, que mede o balde e mostra por que erro também custa cota.
-- Manter um `GetMediaByID` por id onde cabe `Page(media(id_in: [...]))` — uma query custa 1 unidade independente do número de ids (#72).
+- Manter um `GetMediaByID` por id onde cabe `Page(media(id_in: [...]))` — uma query custa 1 unidade independente do número de ids (#72). Feito nos avulsos (`GetMediaByIDs`); `refreshOrphanAnimes` continua 1 por órfão porque ele passa por `GetAnimeInfo`, que é lista por usuário, não media por id.
 
 ---
 
@@ -1546,7 +1546,8 @@ Quatro consequências, todas com efeito de projeto:
 2. **Complexidade não custa nada.** A query aninhada de 33 KB decrementou 1, igual à query mínima.
    Não há cobrança por complexidade nem por número de ids: **maximizar trabalho por request é
    estritamente correto, não há trade-off.** É por isso que `Page(media(id_in: [...]))` (até 50 ids,
-   `perPage` máximo 50) vale sempre que houver um loop de `GetMediaByID`.
+   `perPage` máximo 50) vale sempre que houver um loop de `GetMediaByID`. Aplicado em
+   `GetMediaByIDs` (29/ago/2026), que é o `id_in` dos avulsos.
 3. **O header é autoritativo porque enxerga os outros consumidores.** Ele já soma o passe do
    daemon, o poll do frontend e as buscas de avulso — os três disputam o mesmo balde por IP, sem
    coordenação. Nenhum contador interno chega perto, porque nenhum vê os erros dos outros.

@@ -82,6 +82,54 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 	return resp.Data.Page.Media, nil
 }
 
+// mediaByIDFields sao os campos que GetMediaByID e GetMediaByIDs pedem — os MESMOS de
+// getMediaListEntry (inclusive synonyms, relations e o id de cada no do airingSchedule): a busca
+// por anime e searchNyaaForSingleEpisode dependem de synonyms e relations (offset de temporada
+// dividida via PREQUEL), e todo o resto do app chaveia episodio pelo id do no.
+const mediaByIDFields = `
+	id
+	episodes
+	format
+	status
+	title {
+		english
+		romaji
+		native
+	}
+	synonyms
+	relations {
+		edges {
+			node {
+				title {
+					english
+					romaji
+				}
+				synonyms
+				episodes
+				format
+			}
+			relationType
+		}
+	}
+	coverImage {
+		large
+		medium
+	}
+	airingSchedule {
+		nodes {
+			airingAt
+			timeUntilAiring
+			episode
+			id
+		}
+	}
+	nextAiringEpisode {
+		episode
+		airingAt
+		timeUntilAiring
+	}
+`
+
 // GetMediaByID le um anime pelo media id SEM passar por lista de conta nenhuma — o primitivo
 // que faltava para um anime avulso existir para o app (GetAnimeInfo devolve nil quando nenhuma
 // conta o acompanha).
@@ -90,10 +138,8 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 // sao parte do contrato — DedupeByMedia mantem o MENOR progresso, entao um Progress inventado
 // aqui venceria a entrada real e o daemon rebaixaria episodios ja assistidos.
 //
-// Os campos pedidos sao os MESMOS de getMediaListEntry (inclusive synonyms, relations e o id
-// de cada no do airingSchedule): a busca por anime e searchNyaaForSingleEpisode dependem
-// de synonyms e relations (offset de temporada dividida via PREQUEL), e todo o resto do app
-// chaveia episodio pelo id do no.
+// O MediaList SINTETICO e o mesmo contrato de GetMediaByIDs, que e quem serve a lista inteira
+// de avulsos; este aqui fica para o lookup de um id so.
 //
 // (nil, nil) quando a AniList nao conhece o id.
 func GetMediaByID(mediaID int) (*MediaList, error) {
@@ -104,49 +150,7 @@ func GetMediaByID(mediaID int) (*MediaList, error) {
 
 	query := `
 		query GetMediaByID($id: Int) {
-			Media(id: $id, type: ANIME) {
-				id
-				episodes
-				format
-				status
-				title {
-					english
-					romaji
-					native
-				}
-				synonyms
-				relations {
-					edges {
-						node {
-							title {
-								english
-								romaji
-							}
-							synonyms
-							episodes
-							format
-						}
-						relationType
-					}
-				}
-				coverImage {
-					large
-					medium
-				}
-				airingSchedule {
-					nodes {
-						airingAt
-						timeUntilAiring
-						episode
-						id
-					}
-				}
-				nextAiringEpisode {
-					episode
-					airingAt
-					timeUntilAiring
-				}
-			}
+			Media(id: $id, type: ANIME) {` + mediaByIDFields + `}
 		}
 	`
 
@@ -173,6 +177,84 @@ func GetMediaByID(mediaID int) (*MediaList, error) {
 	ml := &MediaList{Media: *resp.Data.Media}
 	mediaByIDCache.set(key, ml, mediaByIDTTL)
 	return copyMediaList(ml), nil
+}
+
+// mediaByIDsPageSize e o perPage maximo que a AniList aceita. Mais avulsos que isso viram mais
+// de uma query — que continuam sendo N/50 requests, nao N.
+const mediaByIDsPageSize = 50
+
+// GetMediaByIDs le varios animes por media id numa unica query. Substitui o loop de
+// GetMediaByID nos dois lugares que percorrem a lista de avulsos inteira — o consumidor
+// dominante do orcamento da AniList (decisions.md #65), que gastava 1 request por avulso a cada
+// passe do daemon e a cada poll de 30s do frontend.
+//
+// Devolve um mapa id -> MediaList, com tres desfechos distintos por id:
+//
+//   - entrada com valor: o anime veio (do cache ou da rede);
+//   - entrada com nil: a AniList NAO conhece esse id. id_in omite silenciosamente o media
+//     apagado, entao "nao voltou" e a unica forma de descobrir isso — e equivale ao (nil, nil)
+//     de GetMediaByID;
+//   - id ausente do mapa: nao deu para buscar (rede, 429). So esse caso vem com erro.
+//
+// O erro devolvido NAO invalida o mapa: as paginas que passaram antes dele ja estao la.
+func GetMediaByIDs(ids []int) (map[int]*MediaList, error) {
+	// O cache continua por id, e nao por lote: chaveado pelo lote, um avulso novo invalidaria
+	// a leitura de todos os outros.
+	found := make(map[int]*MediaList, len(ids))
+	seen := make(map[int]bool, len(ids))
+	missing := make([]int, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		if cached, ok := mediaByIDCache.get(strconv.Itoa(id)); ok {
+			found[id] = copyMediaList(cached)
+			continue
+		}
+		missing = append(missing, id)
+	}
+
+	query := `
+		query GetMediaByIDs($ids: [Int]) {
+			Page(perPage: ` + strconv.Itoa(mediaByIDsPageSize) + `) {
+				media(id_in: $ids, type: ANIME) {` + mediaByIDFields + `}
+			}
+		}
+	`
+
+	type response struct {
+		Data struct {
+			Page struct {
+				Media []Media `json:"media"`
+			} `json:"Page"`
+		} `json:"data"`
+	}
+
+	for start := 0; start < len(missing); start += mediaByIDsPageSize {
+		chunk := missing[start:min(start+mediaByIDsPageSize, len(missing))]
+
+		resp, err := sendAnilistRequest[response](query, RequestVariables{"ids": chunk})
+		if err != nil {
+			return found, err
+		}
+
+		for i := range resp.Data.Page.Media {
+			ml := &MediaList{Media: resp.Data.Page.Media[i]}
+			mediaByIDCache.set(strconv.Itoa(ml.Media.Id), ml, mediaByIDTTL)
+			found[ml.Media.Id] = copyMediaList(ml)
+		}
+
+		for _, id := range chunk {
+			if _, ok := found[id]; !ok {
+				logger.Logger.Debug().Int("media_id", id).Msg("AniList does not know this media id")
+				mediaByIDCache.set(strconv.Itoa(id), nil, mediaByIDTTL)
+				found[id] = nil
+			}
+		}
+	}
+
+	return found, nil
 }
 
 // copyMediaList devolve uma copia rasa da entrada guardada no cache. Mesma razao de

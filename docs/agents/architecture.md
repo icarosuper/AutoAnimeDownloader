@@ -169,7 +169,7 @@ functions; the parenthesised file name says where each one lives.
 | `ManualDownloadEpisodeWithMagnet(...)` | Used by API for replace-with-magnet per episode |
 | `ManualDownloadAnimeWithMagnet(...)` | Used by API for replace-with-magnet for full anime batch |
 | `searchAnilist(fm, configs, standaloneIDs)` | Builds the pass's anime universe: the union of the accounts' lists plus the standalone animes, appended **after** `DedupeByMedia` (`verification.go`) |
-| `appendStandaloneAnimes(fm, merged, standaloneIDs)` | Drops the standalone record of any id the lists already cover (with a log), then appends the rest via `anilist.GetMediaByID`. No media-status filter — a standalone anime is tracked while `NOT_YET_RELEASED` too (`standalone.go`) |
+| `appendStandaloneAnimes(fm, merged, standaloneIDs)` | Drops the standalone record of any id the lists already cover (with a log), then appends the rest via a single `anilist.GetMediaByIDs` batch. No media-status filter — a standalone anime is tracked while `NOT_YET_RELEASED` too (`standalone.go`) |
 | `DownloadStandaloneAnime(fm, backend, configs, mediaID) (int, error)` | `Ensure` + `processAnimeEpisodes` + `saveEpisodesToFile` for one anime, nothing else. **Must never call `handleSavedEpisodes`** — with a single anime's episodes in hand and `delete_watched_episodes` on, `identifyEpisodesNotInWatching` would wipe the rest of the library (`standalone.go`, decisions.md) |
 
 **Download priority** (in `processAnimeEpisodes`):
@@ -466,6 +466,7 @@ daemon itself. `NewClient(baseURL)` plus `doRequest`/`parseResponse` and one met
 | `GetAllCurrentAnime(username)` | Fetches CURRENT+REPEATING anime list with synonyms and relations (used by verification loop) |
 | `GetAnimeInfo(mediaId, usernames)` | Fetches one anime by **media** id with full airing schedule, synonyms, and relations, querying each account and collapsing via `DedupeByMedia`. Returns `(nil, nil)` when no account tracks it — a normal state, not an error (used by `/animes/{id}/episodes`, `refreshOrphanAnimes` and `daemon.RunAnimeDebug`) |
 | `SearchMedia(term, includeUnreleased)` | `Page(perPage:20){media(search:...)}` — feeds the add-anime search bar. Not cached: every keystroke is a different key, so the debounce is what limits the volume. With `includeUnreleased=false` (the screen's default) the query gains `status_not: NOT_YET_RELEASED`, appended as a **string**, not passed as a null GraphQL variable — see decisions.md |
+| `GetMediaByIDs(ids)` | Batch twin of `GetMediaByID`: one `Page(media(id_in: [...]))` query per 50 ids instead of one request per id — the fix for the standalone loop that dominated the AniList budget (decisions.md #65). Returns `map[int]*MediaList` with **three** outcomes per id: a value (fetched or cached), an explicit `nil` (AniList doesn't know the id — `id_in` silently omits it), or **absent from the map** (couldn't be fetched; only this case comes with an error). The returned error does not invalidate the map — pages that succeeded are already in it. Shares `mediaByIDCache` with `GetMediaByID`, keyed **per id**, so only cache misses go on the wire |
 | `GetMediaByID(mediaId)` | Reads one anime by media id **without** going through any account's list — the primitive a standalone anime needs (`GetAnimeInfo` returns nil for it). Returns a **synthetic** `MediaList`: only `Media` filled, `Progress: 0`, `Status: ""`, `Id: 0` — the zeros are part of the contract, since `DedupeByMedia` keeps the LOWEST progress. Same fields as `getMediaListEntry` (synonyms, relations, airing-schedule ids) because the search/selection path (`searchNyaaForAnime`, `searchNyaaForSingleEpisode`) depends on them. Cached 60s per id |
 | `GetMediaListStatus(username, mediaId)` | One account's list status for one media; the bool reports whether that account tracks it at all. Only `allAccountsAgreeOnDelete` uses it — see the delete rule below |
 | `GetMediaIDForEntry(mediaListId)` | Legacy entry id → media id. The only thing left that keys by entry id: `MigrateAnimeIDsToMedia`. Returns 0 when the entry no longer exists |
@@ -478,7 +479,7 @@ daemon itself. `NewClient(baseURL)` plus `doRequest`/`parseResponse` and one met
 
 ### `src/internal/anilist/standalone.go`
 
-`SearchMedia(term)`, `GetMediaByID(id)`, `MediaSearchResult` and `mediaByIDCache` — the two queries the standalone-anime feature needs, both listed in the `anilist.go` symbol table above.
+`SearchMedia(term)`, `GetMediaByID(id)`, `GetMediaByIDs(ids)`, `mediaByIDFields`, `MediaSearchResult` and `mediaByIDCache` — the queries the standalone-anime feature needs, all listed in the `anilist.go` symbol table above. `mediaByIDFields` is the field block both media-by-id queries share, so the single and batch paths can never drift apart.
 
 ### `src/internal/anilist/health.go`
 

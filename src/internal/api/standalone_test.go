@@ -24,6 +24,8 @@ func mockAniListRoutes(calls *int, listJSON, mediaJSON, searchJSON string) func(
 		}
 		payload := listJSON
 		switch {
+		case strings.Contains(string(body), "GetMediaByIDs"):
+			payload = batchMediaJSON(mediaJSON)
 		case strings.Contains(string(body), "GetMediaByID"):
 			payload = mediaJSON
 		case strings.Contains(string(body), "SearchMedia"):
@@ -34,6 +36,21 @@ func mockAniListRoutes(calls *int, listJSON, mediaJSON, searchJSON string) func(
 			Body:       io.NopCloser(strings.NewReader(payload)),
 		}, nil
 	})
+}
+
+// batchMediaJSON converte um fixture de GetMediaByID (Media unico) na resposta que GetMediaByIDs
+// espera (Page.media[]) — as duas queries pedem os mesmos campos, entao os testes nao precisam de
+// duas copias de cada anime. Media null vira lista vazia, que e como id_in devolve id ausente.
+func batchMediaJSON(mediaJSON string) string {
+	var single struct {
+		Data struct {
+			Media json.RawMessage `json:"Media"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(mediaJSON), &single); err != nil || string(single.Data.Media) == "null" || len(single.Data.Media) == 0 {
+		return `{"data":{"Page":{"media":[]}}}`
+	}
+	return `{"data":{"Page":{"media":[` + string(single.Data.Media) + `]}}}`
 }
 
 // mockStandaloneAniList: a query por lista devolve vazio (o anime nao esta em lista nenhuma) e

@@ -147,3 +147,121 @@ func TestGetMediaByID_NotFound(t *testing.T) {
 		t.Fatalf("quero nil, veio %+v", ml)
 	}
 }
+
+// mockCapturing devolve payloads em sequencia e guarda os corpos enviados — e como os testes do
+// lote provam QUAIS ids foram pedidos, nao so quantos requests sairam.
+func mockCapturing(sent *[]string, payloads ...string) func() {
+	return MockAniListDo(func(req *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(req.Body)
+		*sent = append(*sent, string(body))
+		payload := payloads[len(payloads)-1]
+		if len(*sent) <= len(payloads) {
+			payload = payloads[len(*sent)-1]
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(payload)),
+		}, nil
+	})
+}
+
+// TestGetMediaByIDs_SingleRequestForManyIDs e a razao de a funcao existir: o loop anterior
+// gastava 1 request por avulso contra o limite de 30/min da AniList (decisions.md #65).
+func TestGetMediaByIDs_SingleRequestForManyIDs(t *testing.T) {
+	var sent []string
+	defer mockCapturing(&sent, `{"data":{"Page":{"media":[
+		{"id":21,"title":{"romaji":"A"}},
+		{"id":22,"title":{"romaji":"B"}},
+		{"id":23,"title":{"romaji":"C"}}
+	]}}}`)()
+
+	medias, err := GetMediaByIDs([]int{21, 22, 23})
+	if err != nil {
+		t.Fatalf("GetMediaByIDs: %v", err)
+	}
+	if len(sent) != 1 {
+		t.Fatalf("quero 1 request para 3 ids, veio %d", len(sent))
+	}
+	if !strings.Contains(sent[0], "id_in") {
+		t.Fatalf("a query precisa buscar em lote com id_in, veio: %s", sent[0])
+	}
+	for _, id := range []int{21, 22, 23} {
+		if medias[id] == nil || medias[id].Media.Id != id {
+			t.Fatalf("id %d nao voltou no mapa: %+v", id, medias[id])
+		}
+	}
+}
+
+// TestGetMediaByIDs_AbsentIDIsNilNotMissing: id_in OMITE o media apagado da AniList em vez de
+// devolver erro. Sem transformar a omissao em nil explicito, quem chama nao consegue distinguir
+// "avulso morto" de "nao deu para buscar" e o anime some da tela sem aviso.
+func TestGetMediaByIDs_AbsentIDIsNilNotMissing(t *testing.T) {
+	var sent []string
+	defer mockCapturing(&sent, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"A"}}]}}}`)()
+
+	medias, err := GetMediaByIDs([]int{21, 999999})
+	if err != nil {
+		t.Fatalf("id omitido nao e erro: %v", err)
+	}
+	ml, ok := medias[999999]
+	if !ok {
+		t.Fatal("o id omitido precisa estar no mapa com nil; ausente significa 'nao foi buscado'")
+	}
+	if ml != nil {
+		t.Fatalf("quero nil para o id omitido, veio %+v", ml)
+	}
+}
+
+// TestGetMediaByIDs_CachesPerID: o cache e por id, e nao por lote — chaveado pelo lote, um avulso
+// novo invalidaria a leitura de todos os outros a cada adicao.
+func TestGetMediaByIDs_CachesPerID(t *testing.T) {
+	var sent []string
+	defer mockCapturing(&sent,
+		`{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"A"}},{"id":22,"title":{"romaji":"B"}}]}}}`,
+		`{"data":{"Page":{"media":[{"id":23,"title":{"romaji":"C"}}]}}}`,
+	)()
+
+	if _, err := GetMediaByIDs([]int{21, 22}); err != nil {
+		t.Fatalf("primeira busca: %v", err)
+	}
+	if _, err := GetMediaByIDs([]int{21, 22, 23}); err != nil {
+		t.Fatalf("segunda busca: %v", err)
+	}
+	if len(sent) != 2 {
+		t.Fatalf("quero 2 requests, veio %d", len(sent))
+	}
+	if strings.Contains(sent[1], "21") || !strings.Contains(sent[1], "23") {
+		t.Fatalf("a segunda busca so pode pedir o id novo, veio: %s", sent[1])
+	}
+
+	// O cache e o mesmo de GetMediaByID: quem buscou em lote nao paga de novo no lookup avulso.
+	if _, err := GetMediaByID(22); err != nil {
+		t.Fatalf("GetMediaByID: %v", err)
+	}
+	if len(sent) != 2 {
+		t.Fatalf("GetMediaByID tinha que sair do cache do lote, veio %d requests", len(sent))
+	}
+}
+
+// TestGetMediaByIDs_ChunksAtPageSize: perPage maximo da AniList e 50 — pedir 60 ids numa query so
+// devolveria 50 e os outros 10 pareceriam apagados.
+func TestGetMediaByIDs_ChunksAtPageSize(t *testing.T) {
+	var sent []string
+	defer mockCapturing(&sent, `{"data":{"Page":{"media":[]}}}`)()
+
+	ids := make([]int, 0, 60)
+	for i := range 60 {
+		ids = append(ids, 1000+i)
+	}
+
+	medias, err := GetMediaByIDs(ids)
+	if err != nil {
+		t.Fatalf("GetMediaByIDs: %v", err)
+	}
+	if len(sent) != 2 {
+		t.Fatalf("60 ids com perPage 50 sao 2 requests, veio %d", len(sent))
+	}
+	if len(medias) != 60 {
+		t.Fatalf("todo id pedido precisa ter desfecho no mapa, veio %d", len(medias))
+	}
+}

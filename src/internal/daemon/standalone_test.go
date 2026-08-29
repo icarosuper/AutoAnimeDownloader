@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -19,7 +20,10 @@ func mockAniListRouter(t *testing.T, listJSON, mediaJSON string) func() {
 	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
 		body, _ := io.ReadAll(req.Body)
 		payload := listJSON
-		if strings.Contains(string(body), "GetMediaByID") {
+		switch {
+		case strings.Contains(string(body), "GetMediaByIDs"):
+			payload = batchMediaJSON(mediaJSON)
+		case strings.Contains(string(body), "GetMediaByID"):
 			payload = mediaJSON
 		}
 		return &http.Response{
@@ -28,6 +32,21 @@ func mockAniListRouter(t *testing.T, listJSON, mediaJSON string) func() {
 			Header:     make(http.Header),
 		}, nil
 	})
+}
+
+// batchMediaJSON converte um fixture de GetMediaByID (Media unico) na resposta que GetMediaByIDs
+// espera (Page.media[]) — as duas queries pedem os mesmos campos, entao os testes nao precisam de
+// duas copias de cada anime. Media null vira lista vazia, que e como id_in devolve id ausente.
+func batchMediaJSON(mediaJSON string) string {
+	var single struct {
+		Data struct {
+			Media json.RawMessage `json:"Media"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(mediaJSON), &single); err != nil || string(single.Data.Media) == "null" || len(single.Data.Media) == 0 {
+		return `{"data":{"Page":{"media":[]}}}`
+	}
+	return `{"data":{"Page":{"media":[` + string(single.Data.Media) + `]}}}`
 }
 
 // mockEmptyNyaa evita que os testes batam na rede: a lista de torrents volta vazia.

@@ -185,17 +185,27 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   já pós-F2 — é ela que registra os 492 seeders do `108465` citados no F2. A sonda por variante é
   medição mais estrita que o relatório, que não separa pack de avulso.*
 
-- [ ] **F4 · Avulsos em lote (`id_in`)**
+- [x] **F4 · Avulsos em lote (`id_in`)**
   *Onde:* `src/internal/api/standalone.go` — `appendStandaloneEntries`; **e**
   `src/internal/daemon/standalone.go` (mesmo loop).
   Trocar o loop de `GetMediaByID` por `Page(media(id_in: [...]))`. Leva N req/min → 1.
-  - [ ] Os **dois** lados (corrigir só um deixa metade do consumo de pé)
-  - [ ] Continuar gravando o cache **por id**, não por lote — senão um avulso novo invalida tudo;
+  - [x] Os **dois** lados (corrigir só um deixa metade do consumo de pé)
+  - [x] Continuar gravando o cache **por id**, não por lote — senão um avulso novo invalida tudo;
         buscar só os ids que erraram o cache
-  - [ ] `perPage` máximo é 50 → mais de 50 avulsos viram 2 queries
-  - [ ] Id pedido que não voltou = ausente: `id_in` **omite silenciosamente** media apagado da
+  - [x] `perPage` máximo é 50 → mais de 50 avulsos viram 2 queries
+  - [x] Id pedido que não voltou = ausente: `id_in` **omite silenciosamente** media apagado da
         AniList. Precisa do mesmo tratamento que o `ErrNotFound` do `GetMediaByID` dá hoje, senão
         um avulso morto some da tela sem aviso
+
+  *Feito em 29/ago/2026.* Diferenças do planejado: `GetMediaByID` **não** foi removida — ela
+  continua servindo os lookups de um id só (`resolveMediaList`, `DownloadStandaloneAnime`,
+  `handleStandaloneAnimeAdd`, `resolveAnimeDetails`), e o bloco de campos das duas queries virou a
+  const `mediaByIDFields` para os dois caminhos não poderem divergir. O mapa devolvido por
+  `GetMediaByIDs` tem **três** desfechos por id, não dois: valor, `nil` explícito (a AniList não
+  conhece o id) e **chave ausente** (não deu para buscar — só esse caso vem com erro). Sem essa
+  distinção o aviso de "avulso morto" sairia também num 429, que é ruído. O erro não invalida o
+  mapa: as páginas que passaram antes dele continuam lá. Registrado em `decisions.md` #65 e #72.
+
   *Independente de todo o resto; é um 429 esperando acontecer hoje. Medições em `decisions.md` #65
   e #72.*
 
