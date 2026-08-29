@@ -1780,3 +1780,62 @@ func TestScrapNyaaForAnime_BatchSizeCeilingOffKeepsOversizedPacks(t *testing.T) 
 		t.Fatalf("3 packs aceitos atingem o piso: esperava 1 fetch, obtive %d", len(urls))
 	}
 }
+
+// --- F2: titulo alternativo depois do marcador de temporada ---
+
+// O caso real que motivou a correcao: o EMBER poe o marcador "Season 2" dentro de
+// "(Season 2 | Part 2)" e o romaji completo tres grupos adiante, entre parenteses. Cortar no
+// marcador deixava so [mushoku tensei jobless reincarnation], e a query em romaji era rejeitada
+// por falta de token — os UNICOS packs de Part 2 morriam antes de chegar ao caminho de batch.
+func TestTitleMatchesQuery_AltTitleAfterMarker(t *testing.T) {
+	const romaji = "Mushoku Tensei II: Isekai Ittara Honki Dasu"
+	tests := []struct {
+		name    string
+		torrent string
+		query   string
+	}{
+		{"EMBER pack part 2, romaji entre parenteses",
+			"[EMBER] Mushoku Tensei: Jobless Reincarnation (2024) (Season 2 | Part 2) [BDRip] [1080p Dual Audio HEVC 10 bits DDP] (Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2) (Batch)",
+			romaji},
+		{"EMBER pack part 1",
+			"[EMBER] Mushoku Tensei: Jobless Reincarnation (2023) (Season 2 | Part 1 + Special) [1080p] [Dual Audio HEVC WEBRip DDP] (Mushoku Tensei II: Isekai Ittara Honki Dasu) (Batch)",
+			romaji},
+		{"Diddy pack de season, romaji depois de barra solta",
+			"[Diddy] Mushoku Tensei - S02 (BD 1080p HEVC Opus) [Dual Audio] | Mushoku Tensei II: Isekai Ittara Honki Dasu | Jobless Reincarnation Season 2",
+			romaji},
+		{"NTRX pack de season, romaji depois de barra solta",
+			"[NTRX] Mushoku Tensei: Jobless Reincarnation S02 (Season 2) REPACK (BD Remux 1080p AVC FLAC 2.0) [Dual Audio] | Mushoku Tensei II: Isekai Ittara Honki Dasu",
+			romaji},
+		{"VARYG episodio avulso, romaji entre parenteses depois do titulo do episodio",
+			"Mushoku Tensei Jobless Reincarnation S02E07 The Kidnapping and Confinement of Beast Girls 1080p NF WEB-DL AAC2.0 H 264-VARYG (Mushoku Tensei II: Isekai Ittara Honki Dasu, Multi-Subs)",
+			romaji},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !nyaa.TitleMatchesQuery(tt.torrent, tt.query) {
+				t.Errorf("TitleMatchesQuery(%q, %q) = false, want true", tt.torrent, tt.query)
+			}
+		})
+	}
+}
+
+// O par do teste acima: a segunda tentativa amplia os tokens, nao afrouxa o match. Um titulo
+// alternativo depois do marcador que NAO e o anime pedido continua sendo rejeitado.
+func TestTitleMatchesQuery_AltTitleDoesNotAcceptWrongAnime(t *testing.T) {
+	tests := []struct{ torrent, query string }{
+		// Sequencia diferente: o romaji no rodape diz III, a query pede II.
+		{"[Erai-raws] Mushoku Tensei III: Isekai Ittara Honki Dasu - 01 [1080p CR WEB-DL AVC AAC][MultiSub][07335B96]",
+			"Mushoku Tensei II: Isekai Ittara Honki Dasu"},
+		// Pack real da season 2 contra a query da season 3: o rodape traz o romaji, mas com o
+		// numeral errado. E o token que a checagem 1 exige e nao acha.
+		{"[EMBER] Mushoku Tensei: Jobless Reincarnation (2024) (Season 2 | Part 2) [BDRip] [1080p Dual Audio HEVC 10 bits DDP] (Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2) (Batch)",
+			"Mushoku Tensei III: Isekai Ittara Honki Dasu"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.torrent, func(t *testing.T) {
+			if nyaa.TitleMatchesQuery(tt.torrent, tt.query) {
+				t.Errorf("TitleMatchesQuery(%q, %q) = true, want false", tt.torrent, tt.query)
+			}
+		})
+	}
+}

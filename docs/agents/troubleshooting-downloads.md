@@ -165,6 +165,10 @@ torrent tokens = extractTitleTokens("<torrent name from Nyaa>")
 jaccard        = |intersection| / |union|
 ```
 
+Se der abaixo do threshold, confira também a segunda tentativa antes de mexer no allowlist: o match
+repete as duas checagens sobre cada `altTitleCandidates(<tail depois do marcador>)` (decisions.md
+#75), então o nome pode passar por um título alternativo mesmo com o corte reprovando.
+
 If Jaccard < 0.8, add the offending torrent-side tokens to `titleTechnicalTokens` in `nyaa_match.go` (streaming service tags like `nf`/`amzn`/`cr`, codec fragments like `eac3`/`ddp2`, subtitle markers like `multisub`/`multi`/`subs`, etc.).
 
 **6f. Nenhum pack sobrevive — o anime baixa episódio a episódio mesmo com pack no Nyaa**
@@ -188,10 +192,11 @@ Part 2, `166873`):
 
 Os três culpados já vistos, todos na mesma investigação:
 
-- **`titleMatchesQuery` falso porque `truncateAtFirstMarker` comeu o título alternativo.** Ele corta
-  o nome no primeiro marcador de season; quando o nome traz o romaji entre parênteses **depois**
-  desse marcador (`(Season 2 | Part 2) … (Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2)`), os
-  tokens do romaji somem e o match exige tokens que não sobraram.
+- ~~**`titleMatchesQuery` falso porque `truncateAtFirstMarker` comeu o título alternativo.**~~
+  **CORRIGIDO** (decisions.md #75): quando o corte no marcador falha, `titleMatchesQuery` tenta cada
+  título alternativo que vem depois dele (grupos entre parênteses, segmentos separados por barra).
+  Se você ainda vir um pack morrer neste filtro, verifique se o título alternativo está num formato
+  que `altTitleCandidates` não enxerga — colchetes e texto solto ficam de fora de propósito.
 - **Filtro duro de part matando pack de season inteira.** Com `requestedPart != nil`, pack sem
   marcador de part explícito é descartado — e pack de season inteira normalmente não tem esse
   marcador, embora contenha os episódios pedidos. Ver `sources.md`, "Granularidade e numeração dos

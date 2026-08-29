@@ -573,11 +573,15 @@ Title-matching logic for filtering Nyaa search results.
 | Symbol | Purpose |
 |--------|---------|
 | `titleTechnicalTokens` | Map of tokens to strip before title comparison (codecs, sources, fansubs, season/ep markers) |
-| `extractTitleTokens(name)` | Returns meaningful title tokens, stripping all technical metadata |
+| `firstMarkerIndex(name)` | Index of the earliest season/episode marker in the name, or `-1` |
+| `extractTitleTokens(name)` | Returns meaningful title tokens, stripping all technical metadata (cuts at the marker) |
+| `titleTokens(name)` | Tokenizer proper — used on the truncated name and on each alt-title candidate |
+| `altTitleCandidates(tail)` | Alt titles written AFTER the marker: each `(...)` group and each `\|`-separated segment, one candidate per stretch |
 | `isTitleTechnicalToken(s)` | True if token is technical (codec, resolution, episode marker, hex hash, etc.) |
 | `jaccardSimilarity(a, b)` | `|intersection| / |union|` over two token sets |
 | `titleJaccardThreshold` | `0.8` — minimum Jaccard similarity for a match |
-| `titleMatchesQuery(torrentName, query)` | Two-pass: (1) all query tokens present in torrent title; (2) Jaccard ≥ 0.8. Prevents partial-title and spinoff false positives |
+| `tokensMatchQuery(torrentTokens, queryTokens)` | The two checks: (1) all query tokens present; (2) Jaccard ≥ `jaccardThreshold` |
+| `titleMatchesQuery(torrentName, query)` | Tries the marker-truncated name first; only if that fails, each `altTitleCandidates` entry on its own (decisions.md #75) |
 | `TitleMatchesQuery(torrentName, query)` | Exported alias for tests |
 
 ### `src/internal/torrents/`

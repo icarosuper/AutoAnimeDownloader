@@ -121,12 +121,12 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
 
 ## Onda 1 — independentes entre si, qualquer ordem (exceto F3, que só se decide depois do F2)
 
-- [ ] **F2 · Match de título não pode comer o título alternativo**
+- [x] **F2 · Match de título não pode comer o título alternativo**
   *Onde:* `src/internal/nyaa/nyaa_match.go` — `truncateAtFirstMarker`.
   Não descartar o texto depois do marcador de season quando ele contém um título alternativo entre
   parênteses/pipes — ou casar contra **todas** as variantes de título, não só a que originou a
   busca.
-  - [ ] Teste com o nome real que falhou:
+  - [x] Teste com o nome real que falhou:
         `[EMBER] … (2024) (Season 2 | Part 2) … (Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2) (Batch)`
 
   > **Não é "um bug de string isolado", apesar de parecer.** `truncateAtFirstMarker` alimenta
@@ -134,8 +134,20 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   > episódio e pack. Mexer nele mexe no score de todo match do projeto. O comentário atual da função
   > ("everything after the marker is … never part of the anime's core title") é exatamente a
   > premissa que o nome do EMBER quebra, então ele também precisa ser corrigido.
-  - [ ] Rodar `make debug-batch` (corpus de `scripts/robustness-animes.txt`) antes e depois e
+  - [x] Rodar `make debug-batch` (corpus de `scripts/robustness-animes.txt`) antes e depois e
         comparar — o teste unitário sozinho não cobre a regressão de Jaccard na população
+
+  *Feito em 29/ago/2026.* Diferenças do planejado: o corte no marcador **não** foi alterado — ele
+  virou a *primeira* tentativa de `titleMatchesQuery`, e só quando ela falha o match tenta os
+  títulos alternativos do rodapé, **um trecho por vez**. Duas medições decidiram esse desenho: (a)
+  juntar prefixo + rodapé num conjunto único de tokens dá 0.78 de Jaccard contra 1.00 do romaji
+  sozinho, e no `debug-batch` fazia os avulsos do Yameii de *SAO Alternative: GGO* casarem a query
+  de *Sword Art Online II*; (b) manter a primeira tentativa intacta é o que impede o pack do EMBER
+  de *Kimetsu no Yaiba* (query de 3 tokens) de regredir. Registrado em `decisions.md` #75.
+
+  *Resultado no corpus:* nenhum match perdido; `108465` passou a casar o pack BDRip do EMBER de
+  season 1 e trocou o melhor torrent de 65 para 492 seeders. No `166873` (o caso que motivou tudo),
+  os três packs de Part 2 do EMBER passaram a sobreviver ao filtro — eram zero.
 
   *Melhor retorno isolado do lote, e imune ao refactor da Onda 2.*
 

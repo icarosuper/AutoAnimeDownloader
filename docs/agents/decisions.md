@@ -223,6 +223,8 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 **Don't "fix" by:** lowering `jaccardThreshold` instead. The two failure modes overlap: the real Kaiju Girl Caramelise match scores ~0.33 Jaccard, but the SAO-spinoff torrent that must stay rejected scores ~0.5 — no single threshold accepts one without accepting the other. The marker-truncation approach fixes the union inflation at its source instead.
 
+**Amendment (see #75):** o corte continua sendo a PRIMEIRA tentativa e vale exatamente como descrito acima, mas deixou de ser a única: quando ele falha, `titleMatchesQuery` tenta os títulos alternativos que aparecem depois do marcador. A frase "none of that belongs to the anime's core title" era falsa para os grupos que repetem o romaji no rodapé.
+
 ---
 
 ### 19. Disk space is read via OS stat on `CompletedAnimePath`
@@ -1658,3 +1660,55 @@ lista de arquivos do torrent (item da página de detalhe do Nyaa em `docs/TODO.m
 uma que dá para reconstruir — foi o bug que motivou `BatchStart`/`BatchEnd` existirem), nem
 recarregar `episodes.json` dentro de `removeEpisodesAndLinks` (a Fase 3 é sequencial de propósito e
 já tem os dois pedaços em memória).
+
+---
+
+### 75. O corte no marcador e a primeira tentativa do match de titulo, nao a unica
+
+**Location:** `internal/nyaa/nyaa_match.go` (`titleMatchesQuery`, `altTitleCandidates`,
+`tokensMatchQuery`, `firstMarkerIndex`). Fixado por `TestTitleMatchesQuery_AltTitleAfterMarker` e
+`TestTitleMatchesQuery_AltTitleDoesNotAcceptWrongAnime` (`src/tests/unit/nyaa_test.go`), com nomes
+reais colhidos do Nyaa.
+
+**What it looks like:** `titleMatchesQuery` roda as duas checagens (todos os tokens da query
+presentes + Jaccard) primeiro sobre o nome cortado no marcador — igualzinho a #18 — e, so se isso
+falhar, repete sobre **cada** titulo alternativo que aparece DEPOIS do marcador, um de cada vez.
+Cada trecho entre parenteses e cada segmento separado por barra e um candidato proprio.
+
+**Why it's right:** a premissa de #18 ("tudo depois do marcador e ruido") quebra em uma familia
+inteira de nomes. O EMBER escreve
+`[EMBER] Mushoku Tensei: Jobless Reincarnation (2024) (Season 2 | Part 2) [...] (Mushoku Tensei II:
+Isekai Ittara Honki Dasu Part 2) (Batch)`: o marcador `Season 2` esta DENTRO de um grupo, e o romaji
+completo vem tres grupos adiante. Cortar deixava `[mushoku tensei jobless reincarnation]`, e a query
+em romaji era rejeitada por falta de token — os UNICOS packs de Part 2 do anime morriam antes de
+chegar ao caminho de batch. Diddy, NTRX, Fuchs e o VARYG fazem o mesmo com barra em vez de
+parenteses.
+
+**Por que um candidato por trecho, e nao um saco unico de tokens.** Foi a primeira tentativa, e
+medindo ficou pior: juntar o titulo em ingles do prefixo com o romaji do rodape dilui os dois
+(Jaccard 0.78 no caso do EMBER, contra **1.00** do romaji comparado sozinho), e no `debug-batch`
+isso deixava um trecho emprestar token para o vizinho — os avulsos do Yameii de *SAO Alternative:
+Gun Gale Online* passavam a casar a query de *Sword Art Online II*. Comparado trecho a trecho, cada
+titulo e avaliado como titulo.
+
+**Por que a segunda tentativa so roda depois da primeira falhar.** E o que preserva #18 inteiro.
+O corte e o que protege query curta de afundar no Jaccard: o pack
+`[EMBER] Kimetsu no Yaiba (2024) (Season 4) [...] (Kimetsu no Yaiba: Hashira Geiko-hen | Demon
+Slayer: Kimetsu no Yaiba Hashira Training Arc) (Batch)` casa a query de 3 tokens no corte (1.00) e
+nunca chega aos candidatos — onde marcaria 0.5 e seria rejeitado. Ampliar os tokens para todo mundo
+trocaria um falso negativo por outro.
+
+**Medido no `make debug-batch`** (corpus de `scripts/robustness-animes.txt`, antes e depois): nenhum
+match perdido; ganhos em `108465`, onde o pack BDRip do EMBER de season 1 passou a casar e virou a
+melhor opcao (492 seeders, contra 65 do Judas que liderava). No `166873`, que motivou a
+investigacao, os tres packs de Part 2 do EMBER passaram a sobreviver ao filtro (eram zero).
+
+**Limitacao conhecida, PRE-EXISTENTE e nao introduzida aqui:** a query `Sword Art Online II` casa os
+avulsos de *SAO Alternative: Gun Gale Online II* (Jaccard 0.57, acima do 0.4 de query longa). Os
+releases do Erai-raws desse mesmo spinoff ja casavam antes desta mudanca, pelo caminho do corte —
+o que mudou foi so a consistencia entre releases. Consertar isso e mexer no `jaccardThreshold`, que
+e outra feature.
+
+**Don't "fix" by:** tokenizar o nome inteiro (traz titulo de episodio e tag de release, e afunda o
+Jaccard), nem juntar os candidatos num conjunto so (medido acima), nem criar um threshold proprio
+para a segunda tentativa (numero magico ajustado a cinco amostras).

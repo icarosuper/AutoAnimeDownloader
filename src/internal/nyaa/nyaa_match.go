@@ -53,14 +53,13 @@ var (
 	reMatchOrdinal    = regexp.MustCompile(`^\d+(?:st|nd|rd|th)$`) // 1st, 2nd
 	reMatchHexHash    = regexp.MustCompile(`^[0-9a-f]{6,10}$`)
 	reLeadingBracket  = regexp.MustCompile(`^\s*(?:\[[^\]]*\]|\([^)]*\))\s*`)
+	reBracketGroup    = regexp.MustCompile(`\[[^\]]*\]`)
+	reParenGroup      = regexp.MustCompile(`\(([^)]*)\)`)
 )
 
-// truncateAtFirstMarker cuts a torrent name at the earliest season/episode
-// marker (S01E05, " - 05", "Episode 3", etc). Everything after the marker is
-// episode title, resolution, codec, and fansub noise that inflates the
-// Jaccard union enough to sink genuine matches — it is never part of the
-// anime's core title, so it's dropped rather than tokenized.
-func truncateAtFirstMarker(name string) string {
+// firstMarkerIndex returns the index of the earliest season/episode marker in the name
+// (S01E05, " - 05", "Episode 3", "Season 2", etc), or -1 when there is none.
+func firstMarkerIndex(name string) int {
 	earliest := -1
 	for _, p := range reEpisodePatterns {
 		if loc := p.re.FindStringIndex(name); loc != nil && (earliest == -1 || loc[0] < earliest) {
@@ -72,16 +71,55 @@ func truncateAtFirstMarker(name string) string {
 			earliest = loc[0]
 		}
 	}
-	if earliest <= 0 {
-		return name
+	return earliest
+}
+
+// truncateAtFirstMarker cuts a torrent name at the earliest season/episode marker. Most of what
+// follows is episode title, resolution, codec and fansub noise that inflates the Jaccard union
+// enough to sink genuine matches, so it's dropped rather than tokenized.
+//
+// ATENCAO: o corte NAO e sempre seguro. Varios grupos escrevem um titulo alternativo do anime
+// DEPOIS do marcador — o EMBER poe o marcador dentro de "(Season 2 | Part 2)" e o romaji completo
+// tres grupos adiante. Por isso quem casa titulo nao usa so este corte: titleMatchesQuery tenta
+// tambem os candidatos de altTitleCandidates.
+func truncateAtFirstMarker(name string) string {
+	if earliest := firstMarkerIndex(name); earliest > 0 {
+		return name[:earliest]
 	}
-	return name[:earliest]
+	return name
+}
+
+// altTitleCandidates extrai, do texto que vem DEPOIS do marcador, os titulos alternativos do
+// anime: o conteudo de cada grupo entre parenteses e cada segmento separado por barra. Colchetes
+// e texto solto ficam de fora de proposito — sao titulo de episodio, resolucao, codec e tag de
+// release.
+//
+// UM CANDIDATO POR TRECHO, e nao um saco unico de tokens. O EMBER poe o titulo em ingles antes do
+// marcador e o romaji depois; juntar os dois num conjunto so dilui os dois no Jaccard (medido:
+// 0.78, contra 1.00 do romaji sozinho). Separados, cada titulo e comparado como titulo, e um
+// trecho de outro anime nao empresta token para o vizinho.
+func altTitleCandidates(tail string) []string {
+	tail = reBracketGroup.ReplaceAllString(tail, " ")
+
+	var out []string
+	for _, m := range reParenGroup.FindAllStringSubmatch(tail, -1) {
+		out = append(out, strings.Split(m[1], "|")...)
+	}
+	// Barras FORA de parenteses: Diddy, NTRX e Fuchs escrevem o romaji depois de um "|" solto.
+	// O primeiro segmento e o resto do marcador, nao um titulo — por isso [1:].
+	if parts := strings.Split(reParenGroup.ReplaceAllString(tail, " "), "|"); len(parts) > 1 {
+		out = append(out, parts[1:]...)
+	}
+	return out
 }
 
 // extractTitleTokens returns meaningful title tokens from a torrent name or anime title,
 // stripping technical metadata (resolution, codec, fansub, episode/season numbers, etc.)
 func extractTitleTokens(name string) []string {
-	name = truncateAtFirstMarker(name)
+	return titleTokens(truncateAtFirstMarker(name))
+}
+
+func titleTokens(name string) []string {
 	// A leading fansub tag ("[SubsPlease] ", "(Erai-raws) ") survives truncation
 	// since it sits before the marker; strip it so it doesn't count as a title token.
 	name = reLeadingBracket.ReplaceAllString(name, "")
@@ -188,13 +226,35 @@ func jaccardThreshold(queryLen int) float64 {
 //  2. Jaccard similarity >= threshold (prevents spinoffs/sequels with extra title words,
 //     e.g. "SAO Alternative Gun Gale Online" for a "SAO" query)
 func titleMatchesQuery(torrentName, query string) bool {
-	torrentTokens := extractTitleTokens(torrentName)
 	queryTokens := extractTitleTokens(query)
 
 	// If query has no meaningful tokens, fall back to permissive match
 	if len(queryTokens) == 0 {
 		return true
 	}
+
+	if tokensMatchQuery(extractTitleTokens(torrentName), queryTokens) {
+		return true
+	}
+
+	// So entao os titulos alternativos que vem depois do marcador, um de cada vez. Tentar isto
+	// APENAS quando o corte falha e o que preserva o comportamento de hoje inteiro: o corte no
+	// marcador e o que protege query curta de afundar no Jaccard, e o pack do EMBER de Kimetsu no
+	// Yaiba (query de 3 tokens) casa no corte e nunca chega aqui.
+	marker := firstMarkerIndex(torrentName)
+	if marker <= 0 {
+		return false
+	}
+	for _, alt := range altTitleCandidates(torrentName[marker:]) {
+		if tokensMatchQuery(titleTokens(alt), queryTokens) {
+			return true
+		}
+	}
+	return false
+}
+
+// tokensMatchQuery aplica as duas checagens do match de titulo a um conjunto de tokens ja pronto.
+func tokensMatchQuery(torrentTokens, queryTokens []string) bool {
 	if len(torrentTokens) == 0 {
 		return false
 	}
