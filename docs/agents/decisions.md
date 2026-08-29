@@ -1712,3 +1712,47 @@ e outra feature.
 **Don't "fix" by:** tokenizar o nome inteiro (traz titulo de episodio e tag de release, e afunda o
 Jaccard), nem juntar os candidatos num conjunto so (medido acima), nem criar um threshold proprio
 para a segunda tentativa (numero magico ajustado a cinco amostras).
+
+---
+
+### 76. `searchNyaaWithVariants` para na primeira variante que devolve qualquer resultado — medido, e fica assim
+
+**Location:** `internal/daemon/search.go` (`searchNyaaWithVariants`, `buildTitleVariants`).
+
+**What it looks like:** o laço de variantes de título só continua para a próxima quando a atual
+devolveu **nada** (`result != nil` já encerra). Uma variante que devolve 24 episódios avulsos e zero
+pack encerra a busca — a variante em inglês, que poderia trazer o pack, não roda.
+
+**Why it's right:** a falha descrita acima é real no papel, e chegou a ser agendada como feature
+("F3 · Variantes de título no caminho de pack"). Foi **medida** depois de #75 e não aparece na
+prática: rodando `ScrapNyaaForAnime` + `partitionSearchResults` + `pickBatches` para **cada** variante
+dos 8 animes de `scripts/robustness-animes.txt` mais `146065` e `166873` (29/ago/2026), não há um
+único anime em que a variante 1 devolva resultado e uma variante posterior encontre pack que ela não
+encontrou. Onde existe pack no Nyaa, o romaji já o acha:
+
+| id | v1 (romaji) packs/batches | melhor variante posterior |
+|---|---|---|
+| 1735 Naruto Shippuuden | 1 / 1 | idem (pack diferente, mesma cobertura) |
+| 1 Cowboy Bebop | 9 / 1 | variante única |
+| 108465 Mushoku Tensei | 3 / 1 | idem |
+| 20594 Sword Art Online II | 4 / 1 | variante única |
+| 101922 Kimetsu no Yaiba | 3 / 2 | 14 / 1 (mais packs, cobertura pior) |
+| 166873 Mushoku Tensei II Part 2 | 3 / 1 | idem |
+| 235 Meitantei Conan | 0 / 0 | **0 / 0** em todas as quatro |
+
+O `235` é o único anime do corpus que cai no caminho de episódio avulso, e nenhuma variante acha
+pack para ele — o Nyaa não tem pack dos primeiros episódios de Detective Conan. É ausência de
+conteúdo, não de variante.
+
+Depois de #75, o custo de rodar a variante seguinte deixou de ter contrapartida: seria mais uma
+rodada de busca no Nyaa **por anime, em todo passe** em que não houver pack — que é a maioria dos
+animes em exibição, porque pack de temporada corrente só aparece no fim. Combinado com a paginação
+adaptativa (#57), multiplica.
+
+**Reabrir quando:** aparecer no `make debug-batch` um anime cuja variante 1 devolva resultado, zero
+pack sobreviva ao filtro, e a busca manual com a variante em inglês mostre pack que cobre a janela.
+Aí a mudança é de duas linhas: continuar o laço quando `partitionSearchResults` não devolver pack.
+
+**Don't "fix" by:** rodar todas as variantes sempre e unir os resultados (paga N buscas por anime
+para o ganho medido acima, que é zero), nem inverter a ordem das variantes (`GenerateSearchTitleVariants`
+põe o romaji primeiro porque é ele que casa a maioria dos releases).

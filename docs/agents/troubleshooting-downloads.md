@@ -213,6 +213,10 @@ Verifique também se a variante de título certa chegou a ser tentada: `searchNy
 `GenerateSearchTitleVariants` põe o romaji primeiro. Se o romaji trouxe 24 episódios avulsos, a
 variante em inglês — que poderia casar com os packs — nunca rodou.
 
+> Este suspeito foi **medido e descartado** no corpus (decisions.md #76): depois de #75 não há anime
+> em que uma variante posterior ache pack que o romaji não achou. Confirme antes de mexer no laço —
+> se você tem um caso real, ele é a evidência que reabre a decisão.
+
 ---
 
 ## Step 7 — Write a failing test

@@ -151,7 +151,7 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
 
   *Melhor retorno isolado do lote, e imune ao refactor da Onda 2.*
 
-- [ ] **F3 · Variantes de título no caminho de pack** — **CONDICIONAL, não agendado**
+- [x] **F3 · Variantes de título no caminho de pack** — **DESCARTADO por medição (29/ago/2026)**
   *Onde:* `src/internal/daemon/search.go` — `searchNyaaWithVariants`.
   Hoje só continua para a variante seguinte se a atual não devolveu **nada**. Precisa continuar
   quando devolveu episódios mas nenhum pack — foi o que impediu a variante em inglês de rodar, e
@@ -169,8 +169,21 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   > A falha que ele descreve continua real e continua registrada aqui — o que foi decidido é que ela
   > não é agendada até haver evidência de que ainda importa depois do F2.
 
-  - [ ] Rodar `make debug-batch` depois do F2 e decidir por evidência
-  - [ ] (se entrar) Teste: variante 1 devolve só avulsos → variante 2 é tentada
+  - [x] Rodar `make debug-batch` depois do F2 e decidir por evidência
+  - [x] ~~(se entrar) Teste: variante 1 devolve só avulsos → variante 2 é tentada~~ — não entrou
+
+  **Veredito: não implementar.** A medição rodou `ScrapNyaaForAnime` + `partitionSearchResults` +
+  `pickBatches` para **cada** variante dos 8 animes do corpus mais `146065` e `166873`, com o código
+  pós-F2. Não há um único anime em que a variante 1 devolva resultado e uma variante posterior ache
+  pack que ela não achou — onde o Nyaa tem pack, o romaji já o encontra. O `235` (Meitantei Conan) é
+  o único que cai no caminho de avulso, e as quatro variantes dão zero pack: é ausência de conteúdo,
+  não de variante. Nenhuma linha de produção mudou; a tabela da medição e a condição de reabertura
+  estão em `decisions.md` #76, e o parágrafo do `troubleshooting-downloads.md` que apontava a
+  variante como suspeito foi anotado com o resultado.
+
+  *A rodada de `make debug-batch` reaproveitada é a de 15:01 de 29/ago/2026 (`.debug_batch/report.md`),
+  já pós-F2 — é ela que registra os 492 seeders do `108465` citados no F2. A sonda por variante é
+  medição mais estrita que o relatório, que não separa pack de avulso.*
 
 - [ ] **F4 · Avulsos em lote (`id_in`)**
   *Onde:* `src/internal/api/standalone.go` — `appendStandaloneEntries`; **e**
