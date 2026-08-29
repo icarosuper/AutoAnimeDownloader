@@ -198,7 +198,7 @@ func TestProcessAnimeEpisodes_SavesThePackRange(t *testing.T) {
 	anime.Progress = 5
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "[X] Anime 01-11 [1080p]", MagnetLink: fakeMagnet(1)}}, nil, nil, nil)
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 6 {
 		t.Fatalf("esperava os 6 episódios pendentes registrados, obteve %d", len(result.newEpisodes))
@@ -217,7 +217,7 @@ func TestProcessAnimeEpisodes_SavesTheWholeSeriesForARangelessPack(t *testing.T)
 	anime.Progress = 5
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "[X] Anime (Season 1+OVA) [Batch]", MagnetLink: fakeMagnet(2)}}, nil, nil, nil)
 
-	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
+	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, "", searcher)
 
 	if len(result.newEpisodes) != 6 {
 		t.Fatalf("esperava os 6 episódios pendentes registrados, obteve %d", len(result.newEpisodes))

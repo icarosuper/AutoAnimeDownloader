@@ -135,8 +135,12 @@ functions; the parenthesised file name says where each one lives.
 |----------|---------|
 
 | `StartLoop(p)` | (`loop.go`) Creates goroutine loop, returns `LoopControl` (Cancel/UpdateInterval) |
-| `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`). **Um passe por vez**: pega `verificationMu.TryLock()` e volta na hora se outro já está rodando (ver decisions.md #67) |
-| `processAnimeEpisodes(...)` | Per-anime: monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(...))`, decide download/delete por episódio e executa a estratégia de busca |
+| `AnimeVerification(ctx, fm, state, jobQueue, backend, librarian)` | Main check: fetches Anilist → Nyaa → embedded torrent client (`verification.go`). **Um passe por vez**: pega `verificationMu.TryLock()` e volta na hora se outro já está rodando (ver decisions.md #67). Entre a Fase 1 e a 2 resolve o `seriesIndex` do passe (`resolveSeriesIndex`), que é o que a posse por cobertura consome |
+| `processAnimeEpisodes(...)` | Per-anime: monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(...))`, decide download/delete por episódio, **adota o que um pack já baixado cobre** (`adoptCoveredEpisodes`, antes de qualquer busca) e executa a estratégia de busca com o que sobrou |
+| `resolveSeriesIndex(animeIDs, savedEpisodes)` | (`coverage.go`) Semeia `anilist.GetSeriesIndex` com os animes do passe ∪ os `anime_id` de `episodes.json` e devolve o mapa id → `anilist.Series`. Erro é logado, não aborta: id ausente só não participa da adoção |
+| `adoptCoveredEpisodes(...)` | (`coverage.go`) Devolve os `EpisodeStruct` dos episódios pendentes que um pack já em disco cobre no eixo absoluto — o registro aponta para o hash existente, sem download e sem Nyaa (decisions.md #78) |
+| `findCoveringPack(saved, seriesIndex, hashSet, series, absEp)` | (`coverage.go`) O registro de pack, em **qualquer** `anime_id`, cuja faixa declarada contém `absEp`. Quatro portas: faixa conhecida, torrent vivo na sessão, mesma `Series.Key`, e o anime pedido não ser filme |
+| `dropAdopted(episodes, adopted)` | (`coverage.go`) Tira os adotados da lista pendente. Roda nos **dois** pontos de seleção: `selectEpisodes` é pura e a segunda passada (limite levantado) os traria de volta |
 | `firstEpisodeToConsider(anime, savedEpisodes)` | Onde a lista começa: `Progress + 1` (avulso tem progresso 0, logo começa no 1), recuando para o menor episódio já salvo — sem o recuo, um salvo abaixo do progresso não é "checado" e a poda o apagaria ignorando `watched_episodes_to_keep` |
 | `checkEpisode(configs, maxEpisodes, ...)` | Returns `(shouldDownload, shouldDelete, skipCode)` per episode — `skipCode` é `IssueMaxEpisodesPerAnime` quando o limite por anime barrou o episódio e `""` em todo skip normal. `maxEpisodes` is the **effective** per-anime limit computed by the caller — unlimited (`len(episodes)+1`) once a pack was picked for this pass |
 | `selectEpisodes(configs, maxEpisodes, anime, episodes, ...)` | Pure selection loop extracted from `processAnimeEpisodes`: per episode, `(shouldDownload, shouldDelete, skipCode)`. Runs twice in a pass when a pack covers the window — once with the real limit (produces the deletions), once with it lifted (so pack-covered records aren't pruned). O `episodeSelection` devolvido carrega também `downloaded`/`limitSkipped`, o par de que o `Issue` de `max_episodes_per_anime` é montado — vem do resultado FINAL, então na segunda passada (limite levantado) `limitSkipped` é zero, que é o certo |
@@ -173,6 +177,7 @@ functions; the parenthesised file name says where each one lives.
 | `DownloadStandaloneAnime(fm, backend, configs, mediaID) (int, error)` | `Ensure` + `processAnimeEpisodes` + `saveEpisodesToFile` for one anime, nothing else. **Must never call `handleSavedEpisodes`** — with a single anime's episodes in hand and `delete_watched_episodes` on, `identifyEpisodesNotInWatching` would wipe the rest of the library (`standalone.go`, decisions.md) |
 
 **Download priority** (in `processAnimeEpisodes`):
+0. Posse por cobertura → `adoptCoveredEpisodes`: episódio já contido num pack em disco (em qualquer `anime_id` da mesma série) vira registro apontando para aquele hash e sai da lista antes de qualquer busca
 1. Movie → `resolveMovie`/`searchNyaaForMovie` → `skipSubfolder=true`, epName = animeName
 2. Packs resolved before the episode loop, covering the window from the first pending episode → `searchNyaaForAnime` + `partitionSearchResults` + `pickBatches`/`assignBatches` → `skipSubfolder=true`, filtered by `max_batch_torrent_size_gb`. Eligibility is decided by the filtered search **result** (size, seeders, covered range), not by anime metadata — see decisions.md
 3. Single ep fallback, per still-uncovered episode → `searchNyaaForSingleEpisode`, filtered by `max_episode_torrent_size_gb`
@@ -180,6 +185,14 @@ functions; the parenthesised file name says where each one lives.
 All three also pass through the `min_seeders` floor (`filterSearchResults`).
 
 `max_episodes_per_anime` is lifted (`selectEpisodes` re-run with `len(episodes)+1`) only once a pack was actually picked for the pass; if no pack covers the window, the original (limited) selection stands and the oldest episodes are what gets kept.
+
+### `src/internal/daemon/coverage.go`
+
+**Posse por cobertura**: a unidade de posse deixa de ser `files.EpisodeKey{AnimeID, Episode}` e
+passa a ser a faixa que o torrent cobre no **eixo absoluto da série** (`anilist.Series`,
+decisions.md #77). É o que impede o cour 2 de rebaixar do Nyaa o pack de season que já está em
+disco sob o cour 1. Símbolos na tabela do pacote acima; o desenho e as quatro portas da adoção
+estão em decisions.md #78.
 
 ### `src/internal/daemon/webui.go`
 
@@ -497,8 +510,9 @@ cadeia é um BFS, não uma leitura. Ver decisions.md #77.
 | `recordLink` / `prequelOf` / `resolveSeries` (unexported) | Gravam o elo `{PrequelID, Episodes}`, escolhem o `PREQUEL` de `TV`/`TV_SHORT` (mesma regra de `daemon.ComputeEpisodeOffset`, decisions.md #9) e somam a cadeia para trás. Ancestral desconhecido ou ciclo param a soma ali — na dúvida, o menor offset |
 | `seriesCache` / `seriesTTL` | `ttlCache[seriesLink]` de 24h, por media id. Só grava nó `FINISHED` **com** contagem de episódios: o dado é imutável e a caminhada é monotônica. Em memória, sem arquivo — o warm-up inteiro custa uns poucos requests |
 
-Sem chamador em produção ainda: F6 entrega só o dado. Quem semeia (o daemon, com os ids do passe
-mais os de `episodes.json`) entra com a posse por cobertura.
+Quem semeia é o daemon, em `daemon/coverage.go` (`resolveSeriesIndex`): os ids do passe **mais**
+os `anime_id` de `episodes.json` — o cour anterior já `COMPLETED` saiu do universo do passe, e é o
+offset dele que converte a faixa do pack (decisions.md #78).
 
 ### `src/internal/anilist/health.go`
 

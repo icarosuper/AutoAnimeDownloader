@@ -226,6 +226,15 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	animes := anilistResponse.Data.Page.MediaList
 
+	// Eixo absoluto da serie de cada anime do passe E de cada anime_id com episodio em disco: e
+	// o que permite reconhecer que um pack baixado sob outro cour ja cobre o episodio pendente
+	// (coverage.go). Falha parcial nao aborta o passe — sem o offset o anime so nao adota nada.
+	animeIDs := make([]int, 0, len(animes))
+	for _, a := range animes {
+		animeIDs = append(animeIDs, a.Media.Id)
+	}
+	seriesIndex := resolveSeriesIndex(animeIDs, savedEpisodes)
+
 	// Regra de deleção por status: TODAS as contas que têm o anime precisam tê-lo em algum
 	// status de deleção (não necessariamente o mesmo). A regra de download é a oposta —
 	// basta UMA conta —, e ela já vem aplicada em searchAnilist pela união das listas.
@@ -271,7 +280,7 @@ outer:
 			default:
 			}
 
-			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, blockedMap, q, defaultNyaaSearcher())
+			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, seriesIndex, blockedMap, q, defaultNyaaSearcher())
 		}(anime, customQuery)
 	}
 

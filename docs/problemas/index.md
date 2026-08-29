@@ -320,7 +320,7 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   *Custo medido: 28 medias em 4 requests (`ceil(altura/2) + 1`), e quase não cresce com o tamanho
   da lista. Fatos da API em `decisions.md` #71 e #72.*
 
-- [ ] **F7 · Posse por cobertura** (consome F6)
+- [x] **F7 · Posse por cobertura** (consome F6)
   Antes de buscar no Nyaa, procurar torrent já baixado cuja cobertura (`BatchStart..BatchEnd` no
   eixo absoluto) contenha o `absEp` pedido — em **qualquer** `anime_id`.
 
@@ -354,8 +354,24 @@ muda o score de **todo** match do projeto (F2). Um diff por vez é o que torna c
   >
   > **Reabrir só se** o lookup do F7 aparecer como custo **medido** — e aí ele vira cache derivado,
   > nunca fonte.
-  - [ ] Teste: pack da season baixado sob o cour 1 → cour 2 não busca no Nyaa
-  - [ ] Atualizar `decisions.md`: por que a unidade de posse deixou de ser `(anime_id, episódio)`
+  - [x] Teste: pack da season baixado sob o cour 1 → cour 2 não busca no Nyaa
+  - [x] Atualizar `decisions.md`: por que a unidade de posse deixou de ser `(anime_id, episódio)`
+
+  *Feito em 29/ago/2026.* Diferenças do planejado: (a) adotar não é só "não buscar" — o episódio
+  ganha **registro apontando para o hash que já existe**, que é o que a `Session.Add` produziria
+  se a busca reencontrasse o mesmo torrent. Sem isso o F1 continuaria sem enxergar os irmãos do
+  outro cour e os arquivos sem dono nunca seriam hardlinkados; com isso, `organizeTorrent` já
+  trata o caso (grupo parcialmente organizado, sem re-notificar) e nenhuma exceção nova precisou
+  existir. (b) A faixa é **copiada como o dono a declara**, nunca convertida para a numeração
+  local do adotante — é o que `declaredSpan` (#74) espera. (c) Duas portas que o plano não citava
+  e que são obrigatórias: o torrent tem que estar **vivo na sessão** (adotar hash morto deixa
+  episódio com dono e sem arquivo) e o anime pedido **não pode ser filme** (`prequelOf` só segue
+  TV, então um filme pós-season herda o offset dela e o "episódio 1" dele cai dentro da faixa do
+  pack). (d) O filtro roda nos **dois** pontos de seleção: a segunda passada de `selectEpisodes`
+  (limite levantado, caminho de pack) traria os adotados de volta. (e) `DownloadStandaloneAnime`
+  também semeia o índice — adicionar avulso é o momento mais provável de a season já estar em
+  disco. Registrado em `decisions.md` #78.
+
   *Mata o "cour 2 rebaixa o que já está em disco".*
 
 - [ ] **F8 · Busca por cobertura** (consome F6) — **o mais arriscado, por último**

@@ -102,6 +102,7 @@ func processAnimeEpisodes(
 	anime anilist.MediaList,
 	dlTorrents []torrents.TorrentInfo,
 	savedEpisodes []files.EpisodeStruct,
+	seriesIndex map[int]anilist.Series,
 	blockedMap map[files.EpisodeKey]bool,
 	customQuery string,
 	searcher nyaaSearcher,
@@ -125,6 +126,12 @@ func processAnimeEpisodes(
 	// limite: com o limite levantado por palpite, handleAlreadySavedEpisode nunca disparava e
 	// keysToDelete vinha vazio para todo mundo.
 	sel := selectEpisodes(configs, effectiveMax(configs, episodes), anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
+
+	// Posse por cobertura, ANTES de qualquer busca: o que um pack ja baixado cobre no eixo
+	// absoluto da serie nao volta para o Nyaa (ver coverage.go).
+	adopted := adoptCoveredEpisodes(anime, animeTitle, totalEpisodes, sel.toDownload, savedEpisodes, seriesIndex, torrentsHashSet)
+	sel.toDownload = dropAdopted(sel.toDownload, adopted)
+	result.newEpisodes = append(result.newEpisodes, adopted...)
 
 	var magnetsForEpisodes map[int]resolvedMagnets
 	// batchSkipped e o porque de max_episodes_per_anime estar valendo neste anime. Fica fora do
@@ -156,6 +163,7 @@ func processAnimeEpisodes(
 				// cobrir o pack INTEIRO, senao a contagem mente e a poda apagaria o que o pack
 				// acabou de trazer.
 				sel = selectEpisodes(configs, len(episodes)+1, anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
+				sel.toDownload = dropAdopted(sel.toDownload, adopted)
 				sel.toDownload, magnetsForEpisodes = assignBatches(animeTitle, totalEpisodes, sel.toDownload, batches)
 			case packStats.Input == 0:
 				batchSkipped = BatchSkippedNoResult

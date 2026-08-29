@@ -1846,6 +1846,68 @@ exercitado — verificado por mutação, a versão anterior do teste passava com
 **Don't "fix" by:** tratar `edges: []` como raiz; assumir profundidade 2 como contrato; buscar um
 ancestral por request (a altura vira o custo, e o orçamento da AniList é 30/min); cachear nó de
 nível 2, `RELEASING` ou sem contagem; persistir o offset em disco ou no registro do episódio (ver
-a alternativa descartada em `docs/problemas/index.md`, F7 — valor persistido apodrece quando a
-AniList corrige uma contagem, e o derivado se autocorrige no TTL seguinte); trocar a caminhada por
-`search:` com o nome da franquia (#71).
+a alternativa descartada na #78 — valor persistido apodrece quando a AniList corrige uma contagem,
+e o derivado se autocorrige no TTL seguinte); trocar a caminhada por `search:` com o nome da
+franquia (#71).
+
+### 78. A unidade de posse de um torrent é a cobertura no eixo absoluto, não a chave `(anime_id, episódio)`
+
+**Location:** `src/internal/daemon/coverage.go` — `resolveSeriesIndex`, `adoptCoveredEpisodes`,
+`findCoveringPack`, `dropAdopted`; chamada em `processAnimeEpisodes` (`episodes.go`) e em
+`DownloadStandaloneAnime` (`standalone.go`). Travado por `coverage_test.go`. Consome a #77; é o
+outro lado da #74.
+
+**O problema.** A AniList quebra cour e part em **media ids separados**, cada um numerando a
+partir de 1; os packs do Nyaa são quase sempre da **season inteira**, atravessando essa fronteira.
+Com a posse expressa como `files.EpisodeKey{AnimeID, Episode}`, o pack de `1..23` baixado sob o
+cour 1 (11 episódios) é invisível para o cour 2 — que não tem registro nenhum, não sabe que o
+arquivo já está em disco, e rebaixa a season inteira do Nyaa. Caso real: Mushoku Tensei S1.
+
+**A regra:** antes de qualquer busca, um episódio pendente é adotado quando existe registro de
+pack, **em qualquer `anime_id`**, cuja faixa declarada contenha o episódio **no eixo absoluto da
+série**. `abs = Series.Offset(anime_id) + número local` (#77) — comparar `1..23` com `1..12` sem
+converter é comparar réguas diferentes.
+
+**Adotar é gravar o registro apontando para o hash que já existe**, exatamente o que aconteceria
+se a busca reencontrasse o mesmo torrent (`Session.Add` reusa o infohash). Isso é o que faz o
+resto da máquina funcionar sem nenhuma exceção nova: a #74 passa a enxergar os irmãos do outro
+cour, e `organizeTorrent` hardlinka os arquivos que nunca tiveram dono — ele já trata grupo
+parcialmente organizado sem re-notificar. A faixa é **copiada como o dono a declara** (é a do nome
+do torrent), nunca convertida: `declaredSpan` compara o span da união com a **contagem** de
+registros justamente porque as numerações locais divergem entre cours.
+
+**A semente do índice inclui os `anime_id` de `episodes.json`, não só os do passe.** O cour
+anterior está `COMPLETED` e por isso saiu do universo do passe — e é o offset **dele** que
+converte a faixa do pack. Sem essa semente a feature não enxergaria o pack que a motivou. Custa
+quase nada: largura é grátis (`perPage` 50, uma query = uma unidade — #72) e boa parte da semente
+extra já entraria na caminhada por ser ancestral dos animes do passe.
+
+**Quatro portas, todas obrigatórias** — cada uma cobre um jeito diferente de adotar errado:
+
+| Porta | Sem ela |
+|---|---|
+| Faixa declarada (`BatchStart > 0`) | pack sem faixa no nome grava `0`, e desconhecida viraria "cobre tudo" — mesmo teto da #74 |
+| Torrent ainda na sessão | registro com hash morto: episódio com dono e sem arquivo, invisível para a redescida |
+| Mesma `Series.Key` | "absoluto 12" casaria com o pack de qualquer outro anime |
+| Não é filme | `prequelOf` só segue `TV`/`TV_SHORT`, então um filme pós-season herda o offset dela e o "episódio 1" dele cai dentro da faixa do pack. Cobertura por range não distingue os dois |
+
+**O filtro roda nos DOIS pontos de seleção.** `selectEpisodes` é pura e não sabe da adoção, então
+a segunda passada (limite levantado, caminho de pack) traria os adotados de volta e o daemon
+baixaria o que acabou de adotar.
+
+**Alternativa descartada: persistir `AbsStart`/`AbsEnd` no `EpisodeStruct` na hora do download.**
+O lookup ficaria local e offline, mas todo registro anterior à feature nasceria com `0` —
+indistinguível de "desconhecido" —, ou seja, ela **não resolveria o caso que a motivou**, só
+valeria para o que fosse baixado depois; e o backfill precisaria da derivação de qualquer forma.
+Pior: valor persistido apodrece. Se a AniList corrigir uma contagem de episódios ou adicionar uma
+relação que faltava, o número gravado fica errado para sempre; o derivado se autocorrige no TTL
+seguinte. Guardar como fonte da verdade um número derivável cria uma segunda verdade que ninguém
+invalida. **Reabrir só se** o lookup aparecer como custo **medido** — e aí ele vira cache
+derivado, nunca fonte.
+
+**Don't "fix" by:** comparar `BatchStart`/`BatchEnd` de media ids diferentes sem converter;
+converter a faixa gravada para a numeração local do adotante (quebra `declaredSpan`); adotar com
+faixa desconhecida, com o torrent fora da sessão ou sem checar `Series.Key`; mover a adoção para
+dentro de `selectEpisodes` (ela roda duas vezes — duplicaria os registros); notificar
+`NewEpisode`/`DownloadCompleted` numa adoção (nada foi baixado, e o webhook de conclusão já saiu
+quando o pack pousou).

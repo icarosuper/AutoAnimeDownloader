@@ -61,6 +61,18 @@ Look for:
 - **`ErrSessionNotReady`** — `completed_anime_path` is empty/unset, so the download path (`Config.DownloadPath()`, derived from it) is empty and no torrent session exists yet. Complete the config.
 - **Magnet parse failure** — a malformed magnet (`parseInfoHash` couldn't extract the info hash).
 
+**Nenhum log de busca para o anime inteiro** → antes de acusar a busca, procure:
+
+```json
+{"level":"info","anime":"...","episode":N,"absolute_episode":M,"owner_anime_id":X,"message":"Adopting episode already covered by a downloaded pack"}
+```
+
+Isso é a **posse por cobertura** (decisions.md #78): o episódio já está dentro de um pack em
+disco, baixado sob outra entrada da AniList (o cour anterior, tipicamente), então ele nunca chega
+ao Nyaa — e isso é o comportamento correto, não uma falha. O registro novo aponta para o hash que
+já existe. Se o arquivo de fato não estiver lá, o problema é da faixa declarada (`BatchStart`/
+`BatchEnd`, lida do nome do torrent), não da busca.
+
 A separate, new failure class is **"the torrent downloaded but nothing shows up in the library"** — the download succeeded but the `organize` job (hardlink into `completed_anime_path` + webhook) is failing or retrying. See the embedded-client section below.
 
 ---
