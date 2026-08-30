@@ -33,10 +33,18 @@ describe('stallTracker', () => {
     expect(get(stallTracker).has('a')).toBe(false)
   })
 
-  it('clears a hash that disappears from the torrent list (removed/completed)', () => {
-    stallTracker.sync([{ hash: 'a', peers_total: 0 }], 1000)
-    stallTracker.sync([], 2000)
-    expect(get(stallTracker).has('a')).toBe(false)
+  it('leaves hashes outside the synced list alone (AnimeDetail syncs one anime only)', () => {
+    stallTracker.sync(
+      [
+        { hash: 'a', peers_total: 0 },
+        { hash: 'b', peers_total: 0 },
+      ],
+      1000,
+    )
+    stallTracker.sync([{ hash: 'b', peers_total: 5 }], 2000)
+    const map = get(stallTracker)
+    expect(map.get('a')).toBe(1000)
+    expect(map.has('b')).toBe(false)
   })
 
   it('tracks multiple hashes independently', () => {

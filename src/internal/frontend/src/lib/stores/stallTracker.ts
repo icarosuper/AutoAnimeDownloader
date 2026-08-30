@@ -23,17 +23,23 @@ function createStallTracker() {
   return {
     subscribe,
     /**
-     * Reconciles the tracker against one torrent poll tick. A hash at peers_total===0 keeps
-     * its original timestamp if already tracked, or gets stamped with `now` if newly seen.
-     * Any hash NOT in this tick's list at peers_total===0 (peers came back, or the torrent was
-     * removed/completed and dropped out of the list entirely) is cleared.
+     * Reconciles a torrent poll tick, mexendo SÓ nos hashes que vieram nesta lista: a 0 peers
+     * o hash mantém o carimbo antigo (ou ganha `now` se é novo), com peers ele é apagado.
+     * Hash ausente da lista fica como está — `AnimeDetail` sincroniza só os torrents de um
+     * anime, e podar por ausência zerava o relógio de stall de todos os outros (o chip do
+     * Status voltava ao zero a cada visita a um detalhe).
+     *
+     * O custo é uma entrada órfã quando um torrent some de vez; ela só volta a pesar se o
+     * mesmo hash for readicionado ainda sem peers, e some no reload.
      */
     sync(torrents: { hash: string; peers_total: number }[], now: number) {
       update((prev) => {
-        const next = new Map<string, number>()
+        const next = new Map(prev)
         for (const t of torrents) {
           if (t.peers_total === 0) {
             next.set(t.hash, prev.get(t.hash) ?? now)
+          } else {
+            next.delete(t.hash)
           }
         }
         return next
