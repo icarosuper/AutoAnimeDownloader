@@ -10,7 +10,7 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 
 1. **Run tests**: `go test ./...`
 2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add an entry to `decisions.md`
-   - Arquivo `.go` novo em `src/internal/` ou `src/cmd/` → seção nova em `architecture.md`, listando cada símbolo **exportado** (e os não exportados que importam) com uma linha de propósito. Arquivo apagado → seção apagada. É isso que mantém o `architecture.md` sendo a fonte única de "o que existe e onde"
+   - `architecture.md` documenta o que o **código não responde sozinho**: fluxo entre arquivos, invariante que dói quebrar, fato negativo ("não existe `daemon.go`"), desambiguação de nomes parecidos e o ponteiro para a decisão. **Não** liste símbolo com uma linha de propósito — `grep '^func '` responde isso de graça e sempre atualizado; tabela de símbolo escrita à mão é cópia que envelhece. Arquivo novo só ganha texto se trouxer um desses cinco; arquivo apagado → texto apagado. A pergunta que ele responde é "qual arquivo eu abro e o que me morde lá", não "que funções existem"
    - Entrada nova em `decisions.md` → número seguinte (o maior que existe hoje é **#82**, e as entradas não estão em ordem numérica no arquivo) + uma linha no Índice do topo. Ao referenciar uma decisão, sempre com âncora: `[decisions.md #43](decisions.md#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)`
 3. **Regenerate Swagger**: if API changed → `swag init -g src/cmd/daemon/main.go -o docs/swagger`
 4. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
