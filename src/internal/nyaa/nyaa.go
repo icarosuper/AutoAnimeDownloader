@@ -226,10 +226,11 @@ func ExtractBatchInfo(name string) BatchInfo {
 // (info, false) quando o detalhe nao responde, nao tem lista de arquivos ou nenhum arquivo de
 // video da o numero: nao ha faixa a afirmar, e quem chama decide o que fazer com o "nao sei".
 //
-// ponytail: a faixa e min..max dos numeros lidos. Pack cujos arquivos REINICIAM a numeracao por
-// season (S01-S04 numa pasta cada) fica com a faixa da maior season em vez do total — mesmo
-// resultado de hoje, sem piora. O desempate seria a contagem de arquivos por pasta; entra quando
-// aparecer medido.
+// A faixa e min..max dos numeros lidos, entao pack cujos arquivos REINICIAM a numeracao por
+// season (S01-S04 numa pasta cada) fica com a faixa da maior season em vez do total. MEDIDO em
+// 30/ago/2026 e mantido de proposito: sao 6% dos packs, o delta 0 do packAxis escolhe todos eles
+// corretamente mesmo assim, e o desempate por contagem de arquivos por pasta contaria extras
+// ("Creditless Opening 1" -> episodio 1) como episodio. Numeros em decisions.md #84.
 func PackFileRange(detailURL string) (BatchInfo, bool) {
 	if detailURL == "" {
 		return BatchInfo{}, false

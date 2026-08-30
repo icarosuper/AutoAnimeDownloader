@@ -91,6 +91,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#82** — SetLastCheckError limpa o relatório da última verificação](#82-setlastcheckerror-limpa-o-relatório-da-última-verificação)
 - [**#83** — A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento](#83-a-faixa-do-nome-do-pack-é-o-primeiro-casamento-plausível-não-o-primeiro-casamento)
 - [**#84** — A cobertura de um pack sem faixa no nome vem da lista de arquivos, e não da suposição de que ele cobre tudo](#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
+- [**#85** — O custo do frontend na AniList é por CONTA e por ÓRFÃO, não por aba](#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba)
 
 ---
 
@@ -2180,7 +2181,14 @@ A lista de arquivos da página de detalhe responde antes de baixar, e responde b
 
 **Trade-off aceito:** com faixa zero o `hasUnclaimedContent` de [#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio) não tem span para comparar e o guard de deleção cai no comportamento antigo naquele grupo. É a troca certa: perder uma proteção contra deleção prematura num caso raro vale menos que espalhar uma cobertura inventada para os outros cours da série.
 
-**Teto conhecido (`ponytail:` no código):** a faixa é o `min..max` dos números lidos. Pack cujos arquivos **reiniciam** a numeração por season (S01-S04, uma pasta cada) fica com a faixa da maior season em vez do total — o mesmo resultado de antes, sem piora. O desempate seria a contagem de arquivos por pasta, que [#79](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses) já queria; entra quando aparecer medido.
+**Teto conhecido, e MEDIDO em 30/ago/2026: fica como está.** A faixa é o `min..max` dos números lidos, então pack cujos arquivos **reiniciam** a numeração por season (S01-S04, uma pasta cada) fica com a faixa da maior season em vez do total. O desempate proposto era a contagem de arquivos por pasta, que [#79](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses) já queria. A medição (`nyaa/live_pack_measure_test.go`, 61 packs reais em 12 buscas) diz para **não** fazê-lo:
+
+- **Frequência:** 3 de 48 packs (6%) na amostra neutra `?q=<anime>+batch&s=seeders`, 2 de 13 na amostra que mira multi-season de propósito. Os 5 casos: Vinland Saga (24/24), Jujutsu Kaisen (24/23), Steins;Gate Trix (25/24/4), EMBER SnK (25/12/12/10/16), Haikyuu Complete (25/25/10).
+- **Nenhum download é perdido.** Rodando os 5 pelo `packAxis.localRange` sob a entrada de cada season, o pack é escolhido nas 8 combinações — o delta 0 já acerta, porque um pack multi-season contém de fato os episódios de toda season que ele traz, na numeração local de cada uma.
+- **O desempate não mudaria nenhum dos 8 resultados**, e contaria pasta de extras como episódio: `Creditless Opening 1` → 1, `OAD - 01` → 1, `Movie 01` → 1 (medido; em 61 packs essas pastas nunca alargaram o `min..max` além do conteúdo principal, mas entrariam direto numa contagem por pasta).
+- **O resíduo é outro, e menor:** a faixa GRAVADA passa do total da entrada em 4 das 8 combinações — Haikyuu S3 grava 1..25 para uma entrada de 10, SnK S2 grava 1..25 para 12, SnK S3 +3, JJK S2 +1. Isso é over-claim para a posse por cobertura de [#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio), e o conserto dele é clampar o fim em `totalEpisodes`, não ler pasta.
+
+**Gap medido junto, esse sim sem conserto:** `extractEpisodeNumber` devolve `nil` para nome de arquivo com número solto seguido de título — `My Hero Academia 39 Game Start [1080p].mkv`. Foram os 3 únicos packs da amostra em que nem o nome nem os arquivos resolveram a faixa, os três do mesmo release de MHA.
 
 **Don't "fix" by:**
 - Buscar o detalhe dentro do `parseRow` das buscas: vira uma requisição **por linha** da listagem. É por isso que `DetailURL` só é capturada ali e a leitura acontece depois do filtro e da ordenação.
@@ -2188,3 +2196,53 @@ A lista de arquivos da página de detalhe responde antes de baixar, e responde b
 - Recusar o pack cuja faixa não foi resolvida: um Nyaa fora do ar deixaria de baixar pack nenhum, trocando um registro errado por nenhum download.
 - Voltar a gravar `1..total` "porque o pack foi escolhido como completo": era exatamente o palpite que alimentava a adoção por cobertura com faixa inventada.
 - Filtrar os arquivos por extensão numa lista própria do pacote `files`: `nyaa.IsVideoFile` é a mesma lista que o Librarian usa depois de baixar, e `files` importa `nyaa` (o contrário daria ciclo).
+
+---
+
+### 85. O custo do frontend na AniList é por CONTA e por ÓRFÃO, não por aba
+
+**Location:** `api/endpoint_animes.go` — `refreshOrphanAnimes`, `refreshStandaloneOrphans`;
+`anilist/anilist.go` — `GetAnimeInfoByIDs`, `GetCustomListsMap`, `frontendListCache`,
+`customListsEmptyTTL`. Complementa a [#72](#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso)
+(como saber quanto sobrou) e a [#73](#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo)
+(por que não mover a busca para o browser).
+
+**O que parece:** cada aba aberta faz poll de `GET /animes` a cada 30s, então N abas custam N
+vezes mais orçamento — foi essa leitura que motivou a ideia de o frontend falar direto com a
+AniList (#73), e é o que o comentário do `ttlCache` descrevia antes do cache existir.
+
+**Medido em 30/ago/2026** (daemon isolado, conta real, `NYAA_URL` morto para não baixar nada, três
+fases de 5 minutos com o poll de `/animes` a 30s reproduzindo `Status.svelte`):
+
+| fase | abas | órfãos | req AniList por chamada de `/animes` | req/min |
+|---|---|---|---|---|
+| A | 1 | 0 | 1.50 | 2.4 |
+| B | 2 | 0 | **0.94** | 3.0 |
+| D | 2 | 100 | **3.00** | 7.8 |
+
+Três consequências:
+
+1. **Aba não multiplica — o TTL absorve.** Dobrar as abas BARATEOU o custo por chamada (1.50 →
+   0.94): `frontendListTTL` (60s) e `customListsTTL` seguram, e a segunda aba quase sempre acerta
+   um cache que a primeira acabou de encher. O teto do par lista+customLists é o TTL, não o número
+   de abas.
+2. **Órfão multiplica, e por aba.** `refreshOrphanAnimes` → `GetAnimeInfoByIDs` **não tem cache
+   nenhum**: dispara `ceil(órfãos/50) × contas` requisições em TODA chamada de `/animes`. Com 100
+   órfãos o custo por chamada triplicou (0.94 → 3.00) e passou a escalar com abas. É o único
+   caminho do `/animes` fora do TTL, e é ele que decide o consumo de uma instalação com
+   biblioteca grande.
+3. **`customLists` vazio é o maior consumidor em regime normal.** Conta sem custom list nenhuma cai
+   no `customListsEmptyTTL` de 30s em vez do `customListsTTL` de 5 min — 2 das ~3 req/min das
+   fases A e B, dois terços do custo do frontend quando não há órfão.
+
+**O gate nunca precisou entrar:** 0 recusas por `ErrBudgetLow` e 0 respostas 429 em 22 minutos,
+com pico de 11 req/min num balde de 30. As duas únicas falhas foram timeout de 30s da própria
+AniList — latência, não orçamento.
+
+**A conta que importa:** `(1 + ceil(órfãos/50) × contas) × abas × 2/min`, mais ~2/min por conta do
+`customLists` vazio. 2 abas + 100 órfãos + 1 conta = 7.8/min (medido). 4 abas + 200 órfãos + 2
+contas ≈ 50/min, e aí o gate passa a recusar de verdade.
+
+**Don't "fix" by:** aumentar o `frontendListTTL` achando que aba é o problema — a medição diz que
+não é. Se o orçamento voltar a apertar, o alvo é pôr TTL no `GetAnimeInfoByIDs`, que é o único
+caminho sem cache, e depois olhar o `customListsEmptyTTL`.

@@ -105,6 +105,22 @@ acima reprova em qualquer `max_batch_torrent_size_gb` sadio, mas dá ~300 MiB/ep
 então o pack inteiro desce do mesmo jeito — muda só o critério de aceitar. Só vale se o teto atual
 estiver reprovando pack que o usuário quer.
 
+> **Medido em 30/ago/2026, e a pré-condição NÃO se confirmou — não fazer.** 58 packs reais com
+> tamanho e contagem de arquivos (`nyaa/live_pack_measure_test.go`): mediana **461 MiB/episódio**,
+> min 73 MiB, max 4.2 GiB. No teto padrão de 100 GB:
+>
+> - reprova **4 de 58**, e os 4 são One Piece de série inteira (587 GiB / 1498 arqs, 172 GiB / 574
+>   arqs). Reprovar esses é o comportamento documentado em `config.md`, não um acidente: os packs
+>   parciais de One Piece (86, 61, 36 GiB) passam e cobrem a janela.
+> - os 3 packs realmente gordos por episódio **passam** — ZeroBuild AoT S3 (91.4 GiB, 22 arqs,
+>   **4.2 GiB/ep**), Mushoku Tensei II (87.2 GiB, 2.25 GiB/ep), Mushoku Tensei S1 (82.7 GiB,
+>   1.6 GiB/ep). Todos abaixo de 100 GB porque são curtos.
+>
+> O teto de tamanho é anticorrelacionado com economia por episódio — mas essa nunca foi a função
+> dele. Ele guarda **disco**, e como o `rain` baixa o pack inteiro, disco é o eixo certo para
+> "isso cabe aqui". Trocar por teto de episódio significaria aceitar 172–587 GiB de download; só
+> reabrir se o usuário disser que quer pack de série inteira.
+
 **Como manter barato, se for implementado:** só linha de **pack**, e só quando o dado muda a
 decisão — nome sem faixa (`EndEpisode == 0`) ou pack acima do teto. Dá ~1-3 requisições por anime.
 E **fora do `parseRow`**, depois do sort/filtro: dentro do loop de página vira uma requisição por
@@ -158,7 +174,9 @@ de part é sempre frágil; perguntar "esse pack cobre a janela pendente?" não �
 > hipóteses de numeração desta seção viraram `daemon.packAxis` — com o span do nome no lugar da
 > contagem de arquivos como desempate. O scrape de detalhe entrou depois (`decisions.md` #84) e
 > resolve a **faixa** de um pack sem faixa no nome; a contagem de arquivos por pasta, que
-> desempataria pack cuja numeração reinicia por season, continua de fora — teto conhecido da #84.
+> desempataria pack cuja numeração reinicia por season, **fica de fora de propósito** — medido em
+> 30/ago/2026 (`decisions.md` #84): 6% dos packs, o delta 0 acerta a escolha em todos eles, e a
+> contagem por pasta leria extras como episódio.
 
 ---
 
