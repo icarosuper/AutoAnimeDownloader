@@ -378,6 +378,7 @@
   "add_search_hint": "Digite pelo menos 3 caracteres.",
   "add_no_results": "Nenhum anime encontrado para esta busca.",
   "add_search_error": "A busca no AniList falhou. Tente de novo.",
+  "add_btn_search": "Buscar",
   "add_btn_add": "Adicionar",
   "add_btn_adding": "Adicionando…",
   "add_btn_view_status": "Ver status",

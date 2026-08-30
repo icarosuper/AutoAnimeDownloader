@@ -33,10 +33,11 @@ function result(blockReason: BlockReason, id = 21): AniListSearchResult {
   }
 }
 
-/** Digita o termo e espera a busca (debounce de 300ms) resolver. */
+/** Digita o termo, submete pelo botão e espera a busca resolver. */
 async function search(term = 'one piece'): Promise<void> {
   const input = screen.getByRole('searchbox')
   await fireEvent.input(input, { target: { value: term } })
+  await fireEvent.click(screen.getByRole('button', { name: /^search$|^buscar$/i }))
   await waitFor(() => expect(searchAniList).toHaveBeenCalled())
   await screen.findByText('One Piece')
 }
@@ -119,9 +120,46 @@ describe('AddAnime — não lançados', () => {
 
     await fireEvent.click(screen.getByRole('switch'))
 
-    // Sem debounce: o toggle é clique, não digitação.
     await waitFor(() =>
       expect(searchAniList).toHaveBeenLastCalledWith('one piece', true, expect.anything()),
     )
+  })
+})
+
+// O limite da AniList é de 30 req/min e a busca é disposable: uma requisição por tecla fazia
+// quem digita devagar queimar o próprio balde e ver a busca seguinte ser recusada.
+describe('AddAnime — orçamento da AniList', () => {
+  it('não busca enquanto se digita, só no submit', async () => {
+    searchAniList.mockResolvedValue([result('')])
+    render(AddAnime)
+
+    const input = screen.getByRole('searchbox')
+    for (const term of ['one', 'one ', 'one p', 'one pi']) {
+      await fireEvent.input(input, { target: { value: term } })
+    }
+    expect(searchAniList).not.toHaveBeenCalled()
+
+    await fireEvent.click(screen.getByRole('button', { name: /^search$|^buscar$/i }))
+    await waitFor(() => expect(searchAniList).toHaveBeenCalledTimes(1))
+  })
+
+  it('o Enter no campo submete o formulário', async () => {
+    searchAniList.mockResolvedValue([result('')])
+    render(AddAnime)
+
+    const input = screen.getByRole('searchbox')
+    await fireEvent.input(input, { target: { value: 'one piece' } })
+    await fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    await waitFor(() => expect(searchAniList).toHaveBeenCalledWith('one piece', false, expect.anything()))
+  })
+
+  it('mantém o botão desabilitado abaixo de 3 caracteres', async () => {
+    render(AddAnime)
+    const button = screen.getByRole('button', { name: /^search$|^buscar$/i })
+    expect(button).toBeDisabled()
+
+    await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'one' } })
+    expect(button).toBeEnabled()
   })
 })

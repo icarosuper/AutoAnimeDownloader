@@ -48,7 +48,8 @@ func handleAniListSearch(server *Server) http.HandlerFunc {
 
 		term := strings.TrimSpace(r.URL.Query().Get("q"))
 		if len(term) < minSearchTermLength {
-			// Lista vazia, nao 400: o frontend busca a cada tecla e um erro por tecla seria ruido.
+			// Lista vazia, nao 400: termo curto e estado normal de quem esta montando a busca, nao
+			// erro de cliente — o frontend ja desabilita o botao antes de chegar aqui.
 			JSONSuccess(w, http.StatusOK, []AniListSearchResult{})
 			return
 		}

@@ -378,6 +378,7 @@
   "add_search_hint": "Type at least 3 characters.",
   "add_no_results": "No anime found for this search.",
   "add_search_error": "AniList search failed. Try again.",
+  "add_btn_search": "Search",
   "add_btn_add": "Add",
   "add_btn_adding": "Adding…",
   "add_btn_view_status": "View status",

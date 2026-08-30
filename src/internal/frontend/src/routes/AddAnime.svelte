@@ -22,9 +22,11 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
-  // 300ms + AbortController são requisito, não polimento: sem o debounce o limite de 30 req/min
-  // do AniList estoura digitando, e sem o abort um resultado velho pinta por cima do novo.
-  const DEBOUNCE_MS = 300;
+  // A busca sai no submit (botão ou Enter), NÃO a cada tecla: o limite da AniList é de 30 req/min
+  // por IP e a busca é PriorityDisposable, então quem digita devagar queimava o balde numa
+  // requisição por tecla e via a própria busca seguinte ser recusada pelo gate de orçamento.
+  // Um submit = uma requisição. O AbortController continua porque dois submits em sequência
+  // ainda correm entre si, e a resposta velha não pode pintar por cima da nova.
   const MIN_TERM = 3;
   const ANILIST_URL = "https://anilist.co/anime/";
 
@@ -40,7 +42,6 @@
   let added = new Set<number>();
   let libraryConfigured = true;
 
-  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: AbortController | undefined;
 
   onMount(async () => {
@@ -53,21 +54,12 @@
     }
   });
 
-  onDestroy(() => {
-    clearTimeout(debounceTimer);
-    inFlight?.abort();
-  });
+  onDestroy(() => inFlight?.abort());
 
-  function onInput(): void {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(runSearch, DEBOUNCE_MS);
-  }
-
-  // O toggle busca de novo NA HORA: o debounce existe por causa da digitação, e um clique não
-  // dispara em rajada. O abort de runSearch já cobre a corrida com uma busca em voo.
+  // O toggle só refaz a busca quando já existe uma na tela: ele muda o filtro de um resultado
+  // visível. Sem busca feita ainda, ele apenas escolhe o parâmetro do próximo submit.
   function onToggleUnreleased(): void {
-    clearTimeout(debounceTimer);
-    runSearch();
+    if (searched) runSearch();
   }
 
   async function runSearch(): Promise<void> {
@@ -214,19 +206,25 @@
     </div>
   {/if}
 
-  <label
-    class="flex items-center gap-2 rounded-field border border-default bg-control px-2.5 py-2 focus-within:border-accent"
-  >
-    <Search size={15} strokeWidth={2} class="shrink-0 text-subtle" aria-hidden="true" />
-    <input
-      type="search"
-      bind:value={term}
-      on:input={onInput}
-      placeholder={$locale && m.add_search_placeholder()}
-      aria-label={$locale && m.add_search_placeholder()}
-      class="w-full bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
-    />
-  </label>
+  <!-- <form>, e não um on:keydown no input: o Enter que dispara o submit é comportamento nativo
+       do formulário, e o botão participa dele só por ser type="submit". -->
+  <form class="flex items-center gap-2" on:submit|preventDefault={runSearch}>
+    <label
+      class="flex flex-1 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-2 focus-within:border-accent"
+    >
+      <Search size={15} strokeWidth={2} class="shrink-0 text-subtle" aria-hidden="true" />
+      <input
+        type="search"
+        bind:value={term}
+        placeholder={$locale && m.add_search_placeholder()}
+        aria-label={$locale && m.add_search_placeholder()}
+        class="w-full bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
+      />
+    </label>
+    <Button type="submit" disabled={term.trim().length < MIN_TERM || searching}>
+      {$locale && m.add_btn_search()}
+    </Button>
+  </form>
 
   <Toggle
     id="add-include-unreleased"
@@ -239,7 +237,7 @@
     <Loading message={$locale && m.add_search_placeholder()} />
   {:else if searchFailed}
     <p role="alert" class="text-copy text-danger">{$locale && m.add_search_error()}</p>
-  {:else if term.trim().length < MIN_TERM}
+  {:else if !searched}
     <p class="text-copy text-subtle">{$locale && m.add_search_hint()}</p>
   {:else if searched && results.length === 0}
     <p class="text-copy text-subtle">{$locale && m.add_no_results()}</p>

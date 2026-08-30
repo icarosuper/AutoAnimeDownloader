@@ -46,7 +46,7 @@ export class ApiError extends Error {
 }
 
 interface ApiRequestOptions {
-  /** Cancela a requisição. A busca da tela de adicionar aborta a anterior a cada tecla. */
+  /** Cancela a requisição. A busca da tela de adicionar aborta a anterior a cada submit. */
   signal?: AbortSignal
   /**
    * Suppresses the automatic error toast on failure. For endpoints polled on a short interval
@@ -469,8 +469,8 @@ export async function deleteTorrent(
 }
 
 /**
- * Busca no AniList. `silent` porque a tela busca a cada tecla (com debounce) — um erro de rede
- * transitório não pode virar um toast por letra digitada.
+ * Busca no AniList. `silent` porque a tela desenha o próprio aviso de falha ao lado dos
+ * resultados — um toast em cima disso diria a mesma coisa duas vezes.
  */
 export async function searchAniList(
   q: string,

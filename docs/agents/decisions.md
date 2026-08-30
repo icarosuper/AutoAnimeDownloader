@@ -1031,8 +1031,11 @@ O `PUT /animes/{id}/settings` usa ponteiros (`*string`/`*int`) e faz merge parci
 
 **(e) `Button` com `href` renderiza `<a>` em vez de um `on:click` que escreve `location.hash`.** Um botão que navega perde middle-click, "abrir em nova aba" e a URL na barra de status. A alternativa era copiar as classes de variante para dentro do card, o que duplicaria o estilo em cada tela que precisar disso. `disabled` é ignorado com `href` de propósito: não existe âncora desabilitada, e um link que não deve ser seguido não deve ser renderizado como link.
 
+**(f) A busca sai no submit (botão ou Enter), nunca a cada tecla.** A versão original tinha debounce de 300ms. O custo real não é o digitador rápido — esse já gastava 1 requisição por busca — é quem digita com mais de 300ms entre teclas (celular, catar-milho): a partir do 3º caractere ele gastava **uma requisição por tecla**. Como `SearchMedia` é `PriorityDisposable`, quem estourava o balde era recusado por `budgetAllows` na busca *seguinte* — o usuário via "a busca falhou" por ter digitado devagar. Com submit, uma busca = uma requisição, e o piso do orçamento nunca é atingido pela tela. O `<form>` existe para o Enter ser comportamento nativo em vez de um `on:keydown`; o `AbortController` continua porque dois submits em sequência ainda correm entre si. O toggle de não lançados só refaz a busca quando já existe resultado na tela — sem busca feita, ele apenas escolhe o parâmetro do próximo submit.
+
 **Don't "fix" by:**
 - Mover o filtro para o Go "para poder mostrar quantos foram escondidos": isso reintroduz a busca com 4 de 20 (ver (a)).
+- Voltar a buscar no `on:input`, com ou sem debounce "porque resultado ao vivo é melhor UX": o orçamento da AniList é de 30 req/min por IP e a busca é disposable (ver (f)).
 - Trocar a concatenação por `status_not: $var` com valor nulo "porque variável é mais limpo" (ver (b)).
 - Estender o filtro para `CANCELLED`/`HIATUS` — esses têm episódios baixáveis (ver (c)).
 - Devolver o `block_reason` para dentro de um `tooltip` "para o card ficar mais limpo": o motivo some no mobile inteiro.
