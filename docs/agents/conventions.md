@@ -113,9 +113,34 @@ import (
 | JSON tags | snake_case | `json:"completed_anime_path"` |
 | Go types | PascalCase | `EpisodeStruct`, `SessionManager` |
 
+## Legibilidade
+
+**Nomes explicam.** Função e variável têm nome que diz o que são/fazem sem precisar ler o corpo. Nada de `tmp`, `data`, `x`, `doStuff`. Se o nome precisa de comentário para ser entendido, o nome está errado — troque o nome, não adicione o comentário.
+
+**Condição ou expressão inline grande vira variável.** Quando um `if` (ou qualquer expressão) junta várias condições, o nome da variável passa a ser a explicação:
+
+```go
+// ruim
+if ep.Number > anime.Progress && !ep.Downloaded && ep.Number <= anime.EpisodeCount {
+
+// bom
+isPendingEpisode := ep.Number > anime.Progress && !ep.Downloaded && ep.Number <= anime.EpisodeCount
+if isPendingEpisode {
+```
+
+**Trecho que virou responsabilidade nova vira função.** Quando um bloco cresce e passa a fazer *outra coisa* dentro da função, extraia com um nome que diga essa coisa. O gatilho é a responsabilidade ter mudado, não a contagem de linhas — não quebre uma função coesa só porque ficou longa.
+
 ## Comentários
 
-Não escrever comentário explicando **o que** o código faz — só **por que** ele existe daquele jeito, e apenas quando não for óbvio. Comentário inútil encontrado fora dessa regra: remover.
+Não escrever comentário explicando **o que** o código faz — só **por que** ele existe daquele jeito, e apenas quando não for óbvio pelos nomes de variáveis e funções. Comentário inútil encontrado fora dessa regra: remover.
+
+**Decisão não óbvia → `decisions.md` + referência no código.** Tomou uma decisão que o próximo leitor questionaria ("por que assim e não do jeito óbvio?"), registre uma entrada em [decisions.md](decisions.md) e aponte para ela do trecho relevante, pelo número:
+
+```go
+// Converte os AnimeID gravados de id de entrada para id de midia (decisions.md #43).
+```
+
+O formato usado no repo é `decisions.md #N` — mantenha ele, é o que o `grep` acha.
 
 ## Dual FileManagerInterface
 
