@@ -27,6 +27,20 @@ AAD_LIVE_ANILIST=1 go test ./src/internal/anilist/ -run Live -v
 
 `live_smoke_test.go` mede o que nenhum mock prova: o tamanho da JANELA de `airingSchedule` que a AniList devolve (One Piece começa no episódio 1123; anime antigo volta com agenda vazia) — a premissa de `EpisodeList`, ver [Decisions #52](decisions.md#52-a-lista-de-episódios-é-sintetizada-e-a-chave-de-um-episódio-é-anime-número). Rode-o quando mexer em `anilist/episodes.go`.
 
+Mesmo gate, contra o Nyaa de verdade:
+
+```bash
+AAD_LIVE_NYAA=1 go test ./src/internal/nyaa/ -run Live -v -timeout 25m
+```
+
+`live_pack_measure_test.go` **não é teste de regressão — é instrumento de medição**: ele nunca
+falha, só imprime. Para cada pack real de uma amostra de buscas ele mostra a faixa do nome, a que
+`PackFileRange` lê da lista de arquivos, a árvore de pastas com contagem e faixa de cada uma, e o
+tamanho por episódio. É o que produziu os números de [Decisions #84](decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
+e da seção "Página de detalhe" do [sources.md](sources.md). Rode-o antes de reabrir qualquer
+decisão sobre cobertura ou teto de pack — leva ~2min e faz ~70 requisições ao nyaa.si, com 1.5s de
+espaçamento. `AAD_LIVE_QUERIES="a batch|b batch"` troca a amostra neutra.
+
 ## Test Structure
 
 - `src/tests/unit/` — unit tests (`package unit`)
