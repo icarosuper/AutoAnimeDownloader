@@ -122,7 +122,6 @@ type BatchInfo struct {
 	StartEpisode int
 	EndEpisode   int
 	Season       int
-	IsComplete   bool
 }
 
 // extractBatchInfo extrai informações detalhadas de um batch
@@ -130,36 +129,54 @@ type BatchInfo struct {
 func extractBatchInfo(torrentName string) BatchInfo {
 	info := BatchInfo{}
 
-	// FindStringSubmatchIndex (e nao FindStringSubmatch) porque a guarda precisa do caractere
-	// SEGUINTE ao casamento: reBatchRange casa "720-1080" dentro de "[720-1080p]" e produziria
-	// uma faixa fantasma de 361 episodios.
-	//
-	// ponytail: cobre so o caso dominante (resolucao). Outras faixas fantasma — data
-	// ("2020-2021"), bitrate — so entrariam com um sanitizador de tokens, que nao se paga hoje:
-	// faixa desconhecida cai em EndEpisode == 0, que o chamador ja trata como pack completo.
-	if loc := reBatchRange.FindStringSubmatchIndex(torrentName); loc != nil {
-		end := loc[1]
-		isResolution := end < len(torrentName) && strings.ContainsRune("pPiI", rune(torrentName[end]))
-		if !isResolution {
-			start, errStart := strconv.Atoi(torrentName[loc[2]:loc[3]])
-			last, errEnd := strconv.Atoi(torrentName[loc[4]:loc[5]])
-			// Faixa invertida nao e faixa: em "Hibike! Euphonium 2 - 01 ~ 13" o casamento pega
-			// "2 - 01" (numero da temporada + primeiro episodio) e produz 2..1, que nao cobre
-			// episodio nenhum — o pack sumia de pickBatches e um pack pior era baixado no lugar.
-			if errStart == nil && errEnd == nil && last > start {
-				info.StartEpisode = start
-				info.EndEpisode = last
-			}
-		}
+	if start, last, ok := batchRange(torrentName); ok {
+		info.StartEpisode, info.EndEpisode = start, last
 	}
 
 	if season := extractSeason(torrentName); season != nil {
 		info.Season = *season
 	}
 
-	info.IsComplete = reBatchComplete.MatchString(torrentName)
-
 	return info
+}
+
+// batchRange devolve a primeira faixa PLAUSIVEL do nome, e nao o primeiro casamento: reBatchRange
+// casa qualquer par de numeros ligados por "-" ou "~", e boa parte deles nao e episodio.
+//
+// FindAll (e nao FindString) porque um casamento reprovado nao encerra a busca — "[EMBER] ...
+// (2021-2022) ..." tem o ano ANTES de onde uma faixa de verdade estaria. Ele e nao-sobreposto, o
+// que mantem "Hibike! Euphonium 2 - 01 ~ 13" sem faixa: o "01" e consumido pelo casamento
+// invertido "2 - 01" e o "01 ~ 13" nunca e visto. Faixa desconhecida cai em EndEpisode == 0, que
+// o chamador trata como cobertura a resolver pela lista de arquivos.
+//
+// Indices (e nao FindAllStringSubmatch) porque a guarda de resolucao precisa do caractere
+// SEGUINTE ao casamento.
+func batchRange(torrentName string) (int, int, bool) {
+	for _, loc := range reBatchRange.FindAllStringSubmatchIndex(torrentName, -1) {
+		// "[720-1080p]" nao e uma faixa de 361 episodios.
+		if end := loc[1]; end < len(torrentName) && strings.ContainsRune("pPiI", rune(torrentName[end])) {
+			continue
+		}
+		start, errStart := strconv.Atoi(torrentName[loc[2]:loc[3]])
+		last, errEnd := strconv.Atoi(torrentName[loc[4]:loc[5]])
+		if errStart != nil || errEnd != nil {
+			continue
+		}
+		// Faixa invertida nao e faixa: em "Hibike! Euphonium 2 - 01 ~ 13" o casamento pega
+		// "2 - 01" (numero da temporada + primeiro episodio) e produz 2..1, que nao cobre
+		// episodio nenhum — o pack sumia de pickBatches e um pack pior era baixado no lugar.
+		if last <= start {
+			continue
+		}
+		// Ano de lancamento: "[EMBER] ... (2021-2022) ..." virava a faixa 2021..2022, que
+		// nenhuma hipotese de eixo cobre — o pack completo era descartado em silencio. A banda
+		// so pega ano: nenhuma serie chega ao episodio 1900, e One Piece "1001-1100" passa.
+		if start >= 1900 && last <= 2100 {
+			continue
+		}
+		return start, last, true
+	}
+	return 0, 0, false
 }
 
 // shouldIgnoreTorrent verifica se o torrent deve ser ignorado

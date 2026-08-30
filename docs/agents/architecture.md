@@ -547,7 +547,7 @@ alimentam de toda resposta que passa por `sendAnilistRequest`. Ver decisions.md 
 | Symbol | Purpose |
 |--------|---------|
 | `TorrentResult` struct | `Name`, `MagnetLink`, `Seeders`, `Leechers`, `Episode*`, `Resolution*`, `Season*`, `Part*`, `Size`, `Fansub`, `IsBatch` |
-| `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season`, `IsComplete` — extracted from batch torrent name |
+| `BatchInfo` struct | `StartEpisode`, `EndEpisode`, `Season` — extracted from batch torrent name |
 | `torrentSummaries(results)` | Formats each result as `name \| S:412/L:3 \| 1.4GiB \| t=5 h=4.21` (t = health tier, h = raw score) for debug logging, in the order given (sorted, when logged after `SortTorrentResults`) — the sort-deciding fields, not just the name |
 | `formatSize(bytes)` | Human-readable size for the log only (`?` when the size failed to parse) |
 | `ScrapNyaa(title, episode, season*, part*, totalEpisodes...)` | Scrapes Nyaa for a single episode (adaptive pagination **per query variant**); discards batch (`isBatch`) and movie/OVA/special (`hasMovieMarker`); hard-filters by season and part when non-nil. With `totalEpisodes > 100` it also queries the zero-padded episode (`one piece 001`) — see `episodeQueries` and [decisions.md #56](decisions.md#56-série-longa-busca-o-episódio-também-com-zero-padding-e-o-gate-é-lastairedepisode) |
@@ -563,7 +563,8 @@ alimentam de toda resposta que passa por `sendAnilistRequest`. Ver decisions.md 
 | `hasMovieMarker(name)` | Explicit movie/OVA/special marker check — the part of `isMovie` safe to use as a guard on episode searches (see [Decisions #53](decisions.md#53-busca-de-episódio-descarta-batch-e-filme-e-usa-hasmoviemarker--não-ismovie)) |
 | `ExtractSeason(name)` | Exported: extracts season number from torrent name |
 | `ExtractPart(name)` | Exported: extracts part/cour number from torrent name. Nome que declara **duas** parts ("(Part 1 + Part 2)", "(Season 4 Part 03+04)") devolve `nil`: ele cobre as duas metades, e a primeira que casa mentiria (decisions.md #79) |
-| `ExtractBatchInfo(name)` | Exported version of `extractBatchInfo`: parses a pack's episode range (`StartEpisode`/`EndEpisode`/`Season`/`IsComplete`) out of the torrent name. `daemon.pickBatches`/`coveringBatch` use it to decide which episodes a pack covers. Guards against reading a resolution tag (`[720-1080p]`) as an episode range — see decisions.md. Contract: `EndEpisode == 0` means "unknown range", and every caller treats that as a complete pack |
+| `ExtractBatchInfo(name)` | Exported version of `extractBatchInfo`: parses a pack's episode range (`StartEpisode`/`EndEpisode`/`Season`) out of the torrent name. `daemon.pickBatches`/`coveringBatch` use it to decide which episodes a pack covers. Contract: `EndEpisode == 0` means "unknown range", and every caller treats that as a complete pack |
+| `batchRange(name)` | The range half of `extractBatchInfo`: the first **plausible** `reBatchRange` match, not the first match. Rejects a resolution tag (`[720-1080p]`), an inverted range (`"Euphonium 2 - 01 ~ 13"` → `2..1`) and a release year (`(2021-2022)`), and keeps scanning after each rejection — see [decisions.md #83](decisions.md#83-a-faixa-do-nome-do-pack-é-o-primeiro-casamento-plausível-não-o-primeiro-casamento) |
 | `GenerateSearchTitleVariants(romaji, english)` | Search query variants: clean romaji → original romaji → clean english → original english |
 | `SortTorrentResults(results)` | Sorts by the episode-relevant subset of `ActivePriorities().CriteriaOrder` (default: uncensored → resolution → health tier → fansub → size) |
 | `SortMovieResults(results)` | Sorts by all of `ActivePriorities().CriteriaOrder` (default: uncensored → source → resolution → health tier → codec → fansub → audio → size) |

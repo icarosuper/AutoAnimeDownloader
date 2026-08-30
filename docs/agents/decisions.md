@@ -89,6 +89,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#80** — O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon](#80-o-teto-de-tamanho-de-pack-é-aplicado-duas-vezes-na-busca-do-nyaa-e-no-filtro-do-daemon)
 - [**#81** — A precedência dos códigos do relatório é cascata, não conjunto](#81-a-precedência-dos-códigos-do-relatório-é-cascata-não-conjunto)
 - [**#82** — SetLastCheckError limpa o relatório da última verificação](#82-setlastcheckerror-limpa-o-relatório-da-última-verificação)
+- [**#83** — A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento](#83-a-faixa-do-nome-do-pack-é-o-primeiro-casamento-plausível-não-o-primeiro-casamento)
 
 ---
 
@@ -924,7 +925,7 @@ O que decide elegibilidade a pack hoje **não é mais** um teto de contagem de e
 
 Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos e aplica a CADA lista o seu próprio teto de tamanho — `max_batch_torrent_size_gb`/`max_episode_torrent_size_gb` — e o piso de seeders) seguido de `pickBatches` (escolhe o mínimo de packs, entre os que sobraram do filtro, que cobre a janela pendente).
 
-**Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo`/`extractBatchInfo` guarda só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080. Outras faixas fantasma (data tipo "2020-2021", bitrate) só entrariam com um sanitizador de tokens, que não se paga hoje: uma faixa desconhecida cai em `EndEpisode == 0`, que todo chamador já trata como pack completo — o mesmo fallback seguro, não uma faixa errada. Upgrade path: se um novo padrão de faixa fantasma aparecer medido, generalizar o sanitizador em vez de empilhar mais um caso especial no `if isResolution`.
+**Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo`/`extractBatchInfo` guardava só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080 —, apostando que outras faixas fantasma (data, bitrate) cairiam em `EndEpisode == 0`, o fallback seguro. **RESOLVIDO** (ver #83): a aposta estava errada para o ano. `(2021-2022)` não cai em zero, vira a faixa 2021..2022, e um pack completo top-seeded era descartado em silêncio por não cobrir episódio nenhum.
 
 **Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. **RESOLVIDO** (ver #80): apareceu medido, em One Piece. O teto de pack passou a ser empurrado para o pacote `nyaa` por `applyNyaaSettings` — o mesmo mecanismo de push de `SetMaxSearchPages`, e não leitura direta de `files.Config` —, e pack acima do teto sai antes de contar para o piso. O filtro de seeders continua só no daemon: o Nyaa devolve ordenado por seeders desc, então ele não trunca a descida do mesmo jeito.
 
@@ -2118,3 +2119,32 @@ sobreviver ao filtro.
 no caminho de **episódio**; tratar começo de faixa ≤ 0 como desconhecido; converter a faixa gravada
 "para ficar positiva" (quebra #74 e #78); acrescentar hipótese de numeração sem desempate que a
 distinga das outras; unificar `prequelOf` com `ComputeEpisodeOffset`.
+
+---
+
+### 83. A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento
+
+**Location:** `nyaa/nyaa.go` — `batchRange`, chamado por `extractBatchInfo`; `nyaa/nyaa_regex.go` — `reBatchRange`.
+
+**What it looks like:** um `FindAll` com `continue` em três guardas onde caberia um `FindString` com um `if`, e uma banda de números mágicos (1900..2100) no meio. Parece defesa especulativa contra casos que não acontecem.
+
+**Why it's right:** `reBatchRange` é `(\d{1,4})\s*[-~]\s*(\d{1,4})` — ele casa **qualquer** par de números ligados por `-` ou `~`, e no nome de um release a maioria desses pares não é episódio. Os três medidos:
+
+| Nome | Casamento | O que é |
+|---|---|---|
+| `[Group] Anime Complete Batch [720-1080p]` | `720-1080` | resolução |
+| `[Erai-raws] Hibike! Euphonium 2 - 01 ~ 13 …` | `2 - 01` | temporada + primeiro episódio |
+| `[EMBER] Mushoku Tensei … (2021-2022) (Season 1 …)` | `2021-2022` | ano de lançamento |
+
+O ano é o que forçou a mudança: ele **não** cai no fallback seguro. `EndEpisode == 0` significa "faixa desconhecida" e todo chamador trata como pack completo; `2021..2022` é uma faixa *declarada* que nenhuma hipótese de `packAxis` cobre, então `coveringBatch` rejeita o pack e ele some da escolha sem uma linha de log que explique. Era um pack BDRip completo, primeiro colocado por seeders, descartado por um parêntese.
+
+A banda `start >= 1900 && last <= 2100` só pega ano: nenhuma série chega ao episódio 1900, e `One Piece 1001-1100` — o caso real que forçou `\d{1,4}` em [#51](#51-episódio-aceita-4-dígitos-exceto-entre-colchetes) — passa intacto.
+
+**`FindAll` e não `FindString`** porque um casamento reprovado não deve encerrar a busca: em `[Group] Anime (2021-2022) 01-24 [BD]` a faixa de verdade vem **depois** do ano.
+
+**Trade-off aceito:** `FindAll` é **não-sobreposto**, então o Hibike continua sem faixa. O casamento `2 - 01` consome o `01`, e o `01 ~ 13` seguinte nunca é visto. Fica como está de propósito: varrer com sobreposição (reiniciar um caractere depois de cada rejeição) produz sub-casamentos lixo — `2021-2022` rejeitado viraria `021-2022`, que passa na banda e grava a faixa 21..2022. Um pack sem faixa cai no caminho seguro; um pack com faixa errada mente para a posse por cobertura ([#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)).
+
+**Don't "fix" by:**
+- Trocar por um sanitizador de tokens que remove `[...]`/`(...)` antes de casar: o ano vem entre parênteses, mas `(001-100)` também — é onde metade dos grupos põe a faixa de verdade.
+- Estreitar a banda de ano para "só 19xx/20xx com diferença <= 5": a diferença entre os anos não distingue nada que a banda já não distinga, e vira mais um número mágico.
+- Varrer com sobreposição para salvar o Hibike (ver trade-off).

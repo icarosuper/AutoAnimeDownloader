@@ -1104,6 +1104,13 @@ func TestExtractBatchInfo_ExtractsRangeAndSeason(t *testing.T) {
 		// Faixa invertida: o casamento pega "2 - 01" (temporada + primeiro episodio) e daria
 		// 2..1, uma faixa que nao cobre episodio nenhum.
 		{"[Erai-raws] Hibike! Euphonium 2 - 01 ~ 13 [1080p][Multiple Subtitle]", 0, 0, 2},
+		// Ano de lancamento: medido em "[EMBER] Mushoku Tensei ... (2021-2022) (Season 1 ...)",
+		// que virava a faixa 2021..2022 e sumia da escolha de pack por nao cobrir episodio nenhum.
+		{"[EMBER] Anime (2021-2022) (Season 1) [BDRip] (Batch)", 0, 0, 1},
+		// Casamento reprovado nao encerra a varredura: a faixa de verdade vem depois do ano.
+		{"[Group] Anime (2021-2022) 01-24 [BD]", 1, 24, 0},
+		// A banda so pega ano — serie longa numerada acima de 1000 continua sendo faixa.
+		{"[Judas] One Piece 1001-1100 [1080p]", 1001, 1100, 0},
 	}
 
 	for _, tc := range cases {

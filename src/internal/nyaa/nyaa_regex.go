@@ -35,8 +35,7 @@ var (
 	}
 
 	// Batch info extraction
-	reBatchRange    = regexp.MustCompile(`(?i)(\d{1,4})\s*[-~]\s*(\d{1,4})`)
-	reBatchComplete = regexp.MustCompile(`(?i)complete|batch`)
+	reBatchRange = regexp.MustCompile(`(?i)(\d{1,4})\s*[-~]\s*(\d{1,4})`)
 
 	// Movie keyword patterns
 	reMovieKeywords = []*regexp.Regexp{
