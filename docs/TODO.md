@@ -1,15 +1,12 @@
-- **Correções de posse/busca de pack** — plano ordenado e checklist em `docs/problemas/index.md`
-  (arquivo temporário: apagar a pasta quando tudo estiver feito, migrando o que sobrar para cá)
 - Scrappar página de detalhes do torrent no nyaa — escopo medido em `docs/agents/sources.md`
   ("Página de detalhe"): só compensa para **pack**, e só quando o nome não dá a faixa ou o pack
   estoura o teto
 	- Usar esses detalhes pra filtrar melhor os torrents — a lista de arquivos dá a cobertura
 	  real do pack antes de baixar; hoje pack sem faixa no nome vira "cobre tudo" e grava
 	  episódio fantasma como baixado
-	- Segundo uso: a contagem de arquivos desempata a convenção de numeração do pack — ver
-	  `docs/agents/sources.md`, "Granularidade e numeração dos packs"
-- Reavaliar o frontend buscar direto na AniList — **só** se `id_in` em lote nos avulsos e o gate por
-  prioridade não bastarem. Veredito e medições em `docs/agents/decisions.md` #73
+- Reavaliar o frontend buscar direto na AniList — `id_in` em lote nos avulsos e o gate por
+  prioridade **já entraram**; falta medir se bastaram. Veredito e medições em
+  `docs/agents/decisions.md` #73
 - Parear features do webApp na cli
 - Adicionar integração com MyAnimeList
 - Melhorar experiencia de baixar animes grandes (provavelmente tirar campo de progresso do frontend)

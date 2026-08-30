@@ -59,8 +59,10 @@ Medido em 28/ago/2026 em `nyaa.si/view/1323474` (`[Judas] One Piece 001-574`, up
 Flag trusted/remake **não** exige o detalhe: já vem na classe do `<tr>` da listagem
 (`success`/`danger`).
 
-**Custo medido:** 175 KB por página de detalhe, contra 119 KB de uma listagem inteira com 75
-linhas. Ou seja: buscar detalhe de todas as linhas custaria ~110x uma busca.
+**Custo medido:** 175 KB naquela página — mas ela é o pior caso (574 arquivos). Remedido em
+29/ago/2026 sobre 7 packs reais (Vinland Saga, Mushoku Tensei, AoT, One Piece): **30 KB de média**,
+contra 125 KB de uma listagem inteira. Uma página de detalhe custa ~1/4 de uma busca, não mais que
+ela. O que continua caro é buscar detalhe de **todas** as linhas: 75 × 30 KB ≈ 18x uma busca.
 
 **A diferença que importa contra o AnimeTosho:** a lista de arquivos do Nyaa é gerada do próprio
 `.torrent` e **funciona em conteúdo antigo**. O `files[]` do AnimeTosho não (vem `[]` para entrada
@@ -140,8 +142,9 @@ de part é sempre frágil; perguntar "esse pack cobre a janela pendente?" não �
 > **Implementado** (29/ago/2026, `decisions.md` #79): no caminho de pack o marcador de part só
 > rejeita conflito declarado, `extractPart` devolve `nil` para nome com duas parts, e as três
 > hipóteses de numeração desta seção viraram `daemon.packAxis` — com o span do nome no lugar da
-> contagem de arquivos como desempate. A contagem de arquivos da página de detalhe continua sendo o
-> desempate mais forte, e continua no `TODO.md`.
+> contagem de arquivos como desempate. A contagem de arquivos da página de detalhe seria um
+> desempate mais forte, mas só vale a pena junto do scrape de detalhe, que o `TODO.md` acompanha
+> pela cobertura do pack.
 
 ---
 
