@@ -2,7 +2,9 @@ package anilist
 
 import (
 	"errors"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"AutoAnimeDownloader/src/internal/logger"
@@ -34,15 +36,42 @@ type MediaSearchResult struct {
 	CoverImage CoverImage  `json:"coverImage"`
 }
 
-// SearchMedia busca animes na AniList por termo. Nao e cacheado: cada tecla digitada e uma
-// chave diferente, entao um cache so guardaria prefixos que ninguem repete — quem segura o
-// volume aqui e o debounce do frontend.
+// searchCache guarda o resultado por termo. Passou a valer quando a tela deixou de buscar a
+// cada tecla (decisions.md #50 (f)): com submit, as chaves sao termos inteiros que se repetem —
+// o mesmo usuario refazendo a busca, o toggle de nao lancados indo e voltando, outra aba
+// buscando o mesmo anime. A chave e minuscula porque a busca da AniList e case-insensitive,
+// entao "One Piece" e "one piece" devolvem a mesma coisa e nao ha por que gastar dois requests.
+//
+// O cache fica em SearchMedia, e NAO na resposta do endpoint, porque block_reason e recalculado
+// pelo standaloneGuard a cada resposta: cacheado junto, um anime adicionado agora continuaria
+// aparecendo com o botao "Adicionar" ate o TTL vencer.
+var searchCache = newTTLCache[[]MediaSearchResult]()
+
+const (
+	searchTTL = 10 * time.Minute
+	// ponytail: teto por descarte total, nao por LRU. Este e o unico cache com chave de texto
+	// livre — nada impede alguem de digitar mil termos diferentes, e entrada vencida nunca sai
+	// do mapa. Mil resultados de busca sao poucos MB; se um dia isso incomodar, uma fila de
+	// insercao com descarte do mais antigo troca o flush por eviction de verdade.
+	searchCacheMaxEntries = 1000
+)
+
+func searchCacheKey(term string, includeUnreleased bool) string {
+	return strings.ToLower(term) + "|" + strconv.FormatBool(includeUnreleased)
+}
+
+// SearchMedia busca animes na AniList por termo, com cache de searchTTL.
 //
 // includeUnreleased=false (o padrao da tela) esconde os NOT_YET_RELEASED. O filtro e
 // SERVER-SIDE de proposito: perPage e 20, e filtrar depois de receber devolveria buscas com 4
 // resultados uteis em temporada de anuncios. So NOT_YET_RELEASED sai — CANCELLED e HIATUS ficam,
 // porque um anime interrompido no meio da exibicao tem episodios baixaveis.
 func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, error) {
+	key := searchCacheKey(term, includeUnreleased)
+	if cached, ok := searchCache.get(key); ok {
+		return slices.Clone(cached), nil
+	}
+
 	// Concatenacao, e nao uma variavel GraphQL com valor nulo: a AniList ignora argumentos nulos
 	// hoje, mas depender disso faria o filtro morrer em silencio se a semantica mudasse. Aqui,
 	// quando includeUnreleased e true, o argumento nao existe na query.
@@ -83,9 +112,24 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 
 	resp, err := sendAnilistRequest[response](query, RequestVariables{"q": term}, PriorityDisposable)
 	if err != nil {
+		// Recusado pelo gate de orcamento: o catalogo da AniList nao muda em dez minutos, entao
+		// servir o resultado vencido deixa a tela funcionando e devolve o balde para o passe do
+		// daemon, que e o unico que nao pode ser adiado. Ver decisions.md #72.
+		if errors.Is(err, ErrBudgetLow) {
+			if stale, ok := searchCache.getStale(key); ok {
+				return slices.Clone(stale), nil
+			}
+		}
 		return nil, err
 	}
-	return resp.Data.Page.Media, nil
+
+	if searchCache.size() >= searchCacheMaxEntries {
+		searchCache.clear()
+	}
+	searchCache.set(key, resp.Data.Page.Media, searchTTL)
+	// Copia: a fatia guardada e compartilhada por todos os requests que acertarem esta chave, e
+	// quem chama nao pode reordenar nem cortar a memoria do cache.
+	return slices.Clone(resp.Data.Page.Media), nil
 }
 
 // mediaByIDFields sao os campos que GetMediaByID e GetMediaByIDs pedem — os MESMOS de

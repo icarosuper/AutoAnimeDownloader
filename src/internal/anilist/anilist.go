@@ -57,6 +57,15 @@ func (c *ttlCache[T]) set(key string, value T, ttl time.Duration) {
 	c.expiry[key] = time.Now().Add(ttl)
 }
 
+// size e o numero de chaves guardadas, VENCIDAS INCLUSIVE — nada aqui remove entrada, o
+// vencimento so esconde do get. So o cache de busca usa, que e o unico com chave de texto
+// livre e portanto sem teto natural.
+func (c *ttlCache[T]) size() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.data)
+}
+
 func (c *ttlCache[T]) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -118,6 +127,7 @@ func clearCaches() {
 	frontendListCache.clear()
 	mediaByIDCache.clear()
 	seriesCache.clear()
+	searchCache.clear()
 	// A saude tambem e estado de pacote: sem zerar aqui, um teste que simula 403 deixaria o
 	// proximo teste enxergando a AniList fora do ar. Mesma coisa para a leitura de orcamento:
 	// um teste que simula o balde no fim travaria o gate do teste seguinte.

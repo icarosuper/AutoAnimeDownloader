@@ -3,8 +3,10 @@ package anilist
 import (
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestSearchMedia_MapsResults: a barra de busca da tela #/add depende destes campos.
@@ -263,5 +265,101 @@ func TestGetMediaByIDs_ChunksAtPageSize(t *testing.T) {
 	}
 	if len(medias) != 60 {
 		t.Fatalf("todo id pedido precisa ter desfecho no mapa, veio %d", len(medias))
+	}
+}
+
+// TestSearchMedia_CachesWithinTTL: a tela busca no submit, entao a mesma chave se repete —
+// usuario refazendo a busca, toggle de nao lancados indo e voltando, outra aba com o mesmo
+// termo. Case-insensitive porque a busca da AniList tambem e.
+func TestSearchMedia_CachesWithinTTL(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"One Piece"}}]}}}`)()
+
+	for _, term := range []string{"one piece", "one piece", "One Piece", "ONE PIECE"} {
+		if _, err := SearchMedia(term, false); err != nil {
+			t.Fatalf("SearchMedia(%q): %v", term, err)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("quero 1 request para o mesmo termo em qualquer caixa, veio %d", calls)
+	}
+
+	if _, err := SearchMedia("one piece", true); err != nil {
+		t.Fatalf("SearchMedia com includeUnreleased: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("includeUnreleased faz parte da chave: quero 2 requests, veio %d", calls)
+	}
+}
+
+// TestSearchMedia_CachedSliceIsNotShared: a fatia guardada e servida a todos os requests que
+// acertarem a chave — quem chama nao pode cortar nem reordenar a memoria do cache.
+func TestSearchMedia_CachedSliceIsNotShared(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Page":{"media":[
+		{"id":21,"title":{"romaji":"A"}},
+		{"id":22,"title":{"romaji":"B"}}
+	]}}}`)()
+
+	first, err := SearchMedia("one", false)
+	if err != nil {
+		t.Fatalf("primeira busca: %v", err)
+	}
+	first[0].Id = 999
+
+	second, err := SearchMedia("one", false)
+	if err != nil {
+		t.Fatalf("segunda busca: %v", err)
+	}
+	if second[0].Id != 21 {
+		t.Fatalf("o cache foi corrompido por quem chamou: %+v", second[0])
+	}
+}
+
+// TestSearchMedia_ServesStaleWhenRefused: recusada pelo gate de orcamento, a busca serve o
+// resultado vencido em vez de virar "a busca falhou" na tela. Ver decisions.md #72.
+func TestSearchMedia_ServesStaleWhenRefused(t *testing.T) {
+	defer MockAniListDo(func(*http.Request) (*http.Response, error) {
+		return respond(200, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"One Piece"}}]}}}`,
+			map[string]string{"X-RateLimit-Remaining": "29"}), nil
+	})()
+
+	if _, err := SearchMedia("one piece", false); err != nil {
+		t.Fatalf("primeira busca: %v", err)
+	}
+
+	// Vence o cache e afunda o orcamento: a proxima chamada e recusada pelo gate.
+	searchCache.set(searchCacheKey("one piece", false), []MediaSearchResult{{Id: 21}}, -time.Second)
+	budget.Store(&budgetReading{remaining: 1, at: time.Now()})
+
+	results, err := SearchMedia("one piece", false)
+	if err != nil {
+		t.Fatalf("esperava o cache vencido, veio erro: %v", err)
+	}
+	if len(results) != 1 || results[0].Id != 21 {
+		t.Fatalf("esperava a entrada vencida, veio %+v", results)
+	}
+}
+
+// TestSearchMedia_FlushesWhenFull: unico cache com chave de texto livre, e entrada vencida nunca
+// sai do mapa — sem teto, o mapa so cresce enquanto o daemon roda.
+func TestSearchMedia_FlushesWhenFull(t *testing.T) {
+	calls := 0
+	defer mockList(&calls, `{"data":{"Page":{"media":[]}}}`)()
+
+	for i := range searchCacheMaxEntries {
+		if _, err := SearchMedia("termo"+strconv.Itoa(i), false); err != nil {
+			t.Fatalf("busca %d: %v", i, err)
+		}
+	}
+	if searchCache.size() != searchCacheMaxEntries {
+		t.Fatalf("quero o cache cheio com %d, veio %d", searchCacheMaxEntries, searchCache.size())
+	}
+
+	if _, err := SearchMedia("estoura", false); err != nil {
+		t.Fatalf("busca que estoura o teto: %v", err)
+	}
+	if searchCache.size() != 1 {
+		t.Fatalf("passado o teto o cache e descartado inteiro: quero 1, veio %d", searchCache.size())
 	}
 }

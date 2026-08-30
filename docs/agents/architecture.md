@@ -356,7 +356,9 @@ razão de `daemon/passerror.go`). Ela é escrita por **toda** resposta que passa
 
 **Caches** (todos em memória, `ttlCache[T]`): `GetFrontendAnimeList` 60s por `username+statuses` — o
 poll de `/api/v1/animes`, 30s por aba aberta, é o que estourava a cota da AniList (decisions.md #46);
-`customLists` 5min (decisions.md #11); `seriesCache` 24h.
+`customLists` 5min (decisions.md #11); `seriesCache` 24h; `searchCache` 10min por
+`termo-minúsculo+includeUnreleased` — **o único com chave de texto livre**, por isso é o único com
+teto (`searchCacheMaxEntries`, descarte total, não LRU) e o único que `ttlCache.size()` serve.
 
 **`series.go` — o eixo absoluto da série.** A numeração contínua que atravessa cour e part, que boa
 parte dos grupos usa nos nomes de arquivo. A AniList **não tem id de franquia**: a cadeia de `PREQUEL`
