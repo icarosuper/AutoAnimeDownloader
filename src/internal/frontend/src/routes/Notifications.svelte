@@ -69,35 +69,47 @@
   let showWebhookForm = false;
   let editingIndex: number | null = null;
   let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
-  let newHeaderKey = '';
-  let newHeaderValue = '';
+
+  // Os headers viram lista de pares ENQUANTO o formulario esta aberto, e so voltam a ser
+  // Record<string,string> no Confirmar. O objeto nao serve para editar: renomear uma chave em
+  // Record e apagar e recriar a entrada, e a linha pula de lugar a cada tecla. Ver
+  // decisions.md #87.
+  let headerRows: { key: string; value: string }[] = [{ key: '', value: '' }];
+
+  const toRows = (headers: Record<string, string>) =>
+    Object.entries(headers).map(([key, value]) => ({ key, value }));
+
+  // Linha sem nome e descartada: o + adiciona uma linha vazia, e sair sem preencher nao pode
+  // gravar um header "".
+  const fromRows = (rows: { key: string; value: string }[]) =>
+    Object.fromEntries(rows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value]));
 
   function resetForm() {
     newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
-    newHeaderKey = '';
-    newHeaderValue = '';
+    headerRows = [{ key: '', value: '' }];
     editingIndex = null;
     showWebhookForm = false;
   }
 
   function applyPreset(key: string) {
     newWebhook = { ...WEBHOOK_PRESETS[key] };
+    headerRows = toRows(WEBHOOK_PRESETS[key].headers);
   }
 
   function editWebhook(index: number) {
     newWebhook = { ...notifications.webhooks[index], headers: { ...notifications.webhooks[index].headers }, events: [...(notifications.webhooks[index].events ?? [])] };
-    newHeaderKey = '';
-    newHeaderValue = '';
+    headerRows = toRows(notifications.webhooks[index].headers);
     editingIndex = index;
     showWebhookForm = true;
   }
 
   function confirmWebhook() {
     if (!newWebhook.name || !newWebhook.url) return;
+    const webhook = { ...newWebhook, headers: fromRows(headerRows) };
     if (editingIndex !== null) {
-      notifications.webhooks = notifications.webhooks.map((h, i) => i === editingIndex ? { ...newWebhook } : h);
+      notifications.webhooks = notifications.webhooks.map((h, i) => i === editingIndex ? webhook : h);
     } else {
-      notifications.webhooks = [...notifications.webhooks, { ...newWebhook }];
+      notifications.webhooks = [...notifications.webhooks, webhook];
     }
     resetForm();
   }
@@ -115,16 +127,12 @@
     }
   }
 
-  function addHeader() {
-    if (!newHeaderKey) return;
-    newWebhook.headers = { ...newWebhook.headers, [newHeaderKey]: newHeaderValue };
-    newHeaderKey = '';
-    newHeaderValue = '';
+  function addHeaderRow() {
+    headerRows = [...headerRows, { key: '', value: '' }];
   }
 
-  function removeHeader(key: string) {
-    const { [key]: _, ...rest } = newWebhook.headers;
-    newWebhook.headers = rest;
+  function removeHeaderRow(index: number) {
+    headerRows = headerRows.filter((_, i) => i !== index);
   }
 
   async function loadNotifications() {
@@ -284,35 +292,33 @@
 
               <div class="flex flex-col gap-2">
                 <label class="text-xs font-medium text-base-content">{T && T.labelHeaders}</label>
-                {#each Object.entries(newWebhook.headers) as [k, v]}
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-base-content/70 flex-1">{k}: {v}</span>
+                {#each headerRows as row, i}
+                  <div class="flex gap-2">
+                    <input
+                      type="text"
+                      bind:value={row.key}
+                      placeholder="Header"
+                      class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
+                    />
+                    <input
+                      type="text"
+                      bind:value={row.value}
+                      placeholder="Value"
+                      class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
+                    />
                     <button
                       type="button"
-                      on:click={() => removeHeader(k)}
-                      class="text-xs text-red-400 hover:text-red-600"
+                      on:click={() => removeHeaderRow(i)}
+                      class="px-2 py-1 text-xs text-red-400 hover:text-red-600"
+                      aria-label="{T && T.labelHeaders}: {row.key}"
                     >✕</button>
                   </div>
                 {/each}
-                <div class="flex gap-2">
-                  <input
-                    type="text"
-                    bind:value={newHeaderKey}
-                    placeholder="Header"
-                    class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
-                  />
-                  <input
-                    type="text"
-                    bind:value={newHeaderValue}
-                    placeholder="Value"
-                    class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
-                  />
-                  <button
-                    type="button"
-                    on:click={addHeader}
-                    class="px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                  >+</button>
-                </div>
+                <button
+                  type="button"
+                  on:click={addHeaderRow}
+                  class="self-start px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >+</button>
               </div>
 
               <div class="flex flex-col gap-1">

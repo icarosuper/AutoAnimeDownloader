@@ -93,6 +93,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#84** — A cobertura de um pack sem faixa no nome vem da lista de arquivos, e não da suposição de que ele cobre tudo](#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
 - [**#85** — O custo do frontend na AniList é por CONTA e por ÓRFÃO, não por aba](#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba)
 - [**#86** — O botão Testar responde o status do serviço, não "o preset existe"](#86-o-botão-testar-responde-o-status-do-serviço-não-o-preset-existe)
+- [**#87** — Headers do webhook viram lista de pares enquanto o formulário está aberto](#87-headers-do-webhook-viram-lista-de-pares-enquanto-o-formulário-está-aberto)
 
 ---
 
@@ -2271,3 +2272,29 @@ ignorando o retorno de propósito — não há para quem reportar, e o log já c
 **Don't "fix" by:** voltar `fireWebhook` para `func(...)` sem retorno porque "só o teste usa"; ou
 mapear a falha de entrega para `404`, que faria o front dizer "webhook não encontrado" para um
 token recusado.
+
+### 87. Headers do webhook viram lista de pares enquanto o formulário está aberto
+
+**Location:** `frontend/src/routes/Notifications.svelte` — `headerRows`, `toRows`, `fromRows`,
+`confirmWebhook`. O formato em disco não mudou: `WebhookPreset.headers` continua
+`Record<string,string>` na API e no `config.json`.
+
+**O que parece:** conversão inútil. O `Record` já está na mão, dá para iterar com
+`Object.entries` e escrever direto em `newWebhook.headers` — era o que o código fazia.
+
+**Por que existe:** `Record` não é editável tecla a tecla. Renomear uma chave é apagar a entrada
+e criar outra, então cada letra digitada no campo *Header* reconstrói o objeto, a linha muda de
+posição na iteração e o cursor salta. Foi por isso que a versão antiga só tinha um par de campos
+"pendentes" e um botão `+`: sem lista de pares, os headers já gravados não podiam ser inputs.
+
+O `+` era a armadilha real — quem digitava nos dois campos e clicava em **Confirmar** perdia o
+header em silêncio, e o webhook ia para o disco com o placeholder `CHANGE_API_KEY` (foi assim que
+um Jellyfin ficou tomando `401` sem ninguém entender). Com pares, todo header é input, o `+` só
+acrescenta uma linha vazia e o Confirmar grava o que estiver na tela.
+
+`fromRows` descarta linha de chave vazia: o `+` cria linha em branco, e desistir de preencher não
+pode virar um header `""`. Coberto por `tests/component/Notifications.headers.test.ts`.
+
+**Don't "fix" by:** trocar `headerRows` por bind direto no `Record` "para tirar a conversão"; nem
+mudar o formato salvo para lista de pares, que quebraria o `config.json` de todo mundo e o
+`files.WebhookPreset` do Go sem ganho nenhum.
