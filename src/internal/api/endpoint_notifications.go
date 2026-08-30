@@ -3,6 +3,7 @@ package api
 import (
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
+	"errors"
 	"net/http"
 )
 
@@ -15,6 +16,7 @@ import (
 // @Failure      404   {object}  SuccessResponse
 // @Failure      405   {object}  SuccessResponse
 // @Failure      500   {object}  SuccessResponse
+// @Failure      502   {object}  SuccessResponse
 // @Router       /notifications/webhooks/{name}/test [post]
 func handleNotificationWebhookTest(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -29,8 +31,14 @@ func handleNotificationWebhookTest(server *Server) http.HandlerFunc {
 			JSONInternalError(w, err)
 			return
 		}
+		// 502 e nao 200: o disparo que o servico recusou (token errado, URL fora do ar) precisa
+		// chegar ao toast. Um "sucesso" aqui so provava que o preset existe.
 		if err := notifications.FireTestWebhook(cfg, name); err != nil {
-			JSONError(w, http.StatusNotFound, "WEBHOOK_NOT_FOUND", err.Error())
+			if errors.Is(err, notifications.ErrWebhookNotFound) {
+				JSONError(w, http.StatusNotFound, "WEBHOOK_NOT_FOUND", err.Error())
+				return
+			}
+			JSONError(w, http.StatusBadGateway, "WEBHOOK_FAILED", err.Error())
 			return
 		}
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Webhook fired successfully"})

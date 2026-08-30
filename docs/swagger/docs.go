@@ -1060,6 +1060,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/api.SuccessResponse"
                         }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/api.SuccessResponse"
+                        }
                     }
                 }
             }

@@ -64,3 +64,30 @@ func TestHandleWebhookTest_Fires(t *testing.T) {
 		t.Fatal("webhook not fired")
 	}
 }
+
+// O 401 do Jellyfin com token errado tem de virar erro na tela. Antes este teste falhava: o
+// handler devolvia 200 "fired successfully" para qualquer coisa que nao fosse nome inexistente.
+func TestHandleWebhookTest_ServiceRefused(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	fm := &mockFileManager{configs: &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "jellyfin", URL: srv.URL, Method: "POST", Headers: map[string]string{}},
+			},
+		},
+	}}
+	handler := handleNotificationWebhookTest(&Server{FileManager: fm})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/webhooks/jellyfin/test", nil)
+	req.SetPathValue("name", "jellyfin")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d — body: %s", rec.Code, rec.Body.String())
+	}
+}

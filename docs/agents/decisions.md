@@ -92,6 +92,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#83** — A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento](#83-a-faixa-do-nome-do-pack-é-o-primeiro-casamento-plausível-não-o-primeiro-casamento)
 - [**#84** — A cobertura de um pack sem faixa no nome vem da lista de arquivos, e não da suposição de que ele cobre tudo](#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
 - [**#85** — O custo do frontend na AniList é por CONTA e por ÓRFÃO, não por aba](#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba)
+- [**#86** — O botão Testar responde o status do serviço, não "o preset existe"](#86-o-botão-testar-responde-o-status-do-serviço-não-o-preset-existe)
 
 ---
 
@@ -2246,3 +2247,27 @@ contas ≈ 50/min, e aí o gate passa a recusar de verdade.
 **Don't "fix" by:** aumentar o `frontendListTTL` achando que aba é o problema — a medição diz que
 não é. Se o orçamento voltar a apertar, o alvo é pôr TTL no `GetAnimeInfoByIDs`, que é o único
 caminho sem cache, e depois olhar o `customListsEmptyTTL`.
+
+### 86. O botão Testar responde o status do serviço, não "o preset existe"
+
+**Location:** `notifications/notifications.go` — `fireWebhook`, `FireTestWebhook`,
+`ErrWebhookNotFound`; `api/endpoint_notifications.go` — `handleNotificationWebhookTest`.
+
+**O que parece:** `fireWebhook` devolver `error` é inútil, porque o único caminho que dispara de
+verdade — `fireBatch`, em goroutine — ignora o retorno e já loga tudo o que dá errado. Um
+`return` bastaria.
+
+**Por que existe:** o `POST /notifications/webhooks/{name}/test` respondia `200 "Webhook fired
+successfully"` para qualquer preset que existisse, e o front mostrava toast de sucesso — com o
+Jellyfin devolvendo `401` de token errado, ou com a URL fora do ar. O único registro da falha
+era uma linha `warn` no `daemon.log`, que ninguém vai ler para saber se um botão de testar
+funcionou. Testar entrega é a única razão de esse endpoint existir; sem o retorno ele só
+confirmava que o nome estava escrito certo.
+
+Daí a separação: `ErrWebhookNotFound` (sentinela, `errors.Is`) → `404`; qualquer outro erro →
+`502 WEBHOOK_FAILED`, com o status do serviço na mensagem. O disparo automático continua
+ignorando o retorno de propósito — não há para quem reportar, e o log já cobre.
+
+**Don't "fix" by:** voltar `fireWebhook` para `func(...)` sem retorno porque "só o teste usa"; ou
+mapear a falha de entrega para `404`, que faria o front dizer "webhook não encontrado" para um
+token recusado.

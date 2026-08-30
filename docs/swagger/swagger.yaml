@@ -1295,6 +1295,10 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/api.SuccessResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/api.SuccessResponse'
       summary: Test a webhook preset
       tags:
       - notifications

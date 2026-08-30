@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -154,7 +155,10 @@ func presetIsJSON(preset files.WebhookPreset) bool {
 	return false
 }
 
-func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
+// fireWebhook dispara um preset e devolve o que houve de errado. O disparo automatico ignora o
+// retorno (o log ja registra); quem precisa dele e o botao "Testar", que sem isso respondia
+// sucesso com o servico recusando o token — ver decisions.md #86.
+func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 	bodyVars := vars
 	if presetIsJSON(preset) {
 		bodyVars = escapeVarsForJSON(vars)
@@ -166,7 +170,7 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
 	req, err := http.NewRequest(preset.Method, url, strings.NewReader(body))
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("webhook", preset.Name).Msg("Failed to build webhook request")
-		return
+		return err
 	}
 	for k, v := range preset.Headers {
 		// Um header com \n faz o net/http recusar a request inteira. O ntfy usa
@@ -178,7 +182,7 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("webhook", preset.Name).Msg("Webhook request failed")
-		return
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -187,7 +191,9 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) {
 			Str("webhook", preset.Name).
 			Int("status", resp.StatusCode).
 			Msg("Webhook returned error status")
+		return fmt.Errorf("webhook %q returned status %d", preset.Name, resp.StatusCode)
 	}
+	return nil
 }
 
 // item e um evento aguardando na janela de agrupamento.
@@ -301,14 +307,18 @@ func fireBatch(event Event, items []item, webhooks []files.WebhookPreset, wait b
 	}
 }
 
-// FireTestWebhook fires one named webhook with sample variables. Returns error if not found.
+// ErrWebhookNotFound distingue "esse preset nao existe" (404) de "o preset existe e o disparo
+// falhou" (502). Sem a distincao o handler devolveria 404 para o token recusado pelo servico.
+var ErrWebhookNotFound = errors.New("webhook not found")
+
+// FireTestWebhook fires one named webhook with sample variables. Returns ErrWebhookNotFound if the
+// preset does not exist, or the delivery error if the service refused it.
 func FireTestWebhook(cfg *files.Config, name string) error {
 	for _, preset := range cfg.Notifications.Webhooks {
 		if preset.Name == name {
 			vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "")
-			fireWebhook(preset, vars)
-			return nil
+			return fireWebhook(preset, vars)
 		}
 	}
-	return fmt.Errorf("webhook %q not found", name)
+	return fmt.Errorf("%w: %q", ErrWebhookNotFound, name)
 }
