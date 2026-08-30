@@ -81,6 +81,16 @@ describe('deriveAnimeChip', () => {
     expect(chip.key).not.toBe('noSeeds')
   })
 
+  it('a completed torrent with no peers is an idle seed, not a stall', () => {
+    const anime = makeAnime({ episodes_released: 10, episodes_downloaded: 10 })
+    const torrents = [
+      makeTorrent({ status: 'seeding', completed: true, peers_total: 0, hash: 'seed' }),
+    ]
+    const stalledSince = new Map([['seed', NOW - 60 * 60 * 1000]])
+    const chip = deriveAnimeChip(anime, torrents, NOW, stalledSince)
+    expect(chip.key).toBe('upToDate')
+  })
+
   it('a downloading torrent takes priority over a stalled one for the same anime', () => {
     const anime = makeAnime({ episodes_released: 10, episodes_downloaded: 4 })
     const torrents = [

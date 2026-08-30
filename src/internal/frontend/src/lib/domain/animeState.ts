@@ -75,6 +75,9 @@ export function deriveAnimeChip(
   }
 
   const stalled = related.find((t) => {
+    // Torrent completo (semeando) sem peers e so um seed ocioso, nao um download travado —
+    // sem esse filtro qualquer anime em dia virava "sem seeds" 10 min depois de abrir a tela.
+    if (t.completed) return false
     if (t.peers_total !== 0) return false
     const since = stalledSince.get(t.hash)
     if (since === undefined) return false
