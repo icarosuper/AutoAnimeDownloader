@@ -1124,6 +1124,32 @@ func TestExtractBatchInfo_ExtractsRangeAndSeason(t *testing.T) {
 	}
 }
 
+// Grupo que separa com "_" no lugar de espaco: todo padrao de episodio pede espaco ao redor do
+// numero, entao o nome inteiro nao casava nenhum e o arquivo ia para a biblioteca com nome cru.
+func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
+	cases := []struct {
+		name string
+		want *int
+	}{
+		{"[DB]Vinland Saga_-_01_(Dual Audio_10bit_BD1080p_x265).mkv", intPtr(1)},
+		{"[DB]Vinland Saga_-_24_(Dual Audio_10bit_BD1080p_x265).mkv", intPtr(24)},
+		// Opening/ending sem numero de episodio continua sem numero.
+		{"[DB]Vinland Saga_-_NCED01_(10bit_BD1080p_x265).mkv", nil},
+	}
+
+	for _, tc := range cases {
+		got := nyaa.ExtractEpisodeNumber(tc.name)
+		switch {
+		case tc.want == nil && got != nil:
+			t.Errorf("%q: esperava nenhum episodio, obteve %d", tc.name, *got)
+		case tc.want != nil && got == nil:
+			t.Errorf("%q: esperava episodio %d, obteve nenhum", tc.name, *tc.want)
+		case tc.want != nil && *got != *tc.want:
+			t.Errorf("%q: esperava episodio %d, obteve %d", tc.name, *tc.want, *got)
+		}
+	}
+}
+
 func TestScrapNyaaForAnime_FindsBatchTorrents(t *testing.T) {
 	correct := []string{
 		"[SubsPlease] Frieren (01-28) [1080p]",

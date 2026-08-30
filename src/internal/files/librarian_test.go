@@ -281,6 +281,41 @@ func TestOrganizeBatchJellyfinNames(t *testing.T) {
 	}
 }
 
+// Grupo que separa o nome com "_": o numero do episodio sai do arquivo igual ao de um nome com
+// espacos, senao o pack inteiro ia para a biblioteca com nome cru.
+func TestOrganizeBatchUnderscoreNames(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "batchid")
+	completed := filepath.Join(tmp, "completed")
+	writeFile(t, filepath.Join(dataDir, "[DB]Anime_-_01_(Dual Audio_10bit_BD1080p_x265).mkv"), "a")
+	writeFile(t, filepath.Join(dataDir, "[DB]Anime_-_02_(Dual Audio_10bit_BD1080p_x265).mkv"), "b")
+	writeFile(t, filepath.Join(dataDir, "[DB]Anime_-_NCED01_(10bit_BD1080p_x265).mkv"), "c")
+
+	lib := NewLibrarian(NewOSFileSystem())
+	created, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Anime",
+		CompletedPath:  completed,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	})
+	if err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	if len(created) != 3 {
+		t.Fatalf("created = %v, want 3 links", created)
+	}
+	for _, name := range []string{
+		"Anime - E01.mkv",
+		"Anime - E02.mkv",
+		"[DB]Anime_-_NCED01_(10bit_BD1080p_x265).mkv", // sem numero de episodio: nome cru
+	} {
+		if _, err := os.Stat(filepath.Join(completed, "Anime", name)); err != nil {
+			t.Errorf("expected link %s: %v", name, err)
+		}
+	}
+}
+
 // Pack e avulso do mesmo anime dividem UMA pasta (destDir sai de AnimeName, nunca do nome do
 // torrent) e, com a flag, o mesmo padrao de nome — entao os episodios se misturam em ordem.
 func TestOrganizeBatchAndSingleShareOneFolder(t *testing.T) {

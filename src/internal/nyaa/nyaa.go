@@ -875,7 +875,12 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 
 // extractEpisodeNumber extrai o número do episódio do nome do torrent
 // Testa os padrões em ordem de prioridade (do mais específico ao menos específico)
+// O underscore vira espaco antes de tudo: todo padrao de reEpisodePatterns pede espaco ao redor
+// do numero, e grupo que separa com "_" ("[DB]Vinland Saga_-_01_(...).mkv") nao casava nenhum.
+// Vale para nome de torrent e, principalmente, para nome de ARQUIVO dentro de um pack — e daqui
+// que o Librarian tira o numero para renomear no padrao Jellyfin.
 func extractEpisodeNumber(name string) *int {
+	name = strings.ReplaceAll(name, "_", " ")
 	for _, p := range reEpisodePatterns {
 		matches := p.re.FindStringSubmatch(name)
 		if len(matches) > 1 {
