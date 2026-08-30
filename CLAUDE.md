@@ -15,6 +15,30 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 3. **Regenerate Swagger**: if API changed → `swag init -g src/cmd/daemon/main.go -o docs/swagger`
 4. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
 
+## Padrão de commit
+
+Conventional Commits, mensagem em **português**, só a linha de assunto — sem corpo, sem
+`Co-Authored-By`, sem ponto final.
+
+`tipo: verbo no infinitivo + o que mudou` — tudo minúsculo depois do `tipo:`.
+
+Tipos em uso: `feat`, `fix`, `docs`, `refactor`, `test`, `chore` (`!` depois do tipo para breaking
+change, ex.: `chore!: remover migração de save_path`).
+
+O assunto diz o comportamento, não o arquivo: descreva a regra que passou a valer, e quando houver
+um "em vez de" que explique a mudança, ele cabe no assunto.
+
+```
+feat: escolher pack por cobertura da janela em vez de marcador de part
+fix: servir cache vencido de customLists quando o gate recusa
+docs: registrar que pack sem faixa não passa pela cobertura
+```
+
+## Branch
+
+O padrão é commitar direto na `master` — não crie branch por conta própria. Só quando for uma
+feature maior, que vai exigir vários commits, **pergunte antes** se o usuário quer uma branch.
+
 ## Important — Código ruim no caminho
 
 Achou código ruim **perto** do que você está mexendo — mal escrito, deprecado, não utilizado,
