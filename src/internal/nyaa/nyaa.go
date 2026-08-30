@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +36,22 @@ type TorrentResult struct {
 	Size       int64     `json:"size,omitempty"`
 	Fansub     string    `json:"fansub,omitempty"`
 	IsBatch    bool      `json:"isBatch,omitempty"`
+	// DetailURL e a pagina /view/<id> da linha. So o caminho de pack a usa (PackFileRange), e
+	// so as buscas que devolvem pack a preenchem.
+	DetailURL string `json:"detailUrl,omitempty"`
+}
+
+var videoExtensions = map[string]bool{
+	".mkv": true, ".mp4": true, ".avi": true, ".mov": true, ".m4v": true,
+	".webm": true, ".flv": true, ".wmv": true, ".ts": true, ".mpg": true,
+	".mpeg": true, ".ogm": true,
+}
+
+// IsVideoFile reporta se o nome tem extensao de video. Mora neste pacote, e nao no files, porque
+// os dois leem a mesma lista de arquivos de um pack — o Librarian depois de baixar, PackFileRange
+// antes — e files importa nyaa (o contrario daria ciclo).
+func IsVideoFile(name string) bool {
+	return videoExtensions[strings.ToLower(filepath.Ext(name))]
 }
 
 func getNyaaBaseURL() string {
@@ -194,6 +211,92 @@ func IsBatch(name string) bool {
 // episodios do pack para decidir QUAIS episodios recebem o magnet dele (pickBatches).
 func ExtractBatchInfo(name string) BatchInfo {
 	return extractBatchInfo(name)
+}
+
+// PackFileRange devolve a faixa de episodios que um pack REALMENTE traz, lida da lista de
+// arquivos da pagina de detalhe (`/view/<id>`), na numeracao que o grupo usou nos arquivos —
+// a mesma regua do nome, entao o chamador converte com o mesmo packAxis.
+//
+// Existe porque o nome nao responde: medido em 24 packs de tres animes, 19 nao trazem faixa
+// nenhuma (sources.md, "Pagina de detalhe"). Sem esta chamada, faixa desconhecida vale como
+// "cobre tudo" e o daemon grava como baixado episodio que o pack nao tem. O caso que forcou:
+// "[EMBER] … (Season 2 | Part 2) … (Batch)" nao declara faixa e traz os arquivos 13..24 —
+// intersecao ZERO com o 1..12 que o daemon registrava.
+//
+// (info, false) quando o detalhe nao responde, nao tem lista de arquivos ou nenhum arquivo de
+// video da o numero: nao ha faixa a afirmar, e quem chama decide o que fazer com o "nao sei".
+//
+// ponytail: a faixa e min..max dos numeros lidos. Pack cujos arquivos REINICIAM a numeracao por
+// season (S01-S04 numa pasta cada) fica com a faixa da maior season em vez do total — mesmo
+// resultado de hoje, sem piora. O desempate seria a contagem de arquivos por pasta; entra quando
+// aparecer medido.
+func PackFileRange(detailURL string) (BatchInfo, bool) {
+	if detailURL == "" {
+		return BatchInfo{}, false
+	}
+	doc, err := fetchNyaaPage(detailURL)
+	if err != nil {
+		logger.Logger.Debug().Err(err).Str("url", detailURL).Msg("Failed to fetch the torrent detail page")
+		return BatchInfo{}, false
+	}
+
+	first, last, files := 0, 0, 0
+	doc.Find(".torrent-file-list li").Each(func(_ int, s *goquery.Selection) {
+		// Pasta e nao arquivo: o nome dela costuma trazer a faixa do release inteiro
+		// ("… 001-206 [4x3]"), que e justamente o numero que nao vale para contar cobertura.
+		if s.Children().First().Is("a.folder") {
+			return
+		}
+		name := fileListEntryName(s)
+		if !IsVideoFile(name) {
+			return
+		}
+		// Numero ilegivel nao entra: e assim que NCOP/NCED e extras ficam de fora da faixa em
+		// vez de alarga-la.
+		episode := extractEpisodeNumber(name)
+		if episode == nil {
+			return
+		}
+		if files == 0 || *episode < first {
+			first = *episode
+		}
+		if *episode > last {
+			last = *episode
+		}
+		files++
+	})
+
+	if files == 0 {
+		logger.Logger.Debug().Str("url", detailURL).Msg("Torrent detail page has no readable episode number")
+		return BatchInfo{}, false
+	}
+
+	logger.Logger.Debug().
+		Str("url", detailURL).
+		Int("files", files).
+		Int("first_episode", first).
+		Int("last_episode", last).
+		Msg("Pack range read from the torrent file list")
+
+	return BatchInfo{StartEpisode: first, EndEpisode: last}, true
+}
+
+// detailURL absolutiza o href da coluna de titulo ("/view/1323474"). Vazio quando a linha nao
+// traz link — sem ele PackFileRange nao tem o que buscar e a faixa fica desconhecida.
+func detailURL(href string) string {
+	if !strings.HasPrefix(href, "/") {
+		return ""
+	}
+	return getNyaaBaseURL() + href
+}
+
+// fileListEntryName e o nome do arquivo numa linha da lista, sem o tamanho que vem junto no
+// mesmo <li> ("… - 001.mkv (259.9 MiB)") e sem os filhos de uma sublista.
+func fileListEntryName(s *goquery.Selection) string {
+	entry := s.Clone()
+	entry.Find("ul").Remove()
+	entry.Find("span.file-size").Remove()
+	return strings.TrimSpace(entry.Text())
 }
 
 // ParseSeeders é a versão exportável de parseSeeders: converte a coluna de
@@ -684,6 +787,7 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			Resolution: &res,
 			Size:       parseSize(strings.TrimSpace(cells.Eq(3).Text())),
 			Fansub:     extractFansub(name),
+			DetailURL:  detailURL(cells.Eq(1).Find("a").Not(".comments").AttrOr("href", "")),
 		}
 
 		if isBatch(name) {
@@ -699,12 +803,10 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			// "Granularidade e numeracao dos packs"). Exigir o marcador zerava os packs de
 			// toda entrada "Part N".
 			//
-			// Dali para a frente quem decide e a cobertura da faixa, no daemon (packAxis) —
-			// menos para o pack que TAMBEM nao traz faixa no nome. Esse nao tem numero nenhum
-			// para conferir e vale como pack completo (daemon.coveringBatch), entao nada
-			// distingue o pack da season inteira do pack so da Part 1: os dois passam. E o
-			// teto conhecido da #79, e a lista de arquivos da pagina de detalhe do Nyaa e o
-			// unico desempate que resolveria (docs/TODO.md).
+			// Dali para a frente quem decide e a cobertura da faixa, no daemon (packAxis).
+			// Pack que TAMBEM nao traz faixa no nome nao tem numero para conferir: a faixa
+			// dele sai da lista de arquivos da pagina de detalhe (PackFileRange), e e isso
+			// que distingue o pack da season inteira do pack so da Part 1 (decisions.md #84).
 			if requestedPart != nil && part != nil && *part != *requestedPart {
 				return
 			}

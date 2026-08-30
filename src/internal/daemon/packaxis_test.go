@@ -82,12 +82,12 @@ func TestPackAxis_TheFourNumberingConventions(t *testing.T) {
 			index := map[int]anilist.Series{tc.anime.Media.Id: {Key: 1, Offset: tc.offset}}
 			axis := newPackAxis(tc.anime, index, tc.total)
 
-			picked := pickBatches([]nyaa.TorrentResult{pack(tc.pack, 1)}, axis, 1, tc.total)
-			if len(picked) != 1 {
-				t.Fatalf("%s: o pack deveria cobrir a janela pendente, obteve %d packs", tc.convention, len(picked))
+			picked := pickBatches(newPackSet([]nyaa.TorrentResult{pack(tc.pack, 1)}, nil), axis, 1, tc.total)
+			if picked.len() != 1 {
+				t.Fatalf("%s: o pack deveria cobrir a janela pendente, obteve %d packs", tc.convention, picked.len())
 			}
 
-			_, info := coveringBatch(picked, axis, 1)
+			_, info := picked.covering(axis, 1)
 			if info.StartEpisode != tc.start || info.EndEpisode != tc.end {
 				t.Fatalf("%s: esperava faixa local %d-%d, obteve %d-%d",
 					tc.convention, tc.start, tc.end, info.StartEpisode, info.EndEpisode)
@@ -114,6 +114,28 @@ func TestPackAxis_SpanDecidesBetweenLocalAndSeasonPack(t *testing.T) {
 	}
 }
 
+// A faixa lida da lista de arquivos entra pelo MESMO eixo da faixa lida do nome: os grupos usam
+// as mesmas quatro convencoes nos arquivos que no titulo. Este e o caso medido do EMBER
+// "(Season 2 | Part 2) … (Batch)" — nome sem faixa, arquivos 13..24, entrada Part 2 de 12
+// episodios. Sem a conversao, 13..24 nao cobriria episodio nenhum desta entrada.
+func TestPackSet_DetailRangeGoesThroughTheAxis(t *testing.T) {
+	anime := entryOf(166873, "Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", 12)
+	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 12}}, 12)
+
+	set := newPackSet([]nyaa.TorrentResult{pack("[EMBER] Mushoku Tensei II (Season 2 | Part 2) (Batch)", 1)},
+		func(nyaa.TorrentResult) (nyaa.BatchInfo, bool) {
+			return nyaa.BatchInfo{StartEpisode: 13, EndEpisode: 24}, true
+		})
+
+	got, info := set.covering(axis, 1)
+	if got == nil {
+		t.Fatal("o pack cobre o episódio 1 desta entrada pelo eixo da season")
+	}
+	if info.StartEpisode != 1 || info.EndEpisode != 12 {
+		t.Fatalf("esperava a faixa convertida 1-12, obteve %d-%d", info.StartEpisode, info.EndEpisode)
+	}
+}
+
 // Na duvida, delta 0: sem informacao de serie nenhuma hipotese alternativa existe, e o pack e lido
 // na numeracao da entrada — o comportamento de sempre, que e o que o zero-value entrega.
 func TestPackAxis_ZeroValueKeepsRelativeNumbering(t *testing.T) {
@@ -130,8 +152,8 @@ func TestPackAxis_NoHypothesisCoversRejectsThePack(t *testing.T) {
 	anime := entryOf(166873, "Anime Part 2", 13)
 	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 36}}, 12)
 
-	if picked := pickBatches([]nyaa.TorrentResult{pack("[X] Anime 200-212 [Batch]", 1)}, axis, 1, 12); len(picked) != 0 {
-		t.Fatalf("esperava nenhum pack, obteve %v", names(picked))
+	if picked := pickBatches(newPackSet([]nyaa.TorrentResult{pack("[X] Anime 200-212 [Batch]", 1)}, nil), axis, 1, 12); picked.len() != 0 {
+		t.Fatalf("esperava nenhum pack, obteve %v", batchNames(picked))
 	}
 }
 
@@ -144,7 +166,7 @@ func TestAssignBatches_RecordsConvertedRangeAndClampsTheDisplayName(t *testing.T
 	episodes := []anilist.AiringNode{{Episode: 1}, {Episode: 2}}
 	batch := pack("[Judas] Mushoku Tensei - 01 ~ 23 [BD 1080p][Batch]", 1)
 
-	covered, magnets := assignBatches("Anime", axis, episodes, []nyaa.TorrentResult{batch})
+	covered, magnets := assignBatches("Anime", axis, episodes, newPackSet([]nyaa.TorrentResult{batch}, nil))
 	if len(covered) != 2 {
 		t.Fatalf("esperava os dois episodios cobertos, obteve %d", len(covered))
 	}

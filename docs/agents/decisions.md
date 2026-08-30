@@ -90,6 +90,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#81** — A precedência dos códigos do relatório é cascata, não conjunto](#81-a-precedência-dos-códigos-do-relatório-é-cascata-não-conjunto)
 - [**#82** — SetLastCheckError limpa o relatório da última verificação](#82-setlastcheckerror-limpa-o-relatório-da-última-verificação)
 - [**#83** — A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento](#83-a-faixa-do-nome-do-pack-é-o-primeiro-casamento-plausível-não-o-primeiro-casamento)
+- [**#84** — A cobertura de um pack sem faixa no nome vem da lista de arquivos, e não da suposição de que ele cobre tudo](#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
 
 ---
 
@@ -887,7 +888,7 @@ A URL fica fora porque escape de URL tem regras próprias, e os headers passam p
 
 **Ver também:** [`2026-08-13-batch-por-filtro-design.md`](../superpowers/specs/2026-08-13-batch-por-filtro-design.md) — a spec que substituiu o teto de contagem (`max_batch_episodes`) descrito abaixo por elegibilidade decidida pelo resultado da busca. As entradas 59-62 logo após esta documentam o desenho atual em detalhe.
 
-**Location (histórico):** quando esta decisão foi escrita, `daemon/episodes.go` tinha `willBatchAnime` e `resolveSearchStrategy`; ambos foram removidos pela spec de batch-por-filtro. O que existe hoje: `daemon/episodes.go` — `selectEpisodes`, `effectiveMax`, `windowEnd`, `partitionSearchResults`, `pickBatches`, `coveringBatch`, `assignBatches`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
+**Location (histórico):** quando esta decisão foi escrita, `daemon/episodes.go` tinha `willBatchAnime` e `resolveSearchStrategy`; ambos foram removidos pela spec de batch-por-filtro. O que existe hoje: `daemon/episodes.go` — `selectEpisodes`, `effectiveMax`, `windowEnd`, `partitionSearchResults`, `pickBatches`, `packSet.covering`, `assignBatches`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
 
 **What it looks like:** um limite por anime que às vezes não se aplica, um filtro de tamanho que deixa passar tamanho zero, uma guarda de disco que só barra o `Add`, e um booleano de "disco baixo" calculado no servidor para o frontend.
 
@@ -917,7 +918,7 @@ O que decide elegibilidade a pack hoje **não é mais** um teto de contagem de e
 
 ### 59. Elegibilidade a batch deixou de ser metadado e virou filtro de resultado
 
-**Location:** `daemon/episodes.go` — `partitionSearchResults`, `pickBatches`, `coveringBatch`; `nyaa/nyaa.go` — `extractBatchInfo`/`ExtractBatchInfo`, `ScrapNyaaForAnime`.
+**Location:** `daemon/episodes.go` — `partitionSearchResults`, `pickBatches`, `packSet.covering`; `nyaa/nyaa.go` — `extractBatchInfo`/`ExtractBatchInfo`, `ScrapNyaaForAnime`.
 
 **What it looks like:** nenhuma checagem de `FINISHED`, nenhuma checagem de contagem de episódios do `Media` antes de decidir se um anime "vira pack". A decisão inteira mora do lado de dentro do resultado da busca já filtrado.
 
@@ -939,7 +940,7 @@ Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos 
 
 **What it looks like:** `pickBatches(packs, firstPending, windowEnd)` anda um cursor a partir do primeiro episódio pendente, e `assignBatches` para de atribuir magnet no primeiro episódio da lista que nenhum pack escolhido cobre — em vez de dar a todo mundo o magnet do primeiro pack encontrado, ou tentar episódio solto para o resto.
 
-**Why it's right:** sem a janela ancorada no primeiro pendente, `batchResult[0]` iria para todo episódio pendente e o episódio 800 de uma série longa receberia o magnet do pack 1-100 — dado errado, não "sem magnet". Sem o truncamento de prefixo em `assignBatches`, os episódios fora da cobertura cairiam no fallback de episódio solto (`magnetsByEpisode`), que em One Piece dispararia `DownloadFailed`/`ReasonNotFound` para ~1000 episódios **por passada** — nenhum deles vai aparecer solto no Nyaa, então é notificação de erro pura, sem chance de sucesso. O corte é sempre de **prefixo** (nunca "buraco no meio") porque a agenda (`anilist.EpisodeList`) vem em ordem crescente e os packs escolhidos por `pickBatches` são contíguos a partir do cursor — não há como um pack posterior cobrir um episódio anterior sem que `coveringBatch` já o tivesse escolhido primeiro.
+**Why it's right:** sem a janela ancorada no primeiro pendente, `batchResult[0]` iria para todo episódio pendente e o episódio 800 de uma série longa receberia o magnet do pack 1-100 — dado errado, não "sem magnet". Sem o truncamento de prefixo em `assignBatches`, os episódios fora da cobertura cairiam no fallback de episódio solto (`magnetsByEpisode`), que em One Piece dispararia `DownloadFailed`/`ReasonNotFound` para ~1000 episódios **por passada** — nenhum deles vai aparecer solto no Nyaa, então é notificação de erro pura, sem chance de sucesso. O corte é sempre de **prefixo** (nunca "buraco no meio") porque a agenda (`anilist.EpisodeList`) vem em ordem crescente e os packs escolhidos por `pickBatches` são contíguos a partir do cursor — não há como um pack posterior cobrir um episódio anterior sem que `packSet.covering` já o tivesse escolhido primeiro.
 
 **Don't "fix" by:**
 - Aplicar o magnet do primeiro pack achado a todo episódio pendente "porque é um episódio de qualquer forma" — episódio fora da faixa do pack simplesmente não está no `.torrent`.
@@ -1816,9 +1817,10 @@ guard existe para dar. Comparar os **números** dos episódios também não serv
 ter registros de media ids diferentes, cada um na sua régua. O total da entrada é o único dado que
 diz quanto do pack pertence a ela sem precisar de conversão.
 
-**Teto conhecido (`ponytail:` no código):** pack sem faixa no nome grava `BatchEnd == 0`
-(desconhecida, ver `hasDeclaredRange` em #79) e continua indetectável — o guard cai no comportamento antigo. Sair disso exige a
-lista de arquivos do torrent (item da página de detalhe do Nyaa em `docs/TODO.md`).
+**Teto conhecido (`ponytail:` no código):** pack cuja faixa nem o nome nem a lista de arquivos do
+Nyaa resolveram grava `BatchEnd == 0` (desconhecida, ver `hasDeclaredRange` em #79) e continua
+indetectável — o guard cai no comportamento antigo. Depois de #84 isso é o resto de um caso raro
+(detalhe fora do ar, nome de arquivo ilegível); antes era **todo** pack sem faixa no nome.
 
 **Don't "fix" by:** derivar a faixa do min/max dos episódios salvos (é a informação que falta, não
 uma que dá para reconstruir — foi o bug que motivou `BatchStart`/`BatchEnd` existirem), nem
@@ -2148,3 +2150,41 @@ A banda `start >= 1900 && last <= 2100` só pega ano: nenhuma série chega ao ep
 - Trocar por um sanitizador de tokens que remove `[...]`/`(...)` antes de casar: o ano vem entre parênteses, mas `(001-100)` também — é onde metade dos grupos põe a faixa de verdade.
 - Estreitar a banda de ano para "só 19xx/20xx com diferença <= 5": a diferença entre os anos não distingue nada que a banda já não distinga, e vira mais um número mágico.
 - Varrer com sobreposição para salvar o Hibike (ver trade-off).
+
+---
+
+### 84. A cobertura de um pack sem faixa no nome vem da lista de arquivos, e não da suposição de que ele cobre tudo
+
+**Location:** `nyaa/nyaa.go` — `PackFileRange`, `TorrentResult.DetailURL`, `detailURL`, `fileListEntryName`; `daemon/episodes.go` — `packCandidate`, `packSet`, `maxPackDetailFetches`, `pickBatches`, `assignBatches`; `daemon/search.go` — `nyaaSearcher.packRange`.
+
+**What it looks like:** a escolha de pack faz uma requisição HTTP a mais, no meio de uma função que antes era pura, e a faixa de um pack passou a ser resolvida preguiçosamente por um tipo com estado (`packSet`) em vez de sair de uma chamada a `ExtractBatchInfo`.
+
+**Why it's right:** o nome do pack quase nunca traz a faixa. Medido em 29/ago/2026 nas 8 primeiras linhas de `?q=<anime>+batch&s=seeders` para três animes: **19 de 24 packs não declaram faixa nenhuma**. Isso não era o caso raro — era o caso comum, e o caminho que ele seguia gravava dado errado no `episodes.json`:
+
+`EndEpisode == 0` valia como "pack completo", `pickBatches` parava o cursor ali, `assignBatches` gravava `1..total` e **todo** episódio da janela virava um `EpisodeStruct` apontando para o hash do pack. Os que o pack não tem ficam registrados como baixados para sempre: o Librarian linka só os arquivos que existem e nada reconcilia registro com disco depois, então eles nunca voltam para a busca.
+
+O caso que forçou a mudança, medido em `nyaa.si/view/1891610`: `[EMBER] … (Season 2 | Part 2) … (Batch)` não declara faixa e traz os arquivos **13..24**. Sob a entrada Part 1 o daemon registrava 1..12 — interseção **zero** com o que o torrent contém.
+
+A lista de arquivos da página de detalhe responde antes de baixar, e responde bem: nos 7 packs medidos, 574/574, 24/24, 23/23, 12/12 e 103/111 arquivos deram o número (os 8 que faltaram são OP/ED, que devem mesmo ficar de fora). Ela vem do próprio `.torrent`, então funciona em conteúdo antigo — ao contrário do `files[]` do AnimeTosho (ver `sources.md`).
+
+**A faixa dos arquivos entra pelo mesmo `packAxis` da faixa do nome**, porque os grupos usam as mesmas quatro convenções de numeração nos dois lugares (`sources.md`, "Granularidade e numeração dos packs"). No caso do EMBER: 13..24, delta 12 da hipótese "continua pela season", vira 1..12 local.
+
+**Por que sob demanda e com orçamento.** A página de detalhe custa ~30 KB (medido em 7 packs) contra ~125 KB de uma listagem — não é banda, é número de requisições contra o nyaa.si. `packSet.rangeOf` só busca quando a faixa é pedida para um pack sem faixa no nome, e memoriza inclusive a falha:
+
+- resolver tudo de uma vez gastaria 3 requisições por anime por passe mesmo quando o primeiro pack já declara a faixa e cobre a janela — o caso mais comum;
+- sem memória da falha, `assignBatches` (que varre os packs uma vez **por episódio**) viraria uma requisição por episódio.
+
+`maxPackDetailFetches = 3` porque os packs vêm ordenados por qualidade e `pickBatches` raramente passa dos primeiros para fechar a janela.
+
+**Faixa não resolvida grava ZERO, não `1..total`.** Chegar a `assignBatches` sem faixa significa que as duas fontes falharam (detalhe fora do ar, torrent de arquivo único, nenhum nome legível). O pack ainda é usado — recusá-lo faria um Nyaa fora do ar zerar os packs de todo mundo —, mas `1..total` era um palpite que `hasDeclaredRange` lia como faixa **declarada**, e dali a posse por cobertura ([#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)) adotava, sob outro cour da série, episódio que o pack podia não ter. "Não sei" é o único registro honesto.
+
+**Trade-off aceito:** com faixa zero o `hasUnclaimedContent` de [#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio) não tem span para comparar e o guard de deleção cai no comportamento antigo naquele grupo. É a troca certa: perder uma proteção contra deleção prematura num caso raro vale menos que espalhar uma cobertura inventada para os outros cours da série.
+
+**Teto conhecido (`ponytail:` no código):** a faixa é o `min..max` dos números lidos. Pack cujos arquivos **reiniciam** a numeração por season (S01-S04, uma pasta cada) fica com a faixa da maior season em vez do total — o mesmo resultado de antes, sem piora. O desempate seria a contagem de arquivos por pasta, que [#79](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses) já queria; entra quando aparecer medido.
+
+**Don't "fix" by:**
+- Buscar o detalhe dentro do `parseRow` das buscas: vira uma requisição **por linha** da listagem. É por isso que `DetailURL` só é capturada ali e a leitura acontece depois do filtro e da ordenação.
+- Resolver a faixa de todos os packs de uma vez "para simplificar o `packSet`": gasta o orçamento inteiro em packs que nunca seriam escolhidos.
+- Recusar o pack cuja faixa não foi resolvida: um Nyaa fora do ar deixaria de baixar pack nenhum, trocando um registro errado por nenhum download.
+- Voltar a gravar `1..total` "porque o pack foi escolhido como completo": era exatamente o palpite que alimentava a adoção por cobertura com faixa inventada.
+- Filtrar os arquivos por extensão numa lista própria do pacote `files`: `nyaa.IsVideoFile` é a mesma lista que o Librarian usa depois de baixar, e `files` importa `nyaa` (o contrário daria ciclo).

@@ -72,14 +72,10 @@ func NewLibrarian(fs FileSystem) *organizer {
 	return &organizer{fs: fs, link: fs.Link}
 }
 
-var videoExtensions = map[string]bool{
-	".mkv": true, ".mp4": true, ".avi": true, ".mov": true, ".m4v": true,
-	".webm": true, ".flv": true, ".wmv": true, ".ts": true, ".mpg": true,
-	".mpeg": true, ".ogm": true,
-}
-
+// A lista de extensoes mora no pacote nyaa: PackFileRange le a MESMA lista de arquivos do pack
+// antes de baixar, e duas listas de extensao divergiriam.
 func isVideoFile(name string) bool {
-	return videoExtensions[strings.ToLower(filepath.Ext(name))]
+	return nyaa.IsVideoFile(name)
 }
 
 // sanitizeName strips filesystem-invalid characters. O marcador de season e MANTIDO: uma

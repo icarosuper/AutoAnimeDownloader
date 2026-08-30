@@ -176,7 +176,7 @@ func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearch
 }
 ```
 
-**A pack fixture needs a realistic name** (`"[X] Anime 001-100 [1080p]"`), not a bare `"batch"` string — `pickBatches`/`coveringBatch` read the episode range from the **name** (`nyaa.ExtractBatchInfo`), and a name with no parseable range falls back to "complete pack" (`EndEpisode == 0`), which changes which episodes the pack ends up covering in the test.
+**A pack fixture needs a realistic name** (`"[X] Anime 001-100 [1080p]"`), not a bare `"batch"` string — `newPackSet` reads the episode range from the **name** (`nyaa.ExtractBatchInfo`) first, and a name with no parseable range sends it to the Nyaa detail page, which changes which episodes the pack ends up covering in the test. To exercise the detail path, set `searcher.packRange` (or pass a `detail` func to `newPackSet`) instead of mocking HTTP: `func(nyaa.TorrentResult) (nyaa.BatchInfo, bool)`. `newPackSet(results, nil)` = range from the name only, which is what most pack tests want.
 
 ## Never Let Background Work Outlive Its Test
 

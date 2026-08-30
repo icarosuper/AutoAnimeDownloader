@@ -1,9 +1,10 @@
-- Scrappar página de detalhes do torrent no nyaa — escopo medido em `docs/agents/sources.md`
-  ("Página de detalhe"): só compensa para **pack**, e só quando o nome não dá a faixa ou o pack
-  estoura o teto
-	- Usar esses detalhes pra filtrar melhor os torrents — a lista de arquivos dá a cobertura
-	  real do pack antes de baixar; hoje pack sem faixa no nome vira "cobre tudo" e grava
-	  episódio fantasma como baixado
+- Teto de pack por episódio em vez de por tamanho total — escopo medido em
+  `docs/agents/sources.md` ("Página de detalhe", item 2). **Não economiza download** (o `rain` não
+  seleciona arquivo), muda só o critério de aceitar; só vale se o teto atual estiver reprovando
+  pack que o usuário quer
+- Desempatar a numeração do pack pela contagem de arquivos por pasta — teto conhecido da
+  `decisions.md` #84: pack cujos arquivos reiniciam a numeração por season fica com a faixa da
+  maior season em vez do total
 - Reavaliar o frontend buscar direto na AniList — `id_in` em lote nos avulsos e o gate por
   prioridade **já entraram**; falta medir se bastaram. Veredito e medições em
   `docs/agents/decisions.md` #73

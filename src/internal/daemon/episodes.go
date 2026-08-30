@@ -151,12 +151,12 @@ func processAnimeEpisodes(
 		if !isAnimeMovie(anime) && len(sel.toDownload) > 1 {
 			firstPending := sel.toDownload[0].Episode
 			axis := newPackAxis(anime, seriesIndex, totalEpisodes)
-			batches := pickBatches(packs, axis, firstPending, windowEnd(configs, firstPending))
+			batches := pickBatches(newPackSet(packs, searcher.packRange), axis, firstPending, windowEnd(configs, firstPending))
 			switch {
-			case len(batches) > 0:
+			case batches.len() > 0:
 				logger.Logger.Info().
 					Str("anime", animeTitle).
-					Int("packs", len(batches)).
+					Int("packs", batches.len()).
 					Strs("torrents", batchNames(batches)).
 					Msg("Using batch torrents to cover the pending window")
 
@@ -350,20 +350,21 @@ func mediaTotalEpisodes(anime anilist.MediaList) int {
 // apareceriam com nomes identicos na tela de downloads. O nome da PASTA da biblioteca nao muda —
 // Organize usa AnimeName, nunca EpisodeName.
 //
-// axis.totalEpisodes e a faixa registrada para pack SEM faixa no nome ("(Season 1+OVA) [Batch]"):
-// ele foi escolhido como pack completo — e por isso que coveringBatch o deixa cobrir qualquer
-// episodio —, entao a faixa dele e 1..total. 0 (total desconhecido) deixa a faixa zerada e quem
-// exibe cai no min/max dos registros.
+// Faixa desconhecida grava faixa ZERO, nao 1..total. A faixa vem do nome ou, quando o nome nao a
+// traz, da lista de arquivos do pack (packSet.rangeOf) — chegar aqui sem faixa significa que as
+// duas fontes falharam, e nesse caso "nao sei" e o unico registro honesto. 1..total era um palpite
+// que hasDeclaredRange lia como faixa declarada, e dali a posse por cobertura adotava, sob outro
+// cour, episodio que o pack podia nao ter (decisions.md #84).
 //
 // A faixa GRAVADA e a convertida para a numeracao local (packAxis.localRange) e pode comecar em
 // zero ou abaixo; o nome exibido corta em 1, porque "-10-12" nao diz nada a quem le a tela e o
 // que interessa ali e a fatia que esta entrada recebe.
-func assignBatches(animeTitle string, axis packAxis, episodes []anilist.AiringNode, batches []nyaa.TorrentResult) ([]anilist.AiringNode, map[int]resolvedMagnets) {
+func assignBatches(animeTitle string, axis packAxis, episodes []anilist.AiringNode, batches *packSet) ([]anilist.AiringNode, map[int]resolvedMagnets) {
 	result := make(map[int]resolvedMagnets, len(episodes))
 	var covered []anilist.AiringNode
 
 	for _, ep := range episodes {
-		batch, info := coveringBatch(batches, axis, ep.Episode)
+		batch, info := batches.covering(axis, ep.Episode)
 		if batch == nil {
 			break
 		}
@@ -371,12 +372,10 @@ func assignBatches(animeTitle string, axis packAxis, episodes []anilist.AiringNo
 		name := animeTitle
 		if info.EndEpisode > 0 {
 			name = packDisplayName(animeTitle, info.StartEpisode, info.EndEpisode)
-		} else if axis.totalEpisodes > 0 {
-			info.StartEpisode, info.EndEpisode = 1, axis.totalEpisodes
 		}
 
 		result[ep.Episode] = resolvedMagnets{
-			magnets:       []string{batch.MagnetLink},
+			magnets:       []string{batch.torrent.MagnetLink},
 			skipSubfolder: true,
 			overrideName:  name,
 			batchStart:    info.StartEpisode,
@@ -422,10 +421,10 @@ func magnetsByEpisode(singles []nyaa.TorrentResult, episodes []anilist.AiringNod
 
 // batchNames e so para o log: qual pack cobriu qual faixa e a primeira coisa que se quer saber ao
 // auditar uma escolha de pack.
-func batchNames(batches []nyaa.TorrentResult) []string {
-	out := make([]string, 0, len(batches))
-	for _, b := range batches {
-		out = append(out, b.Name)
+func batchNames(batches *packSet) []string {
+	out := make([]string, 0, batches.len())
+	for _, b := range batches.items {
+		out = append(out, b.torrent.Name)
 	}
 	return out
 }
@@ -529,18 +528,105 @@ func (a packAxis) localRange(info nyaa.BatchInfo, episode int) (nyaa.BatchInfo, 
 	return chosen, found
 }
 
+// packCandidate e um pack e a faixa que ele cobre. A faixa vem do nome quando o nome a traz e,
+// quando nao traz, da lista de arquivos da pagina de detalhe — resolvida sob demanda por packSet.
+type packCandidate struct {
+	torrent nyaa.TorrentResult
+	// info na numeracao que o GRUPO usou (nome ou arquivos), nao na da entrada: quem converte e
+	// packAxis.localRange. EndEpisode == 0 = desconhecida mesmo depois do detalhe.
+	info     nyaa.BatchInfo
+	resolved bool
+}
+
+// maxPackDetailFetches e quantas paginas de detalhe um anime pode custar por passe.
+//
+// A pagina de detalhe custa ~30 KB (medido em 7 packs, sources.md) contra ~125 KB de uma
+// listagem, entao o custo nao e a banda: e nao transformar uma busca em dezenas de requisicoes
+// contra o nyaa.si. Tres cobre a escolha real — os packs vem ordenados por qualidade, e
+// pickBatches raramente passa dos primeiros para fechar a janela.
+const maxPackDetailFetches = 3
+
+// packSet sao os packs candidatos com a faixa de cada um, resolvida SOB DEMANDA.
+//
+// Sob demanda e nao de uma vez porque a maioria das buscas nem chega a precisar do detalhe: se o
+// primeiro pack ja declara a faixa no nome e cobre a janela, nenhuma requisicao extra sai. Buscar
+// o detalhe de todo pack sem faixa da lista gastaria tres requisicoes por anime, por passe, para
+// packs que nunca seriam escolhidos.
+type packSet struct {
+	items []packCandidate
+	// detail e nil no conjunto ja escolhido (pickBatches devolve tudo resolvido) e nos testes que
+	// so montam faixa a partir do nome.
+	detail func(nyaa.TorrentResult) (nyaa.BatchInfo, bool)
+	budget int
+}
+
+func newPackSet(results []nyaa.TorrentResult, detail func(nyaa.TorrentResult) (nyaa.BatchInfo, bool)) *packSet {
+	items := make([]packCandidate, len(results))
+	for i, tr := range results {
+		items[i] = packCandidate{torrent: tr, info: nyaa.ExtractBatchInfo(tr.Name)}
+	}
+	return &packSet{items: items, detail: detail, budget: maxPackDetailFetches}
+}
+
+// rangeOf devolve a faixa do pack i, buscando a pagina de detalhe na PRIMEIRA vez que ela e
+// pedida para um pack cujo nome nao traz faixa. Memoriza inclusive a falha: um detalhe que nao
+// respondeu nao e tentado de novo dentro do mesmo passe.
+func (p *packSet) rangeOf(i int) nyaa.BatchInfo {
+	item := &p.items[i]
+	if item.resolved {
+		return item.info
+	}
+	item.resolved = true
+	if item.info.EndEpisode == 0 && p.detail != nil && p.budget > 0 {
+		p.budget--
+		if fromFiles, ok := p.detail(item.torrent); ok {
+			logger.Logger.Info().
+				Str("torrent", item.torrent.Name).
+				Int("start_episode", fromFiles.StartEpisode).
+				Int("end_episode", fromFiles.EndEpisode).
+				Msg("Pack range resolved from the Nyaa file list")
+			item.info = fromFiles
+		}
+	}
+	return item.info
+}
+
+// covering devolve o primeiro pack que cobre o episodio E a faixa dele ja convertida para a
+// numeracao local da entrada.
+//
+// Pack cuja faixa continua desconhecida DEPOIS do detalhe (pagina fora do ar, torrent de arquivo
+// unico, nenhum nome de arquivo legivel) sai daqui sem passar pelo eixo e conta como completo —
+// mesmo comportamento de antes desta consulta existir. Nao rejeita-lo e deliberado: um Nyaa fora
+// do ar zeraria os packs de todo mundo. O que muda e o que se GRAVA nesse caso, ver assignBatches.
+func (p *packSet) covering(axis packAxis, episode int) (*packCandidate, nyaa.BatchInfo) {
+	for i := range p.items {
+		info := p.rangeOf(i)
+		if info.EndEpisode == 0 {
+			return &p.items[i], info
+		}
+		if local, ok := axis.localRange(info, episode); ok {
+			return &p.items[i], local
+		}
+	}
+	return nil, nyaa.BatchInfo{}
+}
+
+func (p *packSet) len() int { return len(p.items) }
+
 // pickBatches devolve o minimo de packs que cobre [firstPending, windowEnd], em ordem.
 //
 // results ja vem ordenado por SortTorrentResults e ja filtrado por tamanho e seeders, entao "o
 // primeiro que cobre o cursor" e "o melhor que cobre o cursor" — e por isso a escolha de pack
 // deixou de ser decidida por metadado do AniList e passou a ser decidida pelo resultado da busca.
 //
-// Termina sempre: coveringBatch so devolve pack com EndEpisode >= cursor (ja convertido), entao o
+// Termina sempre: covering so devolve pack com EndEpisode >= cursor (ja convertido), entao o
 // cursor cresce estritamente a cada volta e nenhum pack pode ser escolhido duas vezes.
-func pickBatches(results []nyaa.TorrentResult, axis packAxis, firstPending, windowEnd int) []nyaa.TorrentResult {
-	var picked []nyaa.TorrentResult
+//
+// O conjunto devolvido nao busca mais detalhe nenhum: os escolhidos ja passaram por rangeOf.
+func pickBatches(candidates *packSet, axis packAxis, firstPending, windowEnd int) *packSet {
+	var picked []packCandidate
 	for cursor := firstPending; cursor <= windowEnd; {
-		next, info := coveringBatch(results, axis, cursor)
+		next, info := candidates.covering(axis, cursor)
 		if next == nil {
 			break
 		}
@@ -550,29 +636,7 @@ func pickBatches(results []nyaa.TorrentResult, axis packAxis, firstPending, wind
 		}
 		cursor = info.EndEpisode + 1
 	}
-	return picked
-}
-
-// coveringBatch devolve o primeiro pack da lista que cobre o episodio E a faixa dele ja convertida
-// para a numeracao local da entrada.
-//
-// Pack sem faixa no nome (EndEpisode == 0) sai daqui SEM passar pelo eixo: nao ha numero para
-// converter, entao ele conta como completo. E aqui que o filtro de part relaxado (nyaa.go) fica
-// sem rede: pack sem faixa e sem marcador passa la e passa aqui, seja ele da season inteira ou so
-// da Part 1. Aceitar e a escolha medida (sources.md, "Granularidade e numeracao dos packs": pack
-// sem part e o formato normal), e o desempate que falta e a lista de arquivos da pagina de
-// detalhe — teto conhecido da decisions.md #79, item no docs/TODO.md.
-func coveringBatch(results []nyaa.TorrentResult, axis packAxis, episode int) (*nyaa.TorrentResult, nyaa.BatchInfo) {
-	for i := range results {
-		info := nyaa.ExtractBatchInfo(results[i].Name)
-		if info.EndEpisode == 0 {
-			return &results[i], info
-		}
-		if local, ok := axis.localRange(info, episode); ok {
-			return &results[i], local
-		}
-	}
-	return nil, nyaa.BatchInfo{}
+	return &packSet{items: picked}
 }
 
 // episodeNumbers e a lista de numeros que a busca por anime usa para filtrar linha de episodio.
@@ -1004,8 +1068,9 @@ func forgettableKeys(
 // tiveram dono — o cour 2, que ainda nao foi baixado. Com so a primeira condicao, assistir o cour
 // 1 apagava do disco o cour 2 inteiro.
 //
-// ponytail: pack sem faixa no nome grava BatchEnd == 0 (desconhecida) e continua indetectavel.
-// Sair disso exige a lista de arquivos do torrent (item da pagina de detalhe em docs/TODO.md).
+// ponytail: pack cuja faixa nem o nome nem a lista de arquivos resolveram grava BatchEnd == 0
+// (desconhecida) e continua indetectavel aqui. E o resto do caso raro depois da #84 — antes era
+// todo pack sem faixa no nome.
 func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKey]bool) bool {
 	if len(group) == 0 {
 		return true

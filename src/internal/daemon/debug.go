@@ -115,7 +115,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 			// Mesmo eixo de numeracao da producao: sem ele o debug reportaria "nenhum pack cobre"
 			// para toda entrada cujo pack esta numerado pela season ou pela serie (packAxis).
 			axis := newPackAxis(anime, resolveSeriesIndex([]int{animeId}, nil), mediaTotalEpisodes(anime))
-			if batches := pickBatches(packs, axis, firstPending, windowEnd(configs, firstPending)); len(batches) > 0 {
+			if batches := pickBatches(newPackSet(packs, searcher.packRange), axis, firstPending, windowEnd(configs, firstPending)); batches.len() > 0 {
 				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, episodesToDownload, batches)
 			}
 		}

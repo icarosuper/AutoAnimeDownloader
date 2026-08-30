@@ -78,12 +78,26 @@ arquivos é o próprio Nyaa, não o AnimeTosho.
 
 **1. Cobertura real do pack — isso é bug, não melhoria.** `extractBatchInfo`
 (`internal/nyaa/nyaa.go`) lê a faixa só do **nome**. Faixa desconhecida vira `EndEpisode == 0`, e
-daí `coveringBatch` (`internal/daemon/episodes.go`) trata o pack como completo, `pickBatches` para
-o cursor ali e `assignBatches` grava `batchStart/batchEnd = 1..total`. Cada episódio da janela vira
-um `EpisodeStruct` apontando para o hash do pack. Se um `"(Season 1+OVA) [Batch]"` cobre só 1-12 e
-a janela era 1-50, os 38 restantes ficam **registrados como baixados**: o Librarian linka apenas os
-arquivos que existem e nada reconcilia os registros com o disco depois, então esses episódios nunca
-voltam para a busca. A lista de arquivos responde a cobertura real ANTES de adicionar o torrent.
+daí o pack contava como completo: `pickBatches` parava o cursor ali e `assignBatches` gravava
+`batchStart/batchEnd = 1..total`. Cada episódio da janela virava um `EpisodeStruct` apontando para
+o hash do pack. Se um `"(Season 1+OVA) [Batch]"` cobre só 1-12 e a janela era 1-50, os 38 restantes
+ficavam **registrados como baixados**: o Librarian linka apenas os arquivos que existem e nada
+reconcilia os registros com o disco depois, então esses episódios nunca voltam para a busca.
+
+> **Implementado** (29/ago/2026, `decisions.md` #84): `nyaa.PackFileRange` lê a faixa da lista de
+> arquivos antes de adicionar o torrent, e `daemon.packSet` a resolve sob demanda — só para pack
+> sem faixa no nome, só depois do filtro e da ordenação, no máximo 3 por anime por passe. Faixa que
+> nem o nome nem os arquivos resolveram passa a gravar **zero** (desconhecida), não `1..total`.
+>
+> Quão comum era: nas 8 primeiras linhas de `?q=<anime>+batch` para três animes, **19 de 24 packs
+> não declaram faixa no nome**. O caso que forçou é `view/1891610` — `(Season 2 | Part 2) (Batch)`,
+> sem faixa no nome, arquivos **13..24**: sob a entrada Part 1 o daemon registrava 1..12,
+> interseção zero com o conteúdo.
+>
+> Taxa de leitura medida em 7 packs: 574/574, 24/24, 23/23, 12/12, 103/111 arquivos deram o número
+> (os 8 que faltaram são OP/ED, corretamente fora da faixa). Dois casos exigiram os consertos que
+> saíram junto: nome separado por `_` (`[DB]Vinland Saga_-_01_(...)`) não casava padrão nenhum, e
+> `(2021-2022)` era lido como a faixa de episódios 2021..2022 (`decisions.md` #83).
 
 **2. Teto por episódio em vez de por tamanho total** — mudança de política, não correção. O pack
 acima reprova em qualquer `max_batch_torrent_size_gb` sadio, mas dá ~300 MiB/episódio, que é ótimo.
@@ -142,9 +156,9 @@ de part é sempre frágil; perguntar "esse pack cobre a janela pendente?" não �
 > **Implementado** (29/ago/2026, `decisions.md` #79): no caminho de pack o marcador de part só
 > rejeita conflito declarado, `extractPart` devolve `nil` para nome com duas parts, e as três
 > hipóteses de numeração desta seção viraram `daemon.packAxis` — com o span do nome no lugar da
-> contagem de arquivos como desempate. A contagem de arquivos da página de detalhe seria um
-> desempate mais forte, mas só vale a pena junto do scrape de detalhe, que o `TODO.md` acompanha
-> pela cobertura do pack.
+> contagem de arquivos como desempate. O scrape de detalhe entrou depois (`decisions.md` #84) e
+> resolve a **faixa** de um pack sem faixa no nome; a contagem de arquivos por pasta, que
+> desempataria pack cuja numeração reinicia por season, continua de fora — teto conhecido da #84.
 
 ---
 
@@ -247,10 +261,10 @@ frescor de seeders.
 3. **Responder a Etapa 0 antes de escrever adapter** — "existe fonte com infohash **diferente** e
    peers **vivos** onde o Nyaa está morto?". Só o TokyoTosho tem sinal para isso. Enquanto não for
    medido, arquitetura de múltiplas fontes é especulação.
-4. **Lista de arquivos do pack, se virar requisito** — vem da página de detalhe do **Nyaa**
-   (`/view/<id>`), não do AnimeTosho: só ela funciona em pack antigo. Escopo e custo na seção
-   "Página de detalhe" acima; o segundo uso, além da cobertura real, é desempatar a convenção de
-   numeração do pack (seção "Granularidade e numeração dos packs"). O AnimeTosho como fonte adicional só sobra para match por
-   `anidb_aid`. Nenhum dos dois como substituto.
+4. **Lista de arquivos do pack** — feito, ver `decisions.md` #84. Veio da página de detalhe do
+   **Nyaa** (`/view/<id>`), não do AnimeTosho: só ela funciona em pack antigo. Resolveu a cobertura
+   real; o segundo uso — desempatar a convenção de numeração pela contagem de arquivos por pasta
+   (seção "Granularidade e numeração dos packs") — continua de fora. O AnimeTosho como fonte
+   adicional só sobra para match por `anidb_aid`. Nenhum dos dois como substituto.
 5. **Debrid/Usenet** — só se seleção por arquivo virar requisito de verdade. É troca de
    *protocolo*, e é a saída se a Etapa 0 for refutada.

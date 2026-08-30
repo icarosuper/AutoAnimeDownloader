@@ -24,6 +24,10 @@ type nyaaSearcher struct {
 	searchAnime         func(titles anilist.Title, synonyms []string, episodes []int, customQuery string) []nyaa.TorrentResult
 	searchSingleEpisode func(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, customQuery string, totalEpisodes int) []nyaa.TorrentResult
 	searchMovie         func(titles anilist.Title, isFormatMovie bool, customQuery string) []nyaa.TorrentResult
+	// packRange le a faixa REAL de um pack na pagina de detalhe do Nyaa. Separado das buscas
+	// porque nao e busca: roda depois do filtro e da ordenacao, so para o pack que o nome nao
+	// resolve, e so para os poucos que a escolha de fato considera (ver packSet).
+	packRange func(tr nyaa.TorrentResult) (nyaa.BatchInfo, bool)
 }
 
 func defaultNyaaSearcher() nyaaSearcher {
@@ -31,6 +35,7 @@ func defaultNyaaSearcher() nyaaSearcher {
 		searchAnime:         searchNyaaForAnime,
 		searchSingleEpisode: searchNyaaForSingleEpisode,
 		searchMovie:         searchNyaaForMovie,
+		packRange:           func(tr nyaa.TorrentResult) (nyaa.BatchInfo, bool) { return nyaa.PackFileRange(tr.DetailURL) },
 	}
 }
 

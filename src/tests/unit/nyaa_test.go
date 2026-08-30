@@ -25,7 +25,7 @@ func getRow(name string) string {
 
 	return `<tr>
 	  <td></td>
-	  <td><a title="` + parsedName + `">` + name + `</a></td>
+	  <td><a href="/view/1" title="` + parsedName + `">` + name + `</a></td>
 	  <td><a></a><a href="magnet:?xt=urn:btih:` + parsedName + `-magnet">magnet</a></td>
 	  <td></td>
 	  <td>` + time.Now().Format("2006-01-02 15:04") + `</td>
@@ -1147,6 +1147,96 @@ func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 		case tc.want != nil && *got != *tc.want:
 			t.Errorf("%q: esperava episodio %d, obteve %d", tc.name, *tc.want, *got)
 		}
+	}
+}
+
+// fileListHtml monta a pagina de detalhe do Nyaa com a arvore de arquivos, no formato real: um
+// <li> por arquivo, com o tamanho num <span> dentro do MESMO <li>, e as pastas como <a.folder>.
+func fileListHtml(folder string, files []string) string {
+	var items []string
+	for _, f := range files {
+		items = append(items, `<li><i class="fa fa-file"></i>`+f+` <span class="file-size">(1.0 GiB)</span></li>`)
+	}
+	return `<!doctype html><html><body>
+	<div class="torrent-file-list panel-body">
+		<ul>
+			<li>
+				<a href="" class="folder"><i class="fa fa-folder-open"></i>` + folder + `</a>
+				<ul>` + strings.Join(items, "\n") + `</ul>
+			</li>
+		</ul>
+	</div>
+	</body></html>`
+}
+
+func TestPackFileRange_ReadsTheRangeFromTheFileList(t *testing.T) {
+	// O caso medido: "(Season 2 | Part 2) … (Batch)" nao declara faixa no nome e traz 13..24.
+	restore := mockHttpGet(fileListHtml("[EMBER] Anime (Season 2 | Part 2) (Batch)", []string{
+		"[EMBER] Anime - 13.mkv", "[EMBER] Anime - 14.mkv", "[EMBER] Anime - 24.mkv",
+	}))
+	defer restore()
+
+	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1891610")
+	if !ok {
+		t.Fatal("esperava a faixa lida dos arquivos")
+	}
+	if info.StartEpisode != 13 || info.EndEpisode != 24 {
+		t.Errorf("esperava 13-24, obteve %d-%d", info.StartEpisode, info.EndEpisode)
+	}
+}
+
+// O nome da PASTA costuma trazer a faixa do release inteiro, e ele nao pode entrar na conta;
+// NCOP/NCED e arquivo que nao e video tambem nao alargam a faixa.
+func TestPackFileRange_IgnoresFoldersExtrasAndNonVideo(t *testing.T) {
+	restore := mockHttpGet(fileListHtml("[Judas] Anime 001-574 [1080p]", []string{
+		"[Judas] Anime - 01.mkv", "[Judas] Anime - 02.mkv",
+		"NCOP.mkv", "[Judas] Anime - 99.txt", "[Judas] Anime - 300.ass",
+	}))
+	defer restore()
+
+	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1")
+	if !ok || info.StartEpisode != 1 || info.EndEpisode != 2 {
+		t.Errorf("esperava 1-2 (ok=%v), obteve %d-%d", ok, info.StartEpisode, info.EndEpisode)
+	}
+}
+
+// Sem numero legivel nao ha faixa a afirmar: quem chama trata como desconhecida, nao como 1..total.
+func TestPackFileRange_UnreadableFileNamesReportUnknown(t *testing.T) {
+	restore := mockHttpGet(fileListHtml("[Group] Anime", []string{"Opening.mkv", "Interview.mkv"}))
+	defer restore()
+
+	if _, ok := nyaa.PackFileRange("https://nyaa.si/view/1"); ok {
+		t.Error("esperava faixa desconhecida quando nenhum arquivo dá o número")
+	}
+}
+
+func TestPackFileRange_NoURLDoesNotFetch(t *testing.T) {
+	fetched := false
+	restore := nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
+		fetched = true
+		return nil, io.EOF
+	})
+	defer restore()
+
+	if _, ok := nyaa.PackFileRange(""); ok || fetched {
+		t.Error("sem URL de detalhe não há o que buscar")
+	}
+}
+
+// A URL do detalhe sai da coluna de titulo e chega absoluta: e o unico caminho ate PackFileRange.
+func TestScrapNyaaForAnime_CapturesTheDetailURL(t *testing.T) {
+	restore := mockHttpGet(mockHtml([]string{"[X] Frieren (01-28) [1080p]"}))
+	defer restore()
+
+	results, err := nyaa.ScrapNyaaForAnime("Frieren", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("esperava ao menos um resultado")
+	}
+	if want := "https://nyaa.si/view/1"; results[0].DetailURL != want {
+		t.Errorf("esperava %q, obteve %q", want, results[0].DetailURL)
 	}
 }
 
