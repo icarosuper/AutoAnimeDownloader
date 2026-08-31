@@ -135,8 +135,8 @@
 
 <div class="space-y-6">
   <div>
-    <h1 class="text-2xl font-semibold text-base-content">Prioridades dos torrents</h1>
-    <p class="text-sm text-base-content/50 mt-0.5">
+    <h1 class="text-2xl font-semibold text-heading">Prioridades dos torrents</h1>
+    <p class="text-sm text-subtle mt-0.5">
       Controla a ordem de preferência usada para ranquear e filtrar releases do Nyaa.
     </p>
   </div>
@@ -147,12 +147,12 @@
     <div class="space-y-4">
       {#each LISTS as { key, label, scope } (key)}
         {@const items = rows(key, config.priorities[key], defaults)}
-        <div class="card bg-base-200 border border-base-300">
-          <div class="card-body p-5 gap-3">
+        <div class="flex flex-col rounded-card border border-default bg-sunken">
+          <div class="flex flex-col gap-3 p-5">
             <div class="flex items-center justify-between">
-              <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">
+              <h2 class="text-sm font-semibold text-subtle uppercase tracking-wider">
                 {label}
-                {#if scope}<span class="normal-case tracking-normal font-normal text-base-content/40">({scope})</span>{/if}
+                {#if scope}<span class="normal-case tracking-normal font-normal text-subtle">({scope})</span>{/if}
               </h2>
               <button
                 type="button"
@@ -181,7 +181,7 @@
             {#if items.length > 0}
               <ol class="flex flex-col gap-1.5">
                 {#each items as row, i (row.item)}
-                  <li class="flex items-center gap-2 bg-base-100 rounded-md px-3 py-1.5 {row.on ? '' : 'opacity-50'}">
+                  <li class="flex items-center gap-2 bg-card rounded-md px-3 py-1.5 {row.on ? '' : 'opacity-50'}">
                     <Checkbox
                       checked={row.on}
                       disabled={row.custom}
@@ -189,8 +189,8 @@
                       labelHidden
                       on:change={() => toggle(key, row.item, !row.on)}
                     />
-                    <span class="text-xs text-base-content/40 w-5 text-right">{row.on ? i + 1 : ""}</span>
-                    <span class="flex-1 text-sm text-base-content">{row.item}</span>
+                    <span class="text-xs text-subtle w-5 text-right">{row.on ? i + 1 : ""}</span>
+                    <span class="flex-1 text-sm text-heading">{row.item}</span>
                     {#if row.on}
                       <button
                         type="button"
@@ -229,7 +229,7 @@
             {/if}
 
             {#if NOTES[key]}
-              <p class="text-xs text-base-content/50">{NOTES[key]}</p>
+              <p class="text-xs text-subtle">{NOTES[key]}</p>
             {/if}
 
             <!-- criteria_order é conjunto fechado (sortByCriteria pula em silêncio o critério que

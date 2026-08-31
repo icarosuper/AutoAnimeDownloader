@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Checkbox from "../components/ui/Checkbox.svelte";
   import {
     getConfig,
     updateConfig,
@@ -167,17 +168,17 @@
 
 <div class="max-w-2xl mx-auto">
   <div class="mb-6">
-    <h1 class="text-2xl font-bold text-base-content">{T && T.title}</h1>
-    <p class="text-base-content/60 text-sm mt-1">{T && T.subtitle}</p>
+    <h1 class="text-2xl font-bold text-heading">{T && T.title}</h1>
+    <p class="text-subtle text-sm mt-1">{T && T.subtitle}</p>
   </div>
 
   {#if loading}
     <Loading />
   {:else}
     <div class="flex flex-col gap-6">
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionBatch}</h2>
+      <div class="flex flex-col rounded-card border border-default bg-sunken">
+        <div class="flex flex-col gap-4 p-5">
+          <h2 class="text-sm font-semibold text-subtle uppercase tracking-wider">{T && T.sectionBatch}</h2>
 
           <Input
             id="batch_window_seconds"
@@ -190,17 +191,17 @@
         </div>
       </div>
 
-      <div class="card bg-base-200 border border-base-300">
-        <div class="card-body p-5 gap-4">
-          <h2 class="text-sm font-semibold text-base-content/60 uppercase tracking-wider">{T && T.sectionWebhooks}</h2>
+      <div class="flex flex-col rounded-card border border-default bg-sunken">
+        <div class="flex flex-col gap-4 p-5">
+          <h2 class="text-sm font-semibold text-subtle uppercase tracking-wider">{T && T.sectionWebhooks}</h2>
 
           {#if notifications.webhooks.length > 0}
             <div class="flex flex-col gap-2">
               {#each notifications.webhooks as hook, i}
-                <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-base-100 border border-base-300">
+                <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-card border border-default">
                   <div class="flex-1 min-w-0">
-                    <span class="text-sm font-medium text-base-content">{hook.name}</span>
-                    <span class="text-xs text-base-content/50 ml-2 truncate">{hook.url.length > 50 ? hook.url.slice(0, 50) + '…' : hook.url}</span>
+                    <span class="text-sm font-medium text-heading">{hook.name}</span>
+                    <span class="text-xs text-subtle ml-2 truncate">{hook.url.length > 50 ? hook.url.slice(0, 50) + '…' : hook.url}</span>
                   </div>
                   <div class="flex gap-2 shrink-0">
                     {#if savedWebhookNames.has(hook.name)}
@@ -241,9 +242,9 @@
               + {T && T.btnAdd}
             </button>
           {:else}
-            <div class="flex flex-col gap-3 p-4 rounded-md border border-base-300 bg-base-100">
+            <div class="flex flex-col gap-3 p-4 rounded-md border border-default bg-card">
               <div>
-                <p class="text-xs text-base-content/50 mb-2">{T && T.presetLabel}</p>
+                <p class="text-xs text-subtle mb-2">{T && T.presetLabel}</p>
                 <div class="flex flex-wrap gap-2">
                   {#each Object.keys(WEBHOOK_PRESETS) as key}
                     <button
@@ -259,7 +260,7 @@
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs font-medium text-base-content">{T && T.labelName}</label>
+                  <label class="text-xs font-medium text-heading">{T && T.labelName}</label>
                   <input
                     type="text"
                     bind:value={newWebhook.name}
@@ -268,7 +269,7 @@
                   />
                 </div>
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs font-medium text-base-content">{T && T.labelMethod}</label>
+                  <label class="text-xs font-medium text-heading">{T && T.labelMethod}</label>
                   <select
                     bind:value={newWebhook.method}
                     class="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
@@ -281,7 +282,7 @@
               </div>
 
               <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-base-content">{T && T.labelUrl}</label>
+                <label class="text-xs font-medium text-heading">{T && T.labelUrl}</label>
                 <input
                   type="text"
                   bind:value={newWebhook.url}
@@ -291,7 +292,7 @@
               </div>
 
               <div class="flex flex-col gap-2">
-                <label class="text-xs font-medium text-base-content">{T && T.labelHeaders}</label>
+                <label class="text-xs font-medium text-heading">{T && T.labelHeaders}</label>
                 {#each headerRows as row, i}
                   <div class="flex gap-2">
                     <input
@@ -322,39 +323,35 @@
               </div>
 
               <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-base-content">{T && T.labelBody}</label>
+                <label class="text-xs font-medium text-heading">{T && T.labelBody}</label>
                 <textarea
                   bind:value={newWebhook.body}
                   rows="3"
                   placeholder={bodyPlaceholder}
                   class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2 font-mono"
                 ></textarea>
-                <p class="text-xs text-base-content/40">{varsHint}</p>
+                <p class="text-xs text-subtle">{varsHint}</p>
               </div>
 
               <div class="flex flex-col gap-2">
-                <label class="text-xs font-medium text-base-content">{T && T.labelEvents}</label>
+                <label class="text-xs font-medium text-heading">{T && T.labelEvents}</label>
                 <div class="flex flex-col gap-1">
                   {#each [
                     { value: 'new_episode',        label: T && T.eventNewEpisode },
                     { value: 'download_failed',    label: T && T.eventDownloadFailed },
                     { value: 'download_completed', label: T && T.eventDownloadCompleted },
                   ] as ev}
-                    <label class="flex items-center gap-2 text-sm text-base-content cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={newWebhook.events.includes(ev.value)}
-                        on:change={(e) => {
-                          if (e.currentTarget.checked) {
-                            newWebhook.events = [...newWebhook.events, ev.value];
-                          } else {
-                            newWebhook.events = newWebhook.events.filter(v => v !== ev.value);
-                          }
-                        }}
-                        class="checkbox checkbox-sm"
-                      />
-                      {ev.label}
-                    </label>
+                    <Checkbox
+                      label={ev.label || ""}
+                      checked={newWebhook.events.includes(ev.value)}
+                      on:change={(e) => {
+                        if ((e.target as HTMLInputElement).checked) {
+                          newWebhook.events = [...newWebhook.events, ev.value];
+                        } else {
+                          newWebhook.events = newWebhook.events.filter(v => v !== ev.value);
+                        }
+                      }}
+                    />
                   {/each}
                 </div>
               </div>

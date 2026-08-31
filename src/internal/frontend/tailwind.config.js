@@ -1,4 +1,3 @@
-import daisyui from 'daisyui'
 
 /*
  * Cores semânticas (fase 0 do redesign de UI). Fonte da verdade: src/lib/design/tokens.css.
@@ -8,11 +7,10 @@ import daisyui from 'daisyui'
  * (`bg-ok/12`, `border-ok-tint/28`, ...). Superfícies e texto não precisam de opacidade
  * variável, então usam `var(--x)` direto.
  *
- * `heading`/`body` correspondem a --text-primary/--text-secondary do tokens.css. Não usamos
- * os nomes `primary`/`secondary` como chave do Tailwind porque o daisyUI já reserva esses
- * dois nomes para sua própria paleta de tema (--p/--s, cor de marca), e ambos os plugins
- * gerariam a mesma classe `.text-primary`/`.text-secondary` com significados diferentes.
- * `tertiary` e `subtle` não colidem com o vocabulário do daisyUI e mantêm o nome do token.
+ * `heading`/`body` correspondem a --text-primary/--text-secondary do tokens.css. Os nomes
+ * nasceram assim para não colidir com `primary`/`secondary` do daisyUI, que reservava essas
+ * duas chaves para a paleta de marca dele. O daisyUI saiu, mas os nomes ficam: renomear hoje
+ * tocaria toda tela sem mudar um pixel.
  */
 const semanticColors = {
   // fundos
@@ -122,95 +120,5 @@ export default {
       },
     },
   },
-  plugins: [daisyui],
-  daisyui: {
-    themes: [
-      {
-        'aad-dark': {
-          'color-scheme': 'dark',
-          // acento único do app: primary/secondary/accent do daisyUI apontam todos para o
-          // mesmo roxo — a regra de composição do §4.1 permite no máximo um acento sólido
-          // por tela, então não existe um segundo "secondary"/"accent" de verdade aqui.
-          primary: '#8272ee',
-          'primary-content': '#12111a',
-          secondary: '#8272ee',
-          'secondary-content': '#12111a',
-          accent: '#8272ee',
-          'accent-content': '#12111a',
-          // neutral: token --neutral do tokens.css (cor de status "sem estado"), não uma
-          // superfície estrutural — usado hoje só no botão flutuante "voltar ao topo" de Logs.
-          neutral: '#8d93a3',
-          'neutral-content': '#12111a',
-          'base-100': '#101218', // = --bg-card
-          'base-200': '#0a0c11', // = --bg-sunken
-          // base-300 não tem um token dedicado no spec. CORRIGIDO na rodada de fix 1: a
-          // primeira versão (#1b1c1f) tratava base-300 como se fosse usado majoritariamente
-          // como borda e o "achatava" a partir de --border-default sobre --bg-window — isso
-          // ficava MAIS CLARO que base-100/200, invertendo a progressão de escurecimento do
-          // daisyUI. Levantamento real (`grep -rn "bg-base-300" src`) mostra 5 usos como
-          // FUNDO sólido (não borda): chip de filtro inativo e swatch da legenda
-          // (Status.svelte:380,453), trilho de barra de progresso (Status.svelte:533,613) e
-          // painel do visualizador de logs (Logs.svelte:282) — todos pedem a superfície mais
-          // recuada/escura da hierarquia, não uma linha clara. Valor abaixo = base-200
-          // escurecido 7% em direção ao preto em OKLCH (mesma fórmula que o próprio daisyUI
-          // usa para auto-gerar base-300 quando ele não é informado — ver
-          // node_modules/daisyui/src/theming/functions.js:generateDarkenColorFrom), mantendo
-          // a progressão monotônica base-100 > base-200 > base-300 igual ao tema `dark`
-          // padrão do daisyUI e ao nosso próprio tema claro.
-          'base-300': '#080a0e',
-          'base-content': '#e8eaf0',
-          // info não tem token próprio no spec; reaproveita o acento (mesma família de cor
-          // do "primary" do app).
-          info: '#8272ee',
-          'info-content': '#12111a',
-          success: '#4bd4a2',
-          'success-content': '#0d1b16',
-          warning: '#eeb14b',
-          'warning-content': '#1e1a10',
-          error: '#f27575',
-          'error-content': '#1e1414',
-          '--rounded-box': '16px',
-          '--rounded-btn': '9px',
-          '--rounded-badge': '6px',
-        },
-      },
-      {
-        'aad-light': {
-          'color-scheme': 'light',
-          primary: '#6a55d6',
-          'primary-content': '#ffffff',
-          secondary: '#6a55d6',
-          'secondary-content': '#ffffff',
-          accent: '#6a55d6',
-          'accent-content': '#ffffff',
-          neutral: '#6f7788',
-          'neutral-content': '#ffffff',
-          'base-100': '#ffffff', // = --bg-card
-          'base-200': '#eef0f5', // = --bg-sunken
-          // base-300 não tem um token dedicado no spec. Diferente do escuro (ver comentário
-          // acima), este valor já nasceu na direção certa (base-100 > base-200 > base-300,
-          // monotônico) e cobre os mesmos 5 usos como fundo sólido — mantido como estava:
-          // --border-default (rgba(16,18,24,.10)) achatado sobre --bg-window.
-          'base-300': '#dedfe3',
-          'base-content': '#14161d',
-          info: '#6a55d6',
-          'info-content': '#ffffff',
-          success: '#0e7a58',
-          'success-content': '#ffffff',
-          warning: '#8a5d0b',
-          'warning-content': '#ffffff',
-          error: '#c53b3b',
-          'error-content': '#ffffff',
-          '--rounded-box': '16px',
-          '--rounded-btn': '9px',
-          '--rounded-badge': '6px',
-        },
-      },
-    ],
-    darkTheme: 'aad-dark',
-    base: true,
-    styled: true,
-    utils: true,
-    logs: false,
-  },
+  plugins: [],
 }

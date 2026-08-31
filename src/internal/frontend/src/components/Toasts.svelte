@@ -1,13 +1,16 @@
 <script lang="ts">
+  // Empilhamento de toasts. Antes montava sobre `.toast`/`.alert` do daisyUI; agora a caixa é
+  // a mesma superfície elevada que ActionMenu/MoreMenu usam (`bg-menu` + `shadow-elevation`),
+  // com a cor de status apenas na borda e no ícone. Fundo sólido de propósito: o toast flutua
+  // sobre a lista, e o `bg-*-tint/12` do Chip deixaria o conteúdo de baixo vazar através dele.
   import { toasts, type Toast } from '../lib/stores/toast.js'
 
-  function alertClass(type: Toast['type']): string {
-    switch (type) {
-      case 'success': return 'alert-success'
-      case 'error':   return 'alert-error'
-      case 'warning': return 'alert-warning'
-      case 'info':    return 'alert-info'
-    }
+  // Mesmo vocabulário de status de ui/Chip.svelte.
+  const VARIANT_CLASSES: Record<Toast['type'], string> = {
+    success: 'border-ok-tint/28 text-ok',
+    error: 'border-danger-tint/28 text-danger',
+    warning: 'border-warn-tint/28 text-warn',
+    info: 'border-accent-tint/28 text-accent',
   }
 
   function icon(type: Toast['type']): string {
@@ -20,16 +23,16 @@
   }
 </script>
 
-<div class="toast toast-end toast-bottom z-50 gap-2">
+<div class="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
   {#each $toasts as t (t.id)}
     <div
-      class="alert {alertClass(t.type)} shadow-lg max-w-sm animate-in whitespace-normal"
+      class="animate-in flex max-w-sm items-start gap-2 whitespace-normal rounded-field border bg-menu px-4 py-3 shadow-elevation {VARIANT_CLASSES[t.type]}"
       role="alert"
     >
-      <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         {@html icon(t.type)}
       </svg>
-      <span class="text-copy">{t.message}</span>
+      <span class="text-copy text-heading">{t.message}</span>
       {#if t.link}
         <a href={t.link.href} class="text-copy font-semibold underline">{t.link.label}</a>
       {/if}

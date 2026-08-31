@@ -724,7 +724,7 @@
               </button>
 
               <!-- Ações em lote do grupo, quadrados de 32px.
-                   Os tooltips do daisyUI 4 saem do `data-tip` do wrapper (`.tooltip-content` é
+                   O tooltip sai do `data-tip` do wrapper (CSS em src/app.css, que substituiu o do daisyUI).
                    v5), mesmo padrão do NavRail. `tooltip-left` porque estes botões ficam
                    colados na borda direita do card. O texto é só o RÓTULO DA AÇÃO: o
                    `aria-label` concatena " — {nome}", que no tooltip seria ruído.

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
+  import Checkbox from "./ui/Checkbox.svelte";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
@@ -68,15 +69,9 @@
   on:cancel={handleCancel}
 >
   <div class="space-y-3.5">
-    <label class="flex items-start gap-2.5 cursor-pointer">
-      <input type="checkbox" class="checkbox checkbox-sm mt-px" bind:checked={deleteFiles} />
-      <span class="text-copy leading-snug text-base-content">{T && T.checkboxFiles}</span>
-    </label>
-    <label class="flex items-start gap-2.5 cursor-pointer">
-      <input type="checkbox" class="checkbox checkbox-sm mt-px" bind:checked={blockRedownload} />
-      <span class="text-copy leading-snug text-base-content">{blockLabel}</span>
-    </label>
-    <p class="!mt-4 text-caption leading-snug {blockRedownload ? 'text-base-content/50' : 'text-warning'}">
+    <Checkbox bind:checked={deleteFiles} label={(T && T.checkboxFiles) || ""} />
+    <Checkbox bind:checked={blockRedownload} label={blockLabel} />
+    <p class="!mt-4 text-caption leading-snug {blockRedownload ? 'text-subtle' : 'text-warn'}">
       {consequence}
     </p>
   </div>

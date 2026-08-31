@@ -152,12 +152,11 @@ describe('AnimeDetail — a pack is one row', () => {
     await fireEvent.click(deleteItem)
     await tick()
 
-    // Every other ConfirmDialog/TorrentDeleteDialog on the page stays mounted-but-closed (for
-    // a11y — see ConfirmDialog.svelte), so scope the assertion to the one dialog that actually
-    // opened (native `open` attribute is only present on it, per ConfirmDialog's `{open}` spread)
-    // instead of the whole document — otherwise the always-mounted "stop tracking" ConfirmDialog
-    // (untrackOpen, unrelated to this flow) would produce a false failure either way.
-    const openDialog = container.querySelector('dialog[open]') as HTMLElement
+    // ConfirmDialog roda sobre o `ui/Modal`, que só monta o conteúdo quando está aberto
+    // (`{#if open}`), então existe no máximo UM [role=dialog] na árvore. A asserção continua
+    // escopada nele — e não no documento — para não casar com a "stop tracking" (untrackOpen)
+    // se um dia ela também estiver aberta.
+    const openDialog = container.querySelector('[role="dialog"]') as HTMLElement
     expect(openDialog).toBeTruthy()
     expect(within(openDialog).queryByText(/deixar de rastrear|stop tracking/i)).toBeNull()
 

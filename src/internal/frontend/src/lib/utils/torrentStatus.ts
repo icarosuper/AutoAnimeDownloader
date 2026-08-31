@@ -39,19 +39,3 @@ export function statusLabel(status: string): string {
   }
 }
 
-/** Classe de badge (daisyUI) correspondente ao status. */
-export function statusClass(status: string): string {
-  switch (status) {
-    case 'seeding':
-      return 'badge-success'
-    case 'downloading':
-      return 'badge-info'
-    case 'stopped':
-    case 'queued':
-      return 'badge-ghost'
-    case 'stopping':
-      return 'badge-warning'
-    default:
-      return 'badge-neutral'
-  }
-}

@@ -136,15 +136,15 @@
   </div>
 
   <div class="mt-auto flex flex-col items-center gap-2 pb-4">
-    <!-- daisyUI 4 renders the tooltip from data-tip; the .tooltip-content element is a v5-only
+    <!-- o tooltip sai do `data-tip` do wrapper (CSS em src/app.css, que substituiu o do daisyUI)
          API and would render as always-visible inline text here. -->
     <div class="tooltip tooltip-right" data-tip={wsTooltip}>
       <span
         class="inline-block h-2 w-2 rounded-full {$wsConnectionState === 'connected'
-          ? 'bg-success'
+          ? 'bg-ok'
           : $wsConnectionState === 'reconnecting'
-            ? 'animate-pulse bg-warning'
-            : 'bg-error'}"
+            ? 'animate-pulse bg-warn'
+            : 'bg-danger'}"
       ></span>
     </div>
 
@@ -167,7 +167,7 @@
         id="theme-select"
         value={$theme}
         on:change={(e) => theme.set(e.currentTarget.value as Theme)}
-        class="select select-bordered select-sm w-[80px] px-1.5 text-[11px]"
+        class="w-[80px] rounded-control border border-default bg-control text-heading outline-none transition-colors focus:border-accent px-1.5 py-1 text-[11px]"
       >
         <option value={THEMES.LIGHT}>{T.themeLight}</option>
         <option value={THEMES.DARK}>{T.themeDark}</option>

@@ -67,7 +67,7 @@
       class="w-full min-w-0 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
     />
     {#if query}
-      <!-- daisyUI 4: o tooltip sai do `data-tip` do wrapper (`.tooltip-content` é v5). -->
+      <!-- O tooltip sai do `data-tip` do wrapper (CSS em src/app.css, que substituiu o do daisyUI). -->
       <div class="tooltip tooltip-left shrink-0" data-tip={T && T.clearSearch}>
         <button
           type="button"

@@ -13,7 +13,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fundo e cor no html: o AppShell já pinta `bg-window` no seu wrapper, mas nada cobre a área
+   atrás dele (overscroll) nem o instante antes de o shell montar. Isto vinha do `base: true`
+   do daisyUI e passou a morar aqui quando ele saiu. */
 html {
+  background-color: var(--bg-window);
+  color: var(--text-secondary);
   font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -23,3 +28,69 @@ html {
   min-height: 100vh;
 }
 
+
+/* Tooltip — substitui o `.tooltip`/`data-tip` do daisyUI, que saiu. Mantido com o MESMO
+   contrato de classe e atributo (`class="tooltip tooltip-left" data-tip="..."`) para não
+   tocar os 14 pontos de uso. Só as quatro direções que o app usa existem aqui. */
+@layer components {
+  .tooltip {
+    position: relative;
+    display: inline-block;
+  }
+
+  .tooltip::before {
+    content: attr(data-tip);
+    position: absolute;
+    z-index: 60;
+    /* padrão: acima, centralizado (mesmo default do daisyUI) */
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 6px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    border-radius: 6px;
+    border: 1px solid var(--border-default);
+    background-color: var(--bg-menu);
+    color: var(--text-primary);
+    box-shadow: var(--elevation-shadow);
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease-out;
+  }
+
+  /* focus-within e não só hover: os alvos são botões, e quem navega por teclado precisa do
+     rótulo também. */
+  .tooltip:hover::before,
+  .tooltip:focus-within::before {
+    opacity: 1;
+  }
+
+  .tooltip-bottom::before {
+    bottom: auto;
+    top: 100%;
+    margin-bottom: 0;
+    margin-top: 6px;
+  }
+
+  .tooltip-left::before {
+    bottom: auto;
+    top: 50%;
+    left: auto;
+    right: 100%;
+    transform: translateY(-50%);
+    margin: 0 6px 0 0;
+  }
+
+  .tooltip-right::before {
+    bottom: auto;
+    top: 50%;
+    left: 100%;
+    right: auto;
+    transform: translateY(-50%);
+    margin: 0 0 0 6px;
+  }
+}

@@ -108,10 +108,10 @@
                v5-only API and would render as always-visible inline text here. -->
           <span
             class="inline-block h-2 w-2 rounded-full {$wsConnectionState === 'connected'
-              ? 'bg-success'
+              ? 'bg-ok'
               : $wsConnectionState === 'reconnecting'
-                ? 'animate-pulse bg-warning'
-                : 'bg-error'}"
+                ? 'animate-pulse bg-warn'
+                : 'bg-danger'}"
           ></span>
         </div>
 
@@ -135,7 +135,7 @@
           id="theme-select-mobile"
           value={$theme}
           on:change={(e) => theme.set(e.currentTarget.value as Theme)}
-          class="select select-bordered select-sm w-full"
+          class="w-full rounded-control border border-default bg-control text-heading outline-none transition-colors focus:border-accent px-2 py-1.5 text-copy"
         >
           <option value={THEMES.LIGHT}>{T.themeLight}</option>
           <option value={THEMES.DARK}>{T.themeDark}</option>

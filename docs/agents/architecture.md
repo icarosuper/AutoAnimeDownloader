@@ -18,8 +18,9 @@ src/internal/
   anilist/           → GraphQL client for Anilist API
   nyaa/              → HTML scraper for Nyaa torrent site
   torrents/          → Embedded BitTorrent client (github.com/cenkalti/rain/v2) behind a TorrentBackend interface
-  frontend/          → Svelte 5 + Vite + Tailwind 3 + daisyUI 4 web UI (compiled to Go embed)
-                       (o par de versões é obrigatório — ver decisão 33)
+  frontend/          → Svelte 5 + Vite + Tailwind 3 web UI (compiled to Go embed). Sem
+                       biblioteca de componentes: os primitivos moram em components/ui/ e as
+                       cores em lib/design/tokens.css (decisions.md #91)
   notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on NewEpisode/DownloadFailed; by job queue on DownloadCompleted.
   logger/            → zerolog-based structured logger (console + rotating file)
   tray/              → System tray icon (fyne/systray)
@@ -484,7 +485,9 @@ Variáveis de template (URL, headers e corpo): `{{title}}`, `{{message}}`, `{{an
 
 ### `src/internal/frontend/src/` — Svelte 5
 
-O par de versões Svelte/Vite/Tailwind/daisyUI é obrigatório — decisions.md #33.
+Não há biblioteca de componentes: o daisyUI foi removido (decisions.md #91). Botão, modal,
+checkbox, chip e afins moram em `components/ui/`; cor sai de `lib/design/tokens.css`, que é a
+fonte da verdade única e faz a troca de tema pelo seu próprio `[data-theme]`.
 
 **Rotas** (hash router): `Status.svelte` (`#/`), `AddAnime.svelte` (`#/add`), `Downloads.svelte`
 (`#/downloads`), `AnimeDetail.svelte` (`#/status/:id`), `Config.svelte` (`#/config`),

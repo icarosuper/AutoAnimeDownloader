@@ -97,6 +97,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#88** — A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`](#88-a-barra-de-progresso-deriva-baixados-de-episodes_pending-e-não-de-episodes_downloaded)
 - [**#89** — Não existe spec OpenAPI: a tabela do architecture.md é a única doc de endpoint](#89-não-existe-spec-openapi-a-tabela-do-architecturemd-é-a-única-doc-de-endpoint)
 - [**#90** — Não há versionamento de `config.json`: a migração checa FORMA, num lugar só](#90-não-há-versionamento-de-configjson-a-migração-checa-forma-num-lugar-só)
+- [**#91** — Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor](#91-não-há-biblioteca-de-componentes-o-daisyui-saiu-porque-era-um-segundo-vocabulário-de-cor)
 
 ---
 
@@ -609,7 +610,18 @@ não só do rename.
 - **O histórico do repo é feito de remendos deste mesmo bug**: `--btn-shadow: 0` global, "substituir btn DaisyUI por classes Tailwind diretas" (é daí que vêm os `bg-blue-600`/`bg-red-600` crus em `Status.svelte` e `AnimeDetail.svelte`), e a troca de `data-tip` por `.tooltip-content`. Esse último é API só da v5 e, na v4, renderiza o texto do tooltip **sempre visível** ao lado do ponto de conexão na navbar — por isso o `Layout.svelte` voltou para `data-tip`.
 - **`episode_hash != "" ⟺ is_downloaded`.** `handleAnimeEpisodes` preenche `IsDownloaded` e `EpisodeHash` no mesmo `if` (existe registro salvo para aquele nó), e o daemon grava o registro salvo no instante em que o torrent é **adicionado**, não quando termina (`daemon/episodes.go`, `daemon/manual_download.go`). Ou seja, um episódio baixando **já** vem com `is_downloaded: true`. A condição antiga do inline (`torrent && !torrent.completed && !ep.is_downloaded`) exigia uma combinação que a API nunca emite, então a barra jamais aparecia em produção — e o smoke test não pegou porque a fixture montava justamente esse estado impossível.
 
-**Don't "fix" by:** subir a daisyUI para 5 "porque é a mais nova" sem migrar o Tailwind para 4 junto (volta o bug de layer inteiro, e de forma silenciosa: só componentes cujo preflight conflita quebram); usar `.tooltip-content` no lugar de `data-tip`; reintroduzir classes Tailwind cruas no lugar de `btn` "porque o btn não pinta" — isso era sintoma do problema de layer, não limitação da daisyUI; voltar a filtrar o inline de progresso por `!ep.is_downloaded`; escrever fixture de teste com `is_downloaded: false` + `episode_hash` preenchido.
+**Don't "fix" by:** voltar a filtrar o inline de progresso por `!ep.is_downloaded`; escrever fixture de teste com `is_downloaded: false` + `episode_hash` preenchido.
+
+**Amendment (2026-08-31): a metade daisyUI desta entrada está MORTA — o daisyUI foi removido**
+(ver #91). Não há mais `daisyui` no `package.json` nem no `tailwind.config.js`, então o trava-v4,
+o conflito de cascade layer com o preflight do Tailwind 3 e o `data-tip`-vs-`.tooltip-content`
+deixaram de existir como restrição. O que sobra desta entrada é a segunda metade: a regra
+`episode_hash != "" ⟺ is_downloaded` e o inline de progresso.
+
+Consequência que vale registrar: os `bg-blue-600`/`bg-red-600` crus em `Status.svelte` e
+`AnimeDetail.svelte`, que esta entrada explica como remendo do bug de layer, **perderam a razão de
+existir** e agora são só inconsistência com os tokens — mesma coisa para o `StatusBadge.svelte`
+(`bg-green-100 dark:bg-green-900` etc.). Trocá-los pelos tokens é limpeza pendente, não risco.
 
 ---
 
@@ -725,7 +737,7 @@ No índice do Config os divisores são `w-full`, então a quebra acontece neles:
 
 **What it looks like:** o painel do menu já é `z-50`, e ainda assim o `<nav>` em volta precisa de `z-30` — parece número sobrando, e a tentação é remover um dos dois.
 
-**Why it's right:** `position: sticky` cria contexto de empilhamento **sempre**, independente de z-index. Sem z-index no `<nav>`, aquele `z-50` só ordena coisas **dentro** do rail, e o rail inteiro pinta na camada z-auto da raiz, em ordem de árvore — perdendo para qualquer elemento posicionado que venha depois no DOM. Foi o que acontecia na tela de Prioridades, cujos cards usam a classe `.card` do daisyUI (`position: relative`): os cards apareciam na frente do menu aberto. Com `z-30` (o mesmo valor do `NavTabBar`, que é `fixed`), o rail inteiro sobe junto. O `z-40` do backdrop e o `z-50` do painel continuam necessários para ordenar o menu **contra o próprio rail**; Modal e Toasts ficam em `z-50` na raiz e por isso continuam acima dos 30 do rail.
+**Why it's right:** `position: sticky` cria contexto de empilhamento **sempre**, independente de z-index. Sem z-index no `<nav>`, aquele `z-50` só ordena coisas **dentro** do rail, e o rail inteiro pinta na camada z-auto da raiz, em ordem de árvore — perdendo para qualquer elemento posicionado que venha depois no DOM. Foi o que acontecia na tela de Prioridades, cujos cards usavam a classe `.card` do daisyUI (`position: relative`): os cards apareciam na frente do menu aberto. O daisyUI saiu (#91) e aqueles cards não são mais posicionados, então essa causa específica sumiu — o `z-30` fica assim mesmo: ele ordena o rail inteiro contra QUALQUER elemento posicionado que venha depois no DOM, não só contra aquele. Com `z-30` (o mesmo valor do `NavTabBar`, que é `fixed`), o rail inteiro sobe junto. O `z-40` do backdrop e o `z-50` do painel continuam necessários para ordenar o menu **contra o próprio rail**; Modal e Toasts ficam em `z-50` na raiz e por isso continuam acima dos 30 do rail.
 
 **Don't "fix" by:** subir o rail para `z-50` "para ficar igual ao painel" (empataria com Modal/Toasts e o diálogo passaria a depender de ordem de árvore); tirar o `z-30` porque "sticky já fica na frente" (ele fica na frente do conteúdo **não posicionado** — qualquer `position: relative` depois no DOM ganha dele); tirar o `z-50` do painel achando que o `z-30` do nav basta (dentro do rail o painel precisa vencer o backdrop `z-40`).
 
@@ -2460,3 +2472,61 @@ mapeamento antigo→novo não seja mecânico. Hoje é 2 em ~2 anos, ambas mecân
 - Tirar as ~22 linhas do `LoadConfigs` "porque já faz meses": lista de contas vazia **não** é estado
   de erro (#49 — instalação só de avulsos nunca configura conta), então um config pré-abril
   carregaria sem contas, sem reclamar, e o daemon simplesmente não baixaria nada de lista.
+
+### 91. Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor
+
+**Location:** `frontend/tailwind.config.js` (`plugins: []`), `frontend/src/app.css` (base do `html`
+e o `.tooltip`), `frontend/src/components/ui/` (os primitivos), `frontend/src/lib/design/tokens.css`
+(fonte da verdade única de cor). Fato negativo: **não existe** `daisyui` no `package.json`, nem
+bloco `daisyui:` no config, nem classe `.btn`/`.card`/`.modal-*`/`.alert`/`.checkbox`/`.select` em
+tela nenhuma.
+
+**O que parece:** empobrecimento. Uma biblioteca de componentes pronta saiu e no lugar entraram
+classes Tailwind escritas à mão, o que normalmente é o caminho errado da escada.
+
+**Por que saiu:** ele não estava sendo usado como biblioteca de componentes. O uso real era
+**45 utilitárias de cor** (`text-base-content` ×27, `bg-base-100/200`, `border-base-300`,
+`bg-success/warning/error`) contra **12 classes de componente**. E as 45 duplicavam o que o projeto
+já tinha: `tokens.css` define `--bg-card`, `--text-primary`, `--ok`, `--warn`, `--danger` e faz a
+troca de tema pelo **seu próprio** `[data-theme]` — o bloco de tema do daisyUI era cópia manual em
+hex, não fonte.
+
+Três evidências de que a duplicação era real e cobrava pedágio:
+
+1. **Existia um teste só para vigiá-la.** `tests/unit/designTokens.consistency.test.ts` comparava
+   cada cor do `tokens.css` com a cópia hex no `tailwind.config.js`, porque o daisyUI v4 compila
+   as chaves de tema para OKLCH em build time e não consegue consumir `var(--x)`.
+2. **Os tokens do projeto foram renomeados para não colidir.** `heading`/`body` só se chamam assim
+   porque `primary`/`secondary` estavam reservados pela paleta de marca do daisyUI.
+3. **O comentário que justificava o valor de `base-300` descrevia um uso que não existia mais** —
+   20 linhas apoiadas num `grep bg-base-300` que rendia 5 resultados; no dia da remoção rendia
+   zero (os 5 usos eram `border-base-300`).
+
+O que substituiu cada coisa, sem inventar nada novo: `.modal-*` → o `ui/Modal.svelte` que já
+existia (e cujo próprio comentário dizia ter nascido para isso, com migrar o `ConfirmDialog`
+deixado para depois); `.checkbox` → `ui/Checkbox.svelte`; `.btn` → `ui/Button.svelte`;
+`.alert`/`.toast` → a mesma superfície `bg-menu` + `shadow-elevation` do `ActionMenu`, com a cor de
+status só na borda e no ícone; `.card`/`.card-body` → `flex flex-col rounded-card`. Só o
+`.tooltip` não tinha equivalente e virou ~40 linhas de CSS em `app.css`, **mantendo o contrato de
+classe e `data-tip`** para não tocar os 14 pontos de uso.
+
+**Ganhos que não eram o objetivo:** o `ConfirmDialog` passou a ter foco preso, Esc e devolução de
+foco (o `<dialog>` + `.modal-open` não tinha), e duas advertências de a11y do `svelte-check`
+sumiram junto.
+
+**Verificação:** screenshot antes/depois das 4 telas afetadas nos 2 temas. A diferença ficou entre
+**0,0002% e 0,002% dos pixels**, toda ela explicada: borda de card (`base-300` → `border-default`,
+que é o que as outras 41 bordas do app já usavam), a rampa ad-hoc `text-base-content/40|50|60`
+colapsada em `text-subtle` (o app tem 3 níveis nomeados, não 4 opacidades), e ~6px de deslocamento
+nas linhas de checkbox.
+
+**Don't "fix" by:**
+- Readicionar o daisyUI (ou trocar por outra lib de componentes) para "não escrever CSS": o CSS
+  escrito à mão são ~40 linhas de tooltip; o resto é reuso de `components/ui/`.
+- Reintroduzir `bg-base-*`/`text-base-content`: essas classes não existem mais, e o vocabulário é
+  `bg-card`/`bg-sunken`/`text-heading`/`text-body`/`text-subtle`.
+- Tirar `background-color`/`color` do `html` em `app.css`: o `AppShell` pinta o wrapper dele, mas
+  nada cobre a área de overscroll nem o instante antes de o shell montar. Isso vinha do
+  `base: true` do daisyUI.
+- Trocar o `.tooltip` de `app.css` por `title=""`: o nativo tem atraso de ~1s e não estiliza, e são
+  14 pontos numa tela quente.
