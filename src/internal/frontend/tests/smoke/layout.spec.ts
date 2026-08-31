@@ -199,8 +199,9 @@ test('the More menu paints above the page content', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/#/priorities')
 
-  // Os cards existem de verdade — é o que precisa ficar ATRÁS do menu.
-  await expect(page.getByText('uncensored')).toBeVisible()
+  // Os cards existem de verdade — é o que precisa ficar ATRÁS do menu. `exact` porque a tela
+  // também tem um rótulo sr-only "Usar uncensored", e sem isso o locator casa dois elementos.
+  await expect(page.getByText('uncensored', { exact: true })).toBeVisible()
 
   const rail = page.getByRole('navigation', { name: 'Main' })
   await rail.getByRole('button', { name: /^more$/i }).click()
@@ -220,7 +221,7 @@ test('the More menu paints above the page content', async ({ page }) => {
   // um clique sobre um card ainda tem de cair nele e fechar o menu. `page.mouse` e não
   // `locator.click()`: o locator do card seria recusado justamente por estar coberto pelo
   // backdrop, que é o comportamento que se quer.
-  const cardPoint = await page.getByText('uncensored').evaluate((el: HTMLElement) => {
+  const cardPoint = await page.getByText('uncensored', { exact: true }).evaluate((el: HTMLElement) => {
     const rect = el.getBoundingClientRect()
     return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
   })

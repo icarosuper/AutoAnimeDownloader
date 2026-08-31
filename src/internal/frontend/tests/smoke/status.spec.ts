@@ -56,9 +56,11 @@ test.describe('anime list', () => {
     await page.goto('/')
   })
 
+  // "4 ep behind", não 5: o segmento vem de `episodes_pending` (4 na fixture), não da
+  // subtração `episodes_released - episodes_downloaded` (8-3=5) — decisions.md #88.
   test('renders a derived state chip per anime', async ({ page }) => {
     await expect(page.getByText('Up to date').first()).toBeVisible()
-    await expect(page.getByText('5 ep behind').first()).toBeVisible()
+    await expect(page.getByText('4 ep behind').first()).toBeVisible()
     await expect(page.getByText('Blacklisted').first()).toBeVisible()
   })
 

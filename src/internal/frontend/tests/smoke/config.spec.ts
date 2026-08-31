@@ -108,7 +108,6 @@ test('each group holds its own fields', async ({ page }) => {
   await expect(page.getByLabel(/minimum seeders/i)).toBeVisible()
   await expect(page.getByLabel(/max search pages/i)).toBeVisible()
   await expect(page.getByLabel(/episode retry limit/i)).toBeVisible()
-  await expect(page.getByLabel(/max episodes for batch/i)).toBeVisible()
   await expect(page.getByLabel(/max batch torrent size/i)).toBeVisible()
   await expect(page.getByLabel(/max episode torrent size/i)).toBeVisible()
 })

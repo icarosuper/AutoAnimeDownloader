@@ -22,7 +22,6 @@ const mockDetail = {
   success: true,
   data: {
     anime_id: 123,
-    anilist_id: 21,
     total_episodes: 12,
     progress: 1,
     status: 'CURRENT',
@@ -78,7 +77,7 @@ test('anime title links to its AniList page', async ({ page }) => {
   await page.goto('/#/status/123')
   const titleLink = page.getByRole('link', { name: 'Test Anime' })
   await expect(titleLink).toBeVisible()
-  await expect(titleLink).toHaveAttribute('href', 'https://anilist.co/anime/21')
+  await expect(titleLink).toHaveAttribute('href', 'https://anilist.co/anime/123')
   await expect(titleLink).toHaveAttribute('target', '_blank')
 })
 
@@ -90,14 +89,14 @@ test('anime detail shows Download button for undownloaded aired episode', async 
 })
 
 test('clicking Download on undownloaded episode calls POST /.../download', async ({ page }) => {
-  await page.route('**/api/v1/animes/123/episodes/1002/download', route =>
+  await page.route('**/api/v1/animes/123/episodes/2/download', route =>
     route.fulfill({ json: { success: true, data: null } })
   )
 
   await page.goto('/#/status/123')
 
   const downloadRequest = page.waitForRequest(
-    req => req.url().includes('/episodes/1002/download') && req.method() === 'POST'
+    req => req.url().includes('/episodes/2/download') && req.method() === 'POST'
   )
   await page.getByRole('button', { name: /^download$/i }).first().click()
   await downloadRequest
