@@ -467,8 +467,11 @@ Variáveis de template (URL, headers e corpo): `{{title}}`, `{{message}}`, `{{an
   arquivo, para que `--debug-anime` nunca toque o `~/.autoAnimeDownloader`
 - **`version/`** — `Version`, `"dev"` por padrão, sobrescrito por ldflags
 - **`cli/`** — controle de ciclo de vida do daemon para o binário da CLI (`cmd/cli` é o único
-  importador). Prefere o gerenciador de serviço da plataforma (systemd **user** unit no Linux, serviço
-  no Windows) e cai para um PID file
+  importador). Dois caminhos, nessa ordem: systemd **user** unit e, se ela não estiver instalada, um
+  PID file. **Não há integração com o Windows Service Manager** — ela existiu, chamando `sc`/`net`,
+  mas nada no repo instala esse serviço (`development.md` diz que serviço no Windows não é
+  suportado) e `package-windows` nem entrega o binário da CLI, então os três caminhos eram
+  inalcançáveis em todo artefato publicado. No Windows vale o PID file
 - **`tray/`** — build-tagged: a implementação real precisa de CGO, então `tray_stub.go` mantém o build
   sem CGO compilando (a CI cobra isso em `build.yml`). No Linux o daemon só sobe a tray com `DISPLAY`
   não-vazio

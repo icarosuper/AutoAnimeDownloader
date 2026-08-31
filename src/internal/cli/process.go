@@ -14,7 +14,6 @@ import (
 
 const pidFileName = "daemon.pid"
 const systemdServiceName = "autoanimedownloader.service"
-const windowsServiceName = "AutoAnimeDownloader"
 
 func getPIDFilePath() (string, error) {
 	var baseFolder string
@@ -57,19 +56,6 @@ func isSystemdAvailable() bool {
 
 	// Check if our service is in the list
 	return strings.Contains(string(output), systemdServiceName)
-}
-
-// isWindowsServiceAvailable checks if the Windows service is installed
-func isWindowsServiceAvailable() bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-
-	// Use sc.exe to query the service
-	cmd := exec.Command("sc", "query", windowsServiceName)
-	err := cmd.Run()
-	// Exit code 0 means service exists, non-zero means it doesn't
-	return err == nil
 }
 
 // startWithSystemd starts the daemon using systemctl
@@ -128,74 +114,6 @@ func isRunningWithSystemd() (bool, error) {
 	return false, err
 }
 
-// startWithWindowsService starts the daemon using Windows Service Manager
-func startWithWindowsService() error {
-	cmd := exec.Command("net", "start", windowsServiceName)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Check if service is already running
-		if strings.Contains(string(output), "already been started") {
-			return nil
-		}
-		return fmt.Errorf("failed to start Windows service: %s: %w", string(output), err)
-	}
-
-	// Wait a bit for the service to start
-	time.Sleep(1 * time.Second)
-
-	// Verify the service is running
-	running, err := isRunningWithWindowsService()
-	if err != nil {
-		return fmt.Errorf("failed to verify service status: %w", err)
-	}
-	if !running {
-		return fmt.Errorf("daemon service failed to start")
-	}
-
-	return nil
-}
-
-// stopWithWindowsService stops the daemon using Windows Service Manager
-func stopWithWindowsService() error {
-	cmd := exec.Command("net", "stop", windowsServiceName)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// Check if service is already stopped
-		if strings.Contains(string(output), "not started") || strings.Contains(string(output), "not running") {
-			return nil
-		}
-		return fmt.Errorf("failed to stop Windows service: %s: %w", string(output), err)
-	}
-
-	// Wait a bit for the service to stop
-	time.Sleep(1 * time.Second)
-
-	// Verify the service is stopped
-	running, err := isRunningWithWindowsService()
-	if err != nil {
-		return err
-	}
-	if running {
-		return fmt.Errorf("daemon service is still running")
-	}
-
-	return nil
-}
-
-// isRunningWithWindowsService checks if the daemon is running using Windows Service Manager
-func isRunningWithWindowsService() (bool, error) {
-	cmd := exec.Command("sc", "query", windowsServiceName)
-	output, err := cmd.Output()
-	if err != nil {
-		// Service doesn't exist
-		return false, nil
-	}
-
-	// Check if service is in RUNNING state
-	outputStr := string(output)
-	return strings.Contains(outputStr, "RUNNING"), nil
-}
-
 // isRunningWithPID checks if the daemon is running using PID file
 func isRunningWithPID() (bool, error) {
 	pidPath, err := getPIDFilePath()
@@ -249,11 +167,6 @@ func IsRunning() (bool, error) {
 		return isRunningWithSystemd()
 	}
 
-	// Try Windows Service if available
-	if isWindowsServiceAvailable() {
-		return isRunningWithWindowsService()
-	}
-
 	// Fallback to PID file method
 	return isRunningWithPID()
 }
@@ -270,11 +183,6 @@ func Start(daemonBinary string) error {
 	// Use systemd if available (Linux)
 	if isSystemdAvailable() {
 		return startWithSystemd()
-	}
-
-	// Use Windows Service if available
-	if isWindowsServiceAvailable() {
-		return startWithWindowsService()
 	}
 
 	// Fallback to direct process start
@@ -337,11 +245,6 @@ func Stop() error {
 	// Use systemd if available (Linux)
 	if isSystemdAvailable() {
 		return stopWithSystemd()
-	}
-
-	// Use Windows Service if available
-	if isWindowsServiceAvailable() {
-		return stopWithWindowsService()
 	}
 
 	// Fallback to PID file method

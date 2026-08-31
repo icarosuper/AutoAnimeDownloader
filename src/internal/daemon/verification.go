@@ -117,9 +117,9 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	// Phase 1: fetch all independent data sources in parallel.
 	var (
-		anilistResponse  *anilist.AniListResponse
-		savedEpisodes    []files.EpisodeStruct
-		blockedEpisodes  []files.EpisodeKey
+		anilistResponse *anilist.AniListResponse
+		savedEpisodes   []files.EpisodeStruct
+		blockedEpisodes []files.EpisodeKey
 		// inDeleteStatus[username][mediaId] — quais animes cada conta tem em algum status de
 		// deleção. Uma conta cuja busca falhou fica ausente do mapa, e ausente nunca concorda.
 		inDeleteStatus map[string]map[int]bool

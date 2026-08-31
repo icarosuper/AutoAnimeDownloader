@@ -119,38 +119,40 @@ autoanimedownloader config get
 - Delete watched episodes (true/false)
 - Excluded lists
 
-Fields not covered by `config set` (webhooks, torrent priorities, Jellyfin renaming, per-status download/delete rules) are only editable through the web UI's Config, Notifications, and Priorities pages — see the [WebUI Guide](webui.md).
+`config get` is also the authoritative key list for `config set`, which accepts **every** key it prints.
 
 #### `config set <key> <value>`
 
-Update a configuration value.
+Update a configuration value. Accepts **any** key `config get` prints, by its JSON name — there is
+no hand-maintained subset, so a field added to the daemon is settable the day it ships.
 
 ```bash
-autoanimedownloader config set anilist_username myusername
+autoanimedownloader config set anilist_usernames myusername
 autoanimedownloader config set check_interval 15
 autoanimedownloader config set delete_watched_episodes true
+autoanimedownloader config set min_seeders 3
 ```
 
-**Available keys:**
-- `anilist_username` (string) - Anilist username(s). Comma-separated for multiple accounts
-- `completed_anime_path` (string) - Jellyfin library path; required. The download/seeding working directory is derived from this path (a hidden subfolder inside it), so it's always on the same volume automatically
-- `check_interval` (int) - Check interval in minutes
-- `max_episodes_per_anime` (int) - Maximum episodes to download per anime
-- `episode_retry_limit` (int) - Maximum retry attempts for episodes
-- `delete_watched_episodes` (bool) - Delete episodes after watching (true/false)
-- `excluded_list` (string) - Comma-separated list of excluded anime titles
+The key is matched ignoring case and underscores, so `max_search_pages`, `maxSearchPages` and
+`MAX_SEARCH_PAGES` all reach the same field.
+
+**How the value is read:**
+- A key that already holds a **list** accepts the comma-separated form:
+  `config set anilist_usernames me,otheraccount`
+- Anything else is parsed as **JSON** when it parses — `15`, `true`, `2.5`, `["a","b"]`,
+  `{"batch_window_seconds":30}` — and taken as a plain **string** when it does not, which is what
+  makes a path with a comma in it survive: `config set completed_anime_path "/mnt/Anime, Series"`
 
 **Examples:**
 ```bash
-# Set Anilist username(s)
-autoanimedownloader config set anilist_username myusername
-autoanimedownloader config set anilist_username myusername,secondaccount
+# Two Anilist accounts
+autoanimedownloader config set anilist_usernames myusername,secondaccount
 
-# Set check interval to 15 minutes
+# Check interval, in minutes
 autoanimedownloader config set check_interval 15
 
-# Enable deletion of watched episodes
-autoanimedownloader config set delete_watched_episodes true
+# A nested object goes in as JSON
+autoanimedownloader config set notifications '{"webhooks":[],"batch_window_seconds":30}'
 ```
 
 ### Manual Operations

@@ -19,6 +19,7 @@ package main
 import (
 	"AutoAnimeDownloader/src/internal/api"
 	processcli "AutoAnimeDownloader/src/internal/cli"
+	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/version"
 	"bufio"
@@ -124,17 +125,13 @@ func main() {
 						Name:      "set",
 						Usage:     "Set configuration value",
 						ArgsUsage: "<key> <value>",
-						Description: `Set a configuration value. Available keys:
-  - anilist_usernames (comma-separated strings)
-  - completed_anime_path (string)
-  - check_interval (int, in minutes)
-  - max_episodes_per_anime (int)
-  - episode_retry_limit (int)
-  - delete_watched_episodes (bool: true/false)
-  - excluded_lists (comma-separated strings)`,
+						Description: "Set any key of config.json by its JSON name — `config get` lists them all.\n" +
+							"Value is parsed as JSON when it parses (3, true, [\"a\",\"b\"]); otherwise it is\n" +
+							"taken as a string. A comma-separated value is split into a list when the key\n" +
+							"already holds one.",
 						Action: func(c *cli.Context) error {
 							if c.NArg() != 2 {
-								return fmt.Errorf("usage: config set <key> <value>\n\nAvailable keys:\n  - anilist_usernames\n  - completed_anime_path\n  - check_interval\n  - max_episodes_per_anime\n  - episode_retry_limit\n  - delete_watched_episodes\n  - excluded_lists")
+								return fmt.Errorf("usage: config set <key> <value>  (run `config get` to see the keys)")
 							}
 							return handleConfigSet(c.Args().Get(0), c.Args().Get(1))
 						},
@@ -315,6 +312,13 @@ func handleConfigGet() error {
 	return nil
 }
 
+// handleConfigSet patches ONE key of config.json by its JSON name, without the CLI knowing the
+// field list: it round-trips the config through a map, so every key the daemon serves is settable
+// and a new field needs no change here. The old hand-written switch covered 7 of the 25 keys and
+// answered "unknown config key" for the rest, which reads as "the field does not exist".
+//
+// The saved value is also the type oracle: a key that already holds a list accepts the
+// comma-separated form, everything else is JSON-parsed and falls back to a plain string.
 func handleConfigSet(key, value string) error {
 	client := getClient()
 	config, err := client.GetConfig()
@@ -322,62 +326,73 @@ func handleConfigSet(key, value string) error {
 		return fmt.Errorf("failed to get current config: %w", err)
 	}
 
-	// Atualizar o campo apropriado
-	switch strings.ToLower(key) {
-	case "anilist_username", "anilistusername", "anilist_usernames", "anilistusernames":
-		var usernames []string
-		for _, item := range strings.Split(value, ",") {
-			trimmed := strings.TrimSpace(item)
-			if trimmed != "" {
-				usernames = append(usernames, trimmed)
-			}
-		}
-		config.AnilistUsernames = usernames
-	case "completed_anime_path", "completedanimepath":
-		config.CompletedAnimePath = value
-	case "check_interval", "checkinterval":
-		var interval int
-		if _, err := fmt.Sscanf(value, "%d", &interval); err != nil {
-			return fmt.Errorf("invalid check interval: %w", err)
-		}
-		config.CheckInterval = interval
-	case "max_episodes_per_anime", "maxepisodesperanime":
-		var max int
-		if _, err := fmt.Sscanf(value, "%d", &max); err != nil {
-			return fmt.Errorf("invalid max episodes: %w", err)
-		}
-		config.MaxEpisodesPerAnime = max
-	case "episode_retry_limit", "episoderetrylimit":
-		var limit int
-		if _, err := fmt.Sscanf(value, "%d", &limit); err != nil {
-			return fmt.Errorf("invalid retry limit: %w", err)
-		}
-		config.EpisodeRetryLimit = limit
-	case "delete_watched_episodes", "deletewatchedepisodes":
-		config.DeleteWatchedEpisodes = strings.ToLower(value) == "true"
-	case "excluded_list", "excludedlist", "excluded_lists", "excludedlists":
-		var lists []string
-		for _, item := range strings.Split(value, ",") {
-			trimmed := strings.TrimSpace(item)
-			if trimmed != "" {
-				lists = append(lists, trimmed)
-			}
-		}
-		config.ExcludedLists = lists
-	default:
-		return fmt.Errorf("unknown config key: %s", key)
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to encode current config: %w", err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("failed to decode current config: %w", err)
 	}
 
-	if err := client.UpdateConfig(config); err != nil {
+	name, ok := matchConfigKey(fields, key)
+	if !ok {
+		return fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", key)
+	}
+	fields[name] = parseConfigValue(fields[name], value)
+
+	patched, err := json.Marshal(fields)
+	if err != nil {
+		return fmt.Errorf("failed to encode config: %w", err)
+	}
+	var updated files.Config
+	if err := json.Unmarshal(patched, &updated); err != nil {
+		return fmt.Errorf("failed to decode config: %w", err)
+	}
+
+	if err := client.UpdateConfig(&updated); err != nil {
 		return fmt.Errorf("failed to update config: %w", err)
 	}
 
 	if outputJSON {
 		outputJSONResponse(map[string]string{"message": "Configuration updated"})
 	} else {
-		fmt.Printf("Configuration updated: %s = %s\n", key, value)
+		fmt.Printf("Configuration updated: %s = %s\n", name, value)
 	}
 	return nil
+}
+
+// matchConfigKey resolves a user-typed key to the real JSON name, ignoring case and underscores so
+// `maxSearchPages`, `max_search_pages` and `MAX_SEARCH_PAGES` all land on the same field.
+func matchConfigKey(fields map[string]any, key string) (string, bool) {
+	norm := func(s string) string { return strings.ToLower(strings.ReplaceAll(s, "_", "")) }
+	want := norm(key)
+	for name := range fields {
+		if norm(name) == want {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+// parseConfigValue turns the raw CLI string into the JSON value the field expects. current is the
+// value already saved under that key and is used only to recognise a list.
+func parseConfigValue(current any, value string) any {
+	if _, isList := current.([]any); isList && !strings.HasPrefix(strings.TrimSpace(value), "[") {
+		items := []any{}
+		for _, item := range strings.Split(value, ",") {
+			if trimmed := strings.TrimSpace(item); trimmed != "" {
+				items = append(items, trimmed)
+			}
+		}
+		return items
+	}
+
+	var parsed any
+	if err := json.Unmarshal([]byte(value), &parsed); err == nil {
+		return parsed
+	}
+	return value
 }
 
 func handleCheck() error {
