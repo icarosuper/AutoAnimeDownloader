@@ -31,7 +31,7 @@ var titleTechnicalTokens = map[string]bool{
 	"toonshub": true, "asw": true, "ember": true,
 	// Season/episode/structure keywords
 	"season": true, "episode": true, "cour": true, "part": true,
-	// Batch/collection markers (type already checked by isBatch/isMovie)
+	// Batch/collection markers (type already checked by IsBatch/isMovie)
 	"batch": true, "complete": true, "movie": true, "ova": true, "ona": true, "special": true, "film": true,
 	// Subtitle/audio track tags
 	"multisub": true, "multi": true, "subs": true, "dual": true, "audio": true,

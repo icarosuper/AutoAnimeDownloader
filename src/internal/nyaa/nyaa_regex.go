@@ -170,7 +170,7 @@ var (
 	}
 
 	// Qualquer declaracao de part/cour no nome, para detectar as MULTIPLAS: "(Part 1 + Part 2)" e
-	// "(Season 4 Part 03+04)" nao sao packs da part 1/3 (ver extractPart). O grupo opcional cobre
+	// "(Season 4 Part 03+04)" nao sao packs da part 1/3 (ver ExtractPart). O grupo opcional cobre
 	// a forma compacta, em que o segundo numero nao repete a palavra "Part".
 	reAnyPart = regexp.MustCompile(`(?i)\b(?:part|cour)\s*0*(\d+)(?:\s*[+&]\s*0*(\d+))?`)
 

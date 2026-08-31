@@ -157,7 +157,7 @@ Any substring in `priorities.ignore_list` discards the release, case-insensitive
 For single-episode searches, a torrent is only kept if its extracted episode number matches the target. Check if the torrent names on Nyaa use an unusual pattern not covered by `reEpisodePatterns`.
 
 **6c. Season/Part filtering**:
-If `ExtractAnimeSeasonPart` returns a season or part, results are filtered to match. Check if the season/part extracted from the title is correct. A wrong extraction causes all results to be dropped. Watch for sequels titled with only a roman numeral (e.g. "... II") — `extractSeason` (`nyaa.go`) has a roman-numeral fallback (`reRomanSeason` in `nyaa_regex.go`, decision 20) precisely because fansub releases for these often carry no other season marker; if a new roman-numeral case still fails, check whether the numeral is spelled differently in the torrent name than in the AniList title.
+If `ExtractAnimeSeasonPart` returns a season or part, results are filtered to match. Check if the season/part extracted from the title is correct. A wrong extraction causes all results to be dropped. Watch for sequels titled with only a roman numeral (e.g. "... II") — `ExtractSeason` (`nyaa.go`) has a roman-numeral fallback (`reRomanSeason` in `nyaa_regex.go`, decision 20) precisely because fansub releases for these often carry no other season marker; if a new roman-numeral case still fails, check whether the numeral is spelled differently in the torrent name than in the AniList title.
 
 **6d. Batch detection** (`reBatchPatterns`):
 Single-episode searches drop batch torrents. If Nyaa only has a pack available, the single-episode search will return nothing (correct behavior — the pack search/selection path, run earlier over the same anime search, should have caught it first; see [decisions.md #59-61](decisions.md#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado)).
@@ -197,7 +197,7 @@ Part 2, `166873`):
 1. Extraia os nomes crus da busca: as linhas `Raw Nyaa row` do passe em
    `~/.autoAnimeDownloader/daemon.log` (ou do `debug.jsonl` do Step 0).
 2. Rode, para **cada** nome de pack, as funções do pacote `nyaa` que decidem o descarte —
-   `isBatch`, `extractSeason`, `extractPart` e `titleMatchesQuery` — com a query que o daemon usou
+   `IsBatch`, `ExtractSeason`, `ExtractPart` e `titleMatchesQuery` — com a query que o daemon usou
    de verdade (a variante, não o título da AniList).
 3. Monte a tabela `torrent × batch × part × match`. A coluna que der `false` é o filtro culpado, e
    cada linha pode morrer por um motivo diferente.
@@ -213,7 +213,7 @@ Os três culpados já vistos, todos na mesma investigação:
   caminho de pack, `part` só rejeita **conflito declarado** — pack sem marcador passa, porque pack
   de season inteira normalmente não tem esse marcador embora contenha os episódios pedidos. Ver
   `sources.md`, "Granularidade e numeração dos packs".
-- ~~**`extractPart` lendo `Part 1 + Part 2` como `1`.**~~ **CORRIGIDO** (decisions.md #79): nome que
+- ~~**`ExtractPart` lendo `Part 1 + Part 2` como `1`.**~~ **CORRIGIDO** (decisions.md #79): nome que
   declara duas parts devolve `nil`, e quem decide passa a ser a cobertura da faixa.
 - **A faixa do pack não bate com a numeração da entrada.** O pack existe, sobreviveu aos filtros, e
   `pickBatches` ainda não o escolhe: o nome dele está em outra régua (season contínua, absoluta pela

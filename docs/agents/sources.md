@@ -76,7 +76,7 @@ arquivos é o próprio Nyaa, não o AnimeTosho.
   extras ou coletânea. Marginal.
 - **Pack — sim, e é o único que paga.** Duas coisas, de pesos bem diferentes:
 
-**1. Cobertura real do pack — isso é bug, não melhoria.** `extractBatchInfo`
+**1. Cobertura real do pack — isso é bug, não melhoria.** `ExtractBatchInfo`
 (`internal/nyaa/nyaa.go`) lê a faixa só do **nome**. Faixa desconhecida vira `EndEpisode == 0`, e
 daí o pack contava como completo: `pickBatches` parava o cursor ali e `assignBatches` gravava
 `batchStart/batchEnd = 1..total`. Cada episódio da janela virava um `EpisodeStruct` apontando para
@@ -170,7 +170,7 @@ cobre as duas metades, mas um extrator que devolve o primeiro número que casar 
 de part é sempre frágil; perguntar "esse pack cobre a janela pendente?" não é.
 
 > **Implementado** (29/ago/2026, `decisions.md` #79): no caminho de pack o marcador de part só
-> rejeita conflito declarado, `extractPart` devolve `nil` para nome com duas parts, e as três
+> rejeita conflito declarado, `ExtractPart` devolve `nil` para nome com duas parts, e as três
 > hipóteses de numeração desta seção viraram `daemon.packAxis` — com o span do nome no lugar da
 > contagem de arquivos como desempate. O scrape de detalhe entrou depois (`decisions.md` #84) e
 > resolve a **faixa** de um pack sem faixa no nome; a contagem de arquivos por pasta, que

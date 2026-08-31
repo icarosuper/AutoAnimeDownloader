@@ -254,13 +254,13 @@ organizar — é `UpsertEpisodes`.
 **`FileManagerInterface` é declarada duas vezes**, em `api/server.go` e `daemon/helpers.go`. Método novo
 em `files.FileManager` → atualizar **as duas** (ver `conventions.md`).
 
-**`mkv.go`** — `VideoCodec` lê o codec do **header** do arquivo, não do nome: `nyaa.extractCodec` lê do
+**`mkv.go`** — `VideoCodec` lê o codec do **header** do arquivo, não do nome: `nyaa.ExtractCodec` lê do
 nome do release e boa parte dos uploads nunca escreve isso (Erai-raws não escreve; muito BD rip também
 não). Matroska é EBML (RFC 8794), e o codec fica num caminho curto e fixo **antes** dos Clusters
 (`Segment → Tracks → TrackEntry → {TrackType, CodecID}`), então a leitura custa poucos KB e alguns
 seeks, nunca o arquivo inteiro. `TrackType` é conferido porque um `.mkv` de anime carrega vídeo, áudio
 e várias legendas — pegar o primeiro `TrackEntry` às cegas reportaria o codec do áudio. Os `CodecID`
-são mapeados para o **mesmo vocabulário do `nyaa.extractCodec`** (`HEVC`, `H.264`, `AV1`), senão o
+são mapeados para o **mesmo vocabulário do `nyaa.ExtractCodec`** (`HEVC`, `H.264`, `AV1`), senão o
 painel e a tela de prioridades nomeariam codecs de formas diferentes. Devolve `""` — **nunca** erro —
 para todo caso sem resposta. Só Matroska: MP4 teria estrutura análoga mas exigiria um segundo parser, e
 anime na prática é `.mkv`.

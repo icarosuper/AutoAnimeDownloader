@@ -43,7 +43,7 @@ func (f folderStats) span() (int, int) {
 }
 
 // walkFileList percorre a arvore da lista de arquivos atribuindo cada arquivo de video a pasta
-// que o contem. Mesma leitura de PackFileRange (IsVideoFile + extractEpisodeNumber), so que
+// que o contem. Mesma leitura de PackFileRange (IsVideoFile + ExtractEpisodeNumber), so que
 // agrupada por pasta em vez de achatada num min..max unico.
 func walkFileList(sel *goquery.Selection, path string, out *[]folderStats) {
 	cur := folderStats{path: path, seasons: map[int]int{}}
@@ -62,10 +62,10 @@ func walkFileList(sel *goquery.Selection, path string, out *[]folderStats) {
 			return
 		}
 		cur.bytes += parseSize(strings.Trim(strings.TrimSpace(li.Find("span.file-size").Text()), "()"))
-		if s := extractSeason(name); s != nil {
+		if s := ExtractSeason(name); s != nil {
 			cur.seasons[*s]++
 		}
-		if ep := extractEpisodeNumber(name); ep != nil {
+		if ep := ExtractEpisodeNumber(name); ep != nil {
 			cur.episodes = append(cur.episodes, *ep)
 		}
 	})
@@ -75,7 +75,7 @@ func walkFileList(sel *goquery.Selection, path string, out *[]folderStats) {
 }
 
 // isExtrasFolder reconhece pasta cujos arquivos NAO sao episodio mas cujo nome ainda entrega um
-// numero a extractEpisodeNumber (NCOP 01, PV 02...). Nao existe no codigo de producao — e
+// numero a ExtractEpisodeNumber (NCOP 01, PV 02...). Nao existe no codigo de producao — e
 // justamente a medicao de quanto elas sujam a faixa.
 func isExtrasFolder(path string) bool {
 	low := strings.ToLower(path)
@@ -108,14 +108,14 @@ func listPacks(t *testing.T, query string, limit int) []packRow {
 		cols := tr.Find("td")
 		link := cols.Eq(1).Find("a").Last()
 		name := strings.TrimSpace(link.AttrOr("title", link.Text()))
-		if name == "" || !isBatch(name) || shouldIgnoreTorrent(name) {
+		if name == "" || !IsBatch(name) || ShouldIgnore(name) {
 			return true
 		}
 		rows = append(rows, packRow{
 			name:      name,
 			detailURL: detailURL(link.AttrOr("href", "")),
 			size:      parseSize(strings.TrimSpace(cols.Eq(3).Text())),
-			seeders:   parseSeeders(strings.TrimSpace(cols.Eq(5).Text())),
+			seeders:   ParseSeeders(strings.TrimSpace(cols.Eq(5).Text())),
 		})
 		return len(rows) < limit
 	})
@@ -168,7 +168,7 @@ func measurePack(t *testing.T, p packRow) (v verdict) {
 		}
 	}
 
-	nameInfo := extractBatchInfo(p.name)
+	nameInfo := ExtractBatchInfo(p.name)
 	t.Logf("%s", p.name)
 	t.Logf("  %s | S:%d | %s", p.detailURL, p.seeders, formatSize(p.size))
 	t.Logf("  faixa do NOME:     %d..%d", nameInfo.StartEpisode, nameInfo.EndEpisode)

@@ -1404,8 +1404,9 @@ func TestExtractSource_ExtractsVideoSource(t *testing.T) {
 }
 
 func TestExtractCodec_ExtractsVideoCodec(t *testing.T) {
-	// Função não é exportada, testada indiretamente via SortMovieResults
-	t.Skip("extractCodec is not exported - tested indirectly via SortMovieResults")
+	// ExtractCodec É exportada e a cobertura real dela vive em priorities_test.go
+	// (TestDefaultPriorities_TokensAreReachable), que casa cada token default contra o que ela devolve.
+	t.Skip("coberta em priorities_test.go - este placeholder nunca chegou a afirmar nada")
 }
 
 func TestExtractAudio_ExtractsAudioCodec(t *testing.T) {

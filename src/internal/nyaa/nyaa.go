@@ -35,7 +35,7 @@ type TorrentResult struct {
 	Part       *int      `json:"part,omitempty"`
 	Size       int64     `json:"size,omitempty"`
 	Fansub     string    `json:"fansub,omitempty"`
-	IsBatch    bool      `json:"isBatch,omitempty"`
+	IsBatch    bool      `json:"IsBatch,omitempty"`
 	// DetailURL e a pagina /view/<id> da linha. So o caminho de pack a usa (PackFileRange), e
 	// so as buscas que devolvem pack a preenchem.
 	DetailURL string `json:"detailUrl,omitempty"`
@@ -122,9 +122,9 @@ func extractFansub(name string) string {
 	return ""
 }
 
-// isBatch verifica se o torrent é um batch (múltiplos episódios)
+// IsBatch verifica se o torrent é um batch (múltiplos episódios)
 // Baseado nas regras do documento (Seção 1 do RegrasFilmesBatches.md)
-func isBatch(name string) bool {
+func IsBatch(name string) bool {
 	nameLower := strings.ToLower(name)
 	for _, re := range reBatchPatterns {
 		if re.MatchString(nameLower) {
@@ -141,16 +141,18 @@ type BatchInfo struct {
 	Season       int
 }
 
-// extractBatchInfo extrai informações detalhadas de um batch
+// ExtractBatchInfo extrai informações detalhadas de um batch
 // Baseado nas regras do documento (Seção 3.1 do RegrasFilmesBatches.md)
-func extractBatchInfo(torrentName string) BatchInfo {
+// Consumida fora do pacote pelo daemon: e a faixa dela que decide QUAIS episodios recebem o
+// magnet do pack (pickBatches).
+func ExtractBatchInfo(torrentName string) BatchInfo {
 	info := BatchInfo{}
 
 	if start, last, ok := batchRange(torrentName); ok {
 		info.StartEpisode, info.EndEpisode = start, last
 	}
 
-	if season := extractSeason(torrentName); season != nil {
+	if season := ExtractSeason(torrentName); season != nil {
 		info.Season = *season
 	}
 
@@ -196,23 +198,6 @@ func batchRange(torrentName string) (int, int, bool) {
 	return 0, 0, false
 }
 
-// shouldIgnoreTorrent verifica se o torrent deve ser ignorado
-// baseado em padrões indesejados (dub, raw, hardcoded, etc.)
-func shouldIgnoreTorrent(name string) bool {
-	return ShouldIgnore(name)
-}
-
-// IsBatch é uma versão exportável de isBatch para testes
-func IsBatch(name string) bool {
-	return isBatch(name)
-}
-
-// ExtractBatchInfo e a versao exportada de extractBatchInfo: o daemon precisa da faixa de
-// episodios do pack para decidir QUAIS episodios recebem o magnet dele (pickBatches).
-func ExtractBatchInfo(name string) BatchInfo {
-	return extractBatchInfo(name)
-}
-
 // PackFileRange devolve a faixa de episodios que um pack REALMENTE traz, lida da lista de
 // arquivos da pagina de detalhe (`/view/<id>`), na numeracao que o grupo usou nos arquivos —
 // a mesma regua do nome, entao o chamador converte com o mesmo packAxis.
@@ -254,7 +239,7 @@ func PackFileRange(detailURL string) (BatchInfo, bool) {
 		}
 		// Numero ilegivel nao entra: e assim que NCOP/NCED e extras ficam de fora da faixa em
 		// vez de alarga-la.
-		episode := extractEpisodeNumber(name)
+		episode := ExtractEpisodeNumber(name)
 		if episode == nil {
 			return
 		}
@@ -300,40 +285,6 @@ func fileListEntryName(s *goquery.Selection) string {
 	return strings.TrimSpace(entry.Text())
 }
 
-// ParseSeeders é a versão exportável de parseSeeders: converte a coluna de
-// seeders do Nyaa (string, podendo ser "-") para int. Usada pelo piso de
-// seeders em daemon.filterBySeeders.
-func ParseSeeders(seedersStr string) int {
-	return parseSeeders(seedersStr)
-}
-
-// ExtractEpisodeNumber e a versao exportada de extractEpisodeNumber: o Librarian usa os mesmos
-// padroes para tirar o numero do episodio do NOME DO ARQUIVO de dentro de um pack, para renomear
-// os arquivos do pack igual aos baixados avulsos.
-func ExtractEpisodeNumber(name string) *int {
-	return extractEpisodeNumber(name)
-}
-
-// ExtractSeason é uma versão exportável de extractSeason para uso externo ao pacote
-func ExtractSeason(name string) *int {
-	return extractSeason(name)
-}
-
-// ExtractPart é uma versão exportável de extractPart para uso externo ao pacote
-func ExtractPart(name string) *int {
-	return extractPart(name)
-}
-
-// IsMovie é uma versão exportável de isMovie para testes
-// isFormatMovie indica se o AniList classifica como filme (format = MOVIE)
-func IsMovie(torrentName, animeName string, isFormatMovie ...bool) bool {
-	// Se o parâmetro opcional foi passado, usa ele; caso contrário, assume false
-	if len(isFormatMovie) > 0 {
-		return isMovie(torrentName, animeName, isFormatMovie[0])
-	}
-	return isMovie(torrentName, animeName, false)
-}
-
 // isMovie verifica se o torrent é um filme
 // Baseado nas regras do documento (Seção 4 do RegrasFilmesBatches.md)
 // Se isFormatMovie for true, usa o formato do AniList (mais confiável)
@@ -346,7 +297,7 @@ func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 		return true
 	}
 
-	if !reHasEpisode.MatchString(torrentName) && !isBatch(torrentName) {
+	if !reHasEpisode.MatchString(torrentName) && !IsBatch(torrentName) {
 		return true
 	}
 
@@ -356,7 +307,7 @@ func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 // hasMovieMarker reporta se o nome traz marcador explícito de filme, OVA/ONA ou
 // special. É a parte de isMovie que serve como guard na busca de episódio: o
 // ramo "não tem marcador de episódio" de isMovie não pode ser usado lá porque
-// reHasEpisode é mais restrito que extractEpisodeNumber (não cobre EP05, E05,
+// reHasEpisode é mais restrito que ExtractEpisodeNumber (não cobre EP05, E05,
 // [05], " 05 (" etc.) e rejeitaria episódios legítimos.
 func hasMovieMarker(torrentName string) bool {
 	for _, re := range reMovieKeywords {
@@ -507,7 +458,7 @@ func torrentSummaries(results []TorrentResult) []string {
 	summaries := make([]string, len(results))
 	for i, r := range results {
 		summaries[i] = fmt.Sprintf("%s | S:%d/L:%d | %s | t=%d h=%.2f",
-			r.Name, parseSeeders(r.Seeders), r.Leechers, formatSize(r.Size), healthTier(r), torrentHealthScore(r))
+			r.Name, ParseSeeders(r.Seeders), r.Leechers, formatSize(r.Size), healthTier(r), torrentHealthScore(r))
 	}
 	return summaries
 }
@@ -603,24 +554,24 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		size := parseSize(sizeStr)
 
 		seeders := strings.TrimSpace(cells.Eq(5).Text())
-		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
+		leechers := ParseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
 
 		if name != "" {
 			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
 		}
 
 		// Verificar se o torrent deve ser ignorado (dub, raw, hardcoded, etc.)
-		if shouldIgnoreTorrent(name) {
+		if ShouldIgnore(name) {
 			return
 		}
 
 		// Verificar se é batch - ignorar para busca de episódio único
-		if isBatch(name) {
+		if IsBatch(name) {
 			return
 		}
 
 		// Filme/OVA/special não é episódio: "Naruto Shippuuden Movie 3" casa o
-		// padrão " 3 (" de extractEpisodeNumber e passaria como episódio 3.
+		// padrão " 3 (" de ExtractEpisodeNumber e passaria como episódio 3.
 		if hasMovieMarker(name) {
 			return
 		}
@@ -632,9 +583,9 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		var fansub string
 
 		if name != "" {
-			animeEpisode = extractEpisodeNumber(name)
-			season = extractSeason(name)
-			res := extractResolution(name)
+			animeEpisode = ExtractEpisodeNumber(name)
+			season = ExtractSeason(name)
+			res := ExtractResolution(name)
 			resolution = &res
 			fansub = extractFansub(name)
 		}
@@ -656,7 +607,7 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		}
 
 		// Filtrar por parte (hard filter: rejeita torrent sem marker ou com part errada)
-		part := extractPart(name)
+		part := ExtractPart(name)
 		if requestedPart != nil {
 			if part == nil || *part != *requestedPart {
 				return
@@ -766,7 +717,7 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 		}
 		logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
 
-		if shouldIgnoreTorrent(name) {
+		if ShouldIgnore(name) {
 			return
 		}
 		// Filtrar por titulo base (garantir que o torrent pertence ao anime)
@@ -774,14 +725,14 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			return
 		}
 
-		season := extractSeason(name)
-		part := extractPart(name)
-		res := extractResolution(name)
+		season := ExtractSeason(name)
+		part := ExtractPart(name)
+		res := ExtractResolution(name)
 
 		row := TorrentResult{
 			Name:       name,
 			Seeders:    strings.TrimSpace(cells.Eq(5).Text()),
-			Leechers:   parseSeeders(strings.TrimSpace(cells.Eq(6).Text())),
+			Leechers:   ParseSeeders(strings.TrimSpace(cells.Eq(6).Text())),
 			MagnetLink: cells.Eq(2).Find("a").Eq(1).AttrOr("href", ""),
 			Season:     season,
 			Part:       part,
@@ -791,7 +742,7 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			DetailURL:  detailURL(cells.Eq(1).Find("a").Not(".comments").AttrOr("href", "")),
 		}
 
-		if isBatch(name) {
+		if IsBatch(name) {
 			// Temporada no caminho de pack: sem pedido explicito, pack de qualquer temporada
 			// serve. Era o comportamento da busca de batch antiga, e e diferente do caminho de
 			// episodio logo abaixo — por isso os dois filtros nao podem ser fundidos.
@@ -827,7 +778,7 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 		}
 
 		// Filme/OVA/special nao e episodio: "Naruto Shippuuden Movie 3" casa o padrao " 3 (" de
-		// extractEpisodeNumber e passaria como episodio 3.
+		// ExtractEpisodeNumber e passaria como episodio 3.
 		if hasMovieMarker(name) {
 			return
 		}
@@ -844,7 +795,7 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			return
 		}
 
-		episode := extractEpisodeNumber(name)
+		episode := ExtractEpisodeNumber(name)
 		if episode == nil || !slices.Contains(episodes, *episode) {
 			return
 		}
@@ -918,14 +869,14 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 		sizeStr := strings.TrimSpace(cells.Eq(3).Text())
 		size := parseSize(sizeStr)
 		seeders := strings.TrimSpace(cells.Eq(5).Text())
-		leechers := parseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
+		leechers := ParseSeeders(strings.TrimSpace(cells.Eq(6).Text()))
 
 		if name != "" {
 			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
 		}
 
 		// Verificar se o torrent deve ser ignorado
-		if shouldIgnoreTorrent(name) {
+		if ShouldIgnore(name) {
 			return
 		}
 
@@ -935,7 +886,7 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 		}
 
 		// Extrair informações
-		res := extractResolution(name)
+		res := ExtractResolution(name)
 		resolution := &res
 		fansub := extractFansub(name)
 
@@ -976,13 +927,13 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 	return sortedResults, nil
 }
 
-// extractEpisodeNumber extrai o número do episódio do nome do torrent
+// ExtractEpisodeNumber extrai o número do episódio do nome do torrent
 // Testa os padrões em ordem de prioridade (do mais específico ao menos específico)
 // O underscore vira espaco antes de tudo: todo padrao de reEpisodePatterns pede espaco ao redor
 // do numero, e grupo que separa com "_" ("[DB]Vinland Saga_-_01_(...).mkv") nao casava nenhum.
 // Vale para nome de torrent e, principalmente, para nome de ARQUIVO dentro de um pack — e daqui
 // que o Librarian tira o numero para renomear no padrao Jellyfin.
-func extractEpisodeNumber(name string) *int {
+func ExtractEpisodeNumber(name string) *int {
 	name = strings.ReplaceAll(name, "_", " ")
 	for _, p := range reEpisodePatterns {
 		matches := p.re.FindStringSubmatch(name)
@@ -1003,9 +954,9 @@ var romanSeasonValues = map[string]int{
 	"II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10,
 }
 
-// extractSeason extrai o número da temporada do nome do torrent
+// ExtractSeason extrai o número da temporada do nome do torrent
 // Testa os padrões em ordem de prioridade
-func extractSeason(name string) *int {
+func ExtractSeason(name string) *int {
 	for _, p := range reSeasonPatterns {
 		matches := p.re.FindStringSubmatch(name)
 		if len(matches) > 1 {
@@ -1024,14 +975,14 @@ func extractSeason(name string) *int {
 	return nil
 }
 
-// extractPart extrai o número da parte/cour do nome do torrent ou título Anilist
+// ExtractPart extrai o número da parte/cour do nome do torrent ou título Anilist
 // Testa os padrões em ordem de prioridade (mais específico primeiro)
 //
 // Nome que declara MAIS DE UMA part não tem part: "(Part 1 + Part 2)" e "(Season 4 Part 03+04)"
 // cobrem as duas metades, e devolver a primeira que casa fazia o pack ser lido como "da part 1" —
 // justamente o pack que serve para as duas. Sem número único a resposta é nil, e quem decide passa
 // a ser a cobertura da faixa (ver daemon.packAxis e sources.md, item 4).
-func extractPart(name string) *int {
+func ExtractPart(name string) *int {
 	if declared := declaredParts(name); len(declared) > 1 {
 		return nil
 	}
@@ -1070,9 +1021,9 @@ func declaredParts(name string) map[int]bool {
 // existe em anime.
 var canonicalResolutions = map[string]string{"4k": "2160p", "uhd": "2160p", "fhd": "1080p", "hd": "720p"}
 
-// extractResolution extrai a resolução do nome do torrent, já canonicalizada
-// (mesmo contrato de extractCodec, que devolve "HEVC" para "x265").
-func extractResolution(name string) string {
+// ExtractResolution extrai a resolução do nome do torrent, já canonicalizada
+// (mesmo contrato de ExtractCodec, que devolve "HEVC" para "x265").
+func ExtractResolution(name string) string {
 	for _, p := range reResolutionPatterns {
 		matches := p.re.FindStringSubmatch(name)
 		if len(matches) > 1 {
@@ -1089,12 +1040,6 @@ func extractResolution(name string) string {
 	}
 	return ""
 }
-
-// ExtractResolution é a versão exportável de extractResolution para testes.
-func ExtractResolution(name string) string { return extractResolution(name) }
-
-// ExtractCodec é a versão exportável de extractCodec para testes.
-func ExtractCodec(name string) string { return extractCodec(name) }
 
 // parseNyaaDate parseia a string de data do Nyaa para um objeto time.Time
 func parseNyaaDate(dateString string) (time.Time, error) {
@@ -1158,8 +1103,8 @@ func extractSource(name string) string {
 	return ""
 }
 
-// extractCodec extrai o codec de vídeo (HEVC, H.264, AV1, etc.)
-func extractCodec(name string) string {
+// ExtractCodec extrai o codec de vídeo (HEVC, H.264, AV1, etc.)
+func ExtractCodec(name string) string {
 	nameLower := strings.ToLower(name)
 	for _, cp := range reCodecPatterns {
 		if cp.re.MatchString(nameLower) {
@@ -1207,8 +1152,9 @@ func SortTorrentResults(results []TorrentResult) []TorrentResult {
 	return sortByCriteria(results, filterCriteria(ActivePriorities().CriteriaOrder, episodeCriteria))
 }
 
-// parseSeeders converte a string de seeders para int
-func parseSeeders(seedersStr string) int {
+// ParseSeeders converte a string de seeders para int (a coluna do Nyaa pode vir "-").
+// Consumida fora do pacote pelo piso de seeders em daemon.filterBySeeders.
+func ParseSeeders(seedersStr string) int {
 	seedersStr = strings.TrimSpace(seedersStr)
 	if seedersStr == "" || seedersStr == "-" {
 		return 0
@@ -1224,7 +1170,7 @@ func parseSeeders(seedersStr string) int {
 // seeder/leecher ratio. Higher = healthier swarm.
 // Uses log scale so a torrent with 200 seeders isn't infinitely better than one with 100.
 func torrentHealthScore(r TorrentResult) float64 {
-	seeders := parseSeeders(r.Seeders)
+	seeders := ParseSeeders(r.Seeders)
 	if seeders == 0 {
 		return 0.0
 	}

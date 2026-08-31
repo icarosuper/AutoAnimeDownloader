@@ -26,7 +26,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#17** — --debug-anime early-exit branch in cmd/daemon/main.go](#17---debug-anime-early-exit-branch-in-cmddaemonmaingo)
 - [**#18** — extractTitleTokens truncates the torrent name at the first episode/season marker before tokenizing](#18-extracttitletokens-truncates-the-torrent-name-at-the-first-episodeseason-marker-before-tokenizing)
 - [**#19** — Disk space is read via OS stat on CompletedAnimePath](#19-disk-space-is-read-via-os-stat-on-completedanimepath)
-- [**#20** — extractSeason has a roman-numeral fallback kept out of reSeasonPatterns](#20-extractseason-has-a-roman-numeral-fallback-kept-out-of-reseasonpatterns)
+- [**#20** — ExtractSeason has a roman-numeral fallback kept out of reSeasonPatterns](#20-extractseason-has-a-roman-numeral-fallback-kept-out-of-reseasonpatterns)
 - [**#21** — Embedded torrent client + hardlink-into-library model (replaces qBittorrent)](#21-embedded-torrent-client--hardlink-into-library-model-replaces-qbittorrent)
 - [**#22** — Organize everything to completed_anime_path, and the batch-hygiene deletion limitation](#22-organize-everything-to-completed_anime_path-and-the-batch-hygiene-deletion-limitation)
 - [**#23** — Integration tests skip unless DAEMON_URL is set explicitly](#23-integration-tests-skip-unless-daemon_url-is-set-explicitly)
@@ -317,7 +317,7 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 **What it looks like:** Tokenizing only the substring before the first `S01E05`/`- 05`/`Episode 3`-style marker, and separately stripping a leading `[Group]`/`(Group)` tag, instead of just tokenizing the whole torrent name. Looks like it would drop legitimate title words.
 
-**Why it's right:** Real torrent names often carry the episode's plot title, streaming-service tag, or a duplicate alt-title in parentheses *after* the episode marker (e.g. `KAIJU GIRL CARAMELISE S01E01 The Kaiju Girl Appears in Tokyo 1080p CR WEB-DL ... (Otome Kaijuu Caramelise, Multi-Subs)`). None of that belongs to the anime's core title, but it isn't covered by the fixed `titleTechnicalTokens` allowlist (unknown fansub tags like `varyg`/`ironclad`, stray split tokens like `h` from `H 264`, episode-title prose). Tokenizing it anyway inflates the Jaccard union enough that `jaccardThreshold` (0.8 for ≤3-token queries) rejects genuine matches — this caused two real currently-airing anime to never download (see debug session that produced this decision). Truncating at the marker (reusing `reEpisodePatterns`/`reSeasonPatterns`, already used by `extractEpisodeNumber`/`extractSeason`) removes exactly the noise while preserving genuine extra title words that appear *before* the marker (e.g. "Alternative Gun Gale Online" in a Sword Art Online spinoff), so the existing spin-off-rejection tests still pass.
+**Why it's right:** Real torrent names often carry the episode's plot title, streaming-service tag, or a duplicate alt-title in parentheses *after* the episode marker (e.g. `KAIJU GIRL CARAMELISE S01E01 The Kaiju Girl Appears in Tokyo 1080p CR WEB-DL ... (Otome Kaijuu Caramelise, Multi-Subs)`). None of that belongs to the anime's core title, but it isn't covered by the fixed `titleTechnicalTokens` allowlist (unknown fansub tags like `varyg`/`ironclad`, stray split tokens like `h` from `H 264`, episode-title prose). Tokenizing it anyway inflates the Jaccard union enough that `jaccardThreshold` (0.8 for ≤3-token queries) rejects genuine matches — this caused two real currently-airing anime to never download (see debug session that produced this decision). Truncating at the marker (reusing `reEpisodePatterns`/`reSeasonPatterns`, already used by `ExtractEpisodeNumber`/`ExtractSeason`) removes exactly the noise while preserving genuine extra title words that appear *before* the marker (e.g. "Alternative Gun Gale Online" in a Sword Art Online spinoff), so the existing spin-off-rejection tests still pass.
 
 **Don't "fix" by:** lowering `jaccardThreshold` instead. The two failure modes overlap: the real Kaiju Girl Caramelise match scores ~0.33 Jaccard, but the SAO-spinoff torrent that must stay rejected scores ~0.5 — no single threshold accepts one without accepting the other. The marker-truncation approach fixes the union inflation at its source instead.
 
@@ -341,13 +341,13 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 ---
 
-### 20. `extractSeason` has a roman-numeral fallback kept out of `reSeasonPatterns`
+### 20. `ExtractSeason` has a roman-numeral fallback kept out of `reSeasonPatterns`
 
-**Location:** `internal/nyaa/nyaa_regex.go` — `reRomanSeason`, `romanSeasonValues`; `internal/nyaa/nyaa.go` — `extractSeason`.
+**Location:** `internal/nyaa/nyaa_regex.go` — `reRomanSeason`, `romanSeasonValues`; `internal/nyaa/nyaa.go` — `ExtractSeason`.
 
 **What it looks like:** A second, separate regex (`\b(II|III|IV|V|VI|VII|VIII|IX|X)\b`) tried only after the whole `reSeasonPatterns` loop has failed, instead of just adding it as one more entry in that slice.
 
-**Why it's right:** Some sequels are titled with only a roman numeral (e.g. Anilist id 194829, "Katainaka no Ossan, Kensei ni Naru II") — no "Season 2"/"S2" appears anywhere in the AniList title, and fansub groups (Erai-raws, Ironclad) release episodes using that exact title verbatim, with no separate season marker either. Before this fix, `extractSeason("...Naru II - 01 [1080p]...")` returned `nil` while `ExtractAnimeSeasonPart` (via the `"...2nd Season"` synonym) correctly resolved `requestedSeason=2`, so every real torrent got rejected by the hard season filter in `ScrapNyaaForMultipleEpisodes` (`season == nil` vs `requestedSeason=2`) even though `titleMatchesQuery` already matched the full title including "II" — the anime failed to download every cycle. `reSeasonPatterns` is also used by `truncateAtFirstMarker` (decision 18) to decide where to cut a torrent name before tokenizing; if the roman-numeral pattern were merged into that slice, it would truncate `"...Naru II"` right before "II", dropping it from the Jaccard title tokens and silently changing match behavior for every title ending in a numeral. Keeping it as a separate, lower-priority fallback used only by `extractSeason` avoids that cross-effect.
+**Why it's right:** Some sequels are titled with only a roman numeral (e.g. Anilist id 194829, "Katainaka no Ossan, Kensei ni Naru II") — no "Season 2"/"S2" appears anywhere in the AniList title, and fansub groups (Erai-raws, Ironclad) release episodes using that exact title verbatim, with no separate season marker either. Before this fix, `ExtractSeason("...Naru II - 01 [1080p]...")` returned `nil` while `ExtractAnimeSeasonPart` (via the `"...2nd Season"` synonym) correctly resolved `requestedSeason=2`, so every real torrent got rejected by the hard season filter in `ScrapNyaaForMultipleEpisodes` (`season == nil` vs `requestedSeason=2`) even though `titleMatchesQuery` already matched the full title including "II" — the anime failed to download every cycle. `reSeasonPatterns` is also used by `truncateAtFirstMarker` (decision 18) to decide where to cut a torrent name before tokenizing; if the roman-numeral pattern were merged into that slice, it would truncate `"...Naru II"` right before "II", dropping it from the Jaccard title tokens and silently changing match behavior for every title ending in a numeral. Keeping it as a separate, lower-priority fallback used only by `ExtractSeason` avoids that cross-effect.
 
 **Don't "fix" by:** merging `reRomanSeason` into `reSeasonPatterns`, or matching lowercase roman numerals — lowercase risks false positives from unrelated fansub/codec tokens, and uppercase-only matches how anime titles actually format them.
 
@@ -924,7 +924,7 @@ O que decide elegibilidade a pack hoje **não é mais** um teto de contagem de e
 
 ### 59. Elegibilidade a batch deixou de ser metadado e virou filtro de resultado
 
-**Location:** `daemon/episodes.go` — `partitionSearchResults`, `pickBatches`, `packSet.covering`; `nyaa/nyaa.go` — `extractBatchInfo`/`ExtractBatchInfo`, `ScrapNyaaForAnime`.
+**Location:** `daemon/episodes.go` — `partitionSearchResults`, `pickBatches`, `packSet.covering`; `nyaa/nyaa.go` — `ExtractBatchInfo`, `ScrapNyaaForAnime`.
 
 **What it looks like:** nenhuma checagem de `FINISHED`, nenhuma checagem de contagem de episódios do `Media` antes de decidir se um anime "vira pack". A decisão inteira mora do lado de dentro do resultado da busca já filtrado.
 
@@ -932,7 +932,7 @@ O que decide elegibilidade a pack hoje **não é mais** um teto de contagem de e
 
 Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos e aplica a CADA lista o seu próprio teto de tamanho — `max_batch_torrent_size_gb`/`max_episode_torrent_size_gb` — e o piso de seeders) seguido de `pickBatches` (escolhe o mínimo de packs, entre os que sobraram do filtro, que cobre a janela pendente).
 
-**Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo`/`extractBatchInfo` guardava só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080 —, apostando que outras faixas fantasma (data, bitrate) cairiam em `EndEpisode == 0`, o fallback seguro. **RESOLVIDO** (ver #83): a aposta estava errada para o ano. `(2021-2022)` não cai em zero, vira a faixa 2021..2022, e um pack completo top-seeded era descartado em silêncio por não cobrir episódio nenhum.
+**Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo` guardava só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080 —, apostando que outras faixas fantasma (data, bitrate) cairiam em `EndEpisode == 0`, o fallback seguro. **RESOLVIDO** (ver #83): a aposta estava errada para o ano. `(2021-2022)` não cai em zero, vira a faixa 2021..2022, e um pack completo top-seeded era descartado em silêncio por não cobrir episódio nenhum.
 
 **Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. **RESOLVIDO** (ver #80): apareceu medido, em One Piece. O teto de pack passou a ser empurrado para o pacote `nyaa` por `applyNyaaSettings` — o mesmo mecanismo de push de `SetMaxSearchPages`, e não leitura direta de `files.Config` —, e pack acima do teto sai antes de contar para o piso. O filtro de seeders continua só no daemon: o Nyaa devolve ordenado por seeders desc, então ele não trunca a descida do mesmo jeito.
 
@@ -1050,11 +1050,11 @@ O `PUT /animes/{id}/settings` usa ponteiro (`*int`) e faz merge parcial: um `PUT
 
 ### 51. Episódio aceita 4 dígitos, exceto entre colchetes
 
-**Location:** `nyaa/nyaa_regex.go` — `reEpisodePatterns`, `reBatchRange`, `reHasEpisode`, `reBatchPatterns`; `nyaa/nyaa.go` — `extractEpisodeNumber` (teto `< 10000`).
+**Location:** `nyaa/nyaa_regex.go` — `reEpisodePatterns`, `reBatchRange`, `reHasEpisode`, `reBatchPatterns`; `nyaa/nyaa.go` — `ExtractEpisodeNumber` (teto `< 10000`).
 
 **What it looks like:** todos os padrões de episódio usam `\d{1,4}`, menos `\[(\d{1,3})\]`.
 
-**Why it's right:** com `\d{1,3}` o One Piece (ep. 1123+) não casava em nenhum padrão, `extractEpisodeNumber` devolvia `nil` e **todo** resultado do Nyaa era descartado — o log mostrava 30 linhas boas e `results: 0`. `[05]` fica em 3 dígitos porque `[2025]` (ano) é muito mais comum no nome de um torrent que episódio de 4 dígitos entre colchetes, e um ano lido como episódio descarta o torrent certo.
+**Why it's right:** com `\d{1,3}` o One Piece (ep. 1123+) não casava em nenhum padrão, `ExtractEpisodeNumber` devolvia `nil` e **todo** resultado do Nyaa era descartado — o log mostrava 30 linhas boas e `results: 0`. `[05]` fica em 3 dígitos porque `[2025]` (ano) é muito mais comum no nome de um torrent que episódio de 4 dígitos entre colchetes, e um ano lido como episódio descarta o torrent certo.
 
 **Don't "fix" by:** estender `\[(\d{1,3})\]` para 4 dígitos "por consistência".
 
@@ -1089,15 +1089,15 @@ O `PUT /animes/{id}/settings` usa ponteiro (`*int`) e faz merge parcial: um `PUT
 
 **Location:** `nyaa/nyaa.go` — `parseRow` de `ScrapNyaa` e de `ScrapNyaaForAnime` (na época desta decisão, `ScrapNyaaForMultipleEpisodes`, depois fundida em `ScrapNyaaForAnime`), `isMovie`, `hasMovieMarker`; `nyaa/nyaa_regex.go` — `reOvaPattern`.
 
-**What it looks like:** dois guards no começo dos dois `parseRow` de episódio (`isBatch` e `hasMovieMarker`), e um `hasMovieMarker` que é `isMovie` **menos** o ramo final.
+**What it looks like:** dois guards no começo dos dois `parseRow` de episódio (`IsBatch` e `hasMovieMarker`), e um `hasMovieMarker` que é `isMovie` **menos** o ramo final.
 
 **Why it's right:**
 
-**(a) Sem o guard de batch, um pack de 220 episódios entra como "episódio 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` casa `- 001` em `extractEpisodeNumber`, e a busca multi-episódio (ao contrário da single) não filtrava batch. Resultado medido, na época: 220 episódios num registro só, com `IsBatch: false`, furando o teto de batch da época (`max_batch_episodes`, removido pela spec de batch-por-filtro) **e** `max_episodes_per_anime` — e organizado como episódio único (renomeado "Naruto - E01" com `rename_files_for_jellyfin`). Descartar em vez de aceitar como batch porque a busca de pack rodava **antes** na resolução da estratégia: um batch que valesse a pena já teria sido pego lá, e o que vaza aqui é exatamente o que o teto rejeitou. O guard em si (marcar `IsBatch`/descartar packs vazados de dentro do parser de episódio) segue valendo em `ScrapNyaaForAnime` hoje.
+**(a) Sem o guard de batch, um pack de 220 episódios entra como "episódio 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` casa `- 001` em `ExtractEpisodeNumber`, e a busca multi-episódio (ao contrário da single) não filtrava batch. Resultado medido, na época: 220 episódios num registro só, com `IsBatch: false`, furando o teto de batch da época (`max_batch_episodes`, removido pela spec de batch-por-filtro) **e** `max_episodes_per_anime` — e organizado como episódio único (renomeado "Naruto - E01" com `rename_files_for_jellyfin`). Descartar em vez de aceitar como batch porque a busca de pack rodava **antes** na resolução da estratégia: um batch que valesse a pena já teria sido pego lá, e o que vaza aqui é exatamente o que o teto rejeitou. O guard em si (marcar `IsBatch`/descartar packs vazados de dentro do parser de episódio) segue valendo em `ScrapNyaaForAnime` hoje.
 
-**(a2) O guard só vale se o `isBatch` reconhecer a faixa.** O padrão de faixa exigia espaço DEPOIS do segundo número (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), então `One Piece EP 001-501` e `One Piece 001-501.mkv` passavam como "episódio 1" — o mesmo bug de (a) por outro buraco, medido ao vivo na busca do episódio 1 do One Piece (2 dos 7 candidatos eram packs de 500 episódios). O fim da faixa agora aceita espaço, fim do nome, `.` ou `[`.
+**(a2) O guard só vale se o `IsBatch` reconhecer a faixa.** O padrão de faixa exigia espaço DEPOIS do segundo número (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), então `One Piece EP 001-501` e `One Piece 001-501.mkv` passavam como "episódio 1" — o mesmo bug de (a) por outro buraco, medido ao vivo na busca do episódio 1 do One Piece (2 dos 7 candidatos eram packs de 500 episódios). O fim da faixa agora aceita espaço, fim do nome, `.` ou `[`.
 
-**(b) O ramo `!reHasEpisode && !isBatch` de `isMovie` não pode virar guard de episódio.** `reHasEpisode` só cobre `- 05`, `episode 05` e `S01E05`; `extractEpisodeNumber` cobre também `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` e `" 5"`. Chamar `isMovie` inteiro rejeitaria todo release nessas formas (os testes de "Lucky Star EP015 / E015 / 15" pegam isso). Daí o split: `hasMovieMarker` (keywords + OVA/ONA + special) serve os dois lados, e `isMovie` continua sendo o `hasMovieMarker` mais o fallback "não tem marcador de episódio" que só faz sentido na busca de filme.
+**(b) O ramo `!reHasEpisode && !IsBatch` de `isMovie` não pode virar guard de episódio.** `reHasEpisode` só cobre `- 05`, `episode 05` e `S01E05`; `ExtractEpisodeNumber` cobre também `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` e `" 5"`. Chamar `isMovie` inteiro rejeitaria todo release nessas formas (os testes de "Lucky Star EP015 / E015 / 15" pegam isso). Daí o split: `hasMovieMarker` (keywords + OVA/ONA + special) serve os dois lados, e `isMovie` continua sendo o `hasMovieMarker` mais o fallback "não tem marcador de episódio" que só faz sentido na busca de filme.
 
 **(c) `reOvaPattern` precisa de `\b`.** Era `\(?(ova|ona)\)?`, sem boundary: "ona" casa dentro de **Persona**, "ova" dentro de **Nova**. Enquanto o padrão só era usado na direção permissiva (`ScrapNyaaForMovie`) isso passava; como guard de episódio viraria rejeição do anime inteiro.
 
@@ -1434,7 +1434,7 @@ Descartar, e não enfileirar, é deliberado: o passe descartado leria exatamente
 
 **Location:** `internal/files/librarian.go` — `packEpisodeOffset` e a guarda `if used[destName]` em `Organize`; `internal/daemon/jobs.go` — `OrganizeRequest.TotalEpisodes`. Testes em `librarian_test.go` (`TestOrganizeBatch*`, `TestPackEpisodeOffset`) e `orchestration_test.go` (`TestOrganizeTorrent_BatchContinuousNumbering`).
 
-**(a) O offset sai dos arquivos, não da AniList.** Pack de season >= 2 passa pelo filtro de season (`nyaa.go`, ramo `isBatch`) carregando o marcador no nome do torrent, mas os arquivos lá dentro podem estar numerados continuamente (13-24 para uma entrada de 12 episódios). Como cada season é uma entrada própria com numeração começando em 1 (decisão #45), esses arquivos entravam na biblioteca como `E13`..`E24` numa pasta que o Jellyfin conhece com 12 episódios.
+**(a) O offset sai dos arquivos, não da AniList.** Pack de season >= 2 passa pelo filtro de season (`nyaa.go`, ramo `IsBatch`) carregando o marcador no nome do torrent, mas os arquivos lá dentro podem estar numerados continuamente (13-24 para uma entrada de 12 episódios). Como cada season é uma entrada própria com numeração começando em 1 (decisão #45), esses arquivos entravam na biblioteca como `E13`..`E24` numa pasta que o Jellyfin conhece com 12 episódios.
 
 A fonte *correta* do offset é a contagem de episódios do PREQUEL — o que `daemon.ComputeEpisodeOffset` já calcula na busca —, mas ela não existe no organize: o job só tem o hash e os registros de `episodes.json`. Trazê-la pediria campo novo em `EpisodeStruct` (com migração) ou uma requisição à AniList dentro do job. `packEpisodeOffset` evita as duas: usa `AnimeTotalEpisodes`, que **já** está gravado no registro, e só desloca com evidência inequívoca — **todo** arquivo numerado acima do total da entrada **e** pelo menos um arquivo por episódio. Isso é um pack completo que começa no episódio 1 da season, então `min - 1` é o offset.
 
@@ -1461,7 +1461,7 @@ legenda ASS no vídeo** e dessincroniza. `codec` agora está em `episodeCriteria
 nunca desempataria nada e só gastaria uma comparação.
 
 **A guarda que faz a mudança não sair pela culatra:** `priorityIndex` devolve `len(list)` para token
-desconhecido, ou seja, **o pior**. E `extractCodec` devolve `""` para nome sem tag de codec — que é
+desconhecido, ou seja, **o pior**. E `ExtractCodec` devolve `""` para nome sem tag de codec — que é
 exatamente o padrão do SubsPlease (`[SubsPlease] Anime - 07 (1080p) [HASH].mkv` não diz H264 em
 lugar algum). Com `codec` antes de `fansub` na ordem default, ligar o critério cru faria todo
 release sem tag perder para qualquer x265 tagueado: o **oposto** do que a lista de codecs configura.
@@ -1470,7 +1470,7 @@ critério seguinte decidir. É a mesma regra que `sizeCompare`/`resCompare` já 
 ausente, e a mesma de `filterBySize` (`nyaa.go`): dado que não deu para ler não é motivo para punir
 o release.
 
-**Tokens canônicos.** `extractCodec` só devolve `HEVC`, `AV1`, `H.264` e `XviD` (`reCodecPatterns`
+**Tokens canônicos.** `ExtractCodec` só devolve `HEVC`, `AV1`, `H.264` e `XviD` (`reCodecPatterns`
 mapeia `x265`→`HEVC` e `x264`→`H.264`). As entradas `"x265"` e `"x264"` do default de
 `priorities.codecs` portanto **nunca casam com nada** — são inertes. Configurar preferência por
 H264 exige escrever `h.264`, não `x264`.
@@ -1481,12 +1481,12 @@ do token desconhecido (esconde o mesmo bug em vez de resolvê-lo).
 
 ### 70. Resolução canonicaliza no extrator, e os presets de codec são reordenação no frontend
 
-**Location:** `nyaa/nyaa.go` — `extractResolution`, `canonicalResolutions`; `nyaa/priorities.go` —
+**Location:** `nyaa/nyaa.go` — `ExtractResolution`, `canonicalResolutions`; `nyaa/priorities.go` —
 defaults de `Resolutions`/`Codecs`/`Sources`; `frontend/src/lib/domain/priorityPresets.ts`;
 `frontend/src/routes/Priorities.svelte`.
 
-**(a) A canonicalização vive em `extractResolution`, não na ordem da lista.** `extractCodec` já
-devolvia token canônico (`x265` → `HEVC`) e `extractResolution` devolvia a captura crua. Essa
+**(a) A canonicalização vive em `ExtractResolution`, não na ordem da lista.** `ExtractCodec` já
+devolvia token canônico (`x265` → `HEVC`) e `ExtractResolution` devolvia a captura crua. Essa
 assimetria **era** o bug: `4k` e `2160p` são a mesma resolução e ocupavam dois índices diferentes do
 default, então qual vencia dependia só de como o grupo escreveu o nome do torrent; `1920x1080` é
 capturável pelo regex, não existia na lista, e ranqueava como o pior. Resolver isso reordenando a
@@ -1546,7 +1546,7 @@ fechado — `sortByCriteria` pula em silêncio o critério que não está em `cr
 validação no `PUT /config` —, então texto livre ali só produzia config inerte, e com o checkbox os
 oito critérios já estão sempre na tela, marcados ou não. Não há o que adicionar.
 
-**Don't "fix" by:** devolver a captura crua em `extractResolution` e "arrumar" a ordem da lista;
+**Don't "fix" by:** devolver a captura crua em `ExtractResolution` e "arrumar" a ordem da lista;
 repor `4k`/`uhd`/`fhd`/`hd`/`8k` no default; criar endpoint de presets; guardar o preset escolhido
 em `config.json`; escrever os defaults novos por cima de um `config.json` existente; pôr o `✕` de
 volta nos tokens canônicos "porque o checkbox é um clique a mais"; devolver o campo de adicionar a
@@ -2066,7 +2066,7 @@ quando o pack pousou).
 
 **Location:** `src/internal/daemon/episodes.go` — `packAxis`, `newPackAxis`, `packAxis.localRange`,
 `coveringBatch`, `pickBatches`, `assignBatches`, `hasDeclaredRange`, `declaredSpan`;
-`src/internal/nyaa/nyaa.go` — `extractPart`, `declaredParts` e o ramo `isBatch` de
+`src/internal/nyaa/nyaa.go` — `ExtractPart`, `declaredParts` e o ramo `IsBatch` de
 `ScrapNyaaForAnime`. Travado por `packaxis_test.go` e pelas tabelas de `nyaa_test.go`. Consome a
 #77 (eixo absoluto) e é o outro lado da #78 (posse por cobertura).
 
@@ -2114,7 +2114,7 @@ ser o **fim** (`hasDeclaredRange`: `BatchEnd > 0`) e não mais `BatchStart <= 0`
 sobre `[Erai-raws] … - 00 ~ 12`. Só o **nome exibido** corta o começo em 1: "-10-12" não diz nada
 na tela, e o que interessa ali é a fatia desta entrada.
 
-**`extractPart` devolve `nil` para nome com duas parts.** "(Part 1 + Part 2)", "(Part 1+2)" e
+**`ExtractPart` devolve `nil` para nome com duas parts.** "(Part 1 + Part 2)", "(Part 1+2)" e
 "(Season 4 Part 03+04)" cobrem as duas metades; devolver o primeiro número fazia o pack ser
 rejeitado justamente para a segunda. Sem número único, quem decide é a cobertura.
 
@@ -2139,7 +2139,7 @@ distinga das outras; unificar `prequelOf` com `ComputeEpisodeOffset`.
 
 ### 83. A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento
 
-**Location:** `nyaa/nyaa.go` — `batchRange`, chamado por `extractBatchInfo`; `nyaa/nyaa_regex.go` — `reBatchRange`.
+**Location:** `nyaa/nyaa.go` — `batchRange`, chamado por `ExtractBatchInfo`; `nyaa/nyaa_regex.go` — `reBatchRange`.
 
 **What it looks like:** um `FindAll` com `continue` em três guardas onde caberia um `FindString` com um `if`, e uma banda de números mágicos (1900..2100) no meio. Parece defesa especulativa contra casos que não acontecem.
 
@@ -2200,7 +2200,7 @@ A lista de arquivos da página de detalhe responde antes de baixar, e responde b
 - **O desempate não mudaria nenhum dos 8 resultados**, e contaria pasta de extras como episódio: `Creditless Opening 1` → 1, `OAD - 01` → 1, `Movie 01` → 1 (medido; em 61 packs essas pastas nunca alargaram o `min..max` além do conteúdo principal, mas entrariam direto numa contagem por pasta).
 - **O resíduo é outro, e menor:** a faixa GRAVADA passa do total da entrada em 4 das 8 combinações — Haikyuu S3 grava 1..25 para uma entrada de 10, SnK S2 grava 1..25 para 12, SnK S3 +3, JJK S2 +1. Isso é over-claim para a posse por cobertura de [#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio), e o conserto dele é clampar o fim em `totalEpisodes`, não ler pasta.
 
-**Gap medido junto, esse sim sem conserto:** `extractEpisodeNumber` devolve `nil` para nome de arquivo com número solto seguido de título — `My Hero Academia 39 Game Start [1080p].mkv`. Foram os 3 únicos packs da amostra em que nem o nome nem os arquivos resolveram a faixa, os três do mesmo release de MHA.
+**Gap medido junto, esse sim sem conserto:** `ExtractEpisodeNumber` devolve `nil` para nome de arquivo com número solto seguido de título — `My Hero Academia 39 Game Start [1080p].mkv`. Foram os 3 únicos packs da amostra em que nem o nome nem os arquivos resolveram a faixa, os três do mesmo release de MHA.
 
 **Don't "fix" by:**
 - Buscar o detalhe dentro do `parseRow` das buscas: vira uma requisição **por linha** da listagem. É por isso que `DetailURL` só é capturada ali e a leitura acontece depois do filtro e da ordenação.

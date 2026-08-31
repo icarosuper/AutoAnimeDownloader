@@ -14,7 +14,7 @@ var errBadEBML = errors.New("invalid EBML variable-length integer")
 
 // Leitura do codec de vídeo direto do arquivo, e não do nome dele.
 //
-// Por que existe: `nyaa.extractCodec` lê o codec do NOME do release, e boa parte dos uploads
+// Por que existe: `nyaa.ExtractCodec` lê o codec do NOME do release, e boa parte dos uploads
 // simplesmente não escreve — o Erai-raws não escreve, muito BD rip não escreve. O único lugar
 // onde o codec sempre está é o cabeçalho do próprio arquivo, declarado por quem encodou.
 //
@@ -47,7 +47,7 @@ const (
 )
 
 // mkvCodecLabels traduz os CodecID da Matroska para o MESMO vocabulário que
-// `nyaa.extractCodec` usa no resto do app ("HEVC", "H.264", "AV1"), senão a tela de prioridades
+// `nyaa.ExtractCodec` usa no resto do app ("HEVC", "H.264", "AV1"), senão a tela de prioridades
 // e este painel falariam de codec com nomes diferentes. O que não estiver no mapa sai como o
 // CodecID sem o prefixo `V_` — feio, mas honesto: melhor do que chutar um rótulo bonito errado.
 var mkvCodecLabels = map[string]string{
@@ -61,7 +61,7 @@ var mkvCodecLabels = map[string]string{
 }
 
 // VideoCodec devolve o codec da primeira trilha de vídeo de um `.mkv`, no vocabulário de
-// `nyaa.extractCodec`. Devolve "" — nunca erro — para qualquer coisa que não dê para responder:
+// `nyaa.ExtractCodec`. Devolve "" — nunca erro — para qualquer coisa que não dê para responder:
 // arquivo que não abre, que não é Matroska, que ainda não tem o cabeçalho no disco, ou EBML que
 // não bate. É dado de exibição: não saber é um estado normal, não uma falha.
 func VideoCodec(path string) string {

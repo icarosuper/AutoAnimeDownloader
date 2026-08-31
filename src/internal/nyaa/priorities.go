@@ -34,7 +34,7 @@ func DefaultPriorities() Priorities {
 			"subsplease", "erai-raws", "judas", "toonshub", "asw",
 			"ember", "hd-zone", "kamig", "remix", "aniverse", "dub", "raw",
 		},
-		// Só os tokens canônicos que extractResolution consegue devolver: "4k"/"uhd" viram
+		// Só os tokens canônicos que ExtractResolution consegue devolver: "4k"/"uhd" viram
 		// "2160p", "fhd" vira "1080p", "hd" vira "720p". 4K abaixo de 720p é deliberado —
 		// anime em 4K é quase sempre upscale de um master 1080p.
 		Resolutions: []string{"1080p", "720p", "1440p", "2160p", "480p"},
@@ -42,7 +42,7 @@ func DefaultPriorities() Priorities {
 		Sources: []string{"bdremux", "bd", "bdrip", "web-dl", "webrip", "tv", "dvd", "hdtv"},
 		// H.264 primeiro: toca direto em qualquer player, sem transcode no servidor (que
 		// queima a legenda no vídeo e a dessincroniza). Quem prefere arquivo menor troca
-		// pelo preset na tela de prioridades. "x265"/"x264" não entram porque extractCodec
+		// pelo preset na tela de prioridades. "x265"/"x264" não entram porque ExtractCodec
 		// já canonicaliza para "hevc"/"h.264" — seriam tokens inertes.
 		Codecs:     []string{"h.264", "hevc", "av1", "xvid"},
 		Audio:      []string{"flac", "dts-hd", "truehd", "ddp", "aac", "ac3", "mp3"},
@@ -126,7 +126,7 @@ var healthTierFloors = []int{1, 5, 20, 100, 400}
 // razão não é transitiva (100 ~ 150 ~ 220, mas 100 < 220) e sort.SliceStable com comparador
 // intransitivo devolve ordem arbitrária.
 func healthTier(r TorrentResult) int {
-	seeders := parseSeeders(r.Seeders)
+	seeders := ParseSeeders(r.Seeders)
 	tier := 0
 	for _, floor := range healthTierFloors {
 		if seeders >= floor {
@@ -153,7 +153,7 @@ func boolBetter(a, b bool) int {
 // contrário do que a lista de codecs configura. Mesma regra do tamanho ilegível em
 // filterBySize: dado que não deu para ler não é motivo para punir o release.
 func codecCompare(a, b TorrentResult) int {
-	ca, cb := extractCodec(a.Name), extractCodec(b.Name)
+	ca, cb := ExtractCodec(a.Name), ExtractCodec(b.Name)
 	if ca == "" || cb == "" {
 		return 0
 	}
