@@ -96,6 +96,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#87** — Headers do webhook viram lista de pares enquanto o formulário está aberto](#87-headers-do-webhook-viram-lista-de-pares-enquanto-o-formulário-está-aberto)
 - [**#88** — A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`](#88-a-barra-de-progresso-deriva-baixados-de-episodes_pending-e-não-de-episodes_downloaded)
 - [**#89** — Não existe spec OpenAPI: a tabela do architecture.md é a única doc de endpoint](#89-não-existe-spec-openapi-a-tabela-do-architecturemd-é-a-única-doc-de-endpoint)
+- [**#90** — Não há versionamento de `config.json`: a migração checa FORMA, num lugar só](#90-não-há-versionamento-de-configjson-a-migração-checa-forma-num-lugar-só)
 
 ---
 
@@ -2398,3 +2399,64 @@ hover do editor, e não depende de regeneração para estar certo.
 - Gerar o spec sem servir a rota "porque é de graça": não é — volta o passo de regeneração em todo
   commit de API e a segunda cópia do contrato para envelhecer. Se um dia precisar importar num
   Bruno/Insomnia, gerar sob demanda e não versionar é mais barato que manter.
+
+### 90. Não há versionamento de `config.json`: a migração checa FORMA, num lugar só
+
+**Location:** `files/filemanager.go` — `LoadConfigs` (as duas migrações de campo legado, ~22
+linhas). Fato negativo: **não existe** campo `config_version`, chain de migração, nem trava que
+bloqueie o app com config velha. E a migração mora num lugar **só** — `api/endpoint_config.go`
+deliberadamente não a repete no `PUT`.
+
+**O que parece:** falta de robustez. O projeto é distribuído (AUR + releases) e um `config.json`
+de uma versão antiga carregando errado é falha silenciosa. A saída natural parece ser numerar o
+formato, escrever um chain v1→v2→v3 e travar o app com um aviso grande quando a migração não der.
+
+**Por que não existe:** porque o formato já resolve dois dos três casos sozinho. `LoadConfigs`
+desserializa o JSON **por cima de `getDefaultConfig()`** (`filemanager.go`), então:
+
+| Mudança no `Config` | Precisa migrar? |
+|---|---|
+| Campo **novo** | Não — o default vale, config antigo carrega certo |
+| Campo **removido** | Não — o JSON ignora chave desconhecida |
+| Campo **renomeado** | **Sim** — único caso |
+
+Um chain de versões existiria para servir só a terceira linha, que aconteceu **duas vezes** na vida
+do projeto (`anilist_username` → `anilist_usernames` e `excluded_list` → `excluded_lists`, ambas em
+abril de 2026).
+
+E o número de versão seria **menos** confiável que a checagem que está lá. `if config.ExcludedList
+!= "" && len(config.ExcludedLists) == 0` é **derivado do dado**; um `config_version` é **metadado
+afirmando algo sobre o dado**, e o `config.json` é um arquivo que o usuário abre no editor. Ele
+edita um campo e a versão fica parada; restaura um backup e a versão vem de outro momento que a
+forma. Aí o chain roda a migração errada — com confiança, que é o que a checagem de forma não faz.
+
+A trava tem o problema oposto: **nenhum `config.json` que existe hoje tem campo de versão**. Ou
+"sem versão" é tratado como v1, e então a trava nunca protege do caso real, ou ela dispara em todo
+mundo na estreia. E para rename, migrar nunca é *impossível* — se dá para instruir o usuário na
+tela, dá para fazer.
+
+**O precedente que fecha o assunto:** o `save_path` (#31, emenda de 24/ago/2026) foi exatamente
+esta pergunta com consequência **pior** — sem migrar, a rain acha o caminho derivado vazio e
+rebaixa a biblioteca inteira. A decisão foi remover a migração e documentar passo manual. E o que
+travava lá não era falta de campo de versão: a operação preserva inode, carrega o
+`torrents.RootMarkerName` junto e não dá para saber se o usuário já moveu a pasta na mão. Nenhum
+chain torna isso seguro.
+
+Que é a régua geral: migração de config é ou **forma pura** (rename — 3 linhas, dispensa versão) ou
+**mudança com efeito fora do config** (mover dado em disco — versão não deixa segura). O
+framework não ajuda em nenhuma das duas.
+
+**Quando revisitar:** se migração de config virar frequente (3+ num ano) ou se aparecer uma cujo
+mapeamento antigo→novo não seja mecânico. Hoje é 2 em ~2 anos, ambas mecânicas.
+
+**Don't "fix" by:**
+- Adicionar `config_version` + chain: ver acima; a forma já responde, e o número pode mentir.
+- Travar o app quando a config parecer velha: todo config existente hoje dispara essa trava.
+- Repetir a migração no `PUT /config` "para o cliente antigo": era o que `endpoint_config.go` fazia,
+  e o comentário estava errado — nenhuma versão do CLI mandou a chave singular (o `case
+  "anilist_username"` do switch antigo setava `AnilistUsernames`, o plural). Um corpo que ainda
+  mande a chave singular é persistido e curado no `LoadConfigs` seguinte; a cópia no handler só
+  antecipava a cura em um ciclo, ao custo de duas migrações para divergir.
+- Tirar as ~22 linhas do `LoadConfigs` "porque já faz meses": lista de contas vazia **não** é estado
+  de erro (#49 — instalação só de avulsos nunca configura conta), então um config pré-abril
+  carregaria sem contas, sem reclamar, e o daemon simplesmente não baixaria nada de lista.

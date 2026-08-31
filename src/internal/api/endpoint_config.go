@@ -42,11 +42,9 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Migrate legacy anilist_username → anilist_usernames (supports old CLI clients)
-		if config.AnilistUsername != "" && len(config.AnilistUsernames) == 0 {
-			config.AnilistUsernames = []string{config.AnilistUsername}
-			config.AnilistUsername = ""
-		}
+		// A migracao de anilist_username -> anilist_usernames NAO e repetida aqui: quem migra e
+		// LoadConfigs, uma vez, e gravando (decisions.md #90). Um corpo que ainda mande a chave
+		// singular e persistido e curado na leitura seguinte.
 
 		// anilist_usernames NAO e validado: uma instalacao que so usa animes avulsos nunca
 		// configura conta nenhuma (decisions.md #49).
