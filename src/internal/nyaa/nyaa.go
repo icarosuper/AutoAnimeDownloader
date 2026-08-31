@@ -123,7 +123,6 @@ func extractFansub(name string) string {
 }
 
 // IsBatch verifica se o torrent é um batch (múltiplos episódios)
-// Baseado nas regras do documento (Seção 1 do RegrasFilmesBatches.md)
 func IsBatch(name string) bool {
 	nameLower := strings.ToLower(name)
 	for _, re := range reBatchPatterns {
@@ -142,7 +141,6 @@ type BatchInfo struct {
 }
 
 // ExtractBatchInfo extrai informações detalhadas de um batch
-// Baseado nas regras do documento (Seção 3.1 do RegrasFilmesBatches.md)
 // Consumida fora do pacote pelo daemon: e a faixa dela que decide QUAIS episodios recebem o
 // magnet do pack (pickBatches).
 func ExtractBatchInfo(torrentName string) BatchInfo {
@@ -286,7 +284,6 @@ func fileListEntryName(s *goquery.Selection) string {
 }
 
 // isMovie verifica se o torrent é um filme
-// Baseado nas regras do documento (Seção 4 do RegrasFilmesBatches.md)
 // Se isFormatMovie for true, usa o formato do AniList (mais confiável)
 func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 	if isFormatMovie {
@@ -830,7 +827,6 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 
 // ScrapNyaaForMovie busca torrents de filmes
 // Detecta automaticamente filmes e ordena por qualidade técnica
-// Baseado nas regras do documento (Seção 4-6 do RegrasFilmesBatches.md)
 // isFormatMovie indica se o AniList classifica como filme (format = MOVIE)
 func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult, error) {
 	// Se o parâmetro opcional foi passado, usa ele; caso contrário, assume false
@@ -1126,19 +1122,16 @@ func extractAudio(name string) string {
 }
 
 // sourcePriority retorna prioridade da fonte (menor = melhor)
-// Baseado nas regras do documento (Seção 6.1 do RegrasFilmesBatches.md)
 func sourcePriority(source string) int {
 	return priorityIndex(ActivePriorities().Sources, source)
 }
 
 // codecPriority retorna prioridade do codec (menor = melhor)
-// Baseado nas regras do documento (Seção 6.2 do RegrasFilmesBatches.md)
 func codecPriority(codec string) int {
 	return priorityIndex(ActivePriorities().Codecs, codec)
 }
 
 // audioPriority retorna prioridade do áudio (menor = melhor)
-// Baseado nas regras do documento (Seção 6.3 do RegrasFilmesBatches.md)
 func audioPriority(audio string) int {
 	return priorityIndex(ActivePriorities().Audio, audio)
 }
@@ -1226,7 +1219,6 @@ func extractSeasonFromName(name string) string {
 }
 
 // SortMovieResults ordena os resultados de busca de filmes por qualidade
-// Baseado nas regras do documento (Seção 6.4 do RegrasFilmesBatches.md)
 // Critérios de ordenação (em ordem de prioridade):
 // 1. Source (BD > WEB-DL > TV)
 // 2. Resolução (1080p > 720p > 480p)

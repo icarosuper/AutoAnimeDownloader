@@ -1398,37 +1398,6 @@ func TestSortMovieResults_SortsByTechnicalQuality(t *testing.T) {
 	// (prioridade: source > resolution > codec > fansub > audio > seeders > size)
 }
 
-func TestExtractSource_ExtractsVideoSource(t *testing.T) {
-	// Função não é exportada, testada indiretamente via SortMovieResults
-	t.Skip("extractSource is not exported - tested indirectly via SortMovieResults")
-}
-
-func TestExtractCodec_ExtractsVideoCodec(t *testing.T) {
-	// ExtractCodec É exportada e a cobertura real dela vive em priorities_test.go
-	// (TestDefaultPriorities_TokensAreReachable), que casa cada token default contra o que ela devolve.
-	t.Skip("coberta em priorities_test.go - este placeholder nunca chegou a afirmar nada")
-}
-
-func TestExtractAudio_ExtractsAudioCodec(t *testing.T) {
-	// Função não é exportada, testada indiretamente via SortMovieResults
-	t.Skip("extractAudio is not exported - tested indirectly via SortMovieResults")
-}
-
-func TestSourcePriority_CorrectOrder(t *testing.T) {
-	// Função não é exportada, testada indiretamente via SortMovieResults
-	t.Skip("sourcePriority is not exported - tested indirectly via SortMovieResults")
-}
-
-func TestCodecPriority_CorrectOrder(t *testing.T) {
-	// Função não é exportada, testada indiretamente via SortMovieResults
-	t.Skip("codecPriority is not exported - tested indirectly via SortMovieResults")
-}
-
-func TestAudioPriority_CorrectOrder(t *testing.T) {
-	// Função não é exportada, testada indiretamente via SortMovieResults
-	t.Skip("audioPriority is not exported - tested indirectly via SortMovieResults")
-}
-
 func TestTitleMatchesQuery_AcceptsCorrectTorrents(t *testing.T) {
 	tests := []struct {
 		torrent string
