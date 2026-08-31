@@ -96,9 +96,6 @@
   // Custom search query state. O handoff esqueceu deste campo; o spec §9.2 pede que ele volte
   // num bloco recolhível logo abaixo do cabeçalho — recolhido por padrão porque é ajuste fino,
   // não o que se vem fazer nesta tela.
-  let customSearchQuery = "";
-  let searchQuerySaving = false;
-  let searchQueryOpen = false;
 
   // Progresso manual do avulso. Prefill de `anime.episodes_watched`, que já traz o valor salvo
   // (o backend injeta AnimeSettings.progress no MediaList sintético).
@@ -448,7 +445,6 @@
 
       detail = detailData;
       anime = animesData.find((a) => a.anime_id === id) ?? null;
-      customSearchQuery = detailData.custom_search_query ?? "";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.detail_toast_load_error());
     } finally {
@@ -626,18 +622,6 @@
       toast.error(err instanceof Error ? err.message : m.detail_replace_anime_error());
     } finally {
       replaceLoading = false;
-    }
-  }
-
-  async function handleSaveSearchQuery() {
-    searchQuerySaving = true;
-    try {
-      await updateAnimeSettings(animeId, { custom_search_query: customSearchQuery });
-      toast.success(m.detail_search_query_saved());
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : m.detail_search_query_error());
-    } finally {
-      searchQuerySaving = false;
     }
   }
 
@@ -951,50 +935,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Busca customizada do anime — recolhível (spec §9.2) -->
-  {#if detail && !anime?.is_standalone}
-    <section class="rounded-card border border-default bg-card">
-      <button
-        type="button"
-        class="flex w-full items-center gap-2 px-4 py-3 text-left text-copy text-body transition-colors hover:bg-control"
-        aria-expanded={searchQueryOpen}
-        on:click={() => (searchQueryOpen = !searchQueryOpen)}
-      >
-        <ChevronDown
-          size={16}
-          strokeWidth={2}
-          class="shrink-0 transition-transform {searchQueryOpen ? '' : '-rotate-90'}"
-        />
-        {$locale && m.detail_search_query_label()}
-        {#if customSearchQuery}
-          <span class="truncate font-mono text-caption text-subtle">{customSearchQuery}</span>
-        {/if}
-      </button>
-
-      {#if searchQueryOpen}
-        <div class="border-t border-divider p-4">
-          <label for="custom-search-query" class="mb-1.5 block text-copy text-body">
-            {$locale && m.detail_search_query_label()}
-          </label>
-          <div class="flex flex-wrap items-center gap-2">
-            <input
-              id="custom-search-query"
-              type="text"
-              bind:value={customSearchQuery}
-              placeholder={m.detail_search_query_placeholder()}
-              class="min-w-0 flex-1 rounded-field border border-default bg-control px-3 py-2 text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle focus:border-accent"
-              on:keydown={(e) => { if (e.key === 'Enter') handleSaveSearchQuery(); }}
-            />
-            <Button variant="ghost" disabled={searchQuerySaving} on:click={handleSaveSearchQuery}>
-              {searchQuerySaving ? "..." : ($locale && m.common_save())}
-            </Button>
-          </div>
-          <p class="mt-1.5 text-caption text-subtle">{$locale && m.detail_search_query_placeholder()}</p>
-        </div>
-      {/if}
-    </section>
-  {/if}
 
   {#if loading}
     <Loading message={m.detail_loading()} />

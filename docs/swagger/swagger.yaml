@@ -59,8 +59,6 @@ definitions:
         type: integer
       cover_image:
         type: string
-      custom_search_query:
-        type: string
       episodes:
         items:
           $ref: '#/definitions/api.AnimeEpisodeInfo'
@@ -367,8 +365,6 @@ definitions:
     type: object
   api.animeSettingsRequest:
     properties:
-      custom_search_query:
-        type: string
       progress:
         type: integer
     type: object

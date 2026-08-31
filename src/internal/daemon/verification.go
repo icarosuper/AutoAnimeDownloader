@@ -120,7 +120,6 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		anilistResponse  *anilist.AniListResponse
 		savedEpisodes    []files.EpisodeStruct
 		blockedEpisodes  []files.EpisodeKey
-		animeSettingsMap map[int]files.AnimeSettings
 		// inDeleteStatus[username][mediaId] — quais animes cada conta tem em algum status de
 		// deleção. Uma conta cuja busca falhou fica ausente do mapa, e ausente nunca concorda.
 		inDeleteStatus map[string]map[int]bool
@@ -164,17 +163,6 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		if e != nil {
 			logger.Logger.Warn().Err(e).Msg("Failed to load blocked episodes, continuing without block list")
 			blockedEpisodes = []files.EpisodeKey{}
-		}
-	}()
-
-	fetchWg.Add(1)
-	go func() {
-		defer fetchWg.Done()
-		var e error
-		animeSettingsMap, e = fileManager.LoadAllAnimeSettings()
-		if e != nil {
-			logger.Logger.Warn().Err(e).Msg("Failed to load anime settings, using defaults")
-			animeSettingsMap = map[int]files.AnimeSettings{}
 		}
 	}()
 
@@ -263,13 +251,8 @@ outer:
 			continue
 		}
 
-		customQuery := ""
-		if s, ok := animeSettingsMap[anime.Media.Id]; ok {
-			customQuery = s.CustomSearchQuery
-		}
-
 		animeWg.Add(1)
-		go func(a anilist.MediaList, q string) {
+		go func(a anilist.MediaList) {
 			defer animeWg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -280,8 +263,8 @@ outer:
 			default:
 			}
 
-			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, seriesIndex, blockedMap, q, defaultNyaaSearcher())
-		}(anime, customQuery)
+			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, seriesIndex, blockedMap, defaultNyaaSearcher())
+		}(anime)
 	}
 
 	animeWg.Wait()

@@ -26,26 +26,26 @@ func putSettings(t *testing.T, server *Server, id int, body string) *httptest.Re
 	return rec
 }
 
-// O PUT que a tela dispara manda UM campo. Sem merge, salvar a busca customizada zeraria o
-// progresso e vice-versa.
-func TestPutAnimeSettings_PartialUpdateMergesOverTheSaved(t *testing.T) {
+// Progress e ponteiro justamente para que um corpo SEM o campo nao seja lido como zero: um PUT
+// vazio tem de preservar o progresso salvo, nao apaga-lo.
+func TestPutAnimeSettings_AbsentFieldKeepsTheSavedProgress(t *testing.T) {
 	server, fm := newSettingsTestServer(t)
-	fm.animeSettings = map[int]files.AnimeSettings{7: {CustomSearchQuery: "one piece 1080", Progress: 48}}
+	fm.animeSettings = map[int]files.AnimeSettings{7: {Progress: 48}}
 
-	rec := putSettings(t, server, 7, `{"custom_search_query":"one piece"}`)
+	rec := putSettings(t, server, 7, `{}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("esperava 200, obteve %d: %s", rec.Code, rec.Body.String())
 	}
-	if got := fm.animeSettings[7]; got.Progress != 48 || got.CustomSearchQuery != "one piece" {
-		t.Errorf("esperava progresso preservado e query nova, obteve %+v", got)
+	if got := fm.animeSettings[7]; got.Progress != 48 {
+		t.Errorf("esperava progresso preservado, obteve %+v", got)
 	}
 
 	rec = putSettings(t, server, 7, `{"progress":52}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("esperava 200, obteve %d: %s", rec.Code, rec.Body.String())
 	}
-	if got := fm.animeSettings[7]; got.Progress != 52 || got.CustomSearchQuery != "one piece" {
-		t.Errorf("esperava query preservada e progresso novo, obteve %+v", got)
+	if got := fm.animeSettings[7]; got.Progress != 52 {
+		t.Errorf("esperava progresso novo, obteve %+v", got)
 	}
 }
 

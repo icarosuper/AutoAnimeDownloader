@@ -84,7 +84,7 @@ func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 	}
 
 	// As chaves antigas ficam no arquivo de settings: nao ha remocao na interface e uma entrada
-	// orfa de um custom_search_query nao atrapalha nada. Copiar e o que importa.
+	// orfa de settings nao atrapalha nada. Copiar e o que importa.
 	for entryID, s := range settings {
 		mediaID, ok := mediaByEntry[entryID]
 		if !ok || mediaID == entryID {

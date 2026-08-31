@@ -30,7 +30,6 @@ Per-anime episode list, opened by clicking an anime on the Status page:
 - Episode table (episode number, Anilist watch status, downloaded state)
 - Per-episode actions: download, delete, re-download, replace with a manual magnet link
 - Bulk actions on selected episodes: download, delete, release (unpin from retry queue)
-- Custom search query override for that anime's Nyaa searches
 
 ### Config (`/config`)
 

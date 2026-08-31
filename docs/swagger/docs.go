@@ -1744,9 +1744,6 @@ const docTemplate = `{
                 "cover_image": {
                     "type": "string"
                 },
-                "custom_search_query": {
-                    "type": "string"
-                },
                 "episodes": {
                     "type": "array",
                     "items": {
@@ -2098,9 +2095,6 @@ const docTemplate = `{
         "api.animeSettingsRequest": {
             "type": "object",
             "properties": {
-                "custom_search_query": {
-                    "type": "string"
-                },
                 "progress": {
                     "type": "integer"
                 }

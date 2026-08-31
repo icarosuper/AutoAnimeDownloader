@@ -8,12 +8,10 @@ import (
 	"strconv"
 )
 
-// Os dois campos sao PONTEIROS porque o PUT e parcial: a tela dispara
-// updateAnimeSettings(id, { custom_search_query }) e, com um segundo campo no struct, montar um
-// AnimeSettings do zero zeraria o progresso salvo (e vice-versa).
+// Progress e PONTEIRO porque o PUT e parcial: ausente tem de ser distinguivel de zero, ou um
+// corpo sem o campo zeraria o progresso salvo.
 type animeSettingsRequest struct {
-	CustomSearchQuery *string `json:"custom_search_query"`
-	Progress          *int    `json:"progress"`
+	Progress *int `json:"progress"`
 }
 
 // @Summary      Get or update anime-specific settings
@@ -69,9 +67,6 @@ func handleAnimeSettings(server *Server) http.HandlerFunc {
 			settings := files.AnimeSettings{}
 			if existing != nil {
 				settings = *existing
-			}
-			if req.CustomSearchQuery != nil {
-				settings.CustomSearchQuery = *req.CustomSearchQuery
 			}
 			if req.Progress != nil {
 				settings.Progress = *req.Progress

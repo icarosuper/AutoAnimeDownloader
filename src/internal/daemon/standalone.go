@@ -140,16 +140,11 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 		blockedMap[k] = true
 	}
 
-	customQuery := ""
-	if s, err := fm.LoadAnimeSettings(mediaID); err == nil && s != nil {
-		customQuery = s.CustomSearchQuery
-	}
-
 	// Mesma posse por cobertura do passe: adicionar um avulso cuja season ja esta em disco
 	// (baixada sob o cour anterior) nao deve rebaixar nada (coverage.go).
 	seriesIndex := resolveSeriesIndex([]int{mediaID}, savedEpisodes)
 
-	result := processAnimeEpisodes(configs, backend, *anime, backend.List(), savedEpisodes, seriesIndex, blockedMap, customQuery, defaultNyaaSearcher())
+	result := processAnimeEpisodes(configs, backend, *anime, backend.List(), savedEpisodes, seriesIndex, blockedMap, defaultNyaaSearcher())
 
 	saveEpisodesToFile(fm, result.newEpisodes)
 

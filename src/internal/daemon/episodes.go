@@ -104,7 +104,6 @@ func processAnimeEpisodes(
 	savedEpisodes []files.EpisodeStruct,
 	seriesIndex map[int]anilist.Series,
 	blockedMap map[files.EpisodeKey]bool,
-	customQuery string,
 	searcher nyaaSearcher,
 ) animeProcessResult {
 	var result animeProcessResult
@@ -139,11 +138,11 @@ func processAnimeEpisodes(
 	batchSkipped := ""
 
 	if isAnimeMovie(anime) {
-		sel.toDownload, magnetsForEpisodes = resolveMovie(configs, anime, animeTitle, sel.toDownload, customQuery, searcher)
+		sel.toDownload, magnetsForEpisodes = resolveMovie(configs, anime, animeTitle, sel.toDownload, searcher)
 	}
 
 	if magnetsForEpisodes == nil && len(sel.toDownload) > 0 {
-		packs, singles, packStats := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(sel.toDownload), customQuery))
+		packs, singles, packStats := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(sel.toDownload)))
 
 		// Elegibilidade a pack: nao e filme, tem mais de um episodio pendente e a busca FILTRADA
 		// devolveu pack que cobre a janela. Nada disso e metadado do AniList — e o torrent que
@@ -219,7 +218,7 @@ func processAnimeEpisodes(
 		var searchStats dropStats
 		if len(magnets) == 0 {
 			var singleResults []nyaa.TorrentResult
-			singleResults, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, customQuery, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+			singleResults, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 			for _, tr := range singleResults {
 				magnets = append(magnets, tr.MagnetLink)
 			}
@@ -298,12 +297,12 @@ type resolvedMagnets struct {
 // resolveMovie e o caminho de filme, inalterado: quando o filme e achado, todo episodio pendente
 // (ou um episodio sintetico, se nao havia nenhum) recebe o magnet dele. Devolve (episodios, nil)
 // quando nao ha filme, e o fluxo cai na busca por anime — que e o fallback que sempre existiu.
-func resolveMovie(configs *files.Config, anime anilist.MediaList, animeTitle string, episodes []anilist.AiringNode, customQuery string, searcher nyaaSearcher) ([]anilist.AiringNode, map[int]resolvedMagnets) {
+func resolveMovie(configs *files.Config, anime anilist.MediaList, animeTitle string, episodes []anilist.AiringNode, searcher nyaaSearcher) ([]anilist.AiringNode, map[int]resolvedMagnets) {
 	logger.Logger.Info().
 		Str("anime", animeTitle).
 		Msg("Detected movie - searching for movie torrent")
 
-	movieResult, _ := filterSearchResults(searcher.searchMovie(anime.Media.Title, true, customQuery), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+	movieResult, _ := filterSearchResults(searcher.searchMovie(anime.Media.Title, true), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 	if len(movieResult) == 0 {
 		return episodes, nil
 	}

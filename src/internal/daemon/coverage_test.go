@@ -60,15 +60,15 @@ func seasonPackOnDisk() []files.EpisodeStruct {
 // com tudo — se a adocao nao funcionar, o teste acusa E o daemon teria baixado.
 func countingSearcher(hit *bool) nyaaSearcher {
 	return nyaaSearcher{
-		searchAnime: func(_ anilist.Title, _ []string, _ []int, _ string) []nyaa.TorrentResult {
+		searchAnime: func(_ anilist.Title, _ []string, _ []int) []nyaa.TorrentResult {
 			*hit = true
 			return []nyaa.TorrentResult{{Name: "[EMBER] Mushoku Tensei (2021) (Season 1) [Batch]", MagnetLink: "magnet:?xt=urn:btih:outro", IsBatch: true}}
 		},
-		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ string, _ int) []nyaa.TorrentResult {
+		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ int) []nyaa.TorrentResult {
 			*hit = true
 			return nil
 		},
-		searchMovie: func(_ anilist.Title, _ bool, _ string) []nyaa.TorrentResult { return nil },
+		searchMovie: func(_ anilist.Title, _ bool) []nyaa.TorrentResult { return nil },
 	}
 }
 
@@ -91,7 +91,7 @@ func TestCoverageOwnership_SeasonPackCoversNextCour(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, "", countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
 	)
 
 	if searched {
@@ -163,7 +163,7 @@ func TestCoverageOwnership_UncoveredEpisodesStillSearch(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, "", countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
 	)
 
 	if !searched {
@@ -193,7 +193,7 @@ func TestCoverageOwnership_OtherSeriesIsNotOwnership(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: 16498, Offset: 11}, // outra serie, mesmo offset
 		},
-		map[files.EpisodeKey]bool{}, "", countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
 	)
 
 	if !searched {
@@ -215,7 +215,7 @@ func TestCoverageOwnership_PackNotInSessionIsNotOwnership(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, "", countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
 	)
 
 	if !searched {
@@ -241,7 +241,7 @@ func TestCoverageOwnership_UnknownRangeIsNotOwnership(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, "", countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
 	)
 
 	if !searched {

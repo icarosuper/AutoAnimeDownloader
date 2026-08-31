@@ -72,7 +72,7 @@ func TestManualDownloadEpisode_StandaloneAnime(t *testing.T) {
 
 	// Sem torrent no Nyaa o download falha, mas a mensagem tem de ser sobre o torrent — não
 	// sobre o anime não estar em lista nenhuma.
-	_, err := ManualDownloadEpisode(&mockFileManagerForEpisodes{}, torrents.NewFakeBackend(), 500, 1, configs, "")
+	_, err := ManualDownloadEpisode(&mockFileManagerForEpisodes{}, torrents.NewFakeBackend(), 500, 1, configs)
 	if err == nil {
 		t.Fatal("sem torrent no Nyaa o download precisa falhar")
 	}

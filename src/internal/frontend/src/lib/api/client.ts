@@ -355,11 +355,9 @@ export interface AnimeDetailResponse {
   status: string
   cover_image?: string
   episodes: AnimeEpisodeInfo[]
-  custom_search_query?: string
 }
 
 export interface AnimeSettings {
-  custom_search_query?: string
   /** Progresso manual — só é lido para anime avulso (o de lista vem da AniList). */
   progress?: number
 }

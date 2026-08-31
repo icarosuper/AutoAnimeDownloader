@@ -48,7 +48,6 @@ type AnimeDetailResponse struct {
 	Status            string             `json:"status"`
 	CoverImage        string             `json:"cover_image,omitempty"`
 	Episodes          []AnimeEpisodeInfo `json:"episodes"`
-	CustomSearchQuery string             `json:"custom_search_query,omitempty"`
 }
 
 // @Summary      Get detail and episodes for a specific anime
@@ -159,12 +158,6 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			episodes = append(episodes, info)
 		}
 
-		animeSettings, err := server.FileManager.LoadAnimeSettings(id)
-		if err != nil {
-			logger.Logger.Warn().Err(err).Int("anime_id", id).Msg("Failed to load anime settings")
-			animeSettings = &files.AnimeSettings{}
-		}
-
 		totalEpisodes := 0
 		if mediaList.Media.Episodes != nil {
 			totalEpisodes = *mediaList.Media.Episodes
@@ -182,7 +175,6 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			Status:            string(mediaList.Status),
 			CoverImage:        coverImage,
 			Episodes:          episodes,
-			CustomSearchQuery: animeSettings.CustomSearchQuery,
 		}
 
 		JSONSuccess(w, http.StatusOK, response)

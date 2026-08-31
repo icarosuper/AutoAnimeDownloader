@@ -154,7 +154,6 @@ func (c *Config) DownloadPath() string {
 }
 
 type AnimeSettings struct {
-	CustomSearchQuery string `json:"custom_search_query,omitempty"`
 	// Progress e o progresso MANUAL, e existe para o anime avulso: GetMediaByID devolve
 	// Progress: 0 fixo, e sem progresso nada nunca e "assistido", a poda nunca roda e o rodizio
 	// de packs sucessivos nao tem o que o mova. Ausente le 0, que e o comportamento de antes.

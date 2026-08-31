@@ -82,7 +82,7 @@ func TestMigrateAnimeIDsToMedia_RewritesEpisodesAndSettings(t *testing.T) {
 			{EpisodeNumber: 1, AnimeID: 583631757},
 			{EpisodeNumber: 2, AnimeID: 488911345},
 		},
-		settings: map[int]files.AnimeSettings{583631757: {CustomSearchQuery: "bumpkin"}},
+		settings: map[int]files.AnimeSettings{583631757: {Progress: 42}},
 	}
 
 	if err := MigrateAnimeIDsToMedia(fm); err != nil {
@@ -95,8 +95,8 @@ func TestMigrateAnimeIDsToMedia_RewritesEpisodesAndSettings(t *testing.T) {
 			t.Errorf("episodio %d deveria estar com o id da midia, veio %d", ep.EpisodeNumber, ep.AnimeID)
 		}
 	}
-	if fm.settings[194829].CustomSearchQuery != "bumpkin" {
-		t.Errorf("o custom search query deveria ter sido copiado para o id da midia, veio %+v", fm.settings)
+	if fm.settings[194829].Progress != 42 {
+		t.Errorf("as settings deveriam ter sido copiadas para o id da midia, veio %+v", fm.settings)
 	}
 	if !fm.configs.AnimeIDsAreMediaIDs {
 		t.Error("a migracao deveria marcar a conclusao no config")

@@ -1741,9 +1741,6 @@
                 "cover_image": {
                     "type": "string"
                 },
-                "custom_search_query": {
-                    "type": "string"
-                },
                 "episodes": {
                     "type": "array",
                     "items": {
@@ -2095,9 +2092,6 @@
         "api.animeSettingsRequest": {
             "type": "object",
             "properties": {
-                "custom_search_query": {
-                    "type": "string"
-                },
                 "progress": {
                     "type": "integer"
                 }

@@ -27,7 +27,6 @@ const mockDetail = {
     progress: 1,
     status: 'CURRENT',
     cover_image: null,
-    custom_search_query: null,
     episodes: [
       {
         episode_number: 1,
@@ -145,29 +144,6 @@ test('the release action is translated, not hardcoded Portuguese', async ({ page
   await page.goto('/#/status/123')
   await expect(page.getByRole('button', { name: /^release episode$/i }).first()).toBeVisible()
   await expect(page.getByText('Soltar episódio')).toHaveCount(0)
-})
-
-// The custom Nyaa search query (custom_search_query / updateAnimeSettings) is a real feature
-// the design handoff forgot about; spec §9.2 keeps it in a collapsible block.
-test('custom search query is present in a collapsible block and saves', async ({ page }) => {
-  await page.route('**/api/v1/animes/123/settings', route =>
-    route.fulfill({ json: { success: true, data: null } })
-  )
-
-  await page.goto('/#/status/123')
-
-  const input = page.getByLabel(/custom nyaa search query/i)
-  await expect(input).toBeHidden()
-
-  await page.getByRole('button', { name: /custom nyaa search query/i }).click()
-  await expect(input).toBeVisible()
-
-  const saveRequest = page.waitForRequest(
-    req => req.url().includes('/animes/123/settings') && req.method() === 'PUT'
-  )
-  await input.fill('custom query')
-  await page.getByRole('button', { name: /^save$/i }).click()
-  await saveRequest
 })
 
 test('episode row shows a progress bar when an active torrent is joined to it', async ({ page }) => {

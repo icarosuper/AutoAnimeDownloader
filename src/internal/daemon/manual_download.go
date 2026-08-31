@@ -182,7 +182,7 @@ func ManualDownloadAnimeWithMagnet(fm FileManagerInterface, backend torrents.Tor
 
 // ManualDownloadEpisode downloads a specific episode manually (called from API).
 // Returns the saved EpisodeStruct with ManuallyManaged=true on success.
-func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBackend, animeId int, episodeNumber int, configs *files.Config, customQuery string) (files.EpisodeStruct, error) {
+func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBackend, animeId int, episodeNumber int, configs *files.Config) (files.EpisodeStruct, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
@@ -205,7 +205,7 @@ func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBack
 		return files.EpisodeStruct{}, err
 	}
 
-	results := searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, customQuery, anilist.LastAiredEpisode(details.mediaList))
+	results := searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, anilist.LastAiredEpisode(details.mediaList))
 	var magnets []string
 	for _, result := range results {
 		magnets = append(magnets, result.MagnetLink)

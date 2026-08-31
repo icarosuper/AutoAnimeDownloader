@@ -93,10 +93,9 @@ Not part of `Config` — keyed by anime ID, stored/loaded via `FileManager.{Load
 
 | Field | JSON key | Type | Description |
 |-------|----------|------|-------------|
-| `CustomSearchQuery` | `custom_search_query` | `string` | Per-anime override for the Nyaa search query |
 | `Progress` | `progress` | `int` | Manual watch progress, used only by **standalone** (avulso) animes — a list anime's progress always comes from AniList. Absent/missing reads as `0`. Injected into the synthetic `MediaList` built for a standalone anime, so `shouldSkipEpisode`, `firstEpisodeToConsider`, `buildWatchedKeepSet`, pruning and the `EpisodesWatched` count all treat it exactly like AniList progress, no `isStandalone` branch needed |
 
-`PUT /animes/{id}/settings` (`api/endpoint_anime_settings.go`) does a **partial merge**: both request fields are pointers (`*string`/`*int`) so a request that only sets `custom_search_query` does not zero `progress`, and vice versa. `progress < 0` is rejected with HTTP 400.
+`PUT /animes/{id}/settings` (`api/endpoint_anime_settings.go`) is **partial**: `progress` is a pointer (`*int`) so a body that omits it does not zero the saved progress. `progress < 0` is rejected with HTTP 400.
 
 ## Webhook Template Variables
 

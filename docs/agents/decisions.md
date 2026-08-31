@@ -974,11 +974,11 @@ O contador (`downloadedEpisodes`) continua incrementando para episódios de pack
 
 `resolveAnimeDetails` chama `withStandaloneProgress` no MESMO branch de fallback que `appendStandaloneAnimes` usa (`GetAnimeInfo` devolve `nil` → `GetMediaByID`) — sem isso, `RunAnimeDebug` (que passa por `resolveAnimeDetails`) relatava um avulso com progresso gravado como se começasse do episódio 1, divergindo do pipeline real que ele existe para espelhar (decisions.md #58). Nos `ManualDownload*` o efeito é inócuo — eles selecionam episódio por número explícito, não por `Progress` — mas a chamada é a mesma para não depender de qual caminho um chamador futuro escolhe.
 
-O `PUT /animes/{id}/settings` usa ponteiros (`*string`/`*int`) e faz merge parcial: um `PUT` que só manda `custom_search_query` não pode zerar `progress` (e vice-versa) — um `AnimeSettings{}` novo a cada `PUT` apagaria silenciosamente o outro campo. `progress < 0` é rejeitado com 400 na validação do handler, antes do merge.
+O `PUT /animes/{id}/settings` usa ponteiro (`*int`) e faz merge parcial: um `PUT` cujo corpo não menciona `progress` não pode zerá-lo — um `AnimeSettings{}` novo a cada `PUT` apagaria silenciosamente o progresso salvo. O ponteiro continua necessário com um campo só, porque `0` é progresso válido e indistinguível de ausente sem ele. `progress < 0` é rejeitado com 400 na validação do handler, antes do merge.
 
 **Don't "fix" by:**
 - Um branch `if anime.IsStandalone` em `shouldSkipEpisode`/`firstEpisodeToConsider`/`buildWatchedKeepSet` "para deixar explícito": é exatamente a duplicação que injetar no `MediaList` evita.
-- `PUT` substituindo o `AnimeSettings` inteiro em vez de merge parcial: zera o campo que o request não mencionou.
+- `PUT` substituindo o `AnimeSettings` inteiro, ou trocar o `*int` por `int` "porque só sobrou um campo": as duas coisas zeram o progresso num corpo que não o mencionou.
 - Pular `withStandaloneProgress` em `resolveAnimeDetails` "porque `ManualDownload*` não usa `Progress`": `RunAnimeDebug` usa, e os dois passam pelo mesmo caminho.
 
 ### 49. Anime avulso: "acompanhado pela lista" é o snapshot que o daemon PROCESSA, e `DownloadStandaloneAnime` nunca chama `handleSavedEpisodes`

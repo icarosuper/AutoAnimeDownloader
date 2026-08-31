@@ -325,7 +325,7 @@ func TestProcessAnimeEpisodes_BlacklistedAnime_PopulatesKeysToDelete(t *testing.
 
 	backend := torrents.NewFakeBackend()
 
-	result := processAnimeEpisodes(configs, backend, anime, nil, savedEpisodes, nil, map[files.EpisodeKey]bool{}, "", defaultNyaaSearcher())
+	result := processAnimeEpisodes(configs, backend, anime, nil, savedEpisodes, nil, map[files.EpisodeKey]bool{}, defaultNyaaSearcher())
 
 	if !containsID(result.keysToDelete, epKey(animeID, episodeNumber)) {
 		t.Errorf("esperava episódio %d em keysToDelete, obteve %v", episodeNumber, result.keysToDelete)
@@ -424,14 +424,14 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 	// Mock do Nyaa: se a busca por anime for chamada, o teste deve falhar
 	searchAnimeCalled := false
 	mockSearcher := nyaaSearcher{
-		searchAnime: func(_ anilist.Title, _ []string, _ []int, _ string) []nyaa.TorrentResult {
+		searchAnime: func(_ anilist.Title, _ []string, _ []int) []nyaa.TorrentResult {
 			searchAnimeCalled = true
 			return []nyaa.TorrentResult{{MagnetLink: "magnet:?xt=urn:btih:fakehash", IsBatch: true}}
 		},
-		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ string, _ int) []nyaa.TorrentResult {
+		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ int) []nyaa.TorrentResult {
 			return nil
 		},
-		searchMovie: func(_ anilist.Title, _ bool, _ string) []nyaa.TorrentResult {
+		searchMovie: func(_ anilist.Title, _ bool) []nyaa.TorrentResult {
 			return nil
 		},
 	}
@@ -443,7 +443,7 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 
 	backend := torrents.NewFakeBackend()
 
-	result := processAnimeEpisodes(configs, backend, anime, dlTorrents, savedEpisodes, nil, map[files.EpisodeKey]bool{}, "", mockSearcher)
+	result := processAnimeEpisodes(configs, backend, anime, dlTorrents, savedEpisodes, nil, map[files.EpisodeKey]bool{}, mockSearcher)
 
 	if searchAnimeCalled {
 		t.Error("a busca por anime não deve ser chamada: todos os episódios já estão no cliente pelo hash")
@@ -979,11 +979,11 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 	}
 
 	noResults := nyaaSearcher{
-		searchAnime: func(anilist.Title, []string, []int, string) []nyaa.TorrentResult { return nil },
-		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string, int) []nyaa.TorrentResult {
+		searchAnime: func(anilist.Title, []string, []int) []nyaa.TorrentResult { return nil },
+		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, int) []nyaa.TorrentResult {
 			return nil
 		},
-		searchMovie: func(anilist.Title, bool, string) []nyaa.TorrentResult { return nil },
+		searchMovie: func(anilist.Title, bool) []nyaa.TorrentResult { return nil },
 	}
 
 	configs := &files.Config{
@@ -999,7 +999,7 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 	}
 
 	backend := torrents.NewFakeBackend()
-	result := processAnimeEpisodes(configs, backend, anime, nil, nil, nil, map[files.EpisodeKey]bool{}, "", noResults)
+	result := processAnimeEpisodes(configs, backend, anime, nil, nil, nil, map[files.EpisodeKey]bool{}, noResults)
 
 	if len(result.newEpisodes) > 0 {
 		t.Errorf("nenhum episódio deve ser salvo sem magnet, obteve %d", len(result.newEpisodes))

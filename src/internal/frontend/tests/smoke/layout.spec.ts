@@ -120,7 +120,6 @@ test.describe('no screen scrolls horizontally', () => {
       progress: 1,
       status: 'CURRENT',
       cover_image: null,
-      custom_search_query: null,
       episodes: Array.from({ length: 8 }, (_, i) => ({
         episode_number: i + 1,
         airing_at: 0,

@@ -55,13 +55,7 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to unblock episode")
 		}
 
-		animeSettings, err := server.FileManager.LoadAnimeSettings(animeId)
-		if err != nil {
-			logger.Logger.Warn().Err(err).Int("anime_id", animeId).Msg("Failed to load anime settings")
-			animeSettings = &files.AnimeSettings{}
-		}
-
-		ep, err := daemon.ManualDownloadEpisode(server.FileManager, server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.FileManager, server.Torrents, animeId, episodeNumber, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to manually download episode")
 			JSONDownloadError(w, err, "DOWNLOAD_FAILED")
@@ -271,13 +265,7 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 			logger.Logger.Warn().Err(err).Int("episode", episodeNumber).Msg("Failed to unblock episode")
 		}
 
-		animeSettings, err := server.FileManager.LoadAnimeSettings(animeId)
-		if err != nil {
-			logger.Logger.Warn().Err(err).Int("anime_id", animeId).Msg("Failed to load anime settings")
-			animeSettings = &files.AnimeSettings{}
-		}
-
-		ep, err := daemon.ManualDownloadEpisode(server.FileManager, server.Torrents, animeId, episodeNumber, configs, animeSettings.CustomSearchQuery)
+		ep, err := daemon.ManualDownloadEpisode(server.FileManager, server.Torrents, animeId, episodeNumber, configs)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", animeId).Int("episode", episodeNumber).Msg("Failed to redownload episode")
 			JSONDownloadError(w, err, "REDOWNLOAD_FAILED")

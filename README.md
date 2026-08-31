@@ -197,7 +197,7 @@ Full field-by-field reference: [Config Reference](docs/agents/config.md).
 - Check the logs for `Organize:` messages: `autoanimedownloader logs --search Organize`
 
 **Anime not found on Nyaa**
-- The anime title from Anilist may not match Nyaa's naming — set a custom search title in the anime's detail page
+- The anime title from Anilist may not match Nyaa's naming — paste a magnet directly on the anime's detail page (per anime or per episode)
 - Relax or adjust the subtitle group / resolution filters
 
 **No torrents matching filters**
