@@ -179,4 +179,10 @@ var (
 
 	// Size parsing
 	reParseSizeRe = regexp.MustCompile(`(?i)^([\d.]+)\s*([KMGT]?i?B)$`)
+
+	// Tudo que nao e letra, digito ou espaco, para removeSpecialCharacters. Ele APAGA o que
+	// casa ("Re:Zero" -> "rezero"); nao confundir com reMatchNonAlpha (nyaa_match.go), que
+	// troca por espaco ("Re:Zero" -> "re zero"). As duas normalizacoes sao de proposito
+	// diferentes: esta monta a query de busca, aquela tokeniza para casar titulo.
+	reSpecialChars = regexp.MustCompile(`[^a-z0-9\s]`)
 )

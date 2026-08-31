@@ -467,7 +467,6 @@ Variáveis de template (URL, headers e corpo): `{{title}}`, `{{message}}`, `{{an
 
 ### Pacotes pequenos
 
-- **`stringutil/`** — `RemoveSpecialCharacters`, os chars que quebram a query do Nyaa
 - **`logger/`** — zerolog, console + `daemon.log` rotativo. `InitDebug` manda o trace para outro
   arquivo, para que `--debug-anime` nunca toque o `~/.autoAnimeDownloader`
 - **`version/`** — `Version`, `"dev"` por padrão, sobrescrito por ldflags

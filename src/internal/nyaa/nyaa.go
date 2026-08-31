@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"AutoAnimeDownloader/src/internal/logger"
-	"AutoAnimeDownloader/src/internal/stringutil"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -93,7 +92,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 
 	// Prioridade 1: Romaji limpo (sem caracteres especiais)
 	if romaji != "" {
-		cleanRomaji := stringutil.RemoveSpecialCharacters(romaji)
+		cleanRomaji := removeSpecialCharacters(romaji)
 		addVariant(cleanRomaji)
 
 		// Prioridade 2: Romaji original
@@ -102,7 +101,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 
 	// Prioridade 3: English limpo (sem caracteres especiais)
 	if english != "" && english != romaji {
-		cleanEnglish := stringutil.RemoveSpecialCharacters(english)
+		cleanEnglish := removeSpecialCharacters(english)
 		addVariant(cleanEnglish)
 
 		// Prioridade 4: English original
@@ -110,6 +109,14 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 	}
 
 	return variants
+}
+
+// removeSpecialCharacters normaliza para minusculas com apenas letras, digitos e espaco.
+// Morava num pacote stringutil proprio, com esta unica funcao e este unico chamador.
+func removeSpecialCharacters(s string) string {
+	s = strings.ToLower(s)
+	s = reSpecialChars.ReplaceAllString(s, "")
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // extractFansub extrai o nome do fansub do título do torrent
