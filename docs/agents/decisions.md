@@ -2335,8 +2335,22 @@ O chip "atrasado" já tinha levado essa mesma correção antes, em `lib/domain/a
 comentário lá registra que a subtração ingênua "marcava meia lista como atrasado". A barra ficou
 para trás e repetiu o bug; são os dois consumidores do mesmo número.
 
+**A legenda saiu junto.** Ela era uma prop `legend: string` montada na `Status.svelte` com os
+CUMULATIVOS ("5 vistos · 5 baixados · 10 lançados de 13") — impossível de casar com as cores,
+porque o roxo ali tinha largura zero enquanto o texto dizia "5 baixados". Hoje ela mora dentro da
+`TripleProgressBar`, em quatro termos que são os DELTAS, cada um colorido com a cor do seu
+segmento: `X vistos` (--ok) · `Y a assistir` (--accent) · `Z a baixar` (--warn) · `W não lançados`
+(track). Os mesmos quatro números alimentam largura e texto, então não têm como divergir de novo.
+String pronta não tem onde pendurar o `<span>` — é por isso que a prop morreu em vez de virar
+`legend: string[]`.
+
 **Don't "fix" by:** passar `anime.episodes_downloaded` direto para a prop `downloaded` da
-`TripleProgressBar` "porque o nome bate". Os nomes batem, a semântica não. Consequência de
-`downloaded` sair de `pending`: a legenda passa a ler "baixados" como *já adquiridos alguma vez*,
-e não *ocupando disco agora* — que é o que uma barra de progresso quer dizer. Ocupação de disco é
-outro número e outro lugar. Coberto por `tests/unit/status.utils.test.ts`, `describe('breakdown')`.
+`TripleProgressBar` "porque o nome bate" — os nomes batem, a semântica não. Nem devolver a legenda
+para uma prop de string "para o componente não importar i18n". Coberto por
+`tests/unit/status.utils.test.ts` (`describe('breakdown')`) e
+`tests/component/TripleProgressBar.test.ts` (palavra ↔ cor ↔ largura).
+
+**Ceiling conhecido (ponytail, largura da coluna):** os 290px de `LIST_GRID` na `Status.svelte`
+foram medidos para a legenda de três termos. A de quatro é ~25% mais larga e quebra em duas linhas
+com contagem de 3 dígitos. Não foi remedida — alargar rouba da coluna do nome, que já trunca, e o
+caso só aparece em anime longo em exibição. Se incomodar, o corte barato é omitir termo zerado.

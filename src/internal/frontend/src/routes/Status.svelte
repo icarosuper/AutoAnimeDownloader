@@ -198,15 +198,6 @@
   $: activeDownloads = torrents.filter((t) => t.status === "downloading");
   $: seedingCount = torrents.filter((t) => t.status === "seeding").length;
 
-  function legendFor(b: { watched: number; downloaded: number; released: number; total: number }) {
-    return m.status_library_legend({
-      watched: b.watched,
-      downloaded: b.downloaded,
-      released: b.released,
-      total: b.total,
-    });
-  }
-
   // Resumo da biblioteca: soma dos breakdowns já normalizados (não dos campos crus), para que
   // o agregado obedeça à mesma invariante watched <= downloaded <= released <= total.
   $: libraryTotals = animes.reduce(
@@ -256,7 +247,6 @@
         chip,
         chipText: chipLabel(chip),
         breakdown: b,
-        legend: legendFor(b),
         // Cru ("em 2 dias"), nao a frase pronta: no desktop ele cai numa coluna que ja tem
         // o rotulo "Proximo ep." em cima, e repetir ali ficaria "Proximo ep. | Prox. ep. em
         // 2 dias". O card mobile, que nao tem cabecalho de coluna, monta a frase inteira.
@@ -449,9 +439,15 @@
   // As larguras fixas foram remedidas depois do aumento da escala tipográfica — cada uma é o
   // texto mais longo que a coluna pode receber, no idioma mais largo, arredondado para cima:
   //   estado    190px — chip "Downloading ep. 128 · 100%" = 183px (text-caption + px-2 + borda)
-  //   progresso 290px — legenda "128 watched · 128 downloaded · 128 released of 128" = 287px;
-  //                     é uma frase, não um número, e abaixo disso quebra em duas linhas e a
-  //                     altura da linha passa a oscilar conforme os valores
+  //   progresso 290px — é uma frase, não um número, e abaixo disso quebra em duas linhas e a
+  //                     altura da linha passa a oscilar conforme os valores. Os 290px foram
+  //                     medidos para a legenda de TRÊS termos cumulativos; a de quatro deltas
+  //                     que a substituiu ("128 watched · 128 to watch · 128 to download · 128
+  //                     unreleased") é ~25% mais larga e quebra em duas linhas com contagem de
+  //                     3 dígitos. Não foi remedida: alargar aqui rouba da coluna do nome, que
+  //                     já trunca, e o caso de 3 dígitos com os quatro termos não-zero é raro
+  //                     (só anime longo em exibição). Se incomodar, o corte barato é omitir
+  //                     termo zerado na TripleProgressBar
   //   último    150px — cabeçalho "ÚLTIMO DOWNLOAD" em text-mono-label (mono + tracking .12em)
   // A soma das colunas fixas + gaps + padding é ~754px, e é por isso que a tabela só aparece a
   // partir de `lg` (1024px): em `md` (768px) sobrariam ~628px e as colunas vazariam da tela.
@@ -785,7 +781,6 @@
               downloaded={libraryTotals.downloaded}
               released={libraryTotals.released}
               total={libraryTotals.total}
-              legend={$locale ? legendFor(libraryTotals) : ""}
             />
           </div>
         </section>
@@ -995,7 +990,6 @@
                 downloaded={row.breakdown.downloaded}
                 released={row.breakdown.released}
                 total={row.breakdown.total}
-                legend={row.legend}
               />
               <span class="truncate font-mono text-[12px] text-subtle">{row.nextAiringWhen}</span>
               <span class="flex items-center justify-between gap-1 font-mono text-[12px] text-subtle">
@@ -1037,7 +1031,6 @@
                       downloaded={row.breakdown.downloaded}
                       released={row.breakdown.released}
                       total={row.breakdown.total}
-                      legend={row.legend}
                     />
                   </div>
                   <p class="mt-1.5 font-mono text-[12px] text-subtle">
