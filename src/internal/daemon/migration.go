@@ -26,6 +26,16 @@ var migrateAnimeIDsThrottle = 250 * time.Millisecond
 // Entradas que ja nao existem na AniList (o usuario removeu o anime da lista) nao tem como ser
 // resolvidas; esses registros ficam com o id antigo e sao apenas logados. Os episodios
 // continuam em disco e listados — so nao voltam a casar com a AniList se o anime for readicionado.
+//
+// QUANDO DA PARA APAGAR ISTO: a migracao entrou na v2.1.1 (07/ago/2026). Ela so e necessaria para
+// quem atualiza de uma instalacao em v2.1.0 ou ANTERIOR — quem passou por qualquer versao de v2.1.1
+// em diante ja tem AnimeIDsAreMediaIDs ligado no config e cai no return nil da terceira linha.
+// Apagar antes de essa fronteira ser historia antiga nao degrada nada de leve: sem a conversao,
+// NADA em disco casa com a AniList, todo anime parece nao-baixado e o primeiro passe rebaixa a
+// biblioteca inteira, em silencio — para o daemon isso e indistinguivel de uma biblioteca vazia
+// legitima. O projeto e distribuido (AUR + releases), entao a pergunta nao e "o meu ja migrou".
+//
+// Custo de manter enquanto isso: um LoadConfigs e um if, por boot e por passe. Desprezivel.
 func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 	configs, err := fm.LoadConfigs()
 	if err != nil {
