@@ -22,6 +22,11 @@
   export let downloaded: number
   export let released: number
   export let total: number
+  // Por anime, termo zerado e ruido: a maioria das linhas tem pelo menos um, e a legenda de
+  // quatro termos e larga o bastante para quebrar em duas linhas na coluna de progresso. No
+  // resumo da biblioteca e o contrario — la os quatro numeros sao o conteudo do card, e um
+  // termo sumindo faria a soma parar de fechar com o total. Por isso o default omite.
+  export let keepZeros = false
 
   $: toWatch = Math.max(0, downloaded - watched)
   $: toDownload = Math.max(0, released - downloaded)
@@ -31,6 +36,21 @@
     if (!total || total <= 0) return 0
     return Math.max(0, Math.min(100, (n / total) * 100))
   }
+
+  // `text-subtle` do <p> ja cobre "nao lancados" — a faixa dele e o proprio track, sem cor.
+  $: allTerms = $locale
+    ? [
+        { n: watched, cls: "text-ok", text: m.progress_legend_watched({ count: watched }) },
+        { n: toWatch, cls: "text-accent", text: m.progress_legend_to_watch({ count: toWatch }) },
+        { n: toDownload, cls: "text-warn", text: m.progress_legend_to_download({ count: toDownload }) },
+        { n: unreleased, cls: "", text: m.progress_legend_unreleased({ count: unreleased }) },
+      ]
+    : []
+  $: kept = keepZeros ? allTerms : allTerms.filter((t) => t.n > 0)
+  // Anime sem episodio lancado zera os quatro termos, e a legenda inteira sumiria — <p> vazio
+  // encolhe a linha e faz a altura oscilar, justo o que a coluna de progresso nao pode ter.
+  // Nesse caso sobra "0 vistos", que e verdade e ocupa a linha.
+  $: terms = kept.length > 0 ? kept : allTerms.slice(0, 1)
 </script>
 
 <div class="w-full">
@@ -42,12 +62,8 @@
     <div class="h-full bg-warn" style="width:{pct(toDownload)}%"></div>
   </div>
   <p class="mt-1.5 text-caption text-subtle">
-    <span class="text-ok">{$locale && m.progress_legend_watched({ count: watched })}</span>
-    <span aria-hidden="true"> · </span>
-    <span class="text-accent">{$locale && m.progress_legend_to_watch({ count: toWatch })}</span>
-    <span aria-hidden="true"> · </span>
-    <span class="text-warn">{$locale && m.progress_legend_to_download({ count: toDownload })}</span>
-    <span aria-hidden="true"> · </span>
-    <span>{$locale && m.progress_legend_unreleased({ count: unreleased })}</span>
+    {#each terms as term, i}{#if i > 0}<span aria-hidden="true">{' · '}</span>{/if}<span
+        class={term.cls}>{term.text}</span
+      >{/each}
   </p>
 </div>

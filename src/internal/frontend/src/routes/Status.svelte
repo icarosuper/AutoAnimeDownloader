@@ -445,9 +445,9 @@
   //                     que a substituiu ("128 watched · 128 to watch · 128 to download · 128
   //                     unreleased") é ~25% mais larga e quebra em duas linhas com contagem de
   //                     3 dígitos. Não foi remedida: alargar aqui rouba da coluna do nome, que
-  //                     já trunca, e o caso de 3 dígitos com os quatro termos não-zero é raro
-  //                     (só anime longo em exibição). Se incomodar, o corte barato é omitir
-  //                     termo zerado na TripleProgressBar
+  //                     já trunca. Em vez disso a linha de anime omite termo zerado (o default
+  //                     da TripleProgressBar), o que corta a legenda na maioria dos casos; só
+  //                     o card Biblioteca passa `keepZeros`
   //   último    150px — cabeçalho "ÚLTIMO DOWNLOAD" em text-mono-label (mono + tracking .12em)
   // A soma das colunas fixas + gaps + padding é ~754px, e é por isso que a tabela só aparece a
   // partir de `lg` (1024px): em `md` (768px) sobrariam ~628px e as colunas vazariam da tela.
@@ -781,6 +781,7 @@
               downloaded={libraryTotals.downloaded}
               released={libraryTotals.released}
               total={libraryTotals.total}
+              keepZeros
             />
           </div>
         </section>

@@ -2350,7 +2350,16 @@ para uma prop de string "para o componente não importar i18n". Coberto por
 `tests/unit/status.utils.test.ts` (`describe('breakdown')`) e
 `tests/component/TripleProgressBar.test.ts` (palavra ↔ cor ↔ largura).
 
-**Ceiling conhecido (ponytail, largura da coluna):** os 290px de `LIST_GRID` na `Status.svelte`
-foram medidos para a legenda de três termos. A de quatro é ~25% mais larga e quebra em duas linhas
-com contagem de 3 dígitos. Não foi remedida — alargar rouba da coluna do nome, que já trunca, e o
-caso só aparece em anime longo em exibição. Se incomodar, o corte barato é omitir termo zerado.
+**Termo zerado some por anime, fica na Biblioteca.** É o que a prop `keepZeros` decide, e o
+default (`false`) é o caso comum. Por anime, zero é ruído — a maioria das linhas tem pelo menos um,
+e os 290px de `LIST_GRID` foram medidos para a legenda de TRÊS termos, então quatro por extenso
+quebram em duas linhas e a altura da linha oscila. No card *Biblioteca* é o oposto: lá os quatro
+números são o conteúdo do card, e um termo sumindo faria a soma parar de fechar com o total.
+
+Quando os quatro termos são zero (anime sem episódio lançado) sobra `0 vistos`, de propósito: um
+`<p>` vazio encolheria a linha e traria de volta exatamente a oscilação de altura que a omissão
+deveria evitar.
+
+**Cuidado com o separador:** ele é `{' · '}`, expressão e não texto literal. O Svelte apara
+whitespace no início/fim dos filhos de um elemento, e `<span> · </span>` renderiza `·` colado nas
+palavras. Coberto — os testes comparam o `textContent` inteiro do `<p>`, com espaços.
