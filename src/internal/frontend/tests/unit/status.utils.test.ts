@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes } from '../../src/lib/utils/status.js'
+import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes, breakdown } from '../../src/lib/utils/status.js'
 import type { AnimeInfo } from '../../src/lib/api/client.js'
 
 function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
@@ -159,3 +159,54 @@ describe('formatBytes', () => {
   })
 })
 
+
+describe('breakdown', () => {
+  // O bug: episodes_downloaded conta arquivo em disco AGORA e cai quando o daemon poda
+  // assistidos (watched_episodes_to_keep), entao released - episodes_downloaded pintava de
+  // amarelo ("falta baixar") episodio que ja tinha sido baixado e visto.
+  it('assistido e podado do disco nao vira segmento amarelo', () => {
+    const a = makeAnime({
+      episodes_watched: 5,
+      episodes_downloaded: 5, // 5 em disco, mas sao os eps 6-10; os 1-5 foram podados
+      episodes_released: 10,
+      episodes_pending: 0,
+      total_episodes: 13,
+    })
+    expect(breakdown(a)).toEqual({ watched: 5, downloaded: 10, released: 10, total: 13 })
+  })
+
+  it('episodio realmente faltando continua no segmento amarelo', () => {
+    const a = makeAnime({
+      episodes_watched: 0,
+      episodes_downloaded: 5,
+      episodes_released: 8,
+      episodes_pending: 3,
+      total_episodes: 12,
+    })
+    expect(breakdown(a)).toEqual({ watched: 0, downloaded: 5, released: 8, total: 12 })
+  })
+
+  it('sem total anunciado o denominador vira episodes_released', () => {
+    const a = makeAnime({
+      episodes_watched: 2,
+      episodes_released: 4,
+      episodes_pending: 1,
+      total_episodes: 0,
+    })
+    expect(breakdown(a)).toEqual({ watched: 2, downloaded: 3, released: 4, total: 4 })
+  })
+
+  it('progresso da AniList acima do lancado nao gera segmento negativo', () => {
+    const a = makeAnime({
+      episodes_watched: 9,
+      episodes_downloaded: 0,
+      episodes_released: 7,
+      episodes_pending: 0,
+      total_episodes: 12,
+    })
+    const b = breakdown(a)
+    expect(b).toEqual({ watched: 9, downloaded: 9, released: 9, total: 12 })
+    expect(b.downloaded - b.watched).toBeGreaterThanOrEqual(0)
+    expect(b.released - b.downloaded).toBeGreaterThanOrEqual(0)
+  })
+})

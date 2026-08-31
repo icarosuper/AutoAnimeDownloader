@@ -1,10 +1,14 @@
 <script lang="ts">
   // TripleProgressBar — spec §6 (Fase 2). Three ADJACENT, SUMMED segments over one track (not
   // overlaid): watched (--ok), downloaded (--accent), released (--warn), scaled against
-  // `total`. Matches `AnimeInfo`'s cumulative fields directly (episodes_watched <=
-  // episodes_downloaded <= episodes_released <= total_episodes) — each segment's width is the
-  // DELTA from the previous one, so the bar reads left-to-right as "this much watched, then
-  // this much more downloaded-but-unwatched, then this much more released-but-undownloaded".
+  // `total`. Each segment's width is the DELTA from the previous one, so the bar reads
+  // left-to-right as "this much watched, then this much more downloaded-but-unwatched, then
+  // this much more released-but-undownloaded".
+  //
+  // As props sao CUMULATIVAS (watched <= downloaded <= released <= total) e NAO sao os campos
+  // crus de `AnimeInfo`: `downloaded` precisa vir de `breakdown()` (lib/utils/status.ts), que
+  // o deriva de `episodes_pending`. Passar `episodes_downloaded` aqui pinta de amarelo
+  // episodio ja baixado e visto, porque aquele campo cai quando o daemon poda assistidos.
   //
   // `legend` is required (no default value) on purpose — spec §6 is explicit that this bar is
   // never shown without a textual legend, because three stacked colors alone don't communicate

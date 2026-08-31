@@ -94,6 +94,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#85** — O custo do frontend na AniList é por CONTA e por ÓRFÃO, não por aba](#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba)
 - [**#86** — O botão Testar responde o status do serviço, não "o preset existe"](#86-o-botão-testar-responde-o-status-do-serviço-não-o-preset-existe)
 - [**#87** — Headers do webhook viram lista de pares enquanto o formulário está aberto](#87-headers-do-webhook-viram-lista-de-pares-enquanto-o-formulário-está-aberto)
+- [**#88** — A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`](#88-a-barra-de-progresso-deriva-baixados-de-episodes_pending-e-não-de-episodes_downloaded)
 
 ---
 
@@ -2305,3 +2306,37 @@ pode virar um header `""`. Coberto por `tests/component/Notifications.headers.te
 **Don't "fix" by:** trocar `headerRows` por bind direto no `Record` "para tirar a conversão"; nem
 mudar o formato salvo para lista de pares, que quebraria o `config.json` de todo mundo e o
 `files.WebhookPreset` do Go sem ganho nenhum.
+
+### 88. A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`
+
+**Location:** `frontend/src/lib/utils/status.ts` — `breakdown()`, consumida pelas três
+`TripleProgressBar` da `routes/Status.svelte`. O backend que produz o número está em
+`api/endpoint_animes.go` — `countPendingEpisodes`.
+
+**O que parece:** rodeio. `AnimeInfo` tem `episodes_downloaded` bem ali, a barra quer o segmento
+"baixado", e `released - downloaded` é a subtração óbvia. Foi o que o código fazia.
+
+**Por que existe:** `episodes_downloaded` não é "quantos já baixei", é **quantos arquivos estão em
+disco agora** — ele sai da contagem de `LoadSavedEpisodes()`. O daemon poda episódio assistido
+(`daemon/episodes.go`, `buildWatchedKeepSet` / `watched_episodes_to_keep`, default 2), então esse
+contador **cai** conforme o usuário assiste. A subtração então joga episódio já baixado E visto
+para o segmento amarelo, que quer dizer "falta baixar".
+
+Sintoma medido: um anime com `5 vistos · 5 baixados · 10 lançados de 13` pintava 5/13 de amarelo
+com o chip **Em dia** ao lado, na mesma linha. Os eps 6-10 estavam em disco e os 1-5 tinham sido
+podados; não faltava nada.
+
+`countPendingEpisodes` percorre **por número de episódio** (`for n := watched+1; n <= released`),
+e não `released - downloaded`, exatamente para sobreviver à poda — o comentário dele diz isso.
+`episodes_pending` é o único contador imune, e `downloaded` da barra é
+`released - pending` (com piso em `watched`).
+
+O chip "atrasado" já tinha levado essa mesma correção antes, em `lib/domain/animeState.ts` — o
+comentário lá registra que a subtração ingênua "marcava meia lista como atrasado". A barra ficou
+para trás e repetiu o bug; são os dois consumidores do mesmo número.
+
+**Don't "fix" by:** passar `anime.episodes_downloaded` direto para a prop `downloaded` da
+`TripleProgressBar` "porque o nome bate". Os nomes batem, a semântica não. Consequência de
+`downloaded` sair de `pending`: a legenda passa a ler "baixados" como *já adquiridos alguma vez*,
+e não *ocupando disco agora* — que é o que uma barra de progresso quer dizer. Ocupação de disco é
+outro número e outro lugar. Coberto por `tests/unit/status.utils.test.ts`, `describe('breakdown')`.

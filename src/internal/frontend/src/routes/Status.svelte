@@ -35,7 +35,7 @@
   import { wsConnectionState } from "../lib/stores/wsState.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
-  import { filterAnimes, sortAnimes, computeNextCheckIn, type SortKey, type SortDir } from "../lib/utils/status.js";
+  import { filterAnimes, sortAnimes, computeNextCheckIn, breakdown, type SortKey, type SortDir } from "../lib/utils/status.js";
   import { totalSpeeds } from "../lib/utils/torrents.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
   import { formatRelative, nextAiringIn } from "../lib/utils/relativeTime.js";
@@ -197,26 +197,6 @@
 
   $: activeDownloads = torrents.filter((t) => t.status === "downloading");
   $: seedingCount = torrents.filter((t) => t.status === "seeding").length;
-
-  /**
-   * Normaliza os quatro contadores de um anime para o que a TripleProgressBar espera:
-   * watched <= downloaded <= released <= total, todos dentro do mesmo denominador.
-   *
-   * O clamp em cascata não é cosmético. `total_episodes` vem da AniList e é 0 enquanto o anime
-   * está em exibição sem contagem anunciada — nesse caso o denominador passa a ser
-   * `episodes_released` (mesma regra da tela anterior). E os contadores podem se cruzar na
-   * prática: o daemon marca um episódio como assistido a partir do progresso da AniList, que o
-   * usuário atualiza sozinho, então `episodes_watched` pode passar `episodes_downloaded` sem
-   * que nada esteja errado. Sem o `Math.max` encadeado a barra renderizaria um segmento de
-   * largura negativa.
-   */
-  function breakdown(a: AnimeInfo) {
-    const total = a.total_episodes > 0 ? a.total_episodes : a.episodes_released;
-    const watched = Math.min(Math.max(a.episodes_watched, 0), total);
-    const downloaded = Math.min(Math.max(a.episodes_downloaded, watched), total);
-    const released = Math.min(Math.max(a.episodes_released, downloaded), total);
-    return { watched, downloaded, released, total };
-  }
 
   function legendFor(b: { watched: number; downloaded: number; released: number; total: number }) {
     return m.status_library_legend({
