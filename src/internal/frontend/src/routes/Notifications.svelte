@@ -208,7 +208,7 @@
                       <button
                         type="button"
                         on:click={() => testWebhookHandler(hook.name)}
-                        class="inline-flex items-center px-2 py-1 rounded text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        class="inline-flex items-center px-2 py-1 rounded text-xs border border-default text-body hover:bg-control transition-colors"
                       >
                         {T && T.btnTest}
                       </button>
@@ -216,14 +216,14 @@
                     <button
                       type="button"
                       on:click={() => editWebhook(i)}
-                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-default text-body hover:bg-control transition-colors"
                     >
                       {T && T.btnEdit}
                     </button>
                     <button
                       type="button"
                       on:click={() => removeWebhook(i)}
-                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-danger-tint/28 text-danger hover:bg-danger-tint/12 transition-colors"
                     >
                       {T && T.btnRemove}
                     </button>
@@ -237,7 +237,7 @@
             <button
               type="button"
               on:click={() => { showWebhookForm = true; }}
-              class="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-dashed border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm transition-colors w-fit"
+              class="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-dashed border-default text-body hover:bg-control text-sm transition-colors w-fit"
             >
               + {T && T.btnAdd}
             </button>
@@ -250,7 +250,7 @@
                     <button
                       type="button"
                       on:click={() => applyPreset(key)}
-                      class="px-3 py-1 rounded-full text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      class="px-3 py-1 rounded-full text-xs border border-default text-body hover:bg-control transition-colors"
                     >
                       {WEBHOOK_PRESETS[key].name}
                     </button>
@@ -260,19 +260,21 @@
 
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs font-medium text-heading">{T && T.labelName}</label>
+                  <label for="webhook-name" class="text-xs font-medium text-heading">{T && T.labelName}</label>
                   <input
+                    id="webhook-name"
                     type="text"
                     bind:value={newWebhook.name}
                     placeholder="ex: ntfy"
-                    class="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
+                    class="block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
                   />
                 </div>
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs font-medium text-heading">{T && T.labelMethod}</label>
+                  <label for="webhook-method" class="text-xs font-medium text-heading">{T && T.labelMethod}</label>
                   <select
+                    id="webhook-method"
                     bind:value={newWebhook.method}
-                    class="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
+                    class="block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
                   >
                     <option>POST</option>
                     <option>GET</option>
@@ -282,35 +284,38 @@
               </div>
 
               <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-heading">{T && T.labelUrl}</label>
+                <label for="webhook-url" class="text-xs font-medium text-heading">{T && T.labelUrl}</label>
                 <input
+                  id="webhook-url"
                   type="text"
                   bind:value={newWebhook.url}
                   placeholder="https://ntfy.sh/meu-topico"
-                  class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2"
+                  class="block w-full rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
                 />
               </div>
 
-              <div class="flex flex-col gap-2">
-                <label class="text-xs font-medium text-heading">{T && T.labelHeaders}</label>
+              <div class="flex flex-col gap-2" role="group" aria-labelledby="webhook-headers-label">
+                <span id="webhook-headers-label" class="text-xs font-medium text-heading">{T && T.labelHeaders}</span>
                 {#each headerRows as row, i}
                   <div class="flex gap-2">
                     <input
                       type="text"
                       bind:value={row.key}
                       placeholder="Header"
-                      class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
+                      aria-label="Header {i + 1}"
+                      class="flex-1 rounded-md border-default bg-control text-heading text-xs px-2 py-1.5"
                     />
                     <input
                       type="text"
                       bind:value={row.value}
                       placeholder="Value"
-                      class="flex-1 rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-xs px-2 py-1.5"
+                      aria-label="Value {i + 1}"
+                      class="flex-1 rounded-md border-default bg-control text-heading text-xs px-2 py-1.5"
                     />
                     <button
                       type="button"
                       on:click={() => removeHeaderRow(i)}
-                      class="px-2 py-1 text-xs text-red-400 hover:text-red-600"
+                      class="px-2 py-1 text-xs text-subtle hover:text-danger"
                       aria-label="{T && T.labelHeaders}: {row.key}"
                     >✕</button>
                   </div>
@@ -318,24 +323,25 @@
                 <button
                   type="button"
                   on:click={addHeaderRow}
-                  class="self-start px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  class="self-start px-2 py-1 rounded border border-default text-xs text-body hover:bg-control"
                 >+</button>
               </div>
 
               <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium text-heading">{T && T.labelBody}</label>
+                <label for="webhook-body" class="text-xs font-medium text-heading">{T && T.labelBody}</label>
                 <textarea
+                  id="webhook-body"
                   bind:value={newWebhook.body}
                   rows="3"
                   placeholder={bodyPlaceholder}
-                  class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2 font-mono"
+                  class="block w-full rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2 font-mono"
                 ></textarea>
                 <p class="text-xs text-subtle">{varsHint}</p>
               </div>
 
               <div class="flex flex-col gap-2">
-                <label class="text-xs font-medium text-heading">{T && T.labelEvents}</label>
-                <div class="flex flex-col gap-1">
+                <span id="webhook-events-label" class="text-xs font-medium text-heading">{T && T.labelEvents}</span>
+                <div class="flex flex-col gap-1" role="group" aria-labelledby="webhook-events-label">
                   {#each [
                     { value: 'new_episode',        label: T && T.eventNewEpisode },
                     { value: 'download_failed',    label: T && T.eventDownloadFailed },
@@ -361,14 +367,14 @@
                   type="button"
                   on:click={confirmWebhook}
                   disabled={!newWebhook.name || !newWebhook.url}
-                  class="inline-flex items-center px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="inline-flex items-center px-3 py-2 rounded-md bg-accent text-on-accent hover:opacity-90 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {T && T.btnConfirm}
                 </button>
                 <button
                   type="button"
                   on:click={resetForm}
-                  class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm transition-colors"
+                  class="inline-flex items-center px-3 py-2 rounded-md border border-default text-body hover:bg-control text-sm transition-colors"
                 >
                   {T && T.btnCancel}
                 </button>
@@ -383,7 +389,7 @@
           type="button"
           on:click={saveNotifications}
           disabled={saving}
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-on-accent hover:opacity-90 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? (T && T.btnSaving) : (T && T.btnSave)}
         </button>

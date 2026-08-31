@@ -157,7 +157,7 @@
               <button
                 type="button"
                 on:click={() => resetList(key)}
-                class="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                class="text-xs font-medium text-subtle hover:text-heading transition-colors"
               >
                 Resetar esta lista
               </button>
@@ -170,7 +170,7 @@
                     type="button"
                     on:click={() => preset(key, p.first)}
                     title={p.desc}
-                    class="px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-xs font-medium transition-colors"
+                    class="px-3 py-1.5 rounded-md border border-default text-body hover:bg-control text-xs font-medium transition-colors"
                   >
                     {p.label}
                   </button>
@@ -197,7 +197,7 @@
                         on:click={() => move(key, i, -1)}
                         disabled={i === 0}
                         aria-label="Mover {row.item} para cima"
-                        class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        class="text-subtle hover:text-heading disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         ↑
                       </button>
@@ -206,7 +206,7 @@
                         on:click={() => move(key, i, 1)}
                         disabled={i === config.priorities[key].length - 1}
                         aria-label="Mover {row.item} para baixo"
-                        class="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        class="text-subtle hover:text-heading disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         ↓
                       </button>
@@ -216,7 +216,7 @@
                         type="button"
                         on:click={() => remove(key, i)}
                         aria-label="Remover {row.item}"
-                        class="text-gray-400 hover:text-red-500 transition-colors"
+                        class="text-subtle hover:text-danger transition-colors"
                       >
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -241,13 +241,13 @@
                 type="text"
                 bind:value={newItem[key]}
                 placeholder="Adicionar item"
-                class="flex-1 block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
+                class="flex-1 block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent sm:text-sm px-3 py-2"
                 on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(key); } }}
               />
               <button
                 type="button"
                 on:click={() => add(key)}
-                class="inline-flex items-center px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+                class="inline-flex items-center px-3 py-2 rounded-md border border-default text-body hover:bg-control text-sm font-medium transition-colors"
               >
                 +
               </button>
@@ -263,7 +263,7 @@
         type="button"
         on:click={resetAll}
         disabled={saving}
-        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-default text-body hover:bg-control font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Resetar tudo
       </button>
@@ -271,7 +271,7 @@
         type="button"
         on:click={save}
         disabled={saving}
-        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-on-accent hover:opacity-90 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {saving ? "Salvando..." : "Salvar"}
       </button>
