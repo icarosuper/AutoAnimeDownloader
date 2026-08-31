@@ -12,7 +12,7 @@
 src/cmd/daemon/      → Daemon binary entry point (embeds frontend build, starts API)
 src/cmd/cli/         → CLI binary for managing the daemon via REST API
 src/internal/
-  api/               → HTTP server, REST handlers, WebSocket, middleware, Swagger docs
+  api/               → HTTP server, REST handlers, WebSocket, middleware
   daemon/            → Verification loop: Anilist → Nyaa → embedded torrent client → track episodes
   files/             → Config, episode tracking (JSON files), and library hardlinking (Librarian)
   anilist/           → GraphQL client for Anilist API
@@ -72,7 +72,8 @@ Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state file
 
 ## API
 
-Swagger UI at `http://localhost:8091/swagger/` when daemon running.
+A tabela abaixo é a **única** doc de endpoint: não há mais spec OpenAPI nem `/swagger/`
+(removidos — valiam 33% do binário e nada consumia o spec).
 
 Key endpoints:
 
@@ -214,7 +215,7 @@ logo depois de chamá-la, porque a migração persiste uma config mudada que o r
 enxergar. A migração de `save_path` que morava aqui foi removida junto com o campo (decisions.md #31).
 
 **`report.go`** — os campos de detalhe são achatados com `omitempty`, **nunca** um `map[string]any`:
-aquilo não gera Swagger nem tipo TS utilizável. A cascata de precedência dos três problemas de busca
+aquilo não gera tipo TS utilizável. A cascata de precedência dos três problemas de busca
 está em decisions.md #81.
 
 **`state.go`** — `SetLastCheckError` **limpa** `lastCheckReport`. Consequência: `SetLastCheckReport`

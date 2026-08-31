@@ -7,16 +7,6 @@ import (
 	"net/http"
 )
 
-// @Summary      Get and update configuration
-// @Description  Returns the current daemon configuration and allows updates
-// @Tags         config
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /config [get]
 func handleConfig(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -30,15 +20,6 @@ func handleConfig(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Get configuration
-// @Description  Returns the current daemon configuration
-// @Tags         config
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  SuccessResponse{data=files.Config}
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /config [get]
 func handleGetConfig(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		configs, err := server.FileManager.LoadConfigs()
@@ -52,17 +33,6 @@ func handleGetConfig(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Update configuration
-// @Description  Updates the daemon configuration with the provided values
-// @Tags         config
-// @Accept       json
-// @Produce      json
-// @Param        config  body      files.Config  true  "Configuration object"
-// @Success      200     {object}  SuccessResponse
-// @Failure      400     {object}  SuccessResponse
-// @Failure      405     {object}  SuccessResponse
-// @Failure      500     {object}  SuccessResponse
-// @Router       /config [put]
 func handleUpdateConfig(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var config files.Config

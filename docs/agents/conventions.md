@@ -66,25 +66,6 @@ JSONInternalError(w, err)
 
 All API responses follow envelope `{success, data, error}`.
 
-## Swagger Annotations
-
-Every handler needs swag annotations above the function:
-
-```go
-// @Summary      Short description
-// @Description  Longer description
-// @Tags         feature
-// @Accept       json
-// @Produce      json
-// @Param        id   path      int   true  "Anime ID"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Router       /feature/{id} [get]
-func handleGetFeature(server *Server) http.HandlerFunc {
-```
-
-Regenerate docs after changes: `swag init -g src/cmd/daemon/main.go -o docs/swagger`
-
 ## Import Order
 
 Internal packages first, then stdlib, then third-party:
@@ -152,7 +133,6 @@ O formato usado no repo é `decisions.md #N` — mantenha ele, é o que o `grep`
    - Closure over `*Server`
    - Method dispatch with `switch r.Method`
    - Validate input, respond with `JSONSuccess`/`JSONError`/`JSONInternalError`
-   - Add Swagger annotations
 2. Register route in `SetupRoutes()` in `server.go`
    - `apiMux.HandleFunc("/api/v1/...", handleFeature(s))`
 3. If handler needs new `FileManager` method:
@@ -160,9 +140,8 @@ O formato usado no repo é `decisions.md #N` — mantenha ele, é o que o `grep`
    - Update `FileManagerInterface` in **both** `api/server.go` and `daemon/helpers.go`
 4. If exposing to CLI: add method in CLI's `client.go`
 5. Write tests in `endpoint_<feature>_test.go`
-6. Regenerate Swagger: `swag init -g src/cmd/daemon/main.go -o docs/swagger`
-7. Run tests: `go test ./...`
-8. Update `docs/agents/architecture.md` API table
+6. Run tests: `go test ./...`
+7. Update `docs/agents/architecture.md` API table — ela é a **única** doc de endpoint desde que o Swagger saiu
 
 ## Adding a New Config Field — Checklist
 

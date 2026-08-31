@@ -14,20 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// @title           Auto Anime Downloader API
-// @version         1.0
-// @description     REST API for Auto Anime Downloader daemon
-
-// @contact.name   AutoAnimeDownloader on GitHub
-// @contact.url    https://github.com/icarosuper/AutoAnimeDownloader/issues
-
-// @license.name  GPL-3.0
-// @license.url   https://www.gnu.org/licenses/gpl-3.0.html
-
-// @host      localhost:8091
-// @BasePath  /api/v1
-
-// @schemes   http
 package main
 
 import (
@@ -48,8 +34,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	_ "AutoAnimeDownloader/docs/swagger"
 )
 
 func getEnvironment() string {

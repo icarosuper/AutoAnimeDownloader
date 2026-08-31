@@ -10,19 +10,6 @@ import (
 	"strings"
 )
 
-// @Summary      Manually download an episode
-// @Description  Triggers an immediate download for an aired episode and marks it as manually managed
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      404  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeNumber}/download [post]
 func handleDownloadEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -81,19 +68,8 @@ func handleDownloadEpisode(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Manually delete a downloaded episode
-// @Description  Deletes a downloaded episode (library hardlink + torrent) and blocks it from being re-downloaded automatically
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      404  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeNumber} [delete]
+// handleDeleteEpisode deletes a downloaded episode (library hardlink + torrent) and blocks it from
+// being re-downloaded automatically
 func handleDeleteEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
@@ -149,18 +125,6 @@ func handleDeleteEpisode(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Release an episode from manual management
-// @Description  Unblocks and unmanages an episode so the daemon can handle it automatically again
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeNumber}/release [post]
 func handleReleaseEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -196,19 +160,6 @@ func handleReleaseEpisode(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Redownload an episode from Nyaa
-// @Description  Deletes the existing torrent (if any) and searches Nyaa again for a fresh download
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      404  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeNumber}/redownload [post]
 func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -287,19 +238,6 @@ func handleRedownloadEpisode(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Replace a downloaded episode with a user-supplied magnet link
-// @Description  Deletes the existing torrent (if any) and downloads the episode using the provided magnet link
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id        path int true "Anime ID (AniList MediaList ID)"
-// @Param        episodeNumber path int true "Episode number (1-based, as aired)"
-// @Param        body      body object true "Magnet link" example({"magnet":"magnet:?xt=..."})
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes/{episodeNumber}/replace [post]
 func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -384,18 +322,8 @@ func handleReplaceEpisodeWithMagnet(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Replace all downloaded episodes of an anime with a user-supplied batch magnet link
-// @Description  Deletes all existing torrents for the anime and downloads using the provided magnet link, marking all aired episodes as downloaded
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id   path int true "Anime ID (AniList MediaList ID)"
-// @Param        body body object true "Magnet link" example({"magnet":"magnet:?xt=..."})
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/replace [post]
+// handleReplaceAnimeWithMagnet deletes all existing torrents for the anime and downloads using the
+// provided magnet link, marking all aired episodes as downloaded
 func handleReplaceAnimeWithMagnet(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

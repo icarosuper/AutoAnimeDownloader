@@ -100,15 +100,6 @@ func extractAnimeName(episodeName string) string {
 	return result
 }
 
-// @Summary      Get animes list
-// @Description  Returns a list of animes with aggregated episode information
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  SuccessResponse{data=[]AnimeInfo}
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes [get]
 func handleAnimes(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

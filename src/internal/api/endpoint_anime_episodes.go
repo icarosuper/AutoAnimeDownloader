@@ -42,25 +42,14 @@ type AnimeEpisodeInfo struct {
 type AnimeDetailResponse struct {
 	// AnimeID e o id da MIDIA na AniList — a mesma chave usada em episodes.json e nas rotas
 	// /animes/{id}/*, e tambem o id do link anilist.co/anime/{id} (ver decisions.md #43).
-	AnimeID           int                `json:"anime_id"`
-	TotalEpisodes     int                `json:"total_episodes"`
-	Progress          int                `json:"progress"`
-	Status            string             `json:"status"`
-	CoverImage        string             `json:"cover_image,omitempty"`
-	Episodes          []AnimeEpisodeInfo `json:"episodes"`
+	AnimeID       int                `json:"anime_id"`
+	TotalEpisodes int                `json:"total_episodes"`
+	Progress      int                `json:"progress"`
+	Status        string             `json:"status"`
+	CoverImage    string             `json:"cover_image,omitempty"`
+	Episodes      []AnimeEpisodeInfo `json:"episodes"`
 }
 
-// @Summary      Get detail and episodes for a specific anime
-// @Description  Returns anime info from AniList combined with downloaded episodes data
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id path int true "Anime ID (AniList media ID)"
-// @Success      200  {object}  SuccessResponse{data=AnimeDetailResponse}
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/episodes [get]
 func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -169,12 +158,12 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 		}
 
 		response := AnimeDetailResponse{
-			AnimeID:           id,
-			TotalEpisodes:     totalEpisodes,
-			Progress:          mediaList.Progress,
-			Status:            string(mediaList.Status),
-			CoverImage:        coverImage,
-			Episodes:          episodes,
+			AnimeID:       id,
+			TotalEpisodes: totalEpisodes,
+			Progress:      mediaList.Progress,
+			Status:        string(mediaList.Status),
+			CoverImage:    coverImage,
+			Episodes:      episodes,
 		}
 
 		JSONSuccess(w, http.StatusOK, response)

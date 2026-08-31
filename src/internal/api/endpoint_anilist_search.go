@@ -28,17 +28,6 @@ type AniListSearchResult struct {
 	BlockReason string `json:"block_reason"`
 }
 
-// @Summary      Search animes on AniList
-// @Description  Searches AniList by term and flags which results can be added as standalone animes
-// @Tags         standalone
-// @Produce      json
-// @Param        q                   query  string  true   "Search term (fewer than 3 characters returns an empty list)"
-// @Param        include_unreleased  query  bool    false  "Include animes that have not aired yet (NOT_YET_RELEASED). Default false"
-// @Success      200  {object}  SuccessResponse{data=[]AniListSearchResult}
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /anilist/search [get]
 func handleAniListSearch(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

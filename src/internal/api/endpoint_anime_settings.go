@@ -14,19 +14,6 @@ type animeSettingsRequest struct {
 	Progress *int `json:"progress"`
 }
 
-// @Summary      Get or update anime-specific settings
-// @Description  GET returns current settings; PUT updates them
-// @Tags         animes
-// @Accept       json
-// @Produce      json
-// @Param        id   path int true "Anime ID (AniList MediaList ID)"
-// @Param        body body animeSettingsRequest false "Settings"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /animes/{id}/settings [get]
-// @Router       /animes/{id}/settings [put]
 func handleAnimeSettings(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")

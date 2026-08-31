@@ -12,15 +12,6 @@ type LogsResponse struct {
 	Lines []string `json:"lines"`
 }
 
-// @Summary      Get daemon logs
-// @Description  Returns the last N lines from the daemon log file
-// @Tags         logs
-// @Accept       json
-// @Produce      json
-// @Param        lines  query     int  false  "Number of lines to return (default: 1000, max: 10000)"
-// @Success      200    {object}  SuccessResponse{data=LogsResponse}
-// @Failure      500    {object}  SuccessResponse
-// @Router       /logs [get]
 func handleLogs(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

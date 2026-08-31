@@ -53,14 +53,10 @@ type TorrentResponse struct {
 	SeededForSeconds int64  `json:"seeded_for_seconds" example:"3600"`
 }
 
-// @Summary      List torrents
-// @Description  Returns a live snapshot of every torrent in the embedded client — progress, speed, ETA, peers and status — joined with the anime/episode it belongs to. Batch torrents appear once, with a null episode_number. Responds with an empty list (not an error) when no session exists yet, i.e. before completed_anime_path is configured.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  SuccessResponse{data=[]TorrentResponse}
-// @Failure      405  {object}  SuccessResponse
-// @Router       /torrents [get]
+// handleTorrents returns a live snapshot of every torrent in the embedded client — progress,
+// speed, ETA, peers and status — joined with the anime/episode it belongs to. Batch torrents
+// appear once, with a null episode_number. Responds with an empty list (not an error) when no
+// session exists yet, i.e. before completed_anime_path is configured.
 func handleTorrents(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -171,18 +167,10 @@ type TorrentFileResponse struct {
 	Episode *int `json:"episode" example:"3"`
 }
 
-// @Summary      List a torrent's files
-// @Description  Returns the files inside a torrent, in the order the release was built (not re-sorted), with the raw path, size, per-file progress and the episode number extracted from the file name. bytes_completed is null for a paused torrent (rain frees the piece data, so per-file progress is unavailable) and the list is empty while the metadata has not arrived yet.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Param        hash  path      string  true  "Torrent info hash"
-// @Success      200   {object}  SuccessResponse{data=[]TorrentFileResponse}
-// @Failure      400   {object}  SuccessResponse
-// @Failure      404   {object}  SuccessResponse
-// @Failure      405   {object}  SuccessResponse
-// @Failure      500   {object}  SuccessResponse
-// @Router       /torrents/{hash}/files [get]
+// handleTorrentFiles returns the files inside a torrent, in the order the release was built (not
+// re-sorted), with the raw path, size, per-file progress and the episode number extracted from the
+// file name. bytes_completed is null for a paused torrent (rain frees the piece data, so per-file
+// progress is unavailable) and the list is empty while the metadata has not arrived yet.
 func handleTorrentFiles(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -281,47 +269,25 @@ func torrentAction(server *Server, action func(s *Server, hash string) error) ht
 	}
 }
 
-// @Summary      Pause a torrent
-// @Description  Stops a torrent. Does not block: the torrent enters the "stopping" state and only reaches "stopped" up to ~5s later, once the stop event reaches the trackers. The paused state is persisted and survives a daemon restart.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Param        hash  path      string  true  "Torrent info hash"
-// @Success      200   {object}  SuccessResponse
-// @Failure      400   {object}  SuccessResponse
-// @Failure      404   {object}  SuccessResponse
-// @Failure      405   {object}  SuccessResponse
-// @Router       /torrents/{hash}/pause [post]
+// handleTorrentPause stops a torrent. Does not block: the torrent enters the "stopping" state and
+// only reaches "stopped" up to ~5s later, once the stop event reaches the trackers. The paused
+// state is persisted and survives a daemon restart.
 func handleTorrentPause(server *Server) http.HandlerFunc {
 	return torrentAction(server, func(s *Server, hash string) error { return s.Torrents.Pause(hash) })
 }
 
-// @Summary      Resume a torrent
-// @Description  Puts a paused torrent at the BACK of the download queue and starts it if a slot is free — with max_concurrent_downloads set, resuming does not mean "start now" (use /prioritize for that). Re-arms the completion listener. A completed (seeding) torrent bypasses the queue.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Param        hash  path      string  true  "Torrent info hash"
-// @Success      200   {object}  SuccessResponse
-// @Failure      400   {object}  SuccessResponse
-// @Failure      404   {object}  SuccessResponse
-// @Failure      405   {object}  SuccessResponse
-// @Router       /torrents/{hash}/resume [post]
+// handleTorrentResume puts a paused torrent at the BACK of the download queue and starts it if a
+// slot is free — with max_concurrent_downloads set, resuming does not mean "start now" (use
+// /prioritize for that). Re- arms the completion listener. A completed (seeding) torrent bypasses
+// the queue.
 func handleTorrentResume(server *Server) http.HandlerFunc {
 	return torrentAction(server, func(s *Server, hash string) error { return s.Torrents.Resume(hash) })
 }
 
-// @Summary      Prioritize a torrent
-// @Description  Moves a torrent to the FRONT of the download queue and starts it immediately, pausing the least-progressed active torrent when that would exceed max_concurrent_downloads. Nothing is lost by the demotion — rain keeps the piece bitfield across a stop. A torrent that is already downloading is a no-op; an already-completed one is a 500.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Param        hash  path      string  true  "Torrent info hash"
-// @Success      200   {object}  SuccessResponse
-// @Failure      400   {object}  SuccessResponse
-// @Failure      404   {object}  SuccessResponse
-// @Failure      405   {object}  SuccessResponse
-// @Router       /torrents/{hash}/prioritize [post]
+// handleTorrentPrioritize moves a torrent to the FRONT of the download queue and starts it
+// immediately, pausing the least- progressed active torrent when that would exceed
+// max_concurrent_downloads. Nothing is lost by the demotion — rain keeps the piece bitfield across
+// a stop. A torrent that is already downloading is a no-op; an already-completed one is a 500.
 func handleTorrentPrioritize(server *Server) http.HandlerFunc {
 	return torrentAction(server, func(s *Server, hash string) error { return s.Torrents.Prioritize(hash) })
 }
@@ -333,17 +299,11 @@ type PrioritizeRequest struct {
 	Hashes []string `json:"hashes" example:"0123456789abcdef0123456789abcdef01234567"`
 }
 
-// @Summary      Prioritize several torrents at once
-// @Description  Moves every listed torrent to the FRONT of the download queue, in the order received, and starts as many as max_concurrent_downloads allows — whatever is pushed past the limit pauses. Unknown or already-completed hashes are ignored rather than rejected: a list of episodes must not fail whole because one of them finished between the render and the click. Use this instead of N calls to /torrents/{hash}/prioritize, which would reverse the batch.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Param        request  body      PrioritizeRequest  true  "Info hashes, most important first"
-// @Success      200      {object}  SuccessResponse
-// @Failure      400      {object}  SuccessResponse
-// @Failure      405      {object}  SuccessResponse
-// @Failure      500      {object}  SuccessResponse
-// @Router       /torrents/prioritize [post]
+// handleTorrentsPrioritize moves every listed torrent to the FRONT of the download queue, in the
+// order received, and starts as many as max_concurrent_downloads allows — whatever is pushed past
+// the limit pauses. Unknown or already-completed hashes are ignored rather than rejected: a list
+// of episodes must not fail whole because one of them finished between the render and the click.
+// Use this instead of N calls to /torrents/{hash}/prioritize, which would reverse the batch.
 func handleTorrentsPrioritize(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -370,17 +330,9 @@ func handleTorrentsPrioritize(server *Server) http.HandlerFunc {
 	}
 }
 
-// @Summary      Force a torrent re-announce
-// @Description  Re-announces the torrent to all trackers and DHT — the way out of "stuck at 0 peers". It does not override the trackers' minimum interval, so repeated calls have no extra effect.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Param        hash  path      string  true  "Torrent info hash"
-// @Success      200   {object}  SuccessResponse
-// @Failure      400   {object}  SuccessResponse
-// @Failure      404   {object}  SuccessResponse
-// @Failure      405   {object}  SuccessResponse
-// @Router       /torrents/{hash}/announce [post]
+// handleTorrentAnnounce re-announces the torrent to all trackers and DHT — the way out of "stuck
+// at 0 peers". It does not override the trackers' minimum interval, so repeated calls have no
+// extra effect.
 func handleTorrentAnnounce(server *Server) http.HandlerFunc {
 	return torrentAction(server, func(s *Server, hash string) error { return s.Torrents.Announce(hash) })
 }
@@ -400,21 +352,6 @@ func parseBoolQueryParam(r *http.Request, name string) (bool, error) {
 	return v, nil
 }
 
-// @Summary      Delete a torrent
-// @Description  Removes a torrent and every saved episode sharing its hash, as a single unit (the deletion boundary is the torrent, not the episode, so a batch's episodes always leave together). By default this frees both the seeding copy and the library hardlink (same inode); keep_data=true keeps both instead. block=true additionally blocks every episode in the group against automatic re-download.
-// @Tags         torrents
-// @Accept       json
-// @Produce      json
-// @Param        hash       path   string  true   "Torrent info hash"
-// @Param        keep_data  query  bool    false  "Keep the seeding copy and library hardlinks on disk (default false)"
-// @Param        block      query  bool    false  "Block the torrent's episodes against automatic re-download (default false)"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      404  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /torrents/{hash} [delete]
-//
 // Routing note: this is registered on the same "/api/v1/torrents/{hash}" mux pattern for
 // every HTTP method — a Go 1.22+ ServeMux pattern with no method prefix matches all verbs on
 // that path — so the method check below is what turns a non-DELETE request into a 405

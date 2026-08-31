@@ -25,14 +25,8 @@ type StatusResponse struct {
 	Anilist anilist.Health `json:"anilist"`
 }
 
-// @Summary      Get daemon status
-// @Description  Returns the current status of the daemon, including last check time, error state, and disk space for the configured save path
-// @Tags         status
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  SuccessResponse{data=StatusResponse}
-// @Failure      405  {object}  SuccessResponse
-// @Router       /status [get]
+// handleStatus returns the current status of the daemon, including last check time, error state,
+// and disk space for the configured save path
 func handleStatus(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // FileManagerInterface defines the interface for file management operations
@@ -132,9 +130,6 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 
 	// Apply middlewares to API routes
 	mux.Handle("/api/", ApplyMiddlewares(apiMux))
-	mux.Handle("/swagger/", ApplyMiddlewares(httpSwagger.Handler(
-		httpSwagger.URL("/swagger/doc.json"),
-	)))
 
 	// Static files (frontend) - apply only CORS and logging, not JSON middleware
 	staticHandler := corsMiddleware(loggingMiddleware(s.handleStaticFiles()))
@@ -160,7 +155,7 @@ func (s *Server) handleStaticFiles() http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Don't serve static files for API routes
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/swagger/") {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
 			http.NotFound(w, r)
 			return
 		}

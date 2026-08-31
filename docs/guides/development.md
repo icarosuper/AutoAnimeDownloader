@@ -66,8 +66,6 @@ ENVIRONMENT=dev go run ./src/cmd/daemon
 
 Logs are written to `~/.autoAnimeDownloader/daemon.log` (Linux/macOS) or `%APPDATA%\AutoAnimeDownloader\daemon.log` (Windows); in dev mode they also print to console.
 
-Swagger UI for the API is at `http://localhost:8091/swagger/` while the daemon is running.
-
 ## Testing
 
 ```bash
@@ -88,14 +86,6 @@ make debug-anime ID=123   # ID is the AniList MediaList ID
 ```
 
 Runs a one-shot search/match pass against Nyaa without downloading anything or touching the daemon state. See [Commands](../agents/commands.md#debugging-a-specific-anime) and [Troubleshooting Downloads](../agents/troubleshooting-downloads.md) for details.
-
-## Regenerating Swagger Docs
-
-After changing API endpoints or their comments in `src/cmd/daemon/main.go`:
-
-```bash
-swag init -g src/cmd/daemon/main.go -o docs/swagger
-```
 
 ## Windows Service Install
 

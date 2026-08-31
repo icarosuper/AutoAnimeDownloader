@@ -31,19 +31,6 @@ var blockReasonToErrorCode = map[string]string{
 	blockReasonDownloaded: "ALREADY_DOWNLOADED",
 }
 
-// @Summary      Track an anime that is not in any AniList list
-// @Description  Adds a standalone anime and immediately downloads the episodes already aired
-// @Tags         standalone
-// @Accept       json
-// @Produce      json
-// @Param        body body StandaloneAnimeRequest true "Media ID"
-// @Success      200  {object}  SuccessResponse{data=StandaloneAnimeAddResponse}
-// @Failure      400  {object}  SuccessResponse
-// @Failure      404  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      409  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /standalone-animes [post]
 func handleStandaloneAnimeAdd(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -133,17 +120,6 @@ func standaloneBlockMessage(reason string) string {
 	return "This anime cannot be added"
 }
 
-// @Summary      Stop tracking a standalone anime
-// @Description  Removes the standalone record; optionally deletes the downloaded episodes
-// @Tags         standalone
-// @Produce      json
-// @Param        id path int true "AniList media ID"
-// @Param        delete_episodes query bool false "Delete the downloaded episodes (default false)"
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /standalone-animes/{id} [delete]
 func handleStandaloneAnimeRemove(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {

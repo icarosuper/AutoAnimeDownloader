@@ -5,9 +5,6 @@
 For test commands and mock patterns, see [Testing](testing.md).
 
 ```bash
-# Generate Swagger docs
-swag init -g src/cmd/daemon/main.go -o docs/swagger
-
 # Build manually (frontend must be built first)
 cd src/internal/frontend && bun install --frozen-lockfile && bun run build && cd ../../..
 go build -o build/autoanimedownloader-daemon ./src/cmd/daemon

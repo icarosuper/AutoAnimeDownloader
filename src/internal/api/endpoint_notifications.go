@@ -7,17 +7,6 @@ import (
 	"net/http"
 )
 
-// @Summary      Test a webhook preset
-// @Description  Fires a named webhook with sample variables to verify connectivity
-// @Tags         notifications
-// @Produce      json
-// @Param        name  path      string  true  "Webhook preset name"
-// @Success      200   {object}  SuccessResponse
-// @Failure      404   {object}  SuccessResponse
-// @Failure      405   {object}  SuccessResponse
-// @Failure      500   {object}  SuccessResponse
-// @Failure      502   {object}  SuccessResponse
-// @Router       /notifications/webhooks/{name}/test [post]
 func handleNotificationWebhookTest(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

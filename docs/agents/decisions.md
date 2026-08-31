@@ -95,6 +95,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#86** — O botão Testar responde o status do serviço, não "o preset existe"](#86-o-botão-testar-responde-o-status-do-serviço-não-o-preset-existe)
 - [**#87** — Headers do webhook viram lista de pares enquanto o formulário está aberto](#87-headers-do-webhook-viram-lista-de-pares-enquanto-o-formulário-está-aberto)
 - [**#88** — A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`](#88-a-barra-de-progresso-deriva-baixados-de-episodes_pending-e-não-de-episodes_downloaded)
+- [**#89** — Não existe spec OpenAPI: a tabela do architecture.md é a única doc de endpoint](#89-não-existe-spec-openapi-a-tabela-do-architecturemd-é-a-única-doc-de-endpoint)
 
 ---
 
@@ -2363,3 +2364,37 @@ deveria evitar.
 **Cuidado com o separador:** ele é `{' · '}`, expressão e não texto literal. O Svelte apara
 whitespace no início/fim dos filhos de um elemento, e `<span> · </span>` renderiza `·` colado nas
 palavras. Coberto — os testes comparam o `textContent` inteiro do `<p>`, com espaços.
+
+### 89. Não existe spec OpenAPI: a tabela do `architecture.md` é a única doc de endpoint
+
+**Location:** `api/server.go` — `SetupRoutes` (não há rota `/swagger/`); `docs/agents/architecture.md`
+— seção "API". Fato negativo: **não existe** `docs/swagger/`, nem anotação `// @` em handler, nem
+`swag` no `go.mod`.
+
+**O que parece:** esquecimento. Todo daemon com REST tem um `/swagger/`, os handlers estão prontos
+para receber `@Summary`/`@Param`, e adicionar de volta é um `swag init`.
+
+**Por que saiu:** medido — `swaggo/http-swagger` + `swaggo/swag` custavam **11,2 MB num binário de
+34 MB (33%)**, que vai em todo release da AUR e do GitHub em três plataformas. Em troca: 343 linhas
+de anotação em 17 arquivos, 6.482 linhas geradas, ~15 deps `go-openapi` indiretas e um passo
+obrigatório de regeneração em todo commit que tocasse a API.
+
+O que decidiu não foi o tamanho, foi **quem lia**: nada consumia o spec. Não há gerador de cliente
+no `package.json`, no `Makefile` nem nos scripts — o `lib/api/client.ts` é escrito à mão. O único
+leitor era o console `/swagger/` no navegador, que `curl localhost:8091/api/v1/...` substitui.
+
+`@Param`/`@Success` só repetiam tipo e código HTTP e morreram sem substituto. Mas **11 `@Description`
+carregavam invariante que não estava em lugar nenhum** — `bytes_completed` nulo em torrent pausado
+porque a rain libera o piece data; `resume` põe no FIM da fila e não é "começa agora"; `prioritize`
+rebaixa o menos-progredido e a rain preserva o bitfield; o prioritize em lote ignora hash
+desconhecido de propósito; a fronteira de deleção é o torrent, não o episódio. Essas viraram
+**doc comment normal** em cima do handler, que é melhor que a anotação: aparece em `go doc` e no
+hover do editor, e não depende de regeneração para estar certo.
+
+**Don't "fix" by:**
+- Readicionar `swag` "porque o endpoint novo merece doc": a doc do endpoint novo vai na tabela do
+  `architecture.md` (passo 7 do checklist em `conventions.md`) e, quando houver invariante de
+  comportamento, num doc comment em cima do handler.
+- Gerar o spec sem servir a rota "porque é de graça": não é — volta o passo de regeneração em todo
+  commit de API e a segunda cópia do contrato para envelhecer. Se um dia precisar importar num
+  Bruno/Insomnia, gerar sob demanda e não versionar é mais barato que manter.

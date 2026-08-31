@@ -6,16 +6,6 @@ import (
 	"net/http"
 )
 
-// @Summary      Start daemon
-// @Description  Starts the daemon loop for automatic anime checking
-// @Tags         daemon
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  SuccessResponse
-// @Failure      400  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Failure      500  {object}  SuccessResponse
-// @Router       /daemon/start [post]
 func handleDaemonStart(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

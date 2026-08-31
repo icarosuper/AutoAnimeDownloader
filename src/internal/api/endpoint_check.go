@@ -7,14 +7,6 @@ import (
 	"net/http"
 )
 
-// @Summary      Trigger manual check
-// @Description  Triggers a manual anime verification check
-// @Tags         daemon
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  SuccessResponse
-// @Failure      405  {object}  SuccessResponse
-// @Router       /check [post]
 func handleCheck(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
