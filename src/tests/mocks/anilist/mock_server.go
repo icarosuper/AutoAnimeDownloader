@@ -22,15 +22,15 @@ type AniListResponse struct {
 }
 
 type MediaList struct {
-	Status      string `json:"status"`
-	Progress    int    `json:"progress"`
+	Status      string          `json:"status"`
+	Progress    int             `json:"progress"`
 	CustomLists map[string]bool `json:"customLists"`
-	Media       Media  `json:"media"`
+	Media       Media           `json:"media"`
 }
 
 type Media struct {
-	Status         string        `json:"status"`
-	Title          Title         `json:"title"`
+	Status         string         `json:"status"`
+	Title          Title          `json:"title"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 }
 
@@ -112,8 +112,8 @@ func handleGraphQL(w http.ResponseWriter, r *http.Request) {
 			}{
 				MediaList: []MediaList{
 					{
-						Status:   "CURRENT",
-						Progress: 5,
+						Status:      "CURRENT",
+						Progress:    5,
 						CustomLists: map[string]bool{},
 						Media: Media{
 							Status: "RELEASING",

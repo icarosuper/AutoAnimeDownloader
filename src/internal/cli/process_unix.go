@@ -11,4 +11,3 @@ func getSysProcAttr() *syscall.SysProcAttr {
 		Setpgid: true,
 	}
 }
-

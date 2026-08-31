@@ -265,7 +265,7 @@ func (o *organizer) writeShowNFO(destDir, animeName string, animeID int) bool {
 	}
 
 	data, err := xml.MarshalIndent(nfoTVShow{
-		Title:    animeName,
+		Title: animeName,
 		// "AniList" com essa capitalizacao e o valor de ProviderNames.AniList no
 		// jellyfin-plugin-anilist. O ProviderIds do Jellyfin e OrdinalIgnoreCase, entao
 		// minusculo tambem casaria — escrevemos igual ao provider para nao depender disso.

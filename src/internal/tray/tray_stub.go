@@ -48,4 +48,3 @@ func (tm *TrayManager) WaitForShutdown() <-chan struct{} {
 	c := make(chan struct{})
 	return c
 }
-

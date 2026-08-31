@@ -162,11 +162,11 @@ var (
 		re   *regexp.Regexp
 		desc string
 	}{
-		{regexp.MustCompile(`(?i)\|\s*Part\s*0*(\d+)`),  "| Part 02"},
-		{regexp.MustCompile(`(?i)\(Part\s*(\d+)\)`),     "(Part 2)"},
-		{regexp.MustCompile(`(?i)\[Part\s*(\d+)\]`),     "[Part 2]"},
-		{regexp.MustCompile(`(?i)\bPart\s*(\d+)\b`),     "Part 2"},
-		{regexp.MustCompile(`(?i)\bCour\s*(\d+)\b`),     "Cour 2"},
+		{regexp.MustCompile(`(?i)\|\s*Part\s*0*(\d+)`), "| Part 02"},
+		{regexp.MustCompile(`(?i)\(Part\s*(\d+)\)`), "(Part 2)"},
+		{regexp.MustCompile(`(?i)\[Part\s*(\d+)\]`), "[Part 2]"},
+		{regexp.MustCompile(`(?i)\bPart\s*(\d+)\b`), "Part 2"},
+		{regexp.MustCompile(`(?i)\bCour\s*(\d+)\b`), "Cour 2"},
 	}
 
 	// Qualquer declaracao de part/cour no nome, para detectar as MULTIPLAS: "(Part 1 + Part 2)" e
