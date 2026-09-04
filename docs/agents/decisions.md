@@ -39,7 +39,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#30** — Progress data comes from one Stats() per torrent, pulled only while a screen is open](#30-progress-data-comes-from-one-stats-per-torrent-pulled-only-while-a-screen-is-open)
 - [**#31** — Diretório de download derivado da biblioteca](#31-diretório-de-download-derivado-da-biblioteca)
 - [**#32** — DELETE /torrents/{hash}: default é apagar + bloquear, keep_data é binário, não há endpoint de lote](#32-delete-torrentshash-default-é-apagar--bloquear-keep_data-é-binário-não-há-endpoint-de-lote)
-- [**#33** — daisyUI fica travado na v4 enquanto o Tailwind for v3 (e o inline de progresso não pode olhar is_downloaded)](#33-daisyui-fica-travado-na-v4-enquanto-o-tailwind-for-v3-e-o-inline-de-progresso-não-pode-olhar-is_downloaded)
+- [**#33** — O inline de progresso do torrent não pode olhar is_downloaded](#33-o-inline-de-progresso-do-torrent-não-pode-olhar-is_downloaded)
 - [**#34** — Troca da pasta de download é detectada por marcador duplo, e derruba a sessão da rain](#34-troca-da-pasta-de-download-é-detectada-por-marcador-duplo-e-derruba-a-sessão-da-rain)
 - [**#35** — os.SameFile no Windows resolve o arquivo tarde, então FileInfo não é snapshot em teste](#35-ossamefile-no-windows-resolve-o-arquivo-tarde-então-fileinfo-não-é-snapshot-em-teste)
 - [**#36** — AppShell escolhe rail vs tab bar em JS (matchMedia), não com hidden md:flex/md:hidden](#36-appshell-escolhe-rail-vs-tab-bar-em-js-matchmedia-não-com-hidden-mdflexmdhidden)
@@ -332,7 +332,7 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 **What it looks like:** Reading disk space with a raw platform-specific filesystem syscall on a local path, when a portable Go library might seem cleaner.
 
-**Why it's right:** The dashboard needs both total capacity **and** free space ("tamanho total, tamanho disponível" per `docs/TODO.md`); the syscall pair (`Statfs` / `GetDiskFreeSpaceEx`) is the direct way to get both. `handleStatus` swallows stat errors (empty/unreadable `CompletedAnimePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
+**Why it's right:** The dashboard needs both total capacity **and** free space — o card de disco mostra os dois; the syscall pair (`Statfs` / `GetDiskFreeSpaceEx`) is the direct way to get both. `handleStatus` swallows stat errors (empty/unreadable `CompletedAnimePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
 
 > **Revision (embedded-client refactor):** The original rationale compared this against qBittorrent's `free_space_on_disk` API (which only reported free space, not total). That comparison is now moot — the torrent client is embedded and there is no qBittorrent API to read from. The old cross-host mount-mismatch caveat no longer applies either. The OS-stat approach stands as the only and correct source.
 
@@ -363,7 +363,7 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 **Why it's right:** Embedding makes the daemon a single self-contained binary — no external qBittorrent to install, run, secure, or keep reachable, and no `qbittorrent_url`/`QBITTORRENT_URL` to configure. Torrents download to `save_path` and keep **seeding** there; on completion the video files are **hardlinked** into `completed_anime_path` (the Jellyfin library). Hardlinking (not copy/move) means:
 - No wasted space — the library name and the seeded file share the same bytes.
 - Seeding is never interrupted — the seeded file is never moved or renamed (renaming would break the torrent). The Jellyfin name (`"Anime Name - E05.mkv"`, for single episodes and for batch files whose number is readable) lives only on the library hardlink.
-- The hard constraint: `save_path` and `completed_anime_path` **must be on the same filesystem/volume** (hardlinks can't cross devices). `completed_anime_path` is therefore now **required**, and the config-save endpoint validates the pair with a real hardlink probe (`Librarian.ProbePaths`), rejecting cross-device paths with HTTP 400.
+- The hard constraint: `save_path` and `completed_anime_path` **must be on the same filesystem/volume** (hardlinks can't cross devices). `completed_anime_path` is therefore now **required**, and the config-save endpoint validated the pair with a real hardlink probe (`Librarian.ProbePaths`), rejecting cross-device paths with HTTP 400. A probe de duas vias **não existe mais** — hoje é `Librarian.ProbePath`, de um argumento só; ver a emenda no fim desta entrada.
 
 Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Remove`/`Ensure`/`SetCallbacks`/`Close`) so the daemon injects one uniform backend — rain-backed `SessionManager` in production, in-memory `FakeBackend` in tests (the qBittorrent mock server is gone). Resume data lives in a bbolt DB at `~/.autoAnimeDownloader/session.db`, deliberately **outside** `save_path` so it survives a `save_path` change. rain listens on a default port range (20000–30000) with no UPnP/NAT-PMP; inbound peers may need manual forwarding, but DHT+PEX work without it.
 
@@ -397,9 +397,9 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 
 **Why it's right:** These tests are not read-only. `TestAPIEndpoints` and `TestFullDownloadFlow` both `PUT /api/v1/config`, overwriting `save_path`, `completed_anime_path`, `anilist_username`, `check_interval` and `excluded_lists` on whatever daemon answers. Gating on reachability alone meant that following `CLAUDE.md`'s "run `go test ./...` after any change" silently reconfigured the developer's own daemon: the save path became `/tmp/test`, and on distros where `/tmp` is a tmpfs the daemon then downloaded real torrents into RAM until the filesystem filled. A live daemon is not consent to reconfigure it, so the opt-in is an explicit env var. `docker-compose.test.yml` sets `DAEMON_URL=http://daemon:8091`, so Docker and CI runs are unaffected.
 
-The paths written into the config are likewise no longer hardcoded: they come from `TEST_SAVE_PATH`/`TEST_COMPLETED_PATH`, defaulting to `~/aad-test/downloads` and `~/aad-test/library`. Two constraints shape that default — it must not be under `/tmp` (tmpfs), and both paths must share one filesystem, because the config endpoint runs a real hardlink probe (`Librarian.ProbePaths`) and rejects cross-volume pairs with HTTP 400. Docker overrides both to `/app/data/aad-test/*`, inside the daemon container's mounted volume; note the strings are interpreted by the **daemon** container, not the test container.
+The paths written into the config are likewise no longer hardcoded: they come from `TEST_SAVE_PATH`/`TEST_COMPLETED_PATH`, defaulting to `~/aad-test/downloads` and `~/aad-test/library`. Two constraints shaped that default — it must not be under `/tmp` (tmpfs), and both paths had to share one filesystem, because the config endpoint runs a real hardlink probe and rejected cross-volume pairs with HTTP 400. A segunda restrição morreu com o `save_path` (ver a emenda no fim desta entrada): a probe é `Librarian.ProbePath`, de um caminho só, e o que ela recusa hoje é filesystem sem hardlink. Docker overrides both to `/app/data/aad-test/*`, inside the daemon container's mounted volume; note the strings are interpreted by the **daemon** container, not the test container.
 
-**Don't "fix" by:** removing the `DAEMON_URL` gate so the tests "work" during `go test ./...`; hardcoding the config paths again; putting the default paths back under `/tmp`; or splitting save and completed paths across different volumes (the hardlink probe rejects it).
+**Don't "fix" by:** removing the `DAEMON_URL` gate so the tests "work" during `go test ./...`; hardcoding the config paths again; putting the default paths back under `/tmp`; or pointing `TEST_COMPLETED_PATH` at a filesystem without hardlinks (the probe rejects it).
 
 **Amendment (see #31):** `testSavePath`/`TEST_SAVE_PATH` were removed — the integration test no longer sends `save_path` at all, since the field doesn't exist anymore. `Librarian.ProbePaths` (the two-argument save/completed variant) was replaced by `Librarian.ProbePath(completedPath string)`.
 
@@ -446,7 +446,7 @@ Ordering detail: `ensureStartupSession` runs **after** `jobQueue.Start()`. Creat
 
 **Why it's right:** `isConfigComplete` only checks that the fields are non-empty, and the endpoint probe only covers configs saved **through the API after** the embedded-client upgrade. Two populations bypass it entirely: users who configured a `completed_anime_path` on a different volume back when the app *moved* files (perfectly legal then — `rename` crosses devices, `link` does not), and any deployment where `docker/entrypoint.sh` writes `config.json` straight from env vars. For them the daemon would download happily while every `JobOrganize` failed with `EXDEV`, retried 20 times over ~2.5h, and was dropped — with `LastCheckError` never set, so the WebUI showed a healthy daemon and an empty library.
 
-The probe aborts the pass instead of merely warning: downloading episodes that provably cannot be organized only fills the disk. It reuses `Librarian.ProbePaths`, so the message the user sees in the UI is identical to the one `PUT /config` returns. Cost is one small file write, one link and two unlinks per `check_interval` (default 10 min) — negligible next to the Anilist and Nyaa requests in the same pass.
+The probe aborts the pass instead of merely warning: downloading episodes that provably cannot be organized only fills the disk. It reuses the same probe the config endpoint calls (`Librarian.ProbePath`, ver a emenda no fim desta entrada), so the message the user sees in the UI is identical to the one `PUT /config` returns. Cost is one small file write, one link and two unlinks per `check_interval` (default 10 min) — negligible next to the Anilist and Nyaa requests in the same pass.
 
 **Don't "fix" by:** removing the gate because "the endpoint already validates it" (it does not, for pre-upgrade and entrypoint-written configs), or downgrading it to a warning that lets the pass continue. Caching the result per path pair is a legitimate optimization if the I/O ever shows up in a profile — but it must be invalidated on config change, and the current cost does not justify the extra state.
 
@@ -505,16 +505,18 @@ The deviation is intentional and better than the design. It is also what makes r
 
 ### 30. Progress data comes from one `Stats()` per torrent, pulled only while a screen is open
 
-**Location:** `internal/torrents/session.go` (`toInfo`); `internal/api/endpoint_torrents.go`; `frontend/src/routes/Downloads.svelte`; `frontend/src/routes/Status.svelte`.
+**Location:** `internal/torrents/session.go` (`toInfo`); `internal/api/endpoint_torrents.go`; `frontend/src/routes/Downloads.svelte`; `frontend/src/routes/Status.svelte`; `frontend/src/routes/AnimeDetail.svelte`.
 
 **What it looks like:** `TorrentInfo` carries a dozen progress fields filled from a single
 `t.Stats()` call, and the WebUI polls `GET /api/v1/torrents` on a plain client-side timer
 while a screen that needs it is mounted — instead of the more familiar "push updates over
-the existing WebSocket". Two screens poll it independently, at different rates: `Downloads.svelte`
-every 2s (`setInterval(load, 2000)`) while the downloads screen is open, and `Status.svelte`
-every 5s (`torrentsPollInterval = setInterval(loadTorrents, 5000)`) for the global speed
-card, since Status is the default `#/` landing route. Both intervals are cleared on
-unmount, so the endpoint is only hit while at least one of those two screens is on screen.
+the existing WebSocket". Three screens poll it independently, at different rates:
+`Downloads.svelte` every 2s (`POLL_MS`) while the downloads screen is open, `Status.svelte`
+every 5s (`TORRENTS_POLL_MS`) for the global speed card, since Status is the default `#/`
+landing route, and `AnimeDetail.svelte` adaptively — 2s while that anime has an active torrent,
+15s otherwise, re-scheduled with `setTimeout` instead of `setInterval` so the delay can change
+between ticks without ever running two timers at once. All of them are cleared on unmount, so
+the endpoint is only hit while at least one of those three screens is on screen.
 
 **Why it's right:** rain's `Stats()` is not a getter — it is a blocking round-trip into that
 torrent's goroutine (`torrent/torrent_commands.go:141`), and so are `Peers()`, `Trackers()`
@@ -597,31 +599,22 @@ não só do rename.
 
 ---
 
-### 33. daisyUI fica travado na v4 enquanto o Tailwind for v3 (e o inline de progresso não pode olhar `is_downloaded`)
+### 33. O inline de progresso do torrent não pode olhar `is_downloaded`
 
-**Location:** `frontend/package.json` (`daisyui: ^4`), `frontend/tailwind.config.js`, `frontend/src/components/Layout.svelte` (tooltip do WebSocket), `frontend/src/routes/AnimeDetail.svelte` (inline de progresso do torrent), `internal/api/endpoint_anime_episodes.go`.
+**Location:** `src/internal/frontend/src/routes/AnimeDetail.svelte` (inline de progresso do torrent), `src/internal/api/endpoint_anime_episodes.go` (`handleAnimeEpisodes`).
 
-**What it looks like:** o projeto usa Tailwind 3.4 + daisyUI **4**, não a 5. E a barra de progresso inline na tela do anime aparece com base só em `!torrent.completed` — nunca em `!ep.is_downloaded`.
+**What it looks like:** a barra de progresso inline na tela do anime aparece com base só em `!torrent.completed` — nunca em `!ep.is_downloaded`.
 
-**Why it's right:**
-
-- **daisyUI 5 é CSS-first e só suporta Tailwind 4.** Rodando pelo plugin JS no Tailwind 3, ela emite todo o CSS de componente dentro de `@layer daisyui.l1.l2.l3` (cascade layers reais), enquanto o preflight do Tailwind 3 sai **sem layer nenhum**. CSS sem layer sempre ganha de CSS em layer, independente de especificidade — então `button { background-color: transparent; padding: 0 }` e `*,::before,::after { border-width: 0 }` do preflight atropelavam `.btn` e `.checkbox`. Resultado visível: botões daisyUI viravam texto puro sem fundo/borda/padding, e checkboxes ficavam literalmente invisíveis (só o ✓ aparecia quando marcado). Nada disso é ajustável por config: não dá para pôr o preflight do Tailwind 3 numa layer (`@layer tw-base { @tailwind base }` faz o Tailwind 3 estourar "no matching @tailwind directive"), nem para tirar a daisyUI 5 das layers.
-- **A v4 é a versão feita para o Tailwind 3** e emite CSS sem layer, então convive com o preflight pela cascata normal. Todas as classes em uso aqui (`btn*`, `checkbox*`, `badge*`, `progress*`, `card*`, `menu`, `dropdown*`, `modal*`, `join`, `alert*`, `input-bordered`, `select-bordered`, `table*`, `base-100/200/300`, `base-content/NN`) existem na v4 — inclusive `input-bordered`/`select-bordered`/`btn-outline`, que são idioma v4 e denunciam que o código foi escrito para ela antes de alguém bumpar a major.
-- **O histórico do repo é feito de remendos deste mesmo bug**: `--btn-shadow: 0` global, "substituir btn DaisyUI por classes Tailwind diretas" (é daí que vêm os `bg-blue-600`/`bg-red-600` crus em `Status.svelte` e `AnimeDetail.svelte`), e a troca de `data-tip` por `.tooltip-content`. Esse último é API só da v5 e, na v4, renderiza o texto do tooltip **sempre visível** ao lado do ponto de conexão na navbar — por isso o `Layout.svelte` voltou para `data-tip`.
-- **`episode_hash != "" ⟺ is_downloaded`.** `handleAnimeEpisodes` preenche `IsDownloaded` e `EpisodeHash` no mesmo `if` (existe registro salvo para aquele nó), e o daemon grava o registro salvo no instante em que o torrent é **adicionado**, não quando termina (`daemon/episodes.go`, `daemon/manual_download.go`). Ou seja, um episódio baixando **já** vem com `is_downloaded: true`. A condição antiga do inline (`torrent && !torrent.completed && !ep.is_downloaded`) exigia uma combinação que a API nunca emite, então a barra jamais aparecia em produção — e o smoke test não pegou porque a fixture montava justamente esse estado impossível.
+**Why it's right:** **`episode_hash != "" ⟺ is_downloaded`.** `handleAnimeEpisodes` preenche `IsDownloaded` e `EpisodeHash` no mesmo `if` (existe registro salvo para aquele episódio), e o daemon grava o registro salvo no instante em que o torrent é **adicionado**, não quando termina (`daemon/episodes.go`, `daemon/manual_download.go`). Ou seja, um episódio baixando **já** vem com `is_downloaded: true`. A condição antiga do inline (`torrent && !torrent.completed && !ep.is_downloaded`) exigia uma combinação que a API nunca emite, então a barra jamais aparecia em produção — e o smoke test não pegou porque a fixture montava justamente esse estado impossível.
 
 **Don't "fix" by:** voltar a filtrar o inline de progresso por `!ep.is_downloaded`; escrever fixture de teste com `is_downloaded: false` + `episode_hash` preenchido.
 
-**Amendment (2026-08-31): a metade daisyUI desta entrada está MORTA — o daisyUI foi removido**
-(ver #91). Não há mais `daisyui` no `package.json` nem no `tailwind.config.js`, então o trava-v4,
-o conflito de cascade layer com o preflight do Tailwind 3 e o `data-tip`-vs-`.tooltip-content`
-deixaram de existir como restrição. O que sobra desta entrada é a segunda metade: a regra
-`episode_hash != "" ⟺ is_downloaded` e o inline de progresso.
-
-Consequência que vale registrar: os `bg-blue-600`/`bg-red-600` crus em `Status.svelte` e
-`AnimeDetail.svelte`, que esta entrada explica como remendo do bug de layer, **perderam a razão de
-existir** e agora são só inconsistência com os tokens — mesma coisa para o `StatusBadge.svelte`
-(`bg-green-100 dark:bg-green-900` etc.). Trocá-los pelos tokens é limpeza pendente, não risco.
+**Histórico:** esta entrada nasceu com uma segunda metade — o trava do daisyUI na v4 enquanto o
+Tailwind fosse v3, o conflito de cascade layer com o preflight e o `data-tip` vs `.tooltip-content`.
+Está toda MORTA: o daisyUI foi removido em 2026-08-31 (ver #91), o `Layout.svelte` que hospedava
+aquele tooltip não existe mais, e a limpeza que a emenda antiga deixava pendente (os
+`bg-blue-600`/`bg-red-600` crus em `Status.svelte`/`AnimeDetail.svelte` e o `StatusBadge.svelte`)
+já foi feita — nenhuma dessas classes nem esse componente existem no frontend hoje.
 
 ---
 
@@ -656,13 +649,13 @@ Três propriedades que caíram de graça e são intencionais:
 
 ### 35. `os.SameFile` no Windows resolve o arquivo tarde, então FileInfo não é snapshot em teste
 
-**Location:** `internal/files/librarian_test.go` (`TestOrganizeReplacesDifferentFileAtDestination`, o `staleAlias`). O uso em produção fica em `internal/files/librarian.go:156`.
+**Location:** `internal/files/librarian_test.go` (`TestOrganizeReplacesDifferentFileAtDestination`, o `staleAlias`). O uso em produção fica no ramo `os.SameFile` de `Organize` (`internal/files/librarian.go`).
 
 **What it looks like:** o teste cria um hardlink extra (`staleAlias`) para o arquivo velho **antes** de chamar `Organize`, e depois compara `os.Stat(staleAlias)` contra o destino — em vez de guardar um `os.Stat(dest)` antes da troca, que seria o jeito óbvio.
 
 **Why it's right:** no Linux `os.Stat` grava dev+inode na hora, então um `FileInfo` é um retrato do arquivo daquele instante. No Windows não: `saveInfoFromPath` (`os/types_windows.go`) guarda **só o caminho**, e `SameFile` chama `loadFileId`, que abre esse caminho de novo no momento da comparação. Um `FileInfo` tirado de `dest` antes da substituição passa a apontar para o arquivo **novo** depois dela, e `os.SameFile(staleInfo, destInfo)` vira sempre `true` — o teste falhava só no job `test-backend-windows`, com o código de produção correto. Manter um segundo nome para o arquivo velho fixa a identidade dele em qualquer plataforma, porque `Organize` substitui com `Remove(dest)` + `link(src, dest)` e o hardlink alternativo sobrevive ao `Remove`.
 
-Em `librarian.go:156` o mesmo `os.SameFile` está correto: os dois `Stat` são feitos na hora da comparação, com os dois caminhos existindo.
+No ramo de `Organize` o mesmo `os.SameFile` está correto: os dois `Stat` são feitos na hora da comparação, com os dois caminhos existindo.
 
 **Don't "fix" by:** trocar o alias por um `os.Stat(dest)` guardado antes da troca ("é a mesma coisa e lê melhor" — não é, e só quebra no Windows); marcar o teste como `t.Skip` no Windows (era exatamente o cross-device/hardlink que esse job existe para cobrir); apagar a asserção do arquivo velho por parecer redundante com a de conteúdo (uma mutação que pula a substituição faz as duas falharem, mas a de identidade é a que distingue "relinkou" de "sobrescreveu por cima").
 
@@ -859,7 +852,7 @@ Como as duas funcoes de sanitizacao ficaram identicas depois de tirar o regex, v
 
 **What it looks like:** um cache com TTL num getter que "só lê uma lista", devolvendo uma cópia da fatia em vez da fatia guardada. Parece otimização prematura em cima de um request que leva ~1s.
 
-**Why it's right:** a AniList hoje limita a **30 req/min** por IP. `Status.svelte` faz poll de `/api/v1/animes` a cada 30s **por aba aberta**, e o handler faz uma busca por conta configurada (`fetchAniListEntries` = `GetCustomListsMap` + `GetFrontendAnimeList`). Com 2 contas e 2 abas isso sozinho são ~16 req/min só de UI parada — some com um F5, com o ciclo de verificação de 10 em 10 minutos e com `GetAnimeInfo` de órfãos e o 429 é garantido. Diagnóstico real (`daemon.log`, 10/08/2026 11:09): 15 requests a `/api/v1/animes` em 2 minutos, seguidos de 429 em cascata que derrubaram junto o `searchAnilist` do daemon (`verification.go:486`) — ou seja, a tela aberta impedia o download automático de rodar. Com o cache, N abas custam no máximo 1 request por minuto por conta.
+**Why it's right:** a AniList hoje limita a **30 req/min** por IP. `Status.svelte` faz poll de `/api/v1/animes` a cada 30s **por aba aberta**, e o handler faz uma busca por conta configurada (`fetchAniListEntries` = `GetCustomListsMap` + `GetFrontendAnimeList`). Com 2 contas e 2 abas isso sozinho são ~16 req/min só de UI parada — some com um F5, com o ciclo de verificação de 10 em 10 minutos e com `GetAnimeInfo` de órfãos e o 429 é garantido. Diagnóstico real (`daemon.log`, 10/08/2026 11:09): 15 requests a `/api/v1/animes` em 2 minutos, seguidos de 429 em cascata que derrubaram junto o `searchAnilist` do daemon (`verification.go`) — ou seja, a tela aberta impedia o download automático de rodar. Com o cache, N abas custam no máximo 1 request por minuto por conta.
 
 O TTL de 60s é seguro porque essa lista só muda quando o usuário mexe na AniList; contagem de episódios baixados vem do `episodes.json` local e continua instantânea. A chave inclui username + statuses, então mudança de config gera chave nova (não precisa invalidação).
 
@@ -1362,7 +1355,7 @@ O passe do daemon é ruído. Quem estourava o limite era o refresh de órfãos: 
 
 **`mediaId_in` existe e é o que torna o lote possível** (introspecção + medição, 29/ago/2026). `Page.mediaList` aceita `mediaId_in: [Int]` ao lado de `userName`, devolve **no máximo uma entrada por id** (logo, 50 ids nunca passam de uma página — não há paginação a seguir), **omite** silenciosamente o id que a conta não acompanha, e custa 1 unidade como qualquer query. Duas armadilhas medidas: `userName` inexistente responde **500**, e conta privada responde **404 "Private User"** — nenhum dos dois é 400, então uma query malformada não se distingue de uma conta ruim pelo status.
 
-É por isso que `mergeFailed` pula o refresh (`endpoint_animes.go:182`) em vez de tratar "não coberto" como "precisa refresh": com a lista falhada, todo anime baixado vira órfão aparente, e a rajada resultante realimenta a falha. Os TTLs de `frontendListCache` e `customListsCache` também não são cautela genérica — são o que torna o custo do poll **independente do número de abas abertas**. Sem eles, duas abas e duas contas já eram ~16 req/min só de frontend parado.
+É por isso que `mergeFailed` pula o refresh (`handleAnimes`, `endpoint_animes.go`) em vez de tratar "não coberto" como "precisa refresh": com a lista falhada, todo anime baixado vira órfão aparente, e a rajada resultante realimenta a falha. Os TTLs de `frontendListCache` e `customListsCache` também não são cautela genérica — são o que torna o custo do poll **independente do número de abas abertas**. Sem eles, duas abas e duas contas já eram ~16 req/min só de frontend parado.
 
 **O campo `errors` de um 200 nunca é lido.** A doc é explícita: um 200 pode carregar erro no envelope. `sendAnilistRequest` desserializa direto no struct de dados e descarta `errors`, então esse caso hoje vira resposta vazia sem diagnóstico. **Isto não é a causa do `customLists` null da decisão #11** — aquele foi verificado por curl e volta 200 *sem* campo `errors`, é orçamento de complexidade. São dois problemas distintos com o mesmo sintoma aparente, e confundi-los faz procurar a correção no lugar errado.
 
@@ -1393,7 +1386,7 @@ O passe do daemon é ruído. Quem estourava o limite era o refresh de órfãos: 
 
 **Location:** política para `components/shell/AppShell.svelte` (slot único de banner) e `lib/api/client.ts` (`ApiError`, opção `silent`).
 
-**O que parece:** cada origem de erro quer o seu aviso, e a saída óbvia é empilhar — um banner de AniList, um de backend, o de WebSocket que já existe em `routes/Downloads.svelte:554`.
+**O que parece:** cada origem de erro quer o seu aviso, e a saída óbvia é empilhar — um banner de AniList, um de backend, o de WebSocket que já existe em `routes/Downloads.svelte`.
 
 **Por que está certo:** a distinção não é a gravidade, é a **duração**:
 
@@ -2103,9 +2096,13 @@ episódio mantém o filtro duro: ali o marcador é o único jeito de distinguir 
 como completo, então "quem decide é a cobertura" vale para o pack **com** faixa, não para esse.
 Um `[Group] Anime S4 [Batch]` que na prática é só a Part 1 passa igual ao pack da season inteira —
 antes desta decisão ele era rejeitado no scraper, e rejeitá-lo era pior: zerava os packs de toda
-entrada "Part N", que é o problema 1 acima. Aceitar é a escolha medida; o desempate que falta é a
-**lista de arquivos da página de detalhe do Nyaa** (item do `docs/TODO.md`), que diz quantos
-arquivos o pack tem e com que numeração. Enquanto ela não existir, a ambiguidade fica.
+entrada "Part N", que é o problema 1 acima. Aceitar é a escolha medida; o desempate que faltava
+era a **lista de arquivos da página de detalhe do Nyaa** (na época, um item do `docs/TODO.md`), que
+diz quantos arquivos o pack tem e com que numeração. **RESOLVIDO em quase todo caso (ver #84):** essa leitura
+existe (`nyaa.PackFileRange`, consumida sob demanda por `packSet.rangeOf`), e a faixa que ela
+devolve entra pelo mesmo `packAxis` da faixa do nome. Sobra o resíduo em que nem o nome nem os
+arquivos resolvem (detalhe fora do ar, nome de arquivo ilegível): aí a faixa grava zero e o pack
+ainda é usado como completo — a ambiguidade desta entrada, reduzida ao caso raro.
 
 **`packAxis` são três hipóteses e um desempate.** Como não dá para ler a convenção do nome, o
 daemon testa quanto somar ao número local para chegar à régua do grupo: **0** (relativa à entrada),
@@ -2493,9 +2490,11 @@ hex, não fonte.
 
 Três evidências de que a duplicação era real e cobrava pedágio:
 
-1. **Existia um teste só para vigiá-la.** `tests/unit/designTokens.consistency.test.ts` comparava
-   cada cor do `tokens.css` com a cópia hex no `tailwind.config.js`, porque o daisyUI v4 compila
-   as chaves de tema para OKLCH em build time e não consegue consumir `var(--x)`.
+1. **Existiam dois testes só para vigiá-la.** Em `tests/unit/designTokens.consistency.test.ts`,
+   comparavam cada cor do `tokens.css` com a cópia hex no `tailwind.config.js`, porque o daisyUI
+   v4 compila as chaves de tema para OKLCH em build time e não consegue consumir `var(--x)`. O
+   arquivo **continua existindo** com o invariante que sobrou (os dois blocos de tema precisam
+   existir e estar preenchidos); só os dois testes de comparação foram apagados.
 2. **Os tokens do projeto foram renomeados para não colidir.** `heading`/`body` só se chamam assim
    porque `primary`/`secondary` estavam reservados pela paleta de marca do daisyUI.
 3. **O comentário que justificava o valor de `base-300` descrevia um uso que não existia mais** —
