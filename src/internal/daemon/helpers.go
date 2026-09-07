@@ -35,10 +35,21 @@ type FileManagerInterface interface {
 }
 
 // ErrInsufficientDiskSpace e devolvido por checkDiskSpace quando o volume da biblioteca esta
-// abaixo de Config.MinFreeDiskPercent de espaco livre.
+// abaixo de Config.MinFreeDiskPercent de espaco livre, ou quando o torrent que se quer adicionar
+// nao cabe no que sobra.
 var ErrInsufficientDiskSpace = errors.New("insufficient free disk space")
 
-// checkDiskSpace barra a ADICAO de novos torrents quando o volume da biblioteca esta cheio.
+// checkDiskSpace barra a ADICAO de novos torrents quando o volume da biblioteca esta cheio OU
+// quando o torrent pedido nao cabe nele.
+//
+// torrentSizeBytes e o tamanho anunciado pelo Nyaa, 0 quando desconhecido (magnet colado a mao) —
+// e nesse caso a guarda volta a ser a checagem de porcentagem que sempre foi. Sem ele um pack de
+// 61 GiB entrava num volume com 40 GiB livres e so parava de baixar quando o disco enchia, no meio
+// do download: a porcentagem livre so responde "ha espaco AGORA", nunca "ha espaco no fim".
+//
+// As duas metades tem gatilhos diferentes de proposito. A porcentagem e politica do usuario e
+// desliga com min_free_disk_percent = 0; "o torrent e maior que o espaco livre" e aritmetica, e
+// vale mesmo com a politica desligada.
 //
 // Nao barra o passe de verificacao: a poda de episodios assistidos, o deleteEpisodesByStatus e o
 // organize sao justamente o que LIBERA espaco, e um "if disco cheio { return }" no inicio do
@@ -46,8 +57,8 @@ var ErrInsufficientDiskSpace = errors.New("insufficient free disk space")
 //
 // Erro de statfs NAO bloqueia: um volume que nao responde (rede, permissao) nao e prova de disco
 // cheio, e transformar isso em "para de baixar tudo" e pior que o risco que a guarda cobre.
-func checkDiskSpace(configs *files.Config) error {
-	if configs.MinFreeDiskPercent <= 0 || configs.CompletedAnimePath == "" {
+func checkDiskSpace(configs *files.Config, torrentSizeBytes int64) error {
+	if configs.CompletedAnimePath == "" || (configs.MinFreeDiskPercent <= 0 && torrentSizeBytes <= 0) {
 		return nil
 	}
 	// Mesmo volume que o diretorio de download, por construcao (ver Config.DownloadPath).
@@ -59,8 +70,14 @@ func checkDiskSpace(configs *files.Config) error {
 	if total == 0 {
 		return nil
 	}
-	if float64(free)/float64(total)*100 < float64(configs.MinFreeDiskPercent) {
-		return fmt.Errorf("%w: %d%% free required on %s", ErrInsufficientDiskSpace, configs.MinFreeDiskPercent, configs.CompletedAnimePath)
+	if torrentSizeBytes > 0 && float64(torrentSizeBytes) > float64(free) {
+		return fmt.Errorf("%w: torrent needs %d bytes, only %d free on %s", ErrInsufficientDiskSpace, torrentSizeBytes, free, configs.CompletedAnimePath)
+	}
+	if configs.MinFreeDiskPercent <= 0 {
+		return nil
+	}
+	if (float64(free)-float64(torrentSizeBytes))/float64(total)*100 < float64(configs.MinFreeDiskPercent) {
+		return fmt.Errorf("%w: %d%% free required on %s (torrent: %d bytes)", ErrInsufficientDiskSpace, configs.MinFreeDiskPercent, configs.CompletedAnimePath, torrentSizeBytes)
 	}
 	return nil
 }

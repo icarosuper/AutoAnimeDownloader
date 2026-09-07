@@ -204,7 +204,7 @@ func processAnimeEpisodes(
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
 
 		resolved := magnetsForEpisodes[ep.Episode]
-		magnets := resolved.magnets
+		candidates := resolved.candidates
 		skipSubfolder := resolved.skipSubfolder
 		if resolved.overrideName != "" {
 			epName = resolved.overrideName
@@ -216,19 +216,15 @@ func processAnimeEpisodes(
 		// corte dele que descreve por que. Se um dia o pack precisar do proprio codigo, o caminho
 		// e passar o packStats para ca em vez de sobrescrever este.
 		var searchStats dropStats
-		if len(magnets) == 0 {
-			var singleResults []nyaa.TorrentResult
-			singleResults, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
-			for _, tr := range singleResults {
-				magnets = append(magnets, tr.MagnetLink)
-			}
+		if len(candidates) == 0 {
+			candidates, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 		}
 
 		// Sem magnet nao ha o que tentar: avisar "iniciando download" aqui mandava um push
 		// falso a cada passada do loop enquanto o episodio nao aparecesse no Nyaa, e ainda
 		// fazia attemptDownloadWithRetries logar "falhou apos todas as tentativas" com zero
 		// tentativas.
-		if len(magnets) == 0 {
+		if len(candidates) == 0 {
 			logger.Logger.Warn().
 				Str("episode", epName).
 				Msg("No torrent found for episode")
@@ -239,7 +235,7 @@ func processAnimeEpisodes(
 
 		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
 
-		hash := attemptDownloadWithRetries(configs, backend, magnets, epName)
+		hash := attemptDownloadWithRetries(configs, backend, candidates, epName)
 
 		if hash != "" {
 			result.newEpisodes = append(result.newEpisodes, files.EpisodeStruct{
@@ -264,13 +260,16 @@ func processAnimeEpisodes(
 				AnimeName:  animeTitle,
 				Episodes:   []int{ep.Episode},
 				Code:       IssueTorrentRejected,
-				Candidates: len(magnets),
+				Candidates: len(candidates),
 			}
-			if errors.Is(checkDiskSpace(configs), ErrInsufficientDiskSpace) {
+			// O tamanho do melhor candidato entra na conta: o disco pode ter folga em
+			// porcentagem e ainda assim nao caber o pack que este episodio queria.
+			if errors.Is(checkDiskSpace(configs, candidates[0].Size), ErrInsufficientDiskSpace) {
 				reason = notifications.ReasonNoDiskSpace
 				issue.Code = IssueDiskFull
-				// Disco cheio nao e sobre os magnets: nenhum foi tentado (attemptDownloadWithRetries
-				// sai antes do primeiro Add), entao "N candidatos" seria numero sem significado.
+				// Disco cheio nao e sobre os candidatos: ou nenhum foi tentado
+				// (attemptDownloadWithRetries sai antes do primeiro Add), ou eles foram pulados por
+				// nao caberem — nos dois casos "N candidatos" seria numero sem significado.
 				issue.Candidates = 0
 			}
 			result.issues = append(result.issues, issue)
@@ -284,7 +283,9 @@ func processAnimeEpisodes(
 }
 
 type resolvedMagnets struct {
-	magnets       []string
+	// candidates carrega o TorrentResult inteiro, e nao so o magnet, porque o Size e o que a
+	// guarda de disco precisa no momento do Add (checkDiskSpace).
+	candidates    []nyaa.TorrentResult
 	skipSubfolder bool
 	overrideName  string
 	// batchStart/batchEnd: a faixa do pack lida do nome do torrent, 0 quando desconhecida. Vai
@@ -317,7 +318,7 @@ func resolveMovie(configs *files.Config, anime anilist.MediaList, animeTitle str
 	result := make(map[int]resolvedMagnets, len(episodes))
 	for _, ep := range episodes {
 		result[ep.Episode] = resolvedMagnets{
-			magnets:       []string{movieResult[0].MagnetLink},
+			candidates:    movieResult[:1],
 			skipSubfolder: true,
 			overrideName:  animeTitle,
 		}
@@ -374,7 +375,7 @@ func assignBatches(animeTitle string, axis packAxis, episodes []anilist.AiringNo
 		}
 
 		result[ep.Episode] = resolvedMagnets{
-			magnets:       []string{batch.torrent.MagnetLink},
+			candidates:    []nyaa.TorrentResult{batch.torrent},
 			skipSubfolder: true,
 			overrideName:  name,
 			batchStart:    info.StartEpisode,
@@ -409,11 +410,7 @@ func magnetsByEpisode(singles []nyaa.TorrentResult, episodes []anilist.AiringNod
 		if !ok {
 			continue
 		}
-		magnets := make([]string, 0, len(trs))
-		for _, tr := range trs {
-			magnets = append(magnets, tr.MagnetLink)
-		}
-		result[ep.Episode] = resolvedMagnets{magnets: magnets}
+		result[ep.Episode] = resolvedMagnets{candidates: trs}
 	}
 	return result
 }
@@ -788,15 +785,15 @@ func handleAlreadySavedEpisode(maxEpisodes int, downloadedEpisodes *int, isInTor
 	return true, false
 }
 
-func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentBackend, magnets []string, fileName string) (hash string) {
-	// Disco cheio: nem um magnet e tentado e nao ha retry — o magnets[i] nao e o problema, e
-	// tentar 3 vezes so encheria o log.
-	if err := checkDiskSpace(configs); err != nil {
+func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentBackend, candidates []nyaa.TorrentResult, fileName string) (hash string) {
+	// Disco cheio: nem um magnet e tentado e nao ha retry — o candidato nao e o problema, e
+	// tentar 3 vezes so encheria o log. O tamanho de cada candidato e checado no loop.
+	if err := checkDiskSpace(configs, 0); err != nil {
 		logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Skipping download: insufficient free disk space")
 		return ""
 	}
 
-	maxAttempts := min(configs.EpisodeRetryLimit, len(magnets))
+	maxAttempts := min(configs.EpisodeRetryLimit, len(candidates))
 
 	for i := range maxAttempts {
 		logger.Logger.Debug().
@@ -805,7 +802,14 @@ func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentB
 			Int("max_attempts", configs.EpisodeRetryLimit).
 			Msg("Attempting to download episode")
 
-		h, err := backend.Add(magnets[i])
+		// Por candidato, porque cada um tem um tamanho: o proximo da lista pode caber onde o
+		// primeiro nao coube.
+		if err := checkDiskSpace(configs, candidates[i].Size); err != nil {
+			logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Skipping candidate: it does not fit on disk")
+			continue
+		}
+
+		h, err := backend.Add(candidates[i].MagnetLink)
 		if err != nil {
 			logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Failed to add torrent to embedded client")
 			continue

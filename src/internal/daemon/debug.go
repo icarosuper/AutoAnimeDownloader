@@ -125,7 +125,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	magnetsByEpisodeNumber := make(map[int]int, len(episodesToDownload))
 	for _, ep := range episodesToDownload {
 		resolved := magnetsForEpisodes[ep.Episode]
-		magnets := resolved.magnets
+		magnets := resolved.candidates
 
 		// Mesmo fallback do processAnimeEpisodes: a busca multipla nao leva numero de episodio na
 		// query, e numa serie longa as primeiras paginas ordenadas por seeders sao so os episodios
@@ -133,10 +133,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		// chamada o debug reportava "0 magnets" em One Piece/Naruto por nao ter buscado, e nao por
 		// o Nyaa nao ter.
 		if len(magnets) == 0 {
-			singleResults, _ := filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
-			for _, tr := range singleResults {
-				magnets = append(magnets, tr.MagnetLink)
-			}
+			magnets, _ = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 		}
 
 		magnetsByEpisodeNumber[ep.Episode] = len(magnets)

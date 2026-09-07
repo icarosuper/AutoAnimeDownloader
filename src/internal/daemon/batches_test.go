@@ -95,7 +95,7 @@ func TestAssignBatches_EachEpisodeGetsItsOwnPack(t *testing.T) {
 	if len(covered) != 200 {
 		t.Fatalf("esperava 200 episódios cobertos, obteve %d", len(covered))
 	}
-	if magnets[50].magnets[0] != first.MagnetLink || magnets[150].magnets[0] != second.MagnetLink {
+	if magnets[50].candidates[0].MagnetLink != first.MagnetLink || magnets[150].candidates[0].MagnetLink != second.MagnetLink {
 		t.Error("cada episódio deve receber o magnet do pack da sua faixa")
 	}
 	if magnets[50].overrideName == magnets[150].overrideName {

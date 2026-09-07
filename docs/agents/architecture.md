@@ -174,7 +174,10 @@ Os três passam pelo piso de `min_seeders` (`filterSearchResults`).
   `1..total`: as duas fontes falharam e "não sei" é o único registro honesto (decisions.md #84)
 - O sentinela de "faixa desconhecida" é o **fim** (`BatchEnd`). Começo 0 ou negativo é faixa legítima
   ("00 ~ 12", ou pack de season gravado sob um cour posterior)
-- `checkDiskSpace` barra download, **nunca** o passe de verificação. Erro de `statfs` não bloqueia
+- `checkDiskSpace` barra download, **nunca** o passe de verificação. Erro de `statfs` não bloqueia.
+  Recebe o tamanho do torrent e é chamada **por candidato**: o segundo da lista pode caber onde o
+  primeiro não coube, e o gatilho de tamanho vale mesmo com a porcentagem desligada
+  ([#93](decisions.md#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0))
 - O teto de tamanho de pack é aplicado **duas vezes**: na busca do Nyaa e de novo no filtro do daemon
   (decisions.md #80). Mexer só num dos dois não muda o comportamento
 

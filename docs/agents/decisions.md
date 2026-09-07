@@ -99,6 +99,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#90** — Não há versionamento de `config.json`: a migração checa FORMA, num lugar só](#90-não-há-versionamento-de-configjson-a-migração-checa-forma-num-lugar-só)
 - [**#91** — Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor](#91-não-há-biblioteca-de-componentes-o-daisyui-saiu-porque-era-um-segundo-vocabulário-de-cor)
 - [**#92** — O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)
+- [**#93** — A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)
 
 ---
 
@@ -2598,3 +2599,39 @@ já busca quando a contagem fica negativa.
 **Relação com a #72:** a recusa do gate de orçamento continua servindo o vencido **sem** erro. O
 dado ali tem segundos de idade e o próximo poll volta fresco; a tela não ganha nada sabendo. Só
 a falha de verdade carrega `ErrFromCache`.
+
+
+### 93. A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`
+
+**Location:** `daemon/helpers.go` (`checkDiskSpace`), chamada em `daemon/episodes.go`
+(`attemptDownloadWithRetries`, uma vez antes do loop e uma por candidato) e em
+`daemon/manual_download.go` (`addAndPrioritize`).
+
+`checkDiskSpace` recebe `torrentSizeBytes` e recusa por dois motivos diferentes:
+
+1. **o torrent não cabe** no espaço livre — roda sempre que o tamanho é conhecido, inclusive com
+   `min_free_disk_percent = 0`;
+2. **o volume ficaria abaixo da porcentagem** exigida depois do download — só roda com
+   `min_free_disk_percent > 0`.
+
+**O que parece errado:** uma config documentada como "`0` = off" que não desliga a guarda inteira.
+É deliberado. A porcentagem é política do usuário ("quero 10% de folga"), e desligar política é
+direito dele. "Este torrent é maior que o disco" não é política, é aritmética: o download vai
+encher o volume e travar no meio de qualquer jeito, e deixá-lo entrar não realiza desejo nenhum.
+
+**Por que o tamanho não veio antes:** ele existia desde sempre no resultado do Nyaa
+(`nyaa.TorrentResult.Size`, o mesmo dado dos tetos `max_batch_torrent_size_gb`/
+`max_episode_torrent_size_gb`), mas se perdia no caminho — `resolvedMagnets` guardava
+`magnets []string`. Hoje guarda `candidates []nyaa.TorrentResult` justamente para o `Size`
+chegar ao `Add`. Se um dia alguém "simplificar" o campo de volta para uma lista de strings, a
+guarda volta a ser cega.
+
+**Tamanho 0 = desconhecido, e passa.** É o caso do magnet colado à mão: o tamanho só apareceria
+depois dos metadados, e recusar por não saber barraria download legítimo. Aí a guarda é a
+porcentagem que sempre foi — ver `ManualDownloadEpisodeWithMagnet`/`ManualDownloadAnimeWithMagnet`,
+que passam `0` de propósito.
+
+**A checagem é por candidato, não uma só antes do loop.** Cada candidato tem um tamanho, e o
+segundo da lista pode caber onde o primeiro não coube — pular um não encerra a tentativa. A
+checagem sem tamanho **antes** do loop continua existindo, e é outra coisa: disco já cheio hoje
+significa que nenhum candidato serve, e tentar N vezes só encheria o log.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -353,20 +354,29 @@ func TestFilterSearchResults_DropStats(t *testing.T) {
 func TestCheckDiskSpace(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}); err != nil {
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}, 0); err != nil {
 		t.Errorf("com 1%% exigido esperava nil, obteve %v", err)
 	}
 	// 100% livre é impossível num volume em uso: força o caminho "abaixo do teto".
-	err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 100})
+	err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 100}, 0)
 	if !errors.Is(err, ErrInsufficientDiskSpace) {
 		t.Errorf("esperava ErrInsufficientDiskSpace, obteve %v", err)
 	}
-	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}); err != nil {
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}, 0); err != nil {
 		t.Errorf("0 desliga a guarda, obteve %v", err)
+	}
+	// Tamanho maior que o volume inteiro: barra mesmo com a politica de porcentagem desligada.
+	err = checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}, math.MaxInt64)
+	if !errors.Is(err, ErrInsufficientDiskSpace) {
+		t.Errorf("torrent maior que o disco deve barrar mesmo com a guarda desligada, obteve %v", err)
+	}
+	// Um torrent de 1 byte cabe: o tamanho nao pode virar um "nao" automatico.
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}, 1); err != nil {
+		t.Errorf("torrent de 1 byte deve caber, obteve %v", err)
 	}
 	// Erro de statfs não bloqueia.
 	missing := filepath.Join(dir, "nao-existe")
-	if err := checkDiskSpace(&files.Config{CompletedAnimePath: missing, MinFreeDiskPercent: 100}); err != nil {
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: missing, MinFreeDiskPercent: 100}, 0); err != nil {
 		t.Errorf("falha de statfs não deve bloquear, obteve %v", err)
 	}
 }
@@ -382,7 +392,7 @@ func diskFullConfig(t *testing.T) *files.Config {
 
 func TestAttemptDownloadWithRetries_DiskFullDoesNotCallAdd(t *testing.T) {
 	backend := torrents.NewFakeBackend()
-	hash := attemptDownloadWithRetries(diskFullConfig(t), backend, []string{fakeMagnet(1), fakeMagnet(2)}, "ep")
+	hash := attemptDownloadWithRetries(diskFullConfig(t), backend, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(1)}, {MagnetLink: fakeMagnet(2)}}, "ep")
 
 	if hash != "" {
 		t.Errorf("esperava hash vazio com disco cheio, obteve %q", hash)
