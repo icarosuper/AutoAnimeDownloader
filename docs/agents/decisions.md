@@ -411,13 +411,28 @@ The paths written into the config are likewise no longer hardcoded: they come fr
 
 **Location:** `internal/daemon/helpers.go` — `HandleTorrentFailure`; wired as the `onFailed` callback in `cmd/daemon/main.go`.
 
-**What it looks like:** When the embedded client stops a torrent with an error, we fire the `download_failed` webhook and then **remove the torrent from the session** (`Remove(hash, false)`, discarding partial data). Since nothing records that the hash failed, the very next verification pass finds the episode missing from the session and re-adds the same magnet. For a torrent that is genuinely dead (no seeds at all) this is an unbounded re-add loop, one attempt per `check_interval`. That looks like a bug we forgot to guard.
+**What it looks like:** When the embedded client stops a torrent with an error, we fire the `download_failed` webhook and then **remove the torrent from the session** (`Remove`, com os bytes preservados quando há progresso — ver a emenda no fim). Since nothing records that the hash failed, the very next verification pass finds the episode missing from the session and re-adds the same magnet. For a torrent that is genuinely dead (no seeds at all) this is an unbounded re-add loop, one attempt per `check_interval`. That looks like a bug we forgot to guard.
 
 **Why it's right:** The alternative is worse. rain leaves a failed torrent in state Stopped **inside** the session and never restarts it, and the per-torrent listener goroutine exits after `NotifyStop` and is not re-armed (`torrents/session.go`). If we only logged, `episodeInTorrents` (`daemon/helpers.go`) would keep seeing the hash and the daemon would believe the episode was downloaded — forever. No retry, no organize, no notification, and the episode silently never reaches the library. Dropping the torrent converts a permanent silent failure into an automatic retry that reuses the machinery already in place (the loop re-searches Nyaa and may pick a *different*, healthier release the second time). `EpisodeRetryLimit` does not bound this, because it resets each pass.
 
 **Cost of the accepted risk:** a dead torrent costs one Nyaa search plus one magnet add per `check_interval` — cheap, visible in the logs, and each retry fires a `download_failed` webhook so the user is not left guessing.
 
-**Don't "fix" by:** adding a speculative per-hash blacklist with a TTL. That is the correct fix *if* the re-add churn is ever observed to be a real problem, but it introduces new state to persist, expire, and expose in the UI (otherwise a permanently blacklisted episode becomes the new silent failure). Build it against a real report, not preemptively. Also don't go back to log-only in `onFailed`, and don't pass `keepData=true` — partial data from a torrent that errored out is not reusable and only occupies the save path.
+**Don't "fix" by:** adding a speculative per-hash blacklist with a TTL. That is the correct fix *if* the re-add churn is ever observed to be a real problem, but it introduces new state to persist, expire, and expose in the UI (otherwise a permanently blacklisted episode becomes the new silent failure). Build it against a real report, not preemptively. Also don't go back to log-only in `onFailed`.
+
+**Emenda (2026-09-07): o re-add RETOMA, não recomeça.** A versão original passava `keepData=false`
+sempre, com a justificativa de que dado parcial de um torrent que errou não era reutilizável. É
+falso, e num pack de 90 GiB a 90% custava o download inteiro por um erro transitório. `Session.Add`
+adiciona com `AddTorrentOptions{ID: hash}` e a sessão roda com `DataDirIncludesTorrentID`, então o
+re-add cai no **mesmo** `<DataDir>/<id>`; a rain vê os arquivos existentes (`allocator.HasExisting`)
+e, sem entrada no banco de resume — o `RemoveTorrent` apagou —, roda o verificador e reconstrói o
+bitfield sozinha. Nada no app chama `Verify()`: não existe esse método na API pública da rain, e
+não precisa existir.
+
+O `keepData` é **condicional**, não `true` fixo: só com `PiecesHave > 0`. Zero peça verificada não
+tem o que recuperar, e a pasta guardada viraria lixo permanente quando a retentativa cair noutro
+infohash — o diretório é por id do torrent e nada varre o caminho de download. `PiecesHave` é a
+fonte de progresso que sobrevive ao `Stop` (`BytesCompleted` zera quando a rain libera as pieces), e
+a falha chega aqui já parada.
 
 ---
 

@@ -122,8 +122,25 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 	if backend == nil {
 		return
 	}
-	// keepData=false: the partial data is useless and the loop will re-download from scratch.
-	if err := backend.Remove(hash, false); err != nil {
+	// Os bytes ja baixados FICAM quando ha algum: o re-add do proximo passe usa o mesmo id
+	// (Session.Add passa AddTorrentOptions{ID: hash}) e a rain cai no mesmo <DataDir>/<id>,
+	// enxerga os arquivos existentes (allocator.HasExisting) e roda o verificador, que
+	// reconstroi o bitfield. O download continua de onde parou. Sem isso, um erro transitorio
+	// num pack de 90 GiB a 90% custava o download inteiro de novo.
+	//
+	// PiecesHave e a fonte de progresso que sobrevive ao Stop — BytesCompleted zera quando a
+	// rain libera as pieces, e a failed torrent ja esta parada aqui.
+	//
+	// Zero peca verificada -> keepData=false: nao ha o que recuperar, e guardar a pasta so
+	// deixaria lixo permanente no disco quando a retentativa cair noutro infohash (o diretorio
+	// e por id do torrent, e nada varre o caminho de download).
+	keepData := false
+	if info, ok := backend.Get(hash); ok && info.PiecesHave > 0 {
+		keepData = true
+		logger.Logger.Info().Str("hash", hash).Uint32("pieces_have", info.PiecesHave).Uint32("pieces_total", info.PiecesTotal).
+			Msg("Torrent failure: keeping partial data for the re-add to resume from")
+	}
+	if err := backend.Remove(hash, keepData); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to remove the failed torrent from the session")
 	}
 }

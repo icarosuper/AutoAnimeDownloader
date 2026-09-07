@@ -174,6 +174,29 @@ func TestHandleTorrentFailure_NoSavedEpisode(t *testing.T) {
 	}
 }
 
+// Falha com pecas ja verificadas guarda os bytes: o re-add do proximo passe usa o mesmo id e a
+// rain retoma de onde parou, em vez de rebaixar um pack inteiro por um erro transitorio.
+func TestHandleTorrentFailure_KeepsPartialData(t *testing.T) {
+	const withProgress = "cccccccccccccccccccccccccccccccccccccccc"
+	const untouched = "dddddddddddddddddddddddddddddddddddddddd"
+
+	fm := &lifecycleFM{configs: &files.Config{}}
+	backend := torrents.NewFakeBackend()
+	backend.AddPaused(withProgress, "pack a 90%", 900, 1000, false)
+	backend.AddPaused(untouched, "pack sem nada", 0, 1000, false)
+
+	HandleTorrentFailure(withProgress, errors.New("boom"), backend, fm)
+	HandleTorrentFailure(untouched, errors.New("boom"), backend, fm)
+
+	if !backend.RemovedKeepData[withProgress] {
+		t.Error("torrent com pecas verificadas deve ser removido com keepData=true")
+	}
+	// Zero peca: guardar a pasta so deixaria lixo se a retentativa cair noutro infohash.
+	if backend.RemovedKeepData[untouched] {
+		t.Error("torrent sem nenhuma peca deve ser removido com keepData=false")
+	}
+}
+
 // Without a webhook subscribed to download_failed nothing is fired, but the torrent is
 // still dropped from the session (the retry path must not depend on notifications).
 func TestHandleTorrentFailure_NoWebhookStillRemoves(t *testing.T) {
