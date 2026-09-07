@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/logger"
 )
@@ -29,14 +31,21 @@ func loadStandaloneSet(fm FileManagerInterface) map[int]bool {
 // passaria a responder pelas rotas /animes/{id}/*, e o 404 de "esse anime nao e seu" sumiria.
 func resolveMediaList(fm FileManagerInterface, id int, usernames []string, standalone map[int]bool) (*anilist.MediaList, error) {
 	ml, err := anilist.GetAnimeInfo(id, usernames, anilist.PriorityCritical)
-	if err != nil {
+	// Servido do cache local conta como resposta: era esta tela que ficava inteira inacessivel
+	// com a AniList fora do ar, e tudo o que ela faz alem de mostrar a lista de episodios
+	// (bloquear, apagar, re-baixar, marcar como manual) ja e local. O banner do sistema avisa
+	// que a AniList esta degradada; devolver 500 aqui so escondia o que ainda funcionava.
+	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 		return nil, err
 	}
 	if ml != nil || !standalone[id] {
-		return ml, err
+		// nil aqui, e nao err: neste ponto err e ErrFromCache ou nada, e o unico chamador
+		// (handleAnimeEpisodes) transformaria qualquer erro em 500 — que e exatamente o que se
+		// esta consertando. Quem avisa que a AniList caiu e o banner, por anilist.Health.
+		return ml, nil
 	}
 	ml, err = anilist.GetMediaByID(id, anilist.PriorityCritical)
-	if err != nil {
+	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 		return nil, err
 	}
 	return withStandaloneProgress(fm, ml), nil
@@ -60,7 +69,11 @@ func appendStandaloneEntries(fm FileManagerInterface, entries []anilist.MediaLis
 	}
 
 	medias, err := anilist.GetMediaByIDs(pending, anilist.PriorityDisposable)
-	if err != nil {
+	switch {
+	case errors.Is(err, anilist.ErrFromCache):
+		logger.Logger.Warn().
+			Msg("Serving standalone animes from the local cache: AniList is unreachable")
+	case err != nil:
 		logger.Logger.Warn().Err(err).
 			Msg("Failed to fetch standalone animes from AniList; leaving the missing ones out of this response")
 	}

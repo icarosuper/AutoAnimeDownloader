@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -62,7 +63,10 @@ func handleStandaloneAnimeAdd(server *Server) http.HandlerFunc {
 		// E tambem o que valida que o id existe e e ANIME, e de onde sai o total de episodios
 		// que blockReason precisa.
 		media, err := anilist.GetMediaByID(body.MediaID, anilist.PriorityCritical)
-		if err != nil {
+		// Cache local serve para quem JA passou pelo app (reativar um avulso removido). Quem
+		// nunca passou nao tem entrada guardada e continua caindo no erro — e a unica tela que
+		// legitimamente exige a AniList no ar.
+		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 			logger.Logger.Error().Err(err).Int("media_id", body.MediaID).Msg("Failed to fetch media from AniList")
 			JSONInternalError(w, err)
 			return

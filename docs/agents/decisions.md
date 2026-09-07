@@ -98,6 +98,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#89** — Não existe spec OpenAPI: a tabela do architecture.md é a única doc de endpoint](#89-não-existe-spec-openapi-a-tabela-do-architecturemd-é-a-única-doc-de-endpoint)
 - [**#90** — Não há versionamento de `config.json`: a migração checa FORMA, num lugar só](#90-não-há-versionamento-de-configjson-a-migração-checa-forma-num-lugar-só)
 - [**#91** — Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor](#91-não-há-biblioteca-de-componentes-o-daisyui-saiu-porque-era-um-segundo-vocabulário-de-cor)
+- [**#92** — O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)
 
 ---
 
@@ -2529,3 +2530,71 @@ nas linhas de checkbox.
   `base: true` do daisyUI.
 - Trocar o `.tooltip` de `app.css` por `title=""`: o nativo tem atraso de ~1s e não estiliza, e são
   14 pontos numa tela quente.
+
+
+### 92. O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`
+
+**Location:** `anilist/persist.go` (o snapshot inteiro), `anilist/anilist.go`
+(`ttlCache.snapshot`/`restore`, os caminhos de falha de `GetAllCurrentAnime`,
+`GetFrontendAnimeList`, `getMediaListEntry`, `GetCustomListsMap`), `anilist/standalone.go`
+(`GetMediaByID`/`GetMediaByIDs`), `anilist/health.go` (`ErrFromCache`, `Health.CacheSavedAt`),
+`files/filemanager.go` (`LoadAnilistCache`/`SaveAnilistCache`, arquivo `anilist_cache`).
+
+Fato negativo: **não existe** modo cache, flag de "estou offline", camada de repositório nem
+segunda frente de leitura. O `ttlCache` continua sendo a única, e o disco só o faz sobreviver ao
+restart.
+
+**O que parece errado, primeira parte:** um cache persistido que o `get` nunca enxerga. As
+entradas restauradas do snapshot recebem vencimento no passado (`restore(..., 0)`), então toda
+leitura de caminho feliz erra o cache e vai à rede como antes — o arquivo em disco parece
+inútil.
+
+É deliberado, e é a invariante que separa "sobrevive à queda" de "passou a mostrar dado velho".
+Restaurar com TTL vivo faria toda tela servir a lista de ontem sem nem tentar a AniList, e
+economizaria requisições que ninguém pediu para economizar. O único caminho que lê o snapshot é
+o de **falha** (`getStale`), então nenhuma tela ficou mais velha do que era. A exceção é o
+`seriesCache`, restaurado com o TTL cheio: só entra nele elo de anime `FINISHED` com contagem de
+episódios, imutável por construção (ver `recordLink`) — não há o que vencer.
+
+**O que parece errado, segunda parte:** funções que devolvem valor **e** erro ao mesmo tempo, e
+call sites que fazem `if err != nil && !errors.Is(err, anilist.ErrFromCache)`.
+
+`ErrFromCache` não é "deu errado", é "deu certo com dado de outra época". Vai como erro porque
+isso torna o comportamento antigo o **padrão seguro**: todo chamador que não conhece o sentinela
+vê `err != nil` e se comporta exatamente como antes do cache existir. Só quem checa `errors.Is`
+opta por usar o valor, e a escolha fica visível no call site em vez de escondida numa flag que
+alguém esquece de ler. Um booleano no retorno inverteria isso — quem ignorasse o booleano
+passaria a tratar dado de dias atrás como fresco sem escrever uma linha.
+
+Dois call sites merecem atenção:
+
+- `api/endpoint_animes.go` **recusa** o refresh de órfãos quando a lista veio do cache. A
+  cobertura é conhecida (a lista voltou inteira), mas cada anime não coberto viraria um
+  `GetAnimeInfoByIDs` condenado a falhar, a cada poll de 30s por aba — a rajada da #65, agora
+  sem nem a chance de dar certo.
+- `daemon/verification.go` **aceita** a lista do cache para a deleção por status. É decisão
+  explícita do dono do projeto, e o risco tem nome: um anime que saiu de um status de deleção
+  *depois* do snapshot (`COMPLETED` que virou `REPEATING`, e o passe baixou a temporada) volta a
+  aparecer como deletável, e o passe apaga o que ele mesmo acabou de baixar. Antes do cache isso
+  era impossível — conta sem resposta não entrava em `inDeleteStatus` e `allAccountsAgreeOnDelete`
+  recusava sozinha. Se um dia morder, a correção é uma linha: tratar `ErrFromCache` como conta
+  sem resposta ali.
+
+**Por que são três caches de `MediaList`, e não um** (`frontendListCache`, `passListCache`,
+`mediaEntryCache`): as três queries pedem conjuntos de campos **diferentes**. A do frontend traz
+`coverImage` e não traz `relations` nem o `status` da entrada; a do passe traz `relations` e
+`status` e não traz `coverImage`; a por media id (`mediaByIDFields`) traz tudo. Servir a tela de
+detalhe do cache do frontend deixaria o download manual sem `relations` — e ampliar a query do
+poll de 30s para cobrir isso é justamente o que a #57 e a #65 apertaram.
+
+**`stampAiringAt`/`rebaseAiring` existem porque `timeUntilAiring` é relativo ao instante da
+busca.** Todo gate de "já foi ao ar" lê esse campo (`daemon/episodes.go`,
+`anilist/episodes.go`, `daemon/manual_download.go`), então servido cru do cache ele congela e o
+passe conclui para sempre que nada novo estreou. A gravação converte para `airingAt` absoluto
+(só onde a API não o mandou) e a leitura recalcula a contagem. É o que faz o episódio que
+faltava dez minutos quando a AniList caiu entrar na busca sozinho, **sem regra nova** — o passe
+já busca quando a contagem fica negativa.
+
+**Relação com a #72:** a recusa do gate de orçamento continua servindo o vencido **sem** erro. O
+dado ali tem segundos de idade e o próximo poll volta fresco; a tela não ganha nada sabendo. Só
+a falha de verdade carrega `ErrFromCache`.

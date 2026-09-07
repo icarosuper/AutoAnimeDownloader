@@ -75,6 +75,13 @@ defer restore()
 
 Same pattern for Nyaa: `nyaa.MockNyaaHttpGet(fn) (restore func())`.
 
+`MockAniListDo` também limpa **todo** estado de pacote do `anilist` nas duas pontas — os cinco
+caches, a saúde, a leitura de orçamento e a persistência em disco. A persistência entra nessa lista
+porque a gravação do snapshot é **agendada** (`persistDebounce`, 5s): sem desligá-la, um flush que
+dispara depois do teste terminar escreveria no `t.TempDir()` de outro. Um teste que queira exercitar
+o snapshot chama `EnablePersistence` **depois** de instalar o mock, e força a gravação com
+`flushCache()` em vez de esperar o debounce (ver `anilist/persist_test.go`).
+
 ### 2. Interface Injection (Torrent backend)
 
 Torrent logic sits behind the `torrents.TorrentBackend` interface. Production uses the rain-backed `SessionManager`/`Session`; tests use the in-memory `torrents.FakeBackend` instead of a mock qBittorrent HTTP server:

@@ -31,6 +31,10 @@ type Health struct {
 	// quanto falta, e e o que permite mostrar contagem regressiva em vez de "tente mais tarde".
 	RetryAt time.Time `json:"retry_at,omitempty"`
 	Since   time.Time `json:"since,omitempty"`
+	// CacheSavedAt e a data do snapshot em disco (persist.go), preenchida na leitura e nao na
+	// gravacao do estado: nao e um fato sobre a AniList, e o que responde "de quando e o que
+	// estou vendo?" quando ela esta fora do ar. Zero quando nunca houve snapshot.
+	CacheSavedAt time.Time `json:"cache_saved_at,omitempty"`
 }
 
 var health atomic.Pointer[Health]
@@ -38,10 +42,12 @@ var health atomic.Pointer[Health]
 // CurrentHealth devolve o estado atual. Nunca nil: antes da primeira chamada o estado e "ok",
 // porque "ainda nao perguntamos" nao e motivo para alarmar ninguem.
 func CurrentHealth() Health {
+	current := Health{State: HealthOK}
 	if h := health.Load(); h != nil {
-		return *h
+		current = *h
 	}
-	return Health{State: HealthOK}
+	current.CacheSavedAt = SnapshotSavedAt()
+	return current
 }
 
 // setHealth grava um estado degradado. Preserva o Since do estado anterior quando o tipo de
@@ -137,6 +143,16 @@ const (
 // ErrBudgetLow e a recusa do gate. Nao e falha da AniList: nenhuma requisicao chegou a sair, e
 // a saude do pacote continua como estava.
 var ErrBudgetLow = errors.New("anilist: request budget is low, disposable call refused")
+
+// ErrFromCache acompanha um valor que VEIO JUNTO: a AniList falhou e a resposta saiu do cache
+// local (possivelmente do snapshot em disco, de dias atras). Nao e "deu errado", e "deu certo
+// com dado de outra epoca".
+//
+// Vai como erro de proposito. Todo chamador que nao conhece o sentinela ve err != nil e se
+// comporta como se comportava antes do cache existir — que e o comportamento seguro. So quem
+// checa errors.Is opta por usar o valor, e a escolha fica visivel no call site em vez de
+// escondida numa flag que se esquece de ler.
+var ErrFromCache = errors.New("anilist: served from the local cache")
 
 const (
 	// budgetFloor e quantas requisicoes o gate reserva para o trafego critico. O limite medido

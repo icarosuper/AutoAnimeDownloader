@@ -437,6 +437,7 @@
   "banner_anilist_rate_limited": "AniList rate limit reached. Back to normal in {seconds}s.",
   "banner_anilist_rate_limited_no_eta": "AniList rate limit reached. Back to normal in about a minute.",
   "banner_anilist_app_bug": "The app is sending a query AniList no longer accepts. Update the app; if you are already on the latest version, please report it.",
+  "banner_serving_cache": "Showing the local cache from {date}. You can still browse and manage episodes; anything newer than that is not here yet.",
   "banner_report": "Report",
   "banner_update_hint": "Update the app",
   "passerror_anilist": "The last check did not run because AniList did not respond. It retries on its own next cycle.",

@@ -138,6 +138,9 @@ export interface AnilistHealth {
   /** Fim do timeout de 429, derivado do Retry-After. Ausente quando não se aplica. */
   retry_at?: string
   since?: string
+  /** Data do snapshot do cache em disco. Ausente quando nunca houve um. Não é um fato sobre a
+   *  AniList: é o que responde "de quando é o que estou vendo?" enquanto ela está fora. */
+  cache_saved_at?: string
 }
 
 export interface WebhookPreset {

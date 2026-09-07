@@ -17,6 +17,7 @@
 package main
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/api"
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
@@ -259,6 +260,10 @@ func main() {
 	// Antes de qualquer LoadConfigs: e ele que cria o config.json com os defaults, o que
 	// apagaria o sinal de primeira execucao.
 	firstBoot := !fileManager.ConfigExists()
+
+	// Cache da AniList em disco. Antes de qualquer coisa que fale com a AniList: e o que faz
+	// as telas e o passe continuarem de pe quando ela esta fora do ar, restart incluido.
+	anilist.EnablePersistence(fileManager.LoadAnilistCache, fileManager.SaveAnilistCache)
 
 	jobsFilePath, err := getJobsFilePath()
 	if err != nil {

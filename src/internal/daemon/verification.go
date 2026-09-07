@@ -6,6 +6,7 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -173,7 +174,14 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			inDeleteStatus = make(map[string]map[int]bool, len(configs.AnilistUsernames))
 			for _, username := range configs.AnilistUsernames {
 				resp, e := anilist.GetAllCurrentAnime(username, configs.DeleteStatuses)
-				if e != nil {
+				// ponytail: a lista do cache local vota na deleção como se fosse fresca, por
+				// decisão explícita do dono do projeto. O risco tem nome: um anime que saiu de
+				// um status de deleção DEPOIS do snapshot (COMPLETED que virou REPEATING, e o
+				// passe baixou a temporada) volta a aparecer como deletável, e o passe apaga o
+				// que ele mesmo acabou de baixar. Se um dia isso morder, a correção é uma linha:
+				// tratar ErrFromCache como conta sem resposta aqui, e a unanimidade de
+				// allAccountsAgreeOnDelete recusa sozinha.
+				if e != nil && !errors.Is(e, anilist.ErrFromCache) {
 					logger.Logger.Warn().Err(e).Str("username", username).Msg("Failed to fetch AniList animes for delete statuses")
 					// Conta sem resposta nao pode concordar com a deleção — ver deletableMediaIDs.
 					continue
@@ -503,7 +511,10 @@ func searchAnilist(fileManager FileManagerInterface, configs *files.Config, stan
 		clMap := anilist.GetCustomListsMap(username, configs.DownloadStatuses, anilist.PriorityCritical)
 
 		resp, err := anilist.GetAllCurrentAnime(username, configs.DownloadStatuses)
-		if err != nil {
+		// Cache local serve o passe: os episódios que já foram ao ar continuam baixáveis e o
+		// Nyaa não caiu junto. O TimeUntilAiring vem rebaseado (ver anilist/persist.go), então
+		// o episódio que faltava dez minutos quando a AniList caiu entra na busca sozinho.
+		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 			logger.Logger.Error().Err(err).Stack().
 				Str("username", username).
 				Msg("Failed to search animes on Anilist")

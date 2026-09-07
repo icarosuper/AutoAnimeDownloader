@@ -100,7 +100,10 @@ func newStandaloneGuard(fm FileManagerInterface, config *files.Config) (standalo
 		// nil significa busca falhada (ver fetchAniListEntries). Tratar isso como "nada
 		// acompanhado" e o comportamento certo aqui: o front e best-effort e o POST recusa de
 		// novo com o snapshot da proxima chamada.
-		for _, ml := range fetchAniListEntries(username, config.DownloadStatuses, config.DownloadMediaStatuses) {
+		// O segundo retorno (veio do cache) nao muda nada aqui: o guard quer saber o que a
+		// conta acompanha, e a resposta do cache local e melhor que nenhuma.
+		tracked, _ := fetchAniListEntries(username, config.DownloadStatuses, config.DownloadMediaStatuses)
+		for _, ml := range tracked {
 			guard.tracked[ml.Media.Id] = true
 			if isInExcludedList(ml.CustomLists, excluded) {
 				guard.blacklisted[ml.Media.Id] = true

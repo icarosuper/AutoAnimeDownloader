@@ -55,6 +55,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of `{anime_id, episode}`, no extension). O formato antigo (array de ids de nó da AniList) é descartado com aviso ao ser lido — ver decisions.md #52 |
 | `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList **media** ID (JSON map, no extension) |
 | `standalone_animes` | `~/.autoAnimeDownloader/` | Media IDs tracked **without** being in any AniList list (JSON array of IDs, no extension) |
+| `anilist_cache` | `~/.autoAnimeDownloader/` | Snapshot dos caches do `anilist`, para o app sobreviver à AniList fora do ar (JSON, no extension). Bytes **opacos** para o `files` de propósito: o esquema é do `anilist` (`persist.go`), e é isso que evita o `files` importar o `anilist` só para persistir o cache dele. Descartável — apagar só custa uma queda sem rede de proteção até o próximo fetch |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
@@ -84,7 +85,7 @@ Key endpoints:
 
 | Method | Endpoint | Handler func | File |
 |--------|----------|-------------|------|
-| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — o limiar de `disk_low` mora **só** no servidor. O estado da AniList é escrito por **qualquer** chamada (passe ou poll do frontend), porque todas passam por `sendAnilistRequest` — decisions.md #65/#66 |
+| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — o limiar de `disk_low` mora **só** no servidor. O estado da AniList é escrito por **qualquer** chamada (passe ou poll do frontend), porque todas passam por `sendAnilistRequest` — decisions.md #65/#66. `anilist.cache_saved_at` é preenchido na **leitura**, não na escrita do estado: não é fato sobre a AniList, é o que o banner usa para dizer de quando é o cache que está na tela |
 | `GET` | `/api/v1/last-check` | `handleLastCheck` | `endpoint_last_check.go` — só memória. `problems` (devia ter baixado e não baixou) e `limits` (a config funcionando como configurada). Quando há `pass_error` as duas listas vêm vazias, porque `SetLastCheckError` limpa o relatório (decisions.md #82). Download manual fica fora: aquele caminho devolve o erro na própria resposta HTTP |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
@@ -360,11 +361,43 @@ razão de `daemon/passerror.go`). Ela é escrita por **toda** resposta que passa
 `sendAnilistRequest`, e a AniList devolve 200 com erro no corpo, então o envelope também é lido
 (decisions.md #65/#66).
 
-**Caches** (todos em memória, `ttlCache[T]`): `GetFrontendAnimeList` 60s por `username+statuses` — o
-poll de `/api/v1/animes`, 30s por aba aberta, é o que estourava a cota da AniList (decisions.md #46);
-`customLists` 5min (decisions.md #11); `seriesCache` 24h; `searchCache` 10min por
-`termo-minúsculo+includeUnreleased` — **o único com chave de texto livre**, por isso é o único com
-teto (`searchCacheMaxEntries`, descarte total, não LRU) e o único que `ttlCache.size()` serve.
+**Caches** (`ttlCache[T]`, todos em memória; os de baixo também vão para um snapshot em disco, ver
+`persist.go`): `GetFrontendAnimeList` 60s por `username+statuses` — o poll de `/api/v1/animes`, 30s
+por aba aberta, é o que estourava a cota da AniList (decisions.md #46); `customLists` 5min
+(decisions.md #11); `mediaByIDCache` 60s por media id (avulsos); `seriesCache` 24h; `searchCache`
+10min por `termo-minúsculo+includeUnreleased` — **o único com chave de texto livre**, por isso é o
+único com teto (`searchCacheMaxEntries`, descarte total, não LRU) e o único que `ttlCache.size()`
+serve. `passListCache` e `mediaEntryCache` são **só fallback**: gravados com TTL zero, nunca
+consultados por `get`.
+
+**Três buscas de lista com nomes parecidos, e os campos NÃO são os mesmos** — é a desambiguação que
+mais morde aqui:
+
+| função | quem chama | tem `relations`? | tem `status` da entrada? | tem `coverImage`? |
+|---|---|---|---|---|
+| `GetFrontendAnimeList` | poll de `/animes` | ✗ | ✗ | ✓ |
+| `GetAllCurrentAnime` | passe do daemon | ✓ | ✓ | ✗ |
+| `getMediaListEntry` (`mediaByIDFields`) | `/animes/{id}/*`, download manual | ✓ | ✓ | ✓ |
+
+Por isso a tela de detalhe **não** pode ser servida do cache do frontend: ficaria sem `relations`, e
+é dele que sai a busca do Nyaa do download manual. É também por isso que existem três caches de
+`MediaList` em vez de um (decisions.md #92).
+
+**`persist.go` — o snapshot em disco (`anilist_cache`, na pasta de configs).** Existe para uma coisa
+só: telas e passe continuarem de pé com a AniList fora do ar, restart incluído. **A invariante que
+dói quebrar:** as coleções de `MediaList` voltam do disco com **TTL zero** (`restore(..., 0)`), então
+só `getStale` as vê e só o caminho de falha as serve — restaurar com TTL vivo faria toda tela passar
+a mostrar a lista de ontem sem nem tentar a rede. O `seriesCache` é a exceção (imutável por
+construção, volta com o TTL cheio). Fato negativo: **não existe** modo cache, flag de offline nem
+camada de repositório — o `ttlCache` segue sendo a única frente de leitura.
+
+**`ErrFromCache` acompanha o valor, não o substitui.** Quem não checa `errors.Is` vê `err != nil` e
+se comporta como antes do cache existir, que é o padrão seguro; quem opta por usar o valor escreve
+isso no call site. `/animes` usa para **recusar** o refresh de órfãos (seria a rajada da #65 contra
+uma API morta); `verification.go` usa para **aceitar** a lista, deleção por status incluída — com o
+risco registrado na decisions.md #92. `timeUntilAiring` é relativo à busca, então gravação e leitura
+passam por `stampAiringAt`/`rebaseAiring`; sem isso o passe servido do cache concluiria para sempre
+que nada novo estreou.
 
 **`series.go` — o eixo absoluto da série.** A numeração contínua que atravessa cour e part, que boa
 parte dos grupos usa nos nomes de arquivo. A AniList **não tem id de franquia**: a cadeia de `PREQUEL`

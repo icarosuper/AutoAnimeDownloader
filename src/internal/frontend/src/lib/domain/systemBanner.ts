@@ -23,6 +23,9 @@ export interface SystemBanner {
   detail?: string
   /** Instante em que o rate limit expira, para a contagem regressiva. */
   retryAt?: Date
+  /** Data do cache local que está sendo servido no lugar da AniList. Só vem nos estados
+   *  degradados: com a AniList no ar o snapshot existe mas não é ele que está na tela. */
+  cachedAt?: Date
   /** Botão de reportar SÓ em bug nosso: 5xx do backend, e 400 da AniList (o schema mudou e
    *  nenhuma espera resolve). Reportar rate limit ou outage gera issue que se fecha com "é a
    *  AniList", e treina o usuário a ignorar o botão justamente quando ele importa. */
@@ -36,6 +39,8 @@ export function pickBanner(
   if (backend === 'unreachable') return { kind: 'backend_unreachable', reportable: false }
   if (backend === 'server_error') return { kind: 'backend_error', reportable: true }
 
+  const cachedAt = anilist?.cache_saved_at ? new Date(anilist.cache_saved_at) : undefined
+
   switch (anilist?.state) {
     case 'rate_limited':
       return {
@@ -44,9 +49,9 @@ export function pickBanner(
         reportable: false,
       }
     case 'outage':
-      return { kind: 'anilist_outage', detail: anilist.message, reportable: false }
+      return { kind: 'anilist_outage', detail: anilist.message, cachedAt, reportable: false }
     case 'app_bug':
-      return { kind: 'anilist_app_bug', detail: anilist.message, reportable: true }
+      return { kind: 'anilist_app_bug', detail: anilist.message, cachedAt, reportable: true }
     default:
       return null
   }

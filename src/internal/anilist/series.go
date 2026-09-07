@@ -37,9 +37,11 @@ type seriesLink struct {
 // terminado nao ganha episodio nem prequel novo) e a caminhada e monotonica: so ancestrais
 // entram, e ancestral de anime terminado tambem esta terminado.
 //
-// Em memoria, sem arquivo: o warm-up inteiro de uma biblioteca custa ~4 requests
-// (decisions.md #71/#72), entao persistir em disco seria manutencao e invalidacao a troco de
-// quatro requisicoes por dia.
+// Entra no snapshot em disco (persist.go), e nao por economia de requisicao — o warm-up inteiro
+// de uma biblioteca custa ~4 requests (decisions.md #71/#72). E porque esses 4 requests nao
+// existem com a AniList fora do ar, e sem os elos o passe perde a posse por cobertura de pack
+// justamente no passe em que ja esta trabalhando com o resto vindo do cache. Sendo imutavel,
+// volta do disco com o TTL cheio: nao ha o que invalidar.
 var seriesCache = newTTLCache[seriesLink]()
 
 const seriesTTL = 24 * time.Hour
@@ -132,7 +134,7 @@ func walkSeries(seed []int, priority Priority) (map[int]seriesLink, error) {
 			return
 		}
 		seen[id] = true
-		if cached, ok := seriesCache.get(strconv.Itoa(id)); ok {
+		if cached, ok := seriesCache.get(seriesKey(id)); ok {
 			known[id] = cached
 			enqueue(cached.PrequelID) // a cadeia pode continuar em nos que ainda nao estao no cache
 			return
@@ -196,7 +198,8 @@ func recordLink(known map[int]seriesLink, node seriesNode) *seriesNode {
 
 	known[node.Id] = link
 	if node.Status == MediaStatusFinished && node.Episodes != nil {
-		seriesCache.set(strconv.Itoa(node.Id), link, seriesTTL)
+		seriesCache.set(seriesKey(node.Id), link, seriesTTL)
+		markCacheDirty()
 	}
 	return prequel
 }

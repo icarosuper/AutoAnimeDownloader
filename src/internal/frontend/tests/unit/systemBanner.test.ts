@@ -115,3 +115,22 @@ describe('backendHealth', () => {
     expect(get(backendHealth)).toBe('unreachable')
   })
 })
+
+describe('cache local', () => {
+  // A data do snapshot só vale quando é ELE que está na tela. Com a AniList no ar o arquivo
+  // existe do mesmo jeito, e anunciar "mostrando o cache de ontem" enquanto se mostra dado
+  // fresco é dizer que a tela está errada quando ela está certa.
+  it('não expõe a data do cache com a AniList no ar', () => {
+    expect(pickBanner('ok', { state: 'ok', cache_saved_at: '2026-09-05T10:00:00Z' })).toBeNull()
+  })
+
+  it('expõe a data do cache num outage', () => {
+    const banner = pickBanner('ok', { state: 'outage', cache_saved_at: '2026-09-05T10:00:00Z' })
+    expect(banner?.kind).toBe('anilist_outage')
+    expect(banner?.cachedAt).toEqual(new Date('2026-09-05T10:00:00Z'))
+  })
+
+  it('omite a data quando nunca houve snapshot', () => {
+    expect(pickBanner('ok', { state: 'outage' })?.cachedAt).toBeUndefined()
+  })
+})

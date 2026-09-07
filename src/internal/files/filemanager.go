@@ -20,6 +20,11 @@ const blockedEpsFileName = "blocked_episodes"
 const animeSettingsFileName = "anime_settings"
 const standaloneAnimesFileName = "standalone_animes"
 
+// anilistCacheFileName guarda o snapshot dos caches do pacote anilist. Bytes opacos para o
+// files de proposito: o esquema do snapshot e do anilist, e passar por aqui como []byte e o
+// que evita que o files precise importar o anilist so para persistir o cache dele.
+const anilistCacheFileName = "anilist_cache"
+
 // EpisodeKey identifica um episodio. E (anime, numero do episodio) e nao o id do no de
 // airingSchedule da AniList, porque aquele id nao existe para todo episodio: a AniList guarda uma
 // janela de agenda por midia e descarta as antigas, entao One Piece 1 a 1122 e todo anime antigo
@@ -168,6 +173,7 @@ type FileManager struct {
 	blockedEpisodesPath  string
 	animeSettingsPath    string
 	standaloneAnimesPath string
+	anilistCachePath     string
 	mu                   sync.Mutex
 }
 
@@ -249,6 +255,9 @@ func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath, an
 		blockedEpisodesPath:  blockedEpisodesPath,
 		animeSettingsPath:    animeSettingsPath,
 		standaloneAnimesPath: standaloneAnimesPath,
+		// Derivado, e nao um parametro a mais: nenhum chamador precisa escolher onde o cache
+		// da AniList mora, e o construtor ja tem seis posicionais.
+		anilistCachePath: filepath.Join(filepath.Dir(configPath), anilistCacheFileName),
 	}
 }
 
@@ -854,5 +863,38 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 		}
 	}
 
+	return nil
+}
+
+// LoadAnilistCache le o snapshot dos caches da AniList. Arquivo ausente devolve (nil, nil):
+// primeira execucao nao e falha, e o anilist trata nil como "comece sem cache".
+//
+// Nao valida o conteudo. Snapshot corrompido e problema de quem sabe o esquema — o anilist
+// descarta e segue sem cache, que e degradacao aceitavel para um arquivo que existe so para
+// sobreviver ao restart.
+func (m *FileManager) LoadAnilistCache() ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, err := m.fs.Stat(m.anilistCachePath); os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to stat anilist cache file: %w", err)
+	}
+
+	b, err := m.fs.ReadFile(m.anilistCachePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read anilist cache file: %w", err)
+	}
+	return b, nil
+}
+
+func (m *FileManager) SaveAnilistCache(data []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if err := m.writeAtomic(m.anilistCachePath, data); err != nil {
+		return fmt.Errorf("failed to write anilist cache file: %w", err)
+	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 
 	"AutoAnimeDownloader/src/internal/anilist"
@@ -59,7 +60,11 @@ func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.M
 	}
 
 	medias, err := anilist.GetMediaByIDs(pending, anilist.PriorityCritical)
-	if err != nil {
+	switch {
+	case errors.Is(err, anilist.ErrFromCache):
+		logger.Logger.Warn().
+			Msg("Serving standalone animes from the local cache: AniList is unreachable")
+	case err != nil:
 		logger.Logger.Warn().Err(err).
 			Msg("Failed to fetch standalone animes from AniList; skipping the missing ones this pass")
 	}
@@ -117,7 +122,9 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 	}
 
 	anime, err := anilist.GetMediaByID(mediaID, anilist.PriorityCritical)
-	if err != nil {
+	// Cache local serve: o download avulso pedido a mao precisa de titulo e faixa de
+	// episodios, e o Nyaa nao caiu junto com a AniList.
+	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 		return 0, fmt.Errorf("failed to fetch anime %d from AniList: %w", mediaID, err)
 	}
 	if anime == nil {

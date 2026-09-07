@@ -208,3 +208,58 @@ func TestHandleAnimeEpisodes_BatchRange(t *testing.T) {
 		t.Errorf("batch_start deve ser omitido para episódio avulso, obteve %v", ep2["batch_start"])
 	}
 }
+
+// TestHandleAnimeEpisodes_OpensFromCacheDuringOutage e o item que motivou o cache local: esta
+// tela era a unica que ficava INTEIRA inacessivel com a AniList fora do ar, apesar de tudo o que
+// ela faz alem de listar episodios (bloquear, apagar, re-baixar, marcar como manual) ja ser
+// local. Um 500 aqui escondia todas essas acoes junto.
+//
+// O teste vale pelas duas metades: a primeira chamada popula o cache, a segunda ja e a AniList
+// respondendo 503 — e a tela tem de abrir com os mesmos episodios.
+func TestHandleAnimeEpisodes_OpensFromCacheDuringOutage(t *testing.T) {
+	fail := false
+	restore := anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+		if fail {
+			return &http.Response{
+				StatusCode: http.StatusServiceUnavailable,
+				Body:       io.NopCloser(strings.NewReader(`{}`)),
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader(mockAnimeDetailResponse)),
+		}, nil
+	})
+	defer restore()
+
+	server := &Server{FileManager: &mockFileManager{}}
+	call := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/animes/21/episodes", nil)
+		req.SetPathValue("id", "21")
+		w := httptest.NewRecorder()
+		handleAnimeEpisodes(server)(w, req)
+		return w
+	}
+
+	if w := call(); w.Code != http.StatusOK {
+		t.Fatalf("a primeira chamada tinha de passar: %d (%s)", w.Code, w.Body.String())
+	}
+
+	fail = true
+	w := call()
+	if w.Code != http.StatusOK {
+		t.Fatalf("com a AniList fora do ar a tela tinha de abrir do cache, veio %d (%s)", w.Code, w.Body.String())
+	}
+
+	var response SuccessResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+	data, ok := response.Data.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected data to be an object, got %T", response.Data)
+	}
+	if episodes, ok := data["episodes"].([]interface{}); !ok || len(episodes) != 2 {
+		t.Fatalf("esperava os 2 episodios do cache, veio %v", data["episodes"])
+	}
+}

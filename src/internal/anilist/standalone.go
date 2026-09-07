@@ -213,19 +213,25 @@ func GetMediaByID(mediaID int, priority Priority) (*MediaList, error) {
 	resp, err := sendAnilistRequest[response](query, RequestVariables{"id": mediaID}, priority)
 	if errors.Is(err, ErrNotFound) {
 		mediaByIDCache.set(key, nil, mediaByIDTTL)
+		markCacheDirty()
 		return nil, nil
 	}
 	if err != nil {
+		if stale, ok := staleMedia(key); ok {
+			return stale, ErrFromCache
+		}
 		return nil, err
 	}
 	if resp.Data.Media == nil {
 		logger.Logger.Debug().Int("media_id", mediaID).Msg("AniList does not know this media id")
 		mediaByIDCache.set(key, nil, mediaByIDTTL)
+		markCacheDirty()
 		return nil, nil
 	}
 
 	ml := &MediaList{Media: *resp.Data.Media}
 	mediaByIDCache.set(key, ml, mediaByIDTTL)
+	markCacheDirty()
 	return copyMediaList(ml), nil
 }
 
@@ -282,6 +288,20 @@ func GetMediaByIDs(ids []int, priority Priority) (map[int]*MediaList, error) {
 
 		resp, err := sendAnilistRequest[response](query, RequestVariables{"ids": chunk}, priority)
 		if err != nil {
+			// O que der para servir do cache local serve: sem isso os avulsos desaparecem da
+			// lista da tela enquanto a AniList estiver fora, que e metade do "a lista nao
+			// encolher". Os ids sem entrada guardada seguem ausentes do mapa, que e o contrato
+			// documentado acima para "nao deu para buscar".
+			fromCache := false
+			for _, id := range missing[start:] {
+				if stale, ok := staleMedia(strconv.Itoa(id)); ok {
+					found[id] = stale
+					fromCache = true
+				}
+			}
+			if fromCache {
+				return found, ErrFromCache
+			}
 			return found, err
 		}
 
@@ -298,13 +318,14 @@ func GetMediaByIDs(ids []int, priority Priority) (map[int]*MediaList, error) {
 				found[id] = nil
 			}
 		}
+		markCacheDirty()
 	}
 
 	return found, nil
 }
 
 // copyMediaList devolve uma copia rasa da entrada guardada no cache. Mesma razao de
-// frontendListResponse: quem chama sobrescreve campos da entrada (CustomLists, Progress), e
+// mediaListResponse: quem chama sobrescreve campos da entrada (CustomLists, Progress), e
 // entregar o ponteiro guardado deixaria dois requests concorrentes escrevendo na mesma memoria.
 func copyMediaList(ml *MediaList) *MediaList {
 	if ml == nil {

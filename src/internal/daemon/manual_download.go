@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/torrents"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -62,11 +63,13 @@ type animeDetails struct {
 // inocuo: eles selecionam episodio por numero explicito (findEpisodeNode), nao por Progress.
 func resolveAnimeDetails(fm FileManagerInterface, animeId int, usernames []string) (*animeDetails, error) {
 	ml, err := anilist.GetAnimeInfo(animeId, usernames, anilist.PriorityCritical)
-	if err != nil {
+	// Cache local serve: o que se busca aqui e titulo, relations e status para montar a query
+	// do Nyaa, e o Nyaa nao caiu junto com a AniList.
+	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 		return nil, fmt.Errorf("failed to get anime info: %w", err)
 	}
 	if ml == nil {
-		if ml, err = anilist.GetMediaByID(animeId, anilist.PriorityCritical); err != nil {
+		if ml, err = anilist.GetMediaByID(animeId, anilist.PriorityCritical); err != nil && !errors.Is(err, anilist.ErrFromCache) {
 			return nil, fmt.Errorf("failed to get anime info: %w", err)
 		}
 		ml = withStandaloneProgress(fm, ml)

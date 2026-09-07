@@ -40,9 +40,14 @@ func (c *ttlCache[T]) get(key string) (T, bool) {
 	return zero, false
 }
 
-// getStale devolve a entrada IGNORANDO o TTL. So o gate de orcamento usa: quando uma leitura
-// descartavel e recusada, servir o dado vencido e melhor que devolver erro para a tela (ver
-// decisions.md #72). Nada mais deve chamar — quem le por get espera dado fresco.
+// getStale devolve a entrada IGNORANDO o TTL, e e a UNICA porta para o que veio do snapshot em
+// disco: o restore deixa aquelas entradas com o vencimento no passado de proposito, entao get
+// nunca as ve (ver persist.go).
+//
+// So o caminho de FALHA chama. Duas falhas, com contratos diferentes: a recusa do gate de
+// orcamento serve o vencido sem erro, porque o dado tem segundos de idade (decisions.md #72); a
+// AniList fora do ar serve com ErrFromCache, porque a idade passa a ser desconhecida e quem
+// chama precisa decidir. Quem le por get espera dado fresco e nao deve cair aqui.
 func (c *ttlCache[T]) getStale(key string) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -66,6 +71,38 @@ func (c *ttlCache[T]) size() int {
 	return len(c.data)
 }
 
+// snapshot copia TODAS as entradas, vencidas inclusive — quem persiste quer justamente as
+// vencidas, que sao as que vao servir de fallback depois do restart. Nao carrega o vencimento:
+// o TTL de volta e decidido no restore, ver o comentario do snapshot em persist.go.
+func (c *ttlCache[T]) snapshot() map[string]T {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.data) == 0 {
+		return nil
+	}
+	out := make(map[string]T, len(c.data))
+	for k, v := range c.data {
+		out[k] = v
+	}
+	return out
+}
+
+// restore preenche o cache a partir de um snapshot. ttl zero deixa as entradas visiveis SO para
+// getStale: e assim que o dado de disco fica disponivel como fallback sem nunca ser servido
+// como se fosse fresco.
+func (c *ttlCache[T]) restore(data map[string]T, ttl time.Duration) {
+	if len(data) == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	expiry := time.Now().Add(ttl)
+	for k, v := range data {
+		c.data[k] = v
+		c.expiry[k] = expiry
+	}
+}
+
 func (c *ttlCache[T]) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -79,6 +116,17 @@ func (c *ttlCache[T]) clear() {
 var (
 	customListsCache  = newTTLCache[map[int]CustomLists]()
 	frontendListCache = newTTLCache[[]MediaList]()
+	// passListCache e mediaEntryCache existem SO como fallback: gravados com TTL zero, nunca
+	// consultados por get, lidos apenas quando a requisicao falha. Nao ha ganho de orcamento
+	// aqui e nenhum dado velho passa a ser servido no caminho feliz — o objetivo unico e o
+	// passe e a tela de detalhe continuarem de pe com a AniList fora do ar (ver persist.go).
+	//
+	// Sao dois, e nao um, porque as tres queries pedem conjuntos de campos DIFERENTES: a do
+	// frontend traz coverImage e nao traz relations nem o status da entrada; a do passe traz
+	// relations e status e nao traz coverImage; a por media id (mediaByIDFields) traz tudo.
+	// Servir a tela de detalhe do cache do frontend deixaria o download manual sem relations.
+	passListCache   = newTTLCache[[]MediaList]()
+	mediaEntryCache = newTTLCache[[]MediaList]()
 )
 
 const (
@@ -125,6 +173,8 @@ func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func
 func clearCaches() {
 	customListsCache.clear()
 	frontendListCache.clear()
+	passListCache.clear()
+	mediaEntryCache.clear()
 	mediaByIDCache.clear()
 	seriesCache.clear()
 	searchCache.clear()
@@ -133,6 +183,9 @@ func clearCaches() {
 	// um teste que simula o balde no fim travaria o gate do teste seguinte.
 	health.Store(&Health{State: HealthOK})
 	budget.Store(nil)
+	// A persistencia tambem e estado de pacote, e a gravacao e agendada: um snapshot pendente
+	// que dispara depois do teste terminar escreveria no diretorio temporario de outro.
+	disablePersistence()
 }
 
 type AniListResponse struct {
@@ -405,10 +458,11 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 		// volta nil, e o merge de GET /animes conclui "nenhum anime esta na blacklist". A tela
 		// mostra blacklistado como normal e o guard de avulso (standalone_guard.go) deixa
 		// adicionar o que deveria recusar.
-		if errors.Is(err, ErrBudgetLow) {
-			if stale, ok := customListsCache.getStale(key); ok {
-				return stale
-			}
+		// Qualquer falha, e nao so a recusa do gate: devolver nil aqui faz a exclusao
+		// desaparecer, e anime em lista excluida volta a parecer baixavel. Vencido e melhor
+		// que ausente — a exclusao muda quando o usuario mexe na AniList, nao a cada minuto.
+		if stale, ok := customListsCache.getStale(key); ok {
+			return stale
 		}
 		logger.Logger.Warn().Err(err).Str("username", userName).Msg("Failed to fetch customLists map")
 		return nil
@@ -428,6 +482,7 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 	} else {
 		customListsCache.set(key, m, customListsEmptyTTL)
 	}
+	markCacheDirty()
 
 	return m
 }
@@ -494,7 +549,17 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 		"statuses": statuses,
 	}
 
-	return sendAnilistRequest[AniListResponse](query, variables, PriorityCritical)
+	key := userName + "\x00" + strings.Join(statuses, "\x00")
+	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityCritical)
+	if err != nil {
+		if stale, ok := staleList(passListCache, key); ok {
+			return mediaListResponse(stale), ErrFromCache
+		}
+		return nil, err
+	}
+
+	storeList(passListCache, key, resp.Data.Page.MediaList, 0)
+	return resp, nil
 }
 
 // GetFrontendAnimeList alimenta /api/v1/animes, que o frontend faz poll a cada 30s por aba.
@@ -547,7 +612,7 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 
 	key := userName + "\x00" + strings.Join(statuses, "\x00")
 	if list, ok := frontendListCache.get(key); ok {
-		return frontendListResponse(list), nil
+		return mediaListResponse(list), nil
 	}
 
 	variables := RequestVariables{
@@ -558,24 +623,36 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 
 	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityDisposable)
 	if err != nil {
-		// Recusado pelo gate de orcamento: esta lista muda quando o usuario mexe na AniList, e
-		// nao a cada 30s. Servir a leitura vencida deixa a tela funcionando e devolve o balde
-		// para o passe do daemon, que e o unico que nao pode ser adiado. Ver decisions.md #72.
-		if errors.Is(err, ErrBudgetLow) {
-			if stale, ok := frontendListCache.getStale(key); ok {
-				return frontendListResponse(stale), nil
+		if stale, ok := staleList(frontendListCache, key); ok {
+			// Recusado pelo gate de orcamento: esta lista muda quando o usuario mexe na
+			// AniList, e nao a cada 30s. Servir a leitura vencida deixa a tela funcionando e
+			// devolve o balde para o passe do daemon, que e o unico que nao pode ser adiado.
+			// Ver decisions.md #72. Sem erro de proposito: a recusa foi NOSSA, o dado tem
+			// segundos de idade e o proximo poll ja volta fresco — a tela nao ganha nada
+			// sabendo disso.
+			if errors.Is(err, ErrBudgetLow) {
+				return mediaListResponse(stale), nil
 			}
+			// Qualquer outra falha e a AniList fora do ar, e a idade do dado passa a ser
+			// desconhecida (pode vir do snapshot em disco, de dias atras). Aqui o chamador TEM
+			// de saber: /animes usa para nao disparar o refresh de orfaos contra uma API que
+			// nao responde.
+			return mediaListResponse(stale), ErrFromCache
 		}
 		return nil, err
 	}
 
-	frontendListCache.set(key, resp.Data.Page.MediaList, frontendListTTL)
-	// Copia: quem chama sobrescreve CustomLists nas entradas, e devolver a fatia guardada
-	// deixaria dois requests concorrentes escrevendo na mesma memoria.
-	return frontendListResponse(resp.Data.Page.MediaList), nil
+	storeList(frontendListCache, key, resp.Data.Page.MediaList, frontendListTTL)
+	return mediaListResponse(resp.Data.Page.MediaList), nil
 }
 
-func frontendListResponse(list []MediaList) *AniListResponse {
+// mediaListResponse embrulha uma lista num AniListResponse. Nasceu para GetFrontendAnimeList e
+// hoje serve as tres buscas de lista mais o fallback por media id — o nome nao fala de frontend
+// por isso.
+//
+// A copia e o ponto: quem chama sobrescreve CustomLists nas entradas, e devolver a fatia
+// guardada no cache deixaria dois requests concorrentes escrevendo na mesma memoria.
+func mediaListResponse(list []MediaList) *AniListResponse {
 	resp := &AniListResponse{}
 	resp.Data.Page.MediaList = append([]MediaList(nil), list...)
 	return resp
@@ -663,9 +740,16 @@ func GetAnimeInfoByIDs(mediaIds []int, usernames []string) (map[int]*MediaList, 
 func GetAnimeInfo(mediaId int, usernames []string, priority Priority) (*MediaList, error) {
 	var entries []MediaList
 	var lastErr error
+	fromCache := false
 	for _, username := range usernames {
 		resp, err := getMediaListEntry(username, mediaId, priority)
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrFromCache):
+			// A conta respondeu do cache local. A entrada vale — e o que mantem a tela de
+			// detalhe e o download manual de pe — mas o fato viaja com o retorno, para que
+			// nenhum chamador conclua sozinho que falou com a AniList.
+			fromCache = true
+		case err != nil:
 			logger.Logger.Warn().Err(err).Str("username", username).Int("media_id", mediaId).
 				Msg("Failed to fetch anime info for account")
 			lastErr = err
@@ -682,6 +766,9 @@ func GetAnimeInfo(mediaId int, usernames []string, priority Priority) (*MediaLis
 	}
 
 	deduped := DedupeByMedia(entries)
+	if fromCache {
+		return &deduped[0], ErrFromCache
+	}
 	return &deduped[0], nil
 }
 
@@ -765,8 +852,18 @@ func getMediaListEntry(userName string, mediaId int, priority Priority) (*AniLis
 		}
 	`
 
-	return sendAnilistRequest[AniListResponse](query, RequestVariables{
+	key := userName + "\x00" + strconv.Itoa(mediaId)
+	resp, err := sendAnilistRequest[AniListResponse](query, RequestVariables{
 		"userName": userName,
 		"mediaId":  mediaId,
 	}, priority)
+	if err != nil {
+		if stale, ok := staleList(mediaEntryCache, key); ok {
+			return mediaListResponse(stale), ErrFromCache
+		}
+		return nil, err
+	}
+
+	storeList(mediaEntryCache, key, resp.Data.Page.MediaList, 0)
+	return resp, nil
 }

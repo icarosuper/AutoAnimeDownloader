@@ -437,6 +437,7 @@
   "banner_anilist_rate_limited": "Limite de requisições do AniList atingido. Normaliza em {seconds}s.",
   "banner_anilist_rate_limited_no_eta": "Limite de requisições do AniList atingido. Normaliza em cerca de 1 minuto.",
   "banner_anilist_app_bug": "O app está enviando uma consulta que o AniList não aceita mais. Atualize o app; se já estiver na última versão, reporte.",
+  "banner_serving_cache": "Mostrando o cache local de {date}. Você continua podendo ver e gerenciar episódios; o que estiver mais novo que isso não aparece ainda.",
   "banner_report": "Reportar",
   "banner_update_hint": "Atualize o app",
   "passerror_anilist": "A última verificação não rodou porque o AniList não respondeu. Ela tenta de novo sozinha no próximo ciclo.",

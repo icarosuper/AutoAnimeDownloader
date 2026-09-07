@@ -48,6 +48,14 @@
 
   $: banner = pickBanner($backendHealth, anilist)
   $: seconds = banner ? secondsUntil(banner.retryAt, now) : 0
+  // Data curta e sem segundos: o que o usuário precisa saber é se o cache é de hoje ou da
+  // semana passada, não o instante exato da gravação.
+  $: cacheText =
+    $locale && banner?.cachedAt
+      ? m.banner_serving_cache({
+          date: banner.cachedAt.toLocaleString($locale, { dateStyle: 'short', timeStyle: 'short' }),
+        })
+      : ''
 
   $: text =
     $locale && banner
@@ -86,6 +94,9 @@
     <AlertTriangle class="h-4 w-4 shrink-0" aria-hidden="true" />
     <span class="min-w-0 flex-1">
       {text}
+      {#if cacheText}
+        <span class="block text-caption opacity-80">{cacheText}</span>
+      {/if}
       {#if banner.detail}
         <!-- Mensagem crua da AniList. Um 403 de IP bloqueado explica o motivo por escrito e é a
              única informação que o frontend não tem como reconstruir — mostrar verbatim. -->

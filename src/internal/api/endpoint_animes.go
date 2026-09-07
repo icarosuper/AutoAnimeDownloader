@@ -3,6 +3,7 @@ package api
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/logger"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -187,13 +188,15 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		var entries []anilist.MediaList
 		covered := make(map[int]bool)
 		mergeFailed := false
+		fromCache := false
 		for _, username := range config.AnilistUsernames {
 			// nil (e nao uma lista vazia) significa que a busca falhou — ver fetchAniListEntries.
-			list := fetchAniListEntries(username, config.DownloadStatuses, config.DownloadMediaStatuses)
+			list, cached := fetchAniListEntries(username, config.DownloadStatuses, config.DownloadMediaStatuses)
 			if list == nil {
 				mergeFailed = true
 				continue
 			}
+			fromCache = fromCache || cached
 			for _, ml := range list {
 				covered[ml.Media.Id] = true
 			}
@@ -213,6 +216,12 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		// a AniList para 429 — e o 429 fazia a proxima lista falhar, prendendo o ciclo.
 		if mergeFailed {
 			logger.Logger.Warn().Msg("Skipping orphan refresh: AniList list fetch failed, coverage unknown")
+		} else if fromCache {
+			// A cobertura e conhecida (a lista veio inteira, do cache), mas a AniList esta fora
+			// do ar: cada anime nao coberto viraria um GetAnimeInfoByIDs condenado a falhar, a
+			// cada poll de 30s por aba. E a mesma rajada da decisions.md #65, agora sem nem a
+			// chance de dar certo.
+			logger.Logger.Warn().Msg("Skipping orphan refresh: the AniList list came from the local cache")
 		} else {
 			refreshOrphanAnimes(server.FileManager, animeMap, covered, config.ExcludedLists, config.AnilistUsernames, standaloneSet)
 		}
@@ -320,7 +329,11 @@ func refreshStandaloneOrphans(fm FileManagerInterface, medias map[int]*anilist.M
 	}
 
 	fetched, err := anilist.GetMediaByIDs(pending, anilist.PriorityDisposable)
-	if err != nil {
+	switch {
+	case errors.Is(err, anilist.ErrFromCache):
+		logger.Logger.Warn().Int("standalone_orphans", len(pending)).
+			Msg("Refreshing standalone orphans from the local cache: AniList is unreachable")
+	case err != nil:
 		logger.Logger.Warn().Err(err).Int("standalone_orphans", len(pending)).
 			Msg("Failed to refresh some standalone orphans, keeping existing data")
 	}
@@ -373,14 +386,17 @@ func computeAnimeFields(title anilist.Title, status anilist.MediaStatus, episode
 // (server-side) and media status (here), with customLists overlaid.
 // Retorna nil — e nao uma lista vazia — quando a busca falha, para o chamador distinguir
 // "nenhum anime coberto" de "cobertura desconhecida"; o refresh de orfaos depende disso.
-func fetchAniListEntries(username string, statuses []string, mediaStatuses []string) []anilist.MediaList {
+// O segundo retorno diz que a lista veio do cache local. Nao e detalhe de log: e o que impede
+// o refresh de orfaos de rodar contra uma AniList que nao responde — ver o call site.
+func fetchAniListEntries(username string, statuses []string, mediaStatuses []string) ([]anilist.MediaList, bool) {
 	// Fetch customLists via cached minimal query before the complex query that may null it out.
 	clMap := anilist.GetCustomListsMap(username, statuses, anilist.PriorityDisposable)
 
 	resp, err := anilist.GetFrontendAnimeList(username, statuses)
-	if err != nil {
+	fromCache := errors.Is(err, anilist.ErrFromCache)
+	if err != nil && !fromCache {
 		logger.Logger.Warn().Err(err).Msg("Failed to fetch AniList current animes, skipping merge")
-		return nil
+		return nil, false
 	}
 
 	filtered := make([]anilist.MediaList, 0, len(resp.Data.Page.MediaList))
@@ -394,7 +410,7 @@ func fetchAniListEntries(username string, statuses []string, mediaStatuses []str
 		}
 		filtered = append(filtered, *ml)
 	}
-	return filtered
+	return filtered, fromCache
 }
 
 // mergeAniListAnimes merges AniList entries into animeMap so they appear even with 0 downloaded
