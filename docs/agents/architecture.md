@@ -140,8 +140,8 @@ Defaults to `"dev"` if not injected.
 
 **Não existe `daemon.go`.** O orquestrador está espalhado: `loop.go` (a goroutine), `verification.go`
 (o passe), `episodes.go` (seleção e remoção por episódio), `search.go` (busca no Nyaa + filtros),
-`coverage.go` (posse por cobertura), `helpers.go` (guardas de config/disco), `manual_download.go`
-(downloads vindos da API) e `standalone.go`.
+`coverage.go` (posse por cobertura), `helpers.go` (guardas de config/disco), `stalled.go` (torrent
+sem peers), `manual_download.go` (downloads vindos da API) e `standalone.go`.
 
 **Um passe por vez**: `AnimeVerification` pega `verificationMu.TryLock()` e volta na hora se outro já
 está rodando (decisions.md #67).
@@ -204,6 +204,14 @@ anterior já `COMPLETED` saiu do universo do passe, e é o offset dele que conve
 `organize` para todo torrent concluído cujo episódio ainda não está na biblioteca. O critério é
 `LibraryPaths` **vazio**, não o hardlink faltando em disco (decisions.md #29); `clearLibraryPathsAfterRootSwap`
 é a única exceção, quando `Ensure` reporta `RootSwapped` (decisions.md #34).
+
+**`stalled.go`** — chamado no topo do passe, logo depois do `backend.List()`. Torrent a zero peers
+por mais de uma hora **sai da sessão** pelo mesmo `HandleTorrentFailure` de um torrent que a rain
+parou com erro: nada de caminho novo, e o passe seguinte procura de novo no Nyaa
+([#94](decisions.md#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)).
+O relógio é de pacote (`stalledTorrents`), em memória, e **não** é o `stallTracker.ts` do frontend —
+aquele pinta o chip "sem seeds" aos 10 minutos e não conversa com o daemon. O snapshot passado para
+a função não é refeito depois do drop: quem saiu volta a ser procurado só no próximo passe.
 
 **`webui.go`** — o que o processo chama de "porta" é na verdade o **Addr** do `http.Server` (`":8091"`).
 `WebUIURL` tira os dois-pontos: interpolar o valor cru produz `http://localhost::8091`, host inválido.

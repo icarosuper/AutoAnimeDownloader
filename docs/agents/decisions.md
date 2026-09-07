@@ -100,6 +100,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#91** — Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor](#91-não-há-biblioteca-de-componentes-o-daisyui-saiu-porque-era-um-segundo-vocabulário-de-cor)
 - [**#92** — O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)
 - [**#93** — A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)
+- [**#94** — Torrent travado é derrubado pelo caminho de falha, e só quem está *tentando* conta como travado](#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)
 
 ---
 
@@ -2650,3 +2651,41 @@ que passam `0` de propósito.
 segundo da lista pode caber onde o primeiro não coube — pular um não encerra a tentativa. A
 checagem sem tamanho **antes** do loop continua existindo, e é outra coisa: disco já cheio hoje
 significa que nenhum candidato serve, e tentar N vezes só encheria o log.
+
+
+### 94. Torrent travado é derrubado pelo caminho de falha, e só quem está *tentando* conta como travado
+
+**Location:** `daemon/stalled.go` (`dropStalledTorrents`, `stalling`, `stalledTorrentTimeout`),
+chamado em `daemon/verification.go` logo depois do `backend.List()`.
+
+Fato negativo: **não existe** política de retentativa própria, blacklist, contador de tentativas
+nem config para o limiar. Um torrent a zero peers por mais de uma hora entra em
+`HandleTorrentFailure`, a mesma função que trata o torrent que a rain parou com erro — webhook
+`download_failed`, sai da sessão guardando os bytes, e o passe seguinte procura de novo
+([#24](#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist)).
+
+**O que parece errado, primeira parte:** derrubar em vez de pausar. Pausar parece mais gentil e
+libera o mesmo slot de `max_concurrent_downloads`. Não serve: para a fila, pausado é "pausado pelo
+usuário", não ocupa slot e **nunca sobe sozinho** (`torrents/queue.go`). O download travado viraria
+travado, silencioso e permanente — que é exatamente o estado que esta função existe para acabar.
+
+**O que parece errado, segunda parte:** o filtro de status. Só `downloading` e
+`downloading_metadata` são candidatos. Parece descuido não cobrir `verifying`/`allocating`, mas
+zero peers nesses dois é trabalho local em andamento, não swarm morto. E os três excluídos são
+obrigatórios, não opcionais: torrent **enfileirado** está a zero peers porque nem começou
+(`queue.markQueued`), **pausado** porque o usuário mandou parar, e **completo** porque ninguém está
+puxando dele. Sem esse filtro a função derrubaria a fila inteira uma hora depois de o app subir.
+
+**Por que o relógio é de pacote e em memória:** só o passe escreve nele e nada fora do daemon
+precisa lê-lo. Um restart re-observa os stalls do zero, e isso custa no máximo um ciclo de
+`check_interval` a mais. A poda no fim de cada chamada é o que impede um carimbo de semanas atrás
+derrubar na hora um torrent que travou, voltou e travou de novo.
+
+**Não confundir com `frontend/src/lib/stores/stallTracker.ts`.** Os dois medem a mesma coisa e não
+conversam: o do frontend dispara o chip "sem seeds" aos 10 minutos e morre no reload da página; o
+do daemon derruba o torrent em uma hora. Os limiares são diferentes de propósito — pintar um aviso
+e derrubar um download não merecem a mesma paciência.
+
+**Don't "fix" by:** promover o limiar a config sem pedido (o custo de errar é um passe a mais, não
+um download perdido — os bytes ficam), nem transformar o drop em blacklist. A #24 continua valendo:
+se a re-adição virar churn observado, aí sim se discute estado persistido.

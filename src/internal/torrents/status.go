@@ -9,6 +9,11 @@ const (
 	StatusStopped  = "stopped"
 	StatusStopping = "stopping"
 	StatusQueued   = "queued"
+	// StatusDownloading e StatusDownloadingMetadata sao os dois estados em que o torrent esta
+	// de fato tentando falar com o swarm — e portanto os unicos em que "zero peers" e sintoma
+	// de problema, e nao so de nao ter comecado (ver daemon.dropStalledTorrents).
+	StatusDownloading         = "downloading"
+	StatusDownloadingMetadata = "downloading_metadata"
 )
 
 // statusSlug converte o enum de status da rain num slug estável de API.
@@ -21,13 +26,13 @@ func statusSlug(s torrent.Status) string {
 	case torrent.Stopped:
 		return StatusStopped
 	case torrent.DownloadingMetadata:
-		return "downloading_metadata"
+		return StatusDownloadingMetadata
 	case torrent.Allocating:
 		return "allocating"
 	case torrent.Verifying:
 		return "verifying"
 	case torrent.Downloading:
-		return "downloading"
+		return StatusDownloading
 	case torrent.Seeding:
 		return "seeding"
 	case torrent.Stopping:

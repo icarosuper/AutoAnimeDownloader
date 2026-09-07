@@ -108,6 +108,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
 	downloadedTorrents := backend.List()
 
+	// Torrent a zero peers ha horas nao volta sozinho e segura um slot de
+	// max_concurrent_downloads indefinidamente. Roda antes do resto do passe, mas o snapshot
+	// acima NAO e refeito: quem foi derrubado agora e reprocurado no proximo passe.
+	dropStalledTorrents(downloadedTorrents, backend, fileManager, time.Now())
+
 	// Mesma logica de aborto: com os AnimeID ainda no formato antigo (id de entrada) nada em
 	// disco casa com a AniList, e um passe nesse estado rebaixaria a biblioteca inteira.
 	if err := MigrateAnimeIDsToMedia(fileManager); err != nil {
