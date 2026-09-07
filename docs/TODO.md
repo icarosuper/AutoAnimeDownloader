@@ -19,6 +19,16 @@ problema. A causa não é achar candidato — é que o candidato ou está morto 
 `min_seeders` ou travando em 0%) ou é um pack gigante que o teto de tamanho reprova. Ordem não é
 preferência: o item 1 é um **gate**, e o resultado dele decide qual das saídas do item 2 existe.
 
+> Os três itens de **higiene do download** fecharam em 07/set/2026, sem depender do gate: a guarda
+> de disco passou a receber o tamanho do torrent
+> ([#93](agents/decisions.md#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)),
+> a falha de torrent passou a preservar os bytes já baixados (emenda na
+> [#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist))
+> e torrent a zero peers por mais de uma hora passou a ser derrubado pelo mesmo caminho de falha
+> ([#94](agents/decisions.md#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)).
+> Nenhum dos três foi medido ao vivo — os testes são unitários, e o passe do terceiro item da lista
+> abaixo é o que os exercita de verdade.
+
 - **Rodar a Etapa 0 de fontes múltiplas** — spec desenhada em 16/ago e nunca executada:
   [fontes-multiplas-etapa0](superpowers/specs/2026-08-16-fontes-multiplas-etapa0-design.md).
   Pergunta única: onde o Nyaa está morto, existe infohash **diferente** com peers **vivos**?
@@ -41,32 +51,19 @@ preferência: o item 1 é um **gate**, e o resultado dele decide qual das saída
   real de ponta a ponta rodou na cadeia S1 → Final Season Part 3, que é justo onde as quatro
   convenções de numeração da seção "Granularidade" do [sources.md](agents/sources.md) colidem.
   Instrumento já existe: `scripts/robustness-animes.txt` + `make debug-batch`
-- **Falha de torrent joga fora os bytes já baixados** — `HandleTorrentFailure` chama
-  `backend.Remove(hash, false)` (`daemon/helpers.go:109`) e o passe seguinte re-adiciona o magnet
-  ([#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist)).
-  Em pack de 90 GiB a 90%, um erro transitório custa o download inteiro de novo. Medir se
-  `keepData=true` + re-add com o mesmo id + `Verify()` recupera o bitfield
-- **A guarda de disco é cega ao tamanho do torrent** — `checkDiskSpace` (`daemon/helpers.go:49`) só
-  compara `min_free_disk_percent` no instante do Add. Um pack de 61 GiB entra num volume com 40 GiB
-  livres e enche o disco no meio do download. O tamanho já vem do resultado do Nyaa — é o mesmo
-  dado dos tetos `max_batch_torrent_size_gb`/`max_episode_torrent_size_gb`
-- **Torrent travado não tem dono no backend** — `stallTracker` mora na tela e some no reload; o
-  daemon não faz nada com 0 peers por horas, e o torrent segura um slot de
-  `max_concurrent_downloads` indefinidamente. Com anime velho isso é o caso comum, não a exceção
 
 ## Etapa 2 — `v2.4.0` (`+0.1.0`) — features que faltam
 
 Fecha o escopo funcional **antes** do rebranding, pra UI nova nascer desenhada em cima do conjunto
 final de features em vez de ser redesenhada duas vezes.
 
-- **Cache local dos animes, para o app sobreviver à AniList fora do ar** — levantamento em
-  [cache-local-anilist](superpowers/specs/2026-09-05-cache-local-anilist-design.md). Hoje o cache é
-  só em memória e o fallback de dado vencido só vale para o gate de orçamento, nunca para uma queda
-  real: a página do anime devolve 500 e não abre (`api/endpoint_anime_episodes.go:76`), o download
-  manual morre junto (`daemon/manual_download.go:64`) e anime com zero episódio baixado some da
-  lista. A integração é só leitura — não existe mutation para a AniList —, então é persistir o que
-  já se guarda em memória, sem fila de escrita nem conflito. Capas locais e o passe do daemon em
-  modo cache entram no mesmo item, com as decisões pendentes listadas no fim da spec
+> O **cache local dos animes** fechou em 07/set/2026: a AniList é servida de um snapshot em disco
+> quando cai, com o snapshot voltando com TTL zero para nenhuma tela ficar mais velha do que era
+> ([#92](agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)).
+> As capas vieram de graça (a URL é campo de `Media`, já no snapshot) e o passe em modo cache
+> deleta, por decisão explícita — as duas coisas, e o que mudou em relação ao levantamento, estão
+> no fim da [spec](superpowers/specs/2026-09-05-cache-local-anilist-design.md).
+
 - Adicionar integração com MyAnimeList
 - Mecanismo de bug report — precisa existir bem antes de divulgar, senão o feedback chega sem
   contexto
