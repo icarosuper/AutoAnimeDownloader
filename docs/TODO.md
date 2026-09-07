@@ -59,6 +59,14 @@ preferência: o item 1 é um **gate**, e o resultado dele decide qual das saída
 Fecha o escopo funcional **antes** do rebranding, pra UI nova nascer desenhada em cima do conjunto
 final de features em vez de ser redesenhada duas vezes.
 
+- **Cache local dos animes, para o app sobreviver à AniList fora do ar** — levantamento em
+  [cache-local-anilist](superpowers/specs/2026-09-05-cache-local-anilist-design.md). Hoje o cache é
+  só em memória e o fallback de dado vencido só vale para o gate de orçamento, nunca para uma queda
+  real: a página do anime devolve 500 e não abre (`api/endpoint_anime_episodes.go:76`), o download
+  manual morre junto (`daemon/manual_download.go:64`) e anime com zero episódio baixado some da
+  lista. A integração é só leitura — não existe mutation para a AniList —, então é persistir o que
+  já se guarda em memória, sem fila de escrita nem conflito. Capas locais e o passe do daemon em
+  modo cache entram no mesmo item, com as decisões pendentes listadas no fim da spec
 - Adicionar integração com MyAnimeList
 - Mecanismo de bug report — precisa existir bem antes de divulgar, senão o feedback chega sem
   contexto
