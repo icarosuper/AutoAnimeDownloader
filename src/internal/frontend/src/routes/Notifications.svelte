@@ -37,6 +37,8 @@
     labelBatchWindow: m.notifications_label_batch_window(),
     hintBatchWindow: m.notifications_hint_batch_window(),
     labelEvents: m.notifications_label_events(),
+    labelLanguage: m.notifications_label_language(),
+    hintLanguage: m.notifications_hint_language({ title: m.notifications_event_new_episode(), message: m.notifications_event_new_episode() }),
     eventNewEpisode: m.notifications_event_new_episode(),
     eventDownloadFailed: m.notifications_event_download_failed(),
     eventDownloadCompleted: m.notifications_event_download_completed(),
@@ -70,6 +72,10 @@
   let showWebhookForm = false;
   let editingIndex: number | null = null;
   let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
+  // `language` e separado do objeto porque e opcional: um select com bind:value={newWebhook.language}
+  // criaria a chave `language: ''` no objeto, e o backend grava "" como idioma em vez de omitir.
+  // Um config.json antigo (campo ausente) tem que continuar sem o campo, disparando em pt-BR.
+  let newWebhookLanguage: string = '';
 
   // Os headers viram lista de pares ENQUANTO o formulario esta aberto, e so voltam a ser
   // Record<string,string> no Confirmar. O objeto nao serve para editar: renomear uma chave em
@@ -87,26 +93,35 @@
 
   function resetForm() {
     newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
+    newWebhookLanguage = '';
     headerRows = [{ key: '', value: '' }];
     editingIndex = null;
     showWebhookForm = false;
   }
 
   function applyPreset(key: string) {
-    newWebhook = { ...WEBHOOK_PRESETS[key] };
-    headerRows = toRows(WEBHOOK_PRESETS[key].headers);
+    const p = WEBHOOK_PRESETS[key];
+    newWebhook = { ...p };
+    // `language` e opional no tipo e no proprio preset: copiar so a propriedade que existir.
+    newWebhookLanguage = p.language ?? '';
+    headerRows = toRows(p.headers);
   }
 
   function editWebhook(index: number) {
-    newWebhook = { ...notifications.webhooks[index], headers: { ...notifications.webhooks[index].headers }, events: [...(notifications.webhooks[index].events ?? [])] };
-    headerRows = toRows(notifications.webhooks[index].headers);
+    const h = notifications.webhooks[index];
+    newWebhook = { ...h, headers: { ...h.headers }, events: [...(h.events ?? [])] };
+    newWebhookLanguage = h.language ?? '';
+    headerRows = toRows(h.headers);
     editingIndex = index;
     showWebhookForm = true;
   }
 
   function confirmWebhook() {
     if (!newWebhook.name || !newWebhook.url) return;
-    const webhook = { ...newWebhook, headers: fromRows(headerRows) };
+    // Só grava `language` quando o usuario escolheu um: um preset sem campo continua sem o
+    // campo, e o daemon cai no padrao (pt-BR) como uma versao antiga.
+    const webhook: WebhookPreset = { ...newWebhook, headers: fromRows(headerRows) };
+    if (newWebhookLanguage) webhook.language = newWebhookLanguage;
     if (editingIndex !== null) {
       notifications.webhooks = notifications.webhooks.map((h, i) => i === editingIndex ? webhook : h);
     } else {
@@ -360,6 +375,22 @@
                     />
                   {/each}
                 </div>
+              </div>
+
+              <!-- O {{title}}/{{message}} interno so e usado quando o body do proprio preset nao
+                   traz os mesmos. Um webhook customizado que manda so `{{anime_name}}` nao
+                   precisa de idioma; o default (vazio) e pt-BR, o comportamento de antes. -->
+              <div class="flex flex-col gap-1">
+                <label for="webhook-language" class="text-xs font-medium text-heading">{T && T.labelLanguage}</label>
+                <select
+                  id="webhook-language"
+                  bind:value={newWebhookLanguage}
+                  class="block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
+                >
+                  <option value="">— {T && T.labelLanguage ? T.labelLanguage : 'Idioma'} (padrão do daemon) —</option>
+                  <option value="en">English</option>
+                </select>
+                <p class="text-xs text-subtle">{T && T.hintLanguage}</p>
               </div>
 
               <div class="flex gap-2">

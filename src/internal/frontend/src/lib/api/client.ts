@@ -144,12 +144,18 @@ export interface AnilistHealth {
 }
 
 export interface WebhookPreset {
-  name: string
-  url: string
-  method: string
-  headers: Record<string, string>
-  body: string
-  events: string[]
+	name: string
+	url: string
+	method: string
+	headers: Record<string, string>
+	body: string
+	events: string[]
+	/**
+	 * Locale used to render the built-in {{title}}/{{message}} strings when the preset body does
+	 * not supply its own. Empty means "use the daemon default" (pt-BR), so a config written by
+	 * an older release keeps firing in Portuguese exactly as before.
+	 */
+	language?: string
 }
 
 export interface Priorities {

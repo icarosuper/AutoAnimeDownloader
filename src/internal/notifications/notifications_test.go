@@ -47,7 +47,7 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 		Body:    "{{anime_name}} EP {{episode}}",
 	}
 
-	vars := buildVars("Frieren", 5, NewEpisode, "")
+	vars := buildVars("Frieren", 5, NewEpisode, "", "")
 	fireWebhook(preset, vars)
 
 	if capturedBody != "Frieren EP 5" {
@@ -59,7 +59,7 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 }
 
 func TestBuildVarsDownloadFailedReason(t *testing.T) {
-	vars := buildVars("Frieren", 5, DownloadFailed, ReasonNotFound)
+	vars := buildVars("Frieren", 5, DownloadFailed, ReasonNotFound, "")
 	if vars["reason"] != ReasonNotFound {
 		t.Fatalf("reason var = %q", vars["reason"])
 	}
@@ -361,8 +361,84 @@ func TestFireWebhook_DoesNotEscapePlainTextBody(t *testing.T) {
 	}
 }
 
-// TestFireWebhook_StripsNewlinesFromHeaders: um header com \n faz o net/http recusar a request
-// inteira, e o ntfy usa `Title: {{title}}`.
+// TestBuildVars_Language: o {{title}}/{{message}} do preset depende do campo `language`, e um
+// config.json antigo (campo ausente) continua em português como antes.
+func TestBuildVars_Language(t *testing.T) {
+	pt := buildVars("Frieren", 5, NewEpisode, "", "")
+	if pt["title"] != "Novo episódio detectado" {
+		t.Errorf("default lang title = %q", pt["title"])
+	}
+	if pt["message"] != "Frieren EP 5 detectado, iniciando download" {
+		t.Errorf("default lang message = %q", pt["message"])
+	}
+
+	en := buildVars("Frieren", 5, NewEpisode, "", "en")
+	if en["title"] != "New episode detected" {
+		t.Errorf("en title = %q", en["title"])
+	}
+	if en["message"] != "Frieren EP 5 detected, starting download" {
+		t.Errorf("en message = %q", en["message"])
+	}
+
+	// Linguagem desconhecida cai no default.
+	xx := buildVars("Frieren", 5, DownloadCompleted, "", "xx")
+	if xx["title"] != "Download concluído" {
+		t.Errorf("unknown lang title = %q", xx["title"])
+	}
+}
+
+// TestNotify_PresetLanguage: cada webhook da janela usa o proprio idioma, e um preset sem
+// campo language (config.json antigo) continua disparando em português.
+func TestNotify_PresetLanguage(t *testing.T) {
+	srv, bodies := collector(t)
+	t.Cleanup(Flush)
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			BatchWindowSeconds: 1,
+			Webhooks: []files.WebhookPreset{
+				{Name: "pt", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "{{title}}", Events: []string{"download_completed"}},
+				{Name: "en", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "{{title}}", Language: "en", Events: []string{"download_completed"}},
+			},
+		},
+	}
+
+	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+
+	got := drain(bodies, 2, 3*time.Second)
+	if len(got) != 2 {
+		t.Fatalf("esperava 2 requests (um por preset), obteve %d: %v", len(got), got)
+	}
+	seen := map[string]bool{got[0]: true, got[1]: true}
+	if !seen["Download concluído"] || !seen["Download completed"] {
+		t.Errorf("cada preset devia usar o proprio idioma, obteve %v", got)
+	}
+}
+
+// TestFireTestWebhook_UsesPresetLanguage: o disparo manual também respeita o idioma do preset.
+func TestFireTestWebhook_UsesPresetLanguage(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = string(b)
+	}))
+	defer srv.Close()
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "en", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "{{message}}", Language: "en"},
+			},
+		},
+	}
+if err := FireTestWebhook(cfg, "en"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "downloaded successfully") {
+		t.Errorf("test webhook should fire in preset language, got %q", got)
+	}
+}
+
 func TestFireWebhook_StripsNewlinesFromHeaders(t *testing.T) {
 	received := make(chan string, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -378,7 +454,7 @@ func TestFireWebhook_StripsNewlinesFromHeaders(t *testing.T) {
 	fireWebhook(preset, buildBatchVars(DownloadCompleted, []item{
 		{animeName: "Re:ZERO", episode: 12},
 		{animeName: "Frieren", episode: 5},
-	}))
+	}, ""))
 
 	select {
 	case title := <-received:

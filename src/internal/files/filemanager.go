@@ -69,12 +69,17 @@ type EpisodeStruct struct {
 }
 
 type WebhookPreset struct {
-	Name    string            `json:"name"`
-	URL     string            `json:"url"`
-	Method  string            `json:"method"`
-	Headers map[string]string `json:"headers"`
-	Body    string            `json:"body"`
-	Events  []string          `json:"events"`
+	Name     string            `json:"name"`
+	URL      string            `json:"url"`
+	Method   string            `json:"method"`
+	Headers  map[string]string `json:"headers"`
+	Body     string            `json:"body"`
+	Events   []string          `json:"events"`
+	// Language is the locale used to render the built-in {{title}}/{{message}} strings when the
+	// preset body does not supply its own. Empty means "use the daemon default" (pt-BR), so a
+	// config.json written by an older release keeps firing in Portuguese exactly as before.
+	// Supported values: "pt-BR", "en".
+	Language string `json:"language,omitempty"`
 }
 
 type NotificationsConfig struct {

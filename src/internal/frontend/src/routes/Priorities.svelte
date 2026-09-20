@@ -11,23 +11,39 @@
   import Checkbox from "../components/ui/Checkbox.svelte";
   import { toast } from "../lib/stores/toast.js";
   import { PRESETS, applyPreset } from "../lib/domain/priorityPresets.js";
+  import * as m from "../lib/i18n/messages.js";
+  import { locale } from "../lib/stores/locale.js";
 
   // scope: a lista existe mas não vale para episódio — só SortMovieResults lê source e áudio.
   const LISTS: { key: keyof Priorities; label: string; scope?: string }[] = [
-    { key: "criteria_order", label: "Ordem dos critérios" },
-    { key: "fansubs", label: "Fansubs" },
-    { key: "resolutions", label: "Resoluções" },
-    { key: "sources", label: "Source", scope: "só filmes" },
-    { key: "codecs", label: "Codec" },
-    { key: "audio", label: "Áudio", scope: "só filmes" },
-    { key: "ignore_list", label: "Lista de bloqueio" },
+    { key: "criteria_order", label: "priorities_criteria_order" },
+    { key: "fansubs", label: "priorities_fansubs" },
+    { key: "resolutions", label: "priorities_resolutions" },
+    { key: "sources", label: "priorities_sources", scope: "priorities_scope_movies_only" },
+    { key: "codecs", label: "priorities_codecs" },
+    { key: "audio", label: "priorities_audio", scope: "priorities_scope_movies_only" },
+    { key: "ignore_list", label: "priorities_ignore_list" },
   ];
 
-  // Linha fixa em vez de tooltip: tooltip não existe em touch, e esta tela é usada no celular.
-  const NOTES: Partial<Record<keyof Priorities, string>> = {
-    criteria_order: "As entradas source e audio não valem para episódio — só para filmes.",
-    codecs:
-      "H.264 toca direto em qualquer player; HEVC/AV1 ocupam menos espaço mas viram transcode no navegador, o que dessincroniza a legenda.",
+  // Mapa tipado de cada rótulo/nota para a função de mensagem correspondente. Paraglide gera um
+  // módulo sem index signature, então `m[key]` não tipa — e montar esses maps à mão é o que
+  // permite manter o typecheck sem `any`.
+  const LIST_LABELS: Record<keyof Priorities, () => string> = {
+    criteria_order: m.priorities_criteria_order,
+    fansubs: m.priorities_fansubs,
+    resolutions: m.priorities_resolutions,
+    sources: m.priorities_sources,
+    codecs: m.priorities_codecs,
+    audio: m.priorities_audio,
+    ignore_list: m.priorities_ignore_list,
+  };
+  const SCOPE_LABELS: Partial<Record<keyof Priorities, () => string>> = {
+    sources: m.priorities_scope_movies_only,
+    audio: m.priorities_scope_movies_only,
+  };
+  const NOTE_TEXTS: Record<string, () => string> = {
+    criteria_order: m.priorities_note_criteria_order,
+    codecs: m.priorities_note_codecs,
   };
 
   let config: Config | null = null;
@@ -36,6 +52,27 @@
   let saving = false;
   let newItem: Record<string, string> = {};
 
+$: T = $locale && {
+    title: m.priorities_title(),
+    subtitle: m.priorities_subtitle(),
+    loading: m.priorities_loading(),
+    save: m.priorities_save(),
+    saving: m.priorities_saving(),
+    saved: m.priorities_saved(),
+    errorSave: m.priorities_error_save(),
+    errorLoad: m.priorities_error_load(),
+    resetAll: m.priorities_reset_all(),
+    addItem: m.priorities_add_item(),
+    resetList: m.priorities_reset_list(),
+    moveUp: m.priorities_move_up,
+    moveDown: m.priorities_move_down,
+    remove: m.priorities_remove,
+    customLabel: m.priorities_custom_label,
+    listLabels: Object.fromEntries(LISTS.map((l) => [l.key, LIST_LABELS[l.key]()])) as Record<keyof Priorities, string>,
+    scopeLabels: Object.fromEntries(LISTS.filter((l) => SCOPE_LABELS[l.key]).map((l) => [l.key, SCOPE_LABELS[l.key]!()])) as Record<keyof Priorities, string>,
+    noteText: Object.fromEntries(Object.keys(NOTE_TEXTS).map((k) => [k, NOTE_TEXTS[k]()])) as Record<string, string>,
+  };
+
   async function load() {
     try {
       loading = true;
@@ -43,7 +80,7 @@
       config = c;
       defaults = d;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao carregar prioridades");
+      toast.error(err instanceof Error ? err.message : (T && T.errorLoad));
     } finally {
       loading = false;
     }
@@ -122,9 +159,9 @@
     try {
       saving = true;
       await updateConfig(config);
-      toast.success("Prioridades salvas");
+      toast.success(T && T.saved);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao salvar prioridades");
+      toast.error(err instanceof Error ? err.message : (T && T.errorLoad));
     } finally {
       saving = false;
     }
@@ -135,31 +172,31 @@
 
 <div class="space-y-6">
   <div>
-    <h1 class="text-2xl font-semibold text-heading">Prioridades dos torrents</h1>
+    <h1 class="text-2xl font-semibold text-heading">{T && T.title}</h1>
     <p class="text-sm text-subtle mt-0.5">
-      Controla a ordem de preferência usada para ranquear e filtrar releases do Nyaa.
+      {T && T.subtitle}
     </p>
   </div>
 
   {#if loading}
-    <Loading message="Carregando..." />
+    <Loading message={T && T.loading || ""} />
   {:else if config}
     <div class="space-y-4">
-      {#each LISTS as { key, label, scope } (key)}
+      {#each LISTS as { key, scope } (key)}
         {@const items = rows(key, config.priorities[key], defaults)}
         <div class="flex flex-col rounded-card border border-default bg-sunken">
           <div class="flex flex-col gap-3 p-5">
             <div class="flex items-center justify-between">
               <h2 class="text-sm font-semibold text-subtle uppercase tracking-wider">
-                {label}
-                {#if scope}<span class="normal-case tracking-normal font-normal text-subtle">({scope})</span>{/if}
+                {T && T.listLabels[key]}
+                {#if scope}<span class="normal-case tracking-normal font-normal text-subtle">({T && T.scopeLabels[key]})</span>{/if}
               </h2>
               <button
                 type="button"
                 on:click={() => resetList(key)}
                 class="text-xs font-medium text-subtle hover:text-heading transition-colors"
               >
-                Resetar esta lista
+                {T && T.resetList}
               </button>
             </div>
 
@@ -185,7 +222,7 @@
                     <Checkbox
                       checked={row.on}
                       disabled={row.custom}
-                      label={row.custom ? `${row.item} — adicionado por você, remova no ✕` : `Usar ${row.item}`}
+                      label={row.custom ? (T && T.customLabel({ item: row.item }) || `${row.item}`) : `Usar ${row.item}`}
                       labelHidden
                       on:change={() => toggle(key, row.item, !row.on)}
                     />
@@ -196,7 +233,7 @@
                         type="button"
                         on:click={() => move(key, i, -1)}
                         disabled={i === 0}
-                        aria-label="Mover {row.item} para cima"
+                        aria-label={T && T.moveUp({ item: row.item })}
                         class="text-subtle hover:text-heading disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         ↑
@@ -205,7 +242,7 @@
                         type="button"
                         on:click={() => move(key, i, 1)}
                         disabled={i === config.priorities[key].length - 1}
-                        aria-label="Mover {row.item} para baixo"
+                        aria-label={T && T.moveDown({ item: row.item })}
                         class="text-subtle hover:text-heading disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         ↓
@@ -215,7 +252,7 @@
                       <button
                         type="button"
                         on:click={() => remove(key, i)}
-                        aria-label="Remover {row.item}"
+                        aria-label={T && T.remove({ item: row.item })}
                         class="text-subtle hover:text-danger transition-colors"
                       >
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -228,8 +265,8 @@
               </ol>
             {/if}
 
-            {#if NOTES[key]}
-              <p class="text-xs text-subtle">{NOTES[key]}</p>
+            {#if T && T.noteText[key]}
+              <p class="text-xs text-subtle">{T.noteText[key]}</p>
             {/if}
 
             <!-- criteria_order é conjunto fechado (sortByCriteria pula em silêncio o critério que
@@ -240,7 +277,7 @@
               <input
                 type="text"
                 bind:value={newItem[key]}
-                placeholder="Adicionar item"
+                placeholder={T && T.addItem}
                 class="flex-1 block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent sm:text-sm px-3 py-2"
                 on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(key); } }}
               />
@@ -265,7 +302,7 @@
         disabled={saving}
         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-default text-body hover:bg-control font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Resetar tudo
+        {T && T.resetAll}
       </button>
       <button
         type="button"
@@ -273,7 +310,7 @@
         disabled={saving}
         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-on-accent hover:opacity-90 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {saving ? "Salvando..." : "Salvar"}
+        {saving ? (T && T.saving) : (T && T.save)}
       </button>
     </div>
   {/if}

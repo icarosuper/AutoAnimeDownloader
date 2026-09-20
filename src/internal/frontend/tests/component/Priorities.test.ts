@@ -32,12 +32,18 @@ function priorities(over: Partial<P> = {}): P {
   }
 }
 
+// Botões e labels mudam com o locale do jsdom; os matchers aceitam os dois idiomas, como em
+// Notifications.headers.test.ts. O preset de codec é o único rótulo que difere ("Prefiro
+// compatibilidade" / "I prefer compatibility"), então ele leva regex.
+const btn = (re: RegExp) => screen.getByRole('button', { name: re })
+
 /** Renderiza com o config do usuário divergindo (ou não) dos defaults do backend. */
 async function setup(userPriorities: P = priorities()) {
   getConfig.mockResolvedValue({ priorities: userPriorities } as Config)
   getPriorityDefaults.mockResolvedValue(priorities())
   render(Priorities)
   await waitFor(() => expect(getConfig).toHaveBeenCalled())
+  // "Codec" é a única palavra igual nos dois idiomas — serve como âncora de "tela carregou".
   await screen.findByText('Codec')
 }
 
@@ -50,15 +56,15 @@ describe('Priorities', () => {
     await setup(priorities({ codecs: ['h.264', 'hevc'] }))
 
     // O glyph "✓" do Checkbox entra no textContent do <label>, daí o matcher por regex.
-    expect((screen.getByLabelText(/Usar av1$/) as HTMLInputElement).checked).toBe(false)
-    expect((screen.getByLabelText(/Usar h\.264$/) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText(/Usar av1$|Use av1$/) as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByLabelText(/Usar h\.264$|Use h\.264$/) as HTMLInputElement).checked).toBe(true)
   })
 
   it('marcar/desmarcar entra e sai da lista salva', async () => {
     await setup(priorities({ codecs: ['h.264', 'hevc', 'av1', 'xvid'] }))
 
-    await fireEvent.click(screen.getByLabelText(/Usar av1$/))
-    await fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await fireEvent.click(screen.getByLabelText(/Usar av1$|Use av1$/))
+    await fireEvent.click(btn(/^salvar|save$/i))
 
     await waitFor(() => expect(updateConfig).toHaveBeenCalled())
     expect(updateConfig.mock.calls[0][0].priorities.codecs).toEqual(['h.264', 'hevc', 'xvid'])
@@ -68,8 +74,8 @@ describe('Priorities', () => {
   it('só oferece remover item que não está no default', async () => {
     await setup(priorities({ codecs: ['h.264', 'x265'] }))
 
-    expect(screen.getByLabelText('Remover x265')).toBeTruthy()
-    expect(screen.queryByLabelText('Remover h.264')).toBeNull()
+    expect(screen.getByLabelText(/Remover x265|Remove x265/)).toBeTruthy()
+    expect(screen.queryByLabelText(/Remover h\.264|Remove h\.264/)).toBeNull()
   })
 
   // criteria_order é conjunto fechado (o backend pula em silêncio o critério que não conhece) e
@@ -77,16 +83,16 @@ describe('Priorities', () => {
   it('ordem dos critérios não tem campo de adicionar, e mostra o critério que falta desmarcado', async () => {
     await setup(priorities({ criteria_order: ['resolution', 'fansub'] }))
 
-    expect(screen.getAllByPlaceholderText('Adicionar item')).toHaveLength(LISTS_WITH_ADD)
-    expect((screen.getByLabelText(/Usar codec$/) as HTMLInputElement).checked).toBe(false)
-    expect((screen.getByLabelText(/Usar resolution$/) as HTMLInputElement).checked).toBe(true)
+    expect(screen.getAllByPlaceholderText(/Adicionar item|Add item/)).toHaveLength(LISTS_WITH_ADD)
+    expect((screen.getByLabelText(/Usar codec$|Use codec$/) as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByLabelText(/Usar resolution$|Use resolution$/) as HTMLInputElement).checked).toBe(true)
   })
 
   it('preset de codec promove só o que já está na lista', async () => {
     await setup(priorities({ codecs: ['hevc', 'av1', 'h.264', 'xvid'] }))
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Prefiro compatibilidade' }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await fireEvent.click(btn(/Prefiro compatibilidade|I prefer compatibility/))
+    await fireEvent.click(btn(/^salvar|save$/i))
 
     await waitFor(() => expect(updateConfig).toHaveBeenCalled())
     expect(updateConfig.mock.calls[0][0].priorities.codecs).toEqual(['h.264', 'hevc', 'av1', 'xvid'])

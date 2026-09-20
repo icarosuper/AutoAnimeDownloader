@@ -31,6 +31,54 @@ const (
 
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
 
+// localeStrings agrupa as frases de um evento num idioma. O default e pt-BR (o que o daemon
+// usava antes de o campo existir), então um config.json escrito por uma versão antiga continua
+// disparando em português sem mudar nada. Um preset com linguagem desconhecida tambem cai no
+// default: melhor um texto em português do que um {{title}} vazio.
+type localeStrings struct {
+	NewEpisodeTitle          string
+	NewEpisodeMsg            string
+	NewEpisodeBatchTitle     string
+	DownloadFailedTitle      string
+	DownloadFailedMsg        string
+	DownloadFailedBatchTitle string
+	DownloadCompletedTitle   string
+	DownloadCompletedMsg     string
+	DownloadCompletedBatchTitle string
+	ReasonAllFailed          string
+}
+
+func getLocaleStrings(lang string) localeStrings {
+	switch lang {
+	case "en":
+		return localeStrings{
+			NewEpisodeTitle:         "New episode detected",
+			NewEpisodeMsg:           "%s EP %d detected, starting download",
+			NewEpisodeBatchTitle:    "%d new episodes detected",
+			DownloadFailedTitle:     "Download failed",
+			DownloadFailedMsg:       "%s EP %d failed: %s",
+			DownloadFailedBatchTitle: "%d download errors",
+			DownloadCompletedTitle:  "Download completed",
+			DownloadCompletedMsg:    "%s EP %d downloaded successfully",
+			DownloadCompletedBatchTitle: "%d downloads completed",
+			ReasonAllFailed:         "all attempts failed",
+		}
+	default:
+		return localeStrings{
+			NewEpisodeTitle:         "Novo episódio detectado",
+			NewEpisodeMsg:           "%s EP %d detectado, iniciando download",
+			NewEpisodeBatchTitle:    "%d novos episódios detectados",
+			DownloadFailedTitle:     "Erro no download",
+			DownloadFailedMsg:       "%s EP %d falhou: %s",
+			DownloadFailedBatchTitle: "%d erros no download",
+			DownloadCompletedTitle:  "Download concluído",
+			DownloadCompletedMsg:    "%s EP %d foi baixado com sucesso",
+			DownloadCompletedBatchTitle: "%d downloads concluídos",
+			ReasonAllFailed:         "todas as tentativas falharam",
+		}
+	}
+}
+
 func eventString(e Event) string {
 	switch e {
 	case NewEpisode:
@@ -50,8 +98,8 @@ func interpolate(template string, vars map[string]string) string {
 	})
 }
 
-func buildVars(animeName string, episode int, event Event, reason string) map[string]string {
-	return buildBatchVars(event, []item{{animeName: animeName, episode: episode, reason: reason}})
+func buildVars(animeName string, episode int, event Event, reason string, lang string) map[string]string {
+	return buildBatchVars(event, []item{{animeName: animeName, episode: episode, reason: reason}}, lang)
 }
 
 // buildBatchVars monta as variaveis de template para os itens de uma janela. Com um item so o
@@ -61,15 +109,15 @@ func buildVars(animeName string, episode int, event Event, reason string) map[st
 // Com N > 1, `anime_name`, `episode` e `reason` ficam VAZIOS: nao existe valor unico para eles e
 // mandar o do primeiro item faria o template mentir sobre os outros N-1. Quem quer identificar os
 // episodios usa `message` (uma linha por item) ou `count`.
-func buildBatchVars(event Event, items []item) map[string]string {
+func buildBatchVars(event Event, items []item, lang string) map[string]string {
 	lines := make([]string, 0, len(items))
 	for _, it := range items {
-		_, message := eventStrings(it.animeName, it.episode, event, it.reason)
+		_, message := eventStrings(it.animeName, it.episode, event, it.reason, lang)
 		lines = append(lines, message)
 	}
 
 	vars := map[string]string{
-		"title":      batchTitle(event, items),
+		"title":      batchTitle(event, items, lang),
 		"message":    strings.Join(lines, "\n"),
 		"anime_name": "",
 		"episode":    "",
@@ -89,36 +137,44 @@ func buildBatchVars(event Event, items []item) map[string]string {
 	return vars
 }
 
-func batchTitle(event Event, items []item) string {
+func batchTitle(event Event, items []item, lang string) string {
 	if len(items) == 1 {
-		title, _ := eventStrings(items[0].animeName, items[0].episode, event, items[0].reason)
+		title, _ := eventStrings(items[0].animeName, items[0].episode, event, items[0].reason, lang)
 		return title
 	}
+	s := getLocaleStrings(lang)
 	switch event {
 	case NewEpisode:
-		return fmt.Sprintf("%d novos episódios detectados", len(items))
+		return fmt.Sprintf(s.NewEpisodeBatchTitle, len(items))
 	case DownloadFailed:
-		return fmt.Sprintf("%d erros no download", len(items))
+		return fmt.Sprintf(s.DownloadFailedBatchTitle, len(items))
 	case DownloadCompleted:
-		return fmt.Sprintf("%d downloads concluídos", len(items))
+		return fmt.Sprintf(s.DownloadCompletedBatchTitle, len(items))
 	}
 	return ""
 }
 
-func eventStrings(animeName string, episode int, event Event, reason string) (title, message string) {
+// eventStrings devolve o par (title, message) para um unico item. O idioma é o do preset que
+// vai disparar: um webhook do Discord pode ser configurado em português e outro em inglês no
+// mesmo config.json, e misturar os dois no mesmo body faria o título de um e o texto do outro.
+//
+// O default (pt-BR) é o comportamento de antes, assim um config.json escrito por uma versão
+// antiga continua disparando em português sem mudar nada.
+func eventStrings(animeName string, episode int, event Event, reason string, lang string) (title, message string) {
+	s := getLocaleStrings(lang)
 	switch event {
 	case NewEpisode:
-		return "Novo episódio detectado",
-			fmt.Sprintf("%s EP %d detectado, iniciando download", animeName, episode)
+		return s.NewEpisodeTitle,
+			fmt.Sprintf(s.NewEpisodeMsg, animeName, episode)
 	case DownloadFailed:
 		if reason == "" {
-			reason = "todas as tentativas falharam"
+			reason = s.ReasonAllFailed
 		}
-		return "Erro no download",
-			fmt.Sprintf("%s EP %d falhou: %s", animeName, episode, reason)
+		return s.DownloadFailedTitle,
+			fmt.Sprintf(s.DownloadFailedMsg, animeName, episode, reason)
 	case DownloadCompleted:
-		return "Download concluído",
-			fmt.Sprintf("%s EP %d foi baixado com sucesso", animeName, episode)
+		return s.DownloadCompletedTitle,
+			fmt.Sprintf(s.DownloadCompletedMsg, animeName, episode)
 	}
 	return "", ""
 }
@@ -289,7 +345,6 @@ func fireBatch(event Event, items []item, webhooks []files.WebhookPreset, wait b
 		return
 	}
 	eventStr := eventString(event)
-	vars := buildBatchVars(event, items)
 
 	var wg sync.WaitGroup
 	for _, preset := range webhooks {
@@ -299,6 +354,11 @@ func fireBatch(event Event, items []item, webhooks []files.WebhookPreset, wait b
 		wg.Add(1)
 		go func(p files.WebhookPreset) {
 			defer wg.Done()
+			// As variaveis sao montadas por preset: cada um tem seu proprio idioma, e um
+			// Discord em portugues ao lado de um ntfy em ingles no mesmo config.json precisa
+			// de titulos e textos diferentes. Montar uma vez para a janela e reusar daria
+			// o texto de um idioma a todos.
+			vars := buildBatchVars(event, items, p.Language)
 			fireWebhook(p, vars)
 		}(preset)
 	}
@@ -316,7 +376,7 @@ var ErrWebhookNotFound = errors.New("webhook not found")
 func FireTestWebhook(cfg *files.Config, name string) error {
 	for _, preset := range cfg.Notifications.Webhooks {
 		if preset.Name == name {
-			vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "")
+			vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "", preset.Language)
 			return fireWebhook(preset, vars)
 		}
 	}
