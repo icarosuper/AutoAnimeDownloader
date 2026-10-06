@@ -40,9 +40,10 @@
     eventNewEpisode: m.notifications_event_new_episode(),
     eventDownloadFailed: m.notifications_event_download_failed(),
     eventDownloadCompleted: m.notifications_event_download_completed(),
+    eventEpisodeDeleted: m.notifications_event_episode_deleted(),
   };
 
-  const ALL_EVENTS = ['new_episode', 'download_failed', 'download_completed'] as const;
+  const ALL_EVENTS = ['new_episode', 'download_failed', 'download_completed', 'episode_deleted'] as const;
 
   const WEBHOOK_PRESETS: Record<string, WebhookPreset> = {
     ntfy:     { name: 'ntfy',     url: 'https://ntfy.sh/CHANGE_ME',                                    method: 'POST', headers: { Title: '{{title}}', Priority: 'default' },         body: '{{message}}',                                                                                                                                            events: [...ALL_EVENTS] },
@@ -52,10 +53,10 @@
     pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json',                     method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}',                                                      events: [...ALL_EVENTS] },
     slack:    { name: 'Slack',    url: 'https://hooks.slack.com/services/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"text":"*{{title}}*\\n{{message}}"}',                                                                                                                   events: [...ALL_EVENTS] },
     apprise:  { name: 'Apprise',  url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG',                    method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","body":"{{message}}"}',                                                                                                             events: [...ALL_EVENTS] },
-    // Nao sao notificacoes: disparam um scan da biblioteca. So em download_completed — nao ha o que
-    // escanear quando o episodio foi apenas detectado ou o download falhou.
-    jellyfin: { name: 'Jellyfin', url: 'http://YOUR_JELLYFIN_URL/Library/Refresh',                     method: 'POST', headers: { 'X-Emby-Token': 'CHANGE_API_KEY' },                  body: '',                                                                                                                                                      events: ['download_completed'] },
-    plex:     { name: 'Plex',     url: 'http://YOUR_PLEX_URL/library/sections/CHANGE_ID/refresh?X-Plex-Token=CHANGE_TOKEN', method: 'GET', headers: {},                                 body: '',                                                                                                                                                      events: ['download_completed'] },
+    // Nao sao notificacoes: disparam um scan da biblioteca. So em download_completed e episode_deleted —
+    // nao ha o que escanear quando o episodio foi apenas detectado ou o download falhou.
+    jellyfin: { name: 'Jellyfin', url: 'http://YOUR_JELLYFIN_URL/Library/Refresh',                     method: 'POST', headers: { 'X-Emby-Token': 'CHANGE_API_KEY' },                  body: '',                                                                                                                                                      events: ['download_completed', 'episode_deleted'] },
+    plex:     { name: 'Plex',     url: 'http://YOUR_PLEX_URL/library/sections/CHANGE_ID/refresh?X-Plex-Token=CHANGE_TOKEN', method: 'GET', headers: {},                                 body: '',                                                                                                                                                      events: ['download_completed', 'episode_deleted'] },
   };
 
   const bodyPlaceholder = '{"message":"{{message}}"}';
@@ -346,6 +347,7 @@
                     { value: 'new_episode',        label: T && T.eventNewEpisode },
                     { value: 'download_failed',    label: T && T.eventDownloadFailed },
                     { value: 'download_completed', label: T && T.eventDownloadCompleted },
+                    { value: 'episode_deleted',     label: T && T.eventEpisodeDeleted },
                   ] as ev}
                     <Checkbox
                       label={ev.label || ""}

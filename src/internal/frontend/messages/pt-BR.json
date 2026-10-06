@@ -228,6 +228,7 @@
   "notifications_event_new_episode": "Novo episódio detectado",
   "notifications_event_download_failed": "Falha no download",
   "notifications_event_download_completed": "Download concluído",
+  "notifications_event_episode_deleted": "Episódio removido",
   "notifications_btn_edit": "Editar",
   "notifications_section_batch": "Agrupamento",
   "notifications_label_batch_window": "Janela de agrupamento (segundos)",

@@ -228,6 +228,7 @@
   "notifications_event_new_episode": "New episode detected",
   "notifications_event_download_failed": "Download failed",
   "notifications_event_download_completed": "Download completed",
+  "notifications_event_episode_deleted": "Episode deleted",
   "notifications_btn_edit": "Edit",
   "notifications_section_batch": "Batching",
   "notifications_label_batch_window": "Batch window (seconds)",

@@ -1025,8 +1025,21 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 		}
 	}
 
-	if err := fm.DeleteEpisodesFromFile(forgettableKeys(keysToDelete, byKey, byHash, force)); err != nil {
+	forgotten := forgettableKeys(keysToDelete, byKey, byHash, force)
+	if err := fm.DeleteEpisodesFromFile(forgotten); err != nil {
 		return fmt.Errorf("failed to delete episodes from file: %w", err)
+	}
+
+	// Com keepData a biblioteca nao mudou, entao nao ha o que o Jellyfin/Plex reescanear.
+	if !keepData && len(forgotten) > 0 {
+		if configs, err := fm.LoadConfigs(); err != nil {
+			logger.Logger.Warn().Err(err).Msg("Episode deletion: failed to load configs, skipping webhook")
+		} else {
+			for _, k := range forgotten {
+				ep := byKey[k]
+				notifications.Notify(configs, notifications.EpisodeDeleted, ep.AnimeName, ep.EpisodeNumber, "")
+			}
+		}
 	}
 
 	return nil

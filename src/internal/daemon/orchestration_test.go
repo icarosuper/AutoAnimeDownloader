@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/torrents"
@@ -172,6 +173,40 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	removeEpisodesAndLinks(fm2, backend2, lib, []files.EpisodeKey{{Episode: 1}, {Episode: 2}}, saved, false, false)
 	if _, ok := backend2.Get(hash); ok {
 		t.Error("torrent should be removed when all batch siblings are deleted")
+	}
+}
+
+// Deletar episodio dispara episode_deleted (e o Jellyfin reescaneia); com keepData a biblioteca
+// nao muda, entao nao dispara.
+func TestRemoveEpisodesAndLinks_FiresEpisodeDeletedWebhook(t *testing.T) {
+	saved := []files.EpisodeStruct{{AnimeName: "Frieren", EpisodeNumber: 3}}
+	cfg := func(url string) *files.Config {
+		return &files.Config{Notifications: files.NotificationsConfig{Webhooks: []files.WebhookPreset{{
+			Name: "spy", URL: url, Method: http.MethodPost,
+			Body:   `{"anime":"{{anime_name}}","episode":"{{episode}}"}`,
+			Events: []string{"episode_deleted"},
+		}}}}
+	}
+	lib := files.NewLibrarian(files.NewOSFileSystem())
+	keys := []files.EpisodeKey{{Episode: 3}}
+
+	spy := newWebhookSpy(t)
+	fm := &orchestrationFM{saved: saved, configs: cfg(spy.server.URL)}
+	if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, keys, saved, false, false); err != nil {
+		t.Fatal(err)
+	}
+	if body := spy.waitForCall(t); body != `{"anime":"Frieren","episode":"3"}` {
+		t.Errorf("unexpected webhook body: %s", body)
+	}
+
+	spy2 := newWebhookSpy(t)
+	fm2 := &orchestrationFM{saved: saved, configs: cfg(spy2.server.URL)}
+	if err := removeEpisodesAndLinks(fm2, torrents.NewFakeBackend(), lib, keys, saved, true, false); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := spy2.callCount(); n != 0 {
+		t.Errorf("keepData must not fire episode_deleted, got %d calls", n)
 	}
 }
 

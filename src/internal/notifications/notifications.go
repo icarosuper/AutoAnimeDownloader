@@ -20,6 +20,7 @@ const (
 	NewEpisode Event = iota
 	DownloadFailed
 	DownloadCompleted
+	EpisodeDeleted
 )
 
 // Motivos de falha de download, usados como {{reason}} e na mensagem padrão.
@@ -39,6 +40,8 @@ func eventString(e Event) string {
 		return "download_failed"
 	case DownloadCompleted:
 		return "download_completed"
+	case EpisodeDeleted:
+		return "episode_deleted"
 	}
 	return ""
 }
@@ -101,6 +104,8 @@ func batchTitle(event Event, items []item) string {
 		return fmt.Sprintf("%d erros no download", len(items))
 	case DownloadCompleted:
 		return fmt.Sprintf("%d downloads concluídos", len(items))
+	case EpisodeDeleted:
+		return fmt.Sprintf("%d episódios removidos", len(items))
 	}
 	return ""
 }
@@ -119,6 +124,9 @@ func eventStrings(animeName string, episode int, event Event, reason string) (ti
 	case DownloadCompleted:
 		return "Download concluído",
 			fmt.Sprintf("%s EP %d foi baixado com sucesso", animeName, episode)
+	case EpisodeDeleted:
+		return "Episódio removido",
+			fmt.Sprintf("%s EP %d foi removido da biblioteca", animeName, episode)
 	}
 	return "", ""
 }
