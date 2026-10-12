@@ -112,8 +112,7 @@ autoanimedownloader config get
 **Shows all configuration values:**
 - Anilist usernames (supports more than one, comma-separated)
 - MyAnimeList usernames (same format; the list must be public)
-- Save path
-- Completed anime path (required; must be on the same volume as the save path)
+- Completed anime path (required; torrents download and seed in `<path>/.torrents`)
 - Check interval (minutes)
 - Max episodes per anime
 - Episode retry limit

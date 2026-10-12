@@ -18,7 +18,7 @@ The main dashboard:
 
 - **Daemon card** — current status (stopped/running/checking), last check time, next check countdown, and Start/Stop/Force-check controls
 - **Library card** — total anime and episode counts
-- **Disk card** — free/total space on the save path's filesystem, with a warning color when space is low
+- **Disk card** — free/total space on the library's filesystem (`completed_anime_path`, where torrents also download), with a warning color when space is low
 - **Monitored animes** — searchable/filterable table of tracked anime (progress, last download, blacklist status). Click a row to open its detail page
 
 Status changes push over WebSocket, so the page updates live without a refresh.
@@ -33,7 +33,7 @@ Per-anime episode list, opened by clicking an anime on the Status page:
 
 ### Config (`/config`)
 
-Daemon configuration, grouped into sections: Library, Lists (Anilist and MyAnimeList usernames), Downloads and Torrent search (advanced). Covers paths, check interval, episode limits/retries, and download/delete rules. The **Completed Anime Path** is required and must be on the same volume as the Save Path (completed episodes are hardlinked into it) — saving a cross-volume pair is rejected. There is no qBittorrent setting: the torrent client is embedded. See [Config Reference](../agents/config.md) for the full field list and defaults.
+Daemon configuration, grouped into sections: Library, Lists (Anilist and MyAnimeList usernames), Downloads and Torrent search (advanced). Covers paths, check interval, episode limits/retries, and download/delete rules. The **Completed Anime Path** is the only required setting: torrents download and seed in `<path>/.torrents` and completed episodes are hardlinked into the library — saving a path whose filesystem doesn't support hardlinks (exFAT/FAT32, some SMB shares) is rejected. There is no qBittorrent setting: the torrent client is embedded. See [Config Reference](../agents/config.md) for the full field list and defaults.
 
 If required config is missing, the daemon opens this page automatically with a `?missingConfig=true` banner.
 

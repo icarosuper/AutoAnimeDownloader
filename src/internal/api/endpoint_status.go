@@ -15,18 +15,18 @@ type StatusResponse struct {
 	Version   string    `json:"version" example:"1.2.0"`
 	DiskTotal uint64    `json:"disk_total" example:"500107862016"`
 	DiskFree  uint64    `json:"disk_free" example:"128849018880"`
-	// DiskLow marca que o livre esta abaixo de min_free_disk_percent — ou seja, que o daemon
-	// PAROU de adicionar torrents. Calculado no servidor de proposito: um limiar duplicado no
-	// frontend acabaria discordando do que o daemon esta fazendo.
+	// DiskLow marks that the free space is below min_free_disk_percent — that is, that the daemon
+	// STOPPED adding torrents. Computed on the server on purpose: a threshold duplicated in the
+	// frontend would end up disagreeing with what the daemon is doing.
 	DiskLow bool `json:"disk_low" example:"false"`
-	// Anilist e o ultimo estado conhecido da AniList, gravado por QUALQUER chamada (passe do
-	// daemon ou poll do frontend). Viaja aqui, e nao num endpoint proprio, porque /status ja e
-	// polled e ja e o payload que o WebSocket empurra — ver decisions.md #66.
+	// Anilist is AniList's last known state, written by ANY call (the daemon's pass or the
+	// frontend's poll). It travels here, and not in its own endpoint, because /status is already
+	// polled and is already the payload the WebSocket pushes — see decisions.md #66.
 	Anilist anilist.Health `json:"anilist"`
 }
 
 // handleStatus returns the current status of the daemon, including last check time, error state,
-// and disk space for the configured save path
+// and disk space for the filesystem of completed_anime_path (the library)
 func handleStatus(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -38,7 +38,7 @@ func handleStatus(server *Server) http.HandlerFunc {
 
 		var diskTotal, diskFree uint64
 		diskLow := false
-		// Mesmo volume que o diretorio de download, por construcao (ver Config.DownloadPath).
+		// Same volume as the download directory, by construction (see Config.DownloadPath).
 		if cfg, err := server.FileManager.LoadConfigs(); err == nil && cfg.CompletedAnimePath != "" {
 			diskTotal, diskFree, _ = files.DiskSpace(cfg.CompletedAnimePath)
 			if diskTotal > 0 && cfg.MinFreeDiskPercent > 0 {
