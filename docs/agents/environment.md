@@ -32,6 +32,7 @@ start. They are not read by the Go code, and they do nothing after the file exis
 | `COMPLETED_ANIME_PATH` | `/app/downloads/completed` | `completed_anime_path` | The library folder. Point it at a mounted volume — the image only creates `/app/data` |
 | `ANILIST_USERNAMES` | `""` | `anilist_usernames` (array) | Comma-separated; `"a, b"` → `["a","b"]`, empty → `[]` |
 | `ANILIST_USERNAME` | `""` | — | **Legacy**, accepted as a fallback for `ANILIST_USERNAMES`. Still writes the plural key |
+| `MAL_USERNAMES` | `""` | `mal_usernames` (array) | Comma-separated, same conversion as `ANILIST_USERNAMES` |
 | `EXCLUDED_LISTS` | `""` | `excluded_lists` (array) | Comma-separated, same conversion |
 | `EXCLUDED_LIST` | `""` | — | **Legacy** fallback for `EXCLUDED_LISTS`, same as above |
 | `CHECK_INTERVAL` | `10` | `check_interval` | |
@@ -40,7 +41,7 @@ start. They are not read by the Go code, and they do nothing after the file exis
 | `DELETE_WATCHED_EPISODES` | `true` | `delete_watched_episodes` | `true`/`1` → `true`, anything else → `false` |
 | `FORCE_CONFIG_UPDATE` | — (unset) | — | When non-empty, overwrites an existing `config.json` |
 
-> The generated file carries **7 of the ~25 fields** in `Config`. That is safe on creation —
+> The generated file carries **8 of the ~25 fields** in `Config`. That is safe on creation —
 > `LoadConfigs` unmarshals over `getDefaultConfig()`, so the absent fields keep their defaults —
 > but `FORCE_CONFIG_UPDATE` rewrites the *whole* file, discarding everything the user set
 > through the UI or CLI.
