@@ -1,6 +1,7 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/daemon"
 	"net/http"
 )
 
@@ -17,9 +18,18 @@ func handleLastCheck(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Copia por valor (ver GetLastCheckReport): preencher pass_error aqui nao pode escrever
-		// no relatorio compartilhado.
+		// Copy by value (see GetLastCheckReport): filling pass_error here must not write to the
+		// shared report.
 		report := server.State.GetLastCheckReport()
+		// A nil list serializes as null — a pass with no limit, or a report cleared by
+		// SetLastCheckError — and the Status screen reads .length of both: a null froze it on
+		// "Loading status...".
+		if report.Problems == nil {
+			report.Problems = []daemon.Issue{}
+		}
+		if report.Limits == nil {
+			report.Limits = []daemon.Issue{}
+		}
 		if err := server.State.GetLastCheckError(); err != nil {
 			report.PassError = err.Error()
 			report.PassErrorCode = server.State.GetLastCheckErrorCode()

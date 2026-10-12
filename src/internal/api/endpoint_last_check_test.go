@@ -11,7 +11,7 @@ import (
 )
 
 func TestHandleLastCheck(t *testing.T) {
-	t.Run("GET devolve o relatório", func(t *testing.T) {
+	t.Run("GET returns the report", func(t *testing.T) {
 		state := daemon.NewState()
 		state.SetLastCheckReport(daemon.CheckReport{
 			FinishedAt: time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC),
@@ -37,59 +37,67 @@ func TestHandleLastCheck(t *testing.T) {
 		handleLastCheck(&Server{State: state})(w, httptest.NewRequest(http.MethodGet, "/api/v1/last-check", nil))
 
 		if w.Code != http.StatusOK {
-			t.Fatalf("esperava 200, obteve %d", w.Code)
+			t.Fatalf("expected 200, got %d", w.Code)
 		}
 		var response SuccessResponse
 		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-			t.Fatalf("resposta inválida: %v", err)
+			t.Fatalf("invalid response: %v", err)
 		}
 		data, ok := response.Data.(map[string]interface{})
 		if !ok {
-			t.Fatal("esperava data como objeto")
+			t.Fatal("expected data as an object")
 		}
 		if passErr, _ := data["pass_error"].(string); passErr != "" {
-			t.Errorf("esperava pass_error vazio, obteve %q", passErr)
+			t.Errorf("expected empty pass_error, got %q", passErr)
 		}
 		problems, ok := data["problems"].([]interface{})
 		if !ok || len(problems) != 1 {
-			t.Fatalf("esperava 1 problema, obteve %v", data["problems"])
+			t.Fatalf("expected 1 problem, got %v", data["problems"])
 		}
 		first := problems[0].(map[string]interface{})
 		if first["code"] != daemon.IssueAllAboveSizeLimit {
-			t.Errorf("código errado: %v", first["code"])
+			t.Errorf("wrong code: %v", first["code"])
 		}
 		if first["anime_name"] != "Bleach" {
-			t.Errorf("anime errado: %v", first["anime_name"])
+			t.Errorf("wrong anime: %v", first["anime_name"])
 		}
 		limits, ok := data["limits"].([]interface{})
 		if !ok || len(limits) != 1 {
-			t.Fatalf("esperava 1 limite, obteve %v", data["limits"])
+			t.Fatalf("expected 1 limit, got %v", data["limits"])
 		}
-		// omitempty: o limite não carrega episodes.
+		// omitempty: the limit carries no episodes.
 		if _, present := limits[0].(map[string]interface{})["episodes"]; present {
-			t.Error("limite não deve serializar episodes")
+			t.Error("a limit must not serialize episodes")
 		}
 	})
 
-	t.Run("GET com relatório vazio", func(t *testing.T) {
+	// The Status screen reads .length of both lists: a null one froze it on "Loading status..." after
+	// any pass that applied no limit.
+	t.Run("GET with an empty report returns empty lists, not null", func(t *testing.T) {
 		state := daemon.NewState()
 
 		w := httptest.NewRecorder()
 		handleLastCheck(&Server{State: state})(w, httptest.NewRequest(http.MethodGet, "/api/v1/last-check", nil))
 
 		if w.Code != http.StatusOK {
-			t.Fatalf("esperava 200, obteve %d", w.Code)
+			t.Fatalf("expected 200, got %d", w.Code)
 		}
 		var response SuccessResponse
 		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-			t.Fatalf("resposta inválida: %v", err)
+			t.Fatalf("invalid response: %v", err)
 		}
 		if !response.Success {
-			t.Error("esperava success=true")
+			t.Error("expected success=true")
+		}
+		data := response.Data.(map[string]interface{})
+		for _, field := range []string{"problems", "limits"} {
+			if list, ok := data[field].([]interface{}); !ok || len(list) != 0 {
+				t.Errorf("expected %s as an empty list, got %#v", field, data[field])
+			}
 		}
 	})
 
-	t.Run("pass_error vem do último erro de passe", func(t *testing.T) {
+	t.Run("pass_error comes from the last pass error", func(t *testing.T) {
 		state := daemon.NewState()
 		state.SetLastCheckError(errors.New("anilist unreachable"))
 
@@ -98,20 +106,20 @@ func TestHandleLastCheck(t *testing.T) {
 
 		var response SuccessResponse
 		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
-			t.Fatalf("resposta inválida: %v", err)
+			t.Fatalf("invalid response: %v", err)
 		}
 		data := response.Data.(map[string]interface{})
 		if data["pass_error"] != "anilist unreachable" {
-			t.Errorf("esperava a mensagem do erro, obteve %v", data["pass_error"])
+			t.Errorf("expected the error message, got %v", data["pass_error"])
 		}
 	})
 
-	t.Run("POST devolve 405", func(t *testing.T) {
+	t.Run("POST returns 405", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		handleLastCheck(&Server{State: daemon.NewState()})(w, httptest.NewRequest(http.MethodPost, "/api/v1/last-check", nil))
 
 		if w.Code != http.StatusMethodNotAllowed {
-			t.Errorf("esperava 405, obteve %d", w.Code)
+			t.Errorf("expected 405, got %d", w.Code)
 		}
 	})
 }
