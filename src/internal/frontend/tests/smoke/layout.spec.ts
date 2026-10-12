@@ -7,23 +7,23 @@ import {
 } from './helpers.js'
 
 /**
- * Regressões de layout que só aparecem com dados reais de volume — nenhuma delas quebra um
- * teste de conteúdo, porque o elemento continua no DOM e "visível", só que fora da tela.
+ * Layout regressions that only show up with real volume data — none of them breaks a content test,
+ * because the element stays in the DOM and "visible", just off the screen.
  *
- * 1. Estouro horizontal. A faixa "Downloads ativos" do card herói tem `overflow-x-auto`, mas
- *    isso não bastava: a <section> que a contém é item de um grid e item de grid tem
- *    `min-width: auto`, ou seja, seu piso é o tamanho intrínseco do conteúdo. Com muitos
- *    downloads a section crescia até o max-content (medido: 2494px num grid de 1280px), o
- *    scroll da faixa nunca ativava e a coluna da direita saía da tela. A asserção é sobre a
- *    PÁGINA (`documentElement.scrollWidth`), não sobre a faixa: é o sintoma que o usuário vê,
- *    e pega qualquer outra coluna/tabela que estoure pelo mesmo motivo.
+ * 1. Horizontal overflow. The hero card's "Active downloads" strip has `overflow-x-auto`, but that
+ *    wasn't enough: the <section> that holds it is a grid item, and a grid item has
+ *    `min-width: auto`, i.e. its floor is the content's intrinsic size. With many downloads the
+ *    section grew to max-content (measured: 2494px in a 1280px grid), the strip's scroll never
+ *    kicked in and the right column went off the screen. The assertion is about the PAGE
+ *    (`documentElement.scrollWidth`), not the strip: it's the symptom the user sees, and it
+ *    catches any other column/table that overflows for the same reason.
  *
- * 2. NavRail rolando junto com a página. O rail é `h-screen`, mas sem posicionamento era só um
- *    item de flex no fluxo normal — numa página mais alta que a viewport ele subia junto e
- *    sumia. A asserção compara a posição do rail antes e depois de um scroll até o fim.
+ * 2. NavRail scrolling with the page. The rail is `h-screen`, but without positioning it was just
+ *    a flex item in the normal flow — on a page taller than the viewport it went up with it and
+ *    disappeared. The assertion compares the rail's position before and after scrolling to the end.
  */
 
-// 24 downloads ativos: volume suficiente para a faixa passar de 4x a largura da tela.
+// 24 active downloads: enough volume for the strip to exceed 4x the screen width.
 const manyTorrents = Array.from({ length: 24 }, (_, i) => ({
   hash: `${i}`.padStart(40, 'a'),
   name: `[SubsPlease] Some Very Long Anime Title Here - ${i + 1} (1080p)`,
@@ -43,8 +43,8 @@ const manyTorrents = Array.from({ length: 24 }, (_, i) => ({
   seeded_for_seconds: 0,
 }))
 
-// 30 animes com nomes/contadores longos: deixa a página bem mais alta que a viewport (para o
-// teste do rail) e exercita a largura máxima das colunas da lista.
+// 30 animes with long names/counters: makes the page much taller than the viewport (for the rail
+// test) and exercises the list columns' maximum width.
 const manyAnimes = Array.from({ length: 30 }, (_, i) => ({
   anime_id: i + 1,
   name: `Smoking Behind the Supermarket with You ${i + 1}`,
@@ -58,15 +58,15 @@ const manyAnimes = Array.from({ length: 30 }, (_, i) => ({
 }))
 
 async function setupBusyStatusPage(page: import('@playwright/test').Page) {
-  // setupStatusPageMocks já cobre status/animes/config/torrents/ws.
+  // setupStatusPageMocks already covers status/animes/config/torrents/ws.
   await setupStatusPageMocks(page, 'running', makeAnimesResponse(manyAnimes))
   await page.route('**/api/v1/torrents', route =>
     route.fulfill({ json: makeTorrentsResponse(manyTorrents) }),
   )
 }
 
-// 1024 é o menor viewport em que a tabela da lista de animes é renderizada (abaixo disso
-// Status.svelte troca para cards empilhados); 1280 é o padrão do projeto chromium.
+// 1024 is the smallest viewport where the anime list table is rendered (below that Status.svelte
+// switches to stacked cards); 1280 is the chromium project's default.
 for (const width of [1024, 1280, 1600]) {
   test(`status page does not overflow horizontally at ${width}px with many active downloads`, async ({
     page,
@@ -96,19 +96,19 @@ test('the active downloads strip scrolls instead of pushing the card past the vi
     scrollWidth: el.scrollWidth,
   }))
 
-  // A faixa é mais estreita que seu conteúdo — ou seja, virou container de scroll de verdade,
-  // em vez de ter empurrado a section para o tamanho do conteúdo.
+  // The strip is narrower than its content — i.e. it became a real scroll container, instead of
+  // having pushed the section to the content's size.
   expect(scrollWidth).toBeGreaterThan(clientWidth)
   expect(clientWidth).toBeLessThan(1280)
 })
 
 /**
- * As três telas com tabela têm trilhas de largura FIXA (Status LIST_GRID, Downloads ROW_GRID,
- * AnimeDetail EP_GRID). Cada uma soma mais que a largura útil em `md` (768px), então todas
- * trocam para cards/flex-wrap abaixo de `lg`. Este teste é o que segura esse corte no lugar:
- * baixar qualquer um deles de volta para `md`, ou acrescentar uma coluna fixa, volta a jogar a
- * página em rolagem horizontal — que é exatamente o sintoma reclamado, e nenhum teste de
- * conteúdo pega, porque os elementos continuam no DOM e "visíveis", só que fora da tela.
+ * The three screens with a table have FIXED-width tracks (Status LIST_GRID, Downloads ROW_GRID,
+ * AnimeDetail EP_GRID). Each one adds up to more than the usable width at `md` (768px), so all of
+ * them switch to cards/flex-wrap below `lg`. This test is what holds that cut in place: moving any
+ * of them back down to `md`, or adding a fixed column, throws the page into horizontal scrolling
+ * again — which is exactly the reported symptom, and no content test catches it, because the
+ * elements stay in the DOM and "visible", just off the screen.
  */
 test.describe('no screen scrolls horizontally', () => {
   const detail = {
@@ -167,14 +167,14 @@ test.describe('no screen scrolls horizontally', () => {
 })
 
 /**
- * O painel do MoreMenu é `absolute z-50`, mas o z-index dele só vale DENTRO do rail: `position:
- * sticky` cria contexto de empilhamento sempre, independente de z-index. Sem z-index no <nav>, o
- * rail inteiro (painel incluído) pinta na camada z-auto da raiz, em ordem de árvore — e qualquer
- * elemento POSICIONADO que venha depois no DOM ganha dele. É o caso do `.card` do daisyUI
- * (position: relative), usado na tela de Prioridades: os cards apareciam na frente do menu.
+ * The MoreMenu panel is `absolute z-50`, but its z-index only counts INSIDE the rail: `position:
+ * sticky` always creates a stacking context, regardless of z-index. Without a z-index on the <nav>,
+ * the whole rail (panel included) paints in the root's z-auto layer, in tree order — and any
+ * POSITIONED element that comes later in the DOM beats it. That's the case of daisyUI's `.card`
+ * (position: relative), used on the Priorities screen: the cards showed up in front of the menu.
  *
- * A asserção usa elementFromPoint no centro de um item do menu — é o teste de "quem está na
- * frente" que o usuário faz com o clique, sem depender do timeout de actionability.
+ * The assertion uses elementFromPoint at the center of a menu item — it's the "who's in front" test
+ * the user does with the click, without depending on the actionability timeout.
  */
 const samplePriorities = {
   criteria_order: ['uncensored', 'source', 'resolution'],
@@ -188,8 +188,9 @@ const samplePriorities = {
 
 test('the More menu paints above the page content', async ({ page }) => {
   await setupBusyStatusPage(page)
-  // Prioridades morre no load sem estes dois: `config.priorities` (ausente do baseConfig) e o
-  // GET dos defaults. Sem eles não haveria card nenhum na tela e o teste passaria a vazio.
+  // Priorities dies on load without these two: `config.priorities` (absent from baseConfig) and the
+  // defaults GET. Without them there would be no card on the screen and the test would pass
+  // vacuously.
   await page.route('**/api/v1/config', route =>
     route.fulfill({ json: { success: true, data: { ...baseConfig.data, priorities: samplePriorities } } }),
   )
@@ -199,8 +200,8 @@ test('the More menu paints above the page content', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/#/priorities')
 
-  // Os cards existem de verdade — é o que precisa ficar ATRÁS do menu. `exact` porque a tela
-  // também tem um rótulo sr-only "Usar uncensored", e sem isso o locator casa dois elementos.
+  // The cards really exist — they're what has to stay BEHIND the menu. `exact` because the screen
+  // also has an sr-only label "Use uncensored", and without it the locator matches two elements.
   await expect(page.getByText('uncensored', { exact: true })).toBeVisible()
 
   const rail = page.getByRole('navigation', { name: 'Main' })
@@ -217,10 +218,10 @@ test('the More menu paints above the page content', async ({ page }) => {
   })
   expect(coveredBy, 'page content paints over the More menu').toBeNull()
 
-  // O backdrop (`fixed inset-0 z-40`) vive dentro do rail, ou seja, dentro do contexto z-30 —
-  // um clique sobre um card ainda tem de cair nele e fechar o menu. `page.mouse` e não
-  // `locator.click()`: o locator do card seria recusado justamente por estar coberto pelo
-  // backdrop, que é o comportamento que se quer.
+  // The backdrop (`fixed inset-0 z-40`) lives inside the rail, i.e. inside the z-30 context — a
+  // click over a card still has to land on it and close the menu. `page.mouse` and not
+  // `locator.click()`: the card's locator would be refused precisely for being covered by the
+  // backdrop, which is the wanted behavior.
   const cardPoint = await page.getByText('uncensored', { exact: true }).evaluate((el: HTMLElement) => {
     const rect = el.getBoundingClientRect()
     return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
@@ -230,10 +231,10 @@ test('the More menu paints above the page content', async ({ page }) => {
 })
 
 /**
- * Contrapartida do z-index do rail: o que precisa ficar ACIMA dele continua acima. Modal/Toasts
- * são `fixed z-50` na raiz — maior que os 30 do rail —, mas isso só vale enquanto nenhum
- * ancestral deles virar contexto de empilhamento; a asserção é sobre quem pinta na frente, não
- * sobre o número.
+ * The counterpart of the rail's z-index: what has to stay ABOVE it still does. Modal/Toasts are
+ * `fixed z-50` at the root — higher than the rail's 30 —, but that only holds while none of their
+ * ancestors becomes a stacking context; the assertion is about who paints in front, not about the
+ * number.
  */
 test('a modal still paints above the nav rail', async ({ page }) => {
   await setupBusyStatusPage(page)
@@ -245,7 +246,7 @@ test('a modal still paints above the nav rail', async ({ page }) => {
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
 
-  // O diálogo é centralizado na viewport, então sua borda esquerda cai sobre a faixa do rail.
+  // The dialog is centered in the viewport, so its left edge falls over the rail's strip.
   const coveredBy = await dialog.evaluate((el: HTMLElement) => {
     const rect = el.getBoundingClientRect()
     const top = document.elementFromPoint(rect.x + 4, rect.y + rect.height / 2)
@@ -256,15 +257,14 @@ test('a modal still paints above the nav rail', async ({ page }) => {
 })
 
 /**
- * Cabeçalho de Downloads em tela estreita. O bloco do título é `flex-1`, ou seja, flex-basis 0%
- * — e a quebra de linha de um container `flex-wrap` usa o tamanho principal HIPOTÉTICO de cada
- * item, que com basis 0 é ~0. Resultado: a caixa de velocidade nunca ia para a linha de baixo, o
- * bloco do título ficava com as sobras (~30px no print do usuário) e o subtítulo virava uma
- * palavra por linha. O piso vem de `min-w-`, que ENTRA nesse tamanho hipotético — é por isso que
- * a correção é uma largura mínima e não um breakpoint: um `sm:flex-row` consertaria 375px e
- * deixaria 640px ainda espremido.
+ * Downloads header on a narrow screen. The title block is `flex-1`, i.e. flex-basis 0% — and a
+ * `flex-wrap` container's line breaking uses each item's HYPOTHETICAL main size, which with basis 0
+ * is ~0. Result: the speed box never went to the line below, the title block got the leftovers
+ * (~30px in the user's screenshot) and the subtitle became one word per line. The floor comes from
+ * `min-w-`, which GOES INTO that hypothetical size — that's why the fix is a minimum width and not
+ * a breakpoint: an `sm:flex-row` would fix 375px and leave 640px still squeezed.
  *
- * A asserção conta linhas de verdade (uma retângulo por line box via Range), não altura em px.
+ * The assertion counts real lines (one rect per line box via Range), not height in px.
  */
 for (const width of [375, 414, 500, 640, 768, 900, 1280]) {
   test(`the downloads header subtitle is not squeezed to one word per line at ${width}px`, async ({
@@ -287,10 +287,10 @@ for (const width of [375, 414, 500, 640, 768, 900, 1280]) {
 }
 
 /**
- * As pills de filtro de Downloads viviam numa faixa `overflow-x-auto`: em tela estreita as
- * últimas ("Seeding", "Problems") ficavam fora da vista atrás de um scroll horizontal, e a
- * contagem que elas existem para mostrar — "tem algo ali?" — só aparecia depois de arrastar.
- * Agora a faixa quebra para a linha de baixo, então TODAS ficam sempre visíveis.
+ * The Downloads filter pills lived in an `overflow-x-auto` strip: on a narrow screen the last ones
+ * ("Seeding", "Problems") stayed out of view behind a horizontal scroll, and the count they exist
+ * to show — "is there something there?" — only showed up after dragging. Now the strip wraps to the
+ * line below, so ALL of them are always visible.
  */
 for (const width of [375, 414, 640]) {
   test(`every downloads filter pill is visible without horizontal scroll at ${width}px`, async ({
@@ -306,11 +306,11 @@ for (const width of [375, 414, 640]) {
 
     for (const pill of pills) {
       await expect(pill).toBeVisible()
-      // ratio 1: a pill INTEIRA na viewport, não uma borda dela.
+      // ratio 1: the WHOLE pill in the viewport, not an edge of it.
       await expect(pill).toBeInViewport({ ratio: 1 })
     }
 
-    // E a faixa não é um container de scroll: nada escondido para o lado.
+    // And the strip isn't a scroll container: nothing hidden to the side.
     const scrolls = await pills[0].evaluate((el: HTMLElement) => {
       const row = el.parentElement as HTMLElement
       return row.scrollWidth > row.clientWidth
@@ -330,7 +330,7 @@ test('the nav rail stays pinned to the top of the viewport while the page scroll
 
   const before = await rail.boundingBox()
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-  // Confere que a página realmente rolou; senão o teste passaria por vacuidade.
+  // Checks the page really scrolled; otherwise the test would pass vacuously.
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(200)
   const after = await rail.boundingBox()
 
@@ -340,13 +340,13 @@ test('the nav rail stays pinned to the top of the viewport while the page scroll
 })
 
 /**
- * Índice do Config no mobile. Mesma regressão das pills de filtro de Downloads, mesmo remédio:
- * a faixa tinha 358px de espaço para 644px de conteúdo em 390px, então "Torrent search" e os
- * dois links de saída ficavam atrás de um arrasto lateral. `flex-wrap` põe tudo na tela.
+ * Config index on mobile. The same regression as the Downloads filter pills, the same remedy: the
+ * strip had 358px of space for 644px of content at 390px, so "Torrent search" and the two exit
+ * links were behind a sideways drag. `flex-wrap` puts everything on screen.
  *
- * A asserção é dupla de propósito: "todo item inteiro na viewport" pega o item escondido, e
- * "a faixa não é container de scroll" pega o retorno de `overflow-x-auto` mesmo que por sorte
- * os itens caibam num idioma curto.
+ * The assertion is double on purpose: "every item whole in the viewport" catches the hidden item,
+ * and "the strip isn't a scroll container" catches `overflow-x-auto` coming back even if by luck
+ * the items fit in a short language.
  */
 for (const width of [375, 390, 414]) {
   test(`every config group and exit link is visible without horizontal scroll at ${width}px`, async ({
@@ -362,7 +362,7 @@ for (const width of [375, 390, 414]) {
 
     const items = [
       index.getByRole('button', { name: /^library$/i }),
-      index.getByRole('button', { name: /^anilist$/i }),
+      index.getByRole('button', { name: /^lists$/i }),
       index.getByRole('button', { name: /^downloads$/i }),
       index.getByRole('button', { name: /^torrent search$/i }),
       index.getByRole('link', { name: /priorities/i }),
@@ -370,7 +370,7 @@ for (const width of [375, 390, 414]) {
     ]
 
     for (const item of items) {
-      // ratio 1: o item INTEIRO na viewport, não uma borda dele.
+      // ratio 1: the WHOLE item in the viewport, not an edge of it.
       await expect(item).toBeInViewport({ ratio: 1 })
     }
 
@@ -380,14 +380,14 @@ for (const width of [375, 390, 414]) {
 }
 
 /**
- * Ações do daemon no cabeçalho do Status. A fileira era `flex shrink-0 gap-2`: não podia
- * encolher NEM quebrar, então sua largura era a soma dos três botões para sempre — 358px em
- * inglês, 438px em pt-BR — e em tela estreita "Parar Daemon" saía pela direita.
+ * Daemon actions in the Status header. The row was `flex shrink-0 gap-2`: it could neither shrink
+ * NOR wrap, so its width was the sum of the three buttons forever — 358px in English, 438px in
+ * pt-BR — and on a narrow screen "Stop Daemon" went off the right edge.
  *
- * Parametrizado por LOCALE de propósito. O resto da suíte roda só em `en`, o default, e foi
- * exatamente isso que deixou o bug passar: em inglês os rótulos são ~80px mais curtos e a
- * fileira só estourava abaixo de 375px, fora das larguras testadas. pt-BR é o idioma mais
- * longo dos dois; um teste de largura que só roda em `en` mede o caso fácil.
+ * Parametrized by LOCALE on purpose. The rest of the suite runs only in `en`, the default, and
+ * that's exactly what let the bug through: in English the labels are ~80px shorter and the row only
+ * overflowed below 375px, outside the tested widths. pt-BR is the longer of the two languages; a
+ * width test that only runs in `en` measures the easy case.
  */
 for (const locale of ['en', 'pt-BR'] as const) {
   for (const width of [320, 375, 390, 414] as const) {
@@ -399,9 +399,9 @@ for (const locale of ['en', 'pt-BR'] as const) {
       await page.setViewportSize({ width, height: 844 })
       await page.goto('/#/status')
 
-      // Escopado à fileira do cabeçalho: "+ Add anime" também existe no empty state da lista e
-      // na NavTabBar do mobile, então o nome acessível sozinho casa três elementos. "Forçar
-      // verificação" só existe aqui, e serve de âncora para chegar na fileira.
+      // Scoped to the header row: "+ Add anime" also exists in the list's empty state and in the
+      // mobile NavTabBar, so the accessible name alone matches three elements. "Forçar verificação"
+      // (Force check) only exists here, and serves as the anchor to reach the row.
       const row = page
         .getByRole('button', { name: /forçar verificação|force check/i })
         .locator('..')
@@ -412,11 +412,11 @@ for (const locale of ['en', 'pt-BR'] as const) {
         row.getByRole('button', { name: /parar daemon|stop daemon/i }),
       ]
       for (const action of actions) {
-        // ratio 1: o botão INTEIRO na viewport, não uma borda dele.
+        // ratio 1: the WHOLE button in the viewport, not an edge of it.
         await expect(action).toBeInViewport({ ratio: 1 })
       }
 
-      // E a página não ganhou scroll horizontal — é o sintoma que o usuário vê.
+      // And the page didn't gain a horizontal scroll — it's the symptom the user sees.
       const over = await page.evaluate(
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
       )

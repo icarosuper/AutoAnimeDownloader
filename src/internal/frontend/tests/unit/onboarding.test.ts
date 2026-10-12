@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { onboardingSteps, allDone } from '../../src/lib/domain/onboarding'
 import type { AnimeInfo, Config, StatusResponse } from '../../src/lib/api/client'
 
-type OnboardingConfig = Pick<Config, 'completed_anime_path' | 'anilist_usernames'>
+type OnboardingConfig = Pick<Config, 'completed_anime_path' | 'anilist_usernames' | 'mal_usernames'>
 
 function makeConfig(overrides: Partial<OnboardingConfig> = {}): OnboardingConfig {
   return { completed_anime_path: '', anilist_usernames: [], ...overrides }
@@ -38,70 +38,75 @@ function makeStatus(lastCheck: string): StatusResponse {
 
 const VALID_CHECK = makeStatus('2026-08-19T10:00:00Z')
 
-describe('onboardingSteps — item 1 (pasta da biblioteca)', () => {
-  it('fica verde com um caminho preenchido', () => {
+describe('onboardingSteps — item 1 (library folder)', () => {
+  it('is green with a filled-in path', () => {
     const steps = onboardingSteps(makeConfig({ completed_anime_path: '/completed' }), [], VALID_CHECK)
     expect(steps.library).toBe(true)
   })
 
-  it('fica vermelho com caminho vazio', () => {
+  it('is red with an empty path', () => {
     expect(onboardingSteps(makeConfig(), [], VALID_CHECK).library).toBe(false)
   })
 
-  it('fica vermelho com caminho só de espaços', () => {
+  it('is red with a whitespace-only path', () => {
     const steps = onboardingSteps(makeConfig({ completed_anime_path: '   ' }), [], VALID_CHECK)
     expect(steps.library).toBe(false)
   })
 })
 
-// O "ou" do item 2 é a regra que estes três casos protegem: a conta AniList deixou de ser
-// obrigatória quando animes avulsos passaram a existir.
-describe('onboardingSteps — item 2 (fonte de animes)', () => {
-  it('fica verde com username do AniList e ZERO animes', () => {
+// The "or" of item 2 is the rule these cases protect: the AniList account stopped being required
+// when standalone animes came to exist, and a MyAnimeList account counts the same.
+describe('onboardingSteps — item 2 (anime source)', () => {
+  it('is green with an AniList username and ZERO animes', () => {
     const steps = onboardingSteps(makeConfig({ anilist_usernames: ['icaro'] }), [], VALID_CHECK)
     expect(steps.source).toBe(true)
   })
 
-  it('fica verde com ZERO usernames e um anime', () => {
+  it('is green with a MyAnimeList username and ZERO animes', () => {
+    const steps = onboardingSteps(makeConfig({ mal_usernames: ['icaro'] }), [], VALID_CHECK)
+    expect(steps.source).toBe(true)
+  })
+
+  it('is green with ZERO usernames and one anime', () => {
     const steps = onboardingSteps(makeConfig(), [makeAnime()], VALID_CHECK)
     expect(steps.source).toBe(true)
   })
 
-  it('fica vermelho com os dois vazios', () => {
+  it('is red with everything empty', () => {
     expect(onboardingSteps(makeConfig(), [], VALID_CHECK).source).toBe(false)
   })
 })
 
-describe('onboardingSteps — item 3 (primeira verificação)', () => {
-  it('fica vermelho sem status', () => {
+describe('onboardingSteps — item 3 (first check)', () => {
+  it('is red with no status', () => {
     expect(onboardingSteps(makeConfig(), [], null).firstCheck).toBe(false)
   })
 
-  it('fica vermelho com last_check vazio', () => {
+  it('is red with an empty last_check', () => {
     expect(onboardingSteps(makeConfig(), [], makeStatus('')).firstCheck).toBe(false)
   })
 
-  // O zero-value de time.Time do Go serializa como uma data perfeitamente parseável — só
-  // testar string vazia deixaria o item verde num daemon que nunca rodou.
-  it('fica vermelho com o zero-value do Go', () => {
+  // Go's time.Time zero value serializes as a perfectly parseable date — testing only for an
+  // empty string would leave the item green on a daemon that never ran.
+  it("is red with Go's zero value", () => {
     expect(onboardingSteps(makeConfig(), [], makeStatus('0001-01-01T00:00:00Z')).firstCheck).toBe(false)
   })
 
-  it('fica vermelho com uma data impossível de parsear', () => {
-    expect(onboardingSteps(makeConfig(), [], makeStatus('não é data')).firstCheck).toBe(false)
+  it('is red with an unparseable date', () => {
+    expect(onboardingSteps(makeConfig(), [], makeStatus('not a date')).firstCheck).toBe(false)
   })
 
-  it('fica verde com uma data recente', () => {
+  it('is green with a recent date', () => {
     expect(onboardingSteps(makeConfig(), [], VALID_CHECK).firstCheck).toBe(true)
   })
 })
 
 describe('allDone', () => {
-  it('é verdadeiro só com os três verdes', () => {
+  it('is true only with all three green', () => {
     expect(allDone({ library: true, source: true, firstCheck: true })).toBe(true)
   })
 
-  it('é falso se qualquer um estiver vermelho', () => {
+  it('is false if any of them is red', () => {
     expect(allDone({ library: false, source: true, firstCheck: true })).toBe(false)
     expect(allDone({ library: true, source: false, firstCheck: true })).toBe(false)
     expect(allDone({ library: true, source: true, firstCheck: false })).toBe(false)

@@ -18,9 +18,9 @@ func mockList(calls *int, body string) func() {
 	})
 }
 
-// TestGetFrontendAnimeList_CachesWithinTTL trava o conserto do 429: /api/v1/animes tem poll do
-// frontend a cada 30s por aba, e sem cache cada aba aberta virava um request por conta contra o
-// limite de 30/min da AniList — o 429 resultante derrubava o ciclo de download do daemon junto.
+// TestGetFrontendAnimeList_CachesWithinTTL locks the 429 fix: /api/v1/animes is polled by the
+// frontend every 30s per tab, and without a cache each open tab became one request per account
+// against AniList's 30/min limit — the resulting 429 took the daemon's download cycle down with it.
 func TestGetFrontendAnimeList_CachesWithinTTL(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"mediaList":[{"id":1,"progress":2,"media":{"id":10}}]}}}`)()
@@ -35,24 +35,24 @@ func TestGetFrontendAnimeList_CachesWithinTTL(t *testing.T) {
 		t.Fatalf("segunda busca falhou: %v", err)
 	}
 	if calls != 1 {
-		t.Fatalf("esperava 1 request para a AniList, obteve %d", calls)
+		t.Fatalf("want 1 request to AniList, got %d", calls)
 	}
 	if len(second.Data.Page.MediaList) != 1 {
-		t.Fatalf("cache devolveu %d entradas, esperava 1", len(second.Data.Page.MediaList))
+		t.Fatalf("cache returned %d entries, want 1", len(second.Data.Page.MediaList))
 	}
 
-	// Outra conta e outra combinacao de status sao chaves diferentes: precisam buscar.
+	// Another account and another status combination are different keys: they must fetch.
 	if _, err := GetFrontendAnimeList("outra", statuses); err != nil {
 		t.Fatalf("busca de outra conta falhou: %v", err)
 	}
 	if calls != 2 {
-		t.Fatalf("esperava 2 requests apos trocar de conta, obteve %d", calls)
+		t.Fatalf("want 2 requests after switching account, got %d", calls)
 	}
 }
 
-// TestGetFrontendAnimeList_CacheHandsOutCopies garante que o overlay de customLists feito por
-// fetchAniListEntries no resultado nao vaza para o proximo chamador (nem vira corrida entre
-// dois requests concorrentes de /api/v1/animes).
+// TestGetFrontendAnimeList_CacheHandsOutCopies makes sure the customLists overlay
+// fetchAniListEntries applies to the result doesn't leak to the next caller (nor become a race
+// between two concurrent /api/v1/animes requests).
 func TestGetFrontendAnimeList_CacheHandsOutCopies(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"mediaList":[{"id":1,"media":{"id":10}}]}}}`)()
@@ -73,8 +73,8 @@ func TestGetFrontendAnimeList_CacheHandsOutCopies(t *testing.T) {
 	}
 }
 
-// TestGetCustomListsMap_CachesEmptyResult: uma conta sem custom lists nao pode gerar um request
-// por poll do frontend. O TTL curto (customListsEmptyTTL) e o que limita isso.
+// TestGetCustomListsMap_CachesEmptyResult: an account with no custom lists can't generate one
+// request per frontend poll. The short TTL (customListsEmptyTTL) is what limits that.
 func TestGetCustomListsMap_CachesEmptyResult(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"mediaList":[{"id":1,"customLists":null}]}}}`)()
@@ -84,11 +84,11 @@ func TestGetCustomListsMap_CachesEmptyResult(t *testing.T) {
 	GetCustomListsMap("user", statuses, PriorityCritical)
 
 	if calls != 1 {
-		t.Fatalf("esperava 1 request para a AniList, obteve %d", calls)
+		t.Fatalf("want 1 request to AniList, got %d", calls)
 	}
 }
 
-// TestMockAniListDo_ClearsCaches: sem isso um teste herdaria as respostas do teste anterior.
+// TestMockAniListDo_ClearsCaches: without this a test would inherit the previous test's responses.
 func TestMockAniListDo_ClearsCaches(t *testing.T) {
 	firstCalls := 0
 	restore := mockList(&firstCalls, `{"data":{"Page":{"mediaList":[{"id":1,"media":{"id":10}}]}}}`)
@@ -102,16 +102,16 @@ func TestMockAniListDo_ClearsCaches(t *testing.T) {
 		t.Fatalf("busca falhou: %v", err)
 	}
 	if secondCalls != 1 {
-		t.Fatalf("esperava que o novo mock fosse consultado, requests=%d", secondCalls)
+		t.Fatalf("want the new mock to be queried, requests=%d", secondCalls)
 	}
 	if len(resp.Data.Page.MediaList) != 0 {
-		t.Errorf("resposta veio do cache do teste anterior: %+v", resp.Data.Page.MediaList)
+		t.Errorf("response came from the previous test's cache: %+v", resp.Data.Page.MediaList)
 	}
 }
 
-// TestGetAnimeInfoByIDs_ChunksPerAccount: o refresh de orfaos de GET /animes roda a cada poll de
-// 30s por aba. Um request por anime por conta era a rajada da decisions.md #65; o contrato aqui e
-// ceil(ids/50) por conta, e nada mais.
+// TestGetAnimeInfoByIDs_ChunksPerAccount: the GET /animes orphan refresh runs on every 30s poll per
+// tab. One request per anime per account was the burst of decisions.md #65; the contract here is
+// ceil(ids/50) per account, and nothing more.
 func TestGetAnimeInfoByIDs_ChunksPerAccount(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"mediaList":[]}}}`)()
@@ -121,17 +121,17 @@ func TestGetAnimeInfoByIDs_ChunksPerAccount(t *testing.T) {
 		ids = append(ids, 1000+i)
 	}
 
-	if _, err := GetAnimeInfoByIDs(ids, []string{"a", "b"}); err != nil {
+	if _, err := GetAnimeInfoByIDs(ids, []string{"a", "b"}, nil); err != nil {
 		t.Fatalf("GetAnimeInfoByIDs: %v", err)
 	}
 	if calls != 4 {
-		t.Fatalf("60 ids em 2 contas com perPage 50 sao 4 requests, veio %d", calls)
+		t.Fatalf("60 ids in 2 accounts with perPage 50 are 4 requests, got %d", calls)
 	}
 }
 
-// TestGetAnimeInfoByIDs_KeepsLowestProgressAcrossAccounts: mesma regra de GetAnimeInfo e de
-// DedupeByMedia — episodio so e "assistido" quando TODAS as contas o assistiram. Sem isso o
-// refresh de orfaos rebaixaria o progresso da conta atrasada.
+// TestGetAnimeInfoByIDs_KeepsLowestProgressAcrossAccounts: the same rule as GetAnimeInfo and
+// DedupeByMedia — an episode is only "watched" when ALL accounts watched it. Without this the
+// orphan refresh would lower the progress of the account that's behind.
 func TestGetAnimeInfoByIDs_KeepsLowestProgressAcrossAccounts(t *testing.T) {
 	call := 0
 	defer MockAniListDo(func(_ *http.Request) (*http.Response, error) {
@@ -147,35 +147,35 @@ func TestGetAnimeInfoByIDs_KeepsLowestProgressAcrossAccounts(t *testing.T) {
 		}, nil
 	})()
 
-	byMedia, err := GetAnimeInfoByIDs([]int{21}, []string{"a", "b"})
+	byMedia, err := GetAnimeInfoByIDs([]int{21}, []string{"a", "b"}, nil)
 	if err != nil {
 		t.Fatalf("GetAnimeInfoByIDs: %v", err)
 	}
 	if byMedia[21] == nil || byMedia[21].Progress != 3 {
-		t.Fatalf("quero o MENOR progresso das duas contas (3), veio %+v", byMedia[21])
+		t.Fatalf("want the LOWEST progress of the two accounts (3), got %+v", byMedia[21])
 	}
 }
 
-// TestGetAnimeInfoByIDs_UntrackedIDIsAbsent: id que nenhuma conta acompanha nao esta no mapa —
-// e o estado normal do anime tirado da lista com episodios ainda em disco, nao um erro.
+// TestGetAnimeInfoByIDs_UntrackedIDIsAbsent: an id no account tracks isn't in the map — it's the
+// normal state of an anime taken off the list with episodes still on disk, not an error.
 func TestGetAnimeInfoByIDs_UntrackedIDIsAbsent(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"mediaList":[{"id":1,"progress":2,"media":{"id":21}}]}}}`)()
 
-	byMedia, err := GetAnimeInfoByIDs([]int{21, 99}, []string{"a"})
+	byMedia, err := GetAnimeInfoByIDs([]int{21, 99}, []string{"a"}, nil)
 	if err != nil {
-		t.Fatalf("id sem entrada nao e erro: %v", err)
+		t.Fatalf("an id with no entry is not an error: %v", err)
 	}
 	if byMedia[21] == nil {
-		t.Fatal("o id acompanhado precisa estar no mapa")
+		t.Fatal("the tracked id must be in the map")
 	}
 	if _, ok := byMedia[99]; ok {
-		t.Fatalf("o id que ninguem acompanha nao pode estar no mapa, veio %+v", byMedia[99])
+		t.Fatalf("the id nobody tracks can't be in the map, got %+v", byMedia[99])
 	}
 }
 
-// TestGetAnimeInfoByIDs_PartialFailureKeepsWhatCame: o erro de uma conta nao pode zerar o que a
-// outra respondeu — a tela ficaria sem capa e sem nome em toda a lista por causa de uma conta.
+// TestGetAnimeInfoByIDs_PartialFailureKeepsWhatCame: one account's error can't wipe what the other
+// answered — the screen would lose cover and name across the whole list because of one account.
 func TestGetAnimeInfoByIDs_PartialFailureKeepsWhatCame(t *testing.T) {
 	call := 0
 	defer MockAniListDo(func(_ *http.Request) (*http.Response, error) {
@@ -189,11 +189,11 @@ func TestGetAnimeInfoByIDs_PartialFailureKeepsWhatCame(t *testing.T) {
 		}, nil
 	})()
 
-	byMedia, err := GetAnimeInfoByIDs([]int{21}, []string{"a", "b"})
+	byMedia, err := GetAnimeInfoByIDs([]int{21}, []string{"a", "b"}, nil)
 	if err == nil {
-		t.Fatal("a falha de uma conta precisa ser reportada")
+		t.Fatal("one account's failure must be reported")
 	}
 	if byMedia[21] == nil {
-		t.Fatal("o erro nao pode invalidar o que a outra conta respondeu")
+		t.Fatal("the error can't invalidate what the other account answered")
 	}
 }

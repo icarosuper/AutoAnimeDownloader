@@ -7,9 +7,9 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// loadStandaloneSet le o arquivo de avulsos como conjunto. Uma falha de leitura nao derruba o
-// request: o pior efeito e a tela deixar de mostrar o chip e o detalhe do avulso voltar a 404,
-// o que ja e o comportamento de quem nao tem avulso nenhum.
+// loadStandaloneSet reads the standalone file as a set. A read failure doesn't take the request
+// down: the worst effect is the screen not showing the chip and the standalone's detail going back
+// to 404, which is already the behavior for someone with no standalone anime at all.
 func loadStandaloneSet(fm FileManagerInterface) map[int]bool {
 	ids, err := fm.LoadStandaloneAnimes()
 	if err != nil {
@@ -23,25 +23,25 @@ func loadStandaloneSet(fm FileManagerInterface) map[int]bool {
 	return set
 }
 
-// resolveMediaList le um anime pelo media id com o fallback dos avulsos.
+// resolveMediaList reads an anime by media id with the standalone fallback.
 //
-// anilist.GetAnimeInfo devolve (nil, nil) para quem nao esta na lista de conta nenhuma, e um
-// avulso e exatamente esse caso — sem o fallback a tela de detalhe dele nao abre. O fallback e
-// condicionado ao conjunto de avulsos de proposito: sem isso qualquer media id da AniList
-// passaria a responder pelas rotas /animes/{id}/*, e o 404 de "esse anime nao e seu" sumiria.
-func resolveMediaList(fm FileManagerInterface, id int, usernames []string, standalone map[int]bool) (*anilist.MediaList, error) {
-	ml, err := anilist.GetAnimeInfo(id, usernames, anilist.PriorityCritical)
-	// Servido do cache local conta como resposta: era esta tela que ficava inteira inacessivel
-	// com a AniList fora do ar, e tudo o que ela faz alem de mostrar a lista de episodios
-	// (bloquear, apagar, re-baixar, marcar como manual) ja e local. O banner do sistema avisa
-	// que a AniList esta degradada; devolver 500 aqui so escondia o que ainda funcionava.
+// anilist.GetAnimeInfo returns (nil, nil) for an anime in no account's list, and a standalone anime
+// is exactly that case — without the fallback its detail screen doesn't open. The fallback is gated
+// on the standalone set on purpose: without that any AniList media id would start answering on the
+// /animes/{id}/* routes, and the "this anime isn't yours" 404 would disappear.
+func resolveMediaList(fm FileManagerInterface, id int, usernames, malUsers []string, standalone map[int]bool) (*anilist.MediaList, error) {
+	ml, err := anilist.GetAnimeInfo(id, usernames, malUsers, anilist.PriorityCritical)
+	// Served from the local cache counts as an answer: this was the screen that became entirely
+	// unreachable with AniList down, and everything it does besides showing the episode list (block,
+	// delete, re-download, mark as manual) is already local. The system banner says AniList is
+	// degraded; returning 500 here only hid what still worked.
 	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 		return nil, err
 	}
 	if ml != nil || !standalone[id] {
-		// nil aqui, e nao err: neste ponto err e ErrFromCache ou nada, e o unico chamador
-		// (handleAnimeEpisodes) transformaria qualquer erro em 500 — que e exatamente o que se
-		// esta consertando. Quem avisa que a AniList caiu e o banner, por anilist.Health.
+		// nil here, not err: at this point err is ErrFromCache or nothing, and the only caller
+		// (handleAnimeEpisodes) would turn any error into a 500 — which is exactly what's being fixed.
+		// What tells the user AniList went down is the banner, through anilist.Health.
 		return ml, nil
 	}
 	ml, err = anilist.GetMediaByID(id, anilist.PriorityCritical)
@@ -51,12 +51,12 @@ func resolveMediaList(fm FileManagerInterface, id int, usernames []string, stand
 	return withStandaloneProgress(fm, ml), nil
 }
 
-// appendStandaloneEntries junta os avulsos as entradas vindas das listas da AniList, pulando os
-// que ja aparecem nelas — a mesma regra (e a mesma razao) do append do daemon: a entrada real
-// tem progresso e a sintetica nao.
+// appendStandaloneEntries adds the standalone animes to the entries from the AniList lists,
+// skipping the ones already in them — the same rule (and the same reason) as the daemon's append:
+// the real entry has progress and the synthetic one doesn't.
 //
-// covered e atualizado no caminho para que refreshOrphanAnimes nao tente buscar de novo, por
-// conta, um anime que nenhuma conta acompanha.
+// covered is updated along the way so refreshOrphanAnimes doesn't fetch again, per account, an
+// anime no account tracks.
 func appendStandaloneEntries(fm FileManagerInterface, entries []anilist.MediaList, standalone, covered map[int]bool) []anilist.MediaList {
 	pending := make([]int, 0, len(standalone))
 	for id := range standalone {
@@ -81,7 +81,7 @@ func appendStandaloneEntries(fm FileManagerInterface, entries []anilist.MediaLis
 	for _, id := range pending {
 		ml, ok := medias[id]
 		if !ok {
-			continue // ja avisado pelo erro do lote
+			continue // already reported by the batch error
 		}
 		if ml == nil {
 			logger.Logger.Warn().Int("media_id", id).
@@ -94,8 +94,8 @@ func appendStandaloneEntries(fm FileManagerInterface, entries []anilist.MediaLis
 	return entries
 }
 
-// withStandaloneProgress — ver o gemeo em daemon/standalone.go. Sem ele a tela mostraria 0
-// assistidos para um avulso cujo progresso o usuario acabou de gravar.
+// withStandaloneProgress — see its twin in daemon/standalone.go. Without it the screen would show 0
+// watched for a standalone anime whose progress the user just saved.
 func withStandaloneProgress(fm FileManagerInterface, ml *anilist.MediaList) *anilist.MediaList {
 	if ml == nil {
 		return nil

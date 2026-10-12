@@ -1,11 +1,10 @@
 <script lang="ts">
-  // Status — spec §9.1 (Fase 3). Continua sendo daemon E lista de animes (decisão D4): a tela
-  // "Biblioteca" separada do handoff não existe. Layout novo de cima para baixo: header com a
-  // pílula do daemon, card herói de velocidade, coluna direita (biblioteca + disco/próxima
-  // verificação) e a lista de animes.
+  // Status — spec §9.1 (Phase 3). It's still daemon AND anime list (decision D4): the handoff's
+  // separate "Library" screen doesn't exist. New layout from top to bottom: header with the daemon
+  // pill, speed hero card, right column (library + disk/next check) and the anime list.
   //
-  // A seção "Fila e problemas" do artboard 1b foi DESCARTADA de propósito (spec §9.1): é
-  // redundante com a tela de Downloads, que existe justamente para isso.
+  // The artboard 1b "Queue and problems" section was DROPPED on purpose (spec §9.1): it's redundant
+  // with the Downloads screen, which exists precisely for that.
   import { onMount, onDestroy } from "svelte";
   import { ChevronRight, Eye, Search, Unlink, X } from "@lucide/svelte";
   import {
@@ -58,9 +57,10 @@
   import { speedHistory } from "../lib/stores/speedHistory.js";
   import { stallTracker } from "../lib/stores/stallTracker.js";
 
-  // Intervalo do poll de torrents. Exposto como constante porque a nota "polling Ns" mostrada
-  // ao usuário (spec §8: a UI declara que progresso vem de polling HTTP, não do WebSocket) é
-  // derivada daqui — nunca um número escrito à mão no markup que possa divergir do timer.
+  // Torrents poll interval. Exposed as a constant because the "polling Ns" note shown to the user
+  // (spec §8: the UI states that progress comes from HTTP polling, not from the WebSocket) is
+  // derived from here — never a number written by hand in the markup that could drift from the
+  // timer.
   const TORRENTS_POLL_MS = 5000;
 
   // Reactive translations — re-evaluated when $locale changes, no remount needed
@@ -112,25 +112,26 @@
   let status: StatusResponse | null = null;
   let animes: AnimeInfo[] = [];
   let torrents: TorrentInfo[] = [];
-  // Relatório do último passe. Buscado junto do poll de torrents que esta tela já mantém —
-  // é a mesma cadência e o mesmo custo de uma requisição a mais por tick.
+  // Report of the last pass. Fetched together with the torrents poll this screen already keeps —
+  // the same cadence, and the cost of one more request per tick.
   let lastCheck: CheckReport | null = null;
   let checkInterval = 0;
-  // Sem biblioteca configurada não há para onde baixar: o botão de adicionar anime nasce
-  // desabilitado em vez de deixar o usuário descobrir isso só no 409 do POST. Durante o load
-  // ele fica habilitado para não piscar desabilitado antes do `getConfig()` responder.
-  // O caminho cru e os usernames, além do booleano: `onboardingSteps` recebe a config, não um
-  // booleano já cozido. Nenhuma requisição nova — os dois já vêm do mesmo `getConfig()`.
+  // With no library configured there's nowhere to download to: the add-anime button starts disabled
+  // instead of letting the user find out only at the POST's 409. During load it stays enabled so it
+  // doesn't flash disabled before `getConfig()` answers. The raw path and the usernames, beyond the
+  // boolean: `onboardingSteps` takes the config, not an already-cooked boolean. No new request —
+  // they all come from the same `getConfig()`.
   let completedPath = "";
   let anilistUsernames: string[] = [];
+  let malUsernames: string[] = [];
   let loading = true;
   let actionLoading = false;
   let search = "";
   let filterUnwatched = false;
   let filterStandalone = false;
   let now = Date.now();
-  // spec §8: o progresso não vem do WebSocket, vem do poll HTTP. Quando um poll falha a UI
-  // precisa DIZER isso em vez de continuar exibindo o último número como se fosse ao vivo.
+  // spec §8: progress doesn't come from the WebSocket, it comes from the HTTP poll. When a poll
+  // fails the UI has to SAY so instead of keeping the last number on screen as if it were live.
   let torrentsStale = false;
 
   let sortKey: SortKey = "last_download_date";
@@ -146,25 +147,25 @@
     : null;
 
   $: hasReport = !!lastCheck && (lastCheck.problems.length > 0 || lastCheck.limits.length > 0);
-  // O erro de passe vence o texto genérico quando existe; o genérico continua sendo o fallback
-  // para o instante entre o has_error chegar e o relatório ser buscado.
-  // A frase vem do CÓDIGO, nunca do texto cru do Go — que chegava a despejar o JSON de
-  // resposta da AniList no banner. O cru continua acessível, recolhido, para quem for reportar.
+  // The pass error beats the generic text when it exists; the generic one is still the fallback for
+  // the moment between has_error arriving and the report being fetched. The sentence comes from the
+  // CODE, never from Go's raw text — which used to dump AniList's response JSON into the banner.
+  // The raw one is still reachable, collapsed, for whoever reports it.
   $: passErrorText = lastCheck?.pass_error_code
     ? passErrorMessage(lastCheck.pass_error_code)
     : T && T.errorAlert;
   $: passErrorRaw = lastCheck?.pass_error ?? "";
   $: onboarding = onboardingSteps(
-    { completed_anime_path: completedPath, anilist_usernames: anilistUsernames },
+    { completed_anime_path: completedPath, anilist_usernames: anilistUsernames, mal_usernames: malUsernames },
     animes,
     status,
   );
-  // Derivado do mesmo lugar que o item ① do card: um `Boolean(completedPath)` paralelo não
-  // apara espaços, e aí o card pediria a pasta enquanto o botão de adicionar anime já estava
-  // habilitado — a contradição que tirar a regra do componente existe para evitar.
+  // Derived from the same place as the card's item ①: a parallel `Boolean(completedPath)` doesn't
+  // trim spaces, and then the card would ask for the folder while the add-anime button was already
+  // enabled — the contradiction that taking the rule out of the component exists to avoid.
   $: libraryConfigured = loading || onboarding.library;
-  // Título e dica de cada passo na ordem em que são numerados. Reativo porque `checkInterval`
-  // chega depois do `getConfig()` e `$locale` pode mudar em tempo de execução.
+  // Title and hint of each step in the order they're numbered. Reactive because `checkInterval`
+  // arrives after `getConfig()` and `$locale` can change at runtime.
   $: onboardingList = [
     {
       id: ONBOARDING_STEP_IDS[0],
@@ -182,14 +183,15 @@
       hint: $locale && m.onboarding_step_check_hint({ minutes: checkInterval }),
     },
   ];
-  // Três saídas: marcar os três à mão, dispensar, ou o daemon já estar de fato configurado e
-  // rodando (aí o card nunca aparece, para não ensinar o óbvio a quem já usa o app).
+  // Three ways out: marking the three by hand, dismissing, or the daemon already actually being
+  // configured and running (then the card never shows, so as not to teach the obvious to someone
+  // already using the app).
   $: showOnboarding =
     !allDone(onboarding) &&
     !$onboardingDismissed &&
     !ONBOARDING_STEP_IDS.every((id) => $onboardingDone.includes(id));
 
-  // Servidor manda: disk_low é o mesmo limiar que faz o daemon parar de adicionar torrents.
+  // The server rules: disk_low is the same threshold that makes the daemon stop adding torrents.
   $: diskSpaceLow = status?.disk_low ?? false;
 
   $: speeds = totalSpeeds(torrents);
@@ -198,8 +200,8 @@
   $: activeDownloads = torrents.filter((t) => t.status === "downloading");
   $: seedingCount = torrents.filter((t) => t.status === "seeding").length;
 
-  // Resumo da biblioteca: soma dos breakdowns já normalizados (não dos campos crus), para que
-  // o agregado obedeça à mesma invariante watched <= downloaded <= released <= total.
+  // Library summary: the sum of the already normalized breakdowns (not of the raw fields), so the
+  // aggregate obeys the same invariant watched <= downloaded <= released <= total.
   $: libraryTotals = animes.reduce(
     (acc, a) => {
       const b = breakdown(a);
@@ -214,8 +216,8 @@
   );
 
   function chipLabel(state: AnimeChipState): string {
-    // `deriveAnimeChip` devolve chave + números crus, nunca texto (ver o comentário de
-    // i18n em lib/domain/animeState.ts). A tradução acontece aqui.
+    // `deriveAnimeChip` returns a key + raw numbers, never text (see the i18n comment in
+    // lib/domain/animeState.ts). The translation happens here.
     switch (state.key) {
       case "blacklisted":
         return m.chip_blacklisted();
@@ -236,8 +238,8 @@
     }
   }
 
-  // Uma passada só monta tudo que cada linha precisa. Depende de $locale (textos), `torrents`
-  // e $stallTracker (chip) e `now` (limiar de "sem seeds" e tempo relativo).
+  // A single pass builds everything each row needs. Depends on $locale (texts), `torrents` and
+  // $stallTracker (chip) and `now` ("no seeds" threshold and relative time).
   $: rows =
     $locale && sortedAnimes.map((anime) => {
       const chip = deriveAnimeChip(anime, torrents, now, $stallTracker);
@@ -247,9 +249,9 @@
         chip,
         chipText: chipLabel(chip),
         breakdown: b,
-        // Cru ("em 2 dias"), nao a frase pronta: no desktop ele cai numa coluna que ja tem
-        // o rotulo "Proximo ep." em cima, e repetir ali ficaria "Proximo ep. | Prox. ep. em
-        // 2 dias". O card mobile, que nao tem cabecalho de coluna, monta a frase inteira.
+        // Raw ("in 2 days"), not the ready sentence: on desktop it lands in a column that already
+        // has the "Next ep." label on top, and repeating it there would read "Next ep. | Next ep.
+        // in 2 days". The mobile card, which has no column header, builds the whole sentence.
         nextAiringWhen: nextAiringIn(anime.next_airing_at, now, $locale),
         href: anime.anime_id ? `#/status/${anime.anime_id}` : undefined,
         lastDownload: formatTimeAgo(anime.last_download_date) || formatDate(anime.last_download_date),
@@ -264,8 +266,8 @@
         ? m.badge_checking()
         : m.badge_stopped());
 
-  // Rodando e verificando são estados "vivos" — só eles ganham o PulseDot (spec §6 restringe o
-  // pulso a indicadores de vida; parado é um ponto estático).
+  // Running and checking are "live" states — only they get the PulseDot (spec §6 restricts the
+  // pulse to signs of life; stopped is a static dot).
   $: daemonAlive = status?.status === "running" || status?.status === "checking";
 
   function handleSort(key: SortKey) {
@@ -296,8 +298,8 @@
   }
 
   async function loadTorrents() {
-    // allSettled, não all: uma falha do relatório não pode derrubar o poll de torrents, que é
-    // o que alimenta o sparkline.
+    // allSettled, not all: a report failure can't take down the torrents poll, which is what feeds
+    // the sparkline.
     const [torrentsResult, reportResult] = await Promise.allSettled([
       getTorrents(),
       getLastCheck(),
@@ -306,8 +308,8 @@
     if (torrentsResult.status === "fulfilled") {
       torrents = torrentsResult.value;
       torrentsStale = false;
-      // spec §8: alimentar o histórico SÓ em poll bem-sucedido. Não existe "repetir a última
-      // amostra" — o sparkline congelar é o comportamento correto, fingir stream contínuo não.
+      // spec §8: feed the history ONLY on a successful poll. There's no "repeat the last sample" —
+      // the sparkline freezing is the correct behavior, faking a continuous stream isn't.
       speedHistory.push(totalSpeeds(torrents).download);
       stallTracker.sync(torrents, Date.now());
     } else {
@@ -333,6 +335,7 @@
       checkInterval = configData.check_interval;
       completedPath = configData.completed_anime_path ?? "";
       anilistUsernames = configData.anilist_usernames ?? [];
+      malUsernames = configData.mal_usernames ?? [];
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load data");
     } finally {
@@ -391,8 +394,8 @@
   function formatDate(dateString: string) {
     if (!dateString) return m.common_never();
     const date = new Date(dateString);
-    // Datas anteriores a 2010 são o zero-value do Go serializado, não uma data real — o
-    // formatDate do domínio só sabe rejeitar datas inválidas, esta regra é do backend.
+    // Dates before 2010 are Go's serialized zero value, not a real date — the domain's formatDate
+    // only knows how to reject invalid dates, this rule belongs to the backend.
     if (isNaN(date.getTime()) || date.getFullYear() < 2010) return m.common_never();
     return formatDateDomain(date, fmtLocale);
   }
@@ -428,35 +431,34 @@
     if (animesPollInterval) clearInterval(animesPollInterval);
     if (tickInterval) clearInterval(tickInterval);
     if (torrentsPollInterval) clearInterval(torrentsPollInterval);
-    // Esta tela é dona do poll que alimenta o histórico; sem o reset o sparkline voltaria a
-    // exibir amostras de uma visita anterior como se fossem contíguas às novas.
+    // This screen owns the poll that feeds the history; without the reset the sparkline would show
+    // samples from a previous visit as if they were contiguous with the new ones.
     speedHistory.reset();
   });
 
-  // Grid compartilhado pelo cabeçalho e pelas linhas da lista (desktop). Definido uma vez para
-  // que cabeçalho e conteúdo não possam sair de alinhamento.
+  // Grid shared by the header and the list rows (desktop). Defined once so header and content can't
+  // fall out of alignment.
   //
-  // As larguras fixas foram remedidas depois do aumento da escala tipográfica — cada uma é o
-  // texto mais longo que a coluna pode receber, no idioma mais largo, arredondado para cima:
-  //   estado    190px — chip "Downloading ep. 128 · 100%" = 183px (text-caption + px-2 + borda)
-  //   progresso 290px — é uma frase, não um número, e abaixo disso quebra em duas linhas e a
-  //                     altura da linha passa a oscilar conforme os valores. Os 290px foram
-  //                     medidos para a legenda de TRÊS termos cumulativos; a de quatro deltas
-  //                     que a substituiu ("128 watched · 128 to watch · 128 to download · 128
-  //                     unreleased") é ~25% mais larga e quebra em duas linhas com contagem de
-  //                     3 dígitos. Não foi remedida: alargar aqui rouba da coluna do nome, que
-  //                     já trunca. Em vez disso a linha de anime omite termo zerado (o default
-  //                     da TripleProgressBar), o que corta a legenda na maioria dos casos; só
-  //                     o card Biblioteca passa `keepZeros`
-  //   último    150px — cabeçalho "ÚLTIMO DOWNLOAD" em text-mono-label (mono + tracking .12em)
-  // A soma das colunas fixas + gaps + padding é ~754px, e é por isso que a tabela só aparece a
-  // partir de `lg` (1024px): em `md` (768px) sobrariam ~628px e as colunas vazariam da tela.
-  // Abaixo disso entram os cards empilhados.
+  // The fixed widths were re-measured after the type scale grew — each one is the longest text the column
+  // can receive, in the widest language, rounded up:
+  //   status    190px — chip "Downloading ep. 128 · 100%" = 183px (text-caption + px-2 + border)
+  //   progress  290px — it's a sentence, not a number, and below that it wraps into two lines and the
+  //                     row height starts to oscillate with the values. The 290px were measured for
+  //                     the THREE cumulative terms caption; the four-delta one that replaced it
+  //                     ("128 watched · 128 to watch · 128 to download · 128 unreleased") is ~25%
+  //                     wider and wraps into two lines with 3-digit counts. It wasn't re-measured:
+  //                     widening here steals from the name column, which already truncates. Instead
+  //                     the anime row omits zero terms (TripleProgressBar's default), which cuts the
+  //                     caption in most cases; only the Library card passes `keepZeros`
+  //   last      150px — "LAST DOWNLOAD" header in text-mono-label (mono + tracking .12em)
+  // The sum of the fixed columns + gaps + padding is ~754px, and that's why the table only shows from
+  // `lg` (1024px) up: at `md` (768px) ~628px would be left and the columns would spill off the screen.
+  // Below that the stacked cards come in.
   const LIST_GRID = "grid grid-cols-[44px_minmax(0,1fr)_190px_minmax(290px,340px)_130px_150px] items-center gap-3";
 </script>
 
 <div class="space-y-4.5">
-  <!-- Header: título, pílula do daemon e as ações do daemon (spec §9.1.1) -->
+  <!-- Header: title, daemon pill and the daemon actions (spec §9.1.1) -->
   <div class="flex flex-wrap items-center gap-3">
     <div class="min-w-0 flex-1">
       <h1 class="text-screen-title text-heading">{T && T.title}</h1>
@@ -481,20 +483,20 @@
         </span>
       </div>
 
-      <!-- `flex-wrap` e SEM `shrink-0`: a fileira era `flex shrink-0 gap-2`, ou seja não podia
-           encolher nem quebrar, e sua largura ficava sendo a soma dos três botões para sempre
-           (358px em `en`, 438px em pt-BR). Em tela estreita "Parar Daemon" saía pela direita.
-           O `shrink-0` era o problema, não a solução: como item do cabeçalho `flex-wrap`, ele
-           travava a fileira no max-content de uma linha só, então a quebra interna nunca tinha
-           uma linha estreita com que trabalhar. Sem ele, o piso passa a ser o min-content (o
-           botão mais largo) e os botões descem de linha. Mesma regra da decisão 39: conjunto
-           FECHADO de ações quebra linha, não rola nem é cortado. -->
+      <!-- `flex-wrap` and NO `shrink-0`: the row was `flex shrink-0 gap-2`, i.e. it could neither
+           shrink nor wrap, and its width stayed the sum of the three buttons forever (358px in
+           `en`, 438px in pt-BR). On a narrow screen "Stop Daemon" went off the right edge. The
+           `shrink-0` was the problem, not the solution: as an item of the `flex-wrap` header, it
+           locked the row at a single line's max-content, so the inner wrap never had a narrow line
+           to work with. Without it, the floor becomes the min-content (the widest button) and the
+           buttons drop to the next line. Same rule as decision 39: a CLOSED set of actions wraps,
+           it doesn't scroll nor get cut. -->
       <div class="flex flex-wrap gap-2">
-        <!-- Caminho real para a tela de adicionar (o item no MoreMenu é o atalho, não a porta).
-             Desabilitado sem biblioteca configurada: é o mesmo bloqueio do
-             LIBRARY_NOT_CONFIGURED, dito ANTES de o usuário digitar uma busca inteira para
-             descobrir que nada pode ser adicionado. O tooltip mora no wrapper porque um
-             <a>/<button> desabilitado não emite eventos de mouse (padrão de NavRail.svelte). -->
+        <!-- The real way to the add screen (the MoreMenu item is the shortcut, not the door).
+             Disabled with no library configured: it's the same block as LIBRARY_NOT_CONFIGURED,
+             said BEFORE the user types a whole search only to find out nothing can be added. The
+             tooltip lives on the wrapper because a disabled <a>/<button> emits no mouse events
+             (NavRail.svelte's pattern). -->
         {#if libraryConfigured}
           <a
             href="#/add"
@@ -515,10 +517,10 @@
           {status.status === "checking" ? (T && T.checking) : (T && T.forceCheck)}
         </Button>
         {#if status.status === "stopped"}
-          <!-- O verde sólido é escrito inline, não como variante do Button, de propósito: a
-               regra de composição do spec §4.1 reserva o preenchimento verde EXCLUSIVAMENTE
-               para "Iniciar daemon". Uma variante `ok` no primitivo seria um convite a
-               reutilizá-la em outra tela e quebrar a regra de "no máximo um acento sólido". -->
+          <!-- The solid green is written inline, not as a Button variant, on purpose: the
+               composition rule of spec §4.1 reserves the green fill EXCLUSIVELY for "Start daemon".
+               An `ok` variant on the primitive would be an invitation to reuse it on another screen
+               and break the "at most one solid accent" rule. -->
           <button
             type="button"
             class="inline-flex items-center justify-center rounded-control bg-ok px-3 py-1.5 text-copy font-semibold text-on-ok transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
@@ -555,8 +557,8 @@
       >
         <p>{passErrorText}</p>
         {#if passErrorRaw}
-          <!-- Recolhido, e não escondido: o texto cru é a única coisa colável numa issue, mas
-               ele não pode ser a primeira coisa que o usuário lê. -->
+          <!-- Collapsed, not hidden: the raw text is the only thing pasteable into an issue, but it
+               can't be the first thing the user reads. -->
           <details class="mt-1.5">
             <summary class="cursor-pointer text-caption opacity-70 hover:opacity-100">
               {$locale && m.passerror_details()}
@@ -567,15 +569,16 @@
       </div>
     {/if}
 
-    <!-- Primeiros passos. Card de acento (não a caixa neutra do resto da tela) porque ele
-         compete com o herói e com o relatório pela primeira olhada, e perde se parecer com
-         eles. Some quando o usuário marca os três, quando dispensa, ou quando o daemon já
-         está configurado e rodando. Nenhuma requisição nova: tudo vem do que
-         `loadInitialData` já buscou. A dispensa é por navegador (localStorage), não campo do
-         config.json — ver decisions.md.
+    <!-- First steps. An accent card (not the neutral box of the rest of the screen) because it
+         competes with the hero and the report for the first glance, and loses if it looks like
+         them. It disappears when the user marks the three, when they dismiss it, or when the daemon
+         is already configured and running. No new request: everything comes from what
+         `loadInitialData` already fetched. The dismissal is per browser (localStorage), not a
+         config.json field — see decisions.md.
 
-         Opacidade em colchetes (`/[.10]`): o Tailwind só gera as opacidades da escala padrão
-         (…/40, /50…), então `/12` e `/28` viram classe morta e o card fica sem fundo nenhum. -->
+         Opacity in brackets (`/[.10]`): Tailwind only generates the default scale's opacities
+         (…/40, /50…), so `/12` and `/28` become dead classes and the card ends up with no
+         background at all. -->
     {#if showOnboarding}
       <section
         data-testid="onboarding-card"
@@ -583,8 +586,8 @@
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="font-mono text-mono-label uppercase text-accent">{T && T.onboardingTitle}</p>
-          <!-- Botão de TEXTO, não um "×": num card de três itens o × lê como "fechar até
-               recarregar", e o comportamento é permanente. O rótulo tem que dizer isso. -->
+          <!-- A TEXT button, not an "×": in a three-item card the × reads as "close until reload",
+               and the behavior is permanent. The label has to say so. -->
           <button
             type="button"
             class="text-caption text-subtle underline-offset-2 transition-colors hover:text-body hover:underline"
@@ -598,10 +601,9 @@
           {#each onboardingList as step, i (step.id)}
             {@const done = $onboardingDone.includes(step.id)}
             <li class="flex items-start gap-3">
-              <!-- O número É a caixa de marcar: um checkbox separado ao lado de um badge
-                   numerado seriam dois marcadores para um estado só. Marcar é MANUAL — derivar
-                   do estado do daemon deixava os passos 1 e 3 verdes numa instalação nova,
-                   antes de o usuário ter lido qualquer coisa. -->
+              <!-- The number IS the checkbox: a separate checkbox next to a numbered badge would be
+                   two markers for one state. Marking is MANUAL — deriving it from the daemon state
+                   left steps 1 and 3 green on a new install, before the user had read anything. -->
               <label class="relative mt-0.5 shrink-0 cursor-pointer">
                 <input
                   type="checkbox"
@@ -625,12 +627,13 @@
                 {#if !done}
                   <div class="mt-2 flex flex-wrap items-center gap-2">
                     {#if step.id === "library"}
-                      <!-- `library` já é o grupo inicial de Configurações, então sem `?group=`. -->
+                      <!-- `library` is already the Settings screen's initial group, hence no
+                           `?group=`. -->
                       <Button href="#/config" variant="ghost">{T && T.onboardingActionConfigure}</Button>
                     {:else if step.id === "source"}
-                      <!-- DUAS ações, com um "ou" no meio: são caminhos alternativos, e sem o
-                           "ou" a dupla lê como duas etapas obrigatórias. O botão de adicionar
-                           herda o mesmo bloqueio do cabeçalho quando não há biblioteca. -->
+                      <!-- TWO actions, with an "or" in between: they're alternative paths, and
+                           without the "or" the pair reads as two required steps. The add button
+                           inherits the header's same block when there's no library. -->
                       <Button href="#/config?group=anilist" variant="ghost">
                         {T && T.onboardingActionConnectAnilist}
                       </Button>
@@ -638,8 +641,8 @@
                       {#if libraryConfigured}
                         <Button href="#/add" variant="ghost">{T && T.onboardingActionAddAnime}</Button>
                       {:else}
-                        <!-- Tooltip no wrapper: um botão desabilitado não emite eventos de
-                             mouse (mesmo padrão do cabeçalho desta tela e do NavRail). -->
+                        <!-- Tooltip on the wrapper: a disabled button emits no mouse events (same
+                             pattern as this screen's header and NavRail). -->
                         <div class="tooltip tooltip-bottom" data-tip={$locale && m.add_library_required()}>
                           <Button variant="ghost" disabled>{T && T.onboardingActionAddAnime}</Button>
                         </div>
@@ -662,12 +665,13 @@
       </section>
     {/if}
 
-    <!-- Estado vazio é a regra: passe limpo não renderiza nada. Um card permanente anunciando
-         "0 problemas" deixa de ser lido, e aí o dia em que ele tem conteúdo passa batido. -->
+    <!-- The empty state is the rule: a clean pass renders nothing. A permanent card announcing "0
+         problems" stops being read, and then the day it has content goes unnoticed. -->
     {#if hasReport && lastCheck}
-      <!-- Dois blocos, não um: problema é falha (âmbar, mesmo tratamento do aviso do detalhe do
-           anime) e limite é a config funcionando como configurada (neutro). Pintar os dois de
-           urgente diria que ter um teto é um defeito, e o usuário passaria a ignorar a cor. -->
+      <!-- Two blocks, not one: a problem is a failure (amber, the same treatment as the anime
+           detail's warning) and a limit is the config working as configured (neutral). Painting
+           both as urgent would say having a ceiling is a defect, and the user would start ignoring
+           the color. -->
       <section data-testid="last-check-report" class="space-y-3">
         {#if lastCheck.problems.length > 0}
           <div class="rounded-card border border-warn-tint/32 bg-warn-tint/12 p-4.5">
@@ -712,13 +716,13 @@
     {/if}
 
     <div class="grid gap-3.5 lg:grid-cols-[1.15fr_1fr]">
-      <!-- Card herói: velocidade agregada + sparkline + um anel por download ativo.
-           `min-w-0` NÃO é decorativo: a faixa de downloads ativos abaixo é larga (um bloco de
-           ~190px por torrent) e um item de grid tem `min-width: auto`, ou seja, seu piso é o
-           tamanho intrínseco do conteúdo. Sem o override o track `1.15fr` estoura — a section
-           cresce até o max-content (medido: 2494px num grid de 1280px), o `overflow-x-auto` da
-           faixa nunca chega a ativar (largura == scrollWidth) e a coluna da direita é empurrada
-           para fora da tela. Com `min-w-0` a section volta a caber no track e a faixa rola. -->
+      <!-- Hero card: aggregate speed + sparkline + one ring per active download. `min-w-0` is NOT
+           decorative: the active downloads strip below is wide (a ~190px block per torrent) and a
+           grid item has `min-width: auto`, i.e. its floor is the content's intrinsic size. Without
+           the override the `1.15fr` track blows up — the section grows to max-content (measured:
+           2494px in a 1280px grid), the strip's `overflow-x-auto` never kicks in (width ==
+           scrollWidth) and the right column is pushed off the screen. With `min-w-0` the section
+           fits the track again and the strip scrolls. -->
       <section class="min-w-0 rounded-card border border-default bg-card p-4.5">
         <div class="flex items-start justify-between gap-4">
           <div class="min-w-0">
@@ -757,8 +761,8 @@
           <p class="mt-2 text-caption text-subtle">{T && T.heroNoDownloads}</p>
         {/if}
 
-        <!-- spec §8: a UI declara de onde vem o progresso. O ponto fica âmbar quando o último
-             poll falhou, e o texto passa a dizer que os valores estão congelados. -->
+        <!-- spec §8: the UI states where progress comes from. The dot turns amber when the last
+             poll failed, and the text starts saying the values are frozen. -->
         <p class="mt-3 flex items-center gap-1.5 font-mono text-[12px] {torrentsStale ? 'text-warn' : 'text-subtle'}">
           <span
             class="inline-block h-1.5 w-1.5 shrink-0 rounded-full {torrentsStale ? 'bg-warn' : 'bg-neutral'}"
@@ -768,7 +772,7 @@
         </p>
       </section>
 
-      <!-- Coluna direita: resumo da biblioteca + disco/próxima verificação -->
+      <!-- Right column: library summary + disk/next check -->
       <div class="flex min-w-0 flex-col gap-3.5">
         <section class="rounded-card border border-default bg-card p-4.5">
           <p class="font-mono text-mono-label uppercase text-subtle">{T && T.cardLibrary}</p>
@@ -819,10 +823,10 @@
       </div>
     </div>
 
-    <!-- Lista de animes -->
+    <!-- Anime list -->
     <section class="rounded-card border border-default bg-card">
-      <!-- Toolbar. `shrink-0` no container é o que impede a faixa de filtros de colapsar
-           quando a lista abaixo cresce (spec §9.1, nota de mobile). -->
+      <!-- Toolbar. `shrink-0` on the container is what keeps the filter strip from collapsing when
+           the list below grows (spec §9.1, mobile note). -->
       <div class="flex shrink-0 flex-col gap-3 border-b border-divider p-4 sm:flex-row sm:items-center">
         <h2 class="flex-1 text-card-title text-heading">{T && T.animesHeader}</h2>
 
@@ -832,9 +836,9 @@
           </span>
         {/if}
 
-        <!-- No mobile a busca ocupa a linha inteira e os filtros ficam numa faixa própria
-             logo abaixo; empilhar os dois na MESMA faixa rolável empurraria o chip de filtro
-             para fora da tela, sem nenhuma dica de que ele está lá. -->
+        <!-- On mobile the search takes the whole line and the filters get their own strip right
+             below; stacking both in the SAME scrollable strip would push the filter chip off the
+             screen, with no hint that it's there. -->
         <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
           <label
             class="flex w-full shrink-0 items-center gap-2 rounded-field border border-neutral/45 bg-control px-2.5 py-1.5 transition-colors hover:border-neutral/70 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40 sm:w-64"
@@ -858,8 +862,8 @@
             {/if}
           </label>
 
-          <!-- Faixa rolável: hoje só tem um filtro, mas é ela que absorve os próximos sem
-               espremer a busca (spec §9.1, nota de mobile). -->
+          <!-- Scrollable strip: today it has only one filter, but it's what absorbs the next ones
+               without squeezing the search (spec §9.1, mobile note). -->
           <div class="flex items-center gap-2 overflow-x-auto">
             <button
               type="button"
@@ -889,10 +893,10 @@
       </div>
 
       {#if animes.length === 0}
-        <!-- Dois caminhos, porque conta do AniList deixou de ser obrigatória: adicionar um anime
-             avulso é o próximo passo real de quem já tem a biblioteca configurada. O CTA é
-             `ghost` e não sólido — o acento sólido da tela já é o "+ Adicionar anime" do header
-             (spec §4.1: no máximo um por tela). -->
+        <!-- Two paths, because a list account stopped being required: adding a standalone anime is
+             the real next step for someone who already has the library configured. The CTA is
+             `ghost`, not solid — the screen's solid accent is already the header's "+ Add anime"
+             (spec §4.1: at most one per screen). -->
         <div class="flex flex-col items-center gap-3 py-12 text-center">
           <p class="text-card-title text-body">{T && T.emptyTitle}</p>
           <p class="text-caption text-subtle">{T && T.emptyDesc}</p>
@@ -918,9 +922,9 @@
           <p class="text-copy text-subtle">{$locale && m.status_no_results({ search })}</p>
         </div>
       {:else}
-        <!-- Desktop: grid de linhas-link. Não é <table> de propósito — com a linha inteira
-             clicável, um <a> por linha dá o alvo grande sem precisar de handler de clique com
-             role/tabindex/keydown manuais numa <tr>. -->
+        <!-- Desktop: a grid of link rows. Not a <table> on purpose — with the whole row clickable,
+             one <a> per row gives the big target without needing a click handler with manual
+             role/tabindex/keydown on a <tr>. -->
         <div class="hidden lg:block">
           <div class="{LIST_GRID} border-b border-divider px-4 py-2.5">
             <span></span>
@@ -969,17 +973,18 @@
                 ? 'hover:bg-control'
                 : ''}"
             >
-              <!-- Blacklist esmaece capa e título (spec §9.1), não a linha inteira: o chip
-                   "Na blacklist" precisa continuar legível para explicar o porquê. -->
+              <!-- Blacklist dims the cover and title (spec §9.1), not the whole row: the
+                   "Blacklisted" chip has to stay readable to explain why. -->
               <div class="h-11 w-8 overflow-hidden {row.chip.dimmed ? 'opacity-45' : ''}">
                 <Cover src={row.anime.cover_image} alt={row.anime.name} />
               </div>
               <span class="truncate text-copy text-heading {row.chip.dimmed ? 'opacity-45' : ''}" title={row.anime.name}>
                 {row.anime.name}
               </span>
-              <!-- "Avulso" é ORIGEM, não estado de download: fica AO LADO do chip derivado,
-                   nunca dentro de `deriveAnimeChip` — aquela cascata devolve um estado só, e
-                   enfiar a origem lá faria um avulso baixando perder o chip "Baixando". -->
+              <!-- "Standalone" is ORIGIN, not download state: it sits NEXT TO the derived chip,
+                   never inside `deriveAnimeChip` — that cascade returns a single state, and putting
+                   the origin there would make a downloading standalone anime lose the "Downloading"
+                   chip. -->
               <span class="flex flex-wrap items-center gap-1">
                 <Chip variant={row.chip.variant} dimmed={row.chip.dimmed}>{row.chipText}</Chip>
                 {#if row.anime.is_standalone}
@@ -1003,8 +1008,8 @@
           {/each}
         </div>
 
-        <!-- Mobile/tablet: os mesmos dados empilhados em cards (ver a nota de larguras em LIST_GRID
-             sobre por que o corte é em `lg` e não em `md`) -->
+        <!-- Mobile/tablet: the same data stacked in cards (see the widths note in LIST_GRID on why
+             the cut is at `lg` and not `md`) -->
         <div class="space-y-2 p-3 lg:hidden">
           {#each rows || [] as row (row.anime.anime_id || row.anime.name)}
             <svelte:element

@@ -16,10 +16,10 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// ttlCache guarda respostas da AniList por um tempo curto. A AniList hoje limita a 30 req/min
-// por IP e o frontend faz poll de /api/v1/animes a cada 30s por aba aberta, com uma busca por
-// conta configurada: sem cache, duas abas e duas contas ja estouram o orcamento sozinhas e o
-// 429 resultante derruba tambem o ciclo de verificacao do daemon (ver decisions.md #11 e #57).
+// ttlCache holds AniList responses for a short time. AniList today limits to 30 req/min per IP and
+// the frontend polls /api/v1/animes every 30s per open tab, with one fetch per configured account:
+// without a cache, two tabs and two accounts blow the budget on their own and the resulting 429
+// also takes down the daemon's verification cycle (see decisions.md #11 and #57).
 type ttlCache[T any] struct {
 	mu     sync.Mutex
 	data   map[string]T
@@ -40,14 +40,14 @@ func (c *ttlCache[T]) get(key string) (T, bool) {
 	return zero, false
 }
 
-// getStale devolve a entrada IGNORANDO o TTL, e e a UNICA porta para o que veio do snapshot em
-// disco: o restore deixa aquelas entradas com o vencimento no passado de proposito, entao get
-// nunca as ve (ver persist.go).
+// getStale returns the entry IGNORING the TTL, and it's the ONLY door to what came from the disk
+// snapshot: restore leaves those entries with an expiry in the past on purpose, so get never sees
+// them (see persist.go).
 //
-// So o caminho de FALHA chama. Duas falhas, com contratos diferentes: a recusa do gate de
-// orcamento serve o vencido sem erro, porque o dado tem segundos de idade (decisions.md #72); a
-// AniList fora do ar serve com ErrFromCache, porque a idade passa a ser desconhecida e quem
-// chama precisa decidir. Quem le por get espera dado fresco e nao deve cair aqui.
+// Only the FAILURE path calls it. Two failures, with different contracts: the budget gate's refusal
+// serves the expired value without an error, because the data is seconds old (decisions.md #72);
+// AniList being down serves it with ErrFromCache, because the age becomes unknown and the caller
+// has to decide. Whoever reads through get expects fresh data and must not land here.
 func (c *ttlCache[T]) getStale(key string) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -62,18 +62,18 @@ func (c *ttlCache[T]) set(key string, value T, ttl time.Duration) {
 	c.expiry[key] = time.Now().Add(ttl)
 }
 
-// size e o numero de chaves guardadas, VENCIDAS INCLUSIVE — nada aqui remove entrada, o
-// vencimento so esconde do get. So o cache de busca usa, que e o unico com chave de texto
-// livre e portanto sem teto natural.
+// size is the number of stored keys, EXPIRED ONES INCLUDED — nothing here removes an entry, expiry
+// only hides it from get. Only the search cache uses it, the only one with a free-text key and
+// therefore no natural ceiling.
 func (c *ttlCache[T]) size() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.data)
 }
 
-// snapshot copia TODAS as entradas, vencidas inclusive — quem persiste quer justamente as
-// vencidas, que sao as que vao servir de fallback depois do restart. Nao carrega o vencimento:
-// o TTL de volta e decidido no restore, ver o comentario do snapshot em persist.go.
+// snapshot copies ALL entries, expired ones included — whoever persists wants precisely the expired
+// ones, which are the ones that serve as fallback after the restart. It doesn't carry the expiry:
+// the TTL on the way back is decided in restore, see the snapshot comment in persist.go.
 func (c *ttlCache[T]) snapshot() map[string]T {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -87,9 +87,9 @@ func (c *ttlCache[T]) snapshot() map[string]T {
 	return out
 }
 
-// restore preenche o cache a partir de um snapshot. ttl zero deixa as entradas visiveis SO para
-// getStale: e assim que o dado de disco fica disponivel como fallback sem nunca ser servido
-// como se fosse fresco.
+// restore fills the cache from a snapshot. A zero ttl leaves the entries visible ONLY to getStale:
+// that's how the disk data becomes available as fallback without ever being served as if it were
+// fresh.
 func (c *ttlCache[T]) restore(data map[string]T, ttl time.Duration) {
 	if len(data) == 0 {
 		return
@@ -110,30 +110,31 @@ func (c *ttlCache[T]) clear() {
 	clear(c.expiry)
 }
 
-// ponytail: sem protecao contra stampede — N polls simultaneos que erram o cache disparam N
-// buscas. Os timers das abas sao desencontrados, entao o TTL sozinho ja segura o volume; se um
-// dia isso nao bastar, serializar as buscas por chave resolve.
+// ponytail: no stampede protection — N simultaneous polls that miss the cache fire N fetches. The
+// tabs' timers are staggered, so the TTL alone holds the volume; if that's ever not enough,
+// serializing fetches per key solves it.
 var (
 	customListsCache  = newTTLCache[map[int]CustomLists]()
 	frontendListCache = newTTLCache[[]MediaList]()
-	// passListCache e mediaEntryCache existem SO como fallback: gravados com TTL zero, nunca
-	// consultados por get, lidos apenas quando a requisicao falha. Nao ha ganho de orcamento
-	// aqui e nenhum dado velho passa a ser servido no caminho feliz — o objetivo unico e o
-	// passe e a tela de detalhe continuarem de pe com a AniList fora do ar (ver persist.go).
+	// passListCache and mediaEntryCache exist ONLY as fallback: written with TTL zero, never read
+	// through get, read only when the request fails. There's no budget gain here and no stale data
+	// starts being served on the happy path — the single goal is keeping the pass and the detail
+	// screen up with AniList down (see persist.go).
 	//
-	// Sao dois, e nao um, porque as tres queries pedem conjuntos de campos DIFERENTES: a do
-	// frontend traz coverImage e nao traz relations nem o status da entrada; a do passe traz
-	// relations e status e nao traz coverImage; a por media id (mediaByIDFields) traz tudo.
-	// Servir a tela de detalhe do cache do frontend deixaria o download manual sem relations.
+	// They're two, not one, because the three queries ask for DIFFERENT field sets: the frontend's
+	// brings coverImage and doesn't bring relations nor the entry status; the pass's brings relations
+	// and status and doesn't bring coverImage; the media-id one (mediaByIDFields) brings everything.
+	// Serving the detail screen from the frontend cache would leave the manual download without
+	// relations.
 	passListCache   = newTTLCache[[]MediaList]()
 	mediaEntryCache = newTTLCache[[]MediaList]()
 )
 
 const (
 	customListsTTL = 5 * time.Minute
-	// Uma resposta vazia pode ser tanto "a conta nao tem custom lists" quanto um campo que a
-	// AniList degradou. O TTL curto limita os dois: o poll para de bater na API a cada request
-	// e um campo degradado se corrige em meio minuto.
+	// An empty response can be either "the account has no custom lists" or a field AniList degraded.
+	// The short TTL limits both: the poll stops hitting the API on every request and a degraded field
+	// corrects itself in half a minute.
 	customListsEmptyTTL = 30 * time.Second
 	frontendListTTL     = 60 * time.Second
 )
@@ -145,12 +146,12 @@ var httpDo = func(req *http.Request) (*http.Response, error) {
 
 var aniListAPIURL = "https://graphql.anilist.co"
 
-// anilistMaxPerPage e o perPage maximo que a AniList aceita numa Page. E o tamanho do lote de
-// toda busca por lista de ids (mediaId_in, id_in): pedir mais que isso numa query so devolveria
-// 50 e faria os ids restantes parecerem apagados.
+// anilistMaxPerPage is the maximum perPage AniList accepts in a Page. It's the batch size of every
+// fetch by a list of ids (mediaId_in, id_in, idMal_in): asking for more than that in one query
+// would only return 50 and make the remaining ids look deleted.
 const anilistMaxPerPage = 50
 
-// ErrNotFound sinaliza que a AniList respondeu 404: o objeto consultado nao existe.
+// ErrNotFound signals AniList answered 404: the queried object doesn't exist.
 var ErrNotFound = errors.New("anilist: not found")
 
 func init() {
@@ -159,8 +160,9 @@ func init() {
 	}
 }
 
-// MockAniListDo troca o transporte HTTP e limpa os caches nas duas pontas: um teste que instala
-// um mock precisa ver as respostas dele, nao as do teste anterior.
+// MockAniListDo swaps the HTTP transport (MyAnimeList's included — it goes through the same httpDo)
+// and clears the caches at both ends: a test that installs a mock has to see its responses, not the
+// previous test's.
 func MockAniListDo(fn func(*http.Request) (*http.Response, error)) (restore func()) {
 	prev := httpDo
 	clearCaches()
@@ -178,13 +180,15 @@ func clearCaches() {
 	mediaByIDCache.clear()
 	seriesCache.clear()
 	searchCache.clear()
-	// A saude tambem e estado de pacote: sem zerar aqui, um teste que simula 403 deixaria o
-	// proximo teste enxergando a AniList fora do ar. Mesma coisa para a leitura de orcamento:
-	// um teste que simula o balde no fim travaria o gate do teste seguinte.
+	malListCache.clear()
+	malIDMapCache.clear()
+	// Health is package state too: without resetting it here, a test that simulates a 403 would leave
+	// the next test seeing AniList as down. Same for the budget reading: a test that simulates an
+	// empty bucket would lock the next test's gate.
 	health.Store(&Health{State: HealthOK})
 	budget.Store(nil)
-	// A persistencia tambem e estado de pacote, e a gravacao e agendada: um snapshot pendente
-	// que dispara depois do teste terminar escreveria no diretorio temporario de outro.
+	// Persistence is package state too, and the write is scheduled: a pending snapshot that fires
+	// after the test ends would write into another test's temp directory.
 	disablePersistence()
 }
 
@@ -249,17 +253,17 @@ type Media struct {
 	Relations      MediaRelations `json:"relations"`
 	CoverImage     CoverImage     `json:"coverImage"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
-	// NextAiringEpisode e a fonte de "qual foi o ultimo episodio no ar" para os animes cujo
-	// airingSchedule a AniList ja clipou (ver EpisodeList e decisions.md #52). nil quando o
-	// anime terminou ou nao tem data marcada.
+	// NextAiringEpisode is the source of "which was the last episode to air" for the animes whose
+	// airingSchedule AniList already clipped (see EpisodeList and decisions.md #52). nil when the
+	// anime ended or has no date set.
 	NextAiringEpisode *AiringNode `json:"nextAiringEpisode"`
 }
 
 type Title struct {
 	English *string `json:"english"`
 	Romaji  *string `json:"romaji"`
-	// Native e o titulo no idioma original (kanji, na pratica). So a busca da dashboard usa —
-	// o daemon monta as queries do Nyaa com romaji/english, ver search.go.
+	// Native is the title in the original language (kanji, in practice). Only the dashboard search
+	// uses it — the daemon builds the Nyaa queries with romaji/english, see search.go.
 	Native *string `json:"native"`
 }
 
@@ -267,9 +271,9 @@ type MediaRelationNode struct {
 	Title    Title    `json:"title"`
 	Synonyms []string `json:"synonyms"`
 	Episodes *int     `json:"episodes"`
-	// Format separa a prequel que conta episodios da que nao conta: um filme de recap ou uma
-	// OVA tambem chegam como PREQUEL e com Episodes preenchido, e somar isso no offset joga a
-	// busca para um numero de episodio que nao existe. Ver ComputeEpisodeOffset.
+	// Format separates the prequel that counts episodes from the one that doesn't: a recap movie or an
+	// OVA also arrive as PREQUEL with Episodes filled in, and adding that to the offset throws the
+	// search to an episode number that doesn't exist. See ComputeEpisodeOffset.
 	Format MediaFormat `json:"format"`
 }
 
@@ -376,22 +380,22 @@ func sendAnilistRequest[T any](query string, variables RequestVariables, priorit
 	recordBudget(resp.Header)
 
 	if resp.StatusCode == http.StatusNotFound {
-		// A AniList responde 404 quando o objeto pedido nao existe (por exemplo, uma entrada de
-		// lista que o usuario apagou). E uma resposta valida, nao uma falha — quem consulta por
-		// id precisa distinguir isso de "a AniList caiu".
+		// AniList answers 404 when the requested object doesn't exist (for example, a list entry the user
+		// deleted). It's a valid answer, not a failure — whoever queries by id needs to tell it apart
+		// from "AniList is down".
 		return nil, ErrNotFound
 	}
 	if resp.StatusCode != http.StatusOK {
-		// O corpo carrega o motivo real (rate limit vs. API desligada vs. query invalida);
-		// sem ele o log vira um numero sem diagnostico. A mensagem tambem alimenta o banner:
-		// um 403 de IP bloqueado explica o motivo por escrito, e so a AniList sabe qual e.
+		// The body carries the real reason (rate limit vs. API turned off vs. invalid query); without it
+		// the log becomes a number with no diagnosis. The message also feeds the banner: a blocked-IP 403
+		// explains the reason in writing, and only AniList knows which it is.
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		_, message := firstError(snippet)
 		setHealth(classify(resp.StatusCode), message, retryAfter(resp.Header.Get("Retry-After")))
 		logger.Logger.Warn().Int("status_code", resp.StatusCode).Str("body", string(snippet)).Msg("Anilist returned non-200 status")
-		// A mensagem extraida, e nao o corpo cru: o erro sobe ate a tela do usuario, e um dump
-		// de JSON com locations e column nao diz nada a ninguem. O corpo inteiro continua no log
-		// acima, que e onde ele serve para alguma coisa.
+		// The extracted message, not the raw body: the error goes up to the user's screen, and a JSON
+		// dump with locations and column says nothing to anyone. The whole body stays in the log above,
+		// which is where it's useful.
 		if message == "" {
 			message = strings.TrimSpace(string(snippet))
 		}
@@ -403,9 +407,9 @@ func sendAnilistRequest[T any](query string, variables RequestVariables, priorit
 		return nil, fmt.Errorf("error reading response: %v", err)
 	}
 
-	// Um 200 pode carregar erro no envelope — a doc da AniList e explicita quanto a isso. Sem
-	// esta leitura o caso vira resposta vazia sem diagnostico. Nao e o mesmo problema do
-	// customLists null da decisions.md #11: aquele volta 200 SEM campo errors. Ver #65.
+	// A 200 can carry an error in the envelope — AniList's docs are explicit about it. Without this
+	// read the case becomes an empty response with no diagnosis. It's not the same problem as the null
+	// customLists of decisions.md #11: that one comes back 200 WITHOUT an errors field. See #65.
 	if status, message := firstError(body); status != 0 {
 		setHealth(classify(status), message, time.Time{})
 		logger.Logger.Warn().Int("graphql_status", status).Str("message", message).Msg("Anilist returned an error inside a 200 response")
@@ -452,15 +456,14 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 		"s": statuses,
 	}, priority)
 	if err != nil {
-		// Recusado pelo gate de orcamento: serve a leitura vencida, igual ao par dela em
-		// GetFrontendAnimeList (decisions.md #72). Sem isso o gate degrada os DOIS lados de
-		// forma assimetrica — a lista sai do cache velho e responde com sucesso, o customLists
-		// volta nil, e o merge de GET /animes conclui "nenhum anime esta na blacklist". A tela
-		// mostra blacklistado como normal e o guard de avulso (standalone_guard.go) deixa
-		// adicionar o que deveria recusar.
-		// Qualquer falha, e nao so a recusa do gate: devolver nil aqui faz a exclusao
-		// desaparecer, e anime em lista excluida volta a parecer baixavel. Vencido e melhor
-		// que ausente — a exclusao muda quando o usuario mexe na AniList, nao a cada minuto.
+		// Refused by the budget gate: serve the expired read, the same as its pair in
+		// GetFrontendAnimeList (decisions.md #72). Without this the gate degrades BOTH sides
+		// asymmetrically — the list comes from the old cache and answers successfully, customLists comes
+		// back nil, and the GET /animes merge concludes "no anime is blacklisted". The screen shows a
+		// blacklisted anime as normal and the standalone guard (standalone_guard.go) lets the user add
+		// what it should refuse. Any failure, not only the gate's refusal: returning nil here makes the
+		// exclusion disappear, and an anime in an excluded list looks downloadable again. Expired is
+		// better than absent — the exclusion changes when the user edits AniList, not every minute.
 		if stale, ok := customListsCache.getStale(key); ok {
 			return stale
 		}
@@ -562,11 +565,11 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 	return resp, nil
 }
 
-// GetFrontendAnimeList alimenta /api/v1/animes, que o frontend faz poll a cada 30s por aba.
-// O resultado fica em cache por frontendListTTL: sem isso cada aba aberta multiplicava a
-// pressao sobre o limite da AniList ate o 429, que por sua vez fazia o ciclo de download do
-// daemon falhar junto. A lista so muda quando o usuario mexe na AniList, entao um minuto de
-// atraso na tela e barato perto de derrubar o daemon.
+// GetFrontendAnimeList feeds /api/v1/animes, which the frontend polls every 30s per tab. The result
+// is cached for frontendListTTL: without it each open tab multiplied the pressure on AniList's
+// limit up to the 429, which in turn made the daemon's download cycle fail too. The list only
+// changes when the user edits AniList, so a minute of delay on the screen is cheap next to taking
+// the daemon down.
 func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse, error) {
 	query := `
 		query GetFrontendAnimeList($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
@@ -624,19 +627,17 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityDisposable)
 	if err != nil {
 		if stale, ok := staleList(frontendListCache, key); ok {
-			// Recusado pelo gate de orcamento: esta lista muda quando o usuario mexe na
-			// AniList, e nao a cada 30s. Servir a leitura vencida deixa a tela funcionando e
-			// devolve o balde para o passe do daemon, que e o unico que nao pode ser adiado.
-			// Ver decisions.md #72. Sem erro de proposito: a recusa foi NOSSA, o dado tem
-			// segundos de idade e o proximo poll ja volta fresco — a tela nao ganha nada
-			// sabendo disso.
+			// Refused by the budget gate: this list changes when the user edits AniList, not every 30s.
+			// Serving the expired read keeps the screen working and hands the bucket back to the daemon's
+			// pass, the only one that can't be postponed. See decisions.md #72. No error on purpose: the
+			// refusal was OURS, the data is seconds old and the next poll comes back fresh — the screen
+			// gains nothing from knowing.
 			if errors.Is(err, ErrBudgetLow) {
 				return mediaListResponse(stale), nil
 			}
-			// Qualquer outra falha e a AniList fora do ar, e a idade do dado passa a ser
-			// desconhecida (pode vir do snapshot em disco, de dias atras). Aqui o chamador TEM
-			// de saber: /animes usa para nao disparar o refresh de orfaos contra uma API que
-			// nao responde.
+			// Any other failure is AniList being down, and the data's age becomes unknown (it may come from
+			// the disk snapshot, days old). Here the caller HAS to know: /animes uses it to not fire the
+			// orphan refresh against an API that doesn't answer.
 			return mediaListResponse(stale), ErrFromCache
 		}
 		return nil, err
@@ -646,12 +647,12 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 	return mediaListResponse(resp.Data.Page.MediaList), nil
 }
 
-// mediaListResponse embrulha uma lista num AniListResponse. Nasceu para GetFrontendAnimeList e
-// hoje serve as tres buscas de lista mais o fallback por media id — o nome nao fala de frontend
-// por isso.
+// mediaListResponse wraps a list in an AniListResponse. It was born for GetFrontendAnimeList and
+// today serves the three list fetches plus the media-id fallback — that's why the name doesn't say
+// frontend.
 //
-// A copia e o ponto: quem chama sobrescreve CustomLists nas entradas, e devolver a fatia
-// guardada no cache deixaria dois requests concorrentes escrevendo na mesma memoria.
+// The copy is the point: callers overwrite CustomLists in the entries, and returning the slice
+// stored in the cache would leave two concurrent requests writing to the same memory.
 func mediaListResponse(list []MediaList) *AniListResponse {
 	resp := &AniListResponse{}
 	resp.Data.Page.MediaList = append([]MediaList(nil), list...)
@@ -676,13 +677,16 @@ func mediaListResponse(list []MediaList) *AniListResponse {
 //
 // No cache: this feeds a path already fronted by frontendListCache's poll rhythm, and one query
 // per poll per account is the same order as the list fetch beside it.
-func GetAnimeInfoByIDs(mediaIds []int, usernames []string) (map[int]*MediaList, error) {
-	if len(mediaIds) == 0 || len(usernames) == 0 {
+//
+// malUsers are looked up in their cached MAL lists (GetMALEntries) and folded into the same
+// collapse, so a MAL account's lower progress wins here exactly as it does in the pass.
+func GetAnimeInfoByIDs(mediaIds []int, usernames, malUsers []string) (map[int]*MediaList, error) {
+	if len(mediaIds) == 0 || len(usernames)+len(malUsers) == 0 {
 		return map[int]*MediaList{}, nil
 	}
 
-	// mediaId_in devolve no maximo uma entrada por id, entao um lote de anilistMaxPerPage ids
-	// nunca passa de uma pagina — nao ha paginacao a seguir aqui.
+	// mediaId_in returns at most one entry per id, so a batch of anilistMaxPerPage ids never goes past
+	// one page — there's no pagination to follow here.
 	query := `
 		query GetAnimeInfoByIDs($userName: String, $mediaIds: [Int]) {
 			Page(perPage: ` + strconv.Itoa(anilistMaxPerPage) + `) {
@@ -717,6 +721,13 @@ func GetAnimeInfoByIDs(mediaIds []int, usernames []string) (map[int]*MediaList, 
 		}
 	}
 
+	malList, err := malEntriesFor(mediaIds, malUsers, PriorityDisposable)
+	if err != nil && !errors.Is(err, ErrFromCache) {
+		logger.Logger.Warn().Err(err).Int("media_ids", len(mediaIds)).Msg("Failed to fetch anime info from a MAL account")
+		lastErr = err
+	}
+	entries = append(entries, malList...)
+
 	deduped := DedupeByMedia(entries)
 	byMedia := make(map[int]*MediaList, len(deduped))
 	for i := range deduped {
@@ -737,7 +748,10 @@ func GetAnimeInfoByIDs(mediaIds []int, usernames []string) (map[int]*MediaList, 
 // anime was removed from the lists but its episodes are still on disk), not an error. An error
 // is only returned when every account's request failed, so the caller can tell "not tracked"
 // from "AniList is down".
-func GetAnimeInfo(mediaId int, usernames []string, priority Priority) (*MediaList, error) {
+//
+// malUsers count as accounts too: their entry is found in the cached MAL list and joins the
+// same collapse, so the detail screen and the pass agree on the lowest progress.
+func GetAnimeInfo(mediaId int, usernames, malUsers []string, priority Priority) (*MediaList, error) {
 	var entries []MediaList
 	var lastErr error
 	fromCache := false
@@ -745,9 +759,9 @@ func GetAnimeInfo(mediaId int, usernames []string, priority Priority) (*MediaLis
 		resp, err := getMediaListEntry(username, mediaId, priority)
 		switch {
 		case errors.Is(err, ErrFromCache):
-			// A conta respondeu do cache local. A entrada vale — e o que mantem a tela de
-			// detalhe e o download manual de pe — mas o fato viaja com o retorno, para que
-			// nenhum chamador conclua sozinho que falou com a AniList.
+			// The account answered from the local cache. The entry counts — it's what keeps the detail
+			// screen and the manual download up — but the fact travels with the return, so no caller
+			// concludes on its own that it talked to AniList.
 			fromCache = true
 		case err != nil:
 			logger.Logger.Warn().Err(err).Str("username", username).Int("media_id", mediaId).
@@ -757,6 +771,16 @@ func GetAnimeInfo(mediaId int, usernames []string, priority Priority) (*MediaLis
 		}
 		entries = append(entries, resp.Data.Page.MediaList...)
 	}
+
+	malList, err := malEntriesFor([]int{mediaId}, malUsers, priority)
+	switch {
+	case errors.Is(err, ErrFromCache):
+		fromCache = true
+	case err != nil:
+		logger.Logger.Warn().Err(err).Int("media_id", mediaId).Msg("Failed to fetch anime info from a MAL account")
+		lastErr = err
+	}
+	entries = append(entries, malList...)
 
 	if len(entries) == 0 {
 		if lastErr != nil {

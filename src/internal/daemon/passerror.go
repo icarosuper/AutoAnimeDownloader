@@ -2,34 +2,36 @@ package daemon
 
 import "errors"
 
-// Causas de um passe abortado. Sao CODIGOS que o frontend traduz — a mesma fronteira que
-// lib/domain/checkIssue.ts ja defende: o backend manda codigo, o frontend monta a frase. Antes
-// disso o banner da tela de Status exibia o `error.Error()` cru, o que na pratica significava
-// despejar um JSON de resposta da AniList na cara do usuario.
+// Causes of an aborted pass. They are CODES the frontend translates — the same boundary
+// lib/domain/checkIssue.ts already holds: the backend sends a code, the frontend builds the
+// sentence. Before this the Status screen banner showed the raw `error.Error()`, which in
+// practice meant dumping an AniList response JSON in the user's face.
 const (
-	PassErrConfig  = "config"          // nao deu para ler ou gravar a configuracao
-	PassErrSetup   = "setup"           // falta configurar (pasta da biblioteca)
-	PassErrLibrary = "library"         // a pasta da biblioteca nao aceita hardlink
-	PassErrTorrent = "torrent_backend" // o cliente de torrent nao subiu
-	PassErrAnilist = "anilist"         // a AniList nao respondeu
-	PassErrStorage = "storage"         // dados do proprio app (episodes.json, migracoes)
+	PassErrConfig  = "config"          // couldn't read or write the configuration
+	PassErrSetup   = "setup"           // setup is incomplete (library folder)
+	PassErrLibrary = "library"         // the library folder doesn't accept hardlinks
+	PassErrTorrent = "torrent_backend" // the torrent client didn't start
+	PassErrAnilist = "anilist"         // AniList didn't answer
+	PassErrMAL     = "mal"             // every MyAnimeList account failed and nothing else answered
+	PassErrStorage = "storage"         // the app's own data (episodes.json, migrations)
 	PassErrUnknown = "unknown"
 )
 
-// Sentinelas embrulhadas no erro do sitio de aborto. O codigo viaja DENTRO do erro em vez de num
-// parametro novo de SetLastCheckError: sao ~15 chamadas hoje, a maioria com nil para limpar, e
-// nenhuma delas precisaria mudar. Um sitio novo que esqueca de embrulhar cai em PassErrUnknown,
-// que tem frase propria — degrada, nao quebra.
+// Sentinels wrapped into the error at the abort site. The code travels INSIDE the error instead
+// of in a new SetLastCheckError parameter: there are ~15 calls today, most of them with nil to
+// clear, and none of them needs to change. A new site that forgets to wrap falls into
+// PassErrUnknown, which has its own sentence — it degrades, it doesn't break.
 var (
-	errCauseConfig  = errors.New("configuração")
-	errCauseSetup   = errors.New("configuração incompleta")
-	errCauseLibrary = errors.New("biblioteca")
-	errCauseTorrent = errors.New("cliente de torrent")
+	errCauseConfig  = errors.New("configuration")
+	errCauseSetup   = errors.New("incomplete configuration")
+	errCauseLibrary = errors.New("library")
+	errCauseTorrent = errors.New("torrent client")
 	errCauseAnilist = errors.New("anilist")
-	errCauseStorage = errors.New("dados do app")
+	errCauseMAL     = errors.New("myanimelist")
+	errCauseStorage = errors.New("app data")
 )
 
-// passErrorCode traduz o erro de um passe abortado no codigo que o frontend entende.
+// passErrorCode translates an aborted pass's error into the code the frontend understands.
 func passErrorCode(err error) string {
 	switch {
 	case err == nil:
@@ -42,6 +44,10 @@ func passErrorCode(err error) string {
 		return PassErrLibrary
 	case errors.Is(err, errCauseTorrent):
 		return PassErrTorrent
+	// Before AniList: searchAnilist's error is wrapped in errCauseAnilist at the abort site, so a
+	// MAL-only failure carries both sentinels and the more specific one has to win.
+	case errors.Is(err, errCauseMAL):
+		return PassErrMAL
 	case errors.Is(err, errCauseAnilist):
 		return PassErrAnilist
 	case errors.Is(err, errCauseStorage):

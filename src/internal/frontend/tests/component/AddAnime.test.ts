@@ -4,8 +4,8 @@ import AddAnime from '../../src/routes/AddAnime.svelte'
 import * as client from '../../src/lib/api/client.js'
 import type { AniListSearchResult, BlockReason } from '../../src/lib/api/client.js'
 
-// AddAnime.svelte só lê estes exports do client; ApiError precisa ser a classe real porque o
-// tratamento de erro do add faz `instanceof`.
+// AddAnime.svelte only reads these exports from the client; ApiError has to be the real class
+// because the add's error handling does `instanceof`.
 vi.mock('../../src/lib/api/client.js', async () => {
   const actual = await vi.importActual<typeof client>('../../src/lib/api/client.js')
   return {
@@ -33,7 +33,7 @@ function result(blockReason: BlockReason, id = 21): AniListSearchResult {
   }
 }
 
-/** Digita o termo, submete pelo botão e espera a busca resolver. */
+/** Types the term, submits through the button and waits for the search to resolve. */
 async function search(term = 'one piece'): Promise<void> {
   const input = screen.getByRole('searchbox')
   await fireEvent.input(input, { target: { value: term } })
@@ -48,19 +48,19 @@ beforeEach(() => {
   searchAniList.mockResolvedValue([])
 })
 
-describe('AddAnime — rodapé do card', () => {
-  it('leva ao detalhe quando o anime já está na lista do AniList', async () => {
+describe('AddAnime — card footer', () => {
+  it('links to the detail when the anime is already in one of the lists', async () => {
     searchAniList.mockResolvedValue([result('tracked')])
     render(AddAnime)
     await search()
 
     const link = screen.getByRole('link', { name: /view status|ver status/i })
     expect(link).toHaveAttribute('href', '#/status/21')
-    // O motivo sai do tooltip e vira texto: no mobile não existe hover.
-    expect(screen.getByText(/already in your anilist list|já está na sua lista/i)).toBeInTheDocument()
+    // The reason leaves the tooltip and becomes text: on mobile there's no hover.
+    expect(screen.getByText(/already in one of your lists|já está em uma das suas listas/i)).toBeInTheDocument()
   })
 
-  it('leva ao detalhe quando o anime já foi baixado', async () => {
+  it('links to the detail when the anime was already downloaded', async () => {
     searchAniList.mockResolvedValue([result('downloaded')])
     render(AddAnime)
     await search()
@@ -71,7 +71,7 @@ describe('AddAnime — rodapé do card', () => {
     )
   })
 
-  it('não oferece detalhe para um anime na blacklist — ele não tem página', async () => {
+  it('offers no detail for a blacklisted anime — it has no page', async () => {
     searchAniList.mockResolvedValue([result('blacklist')])
     render(AddAnime)
     await search()
@@ -80,7 +80,7 @@ describe('AddAnime — rodapé do card', () => {
     expect(screen.getByRole('button', { name: /^add$|^adicionar$/i })).toBeDisabled()
   })
 
-  it('troca o botão Adicionar por Ver status assim que o anime entra', async () => {
+  it('swaps the Add button for View status as soon as the anime goes in', async () => {
     searchAniList.mockResolvedValue([result('')])
     addStandaloneAnime.mockResolvedValue({ added: 2 })
     render(AddAnime)
@@ -97,8 +97,8 @@ describe('AddAnime — rodapé do card', () => {
   })
 })
 
-describe('AddAnime — link do AniList', () => {
-  it('abre a página do anime em nova aba, sem passar o referrer', async () => {
+describe('AddAnime — AniList link', () => {
+  it('opens the anime page in a new tab, without passing the referrer', async () => {
     searchAniList.mockResolvedValue([result('')])
     render(AddAnime)
     await search()
@@ -110,8 +110,8 @@ describe('AddAnime — link do AniList', () => {
   })
 })
 
-describe('AddAnime — não lançados', () => {
-  it('esconde os não lançados por padrão e refaz a busca quando o toggle liga', async () => {
+describe('AddAnime — unreleased', () => {
+  it('hides the unreleased ones by default and redoes the search when the toggle turns on', async () => {
     searchAniList.mockResolvedValue([result('')])
     render(AddAnime)
     await search()
@@ -126,10 +126,10 @@ describe('AddAnime — não lançados', () => {
   })
 })
 
-// O limite da AniList é de 30 req/min e a busca é disposable: uma requisição por tecla fazia
-// quem digita devagar queimar o próprio balde e ver a busca seguinte ser recusada.
-describe('AddAnime — orçamento da AniList', () => {
-  it('não busca enquanto se digita, só no submit', async () => {
+// AniList's limit is 30 req/min and the search is disposable: one request per keystroke made a slow
+// typist burn their own bucket and see the next search refused.
+describe('AddAnime — AniList budget', () => {
+  it('does not search while typing, only on submit', async () => {
     searchAniList.mockResolvedValue([result('')])
     render(AddAnime)
 
@@ -143,7 +143,7 @@ describe('AddAnime — orçamento da AniList', () => {
     await waitFor(() => expect(searchAniList).toHaveBeenCalledTimes(1))
   })
 
-  it('o Enter no campo submete o formulário', async () => {
+  it('Enter in the field submits the form', async () => {
     searchAniList.mockResolvedValue([result('')])
     render(AddAnime)
 
@@ -154,7 +154,7 @@ describe('AddAnime — orçamento da AniList', () => {
     await waitFor(() => expect(searchAniList).toHaveBeenCalledWith('one piece', false, expect.anything()))
   })
 
-  it('mantém o botão desabilitado abaixo de 3 caracteres', async () => {
+  it('keeps the button disabled below 3 characters', async () => {
     render(AddAnime)
     const button = screen.getByRole('button', { name: /^search$|^buscar$/i })
     expect(button).toBeDisabled()

@@ -101,6 +101,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#92** — O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)
 - [**#93** — A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)
 - [**#94** — Torrent travado é derrubado pelo caminho de falha, e só quem está *tentando* conta como travado](#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)
+- [**#95** — MyAnimeList is a list source, not a metadata source](#95-myanimelist-is-a-list-source-not-a-metadata-source)
 
 ---
 
@@ -2689,3 +2690,58 @@ e derrubar um download não merecem a mesma paciência.
 **Don't "fix" by:** promover o limiar a config sem pedido (o custo de errar é um passe a mais, não
 um download perdido — os bytes ficam), nem transformar o drop em blacklist. A #24 continua valendo:
 se a re-adição virar churn observado, aí sim se discute estado persistido.
+
+### 95. MyAnimeList is a list source, not a metadata source
+
+**Location:** `anilist/mal.go` (`GetMALEntries`, `GetMALList`, `malEntriesFor`, `ErrMALEmpty`);
+the MAL halves of `GetAnimeInfo`/`GetAnimeInfoByIDs` (`anilist/anilist.go`); the call sites in
+`daemon/verification.go` (`searchAnilist`, the delete fetch, `allAccountsAgreeOnDelete`,
+`malAccountKey`) and `api/endpoint_animes.go` (`fetchMALEntries`) / `api/standalone_guard.go`.
+Spec: [myanimelist-list-source](../superpowers/specs/2026-10-12-myanimelist-list-source-design.md).
+
+A MAL account only answers "which anime, in which status, with what progress". Each MAL id is
+mapped to an AniList `Media.Id` through `idMal_in`, and from there the entry is the same synthetic
+`MediaList` a standalone anime gets (`Id == 0`, empty `CustomLists`, Media from `GetMediaByIDs`)
+with the MAL status and progress on top. Identity stays AniList's
+([#43](#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)),
+so `episodes.json`, `anime_settings`, the routes and the library don't know MAL exists.
+
+**What looks wrong, part one: the list comes from `myanimelist.net/animelist/{user}/load.json`**,
+an unofficial endpoint, and not from the official API v2. The v2 answers `403` without a client ID,
+and a client ID either ships in the binary (public, shared rate limit, one revocation breaks every
+install) or makes every user register an app. `load.json` needs nothing, but only reads **public**
+lists. If it breaks, the fallback is v2 with a user-supplied client ID: only `fetchMALList` changes.
+`TestLive_MALList` (`AAD_LIVE_MAL=1`) is the alarm — it already caught `is_rewatching` arriving as
+`""` on some entries.
+
+**What looks wrong, part two: an empty MAL list is an error (`ErrMALEmpty`), not an answer.**
+A private list, a format change on MAL's side (every field decodes to zero) and a total mapping
+failure all look like an empty list. As an empty answer the account would silently lose its veto:
+AniList account with X in `COMPLETED`, MAL account watching X, MAL comes back empty → the AniList
+account alone is unanimous and X is deleted. As a failure, `allAccountsAgreeOnDelete` refuses,
+the same as for an AniList account that didn't answer.
+
+**What looks wrong, part three: the status filter runs before the AniList hydration.** The MAL
+list is fetched whole (`status=7`) and cached raw (MAL id, status, progress); only the entries in
+the requested statuses go to `GetMediaByIDs`. `mediaByIDCache` lives 60s and `/api/v1/animes` is
+polled every 30s per tab, so hydrating a ~300-entry list (mostly `COMPLETED`) would cost ~6 AniList
+queries per minute per MAL account — the burn
+[#46](#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)
+and [#85](#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba) closed. The deletion
+vote never hydrates at all: it only needs AniList id + status.
+
+**Caches:** `malListCache` (raw list, 60s) and `malIDMapCache` (MAL→AniList id, 24h, `0` = no
+counterpart, cached so an unmappable entry doesn't cost a request per pass). Both go into the disk
+snapshot: the list comes back with TTL zero like the other lists
+([#92](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)),
+the mapping with its full TTL like `Series`. MAL down → stale list + `ErrFromCache`.
+
+**Don't confuse:** the `inDeleteStatus` key of a MAL account is `"mal:" + user` (`malAccountKey`),
+so an AniList and a MAL account with the same name don't overwrite each other. And
+`MediaList.Id == 0` means "standalone **or** MAL" — never use it to tell them apart.
+
+**Don't "fix" by:** making MAL a metadata source (a second identity and most of the app
+duplicated); putting the MAL code in its own package (it needs `ttlCache`, the snapshot,
+`sendAnilistRequest` and `GetMediaByIDs`, all internal to `anilist`); treating `ErrMALEmpty` as an
+empty list; or hydrating before filtering.
+

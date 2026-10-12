@@ -5,10 +5,9 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 )
 
-// Motivos pelos quais um anime nao pode ser adicionado como avulso. Sao tambem os codigos de
-// erro do 409 do POST e as chaves de tooltip da tela de busca — um campo so, nao quatro
-// booleanos, porque sao mutuamente exclusivos por precedencia e o front precisa de um rotulo
-// unico por card.
+// Reasons an anime can't be added as standalone. They are also the error codes of the POST's 409
+// and the tooltip keys of the search screen — one field, not four booleans, because they are
+// mutually exclusive by precedence and the front needs a single label per card.
 const (
 	blockReasonBlacklist  = "blacklist"
 	blockReasonStandalone = "standalone"
@@ -16,31 +15,31 @@ const (
 	blockReasonDownloaded = "downloaded"
 )
 
-// standaloneGuard responde a unica pergunta que o POST e a busca fazem: este anime pode ser
-// adicionado como avulso?
+// standaloneGuard answers the only question the POST and the search ask: can this anime be added as
+// standalone?
 //
-// Uma funcao de bloqueio, dois consumidores. E a mesma funcao nos dois porque "o front nao
-// deixa clicar" e "o back devolve erro" precisam concordar por construcao — duas definicoes
-// produziriam um card cinza que o backend aceita, ou o inverso.
+// One blocking function, two consumers. It's the same function for both because "the front doesn't
+// let you click" and "the back returns an error" have to agree by construction — two definitions
+// would produce a grey card the backend accepts, or the reverse.
 //
-// Nenhuma query nova: os quatro sinais ja existem e tres deles ja vem de cache — o arquivo de
-// avulsos e o episodes.json sao locais, tracked/blacklisted saem de fetchAniListEntries
-// (frontendListCache, 60s) e GetCustomListsMap (5min), exatamente o par que GET /animes monta.
+// No new query: the four signals already exist and three of them already come from cache — the
+// standalone file and episodes.json are local, tracked/blacklisted come from fetchAniListEntries
+// (frontendListCache, 60s) and GetCustomListsMap (5min), exactly the pair GET /animes builds.
 type standaloneGuard struct {
 	standalone  map[int]bool // standalone_animes
 	downloaded  map[int]int  // mediaID → nº de registros em episodes.json
-	tracked     map[int]bool // snapshot do que o daemon PROCESSA (ver newStandaloneGuard)
+	tracked     map[int]bool // snapshot of what the daemon PROCESSES (see newStandaloneGuard)
 	blacklisted map[int]bool // customLists ∩ excluded_lists
 }
 
-// blockReason devolve "" quando o anime pode ser adicionado, senao um dos quatro motivos.
+// blockReason returns "" when the anime can be added, otherwise one of the four reasons.
 //
-// Precedencia: blacklist > avulso > lista > baixado. Blacklist vem primeiro porque e o unico
-// motivo em que adicionar mudaria o comportamento PARA PIOR: um blacklisted em status fora de
-// download_statuses escapa do searchAnilist, o registro avulso sobrevive ao merge e o filtro do
-// usuario e contornado (o MediaList sintetico de GetMediaByID tem CustomLists nulo, entao
-// animeIsInExcludedList nunca dispara nele). Os outros tres sao inocuos — os registros
-// existentes ja fazem o loop pular tudo — e a mensagem e so clareza.
+// Precedence: blacklist > standalone > list > downloaded. Blacklist comes first because it's the
+// only reason where adding would change the behavior FOR THE WORSE: a blacklisted anime in a status
+// outside download_statuses escapes searchAnilist, the standalone record survives the merge and the
+// user's filter is bypassed (GetMediaByID's synthetic MediaList has nil CustomLists, so
+// animeIsInExcludedList never fires on it). The other three are harmless — the existing records
+// already make the loop skip everything — and the message is just clarity.
 func (g standaloneGuard) blockReason(mediaID, totalEpisodes int) string {
 	switch {
 	case g.blacklisted[mediaID]:
@@ -49,22 +48,22 @@ func (g standaloneGuard) blockReason(mediaID, totalEpisodes int) string {
 		return blockReasonStandalone
 	case g.tracked[mediaID]:
 		return blockReasonTracked
-	// So bloqueia com contagem CONHECIDA: um anime de 24 episodios com 12 registros (o limite
-	// por anime) nao e "ja baixado", e um total desconhecido nao autoriza afirmar nada.
+	// Only blocks on a KNOWN count: a 24-episode anime with 12 records (the per-anime limit) isn't
+	// "already downloaded", and an unknown total doesn't allow claiming anything.
 	case totalEpisodes > 0 && g.downloaded[mediaID] >= totalEpisodes:
 		return blockReasonDownloaded
 	}
 	return ""
 }
 
-// newStandaloneGuard monta o guard a partir do estado que o servidor ja tem em maos.
+// newStandaloneGuard builds the guard from the state the server already has at hand.
 //
-// tracked sai de fetchAniListEntries, e nao do searchAnilist do daemon: sao consultas
-// diferentes com OS MESMOS DOIS FILTROS (download_statuses server-side + MediaStatusAllowed), e
-// a do pacote api e a que ja tem cache no caminho do frontend. A definicao e "aparece no
-// conjunto que o daemon PROCESSA", nao "existe entrada na AniList" — um anime em PLANNING com
-// download_statuses = [CURRENT] esta numa lista e o daemon o ignora, e adiciona-lo como avulso
-// e o caso de uso mais obvio da feature.
+// tracked comes from fetchAniListEntries, not from the daemon's searchAnilist: they are different
+// queries with THE SAME TWO FILTERS (download_statuses server-side + MediaStatusAllowed), and the
+// api package's one is the one already cached on the frontend path. The definition is "shows up in
+// the set the daemon PROCESSES", not "there is an AniList entry" — an anime in PLANNING with
+// download_statuses = [CURRENT] is in a list and the daemon ignores it, and adding it as standalone
+// is the most obvious use case of the feature.
 func newStandaloneGuard(fm FileManagerInterface, config *files.Config) (standaloneGuard, error) {
 	guard := standaloneGuard{
 		standalone:  map[int]bool{},
@@ -97,17 +96,23 @@ func newStandaloneGuard(fm FileManagerInterface, config *files.Config) (standalo
 	}
 
 	for _, username := range config.AnilistUsernames {
-		// nil significa busca falhada (ver fetchAniListEntries). Tratar isso como "nada
-		// acompanhado" e o comportamento certo aqui: o front e best-effort e o POST recusa de
-		// novo com o snapshot da proxima chamada.
-		// O segundo retorno (veio do cache) nao muda nada aqui: o guard quer saber o que a
-		// conta acompanha, e a resposta do cache local e melhor que nenhuma.
+		// nil means a failed fetch (see fetchAniListEntries). Treating that as "nothing tracked" is the
+		// right behavior here: the front is best-effort and the POST refuses again with the next call's
+		// snapshot. The second return (came from the cache) changes nothing here: the guard wants to know
+		// what the account tracks, and the local cache's answer is better than none.
 		tracked, _ := fetchAniListEntries(username, config.DownloadStatuses, config.DownloadMediaStatuses)
 		for _, ml := range tracked {
 			guard.tracked[ml.Media.Id] = true
 			if isInExcludedList(ml.CustomLists, excluded) {
 				guard.blacklisted[ml.Media.Id] = true
 			}
+		}
+	}
+	// A MAL account is never blacklisted: MAL has no custom lists, so excluded_lists can't apply.
+	for _, user := range config.MALUsernames {
+		tracked, _ := fetchMALEntries(user, config.DownloadStatuses, config.DownloadMediaStatuses)
+		for _, ml := range tracked {
+			guard.tracked[ml.Media.Id] = true
 		}
 	}
 

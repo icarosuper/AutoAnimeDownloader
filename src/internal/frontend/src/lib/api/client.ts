@@ -1,8 +1,8 @@
 import { toasts } from '../stores/toasts.js'
 import { backendHealth } from '../stores/backendHealth.js'
 
-// Usa o host atual da página quando não há variável de ambiente definida
-// Isso permite que o frontend funcione tanto localmente quanto quando acessado remotamente
+// Uses the page's current host when no environment variable is set
+// This lets the frontend work both locally and when accessed remotely
 const getApiBaseUrl = (): string => {
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL
@@ -13,8 +13,8 @@ const getApiBaseUrl = (): string => {
     return 'http://localhost:8091/api/v1'
   }
 
-  // Usa path relativo pois o frontend é servido pelo próprio backend
-  // Isso funciona tanto localmente quanto via Cloudflare Tunnel/proxy reverso
+  // Uses a relative path since the frontend is served by the backend itself
+  // This works both locally and through Cloudflare Tunnel/a reverse proxy
   return `${window.location.origin}/api/v1`
 }
 
@@ -30,9 +30,10 @@ interface ApiResponse<T> {
 }
 
 /**
- * Erro de API que preserva o `code` do envelope. A mensagem continua sendo a do servidor (nada
- * muda para quem só a exibe), mas quem precisa DECIDIR pelo motivo — o 409 do POST de avulso,
- * cujos cinco códigos viram cinco toasts diferentes — não precisa parsear texto para isso.
+ * API error that keeps the envelope's `code`. The message is still the server's (nothing changes
+ * for whoever only displays it), but whoever needs to DECIDE by the reason — the 409 of the
+ * standalone POST, whose five codes become five different toasts — doesn't need to parse text for
+ * it.
  */
 export class ApiError extends Error {
   constructor(
@@ -46,7 +47,7 @@ export class ApiError extends Error {
 }
 
 interface ApiRequestOptions {
-  /** Cancela a requisição. A busca da tela de adicionar aborta a anterior a cada submit. */
+  /** Cancels the request. The add screen's search aborts the previous one on every submit. */
   signal?: AbortSignal
   /**
    * Suppresses the automatic error toast on failure. For endpoints polled on a short interval
@@ -95,18 +96,18 @@ async function apiRequest<T>(
     return data.data
   } catch (error) {
     console.error('API request failed:', error)
-    // Antes de qualquer toast: um 5xx repetido num endpoint com `silent: true` era INVISÍVEL —
-    // o app degradava em silêncio e o usuário só via números parados. A saúde do backend é
-    // contada aqui justamente porque este é o único ponto por onde toda requisição passa.
+    // Before any toast: a repeated 5xx on an endpoint with `silent: true` was INVISIBLE — the app
+    // degraded silently and the user only saw frozen numbers. Backend health is counted here
+    // precisely because this is the only point every request goes through.
     backendHealth.recordFailure(endpoint, responseStatus)
     if (!opts.silent) {
       const isAnilistEndpoint = /\/animes\/\d+\/episodes$/.test(endpoint)
       const message =
         isAnilistEndpoint && (responseStatus === 500 || responseStatus === 0)
-          ? 'Falha na comunicação com o AniList'
+          ? 'Failed to reach AniList'
           : error instanceof Error
             ? error.message
-            : 'Erro desconhecido'
+            : 'Unknown error'
       toasts.add(message)
     }
     throw error
@@ -120,26 +121,34 @@ export interface StatusResponse {
   version: string
   disk_total: number
   disk_free: number
-  /** Livre abaixo de min_free_disk_percent: o daemon parou de adicionar torrents. Calculado no
-   *  servidor de proposito — um limiar duplicado no frontend discordaria do daemon. */
+  /**
+   * Free space below min_free_disk_percent: the daemon stopped adding torrents. Computed on the
+   * server on purpose — a threshold duplicated in the frontend would disagree with the daemon.
+   */
   disk_low: boolean
-  /** Opcional de propósito: o `status_update` do WebSocket carrega só três campos, e a Status
-   *  sintetiza um StatusResponse a partir dele. Ausente também num daemon mais antigo que o
-   *  frontend. Quem consome trata ausência como "sem informação", nunca como "está tudo bem". */
+  /**
+   * Optional on purpose: the WebSocket's `status_update` carries only three fields, and Status
+   * synthesizes a StatusResponse from it. Also absent on a daemon older than the frontend.
+   * Consumers treat absence as "no information", never as "all is well".
+   */
   anilist?: AnilistHealth
 }
 
-/** Último estado conhecido da AniList, gravado por qualquer chamada (passe do daemon ou poll do
- *  frontend). Código, nunca frase pronta: o daemon não sabe o locale do navegador. */
+/**
+ * Last known AniList state, written by any call (the daemon's pass or the frontend's poll). A code,
+ * never a ready sentence: the daemon doesn't know the browser's locale.
+ */
 export interface AnilistHealth {
   state: 'ok' | 'rate_limited' | 'outage' | 'app_bug'
-  /** Mensagem crua da AniList — um 403 de IP bloqueado traz o motivo escrito para ser lido. */
+  /** AniList's raw message — a blocked-IP 403 carries the reason written out to be read. */
   message?: string
-  /** Fim do timeout de 429, derivado do Retry-After. Ausente quando não se aplica. */
+  /** End of the 429 timeout, derived from Retry-After. Absent when it doesn't apply. */
   retry_at?: string
   since?: string
-  /** Data do snapshot do cache em disco. Ausente quando nunca houve um. Não é um fato sobre a
-   *  AniList: é o que responde "de quando é o que estou vendo?" enquanto ela está fora. */
+  /**
+   * Date of the disk cache snapshot. Absent when there never was one. It's not a fact about
+   * AniList: it's what answers "how old is what I'm seeing?" while it's down.
+   */
   cache_saved_at?: string
 }
 
@@ -165,15 +174,16 @@ export interface Priorities {
 export interface Config {
   anilist_username?: string
   anilist_usernames: string[]
+  mal_usernames?: string[]
   completed_anime_path: string
   check_interval: number
   max_episodes_per_anime: number
   /** Tetos de tamanho de torrent em GiB. 0 desliga. */
   max_batch_torrent_size_gb: number
   max_episode_torrent_size_gb: number
-  /** Piso de seeders: torrent abaixo disso e descartado da busca. 0 desliga. */
+  /** Seeders floor: a torrent below this is dropped from the search. 0 disables. */
   min_seeders: number
-  /** Teto de paginas do Nyaa por busca. A busca so desce se tiver poucos candidatos. */
+  /** Ceiling of Nyaa pages per search. The search only goes deeper if it has few candidates. */
   max_search_pages: number
   /** Abaixo desta porcentagem de espaco livre o download e pausado. 0 desliga. */
   min_free_disk_percent: number
@@ -200,26 +210,28 @@ export interface AnimeInfo {
   episodes_downloaded: number
   episodes_released: number
   episodes_watched: number
-  /** Lancados, nao assistidos e nao baixados — a contagem de "atrasado". */
+  /** Released, not watched and not downloaded — the "behind" count. */
   episodes_pending: number
   total_episodes: number
   latest_episode_number: number
   last_download_date: string
   cover_image?: string
   is_blacklisted?: boolean
-  /** Acompanhado pelo arquivo de avulsos, e não por uma lista do AniList. Origem, não estado. */
+  /** Tracked by the standalone file, not by an AniList or MyAnimeList list. Origin, not state. */
   is_standalone?: boolean
   /**
-   * Unix timestamp (segundos) da estreia do próximo episódio; ausente quando não há episódio
-   * agendado. É timestamp, e não uma contagem regressiva pronta, para o countdown não congelar
-   * junto com a resposta em cache — quem renderiza conta para trás no cliente.
+   * Unix timestamp (seconds) of the next episode's premiere; absent when no episode is scheduled.
+   * It's a timestamp, not a ready countdown, so the countdown doesn't freeze with a cached response
+   * — whoever renders counts down on the client.
    */
   next_airing_at?: number
-  /** Outros titulos do mesmo anime (romaji, ingles, kanji, sinonimos). So a busca usa. */
+  /**
+   * Other titles of the same anime (romaji, English, kanji, synonyms). Only the search uses them.
+   */
   alt_names?: string[]
 }
 
-/** Motivos pelos quais um anime não pode ser adicionado como avulso — vêm prontos do servidor. */
+/** Reasons an anime can't be added as standalone — they come ready from the server. */
 export type BlockReason = '' | 'blacklist' | 'standalone' | 'tracked' | 'downloaded'
 
 export interface AniListSearchResult {
@@ -228,7 +240,7 @@ export interface AniListSearchResult {
   format: string
   status: string
   year: number
-  /** 0 quando o AniList não sabe o total (comum em anime ainda no ar). */
+  /** 0 when AniList doesn't know the total (common for an anime still airing). */
   episodes: number
   cover?: string
   block_reason: BlockReason
@@ -260,29 +272,28 @@ export interface TorrentInfo {
   seeded_for_seconds: number
 }
 
-/** Um arquivo de dentro de um torrent. */
+/** A file inside a torrent. */
 export interface TorrentFile {
-  /** Caminho relativo CRU, como está no metadata — fansub, resolução e codec saem daqui. */
+  /** RAW relative path, as in the metadata — fansub, resolution and codec come from here. */
   path: string
   size: number
-  /** null = desconhecido (torrent parado: o rain libera as peças). Não é "nada baixado". */
+  /** null = unknown (stopped torrent: rain releases the pieces). It's not "nothing downloaded". */
   bytes_completed: number | null
-  /** Número extraído do NOME DO ARQUIVO pelo backend; null quando nada casa. */
+  /** Number extracted from the FILE NAME by the backend; null when nothing matches. */
   episode: number | null
   /**
-   * Codec de vídeo lido do CABEÇALHO do arquivo (Matroska/EBML), não do nome — a maior parte
-   * dos releases não escreve o codec no nome. Ausente quando não dá para responder: não é
-   * `.mkv`, ou ainda não terminou de baixar (o rain não baixa sequencial, então o cabeçalho
-   * pode não estar no disco).
+   * Video codec read from the file HEADER (Matroska/EBML), not from the name — most releases don't
+   * write the codec in the name. Absent when it can't be answered: not a `.mkv`, or not finished
+   * downloading yet (rain doesn't download sequentially, so the header may not be on disk).
    */
   codec?: string
 }
 
-/** Uma linha do relatório da última verificação: um par (anime, código). */
+/** One line of the last check's report: an (anime, code) pair. */
 export interface Issue {
   anime_id: number
   anime_name: string
-  /** Só vem em problema. Limite não tem "episódios afetados" — tem downloaded/pending. */
+  /** Only comes with a problem. A limit has no "affected episodes" — it has downloaded/pending. */
   episodes?: number[]
   code: string
   candidates?: number
@@ -293,26 +304,28 @@ export interface Issue {
   batch_skipped?: string
 }
 
-/** O relatório do ÚLTIMO passe, e só dele. Não é histórico. */
+/** The report of the LAST pass, and only of it. It's not history. */
 export interface CheckReport {
   finished_at: string
   pass_error: string
-  /** Causa classificada do aborto. O frontend monta a frase a partir DAQUI; `pass_error` é o
-   *  texto cru, mostrado recolhido para quem for abrir uma issue. */
+  /**
+   * Classified cause of the abort. The frontend builds the sentence from HERE; `pass_error` is the
+   * raw text, shown collapsed for whoever opens an issue.
+   */
   pass_error_code?: string
   problems: Issue[]
   limits: Issue[]
 }
 
 export async function getStatus(opts: { silent?: boolean } = {}): Promise<StatusResponse> {
-  // `silent` para quem faz poll: o AppShell consulta a cada 30s só para alimentar o banner, e
-  // um daemon fora do ar não pode virar um toast a cada meio minuto.
+  // `silent` for pollers: the AppShell queries every 30s only to feed the banner, and a daemon
+  // that's down can't become a toast every half minute.
   return apiRequest<StatusResponse>('GET', '/status', null, opts)
 }
 
 export async function getLastCheck(): Promise<CheckReport> {
-  // Polled junto do poll de torrents do Status e do AnimeDetail: uma falha transitória deve
-  // degradar em silêncio em vez de tostar a cada tick.
+  // Polled together with the torrents poll of Status and AnimeDetail: a transient failure should
+  // degrade silently instead of toasting on every tick.
   return apiRequest<CheckReport>('GET', '/last-check', null, { silent: true })
 }
 
@@ -333,7 +346,9 @@ export async function getAnimes(): Promise<AnimeInfo[]> {
 }
 
 export interface AnimeEpisodeInfo {
-  /** Identidade do episodio nas rotas de acao: (anime, numero). Nao existe mais episode_id. */
+  /**
+   * The episode's identity in the action routes: (anime, number). There's no episode_id anymore.
+   */
   episode_number: number
   airing_at: number
   time_until_airing: number
@@ -344,14 +359,14 @@ export interface AnimeEpisodeInfo {
   is_manually_managed?: boolean
   is_blocked?: boolean
   episode_hash?: string
-  /** Faixa real do pack (do nome do torrent). Ausente/0 = desconhecida — cai no min/max. */
+  /** The pack's real range (from the torrent name). Absent/0 = unknown — falls back to min/max. */
   batch_start?: number
   batch_end?: number
 }
 
 export interface AnimeDetailResponse {
-  // anime_id e o id da MIDIA na AniList: serve de chave interna e tambem monta o link
-  // anilist.co/anime/{id}. Nao ha mais um anilist_id separado.
+  // anime_id is the AniList MEDIA id: it's the internal key and also builds the
+  // anilist.co/anime/{id} link. There's no separate anilist_id anymore.
   anime_id: number
   total_episodes: number
   progress: number
@@ -361,7 +376,7 @@ export interface AnimeDetailResponse {
 }
 
 export interface AnimeSettings {
-  /** Progresso manual — só é lido para anime avulso (o de lista vem da AniList). */
+  /** Manual progress — only read for a standalone anime (a list anime's comes from its list). */
   progress?: number
 }
 
@@ -422,11 +437,11 @@ export async function getTorrents(): Promise<TorrentInfo[]> {
 }
 
 /**
- * Arquivos de dentro de um torrent. Buscado SOB DEMANDA (ao expandir a linha), nunca embutido
- * no `GET /torrents`: aquele é um poll de 2s, e enfiar a lista nele multiplicaria o payload
- * por N para um dado que quase sempre ninguém está olhando.
+ * Files inside a torrent. Fetched ON DEMAND (when the row expands), never embedded in `GET
+ * /torrents`: that one is a 2s poll, and putting the list in it would multiply the payload by N for
+ * data almost nobody is looking at.
  *
- * `silent` porque o painel aberto se refaz no mesmo tick de poll da tela.
+ * `silent` because the open panel refreshes on the screen's same poll tick.
  */
 export async function getTorrentFiles(hash: string): Promise<TorrentFile[]> {
   return apiRequest<TorrentFile[]>('GET', `/torrents/${hash}/files`, null, { silent: true })
@@ -470,16 +485,16 @@ export async function deleteTorrent(
 }
 
 /**
- * Busca no AniList. `silent` porque a tela desenha o próprio aviso de falha ao lado dos
- * resultados — um toast em cima disso diria a mesma coisa duas vezes.
+ * Search on AniList. `silent` because the screen draws its own failure notice next to the results —
+ * a toast on top of that would say the same thing twice.
  */
 export async function searchAniList(
   q: string,
   includeUnreleased = false,
   signal?: AbortSignal,
 ): Promise<AniListSearchResult[]> {
-  // O parâmetro só viaja quando é true: o backend já assume false, e mandar `=false` em toda
-  // busca só engorda a URL do log.
+  // The parameter only travels when it's true: the backend already assumes false, and sending
+  // `=false` on every search only bloats the log URL.
   const unreleased = includeUnreleased ? '&include_unreleased=true' : ''
   return apiRequest<AniListSearchResult[]>(
     'GET',
@@ -489,7 +504,10 @@ export async function searchAniList(
   )
 }
 
-/** Passa a acompanhar um anime avulso e já baixa o que estiver no ar. Devolve quantos entraram. */
+/**
+ * Starts tracking a standalone anime and downloads whatever is already aired. Returns how many went
+ * in.
+ */
 export async function addStandaloneAnime(mediaId: number): Promise<{ added: number }> {
   return apiRequest<{ added: number }>('POST', '/standalone-animes', { media_id: mediaId }, { silent: true })
 }

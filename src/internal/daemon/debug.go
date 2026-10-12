@@ -43,7 +43,7 @@ type EpisodeDebugResult struct {
 func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerInterface) (*DebugSummary, error) {
 	logger.Logger.Warn().Msg("Debug mode: episodes are always treated as not-yet-downloaded. Results may differ from a real run for that reason.")
 
-	details, err := resolveAnimeDetails(fileManager, animeId, configs.AnilistUsernames)
+	details, err := resolveAnimeDetails(fileManager, animeId, configs)
 	if err != nil {
 		return nil, err
 	}
@@ -57,18 +57,18 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 
 	summary := &DebugSummary{AnimeID: animeId, AnimeName: animeTitle}
 
-	// Espelha processAnimeEpisodes: a lista sintetica, nao os nos crus da agenda. Iterar
-	// AiringSchedule.Nodes aqui reportaria um pipeline que o daemon
-	// nao executa — no One Piece, "buscou 1123..1147" quando a producao busca a partir do 1.
-	// savedEpisodes e nil de proposito: o debug ja declara que trata todo episodio como
-	// nao-baixado, e sem ele firstEpisodeToConsider resolve para Progress+1.
+	// Mirrors processAnimeEpisodes: the synthetic list, not the raw schedule nodes. Iterating
+	// AiringSchedule.Nodes here would report a pipeline the daemon doesn't run — on One Piece,
+	// "searched 1123..1147" when production searches from 1. savedEpisodes is nil on purpose: debug
+	// already states it treats every episode as not downloaded, and without it firstEpisodeToConsider
+	// resolves to Progress+1.
 	episodes := anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))
 
 	maxEpisodes := effectiveMax(configs, episodes)
 
-	// A MESMA funcao da producao: o debug reportava o pipeline errado quando este trecho era uma
-	// copia mantida em sincronia a mao. savedEpisodes/torrents/keepSet/blocked vazios porque o
-	// debug ja declara que trata todo episodio como nao-baixado.
+	// The SAME function as production: debug reported the wrong pipeline back when this part was a
+	// copy kept in sync by hand. savedEpisodes/torrents/keepSet/blocked are empty because debug
+	// already states it treats every episode as not downloaded.
 	sel := selectEpisodes(configs, maxEpisodes, anime, episodes, nil, nil, nil, nil, nil)
 
 	wouldSearch := make(map[int]bool, len(sel.toDownload))
@@ -97,8 +97,8 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 
 	searcher := defaultNyaaSearcher()
 
-	// Mesmo fluxo da producao, sem a segunda selecao: o debug nao tem registros salvos para
-	// relevar (ele ja declara que trata todo episodio como nao-baixado).
+	// Same flow as production, without the second selection: debug has no saved records to account for
+	// (it already states it treats every episode as not downloaded).
 	var magnetsForEpisodes map[int]resolvedMagnets
 	if isAnimeMovie(anime) {
 		episodesToDownload, magnetsForEpisodes = resolveMovie(configs, anime, animeTitle, episodesToDownload, searcher)
@@ -107,8 +107,8 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		packs, singles, _ := partitionSearchResults(configs, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(episodesToDownload)))
 		if !isAnimeMovie(anime) && len(episodesToDownload) > 1 {
 			firstPending := episodesToDownload[0].Episode
-			// Mesmo eixo de numeracao da producao: sem ele o debug reportaria "nenhum pack cobre"
-			// para toda entrada cujo pack esta numerado pela season ou pela serie (packAxis).
+			// Same numbering axis as production: without it debug would report "no pack covers" for every
+			// entry whose pack is numbered by season or by series (packAxis).
 			axis := newPackAxis(anime, resolveSeriesIndex([]int{animeId}, nil), mediaTotalEpisodes(anime))
 			if batches := pickBatches(newPackSet(packs, searcher.packRange), axis, firstPending, windowEnd(configs, firstPending)); batches.len() > 0 {
 				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, episodesToDownload, batches)
@@ -119,7 +119,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		}
 	}
 
-	// Tamanho da serie, so para a busca decidir o zero-padding da query do episodio.
+	// Series size, only so the search can decide the zero-padding of the episode query.
 	seriesLength := anilist.LastAiredEpisode(anime)
 
 	magnetsByEpisodeNumber := make(map[int]int, len(episodesToDownload))
@@ -127,11 +127,11 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		resolved := magnetsForEpisodes[ep.Episode]
 		magnets := resolved.candidates
 
-		// Mesmo fallback do processAnimeEpisodes: a busca multipla nao leva numero de episodio na
-		// query, e numa serie longa as primeiras paginas ordenadas por seeders sao so os episodios
-		// recentes. E searchSingleEpisode que carrega o zero-padding (decisions.md #56). Sem esta
-		// chamada o debug reportava "0 magnets" em One Piece/Naruto por nao ter buscado, e nao por
-		// o Nyaa nao ter.
+		// Same fallback as processAnimeEpisodes: the multi search carries no episode number in the query,
+		// and in a long series the first pages sorted by seeders are only the recent episodes.
+		// searchSingleEpisode is what carries the zero-padding (decisions.md #56). Without this call
+		// debug reported "0 magnets" on One Piece/Naruto because it hadn't searched, not because Nyaa
+		// didn't have them.
 		if len(magnets) == 0 {
 			magnets, _ = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 		}

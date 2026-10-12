@@ -17,21 +17,21 @@ type animeProcessResult struct {
 	newEpisodes     []files.EpisodeStruct
 	checkedEpisodes []files.EpisodeKey
 	keysToDelete    []files.EpisodeKey
-	// issues sao os motivos pelos quais este anime deixou de baixar algo. Vem pelo canal que ja
-	// existe de proposito: um *passReport compartilhado entre as goroutines de
-	// maxConcurrentAnimes precisaria de mutex, e o fan-in ja resolve isso de graca.
+	// issues are the reasons this anime stopped downloading something. It comes through the channel
+	// that already exists on purpose: a *passReport shared between the maxConcurrentAnimes goroutines
+	// would need a mutex, and the fan-in already solves that for free.
 	issues []Issue
 }
 
 // maxConcurrentAnimes limits simultaneous Nyaa HTTP searches to avoid rate limiting.
 const maxConcurrentAnimes = 5
 
-// verificationMu serializa os passes. O passe le episodes.json UMA vez no comeco e so escreve no
-// fim (Fase 3), entao dois passes simultaneos — o do loop e o do POST /check, ou dois /check —
-// enxergam a mesma lista velha e baixam tudo de novo: foi assim que um anime ja coberto por um
-// pack ganhou torrents avulsos dos mesmos episodios, e a escrita do segundo passe sobrescreveu os
-// registros do pack. Passe concorrente e DESCARTADO, nao enfileirado: ele leria o mesmo estado
-// que o passe em andamento ja esta corrigindo, e o proximo tick do loop cobre o que faltar.
+// verificationMu serializes the passes. A pass reads episodes.json ONCE at the start and only
+// writes at the end (Phase 3), so two simultaneous passes — the loop's and POST /check's, or two
+// /check — see the same stale list and download everything again: that's how an anime already
+// covered by a pack got standalone torrents of the same episodes, and the second pass's write
+// overwrote the pack's records. A concurrent pass is DROPPED, not queued: it would read the same
+// state the running pass is already fixing, and the loop's next tick covers whatever is missing.
 var verificationMu sync.Mutex
 
 func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, state *State, jobQueue *JobQueue, backend torrents.TorrentBackend, librarian files.Librarian) {
@@ -62,12 +62,12 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		return
 	}
 
-	// A biblioteca e montada com hardlinks. O endpoint de save da config sonda isso, mas
-	// configs escritos antes deste upgrade (ou direto no config.json pelo
-	// docker/entrypoint.sh) nunca passaram por ele. Sem esta porta um filesystem sem
-	// suporte a hardlink baixa alegremente enquanto todo JobOrganize morre, e a UI mostra
-	// um daemon saudavel. Sondar aqui devolve a mesma mensagem acionavel do endpoint, e
-	// aborta o passe: baixar o que nao da para organizar so enche o disco.
+	// The library is built with hardlinks. The config save endpoint probes this, but configs written
+	// before this upgrade (or straight into config.json by docker/entrypoint.sh) never went through
+	// it. Without this gate a filesystem without hardlink support happily downloads while every
+	// JobOrganize dies, and the UI shows a healthy daemon. Probing here returns the same actionable
+	// message as the endpoint, and aborts the pass: downloading what can't be organized only fills the
+	// disk.
 	if librarian != nil {
 		if err := librarian.ProbePath(configs.CompletedAnimePath); err != nil {
 			logger.Logger.Error().Err(err).
@@ -80,16 +80,15 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	if backend == nil {
 		logger.Logger.Error().Msg("Torrent backend not initialized; skipping verification")
-		state.SetLastCheckError(fmt.Errorf("%w: não inicializado", errCauseTorrent))
+		state.SetLastCheckError(fmt.Errorf("%w: not initialized", errCauseTorrent))
 		return
 	}
 
-	// Rede de segurança: main.go e o PUT /config já aplicam o limite, mas um config.json
-	// editado à mão nunca passa por nenhum dos dois. É também o que faz da fila uma
-	// reconciliação de verdade: todo SetMaxActiveDownloads roda um enforce, então um pause que
-	// a rain recusou ou um `stopping` que ficou no meio do caminho se resolve no ciclo
-	// seguinte. Roda ANTES do Ensure, quando ainda pode não haver sessão — o passo 0 do
-	// enforce é quem trata isso (ver decisions.md #41).
+	// Safety net: main.go and PUT /config already apply the limit, but a hand-edited config.json never
+	// goes through either. It's also what makes the queue a real reconciliation: every
+	// SetMaxActiveDownloads runs an enforce, so a pause rain refused or a `stopping` left halfway
+	// resolves itself on the next cycle. Runs BEFORE Ensure, when there may be no session yet — step 0
+	// of enforce is what handles that (see decisions.md #41).
 	backend.SetMaxActiveDownloads(configs.MaxConcurrentDownloads)
 
 	// Ensure the embedded torrent session exists for the current save path (created lazily,
@@ -108,13 +107,13 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
 	downloadedTorrents := backend.List()
 
-	// Torrent a zero peers ha horas nao volta sozinho e segura um slot de
-	// max_concurrent_downloads indefinidamente. Roda antes do resto do passe, mas o snapshot
-	// acima NAO e refeito: quem foi derrubado agora e reprocurado no proximo passe.
+	// A torrent at zero peers for hours doesn't come back on its own and holds a
+	// max_concurrent_downloads slot indefinitely. Runs before the rest of the pass, but the snapshot
+	// above is NOT retaken: whatever was dropped now is searched again on the next pass.
 	dropStalledTorrents(downloadedTorrents, backend, fileManager, time.Now())
 
-	// Mesma logica de aborto: com os AnimeID ainda no formato antigo (id de entrada) nada em
-	// disco casa com a AniList, e um passe nesse estado rebaixaria a biblioteca inteira.
+	// Same abort logic: with the AnimeIDs still in the old format (entry id) nothing on disk matches
+	// AniList, and a pass in that state would re-download the whole library.
 	if err := MigrateAnimeIDsToMedia(fileManager); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to migrate anime IDs to AniList media IDs; skipping verification")
 		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseStorage, err))
@@ -126,16 +125,17 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		anilistResponse *anilist.AniListResponse
 		savedEpisodes   []files.EpisodeStruct
 		blockedEpisodes []files.EpisodeKey
-		// inDeleteStatus[username][mediaId] — quais animes cada conta tem em algum status de
-		// deleção. Uma conta cuja busca falhou fica ausente do mapa, e ausente nunca concorda.
+		// inDeleteStatus[account][mediaId] — which animes each account has in some delete status. An
+		// account whose fetch failed is absent from the map, and absent never agrees. MAL accounts are
+		// keyed by malAccountKey.
 		inDeleteStatus map[string]map[int]bool
 
 		errAnilist  error
 		errEpisodes error
 	)
 
-	// Leitura local e barata, feita antes do fan-out porque searchAnilist depende dela. Uma
-	// falha aqui nao aborta o passe: sem o arquivo o daemon so deixa de cobrir os avulsos.
+	// Local, cheap read, done before the fan-out because searchAnilist depends on it. A failure here
+	// doesn't abort the pass: without the file the daemon just stops covering the standalone animes.
 	standaloneIDs, err := fileManager.LoadStandaloneAnimes()
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to load standalone animes, continuing with the AniList lists only")
@@ -176,19 +176,18 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		fetchWg.Add(1)
 		go func() {
 			defer fetchWg.Done()
-			inDeleteStatus = make(map[string]map[int]bool, len(configs.AnilistUsernames))
+			inDeleteStatus = make(map[string]map[int]bool, len(configs.AnilistUsernames)+len(configs.MALUsernames))
 			for _, username := range configs.AnilistUsernames {
 				resp, e := anilist.GetAllCurrentAnime(username, configs.DeleteStatuses)
-				// ponytail: a lista do cache local vota na deleção como se fosse fresca, por
-				// decisão explícita do dono do projeto. O risco tem nome: um anime que saiu de
-				// um status de deleção DEPOIS do snapshot (COMPLETED que virou REPEATING, e o
-				// passe baixou a temporada) volta a aparecer como deletável, e o passe apaga o
-				// que ele mesmo acabou de baixar. Se um dia isso morder, a correção é uma linha:
-				// tratar ErrFromCache como conta sem resposta aqui, e a unanimidade de
-				// allAccountsAgreeOnDelete recusa sozinha.
+				// ponytail: the local cache's list votes on deletion as if it were fresh, by explicit decision
+				// of the project owner. The risk has a name: an anime that left a delete status AFTER the
+				// snapshot (COMPLETED that became REPEATING, and the pass downloaded the season) shows up as
+				// deletable again, and the pass deletes what it just downloaded. If this ever bites, the fix is
+				// one line: treat ErrFromCache as an account with no answer here, and
+				// allAccountsAgreeOnDelete's unanimity refuses on its own.
 				if e != nil && !errors.Is(e, anilist.ErrFromCache) {
 					logger.Logger.Warn().Err(e).Str("username", username).Msg("Failed to fetch AniList animes for delete statuses")
-					// Conta sem resposta nao pode concordar com a deleção — ver deletableMediaIDs.
+					// An account with no answer can't agree with the deletion — see deletableMediaIDs.
 					continue
 				}
 				byMedia := make(map[int]bool, len(resp.Data.Page.MediaList))
@@ -200,6 +199,21 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 					Int("animes_found", len(byMedia)).
 					Msg("Fetched animes from Anilist for delete statuses")
 				inDeleteStatus[username] = byMedia
+			}
+			for _, user := range configs.MALUsernames {
+				entries, e := anilist.GetMALEntries(user, anilist.PriorityCritical)
+				// ErrFromCache votes as if fresh, the same explicit choice as the AniList loop
+				// above. ErrMALEmpty is a failure, not an empty answer: an account that "tracks
+				// nothing" would lose its veto — see anilist.ErrMALEmpty.
+				if e != nil && !errors.Is(e, anilist.ErrFromCache) {
+					logger.Logger.Warn().Err(e).Str("mal_user", user).Msg("Failed to fetch MAL list for delete statuses")
+					continue
+				}
+				byMedia := make(map[int]bool)
+				for _, entry := range anilist.FilterMALEntries(entries, configs.DeleteStatuses) {
+					byMedia[entry.MediaID] = true
+				}
+				inDeleteStatus[malAccountKey(user)] = byMedia
 			}
 		}()
 	}
@@ -227,18 +241,19 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	animes := anilistResponse.Data.Page.MediaList
 
-	// Eixo absoluto da serie de cada anime do passe E de cada anime_id com episodio em disco: e
-	// o que permite reconhecer que um pack baixado sob outro cour ja cobre o episodio pendente
-	// (coverage.go). Falha parcial nao aborta o passe — sem o offset o anime so nao adota nada.
+	// Absolute series axis of every anime in the pass AND of every anime_id with an episode on disk:
+	// it's what lets the pass recognize that a pack downloaded under another cour already covers the
+	// pending episode (coverage.go). A partial failure doesn't abort the pass — without the offset the
+	// anime just doesn't adopt anything.
 	animeIDs := make([]int, 0, len(animes))
 	for _, a := range animes {
 		animeIDs = append(animeIDs, a.Media.Id)
 	}
 	seriesIndex := resolveSeriesIndex(animeIDs, savedEpisodes)
 
-	// Regra de deleção por status: TODAS as contas que têm o anime precisam tê-lo em algum
-	// status de deleção (não necessariamente o mesmo). A regra de download é a oposta —
-	// basta UMA conta —, e ela já vem aplicada em searchAnilist pela união das listas.
+	// Status deletion rule: EVERY account that has the anime must have it in some delete status (not
+	// necessarily the same one). The download rule is the opposite — ONE account is enough —, and it's
+	// already applied in searchAnilist through the union of the lists.
 	deletableMedia := deletableMediaIDs(configs, inDeleteStatus, savedEpisodes)
 
 	var keysToDelete []files.EpisodeKey
@@ -258,8 +273,8 @@ outer:
 		default:
 		}
 
-		// anime.Status é de UMA conta arbitrária (a que venceu o dedup), então não serve para
-		// decidir nada — quem responde é a regra AND acima.
+		// anime.Status belongs to ONE arbitrary account (the one that won the dedupe), so it can't decide
+		// anything — the AND rule above is what answers.
 		if deletableMedia[anime.Media.Id] {
 			continue
 		}
@@ -315,9 +330,9 @@ outer:
 	state.SetLastCheck(time.Now())
 	state.SetLastCheckError(nil)
 
-	// DEPOIS do SetLastCheckError, nunca antes: ele limpa o relatorio (ver state.go). O
-	// cancelamento acima tambem chama SetLastCheckError(nil) e retorna, entao passe interrompido
-	// nao deixa relatorio — que e o certo, ele estava incompleto.
+	// AFTER SetLastCheckError, never before: it clears the report (see state.go). The cancellation
+	// above also calls SetLastCheckError(nil) and returns, so an interrupted pass leaves no report —
+	// which is right, it was incomplete.
 	problems, limits := aggregateIssues(issues)
 	state.SetLastCheckReport(CheckReport{
 		FinishedAt: time.Now(),
@@ -416,16 +431,17 @@ func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.E
 	}
 }
 
-// deletableMediaIDs decide quais animes podem ter os episódios apagados por status.
+// deletableMediaIDs decides which animes may have their episodes deleted by status.
 //
-// Regra: TODA conta que tem o anime na lista precisa tê-lo em algum status de deleção — os
-// statuses não precisam ser o mesmo (DROPPED numa e COMPLETED noutra apaga). Uma conta que
-// não acompanha o anime não participa da votação; uma que o tem em status neutro (PLANNING,
-// por exemplo) veta, senão apagaríamos episódios que outra conta ainda pretende assistir.
+// Rule: EVERY account (AniList or MyAnimeList) that has the anime in its list must have it in some
+// delete status — the statuses don't have to be the same (DROPPED in one and COMPLETED in another
+// deletes). An account that doesn't track the anime doesn't vote; one that has it in a neutral
+// status (PLANNING, for example) vetoes, otherwise we'd delete episodes another account still means
+// to watch.
 //
-// Só animes COM episódio em disco são avaliados: a resposta não muda nada para os demais, e é
-// isso que mantém as consultas de desempate raras — um anime deletável some do disco no mesmo
-// passe e nunca mais volta a ser candidato.
+// Only animes WITH an episode on disk are evaluated: the answer changes nothing for the rest, and
+// that's what keeps the tie-break queries rare — a deletable anime leaves the disk in the same pass
+// and never becomes a candidate again.
 func deletableMediaIDs(configs *files.Config, inDeleteStatus map[string]map[int]bool, savedEpisodes []files.EpisodeStruct) map[int]bool {
 	if len(configs.DeleteStatuses) == 0 || len(inDeleteStatus) == 0 {
 		return nil
@@ -460,7 +476,7 @@ func allAccountsAgreeOnDelete(configs *files.Config, inDeleteStatus map[string]m
 	for _, username := range configs.AnilistUsernames {
 		byMedia, fetched := inDeleteStatus[username]
 		if !fetched {
-			// A busca desta conta falhou: sem a opinião dela não há unanimidade.
+			// This account's fetch failed: without its opinion there's no unanimity.
 			logger.Logger.Debug().Str("username", username).Int("media_id", mediaID).
 				Msg("Skipping status deletion: account list unavailable")
 			return false
@@ -469,8 +485,8 @@ func allAccountsAgreeOnDelete(configs *files.Config, inDeleteStatus map[string]m
 			continue
 		}
 
-		// A conta não listou o anime entre os deletáveis. Pode ser que ela não o acompanhe
-		// (não vota) ou que o tenha em status neutro (veta) — só uma consulta distingue.
+		// The account didn't list the anime among the deletable ones. It may not track it (no vote) or
+		// hold it in a neutral status (veto) — only a query tells them apart.
 		status, tracked, err := anilist.GetMediaListStatus(username, mediaID)
 		switch {
 		case err != nil:
@@ -478,28 +494,60 @@ func allAccountsAgreeOnDelete(configs *files.Config, inDeleteStatus map[string]m
 				Msg("Skipping status deletion: could not resolve the account's status")
 			return false
 		case !tracked:
-			continue // conta não acompanha este anime, não veta
+			continue // the account doesn't track this anime, no veto
 		case isInDeleteStatuses(configs.DeleteStatuses, status):
-			continue // status de deleção diferente do que a busca por lista trouxe
+			continue // a delete status other than the one the list fetch brought
 		default:
 			logger.Logger.Debug().Str("username", username).Int("media_id", mediaID).
 				Str("status", string(status)).Msg("Status deletion vetoed by account")
 			return false
 		}
 	}
+
+	for _, user := range configs.MALUsernames {
+		byMedia, fetched := inDeleteStatus[malAccountKey(user)]
+		if !fetched {
+			logger.Logger.Debug().Str("mal_user", user).Int("media_id", mediaID).
+				Msg("Skipping status deletion: MAL list unavailable")
+			return false
+		}
+		if byMedia[mediaID] {
+			continue
+		}
+		// Not among the deletable ones: the cached MAL list says whether the account doesn't
+		// track it (no vote) or holds it in a neutral status (veto). No extra request — the list
+		// fetched above is still cached.
+		entries, err := anilist.GetMALEntries(user, anilist.PriorityCritical)
+		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
+			logger.Logger.Warn().Err(err).Str("mal_user", user).Int("media_id", mediaID).
+				Msg("Skipping status deletion: could not resolve the MAL account's status")
+			return false
+		}
+		for _, entry := range entries {
+			if entry.MediaID == mediaID && !isInDeleteStatuses(configs.DeleteStatuses, entry.Status) {
+				logger.Logger.Debug().Str("mal_user", user).Int("media_id", mediaID).
+					Str("status", string(entry.Status)).Msg("Status deletion vetoed by MAL account")
+				return false
+			}
+		}
+	}
 	return true
 }
 
-// searchAnilist monta o universo de animes do passe: a uniao das listas das contas
-// configuradas mais os animes avulsos (§ standalone).
+// malAccountKey keys a MAL account in inDeleteStatus. The prefix keeps an AniList and a MAL
+// account with the same name from overwriting each other.
+func malAccountKey(user string) string { return "mal:" + user }
+
+// searchAnilist builds the pass's anime universe: the union of the configured accounts' lists
+// (AniList and MyAnimeList) plus the standalone animes (§ standalone).
 //
-// fileManager entra aqui, e nao so a config, por causa da remocao automatica: um avulso que
-// depois apareceu numa lista da AniList sai do arquivo, e a unica hora em que se sabe disso e
-// exatamente aqui, com a lista mesclada na mao.
+// fileManager comes in here, not just the config, because of the automatic removal: a standalone
+// anime that later showed up in a list leaves the file, and the only moment that's known is exactly
+// here, with the merged list in hand.
 func searchAnilist(fileManager FileManagerInterface, configs *files.Config, standaloneIDs []int) (*anilist.AniListResponse, error) {
-	// Sem conta da AniList NAO e erro: o passe ainda tem trabalho a fazer (os avulsos), e
-	// abortar aqui faria a feature nunca rodar numa instalacao sem lista. Sem biblioteca e:
-	// nao ha para onde baixar.
+	// No list account is NOT an error: the pass still has work to do (the standalone animes), and
+	// aborting here would make the feature never run on an install without a list. No library is:
+	// there's nowhere to download to.
 	if configs.DownloadPath() == "" {
 		err := fmt.Errorf("missing required configuration: completed anime path")
 		logger.Logger.Error().
@@ -516,9 +564,9 @@ func searchAnilist(fileManager FileManagerInterface, configs *files.Config, stan
 		clMap := anilist.GetCustomListsMap(username, configs.DownloadStatuses, anilist.PriorityCritical)
 
 		resp, err := anilist.GetAllCurrentAnime(username, configs.DownloadStatuses)
-		// Cache local serve o passe: os episódios que já foram ao ar continuam baixáveis e o
-		// Nyaa não caiu junto. O TimeUntilAiring vem rebaseado (ver anilist/persist.go), então
-		// o episódio que faltava dez minutos quando a AniList caiu entra na busca sozinho.
+		// The local cache serves the pass: episodes already aired stay downloadable and Nyaa didn't go
+		// down with it. TimeUntilAiring comes rebased (see anilist/persist.go), so the episode that was
+		// ten minutes away when AniList went down enters the search on its own.
 		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 			logger.Logger.Error().Err(err).Stack().
 				Str("username", username).
@@ -552,19 +600,44 @@ func searchAnilist(fileManager FileManagerInterface, configs *files.Config, stan
 		merged.Data.Page.MediaList = append(merged.Data.Page.MediaList, resp.Data.Page.MediaList...)
 	}
 
-	if len(merged.Data.Page.MediaList) == 0 && lastErr != nil {
-		return nil, fmt.Errorf("failed to search animes on Anilist: %w", lastErr)
+	var lastMALErr error
+	for _, user := range configs.MALUsernames {
+		list, err := anilist.GetMALList(user, configs.DownloadStatuses, anilist.PriorityCritical)
+		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
+			logger.Logger.Error().Err(err).Str("mal_user", user).Msg("Failed to search animes on MyAnimeList")
+			lastMALErr = err
+			continue
+		}
+		count := 0
+		for _, ml := range list {
+			if anilist.MediaStatusAllowed(configs.DownloadMediaStatuses, ml.Media.Status) {
+				merged.Data.Page.MediaList = append(merged.Data.Page.MediaList, ml)
+				count++
+			}
+		}
+		logger.Logger.Debug().Str("mal_user", user).Int("animes_found", count).Msg("Fetched animes from MyAnimeList for username")
+	}
+
+	if len(merged.Data.Page.MediaList) == 0 {
+		// The banner names the source that failed. With both failing it stays AniList.
+		if lastErr != nil {
+			return nil, fmt.Errorf("failed to search animes on Anilist: %w", lastErr)
+		}
+		if lastMALErr != nil {
+			return nil, fmt.Errorf("%w: failed to search animes on MyAnimeList: %w", errCauseMAL, lastMALErr)
+		}
 	}
 
 	merged.Data.Page.MediaList = anilist.DedupeByMedia(merged.Data.Page.MediaList)
 
-	// DEPOIS do dedupe, nunca antes: a entrada real precisa vencer. DedupeByMedia mantem o
-	// MENOR progresso, entao o Progress 0 do MediaList sintetico de GetMediaByID ganharia e o
-	// daemon voltaria a baixar episodios ja assistidos.
+	// AFTER the dedupe, never before: the real entry has to win. DedupeByMedia keeps the LOWEST
+	// progress, so the Progress 0 of GetMediaByID's synthetic MediaList would win and the daemon would
+	// go back to downloading already-watched episodes.
 	merged.Data.Page.MediaList = appendStandaloneAnimes(fileManager, merged.Data.Page.MediaList, standaloneIDs)
 
 	logger.Logger.Info().
 		Strs("usernames", configs.AnilistUsernames).
+		Strs("mal_usernames", configs.MALUsernames).
 		Int("animes_found", len(merged.Data.Page.MediaList)).
 		Msg("Successfully fetched animes from Anilist")
 

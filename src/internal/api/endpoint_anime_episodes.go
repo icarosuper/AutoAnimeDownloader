@@ -10,9 +10,9 @@ import (
 )
 
 type AnimeEpisodeInfo struct {
-	// EpisodeNumber e a identidade do episodio nas rotas /animes/{id}/episodes/{episodeNumber}/*:
-	// o id de no da AniList saiu de cena porque nao existe para episodio fora da janela de agenda
-	// que ela guarda (ver decisions.md #52).
+	// EpisodeNumber is the episode's identity in the /animes/{id}/episodes/{episodeNumber}/* routes:
+	// the AniList node id left the scene because it doesn't exist for an episode outside the schedule
+	// window AniList keeps (see decisions.md #52).
 	EpisodeNumber     int    `json:"episode_number"`
 	AiringAt          int64  `json:"airing_at"`
 	TimeUntilAiring   int    `json:"time_until_airing"`
@@ -29,19 +29,19 @@ type AnimeEpisodeInfo struct {
 	// entirely. Joining by hash instead, single and batch episodes use the same path. Empty
 	// (and omitted via omitempty) when the episode has no saved record.
 	EpisodeHash string `json:"episode_hash,omitempty"`
-	// BatchStart/BatchEnd sao a faixa REAL do pack a que este episodio pertence, lida do nome do
-	// torrent no download. A tela nao consegue deduzi-la da lista: os episodios ja assistidos nao
-	// viram registro, entao o min/max dos registros de um mesmo hash encolhe o pack (um 01-11
-	// baixado com 5 assistidos aparecia como "6-11"). Pack sem faixa no nome ("(Season 1+OVA)
-	// [Batch]") conta como completo e vale 1..total. Omitidas quando 0 — registro antigo, ou nem
-	// o total do AniList e conhecido —, e ai o min/max volta a ser o melhor palpite.
+	// BatchStart/BatchEnd are the REAL range of the pack this episode belongs to, read from the
+	// torrent name at download time. The screen can't deduce it from the list: already-watched
+	// episodes don't become records, so the min/max of one hash's records shrinks the pack (a 01-11
+	// downloaded with 5 watched showed up as "6-11"). A pack with no range in its name ("(Season
+	// 1+OVA) [Batch]") counts as complete and spans 1..total. Omitted when 0 — an old record, or not
+	// even the AniList total is known —, and then the min/max is the best guess again.
 	BatchStart int `json:"batch_start,omitempty"`
 	BatchEnd   int `json:"batch_end,omitempty"`
 }
 
 type AnimeDetailResponse struct {
-	// AnimeID e o id da MIDIA na AniList — a mesma chave usada em episodes.json e nas rotas
-	// /animes/{id}/*, e tambem o id do link anilist.co/anime/{id} (ver decisions.md #43).
+	// AnimeID is the AniList MEDIA id — the same key used in episodes.json and in the /animes/{id}/*
+	// routes, and also the id in the anilist.co/anime/{id} link (see decisions.md #43).
 	AnimeID       int                `json:"anime_id"`
 	TotalEpisodes int                `json:"total_episodes"`
 	Progress      int                `json:"progress"`
@@ -71,7 +71,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			return
 		}
 
-		mediaList, err := resolveMediaList(server.FileManager, id, config.AnilistUsernames, loadStandaloneSet(server.FileManager))
+		mediaList, err := resolveMediaList(server.FileManager, id, config.AnilistUsernames, config.MALUsernames, loadStandaloneSet(server.FileManager))
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("anime_id", id).Msg("Failed to fetch anime detail from AniList")
 			JSONInternalError(w, err)
@@ -119,9 +119,9 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			}
 		}
 
-		// A lista vem do builder, e nao do airingSchedule cru: a tela precisa mostrar tambem os
-		// episodios que a AniList ja tirou da agenda (One Piece 1 a 1122, anime antigo inteiro),
-		// senao o usuario nao tem onde clicar para baixa-los a mao.
+		// The list comes from the builder, not from the raw airingSchedule: the screen also has to show
+		// the episodes AniList already dropped from the schedule (One Piece 1 to 1122, a whole old
+		// anime), otherwise the user has nowhere to click to download them by hand.
 		allNodes := anilist.EpisodeList(*mediaList, 1)
 		episodes := make([]AnimeEpisodeInfo, 0, len(allNodes))
 

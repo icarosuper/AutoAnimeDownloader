@@ -1,14 +1,16 @@
 import * as m from '../i18n/messages.js'
 
 /**
- * A frase do banner de passe abortado, montada a partir do CÓDIGO — nunca do texto cru do Go.
- * Mesma fronteira que checkIssue.ts documenta e defende. Antes disso o banner exibia
- * `err.Error()` direto, o que na prática despejava o JSON de resposta da AniList na tela.
+ * The aborted-pass banner sentence, built from the CODE — never from Go's raw text. The same
+ * boundary checkIssue.ts documents and defends. Before this the banner showed `err.Error()`
+ * directly, which in practice dumped AniList's response JSON on the screen.
  */
 export function passErrorMessage(code: string): string {
   switch (code) {
     case 'anilist':
       return m.passerror_anilist()
+    case 'mal':
+      return m.passerror_mal()
     case 'setup':
       return m.passerror_setup()
     case 'library':
@@ -20,8 +22,8 @@ export function passErrorMessage(code: string): string {
     case 'storage':
       return m.passerror_storage()
     default:
-      // Inclui 'unknown' e um código novo que o backend passe a mandar antes de o frontend
-      // conhecer: uma verificação que não rodou não pode virar linha em branco na tela.
+      // Covers 'unknown' and a new code the backend starts sending before the frontend knows
+      // it: a check that didn't run can't become a blank line on the screen.
       return m.passerror_unknown()
   }
 }

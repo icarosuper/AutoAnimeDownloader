@@ -1,12 +1,12 @@
 <script lang="ts">
-  // Config — spec §9.4 (Fase 6). Re-skin puro: NENHUMA mudança de comportamento (decisão D5).
-  // O botão Salvar continua sendo o único caminho de escrita — sem autosave, sem debounce —
-  // porque `PUT /config` valida tudo de uma vez e faz I/O de filesystem (`Librarian.ProbePath`),
-  // então salvar no meio da digitação renderia 400 a cada tecla.
+  // Config — spec §9.4 (Phase 6). Pure re-skin: NO behavior change (decision D5). The Save button
+  // is still the only write path — no autosave, no debounce — because `PUT /config` validates
+  // everything at once and does filesystem I/O (`Librarian.ProbePath`), so saving mid-typing would
+  // produce a 400 on every keystroke.
   //
-  // O layout novo é o índice lateral de 196px com UM grupo visível por vez. Os campos de
-  // lista (anilist_usernames, excluded_lists) trocaram o par "input + botão +" pelo
-  // ChipsInput do artboard 1e.
+  // The new layout is the 196px side index with ONE group visible at a time. The list fields
+  // (anilist_usernames, mal_usernames, excluded_lists) swapped the "input + button +" pair for
+  // artboard 1e's ChipsInput.
   import { onMount } from "svelte";
   import { ArrowUpRight, Check } from "@lucide/svelte";
   import {
@@ -44,6 +44,8 @@
     linkNotifications: m.nav_notifications(),
     labelUsername: m.config_label_username(),
     hintAnilistUsernames: m.config_hint_anilist_usernames(),
+    labelMalUsernames: m.config_label_mal_usernames(),
+    hintMalUsernames: m.config_hint_mal_usernames(),
     labelCompletedPath: m.config_label_completed_path(),
     hintCompletedPath: m.config_hint_completed_path(),
     labelDeleteWatched: m.config_label_delete_watched(),
@@ -96,11 +98,11 @@
   }
 
   /**
-   * Ordem do índice. Biblioteca primeiro porque hospeda o único campo obrigatório da tela — e é
-   * para cá que `#/config?missingConfig=true` manda o usuário.
+   * Index order. Library first because it hosts the screen's only required field — and it's where
+   * `#/config?missingConfig=true` sends the user.
    *
-   * `advanced` desenha o divisor acima do item: "Busca de torrents" é ajuste fino da seleção de
-   * torrent, não algo que uma instalação nova precise tocar.
+   * `advanced` draws the divider above the item: "Torrent search" is fine-tuning of torrent
+   * selection, not something a new install needs to touch.
    */
   $: groups = ($locale && [
     { id: "library" as GroupId, label: m.config_section_library(), advanced: false },
@@ -116,6 +118,7 @@
 
   let config: Config = {
     anilist_usernames: [],
+    mal_usernames: [],
     completed_anime_path: "",
     check_interval: 10,
     max_episodes_per_anime: 12,
@@ -145,8 +148,8 @@
     },
   };
 
-  // Um status não pode estar em "baixar" e "deletar" ao mesmo tempo — ligar um sempre desliga
-  // o outro. Regra pré-existente, preservada verbatim.
+  // A status can't be in "download" and "delete" at the same time — turning one on always turns the
+  // other off. Pre-existing rule, kept verbatim.
   function toggleDownloadStatus(status: string) {
     const active = (config.download_statuses ?? []).includes(status);
     if (active) {
@@ -188,10 +191,10 @@
   let showMissingConfigBanner = false;
 
   /**
-   * A app é um SPA de hash, então a query pode estar em `?a=b#/config` (raro) ou depois do `?`
-   * DENTRO do hash (`#/config?a=b`, o caminho normal). Os params são resolvidos UMA vez e
-   * todos os parâmetros saem dali: com um `return` por ramo, cada parâmetro novo teria que ser
-   * lido nos dois lugares, e os dois poderiam divergir.
+   * The app is a hash SPA, so the query can be in `?a=b#/config` (rare) or after the `?` INSIDE the
+   * hash (`#/config?a=b`, the normal path). The params are resolved ONCE and every parameter comes
+   * from there: with one `return` per branch, each new parameter would have to be read in both
+   * places, and the two could diverge.
    */
   function resolveParams(): URLSearchParams | null {
     if (typeof window === "undefined") return null;
@@ -200,8 +203,9 @@
     return hashParts.length > 1 ? new URLSearchParams(hashParts[1]) : null;
   }
 
-  // O card também some quando o usuário marca os três passos à mão, então trazer de volta é
-  // limpar as duas coisas — só zerar a dispensa deixaria o botão sem efeito visível.
+  // The card also disappears when the user marks the three steps by hand, so bringing it back means
+  // clearing both things — only resetting the dismissal would leave the button with no visible
+  // effect.
   $: onboardingHidden =
     $onboardingDismissed || ONBOARDING_STEP_IDS.every((id) => $onboardingDone.includes(id));
 
@@ -216,13 +220,13 @@
 
     showMissingConfigBanner = params.has("missingConfig");
 
-    // A validação usa o array `groups` que a tela já monta — uma segunda lista de ids sairia
-    // de dia com ele. Valor desconhecido é ignorado e `activeGroup` fica no default
-    // "library": sem a guarda, um link velho ou digitado errado deixaria a tela num grupo que
-    // não renderiza nada.
+    // Validation uses the `groups` array the screen already builds — a second list of ids would
+    // drift from it. An unknown value is ignored and `activeGroup` stays on the default "library":
+    // without the guard, an old or mistyped link would leave the screen on a group that renders
+    // nothing.
     //
-    // Sem conflito com a validação: `firstValidationError()` só mexe em `activeGroup` no
-    // clique de Salvar, e isto roda no `onMount`.
+    // No conflict with validation: `firstValidationError()` only touches `activeGroup` on the Save
+    // click, and this runs in `onMount`.
     const group = params.get("group");
     if (group && groups.some((g) => g.id === group)) activeGroup = group as GroupId;
   }
@@ -231,7 +235,7 @@
     try {
       loading = true;
       const data = await getConfig();
-      config = { ...data, anilist_usernames: data.anilist_usernames ?? [] };
+      config = { ...data, anilist_usernames: data.anilist_usernames ?? [], mal_usernames: data.mal_usernames ?? [] };
       if (config.anilist_username && (config.anilist_usernames ?? []).length === 0) {
         config.anilist_usernames = [config.anilist_username];
       }
@@ -245,23 +249,23 @@
   }
 
   /**
-   * Mesmas seis validações de antes, na mesma ordem — só que cada uma agora sabe em que grupo
-   * mora o campo que ela reprova. Isso é exigência do layout novo, não uma regra nova: com um
-   * grupo visível por vez, um toast dizendo "pasta é obrigatória" enquanto o usuário olha para
-   * "Automação" não teria como ser acionável. A validação que falha traz o grupo dela à tela.
+   * The same six validations as before, in the same order — only now each one knows which group the
+   * field it rejects lives in. That's a requirement of the new layout, not a new rule: with one
+   * group visible at a time, a toast saying "folder is required" while the user looks at
+   * "Automation" couldn't be acted on. The failing validation brings its group to the screen.
    *
-   * Elas viraram uma LISTA (antes era uma cadeia de `if`) porque a tela agora as usa para duas
-   * coisas: o toast do Salvar, como sempre, e a marca de "falta preencher" no índice lateral.
-   * Reescrever as condições no segundo lugar deixaria a marca mentir na primeira vez que uma
-   * regra mudasse — o índice tem de dizer exatamente o que barra o Salvar, nada mais.
+   * They became a LIST (it used to be a chain of `if`) because the screen now uses them for two
+   * things: the Save toast, as always, and the "needs filling" mark in the side index. Rewriting
+   * the conditions in the second place would make the mark lie the first time a rule changed — the
+   * index has to say exactly what blocks Save, nothing more.
    *
-   * `message` guarda a REFERÊNCIA da função do paraglide, não o texto: assim a mensagem é
-   * resolvida no idioma vigente no momento do clique, como era quando cada `if` a chamava.
+   * `message` holds the REFERENCE to the paraglide function, not the text: that way the message is
+   * resolved in the language active at click time, as it was when each `if` called it.
    */
   $: requiredChecks = [
-    // Conta do AniList NÃO entra: com animes avulsos (#/add) o app funciona inteiro sem lista
-    // nenhuma, e o backend deixou de validá-la. Uma obrigatoriedade só no frontend seria uma
-    // regra que o servidor não conhece.
+    // A list account (AniList or MyAnimeList) is NOT required: with standalone animes (#/add) the
+    // app works entirely without any list, and the backend stopped validating it. A requirement
+    // only in the frontend would be a rule the server doesn't know.
     {
       group: "library" as GroupId,
       ok: !!config.completed_anime_path?.trim(),
@@ -308,14 +312,14 @@
       message: m.config_val_max_search_pages,
     },
     {
-      // 100 bloquearia todo download para sempre.
+      // 100 would block every download forever.
       group: "library" as GroupId,
       ok: config.min_free_disk_percent >= 0 && config.min_free_disk_percent <= 99,
       message: m.config_val_min_free_disk,
     },
   ];
 
-  /** Grupos com alguma pendência — alimenta o ponto no índice lateral. */
+  /** Groups with something pending — feeds the dot in the side index. */
   $: pendingGroups = new Set(requiredChecks.filter((c) => !c.ok).map((c) => c.group));
 
   function firstValidationError(): { message: string; group: GroupId } | null {
@@ -367,36 +371,36 @@
     <Loading message={T && T.loading || ""} />
   {:else}
     <form on:submit|preventDefault={saveConfig} class="space-y-4">
-      <!-- Legenda do asterisco. Sem ela o `*` é convenção implícita; com um grupo por vez, vale
-           dizer em texto o que a marca significa. -->
+      <!-- Asterisk legend. Without it the `*` is an implicit convention; with one group at a time,
+           it's worth saying in text what the mark means. -->
       <p class="text-caption text-subtle">
         <span class="text-danger" aria-hidden="true">*</span>
         {T && T.requiredLegend}
       </p>
 
       <div class="grid gap-3.5 md:grid-cols-[196px_1fr] md:items-start">
-        <!-- Índice: coluna de 196px no desktop; no mobile os itens QUEBRAM LINHA, não rolam.
-             Mesma decisão (e mesmo motivo) das pills de filtro de `DownloadsToolbar.svelte`:
-             em 390px a faixa tinha 358px de espaço para 644px de conteúdo, então metade das
-             opções — inclusive "Torrent search" e os dois links de saída — só aparecia depois
-             de arrastar. `shrink-0` mantém o rótulo inteiro em vez de espremê-lo.
+        <!-- Index: a 196px column on desktop; on mobile the items WRAP, they don't scroll. Same
+             decision (and same reason) as the filter pills of `DownloadsToolbar.svelte`: at 390px
+             the strip had 358px of space for 644px of content, so half the options — including
+             "Torrent search" and the two exit links — only showed up after dragging. `shrink-0`
+             keeps the label whole instead of squeezing it.
 
-             Os divisores são `w-full`, então a quebra acontece NELES: as três fileiras que saem
-             disso são a arquitetura da tela — grupos do dia a dia, o grupo avançado, e o que
-             sai da tela. No desktop a coluna diz isso implicitamente; aqui fica explícito.
+             The dividers are `w-full`, so the wrap happens AT THEM: the three rows that come out of
+             it are the screen's architecture — everyday groups, the advanced group, and what leaves
+             the screen. On desktop the column says this implicitly; here it's explicit.
 
-             O ponto de pendência entra AQUI porque só um grupo fica na tela por vez: o asterisco
-             no campo resolve o grupo aberto, e este ponto é o que conta ao usuário que ainda
-             falta algo nos outros três. O texto sr-only entra no nome acessível do botão
-             ("Anilist, configuração obrigatória faltando"); o ponto em si é decorativo. -->
+             The pending dot goes HERE because only one group is on screen at a time: the asterisk
+             on the field covers the open group, and this dot is what tells the user something is
+             still missing in the other three. The sr-only text goes into the button's accessible
+             name ("Lists, required configuration missing"); the dot itself is decorative. -->
         <nav
           aria-label={(T && T.navLabel) || ""}
           class="flex flex-wrap gap-1 md:flex-col"
         >
           {#each groups as group (group.id)}
             {#if group.advanced}
-              <!-- `w-full`: além de separar, é o que empurra "Torrent search" para a fileira
-                   seguinte no mobile. Um só eixo nas duas larguras. -->
+              <!-- `w-full`: besides separating, it's what pushes "Torrent search" to the next row
+                   on mobile. One axis at both widths. -->
               <div class="my-1 w-full border-t border-divider md:my-1.5" aria-hidden="true"></div>
             {/if}
             <button
@@ -416,7 +420,7 @@
             </button>
           {/each}
 
-          <!-- Divisor: o que vem abaixo SAI da tela em vez de trocar o grupo visível. -->
+          <!-- Divider: what comes below LEAVES the screen instead of switching the visible group. -->
           <div class="my-1 w-full border-t border-divider md:my-1.5" aria-hidden="true"></div>
 
           <a
@@ -435,8 +439,8 @@
           </a>
         </nav>
 
-        <!-- `divide-y` desenha os divisores de 1px ENTRE os campos, sem borda sobrando na
-             primeira nem na última linha do card. -->
+        <!-- `divide-y` draws the 1px dividers BETWEEN the fields, with no leftover border on the
+             first or the last row of the card. -->
         <div class="divide-y divide-divider rounded-card border border-default bg-card">
           {#if activeGroup === "anilist"}
             <div class="p-4.5">
@@ -445,6 +449,17 @@
                 bind:values={config.anilist_usernames}
                 label={(T && T.labelUsername) || ""}
                 hint={(T && T.hintAnilistUsernames) || ""}
+                placeholder={(T && T.chipsPlaceholder) || ""}
+                removeLabel={(item) => m.config_chips_remove({ item })}
+              />
+            </div>
+
+            <div class="p-4.5">
+              <ChipsInput
+                id="mal_usernames"
+                bind:values={config.mal_usernames}
+                label={(T && T.labelMalUsernames) || ""}
+                hint={(T && T.hintMalUsernames) || ""}
                 placeholder={(T && T.chipsPlaceholder) || ""}
                 removeLabel={(item) => m.config_chips_remove({ item })}
               />
@@ -544,9 +559,9 @@
               />
             </div>
 
-            <!-- A dica aparece sempre: é justamente ela que ajuda a decidir se vale ligar a
-                 chave, então esconder atrás do estado ligado esconde a informação útil.
-                 `Toggle` não tem prop de dica, daí o <p> irmão. -->
+            <!-- The hint always shows: it's precisely what helps decide whether to turn the switch
+                 on, so hiding it behind the on state hides the useful information. `Toggle` has no
+                 hint prop, hence the sibling <p>. -->
             <div class="space-y-1.5 p-4.5">
               <Toggle
                 id="rename_files_for_jellyfin"
@@ -571,14 +586,14 @@
               />
             </div>
 
-            <!-- Caminho de volta do card de primeiros passos. NÃO é campo de config: não entra
-                 em `requiredChecks` nem no corpo do PUT — é preferência de UI, por navegador.
-                 O divisor sai de graça do `divide-y` do container. `Input`/`Toggle` não servem
-                 aqui porque os dois fazem `bind:` num campo de `config`, e não há campo.
+            <!-- The way back to the first-steps card. It's NOT a config field: it doesn't go into
+                 `requiredChecks` nor into the PUT body — it's a UI preference, per browser. The
+                 divider comes for free from the container's `divide-y`. `Input`/`Toggle` don't fit
+                 here because both `bind:` to a `config` field, and there's no field.
 
-                 O desabilitado é sobre a DISPENSA, não sobre o card estar visível: com os três
-                 itens verdes o card não aparece de qualquer forma, e um botão habilitado aqui
-                 seria um clique sem efeito visível. -->
+                 The disabled state is about the DISMISSAL, not about the card being visible: with
+                 the three items green the card doesn't show anyway, and an enabled button here
+                 would be a click with no visible effect. -->
             <div class="flex flex-wrap items-center justify-between gap-3 p-4.5">
               <div class="min-w-0">
                 <p class="text-[14.5px] font-bold text-heading">{T && T.onboardingRestoreLabel}</p>
@@ -632,8 +647,8 @@
               />
             </div>
 
-            <!-- Sem divisor entre a chave e a quantidade: a ausência do divisor é o que expressa
-                 que o segundo campo depende do primeiro. -->
+            <!-- No divider between the switch and the amount: the absence of the divider is what
+                 says the second field depends on the first. -->
             <div class="space-y-3 p-4.5">
               <Toggle
                 id="delete_watched_episodes"
@@ -723,7 +738,7 @@
         </div>
       </div>
 
-      <!-- Ações. `solid` só no Salvar: é o único acento sólido da tela (§4.1). -->
+      <!-- Actions. `solid` only on Save: it's the screen's only solid accent (§4.1). -->
       <div class="flex flex-wrap justify-end gap-2.5">
         <Button
           variant="ghost"

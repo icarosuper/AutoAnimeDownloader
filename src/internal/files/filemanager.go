@@ -20,15 +20,15 @@ const blockedEpsFileName = "blocked_episodes"
 const animeSettingsFileName = "anime_settings"
 const standaloneAnimesFileName = "standalone_animes"
 
-// anilistCacheFileName guarda o snapshot dos caches do pacote anilist. Bytes opacos para o
-// files de proposito: o esquema do snapshot e do anilist, e passar por aqui como []byte e o
-// que evita que o files precise importar o anilist so para persistir o cache dele.
+// anilistCacheFileName holds the snapshot of the anilist package's caches. Opaque bytes to files on
+// purpose: the snapshot's schema belongs to anilist, and going through here as []byte is what keeps
+// files from having to import anilist just to persist its cache.
 const anilistCacheFileName = "anilist_cache"
 
-// EpisodeKey identifica um episodio. E (anime, numero do episodio) e nao o id do no de
-// airingSchedule da AniList, porque aquele id nao existe para todo episodio: a AniList guarda uma
-// janela de agenda por midia e descarta as antigas, entao One Piece 1 a 1122 e todo anime antigo
-// nao tinham id nenhum — e portanto nao podiam ser baixados (ver decisions.md #52).
+// EpisodeKey identifies an episode. It's (anime, episode number) and not the AniList airingSchedule
+// node id, because that id doesn't exist for every episode: AniList keeps a schedule window per
+// media and drops the old ones, so One Piece 1 to 1122 and every old anime had no id at all — and
+// therefore couldn't be downloaded (see decisions.md #52).
 type EpisodeKey struct {
 	AnimeID int `json:"anime_id"`
 	Episode int `json:"episode"`
@@ -50,16 +50,16 @@ type EpisodeStruct struct {
 	// IsBatch marks episodes that came from a batch/movie torrent (multiple episodes share
 	// one EpisodeHash; library files keep raw names, never Jellyfin-renamed).
 	IsBatch bool `json:"is_batch,omitempty"`
-	// BatchStart/BatchEnd sao a faixa REAL do pack na hora do download, na numeracao LOCAL da
-	// entrada. Sem ela a tela de detalhe reconstruia a faixa pelo min/max dos episodios SALVOS,
-	// que sao so os pendentes: um pack 01-11 baixado com 5 episodios ja assistidos aparecia
-	// como "6-11".
+	// BatchStart/BatchEnd are the pack's REAL range at download time, in the entry's LOCAL numbering.
+	// Without it the detail screen rebuilt the range from the min/max of the SAVED episodes, which are
+	// only the pending ones: a 01-11 pack downloaded with 5 episodes already watched showed up as
+	// "6-11".
 	//
-	// A faixa vem do NOME do torrent quando o nome a traz e, quando nao traz, da lista de
-	// arquivos da pagina de detalhe do Nyaa (decisions.md #84). Zero significa DESCONHECIDA —
-	// registro antigo, ou nenhuma das duas fontes resolveu — e nunca "1..total": esse palpite
-	// era lido como faixa declarada e espalhava cobertura inventada para os outros cours da
-	// serie. Quem exibe cai no min/max.
+	// The range comes from the torrent NAME when the name carries it and, when it doesn't, from the
+	// file list of the Nyaa detail page (decisions.md #84). Zero means UNKNOWN — an old record, or
+	// neither source resolved it — and never "1..total": that guess was read as a declared range and
+	// spread made-up coverage to the series' other cours. Whoever displays it falls back to the
+	// min/max.
 	BatchStart int `json:"batch_start,omitempty"`
 	BatchEnd   int `json:"batch_end,omitempty"`
 	// LibraryPaths are the hardlink paths created in the completed-anime library by
@@ -79,10 +79,10 @@ type WebhookPreset struct {
 
 type NotificationsConfig struct {
 	Webhooks []WebhookPreset `json:"webhooks"`
-	// BatchWindowSeconds agrupa os eventos de uma mesma janela num webhook so. 0 desliga o
-	// agrupamento (um webhook por evento, comportamento original). Existe porque um backfill
-	// de biblioteca dispara um `download_completed` por torrent e estoura a cota de servicos
-	// como o ntfy.sh — ver decisions.md #47.
+	// BatchWindowSeconds groups the events of one window into a single webhook. 0 disables grouping
+	// (one webhook per event, the original behavior). It exists because a library backfill fires one
+	// `download_completed` per torrent and blows the quota of services like ntfy.sh — see decisions.md
+	// #47.
 	BatchWindowSeconds int `json:"batch_window_seconds"`
 }
 
@@ -90,35 +90,38 @@ type Config struct {
 	CompletedAnimePath string   `json:"completed_anime_path"`
 	AnilistUsername    string   `json:"anilist_username,omitempty"`
 	AnilistUsernames   []string `json:"anilist_usernames"`
-	CheckInterval      int      `json:"check_interval"`
-	// MaxEpisodesPerAnime limita quantos episodios de um anime existem ao mesmo tempo, e vale
-	// APENAS no caminho episodio-a-episodio: um batch e um torrent so, entao limitar registros
-	// nao limitaria bytes nem arquivos na biblioteca (ver decisions.md). 0 significa SEM TETO
-	// (ver effectiveMax/windowEnd em daemon/episodes.go).
+	// MALUsernames are MyAnimeList accounts used as LIST sources only (status + progress);
+	// everything else still comes from AniList — see decisions.md #95.
+	MALUsernames  []string `json:"mal_usernames"`
+	CheckInterval int      `json:"check_interval"`
+	// MaxEpisodesPerAnime limits how many episodes of an anime exist at the same time, and applies
+	// ONLY on the episode-by-episode path: a batch is a single torrent, so limiting records wouldn't
+	// limit bytes or files in the library (see decisions.md). 0 means NO CEILING (see
+	// effectiveMax/windowEnd in daemon/episodes.go).
 	MaxEpisodesPerAnime int `json:"max_episodes_per_anime"`
-	// MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB descartam da busca torrents acima do teto,
-	// em GiB. 0 desliga. O de pack e a guarda UNICA de pack desde que a elegibilidade deixou de
-	// ser contagem de episodios: 100 cabe pack completo de serie de temporada em 1080p e nao cabe
-	// pack completo de One Piece — para serie longa o que passa e pack parcial.
+	// MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB drop torrents above the ceiling from the search,
+	// in GiB. 0 disables. The pack one is the ONLY pack guard since eligibility stopped being an
+	// episode count: 100 fits a complete pack of a seasonal series in 1080p and doesn't fit a complete
+	// One Piece pack — for a long series what passes is a partial pack.
 	MaxBatchTorrentSizeGB   float64 `json:"max_batch_torrent_size_gb"`
 	MaxEpisodeTorrentSizeGB float64 `json:"max_episode_torrent_size_gb"`
-	// MinSeeders descarta da busca o torrent com menos seeders que isso. 0 desliga. O default
-	// e 1: barra so o torrent literalmente morto, que sem piso e candidato valido e chega a ser
-	// escolhido quando e o unico resultado do episodio.
+	// MinSeeders drops from the search any torrent with fewer seeders than this. 0 disables. The
+	// default is 1: it only bars the literally dead torrent, which without a floor is a valid
+	// candidate and even gets picked when it's the episode's only result.
 	MinSeeders int `json:"min_seeders"`
-	// MaxSearchPages e o teto de paginas do Nyaa por busca. A busca desce para a pagina
-	// seguinte apenas enquanto tiver poucos candidatos aceitos, entao o teto e um limite, nao
-	// um custo fixo. <= 1 significa buscar so a pagina 1.
+	// MaxSearchPages is the ceiling of Nyaa pages per search. The search only goes down to the next
+	// page while it has few accepted candidates, so the ceiling is a limit, not a fixed cost. <= 1
+	// means searching only page 1.
 	MaxSearchPages int `json:"max_search_pages"`
-	// MinFreeDiskPercent barra a adicao de novos torrents abaixo dessa porcentagem de espaco
-	// livre no volume da biblioteca. 0 desliga.
+	// MinFreeDiskPercent bars adding new torrents below this percentage of free space on the library
+	// volume. 0 disables.
 	MinFreeDiskPercent int `json:"min_free_disk_percent"`
 	EpisodeRetryLimit  int `json:"episode_retry_limit"`
-	// MaxConcurrentDownloads limita quantos torrents INCOMPLETOS baixam ao mesmo tempo; o
-	// excedente espera na fila (torrents.queue). 0 desliga o limite. Seeding nunca conta.
+	// MaxConcurrentDownloads limits how many INCOMPLETE torrents download at the same time; the excess
+	// waits in the queue (torrents.queue). 0 disables the limit. Seeding never counts.
 	//
-	// Nao precisa de migracao: LoadConfigs desserializa POR CIMA de getDefaultConfig(),
-	// entao um config.json anterior a este campo ja carrega valendo o default.
+	// No migration needed: LoadConfigs deserializes ON TOP of getDefaultConfig(), so a config.json
+	// older than this field already loads with the default.
 	MaxConcurrentDownloads int      `json:"max_concurrent_downloads"`
 	DeleteWatchedEpisodes  bool     `json:"delete_watched_episodes"`
 	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
@@ -128,29 +131,29 @@ type Config struct {
 	DownloadStatuses       []string `json:"download_statuses"`
 	DownloadMediaStatuses  []string `json:"download_media_statuses"`
 	DeleteStatuses         []string `json:"delete_statuses"`
-	// AnimeIDsAreMediaIDs marca que daemon.MigrateAnimeIDsToMedia ja converteu os AnimeID
-	// gravados de id de ENTRADA (MediaList, por conta) para id de MIDIA (ver decisions.md #43).
-	// O default e false de proposito: um config.json anterior a este campo desserializa por
-	// cima do default e precisa migrar. Numa instalacao nova a migracao roda sem nada a fazer
-	// e liga o campo no primeiro passe.
+	// AnimeIDsAreMediaIDs marks that daemon.MigrateAnimeIDsToMedia already converted the saved
+	// AnimeIDs from ENTRY id (MediaList, per account) to MEDIA id (see decisions.md #43). The default
+	// is false on purpose: a config.json older than this field deserializes on top of the default and
+	// needs to migrate. On a new install the migration runs with nothing to do and turns the field on
+	// in the first pass.
 	AnimeIDsAreMediaIDs bool                `json:"anime_ids_are_media_ids"`
 	Notifications       NotificationsConfig `json:"notifications"`
 	Priorities          nyaa.Priorities     `json:"priorities"`
 }
 
-// downloadDirName e o nome do diretorio de download dentro da biblioteca. O ponto o
-// esconde do scanner do Jellyfin no Linux; o arquivo .ignore criado por
-// Librarian.ProbePath cobre as demais plataformas.
+// downloadDirName is the name of the download directory inside the library. The dot hides it from
+// Jellyfin's scanner on Linux; the .ignore file created by Librarian.ProbePath covers the other
+// platforms.
 const downloadDirName = ".torrents"
 
-// DownloadPath e o diretorio onde os torrents baixam e continuam semeando. Ele e derivado
-// de CompletedAnimePath, nunca armazenado: assim a restricao de hardlink (origem e destino
-// no mesmo filesystem) fica impossivel de violar por configuracao.
+// DownloadPath is the directory where torrents download and keep seeding. It's derived from
+// CompletedAnimePath, never stored: that way the hardlink constraint (source and destination on the
+// same filesystem) is impossible to violate through configuration.
 //
-// Devolve "" quando a biblioteca nao esta configurada. Essa guarda e obrigatoria: sem ela
-// filepath.Join produziria o caminho relativo ".autoAnimeDownloader" e a sessao da rain
-// seria criada no diretorio de trabalho do processo. Com "", SessionManager.Ensure devolve
-// ErrSessionNotReady, que e o comportamento atual para config incompleta.
+// Returns "" when the library isn't configured. This guard is mandatory: without it filepath.Join
+// would produce the relative path ".autoAnimeDownloader" and the rain session would be created in
+// the process's working directory. With "", SessionManager.Ensure returns ErrSessionNotReady, which
+// is the current behavior for an incomplete config.
 func (c *Config) DownloadPath() string {
 	if c.CompletedAnimePath == "" {
 		return ""
@@ -159,10 +162,10 @@ func (c *Config) DownloadPath() string {
 }
 
 type AnimeSettings struct {
-	// Progress e o progresso MANUAL, e existe para o anime avulso: GetMediaByID devolve
-	// Progress: 0 fixo, e sem progresso nada nunca e "assistido", a poda nunca roda e o rodizio
-	// de packs sucessivos nao tem o que o mova. Ausente le 0, que e o comportamento de antes.
-	// Anime de lista nunca usa este campo: quem manda la e a AniList.
+	// Progress is the MANUAL progress, and exists for the standalone anime: GetMediaByID returns a
+	// fixed Progress: 0, and without progress nothing is ever "watched", the pruning never runs and
+	// the rotation of successive packs has nothing to move it. Absent reads as 0, which is the earlier
+	// behavior. A list anime never uses this field: there its list (AniList or MyAnimeList) rules.
 	Progress int `json:"progress,omitempty"`
 }
 
@@ -177,9 +180,9 @@ type FileManager struct {
 	mu                   sync.Mutex
 }
 
-// applyNyaaSettings empurra para o pacote nyaa os campos de config que ele consome. Chamado em
-// TODO retorno de LoadConfigs — o nyaa nao pode importar files (ciclo), entao a config chega
-// nele por push, nunca por leitura.
+// applyNyaaSettings pushes to the nyaa package the config fields it consumes. Called on EVERY
+// return of LoadConfigs — nyaa can't import files (cycle), so the config reaches it by push, never
+// by read.
 func applyNyaaSettings(config *Config) {
 	nyaa.SetPriorities(config.Priorities)
 	nyaa.SetMaxSearchPages(config.MaxSearchPages)
@@ -187,8 +190,8 @@ func applyNyaaSettings(config *Config) {
 }
 
 func getDefaultConfig() *Config {
-	// Default da biblioteca: ~/Animes. Se o home nao existir (container sem HOME), fica ""
-	// e a config segue "incompleta" como antes, exigindo que o usuario preencha.
+	// Library default: ~/Animes. If home doesn't exist (container without HOME), it stays "" and the
+	// config remains "incomplete" as before, requiring the user to fill it in.
 	completedPath := ""
 	if home, err := os.UserHomeDir(); err == nil {
 		completedPath = filepath.Join(home, "Animes")
@@ -197,6 +200,7 @@ func getDefaultConfig() *Config {
 	return &Config{
 		CompletedAnimePath:    completedPath,
 		AnilistUsernames:      []string{},
+		MALUsernames:          []string{},
 		CheckInterval:         10,
 		MaxEpisodesPerAnime:   12,
 		MaxBatchTorrentSizeGB: 100,
@@ -208,8 +212,8 @@ func getDefaultConfig() *Config {
 		EpisodeRetryLimit:       5,
 		MaxConcurrentDownloads:  3,
 		DeleteWatchedEpisodes:   true,
-		// DeleteWatchedEpisodes vem ligado de fábrica: sem folga o episódio some assim que
-		// é marcado como assistido. Dois perdoam "marquei errado" e "quis rever".
+		// DeleteWatchedEpisodes comes on by default: with no slack the episode disappears as soon as it's
+		// marked watched. Two forgive "I marked it by mistake" and "I wanted to rewatch".
 		WatchedEpisodesToKeep: 2,
 		ExcludedLists:         []string{},
 		DownloadStatuses:      []string{"CURRENT", "REPEATING"},
@@ -255,8 +259,8 @@ func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath, an
 		blockedEpisodesPath:  blockedEpisodesPath,
 		animeSettingsPath:    animeSettingsPath,
 		standaloneAnimesPath: standaloneAnimesPath,
-		// Derivado, e nao um parametro a mais: nenhum chamador precisa escolher onde o cache
-		// da AniList mora, e o construtor ja tem seis posicionais.
+		// Derived, not one more parameter: no caller needs to choose where the AniList cache lives, and
+		// the constructor already has six positional ones.
 		anilistCachePath: filepath.Join(filepath.Dir(configPath), anilistCacheFileName),
 	}
 }
@@ -277,9 +281,9 @@ func NewDefaultFileManager() (*FileManager, error) {
 	return NewManager(fs, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath, standaloneAnimesPath), nil
 }
 
-// ConfigExists diz se ja existe um config.json em disco. Serve para detectar a primeira
-// execucao, e por isso precisa ser consultado ANTES do primeiro LoadConfigs — que cria o
-// arquivo com os defaults quando ele nao existe.
+// ConfigExists says whether a config.json already exists on disk. It's used to detect the first
+// run, so it must be checked BEFORE the first LoadConfigs — which creates the file with the
+// defaults when it doesn't exist.
 func (m *FileManager) ConfigExists() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -360,6 +364,9 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 	if config.AnilistUsernames == nil {
 		config.AnilistUsernames = []string{}
 	}
+	if config.MALUsernames == nil {
+		config.MALUsernames = []string{}
+	}
 
 	applyNyaaSettings(config)
 	return config, nil
@@ -371,10 +378,10 @@ func (m *FileManager) SaveConfigs(config *Config) error {
 	return m.saveConfigsLocked(config)
 }
 
-// writeAtomic grava via arquivo temporario + rename, para que um leitor (ou uma queda de
-// energia no meio da escrita) nunca enxergue o arquivo truncado. Todo estado persistido
-// aqui e reescrito por inteiro a cada alteracao, entao um WriteFile direto deixa uma
-// janela em que o arquivo esta pela metade — foi assim que o arquivo de episodios corrompeu.
+// writeAtomic writes through a temp file + rename, so a reader (or a power loss mid-write) never
+// sees the file truncated. Every state persisted here is rewritten whole on every change, so a
+// direct WriteFile leaves a window where the file is half-written — that's how the episodes file
+// got corrupted.
 func (m *FileManager) writeAtomic(path string, data []byte) error {
 	tmpPath := path + ".tmp"
 	if err := m.fs.WriteFile(tmpPath, data, 0644); err != nil {
@@ -403,10 +410,9 @@ func (m *FileManager) saveConfigsLocked(config *Config) error {
 	return m.writeAtomic(m.configPath, data)
 }
 
-// As rotinas de episodios abaixo fazem read-modify-write no mesmo arquivo. A UI dispara
-// varias delas em paralelo (soltar/apagar varios episodios de uma vez) enquanto o daemon
-// organiza torrents, entao todas precisam segurar m.mu — senao as atualizacoes se perdem
-// e as escritas concorrentes corrompem o arquivo.
+// The episode routines below do read-modify-write on the same file. The UI fires several of them in
+// parallel (releasing/deleting several episodes at once) while the daemon organizes torrents, so
+// all of them must hold m.mu — otherwise updates get lost and concurrent writes corrupt the file.
 func (m *FileManager) LoadSavedEpisodes() ([]EpisodeStruct, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -580,10 +586,10 @@ func (m *FileManager) DeleteEpisodesFromFile(keys []EpisodeKey) error {
 	return m.saveEpisodesLocked(newSaved)
 }
 
-// DeleteEmptyFolders remove os diretorios de anime que ficaram vazios na biblioteca depois
-// de uma exclusao. O diretorio de download vive dentro dela (ver Config.DownloadPath), e a
-// rain aloca <download>/<id> antes de escrever qualquer byte — por isso a varredura o pula
-// explicitamente, senao apagaria torrents recem-adicionados.
+// DeleteEmptyFolders removes the anime directories left empty in the library after a deletion. The
+// download directory lives inside it (see Config.DownloadPath), and rain allocates <download>/<id>
+// before writing any byte — that's why the sweep skips it explicitly, otherwise it would delete
+// freshly added torrents.
 func (m *FileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error {
 	if completedAnimeSaveFolder == "" {
 		return fmt.Errorf("completed anime path cannot be empty")
@@ -602,9 +608,9 @@ func (m *FileManager) LoadBlockedEpisodes() ([]EpisodeKey, error) {
 	return m.loadBlockedEpisodesLocked()
 }
 
-// loadIntListLocked le um arquivo de estado que e so um array JSON de ids (standalone_animes).
-// Arquivo ausente e lista vazia, nao erro: e o estado inicial normal.
-// Must be called with m.mu held.
+// loadIntListLocked reads a state file that is just a JSON array of ids (standalone_animes). A
+// missing file is an empty list, not an error: it's the normal initial state. Must be called with
+// m.mu held.
 func (m *FileManager) loadIntListLocked(path, what string) ([]int, error) {
 	_, err := m.fs.Stat(path)
 	if os.IsNotExist(err) {
@@ -641,13 +647,13 @@ func (m *FileManager) saveIntListLocked(path string, ids []int, what string) err
 	return nil
 }
 
-// loadBlockedEpisodesLocked le blocked_episodes, um array JSON de EpisodeKey. Must be called
-// with m.mu held.
+// loadBlockedEpisodesLocked reads blocked_episodes, a JSON array of EpisodeKey. Must be called with
+// m.mu held.
 //
-// O arquivo no formato antigo era um array de ids de no da AniList (`[416348, ...]`). Esses ids
-// nao existem mais em lugar nenhum do codigo, entao nao ha como converte-los: o arquivo legado e
-// DESCARTADO com um aviso, e o usuario perde os bloqueios manuais que tinha. Bloquear e um clique
-// por episodio na tela de detalhe; migrar por adivinhacao seria pior que refazer.
+// The file in the old format was an array of AniList node ids (`[416348, ...]`). Those ids no
+// longer exist anywhere in the code, so there's no way to convert them: the legacy file is
+// DISCARDED with a warning, and the user loses the manual blocks they had. Blocking is one click
+// per episode on the detail screen; migrating by guesswork would be worse than redoing it.
 func (m *FileManager) loadBlockedEpisodesLocked() ([]EpisodeKey, error) {
 	_, err := m.fs.Stat(m.blockedEpisodesPath)
 	if os.IsNotExist(err) {
@@ -866,12 +872,12 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 	return nil
 }
 
-// LoadAnilistCache le o snapshot dos caches da AniList. Arquivo ausente devolve (nil, nil):
-// primeira execucao nao e falha, e o anilist trata nil como "comece sem cache".
+// LoadAnilistCache reads the snapshot of the AniList caches. A missing file returns (nil, nil): a
+// first run isn't a failure, and anilist treats nil as "start without a cache".
 //
-// Nao valida o conteudo. Snapshot corrompido e problema de quem sabe o esquema — o anilist
-// descarta e segue sem cache, que e degradacao aceitavel para um arquivo que existe so para
-// sobreviver ao restart.
+// It doesn't validate the content. A corrupt snapshot is the problem of whoever knows the schema —
+// anilist discards it and goes on without a cache, which is an acceptable degradation for a file
+// that exists only to survive the restart.
 func (m *FileManager) LoadAnilistCache() ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

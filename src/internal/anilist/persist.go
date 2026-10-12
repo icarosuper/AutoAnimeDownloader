@@ -10,53 +10,58 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// O snapshot em disco existe para UMA coisa: manter as telas e o passe funcionando quando a
-// AniList sai do ar, inclusive depois de um restart. Ele NAO e uma frente de leitura — nada
-// aqui e servido enquanto a API responde.
+// The disk snapshot exists for ONE thing: keeping the screens and the pass working when AniList
+// goes down, restart included. It is NOT a read front — nothing here is served while the API
+// answers.
 //
-// Como isso e garantido: as tres colecoes de MediaList voltam do disco com TTL ZERO, ou seja
-// visiveis so para getStale, que so roda quando a requisicao falhou. O caminho feliz continua
-// indo a rede exatamente como antes, e nenhuma tela passa a mostrar dado mais velho do que
-// mostrava. A excecao e o seriesCache, que volta com o TTL cheio de proposito: o que entra nele
-// e elo de anime FINISHED com contagem de episodios, dado imutavel por construcao (ver
-// recordLink) — nao ha o que vencer.
+// How that's guaranteed: the MediaList collections (and the MAL lists) come back from disk with TTL
+// ZERO, i.e. visible only to getStale, which only runs when the request failed. The happy path
+// keeps going to the network exactly as before, and no screen starts showing older data than it
+// did. The exceptions are seriesCache and the MAL id mapping, which come back with their full TTL
+// on purpose: what goes into seriesCache is a link of a FINISHED anime with its episode count,
+// immutable by construction (see recordLink), and a MAL -> AniList id mapping practically never
+// changes — there's nothing to expire.
 type snapshot struct {
 	SavedAt time.Time `json:"saved_at"`
-	// Chaveados exatamente como em memoria (usuario + separador + statuses, ou usuario +
-	// separador + media id). O separador e um byte nulo, que o encoder do Go escreve como
-	// \u0000 e le de volta igual - a chave sobrevive ao round-trip sem tratamento.
+	// Keyed exactly as in memory (user + separator + statuses, or user + separator + media id). The
+	// separator is a null byte, which Go's encoder writes as \u0000 and reads back the same - the key
+	// survives the round-trip untouched.
 	FrontendList map[string][]MediaList `json:"frontend_list,omitempty"`
 	PassList     map[string][]MediaList `json:"pass_list,omitempty"`
 	MediaEntries map[string][]MediaList `json:"media_entries,omitempty"`
-	// CustomLists entra porque e ela que carrega a exclusao. Sem ela no fallback, um anime que
-	// o usuario pos numa lista excluida volta a parecer nao-excluido enquanto a AniList estiver
-	// fora — e o passe baixa o que o usuario mandou ignorar.
+	// CustomLists goes in because it's what carries the exclusion. Without it in the fallback, an
+	// anime the user put in an excluded list looks non-excluded again while AniList is down — and the
+	// pass downloads what the user said to ignore.
 	CustomLists map[string]map[int]CustomLists `json:"custom_lists,omitempty"`
-	// MediaByID cobre os avulsos, que nao aparecem em lista de conta nenhuma: sem ele a lista
-	// da tela continua encolhendo — a parte dela que e avulso — com a AniList fora do ar.
+	// MediaByID covers the standalone animes, which show up in no account's list: without it the
+	// screen's list keeps shrinking — the standalone part of it — with AniList down.
 	MediaByID map[string]*MediaList `json:"media_by_id,omitempty"`
 	Series    map[string]seriesLink `json:"series,omitempty"`
+	// The MAL raw lists come back with TTL zero like the other lists; the MAL -> AniList id
+	// mapping comes back with its full TTL, like Series: it practically never changes.
+	MALLists map[string][]malRawEntry `json:"mal_lists,omitempty"`
+	MALIDMap map[string]int           `json:"mal_id_map,omitempty"`
 }
 
-// persistDebounce coalesce as escritas. Sem ele cada abertura da tela de detalhe reescreveria o
-// snapshot inteiro, e um passe reescreveria uma vez por conta mais uma por caminhada de serie.
+// persistDebounce coalesces the writes. Without it every opening of the detail screen would rewrite
+// the whole snapshot, and a pass would rewrite it once per account plus once per series walk.
 const persistDebounce = 5 * time.Second
 
 var (
 	persistMu    sync.Mutex
 	persistSave  func([]byte) error
 	persistTimer *time.Timer
-	// snapshotAt e o SavedAt do que esta em disco, em unix. Zero = nunca gravado nesta
-	// instalacao. O frontend usa para dizer de quando e o cache que esta vendo.
+	// snapshotAt is the SavedAt of what's on disk, in unix. Zero = never written on this install. The
+	// frontend uses it to say how old the cache it's seeing is.
 	snapshotAt atomic.Int64
 )
 
-// EnablePersistence liga o snapshot e carrega o que estiver em disco. Chamada uma vez no boot do
-// daemon; sem ela o pacote se comporta exatamente como antes (todo cache morre no restart), que
-// e o que os testes unitarios querem.
+// EnablePersistence turns the snapshot on and loads whatever is on disk. Called once at daemon
+// boot; without it the package behaves exactly as before (every cache dies on restart), which is
+// what the unit tests want.
 //
-// Erro de leitura ou snapshot corrompido nao aborta nada: comeca sem cache e o proximo fetch
-// bem-sucedido regrava o arquivo.
+// A read error or a corrupt snapshot aborts nothing: it starts without a cache and the next
+// successful fetch rewrites the file.
 func EnablePersistence(load func() ([]byte, error), save func([]byte) error) {
 	persistMu.Lock()
 	persistSave = save
@@ -83,6 +88,8 @@ func EnablePersistence(load func() ([]byte, error), save func([]byte) error) {
 	customListsCache.restore(snap.CustomLists, 0)
 	mediaByIDCache.restore(snap.MediaByID, 0)
 	seriesCache.restore(snap.Series, seriesTTL)
+	malListCache.restore(snap.MALLists, 0)
+	malIDMapCache.restore(snap.MALIDMap, malIDMapTTL)
 	snapshotAt.Store(snap.SavedAt.Unix())
 
 	logger.Logger.Info().
@@ -94,8 +101,8 @@ func EnablePersistence(load func() ([]byte, error), save func([]byte) error) {
 		Msg("Loaded the AniList cache snapshot from disk")
 }
 
-// SnapshotSavedAt e a data do snapshot em disco, ou zero se nao ha nenhum. E o que responde
-// "servindo do cache de quando?" na tela.
+// SnapshotSavedAt is the date of the disk snapshot, or zero if there's none. It's what answers
+// "serving the cache from when?" on the screen.
 func SnapshotSavedAt() time.Time {
 	if unix := snapshotAt.Load(); unix > 0 {
 		return time.Unix(unix, 0)
@@ -103,8 +110,8 @@ func SnapshotSavedAt() time.Time {
 	return time.Time{}
 }
 
-// markCacheDirty agenda a gravacao. Barato de chamar em excesso: com um timer pendente ele nao
-// faz nada, e sem persistencia ligada tambem nao.
+// markCacheDirty schedules the write. Cheap to call too often: with a pending timer it does
+// nothing, and with persistence off neither.
 func markCacheDirty() {
 	persistMu.Lock()
 	defer persistMu.Unlock()
@@ -132,14 +139,16 @@ func flushCache() {
 		CustomLists:  customListsCache.snapshot(),
 		MediaByID:    mediaByIDCache.snapshot(),
 		Series:       seriesCache.snapshot(),
+		MALLists:     malListCache.snapshot(),
+		MALIDMap:     malIDMapCache.snapshot(),
 	})
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to marshal the AniList cache snapshot")
 		return
 	}
 
-	// Falha de gravacao nao propaga: o cache em disco e conveniencia, e quem chamou estava
-	// servindo uma requisicao que nao tem nada a ver com isso.
+	// A write failure doesn't propagate: the disk cache is a convenience, and the caller was serving a
+	// request that has nothing to do with it.
 	if err := save(data); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to write the AniList cache snapshot")
 		return
@@ -147,10 +156,9 @@ func flushCache() {
 	snapshotAt.Store(now.Unix())
 }
 
-// disablePersistence desliga e cancela a gravacao pendente. Existe para o isolamento dos
-// testes: um snapshot agendado que dispara depois do teste terminar escreveria no diretorio
-// temporario de outro teste. Em producao EnablePersistence roda uma vez no boot e ninguem
-// desliga.
+// disablePersistence turns it off and cancels the pending write. It exists for test isolation: a
+// scheduled snapshot that fires after the test ends would write into another test's temp directory.
+// In production EnablePersistence runs once at boot and nobody turns it off.
 func disablePersistence() {
 	persistMu.Lock()
 	defer persistMu.Unlock()
@@ -162,18 +170,19 @@ func disablePersistence() {
 	snapshotAt.Store(0)
 }
 
-// stampAiringAt converte o TimeUntilAiring (relativo ao instante da busca) em AiringAt
-// (absoluto) antes de guardar, e e o que torna o cache utilizavel para decidir se um episodio
-// ja foi ao ar.
+// stampAiringAt converts TimeUntilAiring (relative to the fetch instant) into AiringAt (absolute)
+// before storing, and it's what makes the cache usable to decide whether an episode already aired.
 //
-// Sem isso o TimeUntilAiring congela no valor do momento da busca, e como TODO gate de "ja
-// passou" le esse campo (daemon/episodes.go, anilist/episodes.go, daemon/manual_download.go),
-// um passe servido do cache concluiria para sempre que nada novo estreou. Com o instante
-// absoluto guardado, rebaseAiring devolve a contagem certa na hora de servir — e o episodio que
-// faltava dez minutos quando a AniList caiu vira "ja foi ao ar" sozinho, sem regra nova.
+// Without it TimeUntilAiring freezes at the value of the fetch moment, and since EVERY "already
+// aired" gate reads that field (daemon/episodes.go, anilist/episodes.go,
+// daemon/manual_download.go), a pass served from the cache would conclude forever that nothing new
+// premiered. With the absolute instant stored, rebaseAiring returns the right count at serving time
+// — and the episode that was ten minutes away when AniList went down becomes "already aired" on its
+// own, with no new rule.
 //
-// So preenche o que esta zerado: a query por media id ja pede airingAt de verdade, e o da API e
-// melhor que o nosso. As do passe e do frontend nao pedem, e e nessas que isto vale.
+// It only fills what's zero: the media-id query already asks for the real airingAt, and the API's
+// is better than ours. The pass's and the frontend's don't ask for it, and that's where this
+// matters.
 func stampAiringAt(list []MediaList, now time.Time) {
 	unix := now.Unix()
 	for i := range list {
@@ -190,12 +199,12 @@ func stampAiringAt(list []MediaList, now time.Time) {
 	}
 }
 
-// rebaseAiring e o inverso de stampAiringAt: recalcula o TimeUntilAiring a partir do instante
-// absoluto, para que uma entrada guardada ontem nao afirme que faltam as mesmas seis horas de
-// ontem. Chamada em TODO caminho que serve do cache.
+// rebaseAiring is the inverse of stampAiringAt: it recomputes TimeUntilAiring from the absolute
+// instant, so an entry stored yesterday doesn't claim the same six hours remain as yesterday.
+// Called on EVERY path that serves from the cache.
 //
-// Trabalha sobre copias dos campos que reescreve, nunca sobre a entrada guardada: reescrever a
-// guardada faria o proximo leitor rebasear um valor ja rebaseado.
+// It works on copies of the fields it rewrites, never on the stored entry: rewriting the stored one
+// would make the next reader rebase an already rebased value.
 func rebaseAiring(list []MediaList, now time.Time) {
 	unix := now.Unix()
 	for i := range list {
@@ -217,8 +226,8 @@ func rebaseAiring(list []MediaList, now time.Time) {
 	}
 }
 
-// staleList devolve a entrada vencida de um cache de MediaList pronta para uso: copia rasa (o
-// chamador sobrescreve CustomLists) e contagem de estreia recalculada.
+// staleList returns the expired entry of a MediaList cache ready to use: a shallow copy (the caller
+// overwrites CustomLists) and the premiere count recomputed.
 func staleList(cache *ttlCache[[]MediaList], key string) ([]MediaList, bool) {
 	stored, ok := cache.getStale(key)
 	if !ok {
@@ -229,10 +238,10 @@ func staleList(cache *ttlCache[[]MediaList], key string) ([]MediaList, bool) {
 	return out, true
 }
 
-// storeList guarda a lista para o fallback: copia rasa, para que a sobrescrita de CustomLists
-// do chamador nao alcance o que foi guardado, e AiringAt preenchido.
-// Guarda lista vazia tambem: "esta conta nao tem nada nesses status" e resposta legitima, e
-// nao guardar faria o poll de 30s ir a rede para sempre em quem tem a lista vazia.
+// storeList stores the list for the fallback: a shallow copy, so the caller's CustomLists overwrite
+// doesn't reach what was stored, and AiringAt filled in. It stores an empty list too: "this account
+// has nothing in these statuses" is a legitimate answer, and not storing it would make the 30s poll
+// hit the network forever for whoever has an empty list.
 func storeList(cache *ttlCache[[]MediaList], key string, list []MediaList, ttl time.Duration) {
 	stored := append([]MediaList(nil), list...)
 	stampAiringAt(stored, time.Now())
@@ -240,9 +249,9 @@ func storeList(cache *ttlCache[[]MediaList], key string, list []MediaList, ttl t
 	markCacheDirty()
 }
 
-// staleMedia devolve o avulso vencido com a contagem de estreia recalculada. Devolve ok=true
-// para uma entrada nil guardada: nil ali significa "a AniList nao conhece este id", que e
-// resposta, nao ausencia de resposta.
+// staleMedia returns the expired standalone entry with the premiere count recomputed. It returns
+// ok=true for a stored nil entry: nil there means "AniList doesn't know this id", which is an
+// answer, not the absence of one.
 func staleMedia(key string) (*MediaList, bool) {
 	stored, ok := mediaByIDCache.getStale(key)
 	if !ok {
@@ -257,6 +266,6 @@ func staleMedia(key string) (*MediaList, bool) {
 	return out, true
 }
 
-// seriesKey e a chave do seriesCache. Existe para que persist.go e series.go concordem sobre o
-// formato sem repetir o Itoa em varios lugares.
+// seriesKey is the seriesCache key. It exists so persist.go and series.go agree on the format
+// without repeating the Itoa in several places.
 func seriesKey(mediaID int) string { return strconv.Itoa(mediaID) }

@@ -27,7 +27,10 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.4.0` — MyAnimeList integration
 
-- Add MyAnimeList integration
+- ~~Add MyAnimeList integration~~ — **implemented on 2026-10-12**, not released yet ([decisions.md #95](agents/decisions.md#95-myanimelist-is-a-list-source-not-a-metadata-source)). Spec:
+  [myanimelist-list-source](superpowers/specs/2026-10-12-myanimelist-list-source-design.md).
+  MAL is a **list source** only (status + progress); identity, episodes and metadata stay on
+  AniList, mapped through `idMal`. The list comes from the unofficial `load.json`, so no client ID
 
 ## `v2.5.0` — bug report
 

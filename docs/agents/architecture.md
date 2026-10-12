@@ -55,7 +55,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of `{anime_id, episode}`, no extension). O formato antigo (array de ids de nó da AniList) é descartado com aviso ao ser lido — ver decisions.md #52 |
 | `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList **media** ID (JSON map, no extension) |
 | `standalone_animes` | `~/.autoAnimeDownloader/` | Media IDs tracked **without** being in any AniList list (JSON array of IDs, no extension) |
-| `anilist_cache` | `~/.autoAnimeDownloader/` | Snapshot dos caches do `anilist`, para o app sobreviver à AniList fora do ar (JSON, no extension). Bytes **opacos** para o `files` de propósito: o esquema é do `anilist` (`persist.go`), e é isso que evita o `files` importar o `anilist` só para persistir o cache dele. Descartável — apagar só custa uma queda sem rede de proteção até o próximo fetch |
+| `anilist_cache` | `~/.autoAnimeDownloader/` | Snapshot of the `anilist` caches (MAL lists and the MAL→AniList id mapping included), so the app survives AniList being down (JSON, no extension). **Opaque** bytes to `files` on purpose: the schema belongs to `anilist` (`persist.go`), and that's what keeps `files` from importing `anilist` just to persist its cache. Disposable — deleting it only costs an outage with no safety net until the next fetch |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
@@ -417,6 +417,17 @@ cadeia é um BFS, não uma leitura (decisions.md #77). Cada media buscada ensina
 e 1, os únicos em posição autoritativa); o avô, cujo `relations` veio cortado, volta para a fronteira
 em vez de virar raiz. A semente vem pronta de quem chama porque **`anilist` não pode importar
 `files`** — e o conjunto certo só o daemon conhece.
+
+**`mal.go` — MyAnimeList, as a list source only.** It lives in `anilist` on purpose (it needs
+`ttlCache`, the snapshot, `sendAnilistRequest` and `GetMediaByIDs`); there is **no** `internal/mal`
+package and no `Account` type. A MAL entry becomes the same synthetic `MediaList` a standalone anime
+gets, so `MediaList.Id == 0` means "standalone **or** MAL" and nothing can tell them apart by it.
+What bites: `ErrMALEmpty` is a **failure** — every caller must treat it like a failed fetch, or the
+account loses its deletion veto; and the status filter must run **before** `GetMediaByIDs`, or the
+frontend poll hydrates the whole list every minute. The MAL account loops live next to the AniList
+ones in `daemon/verification.go` and `api/endpoint_animes.go`/`api/standalone_guard.go`, keyed
+`"mal:" + user` in `inDeleteStatus`
+([decisions.md #95](decisions.md#95-myanimelist-is-a-list-source-not-a-metadata-source)).
 
 ### `src/internal/nyaa/`
 

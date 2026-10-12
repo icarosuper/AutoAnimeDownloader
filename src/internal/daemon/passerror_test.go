@@ -7,25 +7,28 @@ import (
 	"testing"
 )
 
-// TestPassErrorCode trava a classificacao das causas de aborto. E o que decide a frase que o
-// usuario le no banner da Status: uma causa mal classificada manda ele conferir a pasta da
-// biblioteca quando quem caiu foi a AniList.
+// TestPassErrorCode locks the classification of abort causes. It's what decides the sentence the
+// user reads in the Status banner: a misclassified cause sends them to check the library folder
+// when what went down was AniList.
 func TestPassErrorCode(t *testing.T) {
 	cases := []struct {
 		name string
 		err  error
 		want string
 	}{
-		{"sem erro", nil, ""},
-		{"anilist embrulhado", fmt.Errorf("%w: %w", errCauseAnilist, errors.New("anilist returned 403: disabled")), PassErrAnilist},
-		{"configuracao incompleta", fmt.Errorf("%w: falta a pasta", errCauseSetup), PassErrSetup},
-		{"biblioteca sem hardlink", fmt.Errorf("%w: %w", errCauseLibrary, errors.New("cross-device link")), PassErrLibrary},
-		{"cliente de torrent", fmt.Errorf("%w: não inicializado", errCauseTorrent), PassErrTorrent},
-		{"dados do app", fmt.Errorf("%w: %w", errCauseStorage, errors.New("episodes.json corrompido")), PassErrStorage},
-		{"config ilegivel", fmt.Errorf("%w: %w", errCauseConfig, errors.New("permission denied")), PassErrConfig},
-		// Um sitio de aborto novo que esqueca de embrulhar tem de cair aqui, e nao virar uma
-		// causa errada: "unknown" tem frase propria no frontend.
-		{"erro nao embrulhado", errors.New("qualquer coisa"), PassErrUnknown},
+		{"no error", nil, ""},
+		{"wrapped anilist", fmt.Errorf("%w: %w", errCauseAnilist, errors.New("anilist returned 403: disabled")), PassErrAnilist},
+		// searchAnilist wraps a MAL-only failure in errCauseMAL, and the abort site wraps that in
+		// errCauseAnilist: the banner must still blame MAL.
+		{"mal inside anilist", fmt.Errorf("%w: %w", errCauseAnilist, fmt.Errorf("%w: boom", errCauseMAL)), PassErrMAL},
+		{"incomplete setup", fmt.Errorf("%w: missing folder", errCauseSetup), PassErrSetup},
+		{"library without hardlink", fmt.Errorf("%w: %w", errCauseLibrary, errors.New("cross-device link")), PassErrLibrary},
+		{"torrent client", fmt.Errorf("%w: not initialized", errCauseTorrent), PassErrTorrent},
+		{"app data", fmt.Errorf("%w: %w", errCauseStorage, errors.New("episodes.json corrupted")), PassErrStorage},
+		{"unreadable config", fmt.Errorf("%w: %w", errCauseConfig, errors.New("permission denied")), PassErrConfig},
+		// A new abort site that forgets to wrap has to land here, not on a wrong cause:
+		// "unknown" has its own sentence in the frontend.
+		{"unwrapped error", errors.New("anything"), PassErrUnknown},
 	}
 
 	for _, tc := range cases {
@@ -37,14 +40,14 @@ func TestPassErrorCode(t *testing.T) {
 	}
 }
 
-// TestPassErrorKeepsOriginalMessage: embrulhar nao pode engolir o texto original — ele continua
-// indo para o `pass_error` cru, que a tela mostra recolhido para quem for abrir uma issue.
+// TestPassErrorKeepsOriginalMessage: wrapping must not swallow the original text — it still goes
+// to the raw `pass_error`, which the screen shows collapsed for whoever opens an issue.
 func TestPassErrorKeepsOriginalMessage(t *testing.T) {
 	err := fmt.Errorf("%w: %w", errCauseAnilist, errors.New("anilist returned 403: temporarily disabled"))
 	if got := err.Error(); got == "" || !errors.Is(err, errCauseAnilist) {
-		t.Fatalf("erro embrulhado perdeu informação: %q", got)
+		t.Fatalf("wrapped error lost information: %q", got)
 	}
 	if want := "temporarily disabled"; !strings.Contains(err.Error(), want) {
-		t.Errorf("mensagem = %q, esperava conter %q", err.Error(), want)
+		t.Errorf("message = %q, want it to contain %q", err.Error(), want)
 	}
 }

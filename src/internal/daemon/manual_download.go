@@ -10,21 +10,20 @@ import (
 	"time"
 )
 
-// addAndPrioritize adiciona o magnet e o poe na frente da fila de downloads.
+// addAndPrioritize adds the magnet and puts it at the front of the download queue.
 //
-// Um download pedido a mao tem de comecar agora, nao quando a fila chegar nele — mas
-// continua respeitando max_concurrent_downloads: em vez de virar um ativo a mais, ele
-// rebaixa o torrent automatico menos adiantado. Um limite que a UI mostra sendo furado e
-// um limite em que ninguem confia.
+// A download asked for by hand has to start now, not when the queue gets to it — but it still
+// respects max_concurrent_downloads: instead of becoming one more active torrent, it demotes the
+// least advanced automatic one. A limit the UI shows being broken is a limit nobody trusts.
 //
-// A falha do Prioritize e so logada: o torrent ja esta na sessao e vai baixar de qualquer
-// jeito, so que na vez dele — abortar o download inteiro por causa disso seria pior.
-// sizeBytes e o tamanho anunciado pelo Nyaa; 0 quando o magnet veio colado pelo usuario e nao ha
-// como saber o tamanho antes dos metadados.
+// A Prioritize failure is only logged: the torrent is already in the session and will download
+// anyway, just in its turn — aborting the whole download because of that would be worse. sizeBytes
+// is the size Nyaa announced; 0 when the magnet was pasted by the user and there's no way to know
+// the size before the metadata.
 func addAndPrioritize(backend torrents.TorrentBackend, magnet string, sizeBytes int64, configs *files.Config) (string, error) {
-	// A guarda de espaco em disco fica aqui (e nao em torrents.Session.Add) porque o pacote
-	// torrents nao conhece files.Config — passar a config para la so para ler uma porcentagem
-	// inverteria a dependencia. Este e o unico Add dos caminhos manuais.
+	// The disk space guard lives here (and not in torrents.Session.Add) because the torrents package
+	// doesn't know files.Config — passing the config there just to read a percentage would invert the
+	// dependency. This is the only Add of the manual paths.
 	if err := checkDiskSpace(configs, sizeBytes); err != nil {
 		return "", err
 	}
@@ -45,28 +44,28 @@ type animeDetails struct {
 	isFinished bool
 }
 
-// resolveAnimeDetails busca um anime pelo MEDIA id, colapsando as contas configuradas, e cai em
-// GetMediaByID quando nenhuma conta o acompanha.
+// resolveAnimeDetails fetches an anime by MEDIA id, collapsing the configured accounts (AniList and
+// MyAnimeList), and falls back to GetMediaByID when no account tracks it.
 //
-// O fallback e o que faz os botoes por episodio (download, redownload, replace) funcionarem num
-// anime avulso: a tela de detalhe dele abre — resolveMediaList ja cobria isso —, mas cada acao
-// morria aqui com "nao esta em nenhuma conta". Sem contas configuradas, que passou a ser um
-// estado valido, esse era o caminho de TODO download manual.
+// The fallback is what makes the per-episode buttons (download, redownload, replace) work on a
+// standalone anime: its detail screen opens — resolveMediaList already covered that —, but every
+// action died here with "not in any account". With no accounts configured, which became a valid
+// state, that was the path of EVERY manual download.
 //
-// Nao ha checagem contra o arquivo de avulsos aqui, ao contrario de api.resolveMediaList: estas
-// funcoes ja exigem um media id e um episode id que so a tela de detalhe fornece, e o resultado
-// e sempre gravado com ManuallyManaged=true — o loop nunca o apaga por nao acompanhar o anime.
-// Um id que nao existe na AniList continua devolvendo erro.
+// There's no check against the standalone file here, unlike api.resolveMediaList: these functions
+// already require a media id and an episode id only the detail screen provides, and the result is
+// always saved with ManuallyManaged=true — the loop never deletes it for not tracking the anime. An
+// id that doesn't exist on AniList still returns an error.
 //
-// O fallback (ml == nil) e o mesmo caminho sintetico de appendStandaloneAnimes: passa por
-// withStandaloneProgress para injetar o progresso salvo. Sem isso RunAnimeDebug relatava um
-// avulso com progresso gravado como se comecasse do episodio 1 — o pipeline de debug divergindo
-// do pipeline real que ele existe para espelhar. Nos chamadores de ManualDownload* o efeito e
-// inocuo: eles selecionam episodio por numero explicito (findEpisodeNode), nao por Progress.
-func resolveAnimeDetails(fm FileManagerInterface, animeId int, usernames []string) (*animeDetails, error) {
-	ml, err := anilist.GetAnimeInfo(animeId, usernames, anilist.PriorityCritical)
-	// Cache local serve: o que se busca aqui e titulo, relations e status para montar a query
-	// do Nyaa, e o Nyaa nao caiu junto com a AniList.
+// The fallback (ml == nil) is the same synthetic path as appendStandaloneAnimes: it goes through
+// withStandaloneProgress to inject the saved progress. Without that RunAnimeDebug reported a
+// standalone anime with saved progress as if it started at episode 1 — the debug pipeline diverging
+// from the real pipeline it exists to mirror. For the ManualDownload* callers the effect is
+// harmless: they select the episode by explicit number (findEpisodeNode), not by Progress.
+func resolveAnimeDetails(fm FileManagerInterface, animeId int, configs *files.Config) (*animeDetails, error) {
+	ml, err := anilist.GetAnimeInfo(animeId, configs.AnilistUsernames, configs.MALUsernames, anilist.PriorityCritical)
+	// The local cache serves: what's fetched here is title, relations and status to build the Nyaa
+	// query, and Nyaa didn't go down with AniList.
 	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 		return nil, fmt.Errorf("failed to get anime info: %w", err)
 	}
@@ -94,10 +93,10 @@ func resolveAnimeDetails(fm FileManagerInterface, animeId int, usernames []strin
 	}, nil
 }
 
-// findEpisodeNode acha o episodio pelo NUMERO na lista completa do anime — e nao no
-// airingSchedule cru, que nao tem no para episodio fora da janela que a AniList guarda. Sem isso
-// os botoes por episodio morriam com "episodio nao encontrado" justamente nos animes em que a
-// tela mostra os episodios sinteticos (ver anilist.EpisodeList e decisions.md #52).
+// findEpisodeNode finds the episode by NUMBER in the anime's full list — not in the raw
+// airingSchedule, which has no node for an episode outside the window AniList keeps. Without this
+// the per-episode buttons died with "episode not found" precisely on the animes where the screen
+// shows synthetic episodes (see anilist.EpisodeList and decisions.md #52).
 func findEpisodeNode(ml anilist.MediaList, episodeNumber int) *anilist.AiringNode {
 	for _, node := range anilist.EpisodeList(ml, 1) {
 		if node.Episode == episodeNumber {
@@ -115,7 +114,7 @@ func ManualDownloadEpisodeWithMagnet(fm FileManagerInterface, backend torrents.T
 		return files.EpisodeStruct{}, err
 	}
 
-	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
+	details, err := resolveAnimeDetails(fm, animeId, configs)
 	if err != nil {
 		return files.EpisodeStruct{}, err
 	}
@@ -149,7 +148,7 @@ func ManualDownloadAnimeWithMagnet(fm FileManagerInterface, backend torrents.Tor
 		return nil, err
 	}
 
-	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
+	details, err := resolveAnimeDetails(fm, animeId, configs)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +191,7 @@ func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBack
 		return files.EpisodeStruct{}, err
 	}
 
-	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
+	details, err := resolveAnimeDetails(fm, animeId, configs)
 	if err != nil {
 		return files.EpisodeStruct{}, err
 	}
@@ -204,8 +203,8 @@ func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBack
 
 	epName := fmt.Sprintf("%s - Episode %d", details.title, targetNode.Episode)
 
-	// Checado antes da busca no Nyaa para o handler receber ErrInsufficientDiskSpace em vez do
-	// "falhou apos N tentativas" genrico (que viraria 500 em vez de 409).
+	// Checked before the Nyaa search so the handler gets ErrInsufficientDiskSpace instead of the
+	// generic "failed after N attempts" (which would become a 500 instead of a 409).
 	if err := checkDiskSpace(configs, 0); err != nil {
 		return files.EpisodeStruct{}, err
 	}

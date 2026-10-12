@@ -31,7 +31,7 @@ func TestAniListModule_GetAnimeInfo_ParsesSynonymsAndRelations(t *testing.T) {
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, nil, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -113,7 +113,7 @@ func TestAniListModule_GetAnimeInfo_ParsesMediaID(t *testing.T) {
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, nil, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -122,8 +122,8 @@ func TestAniListModule_GetAnimeInfo_ParsesMediaID(t *testing.T) {
 	}
 }
 
-// GetAnimeInfo colapsa as contas: o anime aparece nas duas listas com entradas diferentes e
-// deve voltar como UM registro, com o MENOR progresso (a conta mais atrasada manda).
+// GetAnimeInfo collapses the accounts: the anime shows up in both lists with different entries and
+// must come back as ONE record, with the LOWEST progress (the account furthest behind rules).
 func TestAniListModule_GetAnimeInfo_CollapsesAccountsKeepingLowestProgress(t *testing.T) {
 	var calls int
 	restore := anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
@@ -138,26 +138,26 @@ func TestAniListModule_GetAnimeInfo_CollapsesAccountsKeepingLowestProgress(t *te
 	})
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"accountA", "accountB"}, anilist.PriorityCritical)
+	ml, err := anilist.GetAnimeInfo(21, []string{"accountA", "accountB"}, nil, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if ml.Progress != 2 {
-		t.Errorf("esperava o menor progresso entre as contas (2), obteve %d", ml.Progress)
+		t.Errorf("want the lowest progress across the accounts (2), got %d", ml.Progress)
 	}
 }
 
-// Anime fora de todas as listas nao e erro: os episodios podem seguir em disco.
+// An anime outside every list is not an error: its episodes may stay on disk.
 func TestAniListModule_GetAnimeInfo_NotTrackedReturnsNil(t *testing.T) {
 	restore := mockAniListResponse(`{"data": {"Page": {"mediaList": []}}}`, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, nil, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if ml != nil {
-		t.Errorf("esperava nil para anime fora das listas, obteve %+v", ml)
+		t.Errorf("want nil for an anime outside every list, got %+v", ml)
 	}
 }
 
@@ -170,7 +170,7 @@ func TestAniListModule_GetAnimeInfo_ParsesCustomLists(t *testing.T) {
 	restore := mockAniListResponse(json, 200)
 	defer restore()
 
-	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, anilist.PriorityCritical)
+	ml, err := anilist.GetAnimeInfo(21, []string{"user"}, nil, anilist.PriorityCritical)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

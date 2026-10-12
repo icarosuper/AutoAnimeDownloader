@@ -206,7 +206,7 @@ func getClient() *api.Client {
 }
 
 func handleStart() error {
-	// Encontrar o binário do daemon
+	// Find the daemon binary
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
@@ -215,7 +215,7 @@ func handleStart() error {
 	execDir := filepath.Dir(execPath)
 	daemonBinary := filepath.Join(execDir, "autoanimedownloader-daemon")
 
-	// Se não existir, tentar sem extensão (Linux/Mac)
+	// If it doesn't exist, try without the extension (Linux/Mac)
 	if _, err := os.Stat(daemonBinary); os.IsNotExist(err) {
 		daemonBinary = filepath.Join(execDir, "aad-daemon")
 	}
@@ -301,6 +301,7 @@ func handleConfigGet() error {
 		t.SetOutputMirror(os.Stdout)
 		t.AppendHeader(table.Row{"Field", "Value"})
 		t.AppendRow(table.Row{"Anilist Usernames", strings.Join(config.AnilistUsernames, ", ")})
+		t.AppendRow(table.Row{"MyAnimeList Usernames", strings.Join(config.MALUsernames, ", ")})
 		t.AppendRow(table.Row{"Completed Anime Path", config.CompletedAnimePath})
 		t.AppendRow(table.Row{"Check Interval", fmt.Sprintf("%d minutes", config.CheckInterval)})
 		t.AppendRow(table.Row{"Max Episodes Per Anime", config.MaxEpisodesPerAnime})
@@ -688,14 +689,14 @@ func handleLogs(lines int, filterLevel, searchQuery string) error {
 }
 
 func handleOpen() error {
-	// Construir a URL da web UI a partir do endpoint da API
+	// Build the web UI URL from the API endpoint
 	webUIURL := apiEndpoint
 
-	// Remover /api/v1 se presente, já que a web UI está na raiz
+	// Strip /api/v1 if present, since the web UI is at the root
 	webUIURL = strings.TrimSuffix(webUIURL, "/api/v1")
 	webUIURL = strings.TrimSuffix(webUIURL, "/")
 
-	// Garantir que tenha http:// ou https://
+	// Make sure it has http:// or https://
 	if !strings.HasPrefix(webUIURL, "http://") && !strings.HasPrefix(webUIURL, "https://") {
 		webUIURL = "http://" + webUIURL
 	}
