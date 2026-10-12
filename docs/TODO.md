@@ -1,8 +1,13 @@
 # TODO
 
-Agrupado por release: cada etapa é **uma** release, e o bump da etapa é o maior bump das tasks
-dentro dela — task que não mexe no binário (doc, coisa fora do repo) pega carona sem mudar o número.
-Versão atual: `v2.2.1`.
+Agrupado por release: cada seção é **uma** release, e o bump é o maior bump das tasks dentro dela —
+task que não mexe no binário (doc, coisa fora do repo) pega carona sem mudar o número.
+Versão atual: `v2.3.0`.
+
+A ordem segue um critério só: **nada que carimba o nome do projeto sai antes do rename**
+(instalador do Windows, imagem no ghcr, README, social preview, landing page), senão é migração
+dupla. Se a apresentação do repositório para empregadores apertar, o `v3.0.0` pode subir para logo
+depois do `v2.4.0` — bug report e paridade da CLI não aparecem para quem só olha o repositório.
 
 > A antiga Etapa 1 (fechar tetos do que já roda) fechou em 30/ago/2026 **sem código**: os três
 > itens foram medidos e os três disseram para não mexer. Numeração de pack por pasta e teto de
@@ -12,12 +17,77 @@ Versão atual: `v2.2.1`.
 > que fecha a reavaliação da [#73](agents/decisions.md#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo).
 > O instrumento das duas primeiras ficou em `nyaa/live_pack_measure_test.go` (`AAD_LIVE_NYAA=1`).
 
-## Etapa 1 — `v2.3.0` (`+0.1.0`) — baixar direito anime velho e longo
+> O **cache local dos animes** fechou em 07/set/2026: a AniList é servida de um snapshot em disco
+> quando cai, com o snapshot voltando com TTL zero para nenhuma tela ficar mais velha do que era
+> ([#92](agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)).
+> As capas vieram de graça (a URL é campo de `Media`, já no snapshot) e o passe em modo cache
+> deleta, por decisão explícita — as duas coisas, e o que mudou em relação ao levantamento, estão
+> no fim da [spec](superpowers/specs/2026-09-05-cache-local-anilist-design.md).
 
-O sintoma é um só: **anime velho ou longo não baixa**. Anime da temporada corrente baixa sem
-problema. A causa não é achar candidato — é que o candidato ou está morto (0-2 seeders, barrado por
-`min_seeders` ou travando em 0%) ou é um pack gigante que o teto de tamanho reprova. Ordem não é
-preferência: o item 1 é um **gate**, e o resultado dele decide qual das saídas do item 2 existe.
+## `v2.4.0` — integração com MyAnimeList
+
+- Adicionar integração com MyAnimeList
+
+## `v2.5.0` — bug report
+
+- Mecanismo de bug report — precisa existir bem antes de divulgar, senão o feedback chega sem
+  contexto
+
+## `v2.6.0` — paridade da CLI
+
+- Parear features do webApp na cli — depois do MyAnimeList, pra parear já com ele dentro
+
+## `v3.0.0` — Serval
+
+Tudo que carimba o nome e a cara do projeto, numa release só. O major vem do rename, e o descriptor
+do Nyaa vem junto pra que quem atualiza passe por **uma** migração, não duas.
+
+- Renomear o projeto para **Serval** — nome do módulo Go, binários (`daemon`/`cli`), repo no GitHub,
+  `config.json` e diretório de dados do usuário, imagem do ghcr, títulos do webApp e do Swagger.
+  Quebra o caminho de dados de quem já usa → precisa de migração ou nota de release explícita
+- **Tirar o Nyaa do repositório (fonte como descriptor externo)** — spec desenhada em 13/set e nunca
+  executada: [fonte-como-descriptor](superpowers/specs/2026-09-13-fonte-como-descriptor-design.md).
+  Objetivo é **publicabilidade**, não múltiplas fontes: o endereço, a query e o layout do Nyaa saem
+  do binário para um JSON que o usuário põe ao lado do `config.json`. Plugin compilado em Go está
+  fora (o pacote `plugin` é Linux-only e exige mesmo compilador e mesmas deps). O tratamento **não**
+  vai no descriptor: das 2217 linhas de `internal/nyaa`, ~150 são do Nyaa e ~2050 são parsing de
+  nome de release, igual em qualquer fonte. O grosso do diff é a quebra em `internal/release` +
+  `internal/source` (21 arquivos importam o pacote, 277 ocorrências de `nyaa.`), e as etapas 1-2 da
+  spec valem sozinhas — dá pra adiantá-las numa minor, já que não mudam comportamento. Quem atualiza
+  sem o descriptor fica sem fonte: a migração do rename cobre isso
+- Mexida na UI/UX do webApp
+- Identidade visual — logo, paleta, favicon; alimenta o social preview e a landing page
+- Publicar imagem no ghcr — maior ganho das opções medidas em [distribuicao.md](distribuicao.md),
+  o Dockerfile já existe. O `install.sh` via curl é o passo seguinte de lá, se fizer falta.
+  `go install`, Homebrew, Scoop, .deb/.rpm e Flatpak avaliados e descartados
+- Atualizar README — depois da imagem, porque é ela que muda as instruções de instalação
+- Subir social preview no GitHub — hoje o card de link compartilhado é o genérico do GitHub.
+  Settings > General > Social preview > Upload, 1280x640, usar a identidade visual nova. Só existe
+  na web, `gh repo edit` não cobre
+- Criar landing page
+
+## `v3.1.0` — proper release no Windows
+
+Depois do rename: instalador, nome do serviço e caminho de dados carimbam o nome, e os ajustes de
+UI pra Windows seriam refeitos pela mexida de UI/UX do `v3.0.0`.
+
+- Autenticar app com conta Microsoft
+- Instalar ao invés de rodar de arquivo executável
+- Dar detach e rodar como serviço no background
+- Fazer mudanças de ui pra funcionar melhor no Windows
+- Testar bem
+
+## Sem release — divulgar
+
+Depois do `v3.1.0`: divulgar sem Windows corta boa parte do público.
+
+## Fixes sem release fixa — baixar direito anime velho e longo
+
+Sai como patch (`v2.x.y`/`v3.x.y`) quando for atacado. O sintoma é um só: **anime velho ou longo
+não baixa**. Anime da temporada corrente baixa sem problema. A causa não é achar candidato — é que
+o candidato ou está morto (0-2 seeders, barrado por `min_seeders` ou travando em 0%) ou é um pack
+gigante que o teto de tamanho reprova. Ordem não é preferência: o primeiro item é um **gate**, e o
+resultado dele decide qual das saídas do segundo existe.
 
 > Os três itens de **higiene do download** fecharam em 07/set/2026, sem depender do gate: a guarda
 > de disco passou a receber o tamanho do torrent
@@ -44,66 +114,10 @@ preferência: o item 1 é um **gate**, e o resultado dele decide qual das saída
   teto de tamanho por anime em `AnimeSettings` (menor diff, custa disco), **seleção por arquivo**
   (o `rain` v2.3.1 não tem — `AddTorrentOptions` só expõe `Stopped`/`StopAfterDownload`/
   `StopAfterMetadata`, e `Files()`/`FileStats()` são read-only; `anacrolix/torrent` tem prioridade
-  por arquivo) e Debrid. **Escolher depois do item 1**, que é o que diz se sobra alternativa
+  por arquivo) e Debrid. **Escolher depois do item anterior**, que é o que diz se sobra alternativa
 - **Passe ao vivo numa franquia em partes (Attack on Titan)** — o eixo absoluto por série, o
   `packAxis` e a posse por cobertura ([#77](agents/decisions.md#77-o-eixo-absoluto-por-série-é-um-bfs-de-duas-em-duas-gerações-e-o-nível-cortado-volta-para-a-fila)/[#78](agents/decisions.md#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)/[#79](agents/decisions.md#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)/[#84](agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo))
   foram escritos em agosto e só têm teste unitário mais medição de **listagem**. Nenhum download
   real de ponta a ponta rodou na cadeia S1 → Final Season Part 3, que é justo onde as quatro
   convenções de numeração da seção "Granularidade" do [sources.md](agents/sources.md) colidem.
   Instrumento já existe: `scripts/robustness-animes.txt` + `make debug-batch`
-
-## Etapa 2 — `v2.4.0` (`+0.1.0`) — features que faltam
-
-Fecha o escopo funcional **antes** do rebranding, pra UI nova nascer desenhada em cima do conjunto
-final de features em vez de ser redesenhada duas vezes.
-
-> O **cache local dos animes** fechou em 07/set/2026: a AniList é servida de um snapshot em disco
-> quando cai, com o snapshot voltando com TTL zero para nenhuma tela ficar mais velha do que era
-> ([#92](agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)).
-> As capas vieram de graça (a URL é campo de `Media`, já no snapshot) e o passe em modo cache
-> deleta, por decisão explícita — as duas coisas, e o que mudou em relação ao levantamento, estão
-> no fim da [spec](superpowers/specs/2026-09-05-cache-local-anilist-design.md).
-
-- Adicionar integração com MyAnimeList
-- Mecanismo de bug report — precisa existir bem antes de divulgar, senão o feedback chega sem
-  contexto
-- Parear features do webApp na cli — por último dentro da etapa, pra parear já com o MyAnimeList
-  dentro
-
-## Etapa 3 — `v3.0.0` (`+1.0.0`) — Serval
-
-Vem **antes** de tudo que carimba o nome e a cara do projeto (instalação, README, social preview,
-landing page), senão é retrabalho garantido.
-
-- Renomear o projeto para **Serval** — nome do módulo Go, binários (`daemon`/`cli`), repo no GitHub,
-  `config.json` e diretório de dados do usuário, imagem do ghcr, títulos do webApp e do Swagger.
-  Quebra o caminho de dados de quem já usa → precisa de migração ou nota de release explícita, e é
-  o que faz o major da etapa
-- Mexida na UI/UX do webApp
-- Identidade visual — logo, paleta, favicon; alimenta o social preview e a landing page da Etapa 4
-
-## Etapa 4 — `v3.1.0` (`+0.1.0`) — chegar no usuário de fora
-
-Tudo aqui depende do nome e da identidade da Etapa 3.
-
-- Melhorar a experiência de instalação — opções medidas e ordenadas em
-  [distribuicao.md](distribuicao.md): publicar imagem no ghcr (maior ganho, o Dockerfile já existe),
-  depois um `install.sh` via curl. `go install`, Homebrew, Scoop, .deb/.rpm e Flatpak avaliados e
-  descartados lá. É o que dá o `+0.1.0` da etapa
-- Atualizar README — depois da instalação, porque é ela que muda as instruções
-- Subir social preview no GitHub — hoje o card de link compartilhado é o genérico do GitHub.
-  Settings > General > Social preview > Upload, 1280x640, usar a identidade visual nova. Só existe
-  na web, `gh repo edit` não cobre
-- Criar landing page
-
-## Etapa 5 — `v4.0.0` (`+1.0.0`) — proper release no Windows
-
-- Autenticar app com conta Microsoft
-- Instalar ao invés de rodar de arquivo executável
-- Dar detach e rodar como serviço no background
-- Fazer mudanças de ui pra funcionar melhor no Windows
-- Testar bem
-
-## Etapa 6 — sem release — divulgar
-
-Depois da Etapa 5: divulgar sem Windows corta boa parte do público.
