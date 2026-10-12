@@ -98,7 +98,8 @@ This goes through `sendAnilistRequest`, so the budget gate
 and the health tracking cover it without changes.
 
 A MAL entry with no AniList counterpart gets a `Warn` log (with the MAL id and title) and is
-skipped. It doesn't fail the pass.
+skipped. It doesn't fail the pass. The `Warn` comes once, when the missing mapping is cached; later
+reads of the list log it at `Debug`.
 
 ## The resulting `MediaList`
 

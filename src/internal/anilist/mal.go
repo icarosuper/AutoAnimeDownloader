@@ -229,7 +229,7 @@ func mapMALIDs(malIDs []int, priority Priority) (map[int]int, error) {
 }
 
 // GetMALEntries returns the user's whole MAL list (all statuses), mapped to AniList ids. Entries
-// with no AniList counterpart are dropped with a Warn. ErrFromCache when anything came from a
+// with no AniList counterpart are dropped with a Warn (once per mapping TTL, Debug after that). ErrFromCache when anything came from a
 // stale copy; ErrMALEmpty when nothing usable is left (see ErrMALEmpty — it is a failure).
 func GetMALEntries(user string, priority Priority) ([]MALEntry, error) {
 	raw, err := malRawList(user)
@@ -239,8 +239,14 @@ func GetMALEntries(user string, priority Priority) ([]MALEntry, error) {
 	}
 
 	ids := make([]int, len(raw))
+	// cachedBefore: ids the mapping cache already had. A missing counterpart among them was warned when
+	// it was cached, so the list read (every pass and every screen refresh) doesn't repeat it.
+	cachedBefore := make(map[int]bool, len(raw))
 	for i, e := range raw {
 		ids[i] = e.MalID
+		if _, ok := malIDMapCache.get(strconv.Itoa(e.MalID)); ok {
+			cachedBefore[e.MalID] = true
+		}
 	}
 	mapped, mapErr := mapMALIDs(ids, priority)
 	switch {
@@ -257,7 +263,11 @@ func GetMALEntries(user string, priority Priority) ([]MALEntry, error) {
 			continue // couldn't be asked: AniList failed and there's no stale mapping
 		}
 		if mediaID == 0 {
-			logger.Logger.Warn().Str("mal_user", user).Int("mal_id", e.MalID).Str("title", e.Title).
+			event := logger.Logger.Warn()
+			if cachedBefore[e.MalID] {
+				event = logger.Logger.Debug()
+			}
+			event.Str("mal_user", user).Int("mal_id", e.MalID).Str("title", e.Title).
 				Msg("MAL entry has no AniList counterpart, skipping")
 			continue
 		}
