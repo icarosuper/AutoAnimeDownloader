@@ -104,7 +104,7 @@ Available in `url`, `headers` values, and `body`:
 
 | Variable | Value |
 |----------|-------|
-| `{{title}}` | Short event label (e.g. "Novo episódio detectado") |
+| `{{title}}` | Short event label (e.g. "New episode detected") |
 | `{{message}}` | Full sentence with anime name and episode number |
 | `{{anime_name}}` | Anime title |
 | `{{episode}}` | Episode number as string |

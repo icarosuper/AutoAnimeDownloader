@@ -950,11 +950,11 @@ func TestRemoveTorrentWithEpisodes_LoadErrorAbortsWithoutRemoving(t *testing.T) 
 	}
 }
 
-// TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook: quando nenhuma busca acha torrent,
-// o episódio não pode disparar "novo episódio detectado, iniciando download" — esse push saía a
-// cada passada do loop (10 em 10 min) para um episódio que nunca começou a baixar, e ainda fazia
-// attemptDownloadWithRetries logar "falhou após todas as tentativas" com zero tentativas.
-// Só o webhook de falha (motivo: nenhum torrent encontrado) deve sair.
+// TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook: when no search finds a torrent,
+// the episode must not fire "new episode detected, starting download" — that push used to go
+// out on every loop pass (every 10 min) for an episode that never started downloading, and
+// also made attemptDownloadWithRetries log "failed after all attempts" with zero attempts.
+// Only the failure webhook (reason: no torrent found) should fire.
 func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 	events := make(chan string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -1002,10 +1002,10 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 	result := processAnimeEpisodes(configs, backend, anime, nil, nil, nil, map[files.EpisodeKey]bool{}, noResults)
 
 	if len(result.newEpisodes) > 0 {
-		t.Errorf("nenhum episódio deve ser salvo sem magnet, obteve %d", len(result.newEpisodes))
+		t.Errorf("no episode should be saved without a magnet, got %d", len(result.newEpisodes))
 	}
 	if len(backend.List()) > 0 {
-		t.Errorf("backend.Add não deve ser chamado sem magnet, cliente tem %d torrent(s)", len(backend.List()))
+		t.Errorf("backend.Add must not be called without a magnet, client has %d torrent(s)", len(backend.List()))
 	}
 
 	var got []string
@@ -1016,8 +1016,8 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 		case <-time.After(300 * time.Millisecond):
 		}
 	}
-	if len(got) != 1 || got[0] != "Erro no download" {
-		t.Errorf("esperava só o webhook de falha, obteve %v", got)
+	if len(got) != 1 || got[0] != "Download failed" {
+		t.Errorf("expected only the failure webhook, got %v", got)
 	}
 }
 

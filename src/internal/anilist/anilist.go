@@ -329,8 +329,9 @@ type CustomLists map[string]bool
 // yet. An episode is only "watched" once all accounts have seen it.
 //
 // Status is NOT resolved here: the winning entry's Status belongs to one arbitrary account,
-// so nothing may branch on it. Status is a per-account question answered by
-// downloadableMediaIDs / deletableMediaIDs, which apply the OR/AND rules across accounts.
+// so nothing may branch on it. Status is a per-account question: download is the OR of the
+// lists already filtered by status_in in searchAnilist; deletion is answered by
+// deletableMediaIDs, which applies the AND rule across accounts.
 func DedupeByMedia(list []MediaList) []MediaList {
 	byMedia := make(map[int]int, len(list)) // media id -> index in result
 	result := make([]MediaList, 0, len(list))

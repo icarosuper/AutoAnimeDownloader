@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get } from 'svelte/store'
-import { getStatus, getAnimes, getTorrents } from '../../src/lib/api/client.js'
+import { getStatus, getAnimes, getTorrents, getAnimeDetail } from '../../src/lib/api/client.js'
 import { toasts } from '../../src/lib/stores/toasts.js'
+import { locale } from '../../src/lib/stores/locale.js'
 
 describe('api client', () => {
   const mockFetch = vi.fn()
@@ -72,5 +73,41 @@ describe('api client', () => {
     })
     await expect(getTorrents()).rejects.toThrow('torrents down')
     expect(get(toasts).length).toBe(before)
+  })
+
+  it('getAnimeDetail 500 toasts the AniList i18n message, not a hardcoded string', async () => {
+    locale.set('en')
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ success: false, error: { code: 'ERR', message: 'Internal error' } }),
+    })
+    await expect(getAnimeDetail(1)).rejects.toThrow()
+    const list = get(toasts)
+    expect(list[list.length - 1].message).toBe('Failed to reach AniList')
+  })
+
+  it('getAnimeDetail 500 toasts in Portuguese when the locale is pt-BR', async () => {
+    locale.set('pt-BR')
+    try {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({ success: false, error: { code: 'ERR', message: 'Internal error' } }),
+      })
+      await expect(getAnimeDetail(1)).rejects.toThrow()
+      const list = get(toasts)
+      expect(list[list.length - 1].message).toBe('Falha na comunicação com o AniList')
+    } finally {
+      locale.set('en')
+    }
+  })
+
+  it('non-Error rejection toasts the unknown-error i18n message', async () => {
+    locale.set('en')
+    mockFetch.mockRejectedValueOnce('boom')
+    await expect(getStatus()).rejects.toBe('boom')
+    const list = get(toasts)
+    expect(list[list.length - 1].message).toBe('Unknown error')
   })
 })

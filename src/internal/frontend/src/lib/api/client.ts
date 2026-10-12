@@ -1,5 +1,6 @@
 import { toasts } from '../stores/toasts.js'
 import { backendHealth } from '../stores/backendHealth.js'
+import * as m from '../i18n/messages.js'
 
 // Uses the page's current host when no environment variable is set
 // This lets the frontend work both locally and when accessed remotely
@@ -104,10 +105,10 @@ async function apiRequest<T>(
       const isAnilistEndpoint = /\/animes\/\d+\/episodes$/.test(endpoint)
       const message =
         isAnilistEndpoint && (responseStatus === 500 || responseStatus === 0)
-          ? 'Failed to reach AniList'
+          ? m.api_toast_anilist()
           : error instanceof Error
             ? error.message
-            : 'Unknown error'
+            : m.api_toast_unknown()
       toasts.add(message)
     }
     throw error

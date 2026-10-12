@@ -455,5 +455,7 @@
   "next_airing": "Próx. ep. {when}",
   "status_col_next_airing": "Próximo ep.",
   "files_waiting_metadata": "Aguardando a metadata do torrent",
-  "files_toggle": "Mostrar ou esconder os arquivos de {name}"
+  "files_toggle": "Mostrar ou esconder os arquivos de {name}",
+  "api_toast_anilist": "Falha na comunicação com o AniList",
+  "api_toast_unknown": "Erro desconhecido"
 }

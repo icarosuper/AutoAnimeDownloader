@@ -63,7 +63,7 @@ func TestBuildVarsDownloadFailedReason(t *testing.T) {
 	if vars["reason"] != ReasonNotFound {
 		t.Fatalf("reason var = %q", vars["reason"])
 	}
-	if want := "Frieren EP 5 falhou: " + ReasonNotFound; vars["message"] != want {
+	if want := "Frieren EP 5 failed: " + ReasonNotFound; vars["message"] != want {
 		t.Fatalf("message = %q, want %q", vars["message"], want)
 	}
 }
@@ -154,7 +154,7 @@ func TestNotify_FiresWebhookWhenEventSubscribed(t *testing.T) {
 	}
 }
 
-// cfgWithWindow monta uma config de um webhook só, inscrito em todos os eventos.
+// cfgWithWindow builds a one-webhook config subscribed to every event.
 func cfgWithWindow(url string, window int, headers map[string]string, body string) *files.Config {
 	if headers == nil {
 		headers = map[string]string{}
@@ -170,7 +170,7 @@ func cfgWithWindow(url string, window int, headers map[string]string, body strin
 	}
 }
 
-// collector devolve um servidor que empilha os bodies recebidos.
+// collector returns a server that stacks the bodies it receives.
 func collector(t *testing.T) (*httptest.Server, chan string) {
 	t.Helper()
 	bodies := make(chan string, 16)
@@ -182,7 +182,7 @@ func collector(t *testing.T) (*httptest.Server, chan string) {
 	return srv, bodies
 }
 
-// drain espera até `want` bodies ou o timeout, e devolve o que chegou.
+// drain waits for `want` bodies or the timeout, and returns what arrived.
 func drain(bodies chan string, want int, timeout time.Duration) []string {
 	var got []string
 	deadline := time.After(timeout)
@@ -194,7 +194,7 @@ func drain(bodies chan string, want int, timeout time.Duration) []string {
 			return got
 		}
 	}
-	// Dá uma folga pra pegar um request extra indevido.
+	// Give it a beat to catch an extra request that should not have been sent.
 	select {
 	case b := <-bodies:
 		got = append(got, b)
@@ -203,9 +203,9 @@ func drain(bodies chan string, want int, timeout time.Duration) []string {
 	return got
 }
 
-// TestNotify_BatchesEventsWithinWindow: o motivo de existir o agrupamento. Um backfill de
-// biblioteca dispara um download_completed por torrent (77 num caso real) e o ntfy.sh responde
-// 429 a partir de certo volume — a janela tem que virar isso em uma request só.
+// TestNotify_BatchesEventsWithinWindow: the reason batching exists. A library backfill fires
+// one download_completed per torrent (77 in a real case) and ntfy.sh answers 429 past a certain
+// volume — the window has to turn that into a single request.
 func TestNotify_BatchesEventsWithinWindow(t *testing.T) {
 	srv, bodies := collector(t)
 	t.Cleanup(Flush)
@@ -217,19 +217,19 @@ func TestNotify_BatchesEventsWithinWindow(t *testing.T) {
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
-		t.Fatalf("esperava 1 request para os 3 eventos, obteve %d: %v", len(got), got)
+		t.Fatalf("expected 1 request for the 3 events, got %d: %v", len(got), got)
 	}
-	want := "3|3 downloads concluídos|" +
-		"Re:ZERO EP 12 foi baixado com sucesso\n" +
-		"Frieren EP 5 foi baixado com sucesso\n" +
-		"Dandadan EP 3 foi baixado com sucesso"
+	want := "3|3 downloads completed|" +
+		"Re:ZERO EP 12 downloaded successfully\n" +
+		"Frieren EP 5 downloaded successfully\n" +
+		"Dandadan EP 3 downloaded successfully"
 	if got[0] != want {
-		t.Errorf("body agrupado errado:\n obtido: %q\nesperado: %q", got[0], want)
+		t.Errorf("batched body wrong:\n got: %q\nwant: %q", got[0], want)
 	}
 }
 
-// TestNotify_SeparateBatchPerEvent: um preset inscrito só em download_failed não pode receber
-// texto de sucesso. A fila é por evento justamente pra não misturar.
+// TestNotify_SeparateBatchPerEvent: a preset subscribed only to download_failed must not
+// receive success text. The queue is per event precisely so they don't mix.
 func TestNotify_SeparateBatchPerEvent(t *testing.T) {
 	srv, bodies := collector(t)
 	t.Cleanup(Flush)
@@ -240,17 +240,17 @@ func TestNotify_SeparateBatchPerEvent(t *testing.T) {
 
 	got := drain(bodies, 2, 3*time.Second)
 	if len(got) != 2 {
-		t.Fatalf("esperava 2 requests (uma por evento), obteve %d: %v", len(got), got)
+		t.Fatalf("expected 2 requests (one per event), got %d: %v", len(got), got)
 	}
 	seen := map[string]bool{got[0]: true, got[1]: true}
-	if !seen["Download concluído"] || !seen["Erro no download"] {
-		t.Errorf("esperava um título por evento, obteve %v", got)
+	if !seen["Download completed"] || !seen["Download failed"] {
+		t.Errorf("expected one title per event, got %v", got)
 	}
 }
 
-// TestNotify_SingleItemBatchMatchesUnbatched: ligar o agrupamento não pode mudar a aparência de
-// uma notificação que chegou sozinha na janela — é o que garante que os presets existentes
-// continuam funcionando igual.
+// TestNotify_SingleItemBatchMatchesUnbatched: turning batching on must not change the look of
+// a notification that arrived alone in the window — that is what keeps existing presets
+// working the same.
 func TestNotify_SingleItemBatchMatchesUnbatched(t *testing.T) {
 	srv, bodies := collector(t)
 	t.Cleanup(Flush)
@@ -263,14 +263,14 @@ func TestNotify_SingleItemBatchMatchesUnbatched(t *testing.T) {
 	batched := drain(bodies, 1, 3*time.Second)
 
 	if len(unbatched) != 1 || len(batched) != 1 {
-		t.Fatalf("esperava 1 request de cada, obteve %d e %d", len(unbatched), len(batched))
+		t.Fatalf("expected 1 request of each, got %d and %d", len(unbatched), len(batched))
 	}
 	if unbatched[0] != batched[0] {
-		t.Errorf("janela de 1 item mudou o body:\n sem batch: %q\n com batch: %q", unbatched[0], batched[0])
+		t.Errorf("a 1-item window changed the body:\n without batch: %q\n with batch: %q", unbatched[0], batched[0])
 	}
 }
 
-// TestNotify_WindowZeroFiresImmediately: 0 desliga o agrupamento, sem esperar timer nenhum.
+// TestNotify_WindowZeroFiresImmediately: 0 turns batching off, without waiting for any timer.
 func TestNotify_WindowZeroFiresImmediately(t *testing.T) {
 	srv, bodies := collector(t)
 	cfg := cfgWithWindow(srv.URL, 0, nil, "{{title}}")
@@ -280,38 +280,38 @@ func TestNotify_WindowZeroFiresImmediately(t *testing.T) {
 
 	got := drain(bodies, 2, time.Second)
 	if len(got) != 2 {
-		t.Fatalf("com janela 0 esperava 2 requests imediatas, obteve %d", len(got))
+		t.Fatalf("with window 0 expected 2 immediate requests, got %d", len(got))
 	}
 }
 
-// TestFlush_SendsPendingBatch: sem isso uma janela inteira de notificações morreria com o
-// processo no shutdown.
+// TestFlush_SendsPendingBatch: without this a whole window of notifications would die with
+// the process on shutdown.
 func TestFlush_SendsPendingBatch(t *testing.T) {
 	srv, bodies := collector(t)
-	// Janela longa: só o Flush pode fazer isso sair dentro do teste.
+	// Long window: only Flush can make this leave during the test.
 	cfg := cfgWithWindow(srv.URL, 3600, nil, "{{count}}")
 
 	Notify(cfg, NewEpisode, "Re:ZERO", 12, "")
 	Notify(cfg, NewEpisode, "Frieren", 5, "")
 
 	if got := drain(bodies, 1, 200*time.Millisecond); len(got) != 0 {
-		t.Fatalf("nada devia sair antes do Flush, obteve %v", got)
+		t.Fatalf("nothing should leave before Flush, got %v", got)
 	}
 
-	Flush() // síncrono: se voltar antes da request, o teste abaixo pega
+	Flush() // synchronous: if it returns before the request, the check below catches it
 	select {
 	case b := <-bodies:
 		if b != "2" {
-			t.Errorf("Flush devia mandar os 2 itens juntos, obteve %q", b)
+			t.Errorf("Flush should send the 2 items together, got %q", b)
 		}
 	default:
-		t.Error("Flush retornou sem a request ter chegado")
+		t.Error("Flush returned without the request arriving")
 	}
 }
 
-// TestFireWebhook_EscapesJSONBody: nome com aspas e o \n do agrupamento quebrariam o body dos
-// presets que embutem {{message}} num JSON (Discord, Slack, Telegram...), e o serviço responderia
-// 400 com a notificação sumindo sem explicação.
+// TestFireWebhook_EscapesJSONBody: a name with quotes and the batching \n would break the body
+// of presets that embed {{message}} in JSON (Discord, Slack, Telegram...), and the service
+// would answer 400 with the notification vanishing unexplained.
 func TestFireWebhook_EscapesJSONBody(t *testing.T) {
 	srv, bodies := collector(t)
 	t.Cleanup(Flush)
@@ -324,23 +324,23 @@ func TestFireWebhook_EscapesJSONBody(t *testing.T) {
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
-		t.Fatalf("esperava 1 request, obteve %d", len(got))
+		t.Fatalf("expected 1 request, got %d", len(got))
 	}
 
 	var payload struct{ Content string }
 	if err := json.Unmarshal([]byte(got[0]), &payload); err != nil {
-		t.Fatalf("body não é JSON válido (%v): %s", err, got[0])
+		t.Fatalf("body is not valid JSON (%v): %s", err, got[0])
 	}
 	if !strings.Contains(payload.Content, `Re:"ZERO" EP 12`) {
-		t.Errorf("aspas do nome perdidas no escape: %q", payload.Content)
+		t.Errorf("quotes in the name lost in the escape: %q", payload.Content)
 	}
 	if !strings.Contains(payload.Content, "\n") {
-		t.Errorf("quebra de linha do agrupamento perdida: %q", payload.Content)
+		t.Errorf("batching newline lost: %q", payload.Content)
 	}
 }
 
-// TestFireWebhook_DoesNotEscapePlainTextBody: o preset do ntfy manda `{{message}}` cru, então o
-// \n tem que chegar como \n de verdade — escapar ali mandaria a barra-n literal.
+// TestFireWebhook_DoesNotEscapePlainTextBody: ntfy's preset sends raw `{{message}}`, so the
+// \n has to arrive as a real \n — escaping there would send the literal backslash-n.
 func TestFireWebhook_DoesNotEscapePlainTextBody(t *testing.T) {
 	srv, bodies := collector(t)
 	t.Cleanup(Flush)
@@ -351,18 +351,18 @@ func TestFireWebhook_DoesNotEscapePlainTextBody(t *testing.T) {
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
-		t.Fatalf("esperava 1 request, obteve %d", len(got))
+		t.Fatalf("expected 1 request, got %d", len(got))
 	}
 	if strings.Contains(got[0], `\n`) {
-		t.Errorf("body de texto puro não deve ser escapado: %q", got[0])
+		t.Errorf("plain-text body must not be escaped: %q", got[0])
 	}
 	if !strings.Contains(got[0], "\n") {
-		t.Errorf("esperava as duas linhas separadas por \\n: %q", got[0])
+		t.Errorf("expected the two lines separated by \\n: %q", got[0])
 	}
 }
 
-// TestFireWebhook_StripsNewlinesFromHeaders: um header com \n faz o net/http recusar a request
-// inteira, e o ntfy usa `Title: {{title}}`.
+// TestFireWebhook_StripsNewlinesFromHeaders: a header with \n makes net/http reject the whole
+// request, and ntfy uses `Title: {{title}}`.
 func TestFireWebhook_StripsNewlinesFromHeaders(t *testing.T) {
 	received := make(chan string, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -383,12 +383,12 @@ func TestFireWebhook_StripsNewlinesFromHeaders(t *testing.T) {
 	select {
 	case title := <-received:
 		if title == "" {
-			t.Error("header vazio: a request foi recusada em vez de sanitizada")
+			t.Error("empty header: the request was rejected instead of sanitized")
 		}
 		if strings.ContainsAny(title, "\n\r") {
-			t.Errorf("header ainda tem quebra de linha: %q", title)
+			t.Errorf("header still has a newline: %q", title)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("request nunca chegou — net/http recusou o header")
+		t.Fatal("request never arrived — net/http rejected the header")
 	}
 }

@@ -7,7 +7,7 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
-    # Ports não são mapeados para o host, apenas expostos na rede Docker
+    # Ports are not mapped to the host, only exposed on the Docker network
     expose:
       - "8080"
     environment:
@@ -34,9 +34,9 @@ services:
 
   daemon:
     image: test-daemon
-    # A MESMA imagem de producao que a CI constroi (build.yml taggeia docker/Dockerfile como
-    # test-daemon e sobe com --no-build). Havia um Dockerfile.test que stubava o frontend:
-    # rodar local e rodar na CI exercitavam imagens diferentes.
+    # The SAME production image the CI builds (build.yml tags docker/Dockerfile as
+    # test-daemon and starts with --no-build). There used to be a Dockerfile.test that stubbed
+    # the frontend: running locally and running in CI exercised different images.
     build:
       context: ..
       dockerfile: docker/Dockerfile

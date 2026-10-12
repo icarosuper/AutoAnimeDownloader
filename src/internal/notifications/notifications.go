@@ -23,11 +23,11 @@ const (
 	EpisodeDeleted
 )
 
-// Motivos de falha de download, usados como {{reason}} e na mensagem padrão.
+// Download-failure reasons, used as {{reason}} and in the default message.
 const (
-	ReasonNotFound         = "nenhum torrent encontrado"
-	ReasonDownloadRejected = "torrent rejeitado"
-	ReasonNoDiskSpace      = "espaço em disco insuficiente"
+	ReasonNotFound         = "no torrent found"
+	ReasonDownloadRejected = "torrent rejected"
+	ReasonNoDiskSpace      = "insufficient disk space"
 )
 
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
@@ -57,13 +57,13 @@ func buildVars(animeName string, episode int, event Event, reason string) map[st
 	return buildBatchVars(event, []item{{animeName: animeName, episode: episode, reason: reason}})
 }
 
-// buildBatchVars monta as variaveis de template para os itens de uma janela. Com um item so o
-// resultado e identico ao de antes do agrupamento — e por isso que ligar o batching nao muda a
-// aparencia das notificacoes de quem recebe uma de cada vez.
+// buildBatchVars builds the template variables for the items of a window. With a single item the
+// result is identical to before batching — which is why turning batching on does not change the
+// look of notifications for anyone who still receives them one at a time.
 //
-// Com N > 1, `anime_name`, `episode` e `reason` ficam VAZIOS: nao existe valor unico para eles e
-// mandar o do primeiro item faria o template mentir sobre os outros N-1. Quem quer identificar os
-// episodios usa `message` (uma linha por item) ou `count`.
+// With N > 1, `anime_name`, `episode` and `reason` stay EMPTY: there is no single value for them
+// and sending the first item's would make the template lie about the other N-1. Whoever needs
+// to identify the episodes uses `message` (one line per item) or `count`.
 func buildBatchVars(event Event, items []item) map[string]string {
 	lines := make([]string, 0, len(items))
 	for _, it := range items {
@@ -99,13 +99,13 @@ func batchTitle(event Event, items []item) string {
 	}
 	switch event {
 	case NewEpisode:
-		return fmt.Sprintf("%d novos episódios detectados", len(items))
+		return fmt.Sprintf("%d new episodes detected", len(items))
 	case DownloadFailed:
-		return fmt.Sprintf("%d erros no download", len(items))
+		return fmt.Sprintf("%d download errors", len(items))
 	case DownloadCompleted:
-		return fmt.Sprintf("%d downloads concluídos", len(items))
+		return fmt.Sprintf("%d downloads completed", len(items))
 	case EpisodeDeleted:
-		return fmt.Sprintf("%d episódios removidos", len(items))
+		return fmt.Sprintf("%d episodes deleted", len(items))
 	}
 	return ""
 }
@@ -113,39 +113,39 @@ func batchTitle(event Event, items []item) string {
 func eventStrings(animeName string, episode int, event Event, reason string) (title, message string) {
 	switch event {
 	case NewEpisode:
-		return "Novo episódio detectado",
-			fmt.Sprintf("%s EP %d detectado, iniciando download", animeName, episode)
+		return "New episode detected",
+			fmt.Sprintf("%s EP %d detected, starting download", animeName, episode)
 	case DownloadFailed:
 		if reason == "" {
-			reason = "todas as tentativas falharam"
+			reason = "all attempts failed"
 		}
-		return "Erro no download",
-			fmt.Sprintf("%s EP %d falhou: %s", animeName, episode, reason)
+		return "Download failed",
+			fmt.Sprintf("%s EP %d failed: %s", animeName, episode, reason)
 	case DownloadCompleted:
-		return "Download concluído",
-			fmt.Sprintf("%s EP %d foi baixado com sucesso", animeName, episode)
+		return "Download completed",
+			fmt.Sprintf("%s EP %d downloaded successfully", animeName, episode)
 	case EpisodeDeleted:
-		return "Episódio removido",
-			fmt.Sprintf("%s EP %d foi removido da biblioteca", animeName, episode)
+		return "Episode deleted",
+			fmt.Sprintf("%s EP %d was removed from the library", animeName, episode)
 	}
 	return "", ""
 }
 
-// jsonEscape devolve o valor pronto para ser colado DENTRO de uma string JSON (sem as aspas
-// externas). Um nome de anime com aspas, barra invertida ou o \n do agrupamento quebraria o body
-// dos presets que embutem {{message}} num JSON (Discord, Slack, Telegram, Gotify, Pushover,
-// Apprise): o servico responderia 400 e a notificacao sumiria sem explicacao no log.
+// jsonEscape returns the value ready to be pasted INSIDE a JSON string (without the outer
+// quotes). An anime name with quotes, a backslash, or the batching \n would break the body of
+// presets that embed {{message}} in JSON (Discord, Slack, Telegram, Gotify, Pushover, Apprise):
+// the service would answer 400 and the notification would vanish with no explanation in the log.
 func jsonEscape(value string) string {
 	encoded, err := json.Marshal(value)
-	if err != nil { // json.Marshal de string nao falha; se falhar, melhor o valor cru que nada
+	if err != nil { // json.Marshal of a string does not fail; if it did, the raw value beats nothing
 		return value
 	}
 	return string(encoded[1 : len(encoded)-1])
 }
 
-// escapeVarsForJSON aplica jsonEscape em todas as variaveis. So e usado no body, e so quando o
-// preset se declara JSON: a URL tem regras de escape proprias e um body de texto puro (o do ntfy
-// e `{{message}}` cru) tem de receber o \n de verdade.
+// escapeVarsForJSON applies jsonEscape to every variable. Used only on the body, and only when
+// the preset declares itself JSON: the URL has its own escaping rules and a plain-text body
+// (ntfy's is raw `{{message}}`) must receive a real \n.
 func escapeVarsForJSON(vars map[string]string) map[string]string {
 	escaped := make(map[string]string, len(vars))
 	for k, v := range vars {
@@ -163,9 +163,9 @@ func presetIsJSON(preset files.WebhookPreset) bool {
 	return false
 }
 
-// fireWebhook dispara um preset e devolve o que houve de errado. O disparo automatico ignora o
-// retorno (o log ja registra); quem precisa dele e o botao "Testar", que sem isso respondia
-// sucesso com o servico recusando o token — ver decisions.md #86.
+// fireWebhook fires a preset and returns what went wrong. Automatic delivery ignores the
+// return (the log already records it); the "Test" button needs it, or it would report success
+// while the service refused the token — see decisions.md #86.
 func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 	bodyVars := vars
 	if presetIsJSON(preset) {
@@ -181,8 +181,8 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 		return err
 	}
 	for k, v := range preset.Headers {
-		// Um header com \n faz o net/http recusar a request inteira. O ntfy usa
-		// `Title: {{title}}`, e nada impede alguem de colocar {{message}} num header.
+		// A header with \n makes net/http reject the whole request. ntfy uses
+		// `Title: {{title}}`, and nothing stops someone from putting {{message}} in a header.
 		req.Header.Set(k, strings.NewReplacer("\n", " ", "\r", " ").Replace(interpolate(v, vars)))
 	}
 
@@ -204,15 +204,15 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 	return nil
 }
 
-// item e um evento aguardando na janela de agrupamento.
+// item is an event waiting in the batching window.
 type item struct {
 	animeName string
 	episode   int
 	reason    string
 }
 
-// batch acumula os itens de uma janela de um evento. O timer e guardado junto para que Flush
-// possa cancela-lo: sem isso o flush do shutdown e o do timer disputariam a mesma fila.
+// batch accumulates the items of one event's window. The timer is stored with it so Flush can
+// cancel it: without that, the shutdown flush and the timer would race on the same queue.
 type batch struct {
 	items   []item
 	timer   *time.Timer
@@ -227,10 +227,10 @@ var (
 // Notify fires webhooks subscribed to the given event in background goroutines.
 // No-op if cfg is nil or has no webhooks.
 //
-// Com cfg.Notifications.BatchWindowSeconds > 0 o evento entra numa fila por tipo de evento e sai
-// junto com os outros da mesma janela, num webhook so. Um backfill de biblioteca dispara um
-// DownloadCompleted por torrent (77 num caso real) e servicos como o ntfy.sh respondem 429 a
-// partir de um certo volume — ver decisions.md #47.
+// With cfg.Notifications.BatchWindowSeconds > 0 the event enters a per-event-type queue and
+// leaves with the others of the same window, as a single webhook. A library backfill fires one
+// DownloadCompleted per torrent (77 in a real case) and services such as ntfy.sh answer 429
+// past a certain volume — see decisions.md #47.
 func Notify(cfg *files.Config, event Event, animeName string, episode int, reason string) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 {
 		return
@@ -248,8 +248,8 @@ func Notify(cfg *files.Config, event Event, animeName string, episode int, reaso
 
 	if b, ok := pendingBatch[event]; ok {
 		b.items = append(b.items, it)
-		// Os webhooks da janela sao os da ultima config vista: se o usuario mexeu nos presets no
-		// meio da janela, o que vale e o mais recente.
+		// The window's webhooks are those of the last config seen: if the user edited the
+		// presets mid-window, the latest one wins.
 		b.webhook = cfg.Notifications.Webhooks
 		return
 	}
@@ -259,10 +259,10 @@ func Notify(cfg *files.Config, event Event, animeName string, episode int, reaso
 	b.timer = time.AfterFunc(window, func() { flushEvent(event, false) })
 }
 
-// Flush dispara agora tudo que esta esperando janela e SO retorna quando as requests terminaram.
-// Chamado no shutdown do daemon: sem isso ate uma janela inteira de notificacoes morreria com o
-// processo — e disparar em goroutine no shutdown seria o mesmo que nao disparar, porque o
-// processo sai antes delas rodarem.
+// Flush fires everything currently waiting in a window and ONLY returns once the requests have
+// finished. Called on daemon shutdown: without it a whole window of notifications would die
+// with the process — and firing in a goroutine on shutdown would be the same as not firing,
+// because the process exits before they run.
 func Flush() {
 	batchMu.Lock()
 	events := make([]Event, 0, len(pendingBatch))
@@ -315,8 +315,9 @@ func fireBatch(event Event, items []item, webhooks []files.WebhookPreset, wait b
 	}
 }
 
-// ErrWebhookNotFound distingue "esse preset nao existe" (404) de "o preset existe e o disparo
-// falhou" (502). Sem a distincao o handler devolveria 404 para o token recusado pelo servico.
+// ErrWebhookNotFound distinguishes "this preset does not exist" (404) from "the preset exists
+// and delivery failed" (502). Without the distinction the handler would return 404 for a token
+// the service refused.
 var ErrWebhookNotFound = errors.New("webhook not found")
 
 // FireTestWebhook fires one named webhook with sample variables. Returns ErrWebhookNotFound if the
