@@ -11,26 +11,27 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 1. **Run tests**: `go test ./...`
 2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add an entry to `decisions.md`
    - `architecture.md` documenta o que o **código não responde sozinho**: fluxo entre arquivos, invariante que dói quebrar, fato negativo ("não existe `daemon.go`"), desambiguação de nomes parecidos e o ponteiro para a decisão. **Não** liste símbolo com uma linha de propósito — `grep '^func '` responde isso de graça e sempre atualizado; tabela de símbolo escrita à mão é cópia que envelhece. Arquivo novo só ganha texto se trouxer um desses cinco; arquivo apagado → texto apagado. A pergunta que ele responde é "qual arquivo eu abro e o que me morde lá", não "que funções existem"
-   - Entrada nova em `decisions.md` → número seguinte (o maior que existe hoje é **#91**, e as entradas não estão em ordem numérica no arquivo) + uma linha no Índice do topo. Ao referenciar uma decisão, sempre com âncora: `[decisions.md #43](decisions.md#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)`
+   - Entrada nova em `decisions.md` → número seguinte (o maior que existe hoje é **#94**, e as entradas não estão em ordem numérica no arquivo) + uma linha no Índice do topo. Ao referenciar uma decisão, sempre com âncora: `[decisions.md #43](decisions.md#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)`
 3. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
 
 ## Padrão de commit
 
-Conventional Commits, mensagem em **português**, só a linha de assunto — sem corpo, sem
-`Co-Authored-By`, sem ponto final.
+Conventional Commits, mensagem em **inglês** (desde 12/out/2026 — o histórico anterior é em
+português e fica como está), só a linha de assunto — sem corpo, sem `Co-Authored-By`, sem ponto
+final.
 
-`tipo: verbo no infinitivo + o que mudou` — tudo minúsculo depois do `tipo:`.
+`tipo: verbo no imperativo + o que mudou` — tudo minúsculo depois do `tipo:`.
 
 Tipos em uso: `feat`, `fix`, `docs`, `refactor`, `test`, `chore` (`!` depois do tipo para breaking
-change, ex.: `chore!: remover migração de save_path`).
+change, ex.: `chore!: drop save_path migration`).
 
 O assunto diz o comportamento, não o arquivo: descreva a regra que passou a valer, e quando houver
-um "em vez de" que explique a mudança, ele cabe no assunto.
+um "instead of" que explique a mudança, ele cabe no assunto.
 
 ```
-feat: escolher pack por cobertura da janela em vez de marcador de part
-fix: servir cache vencido de customLists quando o gate recusa
-docs: registrar que pack sem faixa não passa pela cobertura
+feat: pick pack by window coverage instead of part marker
+fix: serve stale customLists cache when the gate refuses
+docs: record that packs without a range skip the coverage check
 ```
 
 ## Branch
@@ -61,6 +62,6 @@ usuário já cobre não é "de passagem", é o trabalho.
 - [Environment Variables](docs/agents/environment.md) — read when touching env vars or dev setup
 - [Testing](docs/agents/testing.md) — read when writing or running tests; mock patterns
 - [Commands](docs/agents/commands.md) — read when building or running the daemon/frontend
-- [Decisions](docs/agents/decisions.md) — read before "fixing" unusual patterns; 91 entradas autocontidas. **Comece pelo Índice do topo e leia só a entrada apontada** — o arquivo inteiro tem 2k linhas e nunca precisa ser lido de ponta a ponta
+- [Decisions](docs/agents/decisions.md) — read before "fixing" unusual patterns; 94 entradas autocontidas. **Comece pelo Índice do topo e leia só a entrada apontada** — o arquivo inteiro tem 2k linhas e nunca precisa ser lido de ponta a ponta
 - [Troubleshooting Downloads](docs/agents/troubleshooting-downloads.md) — follow when animes fail to download; diagnose search/filter logic bugs step by step
 - [Sources](docs/agents/sources.md) — read before adding a torrent source; measured limits of Nyaa, the AnimeTosho JSON API, and why the alternatives were rejected
