@@ -613,3 +613,41 @@ func TestPackThatDoesNotFitFallsBackToLooseEpisodes(t *testing.T) {
 		}
 	}
 }
+
+// TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes: a per-episode search that comes back empty isn't
+// repeated on the next pass, and the episodes after it skip the search in the same pass — but keep
+// their report row. Once the wait is over and the episode shows up, the later ones are searched again.
+func TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes(t *testing.T) {
+	anime := animeWithEpisodes(3, anilist.MediaStatusFinished, true, "")
+	var searched []int
+	found := map[int]bool{}
+	searcher := searcherFor(nil, nil, nil, nil)
+	searcher.misses = &searchMisses{byKey: map[files.EpisodeKey]searchMiss{}}
+	searcher.searchSingleEpisode = func(ep anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ int) []nyaa.TorrentResult {
+		searched = append(searched, ep.Episode)
+		if !found[ep.Episode] {
+			return nil
+		}
+		n := ep.Episode
+		return []nyaa.TorrentResult{{Name: "ep", MagnetLink: fakeMagnet(n), Episode: &n, Seeders: "10"}}
+	}
+	pass := func() animeProcessResult {
+		searched = nil
+		return processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
+	}
+
+	if result := pass(); fmt.Sprint(searched) != "[1]" || len(result.issues) != 3 {
+		t.Fatalf("first pass: want only episode 1 searched and 3 issues, got %v and %d", searched, len(result.issues))
+	}
+	if pass(); len(searched) != 0 {
+		t.Fatalf("second pass: want no search while episode 1 waits, got %v", searched)
+	}
+
+	miss := searcher.misses.byKey[files.EpisodeKey{AnimeID: 777, Episode: 1}]
+	miss.retryAt = time.Now().Add(-time.Second)
+	searcher.misses.byKey[files.EpisodeKey{AnimeID: 777, Episode: 1}] = miss
+	found[1], found[2] = true, true
+	if result := pass(); fmt.Sprint(searched) != "[1 2 3]" || len(result.newEpisodes) != 2 {
+		t.Fatalf("after the wait: want episodes 1-3 searched and 2 downloaded, got %v and %d", searched, len(result.newEpisodes))
+	}
+}

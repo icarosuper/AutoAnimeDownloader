@@ -10,27 +10,28 @@ import (
 	"AutoAnimeDownloader/src/internal/torrents"
 )
 
-// appendStandaloneAnimes junta os animes avulsos ao universo do passe, e e chamada DEPOIS do
-// DedupeByMedia (ver searchAnilist).
+// appendStandaloneAnimes adds the standalone animes to the pass's universe, and is called AFTER
+// DedupeByMedia (see searchAnilist).
 //
-// Faz duas coisas, nesta ordem:
+// It does two things, in this order:
 //
-//  1. Remocao automatica: todo id avulso que ja esta na lista processada sai do arquivo. A
-//     entrada real ja vencia o dedupe, entao o que o passe baixa nao muda — o que muda e que o
-//     arquivo para de crescer, o chip "Avulso" some da tela e o is_standalone deixa de mentir
-//     sobre a origem daquele anime.
+//  1. Automatic removal: every standalone id already in the processed list leaves the file. The
+//     real entry already won the dedupe, so what the pass downloads doesn't change — what changes is
+//     that the file stops growing, the "Standalone" chip disappears from the screen and is_standalone
+//     stops lying about where that anime came from.
 //
-//     Consequencia aceita: se depois disso o usuario tirar o anime da lista da AniList, o
-//     registro avulso ja foi consumido e o passe deixa de cobri-lo — com delete_watched_episodes
-//     ligado os episodios dele caem em identifyEpisodesNotInWatching e saem do disco, o mesmo
-//     caminho de qualquer anime tirado da lista. A alternativa (distinguir "avulso ativo" de
-//     "avulso dormente") custaria estado novo no arquivo, no AnimeInfo e na tela para cobrir um
-//     caminho que quem usa avulso nao percorre. Quem quiser o anime de volta o adiciona outra vez.
+//     Accepted consequence: if the user later removes the anime from the AniList list, the
+//     standalone record was already consumed and the pass stops covering it — with
+//     delete_watched_episodes on, its episodes fall into identifyEpisodesNotInWatching and leave the
+//     disk, the same path as any anime removed from the list. The alternative (telling an "active
+//     standalone" from a "dormant standalone") would cost new state in the file, in AnimeInfo and on
+//     the screen to cover a path standalone users don't take. Whoever wants the anime back adds it
+//     again.
 //
-//  2. Append: cada avulso ainda ausente entra como o MediaList sintetico de GetMediaByIDs,
-//     buscados todos numa query so.
-//     Nao ha filtro de media status aqui de proposito — quem pediu o anime a mao quer que ele
-//     seja acompanhado tambem enquanto e NOT_YET_RELEASED, que e metade do sentido da feature.
+//  2. Append: each standalone still missing comes in as GetMediaByIDs' synthetic MediaList, all
+//     fetched in a single query.
+//     There's no media status filter here on purpose — whoever asked for the anime by hand wants it
+//     tracked while it's NOT_YET_RELEASED too, which is half the point of the feature.
 func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.MediaList, standaloneIDs []int) []anilist.MediaList {
 	if len(standaloneIDs) == 0 {
 		return merged
@@ -72,7 +73,7 @@ func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.M
 	for _, mediaID := range pending {
 		ml, ok := medias[mediaID]
 		if !ok {
-			continue // ja avisado pelo erro do lote
+			continue // already warned by the batch error
 		}
 		if ml == nil {
 			logger.Logger.Warn().Int("media_id", mediaID).
@@ -87,12 +88,13 @@ func appendStandaloneAnimes(fileManager FileManagerInterface, merged []anilist.M
 	return merged
 }
 
-// withStandaloneProgress da ao MediaList sintetico do avulso o progresso salvo em AnimeSettings.
+// withStandaloneProgress gives the standalone's synthetic MediaList the progress saved in
+// AnimeSettings.
 //
-// E a alternativa a um caminho paralelo: com o dado no lugar, shouldSkipEpisode,
-// firstEpisodeToConsider, buildWatchedKeepSet, a poda de assistidos e EpisodesWatched funcionam em
-// avulso sem nenhum "if isStandalone". Falha de leitura vale como progresso 0 — que e o
-// comportamento anterior a este campo.
+// It's the alternative to a parallel path: with the data in place, shouldSkipEpisode,
+// firstEpisodeToConsider, buildWatchedKeepSet, the watched pruning and EpisodesWatched work on a
+// standalone without any "if isStandalone". A read failure counts as progress 0 — which is the
+// behavior from before this field.
 func withStandaloneProgress(fm FileManagerInterface, ml *anilist.MediaList) *anilist.MediaList {
 	if ml == nil {
 		return nil
@@ -103,27 +105,27 @@ func withStandaloneProgress(fm FileManagerInterface, ml *anilist.MediaList) *ani
 	return ml
 }
 
-// DownloadStandaloneAnime baixa os episodios ja no ar de um anime avulso na hora em que ele e
-// adicionado, sem esperar o proximo ciclo. Devolve quantos episodios entraram.
+// DownloadStandaloneAnime downloads a standalone anime's already aired episodes the moment it's
+// added, without waiting for the next cycle. It returns how many episodes came in.
 //
-// Faz exatamente tres coisas: garante a sessao de torrents, processa os episodios daquele anime
-// e salva os novos registros.
+// It does exactly three things: ensures the torrent session, processes that anime's episodes and
+// saves the new records.
 //
-// NAO PODE chamar handleSavedEpisodes. Ela chama identifyEpisodesNotInWatching, que compara
-// TODOS os episodios salvos contra os checkedEpisodes recebidos e devolve os nao cobertos para
-// deleção: com os episodios de um unico anime na mao e delete_watched_episodes ligado, isso
-// apagaria o resto da biblioteca inteira.
+// It MUST NOT call handleSavedEpisodes. That calls identifyEpisodesNotInWatching, which compares ALL
+// saved episodes against the checkedEpisodes it receives and returns the uncovered ones for
+// deletion: with a single anime's episodes in hand and delete_watched_episodes on, that would delete
+// the rest of the whole library.
 //
-// Tambem nao chama deleteEpisodesByStatus nem DeleteEmptyFolders — adicionar um anime nao e
-// ocasiao para apagar nada.
+// It doesn't call deleteEpisodesByStatus or DeleteEmptyFolders either — adding an anime is no
+// occasion to delete anything.
 func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBackend, configs *files.Config, mediaID int) (int, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return 0, err
 	}
 
 	anime, err := anilist.GetMediaByID(mediaID, anilist.PriorityCritical)
-	// Cache local serve: o download avulso pedido a mao precisa de titulo e faixa de
-	// episodios, e o Nyaa nao caiu junto com a AniList.
+	// The local cache will do: the standalone download asked for by hand needs the title and the
+	// episode range, and Nyaa didn't go down along with AniList.
 	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 		return 0, fmt.Errorf("failed to fetch anime %d from AniList: %w", mediaID, err)
 	}
@@ -147,11 +149,15 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 		blockedMap[k] = true
 	}
 
-	// Mesma posse por cobertura do passe: adicionar um avulso cuja season ja esta em disco
-	// (baixada sob o cour anterior) nao deve rebaixar nada (coverage.go).
+	// Same ownership by coverage as the pass: adding a standalone whose season is already on disk
+	// (downloaded under the previous cour) must not download anything again (coverage.go).
 	seriesIndex := resolveSeriesIndex([]int{mediaID}, savedEpisodes)
 
-	result := processAnimeEpisodes(configs, backend, *anime, backend.List(), savedEpisodes, seriesIndex, blockedMap, defaultNyaaSearcher())
+	// A download asked for by hand searches every episode now: the pass's miss backoff would make
+	// the button do nothing for up to a day.
+	searcher := defaultNyaaSearcher()
+	searcher.misses = nil
+	result := processAnimeEpisodes(configs, backend, *anime, backend.List(), savedEpisodes, seriesIndex, blockedMap, searcher)
 
 	saveEpisodesToFile(fm, result.newEpisodes)
 

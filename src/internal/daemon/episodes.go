@@ -199,8 +199,13 @@ func processAnimeEpisodes(
 	// Series length, only so the search can decide the zero-padding of the episode query.
 	seriesLength := anilist.LastAiredEpisode(anime)
 
+	// stuck: an earlier episode of this anime ended this pass without a torrent. Episodes are released
+	// in order, so asking Nyaa for the ones after it is almost always wasted — they skip the
+	// per-episode search too, and still get whatever the anime search found (decisions.md #100).
+	stuck := false
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
+		missKey := files.EpisodeKey{AnimeID: anime.Media.Id, Episode: ep.Episode}
 
 		resolved := magnetsForEpisodes[ep.Episode]
 		candidates := resolved.candidates
@@ -216,13 +221,28 @@ func processAnimeEpisodes(
 		// one.
 		var searchStats dropStats
 		if len(candidates) == 0 {
-			candidates, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+			due := true
+			if searcher.misses != nil {
+				due, searchStats = searcher.misses.due(missKey, time.Now())
+			}
+			if stuck || !due {
+				logger.Logger.Debug().
+					Str("episode", epName).
+					Bool("earlier_episode_missing", stuck).
+					Msg("Skipping per-episode search: a recent search came back empty")
+			} else {
+				candidates, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+				if len(candidates) == 0 && searcher.misses != nil {
+					searcher.misses.record(missKey, time.Now(), searchStats)
+				}
+			}
 		}
 
 		// Without a magnet there's nothing to try: announcing "starting download" here sent a false push
 		// on every loop pass while the episode wasn't on Nyaa, and also made attemptDownloadWithRetries
 		// log "failed after all attempts" with zero attempts.
 		if len(candidates) == 0 {
+			stuck = searcher.misses != nil
 			logger.Logger.Warn().
 				Str("episode", epName).
 				Msg("No torrent found for episode")
@@ -231,6 +251,9 @@ func processAnimeEpisodes(
 			continue
 		}
 
+		if searcher.misses != nil {
+			searcher.misses.clear(missKey)
+		}
 		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
 
 		hash := attemptDownloadWithRetries(configs, backend, candidates, epName)
