@@ -91,6 +91,7 @@
     goToConfig: m.status_go_to_config(),
     filterUnwatched: m.status_filter_unwatched(),
     filterStandalone: m.status_filter_standalone(),
+    loading: m.status_loading(),
     heroSpeedLabel: m.status_hero_speed_label(),
     heroNoDownloads: m.status_hero_no_downloads(),
     activeDownloads: m.status_active_downloads_label(),
@@ -337,7 +338,7 @@
       anilistUsernames = configData.anilist_usernames ?? [];
       malUsernames = configData.mal_usernames ?? [];
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load data");
+      toast.error(err instanceof Error ? err.message : m.status_toast_load_failed());
     } finally {
       loading = false;
     }
@@ -361,7 +362,7 @@
       await startDaemon();
       await loadAnimes();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start daemon");
+      toast.error(err instanceof Error ? err.message : m.status_toast_start_failed());
     } finally {
       actionLoading = false;
     }
@@ -373,7 +374,7 @@
       await stopDaemon();
       await loadAnimes();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to stop daemon");
+      toast.error(err instanceof Error ? err.message : m.status_toast_stop_failed());
     } finally {
       actionLoading = false;
     }
@@ -385,7 +386,7 @@
       await triggerCheck();
       await loadAnimes();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to trigger check");
+      toast.error(err instanceof Error ? err.message : m.status_toast_check_failed());
     } finally {
       actionLoading = false;
     }
@@ -539,7 +540,7 @@
   </div>
 
   {#if loading}
-    <Loading message="Loading status..." />
+    <Loading message={(T && T.loading) || ""} />
   {:else if status}
     {#if diskSpaceLow}
       <div
