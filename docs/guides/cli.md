@@ -111,6 +111,7 @@ autoanimedownloader config get
 
 **Shows all configuration values:**
 - Anilist usernames (supports more than one, comma-separated)
+- MyAnimeList usernames (same format; the list must be public)
 - Save path
 - Completed anime path (required; must be on the same volume as the save path)
 - Check interval (minutes)
@@ -147,6 +148,9 @@ The key is matched ignoring case and underscores, so `max_search_pages`, `maxSea
 ```bash
 # Two Anilist accounts
 autoanimedownloader config set anilist_usernames myusername,secondaccount
+
+# A MyAnimeList account
+autoanimedownloader config set mal_usernames mymalusername
 
 # Check interval, in minutes
 autoanimedownloader config set check_interval 15

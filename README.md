@@ -1,8 +1,8 @@
 # AutoAnimeDownloader
 
-**Automatically downloads your anime from your Anilist watching list.**
+**Automatically downloads your anime from your Anilist or MyAnimeList watching list.**
 
-Syncs with [Anilist](https://anilist.co) (one or more accounts — or none at all), scrapes [Nyaa](https://nyaa.si) for matching torrents, and downloads them with a built-in BitTorrent client — all unattended, from a single self-contained binary (no external torrent client to install or configure). Includes an embedded Svelte web UI for monitoring, torrent management and configuration.
+Syncs with [Anilist](https://anilist.co) and [MyAnimeList](https://myanimelist.net) (one or more accounts — or none at all), scrapes [Nyaa](https://nyaa.si) for matching torrents, and downloads them with a built-in BitTorrent client — all unattended, from a single self-contained binary (no external torrent client to install or configure). Includes an embedded Svelte web UI for monitoring, torrent management and configuration.
 
 [![CI](https://github.com/icarosuper/AutoAnimeDownloader/actions/workflows/build.yml/badge.svg)](https://github.com/icarosuper/AutoAnimeDownloader/actions/workflows/build.yml)
 
@@ -27,6 +27,7 @@ Syncs with [Anilist](https://anilist.co) (one or more accounts — or none at al
 
 - **Automatic Downloads** — monitors your Anilist watching list and downloads new episodes as they air
 - **Multi-account Anilist** — sync several usernames at once; an episode is only deleted once every account has watched it
+- **MyAnimeList lists** — sync public MyAnimeList lists alongside (or instead of) Anilist; titles and episodes are still resolved through Anilist, so both count as accounts for the download and delete rules
 - **Standalone animes** — track anime that is in no Anilist list (search + add from the UI), with manual watch progress. An Anilist account is optional; the app runs fine with none
 - **Batch / season packs** — when the Nyaa search returns a pack that covers what's missing, it downloads the pack instead of episode by episode (capped by a configurable torrent size ceiling)
 - **Embedded BitTorrent client** — downloads and seeds internally (via [rain](https://github.com/cenkalti/rain)); no qBittorrent or other external client required
@@ -51,7 +52,7 @@ Syncs with [Anilist](https://anilist.co) (one or more accounts — or none at al
 ## Requirements
 
 - A **completed anime path** — the library folder. It's the only required setting; the download/seeding directory (`<completed_anime_path>/.torrents`) is derived from it, so the two always share a filesystem
-- **Anilist account(s)** (usernames only, no password needed) — *optional*: without one you can still add animes manually as standalone
+- **Anilist and/or MyAnimeList account(s)** (usernames only, no password needed; a MyAnimeList list must be public) — *optional*: without one you can still add animes manually as standalone
 
 That's it — the BitTorrent client is built in, so there is no qBittorrent (or any other torrent client) to install or configure.
 
@@ -121,7 +122,7 @@ Open **http://localhost:8091** in your browser.
 - **Status** (`#/`) — daemon status, start/stop, force check, download speed, disk space, and the anime list; click an anime for its episodes and per-episode actions
 - **Add anime** (`#/add`) — search Anilist and track an anime that is in no list
 - **Downloads** (`#/downloads`) — live torrents grouped by anime: pause, resume, re-announce, prioritize, delete (single or bulk)
-- **Config** (`#/config`) — library path, Anilist usernames, download rules, torrent search tuning
+- **Config** (`#/config`) — library path, Anilist and MyAnimeList usernames, download rules, torrent search tuning
 - **Priorities** (`#/priorities`) — fansub/resolution/source/codec/audio ranking and ignore list
 - **Notifications** (`#/notifications`) — webhook presets and test firing
 - **Logs** (`#/logs`) — tail the daemon log with level filter and search
@@ -173,8 +174,9 @@ Key settings:
 |---|---|
 | Completed Anime Path | Jellyfin library — **the only required setting**. Episodes are hardlinked into it; torrents download and seed in `<path>/.torrents` |
 | Anilist Usernames | One or more Anilist usernames to sync (optional) |
+| MyAnimeList Usernames | One or more MyAnimeList usernames to sync (optional; the list must be public) |
 | Check Interval | How often to check for new episodes (minutes) |
-| Download / Delete Statuses | Which Anilist list statuses (`CURRENT`, `COMPLETED`, …) and media statuses (`RELEASING`, `FINISHED`, …) are eligible for download or auto-deletion |
+| Download / Delete Statuses | Which list statuses (`CURRENT`, `COMPLETED`, …) and media statuses (`RELEASING`, `FINISHED`, …) are eligible for download or auto-deletion |
 | Max Episodes per Anime | Ceiling of kept episodes per anime, and the width of the pack-selection window |
 | Max Concurrent Downloads | How many torrents download at once; the rest wait in the queue |
 | Min Free Disk % | Below this, no new torrent is added |
@@ -228,5 +230,5 @@ Licensed under the [GNU General Public License v3.0](https://www.gnu.org/license
 - Backend: [Go](https://golang.org/)
 - Frontend: [Svelte](https://svelte.dev/)
 - BitTorrent client: [rain](https://github.com/cenkalti/rain)
-- Watch list: [Anilist](https://anilist.co/)
+- Watch list: [Anilist](https://anilist.co/), [MyAnimeList](https://myanimelist.net/)
 - Torrents: [Nyaa](https://nyaa.si/)
