@@ -1,123 +1,130 @@
 # TODO
 
-Agrupado por release: cada seção é **uma** release, e o bump é o maior bump das tasks dentro dela —
-task que não mexe no binário (doc, coisa fora do repo) pega carona sem mudar o número.
-Versão atual: `v2.3.0`.
+Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
+inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
+changing the number.
+Current version: `v2.3.0`.
 
-A ordem segue um critério só: **nada que carimba o nome do projeto sai antes do rename**
-(instalador do Windows, imagem no ghcr, README, social preview, landing page), senão é migração
-dupla. Se a apresentação do repositório para empregadores apertar, o `v3.0.0` pode subir para logo
-depois do `v2.4.0` — bug report e paridade da CLI não aparecem para quem só olha o repositório.
+The order follows a single rule: **nothing that stamps the project's name ships before the rename**
+(Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
+migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up to right after
+`v2.4.0` — bug report and CLI parity aren't visible to someone who only looks at the repo.
 
-> A antiga Etapa 1 (fechar tetos do que já roda) fechou em 30/ago/2026 **sem código**: os três
-> itens foram medidos e os três disseram para não mexer. Numeração de pack por pasta e teto de
-> pack por episódio em [decisions.md #84](agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
-> e [sources.md](agents/sources.md); custo do frontend na AniList em
+> The old Stage 1 (close the ceilings of what already runs) closed on 2026-08-30 **with no code**:
+> all three items were measured and all three said not to touch anything. Pack numbering by folder
+> and per-episode pack ceiling in [decisions.md #84](agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
+> and [sources.md](agents/sources.md); frontend cost on AniList in
 > [decisions.md #85](agents/decisions.md#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba),
-> que fecha a reavaliação da [#73](agents/decisions.md#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo).
-> O instrumento das duas primeiras ficou em `nyaa/live_pack_measure_test.go` (`AAD_LIVE_NYAA=1`).
+> which closes the re-evaluation of [#73](agents/decisions.md#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo).
+> The instrument for the first two lives in `nyaa/live_pack_measure_test.go` (`AAD_LIVE_NYAA=1`).
 
-> O **cache local dos animes** fechou em 07/set/2026: a AniList é servida de um snapshot em disco
-> quando cai, com o snapshot voltando com TTL zero para nenhuma tela ficar mais velha do que era
+> The **local anime cache** closed on 2026-09-07: AniList is served from an on-disk snapshot when it
+> goes down, with the snapshot coming back with TTL zero so no screen gets staler than it was
 > ([#92](agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)).
-> As capas vieram de graça (a URL é campo de `Media`, já no snapshot) e o passe em modo cache
-> deleta, por decisão explícita — as duas coisas, e o que mudou em relação ao levantamento, estão
-> no fim da [spec](superpowers/specs/2026-09-05-cache-local-anilist-design.md).
+> Covers came for free (the URL is a `Media` field, already in the snapshot) and a pass in cache
+> mode deletes, by explicit decision — both things, and what changed relative to the survey, are at
+> the end of the [spec](superpowers/specs/2026-09-05-cache-local-anilist-design.md).
 
-## `v2.4.0` — integração com MyAnimeList
+## `v2.4.0` — MyAnimeList integration
 
-- Adicionar integração com MyAnimeList
+- Add MyAnimeList integration
 
 ## `v2.5.0` — bug report
 
-- Mecanismo de bug report — precisa existir bem antes de divulgar, senão o feedback chega sem
-  contexto
+- Bug report mechanism — must exist well before promoting the project, otherwise feedback arrives
+  without context
 
-## `v2.6.0` — paridade da CLI
+## `v2.6.0` — CLI parity
 
-- Parear features do webApp na cli — depois do MyAnimeList, pra parear já com ele dentro
+- Bring the CLI to parity with the webApp's features — after MyAnimeList, so it's matched with that
+  already in
 
 ## `v3.0.0` — Serval
 
-Tudo que carimba o nome e a cara do projeto, numa release só. O major vem do rename, e o descriptor
-do Nyaa vem junto pra que quem atualiza passe por **uma** migração, não duas.
+Everything that stamps the project's name and look, in a single release. The major comes from the
+rename, and the Nyaa descriptor comes along so whoever upgrades goes through **one** migration, not
+two.
 
-- Renomear o projeto para **Serval** — nome do módulo Go, binários (`daemon`/`cli`), repo no GitHub,
-  `config.json` e diretório de dados do usuário, imagem do ghcr, títulos do webApp e do Swagger.
-  Quebra o caminho de dados de quem já usa → precisa de migração ou nota de release explícita
-- **Tirar o Nyaa do repositório (fonte como descriptor externo)** — spec desenhada em 13/set e nunca
-  executada: [fonte-como-descriptor](superpowers/specs/2026-09-13-fonte-como-descriptor-design.md).
-  Objetivo é **publicabilidade**, não múltiplas fontes: o endereço, a query e o layout do Nyaa saem
-  do binário para um JSON que o usuário põe ao lado do `config.json`. Plugin compilado em Go está
-  fora (o pacote `plugin` é Linux-only e exige mesmo compilador e mesmas deps). O tratamento **não**
-  vai no descriptor: das 2217 linhas de `internal/nyaa`, ~150 são do Nyaa e ~2050 são parsing de
-  nome de release, igual em qualquer fonte. O grosso do diff é a quebra em `internal/release` +
-  `internal/source` (21 arquivos importam o pacote, 277 ocorrências de `nyaa.`), e as etapas 1-2 da
-  spec valem sozinhas — dá pra adiantá-las numa minor, já que não mudam comportamento. Quem atualiza
-  sem o descriptor fica sem fonte: a migração do rename cobre isso
-- Mexida na UI/UX do webApp
-- Identidade visual — logo, paleta, favicon; alimenta o social preview e a landing page
-- Publicar imagem no ghcr — maior ganho das opções medidas em [distribuicao.md](distribuicao.md),
-  o Dockerfile já existe. O `install.sh` via curl é o passo seguinte de lá, se fizer falta.
-  `go install`, Homebrew, Scoop, .deb/.rpm e Flatpak avaliados e descartados
-- Atualizar README — depois da imagem, porque é ela que muda as instruções de instalação
-- Subir social preview no GitHub — hoje o card de link compartilhado é o genérico do GitHub.
-  Settings > General > Social preview > Upload, 1280x640, usar a identidade visual nova. Só existe
-  na web, `gh repo edit` não cobre
-- Criar landing page
+- Rename the project to **Serval** — Go module name, binaries (`daemon`/`cli`), GitHub repo,
+  `config.json` and the user data directory, ghcr image, webApp and Swagger titles. Breaks the data
+  path for existing users → needs a migration or an explicit release note
+- **Take Nyaa out of the repository (source as an external descriptor)** — spec designed on
+  2026-09-13 and never executed:
+  [fonte-como-descriptor](superpowers/specs/2026-09-13-fonte-como-descriptor-design.md).
+  The goal is **publishability**, not multiple sources: Nyaa's address, query and layout leave the
+  binary for a JSON file the user puts next to `config.json`. A compiled Go plugin is out (the
+  `plugin` package is Linux-only and requires the same compiler and the same deps). The processing
+  does **not** go in the descriptor: of the 2217 lines in `internal/nyaa`, ~150 are Nyaa-specific
+  and ~2050 are release-name parsing, the same for any source. The bulk of the diff is the split
+  into `internal/release` + `internal/source` (21 files import the package, 277 occurrences of
+  `nyaa.`), and steps 1-2 of the spec stand on their own — they can ship early in a minor, since
+  they don't change behavior. Whoever upgrades without the descriptor is left with no source: the
+  rename migration covers that
+- UI/UX overhaul of the webApp
+- Visual identity — logo, palette, favicon; feeds the social preview and the landing page
+- Publish the image on ghcr — the biggest win among the options measured in
+  [distribuicao.md](distribuicao.md), the Dockerfile already exists. A `curl` `install.sh` is the
+  next step from there, if needed. `go install`, Homebrew, Scoop, .deb/.rpm and Flatpak were
+  evaluated and discarded
+- Update the README — after the image, because that's what changes the install instructions
+- Upload a social preview on GitHub — today the shared link card is GitHub's generic one.
+  Settings > General > Social preview > Upload, 1280x640, using the new visual identity. Web only,
+  `gh repo edit` doesn't cover it
+- Create a landing page
 
-## `v3.1.0` — proper release no Windows
+## `v3.1.0` — proper Windows release
 
-Depois do rename: instalador, nome do serviço e caminho de dados carimbam o nome, e os ajustes de
-UI pra Windows seriam refeitos pela mexida de UI/UX do `v3.0.0`.
+After the rename: the installer, the service name and the data path stamp the name, and Windows UI
+tweaks would be redone by the `v3.0.0` UI/UX overhaul.
 
-- Autenticar app com conta Microsoft
-- Instalar ao invés de rodar de arquivo executável
-- Dar detach e rodar como serviço no background
-- Fazer mudanças de ui pra funcionar melhor no Windows
-- Testar bem
+- Authenticate the app with a Microsoft account
+- Install instead of running from an executable file
+- Detach and run as a background service
+- UI changes to work better on Windows
+- Test thoroughly
 
-## Sem release — divulgar
+## No release — promote
 
-Depois do `v3.1.0`: divulgar sem Windows corta boa parte do público.
+After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
 
-## Fixes sem release fixa — baixar direito anime velho e longo
+## Fixes with no fixed release — download old and long anime properly
 
-Sai como patch (`v2.x.y`/`v3.x.y`) quando for atacado. O sintoma é um só: **anime velho ou longo
-não baixa**. Anime da temporada corrente baixa sem problema. A causa não é achar candidato — é que
-o candidato ou está morto (0-2 seeders, barrado por `min_seeders` ou travando em 0%) ou é um pack
-gigante que o teto de tamanho reprova. Ordem não é preferência: o primeiro item é um **gate**, e o
-resultado dele decide qual das saídas do segundo existe.
+Ships as a patch (`v2.x.y`/`v3.x.y`) whenever it's tackled. The symptom is a single one: **old or
+long anime doesn't download**. Current-season anime downloads fine. The cause isn't finding a
+candidate — it's that the candidate is either dead (0-2 seeders, blocked by `min_seeders` or stuck
+at 0%) or a huge pack the size ceiling rejects. The order isn't preference: the first item is a
+**gate**, and its result decides which of the second item's exits exist.
 
-> Os três itens de **higiene do download** fecharam em 07/set/2026, sem depender do gate: a guarda
-> de disco passou a receber o tamanho do torrent
+> The three **download hygiene** items closed on 2026-09-07, without depending on the gate: the
+> disk guard now receives the torrent size
 > ([#93](agents/decisions.md#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)),
-> a falha de torrent passou a preservar os bytes já baixados (emenda na
+> a torrent failure now keeps the bytes already downloaded (amendment to
 > [#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist))
-> e torrent a zero peers por mais de uma hora passou a ser derrubado pelo mesmo caminho de falha
+> and a torrent at zero peers for more than an hour is now dropped through the same failure path
 > ([#94](agents/decisions.md#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)).
-> Nenhum dos três foi medido ao vivo — os testes são unitários, e o passe do terceiro item da lista
-> abaixo é o que os exercita de verdade.
+> None of the three was measured live — the tests are unit tests, and the pass in the third item
+> below is what actually exercises them.
 
-- **Rodar a Etapa 0 de fontes múltiplas** — spec desenhada em 16/ago e nunca executada:
+- **Run Stage 0 of multiple sources** — spec designed on 2026-08-16 and never executed:
   [fontes-multiplas-etapa0](superpowers/specs/2026-08-16-fontes-multiplas-etapa0-design.md).
-  Pergunta única: onde o Nyaa está morto, existe infohash **diferente** com peers **vivos**?
-  Trocar de indexador não ressuscita swarm — o AnimeTosho é espelho do Nyaa (75/75 `nyaa_id`), e
-  só o TokyoTosho agrega tracker de fora. Critério de decisão já fixado antes de medir (≥ 1/3
-  confirma; abaixo disso o caminho vira Debrid/Usenet, que é outro *protocolo*, não outro
-  indexador). **Pré-requisito que só o usuário tem:** a lista de 4-6 animes que ele viu falhar de
-  verdade — sem ela a medição roda na população errada, que foi o erro dos vereditos originais do
-  [sources.md](agents/sources.md)
-- **Baixar parte de um pack** — para a janela 1-12 de One Piece, o único pack vivo que cobre custa
-  171,8 GiB e o teto de 100 GB o barra; os episódios soltos existem e estão mortos. Nenhuma fonte
-  resolve isso, porque 574 episódios pesam o que pesam. As três saídas, todas em spec própria:
-  teto de tamanho por anime em `AnimeSettings` (menor diff, custa disco), **seleção por arquivo**
-  (o `rain` v2.3.1 não tem — `AddTorrentOptions` só expõe `Stopped`/`StopAfterDownload`/
-  `StopAfterMetadata`, e `Files()`/`FileStats()` são read-only; `anacrolix/torrent` tem prioridade
-  por arquivo) e Debrid. **Escolher depois do item anterior**, que é o que diz se sobra alternativa
-- **Passe ao vivo numa franquia em partes (Attack on Titan)** — o eixo absoluto por série, o
-  `packAxis` e a posse por cobertura ([#77](agents/decisions.md#77-o-eixo-absoluto-por-série-é-um-bfs-de-duas-em-duas-gerações-e-o-nível-cortado-volta-para-a-fila)/[#78](agents/decisions.md#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)/[#79](agents/decisions.md#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)/[#84](agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo))
-  foram escritos em agosto e só têm teste unitário mais medição de **listagem**. Nenhum download
-  real de ponta a ponta rodou na cadeia S1 → Final Season Part 3, que é justo onde as quatro
-  convenções de numeração da seção "Granularidade" do [sources.md](agents/sources.md) colidem.
-  Instrumento já existe: `scripts/robustness-animes.txt` + `make debug-batch`
+  Single question: where Nyaa is dead, is there a **different** infohash with **live** peers?
+  Switching indexers doesn't revive a swarm — AnimeTosho mirrors Nyaa (75/75 `nyaa_id`), and only
+  TokyoTosho aggregates outside trackers. Decision criterion fixed before measuring (≥ 1/3
+  confirms; below that the path becomes Debrid/Usenet, which is a different *protocol*, not a
+  different indexer). **Prerequisite only the user has:** the list of 4-6 anime they actually saw
+  fail — without it the measurement runs on the wrong population, which was the mistake of the
+  original verdicts in [sources.md](agents/sources.md)
+- **Download part of a pack** — for the One Piece 1-12 window, the only live pack that covers it is
+  171.8 GiB and the 100 GB ceiling blocks it; the loose episodes exist and are dead. No source
+  solves this, because 574 episodes weigh what they weigh. The three exits, each in its own spec:
+  per-anime size ceiling in `AnimeSettings` (smallest diff, costs disk), **per-file selection**
+  (`rain` v2.3.1 doesn't have it — `AddTorrentOptions` only exposes `Stopped`/`StopAfterDownload`/
+  `StopAfterMetadata`, and `Files()`/`FileStats()` are read-only; `anacrolix/torrent` has per-file
+  priority) and Debrid. **Choose after the previous item**, which is what says whether an
+  alternative remains
+- **Live pass on a multi-part franchise (Attack on Titan)** — the per-series absolute axis, the
+  `packAxis` and ownership by coverage ([#77](agents/decisions.md#77-o-eixo-absoluto-por-série-é-um-bfs-de-duas-em-duas-gerações-e-o-nível-cortado-volta-para-a-fila)/[#78](agents/decisions.md#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)/[#79](agents/decisions.md#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)/[#84](agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo))
+  were written in August and only have unit tests plus a **listing** measurement. No real
+  end-to-end download has run on the S1 → Final Season Part 3 chain, which is exactly where the
+  four numbering conventions from the "Granularidade" section of [sources.md](agents/sources.md)
+  collide. The instrument already exists: `scripts/robustness-animes.txt` + `make debug-batch`
