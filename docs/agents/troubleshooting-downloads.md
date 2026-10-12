@@ -73,6 +73,18 @@ ao Nyaa — e isso é o comportamento correto, não uma falha. O registro novo a
 já existe. Se o arquivo de fato não estiver lá, o problema é da faixa declarada (`BatchStart`/
 `BatchEnd`, lida do nome do torrent), não da busca.
 
+**An episode reported as not found, with no per-episode Nyaa search in this pass** → look for:
+
+```json
+{"level":"debug","episode":"Anime Name - Episode N","earlier_episode_missing":true,"message":"Skipping per-episode search: a recent search came back empty"}
+```
+
+That's the miss backoff ([decisions.md #100](decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes)):
+the episode's own search came back empty recently (`earlier_episode_missing: false`), or an earlier
+episode of the same anime ended the pass without a torrent (`true`). The report row keeps the stats
+of the last real search. To search it right now, run `make debug-anime` (Step 0) or restart the
+daemon — the backoff lives in memory.
+
 A separate, new failure class is **"the torrent downloaded but nothing shows up in the library"** — the download succeeded but the `organize` job (hardlink into `completed_anime_path` + webhook) is failing or retrying. See the embedded-client section below.
 
 ---

@@ -174,7 +174,7 @@ Run this package with `-race`: `TestSessionManagerConcurrentEnsureAndDelegation`
 
 ### 7. `nyaaSearcher` Injection (`processAnimeEpisodes`)
 
-`nyaaSearcher` (`daemon/search.go`) has three function-valued fields: `searchAnime`, `searchSingleEpisode`, `searchMovie` — no `searchBatch`/`searchMultiple` anymore. `searchAnime` alone returns **both** packs and episodes in one list (mirroring `nyaa.ScrapNyaaForAnime`); production splits them with `daemon.partitionSearchResults`.
+`nyaaSearcher` (`daemon/search.go`) has three search fields: `searchAnime`, `searchSingleEpisode`, `searchMovie` — no `searchBatch`/`searchMultiple` anymore — plus `packRange` (the detail page, below) and `misses` (the per-episode miss backoff, decisions.md #100). A fake searcher leaves `misses` nil, which turns the backoff off: every uncovered episode is searched on every call. A test of the backoff itself sets `misses: &searchMisses{byKey: map[files.EpisodeKey]searchMiss{}}` and moves `retryAt` into the past to end the wait (`TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes`). `searchAnime` alone returns **both** packs and episodes in one list (mirroring `nyaa.ScrapNyaaForAnime`); production splits them with `daemon.partitionSearchResults`.
 
 `searcherFor` (`daemon/limits_test.go`) builds a fake searcher from separate `batch`/`multiple`/`single`/`movie` slices for test readability, then combines `batch` (tagged `IsBatch: true`) and `multiple` into the one list `searchAnime` returns:
 
@@ -188,11 +188,11 @@ func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearch
     anime = append(anime, multiple...)
 
     return nyaaSearcher{
-        searchAnime: func(anilist.Title, []string, []int, string) []nyaa.TorrentResult { return anime },
-        searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, string, int) []nyaa.TorrentResult {
+        searchAnime: func(anilist.Title, []string, []int) []nyaa.TorrentResult { return anime },
+        searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, int) []nyaa.TorrentResult {
             return single
         },
-        searchMovie: func(anilist.Title, bool, string) []nyaa.TorrentResult { return movie },
+        searchMovie: func(anilist.Title, bool) []nyaa.TorrentResult { return movie },
     }
 }
 ```

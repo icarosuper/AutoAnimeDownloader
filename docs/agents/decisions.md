@@ -2855,4 +2855,5 @@ per-episode search of the ones after it — they're left to the anime search. An
 memory: a restart forgets it, at the price of one full round of searches.
 
 **Don't "fix" by:** applying it to the manual download (the button would do nothing for up to a
-day — `misses` is nil there); or persisting it to disk.
+day — `misses` is nil there) or to `RunAnimeDebug` (a diagnostic must show every episode's search —
+the one deliberate gap in [#58](#58-runanimedebug-espelha-processanimeepisodes-enumeração-resolução-de-pack-e-fallback-single)'s mirror); or persisting it to disk.

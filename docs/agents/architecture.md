@@ -128,7 +128,7 @@ Defaults to `"dev"` if not injected.
 
 `cmd/daemon/main.go` accepts `--debug-anime <anilistId>`: runs `daemon.RunAnimeDebug` (see `daemon/debug.go`) and exits, skipping the PID file / API server / tray / loop entirely. See [Commands](commands.md) and [Troubleshooting Downloads](troubleshooting-downloads.md).
 
-`RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the pack search/selection (`partitionSearchResults` + `pickBatches`) that lifts the per-anime limit when it resolves, and the per-episode `searchSingleEpisode` fallback when no batch/movie/single magnet was found — so the debug pass reports the pipeline the daemon actually runs (see [decisions.md #58](decisions.md#58-runanimedebug-espelha-processanimeepisodes-enumeração-resolução-de-pack-e-fallback-single)).
+`RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the pack search/selection (`partitionSearchResults` + `pickBatches`) that lifts the per-anime limit when it resolves, and the per-episode `searchSingleEpisode` fallback when no batch/movie/single magnet was found — so the debug pass reports the pipeline the daemon actually runs (see [decisions.md #58](decisions.md#58-runanimedebug-espelha-processanimeepisodes-enumeração-resolução-de-pack-e-fallback-single)). The one deliberate difference: it searches every uncovered episode, without the miss backoff of [decisions.md #100](decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes).
 
 `scripts/robustness-animes.txt` (curated media IDs, one per line) + `scripts/debug-batch.sh` (`make debug-batch`) run that pass over the whole list and write a triaged `.debug_batch/report.md`.
 
@@ -155,7 +155,11 @@ está rodando (decisions.md #67).
 2. **Packs**, resolvidos antes do loop de episódios, cobrindo a janela a partir do primeiro pendente
    → `partitionSearchResults` + `pickBatches`/`assignBatches`. Elegibilidade vem do **resultado** da
    busca (tamanho, seeders, faixa coberta), nunca do metadado do anime
-3. **Episódio avulso**, por episódio ainda descoberto
+3. **Episódio avulso**, por episódio ainda descoberto. An episode can skip this search without
+   any Nyaa line in the log: after an empty search it waits 1h→24h before the next one, and the
+   episodes after the first miss of the pass skip it too (`searchMisses`, in memory,
+   [decisions.md #100](decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes)).
+   The manual download (`DownloadStandaloneAnime`) and `RunAnimeDebug` don't apply it.
 
 Os três passam pelo piso de `min_seeders` (`filterSearchResults`).
 
