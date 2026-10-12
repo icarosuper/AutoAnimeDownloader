@@ -78,26 +78,32 @@ func firstMarkerIndex(name string) int {
 // follows is episode title, resolution, codec and fansub noise that inflates the Jaccard union
 // enough to sink genuine matches, so it's dropped rather than tokenized.
 //
-// ATENCAO: o corte NAO e sempre seguro. Varios grupos escrevem um titulo alternativo do anime
-// DEPOIS do marcador — o EMBER poe o marcador dentro de "(Season 2 | Part 2)" e o romaji completo
-// tres grupos adiante. Por isso quem casa titulo nao usa so este corte: titleMatchesQuery tenta
-// tambem os candidatos de altTitleCandidates.
+// CAUTION: the cut is NOT always safe. Several groups write an alternative anime title AFTER the
+// marker — EMBER puts the marker inside "(Season 2 | Part 2)" and the full romaji three groups
+// later. That's why title matching doesn't rely on this cut alone: titleMatchesQuery also tries the
+// candidates from altTitleCandidates.
+//
+// A name with NO marker ("[man] Azumanga Daioh [BD 1080p HEVC FLAC]", an unlabeled pack) has
+// nothing to cut at, so its bracket groups go instead: there they hold the source and the codecs,
+// the same noise the cut drops elsewhere. The leading fansub tag is stripped later by titleTokens.
 func truncateAtFirstMarker(name string) string {
 	if earliest := firstMarkerIndex(name); earliest > 0 {
 		return name[:earliest]
 	}
-	return name
+	if loc := reLeadingBracket.FindStringIndex(name); loc != nil {
+		return name[:loc[1]] + reBracketGroup.ReplaceAllString(name[loc[1]:], " ")
+	}
+	return reBracketGroup.ReplaceAllString(name, " ")
 }
 
-// altTitleCandidates extrai, do texto que vem DEPOIS do marcador, os titulos alternativos do
-// anime: o conteudo de cada grupo entre parenteses e cada segmento separado por barra. Colchetes
-// e texto solto ficam de fora de proposito — sao titulo de episodio, resolucao, codec e tag de
-// release.
+// altTitleCandidates extracts, from the text AFTER the marker, the anime's alternative titles: the
+// content of each parenthesized group and each slash-separated segment. Brackets and loose text are
+// left out on purpose — they're episode title, resolution, codec and release tag.
 //
-// UM CANDIDATO POR TRECHO, e nao um saco unico de tokens. O EMBER poe o titulo em ingles antes do
-// marcador e o romaji depois; juntar os dois num conjunto so dilui os dois no Jaccard (medido:
-// 0.78, contra 1.00 do romaji sozinho). Separados, cada titulo e comparado como titulo, e um
-// trecho de outro anime nao empresta token para o vizinho.
+// ONE CANDIDATE PER SEGMENT, not a single bag of tokens. EMBER puts the English title before the
+// marker and the romaji after; merging both into one set dilutes both in the Jaccard (measured:
+// 0.78, against 1.00 for the romaji alone). Kept apart, each title is compared as a title, and a
+// segment from another anime doesn't lend tokens to its neighbor.
 func altTitleCandidates(tail string) []string {
 	tail = reBracketGroup.ReplaceAllString(tail, " ")
 
@@ -105,8 +111,8 @@ func altTitleCandidates(tail string) []string {
 	for _, m := range reParenGroup.FindAllStringSubmatch(tail, -1) {
 		out = append(out, strings.Split(m[1], "|")...)
 	}
-	// Barras FORA de parenteses: Diddy, NTRX e Fuchs escrevem o romaji depois de um "|" solto.
-	// O primeiro segmento e o resto do marcador, nao um titulo — por isso [1:].
+	// Bars OUTSIDE parentheses: Diddy, NTRX and Fuchs write the romaji after a loose "|". The first
+	// segment is the rest of the marker, not a title — hence [1:].
 	if parts := strings.Split(reParenGroup.ReplaceAllString(tail, " "), "|"); len(parts) > 1 {
 		out = append(out, parts[1:]...)
 	}
@@ -237,10 +243,10 @@ func titleMatchesQuery(torrentName, query string) bool {
 		return true
 	}
 
-	// So entao os titulos alternativos que vem depois do marcador, um de cada vez. Tentar isto
-	// APENAS quando o corte falha e o que preserva o comportamento de hoje inteiro: o corte no
-	// marcador e o que protege query curta de afundar no Jaccard, e o pack do EMBER de Kimetsu no
-	// Yaiba (query de 3 tokens) casa no corte e nunca chega aqui.
+	// Only then the alternative titles after the marker, one at a time. Trying this ONLY when the cut
+	// fails is what keeps today's behavior intact: the cut at the marker is what protects a short
+	// query from sinking in the Jaccard, and EMBER's Kimetsu no Yaiba pack (3-token query) matches on
+	// the cut and never gets here.
 	marker := firstMarkerIndex(torrentName)
 	if marker <= 0 {
 		return false
@@ -253,7 +259,7 @@ func titleMatchesQuery(torrentName, query string) bool {
 	return false
 }
 
-// tokensMatchQuery aplica as duas checagens do match de titulo a um conjunto de tokens ja pronto.
+// tokensMatchQuery applies the two title-match checks to an already built token set.
 func tokensMatchQuery(torrentTokens, queryTokens []string) bool {
 	if len(torrentTokens) == 0 {
 		return false

@@ -42,9 +42,9 @@ func animeWithEpisodes(n int, status anilist.MediaStatus, totalKnown bool, forma
 	return anilist.MediaList{Id: 777, Status: anilist.MediaListStatusCurrent, Media: media}
 }
 
-// searcherFor builds a searcher whose strategies return the given results. batch e multiple viram
-// UMA lista (a busca por anime devolve as duas juntas): pack ganha IsBatch, episodio ja vem com
-// Episode preenchido por multipleFor.
+// searcherFor builds a searcher whose strategies return the given results. batch and multiple
+// become ONE list (the anime search returns both together): a pack gets IsBatch, an episode already
+// comes with Episode filled by multipleFor.
 func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearcher {
 	anime := make([]nyaa.TorrentResult, 0, len(batch)+len(multiple))
 	for _, tr := range batch {
@@ -90,9 +90,9 @@ func limitsConfig() *files.Config {
 	}
 }
 
-// TestWillBatch_FinishedWithinCeilingIgnoresPerAnimeLimit: 26 episódios finalizados casam com o
-// batch, e o limite de 12 por anime NÃO se aplica — um batch é um torrent só, limitar registros
-// não limitaria nem bytes nem arquivos na biblioteca.
+// TestWillBatch_FinishedWithinCeilingIgnoresPerAnimeLimit: 26 finished episodes match the batch,
+// and the per-anime limit of 12 does NOT apply — a batch is a single torrent, limiting records
+// would limit neither bytes nor files in the library.
 func TestWillBatch_FinishedWithinCeilingIgnoresPerAnimeLimit(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "batch", MagnetLink: fakeMagnet(9001)}}, nil, nil, nil)
@@ -100,17 +100,17 @@ func TestWillBatch_FinishedWithinCeilingIgnoresPerAnimeLimit(t *testing.T) {
 	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if len(result.newEpisodes) != 26 {
-		t.Errorf("esperava 26 episódios registrados pelo batch, obteve %d", len(result.newEpisodes))
+		t.Errorf("want 26 episodes recorded by the batch, got %d", len(result.newEpisodes))
 	}
 	for _, ep := range result.newEpisodes {
 		if !ep.IsBatch {
-			t.Fatalf("episódio %d deveria estar marcado como batch", ep.EpisodeNumber)
+			t.Fatalf("episode %d should be marked as batch", ep.EpisodeNumber)
 		}
 	}
 }
 
-// RELEASING de 1100 episódios BUSCA pack (antes desta spec não buscava, por status), e o pack
-// parcial cobre a janela do limite por anime.
+// RELEASING with 1100 episodes SEARCHES for a pack (before this spec it didn't, by status), and the
+// partial pack covers the per-anime limit window.
 func TestEligibility_ReleasingLongSeriesUsesPartialPack(t *testing.T) {
 	anime := animeWithEpisodes(1100, anilist.MediaStatusReleasing, false, "")
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "[X] Anime 001-100 [1080p]", MagnetLink: fakeMagnet(1)}}, nil, nil, nil)
@@ -118,17 +118,17 @@ func TestEligibility_ReleasingLongSeriesUsesPartialPack(t *testing.T) {
 	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if len(result.newEpisodes) != 100 {
-		t.Fatalf("esperava os 100 episódios do pack registrados, obteve %d", len(result.newEpisodes))
+		t.Fatalf("want the pack's 100 episodes recorded, got %d", len(result.newEpisodes))
 	}
 	for _, ep := range result.newEpisodes {
 		if !ep.IsBatch {
-			t.Fatalf("episódio %d deveria estar marcado como batch", ep.EpisodeNumber)
+			t.Fatalf("episode %d should be marked as batch", ep.EpisodeNumber)
 		}
 	}
 }
 
-// Media.Episodes == nil passa a ser elegível: sem comparação de contagem, contagem desconhecida
-// deixa de importar.
+// Media.Episodes == nil becomes eligible: with no count comparison, an unknown count stops
+// mattering.
 func TestEligibility_UnknownTotalIsEligible(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, false, "")
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "[X] Anime 01-26 [1080p]", MagnetLink: fakeMagnet(1)}}, nil, nil, nil)
@@ -136,11 +136,11 @@ func TestEligibility_UnknownTotalIsEligible(t *testing.T) {
 	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if len(result.newEpisodes) != 26 {
-		t.Errorf("contagem desconhecida deve poder usar pack, obteve %d", len(result.newEpisodes))
+		t.Errorf("an unknown count must be able to use a pack, got %d", len(result.newEpisodes))
 	}
 }
 
-// Um episódio pendente não busca pack: um pack para um episódio é o caminho de episódio solto.
+// One pending episode doesn't search for a pack: a pack for one episode is the loose-episode path.
 func TestEligibility_SinglePendingEpisodeDoesNotUsePack(t *testing.T) {
 	anime := animeWithEpisodes(1, anilist.MediaStatusFinished, true, "")
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "[X] Anime 01-26 [1080p]", MagnetLink: fakeMagnet(1)}}, multipleFor(1, 0), nil, nil)
@@ -148,12 +148,12 @@ func TestEligibility_SinglePendingEpisodeDoesNotUsePack(t *testing.T) {
 	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if len(result.newEpisodes) != 1 || result.newEpisodes[0].IsBatch {
-		t.Errorf("esperava 1 episódio solto, obteve %+v", result.newEpisodes)
+		t.Errorf("want 1 loose episode, got %+v", result.newEpisodes)
 	}
 }
 
-// O caminho que o tampão cobria, agora sem tampão: o filtro de tamanho esvazia os packs, pickBatches
-// devolve vazio, o fluxo cai em episódio solto e o limite por anime VALE.
+// The path the stopgap covered, now without it: the size filter empties the packs, pickBatches
+// returns empty, the flow falls to loose episodes and the per-anime limit APPLIES.
 func TestEligibility_SizeCeilingEmptiesPacksAndLimitApplies(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	configs := limitsConfig()
@@ -168,18 +168,18 @@ func TestEligibility_SizeCeilingEmptiesPacksAndLimitApplies(t *testing.T) {
 	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if len(result.newEpisodes) != 12 {
-		t.Errorf("esperava 12 episódios individuais, obteve %d", len(result.newEpisodes))
+		t.Errorf("want 12 individual episodes, got %d", len(result.newEpisodes))
 	}
 	for _, ep := range result.newEpisodes {
 		if ep.IsBatch {
-			t.Fatal("nenhum episódio deveria vir marcado como batch")
+			t.Fatal("no episode should come marked as batch")
 		}
 	}
 }
 
-// Formato One Piece: RELEASING, Media.Episodes == nil, 1100 episódios no ar. O tamanho da série
-// tem de chegar na busca de episódio (é ele que liga o zero-padding da query) — e Media.Episodes
-// sozinho não serviria, porque é justamente nil na série longa em andamento.
+// One Piece shape: RELEASING, Media.Episodes == nil, 1100 episodes aired. The series length has to
+// reach the episode search (it's what turns on the query's zero-padding) — and Media.Episodes alone
+// wouldn't do, because it's precisely nil on the long airing series.
 func TestSingleEpisodeSearch_ReceivesSeriesLength(t *testing.T) {
 	anime := animeWithEpisodes(1100, anilist.MediaStatusReleasing, false, "")
 	got := 0
@@ -192,11 +192,11 @@ func TestSingleEpisodeSearch_ReceivesSeriesLength(t *testing.T) {
 	processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if got != 1100 {
-		t.Errorf("esperava 1100 como tamanho da série na busca de episódio, obteve %d", got)
+		t.Errorf("want 1100 as the series length in the episode search, got %d", got)
 	}
 }
 
-// TestWillBatch_MovieUnaffected: filme continua usando a estratégia de filme.
+// TestWillBatch_MovieUnaffected: a movie keeps using the movie strategy.
 func TestWillBatch_MovieUnaffected(t *testing.T) {
 	anime := animeWithEpisodes(1, anilist.MediaStatusFinished, true, anilist.MediaFormatMovie)
 	searcher := searcherFor(nil, nil, nil, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(9004)}})
@@ -204,12 +204,12 @@ func TestWillBatch_MovieUnaffected(t *testing.T) {
 	result := processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if len(result.newEpisodes) != 1 || !result.newEpisodes[0].IsBatch {
-		t.Errorf("filme deve baixar como torrent único, obteve %+v", result.newEpisodes)
+		t.Errorf("a movie must download as a single torrent, got %+v", result.newEpisodes)
 	}
 }
 
-// TestEpisodeSizeCeiling_DoesNotAffectBatchChoice: um pack de 40 GiB continua sendo baixado com
-// max_episode_torrent_size_gb = 1.5 — os dois tetos são independentes.
+// TestEpisodeSizeCeiling_DoesNotAffectBatchChoice: a 40 GiB pack is still downloaded with
+// max_episode_torrent_size_gb = 1.5 — the two ceilings are independent.
 func TestEpisodeSizeCeiling_DoesNotAffectBatchChoice(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	configs := limitsConfig()
@@ -220,7 +220,7 @@ func TestEpisodeSizeCeiling_DoesNotAffectBatchChoice(t *testing.T) {
 	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 
 	if len(result.newEpisodes) != 26 {
-		t.Errorf("o teto de episódio não deve filtrar o batch, obteve %d episódios", len(result.newEpisodes))
+		t.Errorf("the episode ceiling must not filter the batch, got %d episodes", len(result.newEpisodes))
 	}
 }
 
@@ -234,21 +234,21 @@ func TestFilterBySize(t *testing.T) {
 	}
 
 	if got, dropped := filterBySize(results, 0); len(got) != 4 || dropped != 0 {
-		t.Errorf("teto 0 não deve filtrar nada, sobraram %d e caíram %d", len(got), dropped)
+		t.Errorf("ceiling 0 must filter nothing, %d left and %d dropped", len(got), dropped)
 	}
 
 	got, dropped := filterBySize(results, 10)
 	if len(got) != 3 {
-		t.Fatalf("esperava 3 resultados, obteve %d (%+v)", len(got), got)
+		t.Fatalf("want 3 results, got %d (%+v)", len(got), got)
 	}
 	if dropped != 1 {
-		t.Errorf("esperava 1 descartado por tamanho, obteve %d", dropped)
+		t.Errorf("want 1 dropped by size, got %d", dropped)
 	}
-	// Size == 0 fica (parsing quebrado não pode virar paralisação) e a ordem é preservada.
+	// Size == 0 stays (broken parsing can't become a standstill) and the order is kept.
 	want := []string{"small", "unknown", "medium"}
 	for i, name := range want {
 		if got[i].Name != name {
-			t.Errorf("posição %d: esperava %q, obteve %q", i, name, got[i].Name)
+			t.Errorf("position %d: want %q, got %q", i, name, got[i].Name)
 		}
 	}
 }
@@ -262,61 +262,61 @@ func TestFilterBySeeders(t *testing.T) {
 	}
 
 	if got, dropped := filterBySeeders(results, 0); len(got) != 4 || dropped != 0 {
-		t.Errorf("piso 0 não deve filtrar nada, sobraram %d e caíram %d", len(got), dropped)
+		t.Errorf("floor 0 must filter nothing, %d left and %d dropped", len(got), dropped)
 	}
 
-	// Default: só o literalmente morto sai (e "-" conta como 0).
+	// Default: only the literally dead one goes (and "-" counts as 0).
 	got, dropped := filterBySeeders(results, 1)
 	want := []string{"alive", "weak"}
 	if len(got) != len(want) {
-		t.Fatalf("esperava %d resultados, obteve %d (%+v)", len(want), len(got), got)
+		t.Fatalf("want %d results, got %d (%+v)", len(want), len(got), got)
 	}
 	if dropped != 2 {
-		t.Errorf("esperava 2 descartados por seeders, obteve %d", dropped)
+		t.Errorf("want 2 dropped by seeders, got %d", dropped)
 	}
 	for i, name := range want {
 		if got[i].Name != name {
-			t.Errorf("posição %d: esperava %q, obteve %q", i, name, got[i].Name)
+			t.Errorf("position %d: want %q, got %q", i, name, got[i].Name)
 		}
 	}
 
 	if got, _ := filterBySeeders(results, 5); len(got) != 1 || got[0].Name != "alive" {
-		t.Errorf("piso 5 deveria sobrar só o alive, obteve %+v", got)
+		t.Errorf("floor 5 should leave only alive, got %+v", got)
 	}
 }
 
-// TestFilterSearchResults_DropStats: o dropStats e a unica coisa que distingue "o Nyaa nao
-// devolveu nada" de "o filtro cortou tudo", e o relatorio da ultima verificacao depende dessa
-// distincao para nao mentir dizendo "nenhum torrent encontrado" quando havia oito.
+// TestFilterSearchResults_DropStats: dropStats is the only thing that tells "Nyaa returned nothing"
+// from "the filter cut everything", and the last-verification report depends on that distinction so
+// it doesn't lie saying "no torrent found" when there were eight.
 func TestFilterSearchResults_DropStats(t *testing.T) {
 	const gib = int64(1024 * 1024 * 1024)
 
 	t.Run("entrada vazia", func(t *testing.T) {
 		got, stats := filterSearchResults(nil, 3, 1)
 		if len(got) != 0 {
-			t.Errorf("esperava lista vazia, obteve %+v", got)
+			t.Errorf("want an empty list, got %+v", got)
 		}
 		if stats != (dropStats{}) {
-			t.Errorf("esperava dropStats zerado, obteve %+v", stats)
+			t.Errorf("want zeroed dropStats, got %+v", stats)
 		}
 	})
 
-	t.Run("corte só por tamanho", func(t *testing.T) {
+	t.Run("cut by size only", func(t *testing.T) {
 		results := []nyaa.TorrentResult{
 			{Name: "huge-a", Size: 8 * gib, Seeders: "50"},
 			{Name: "huge-b", Size: 9 * gib, Seeders: "40"},
 		}
 		got, stats := filterSearchResults(results, 3, 1)
 		if len(got) != 0 {
-			t.Fatalf("esperava lista vazia, obteve %+v", got)
+			t.Fatalf("want an empty list, got %+v", got)
 		}
 		want := dropStats{Input: 2, BySize: 2, BySeeders: 0}
 		if stats != want {
-			t.Errorf("esperava %+v, obteve %+v", want, stats)
+			t.Errorf("want %+v, got %+v", want, stats)
 		}
 	})
 
-	t.Run("corte só por seeders", func(t *testing.T) {
+	t.Run("cut by seeders only", func(t *testing.T) {
 		results := []nyaa.TorrentResult{
 			{Name: "dead-a", Size: 1 * gib, Seeders: "0"},
 			{Name: "dead-b", Size: 1 * gib, Seeders: "0"},
@@ -324,11 +324,11 @@ func TestFilterSearchResults_DropStats(t *testing.T) {
 		}
 		got, stats := filterSearchResults(results, 3, 1)
 		if len(got) != 0 {
-			t.Fatalf("esperava lista vazia, obteve %+v", got)
+			t.Fatalf("want an empty list, got %+v", got)
 		}
 		want := dropStats{Input: 3, BySize: 0, BySeeders: 3}
 		if stats != want {
-			t.Errorf("esperava %+v, obteve %+v", want, stats)
+			t.Errorf("want %+v, got %+v", want, stats)
 		}
 	})
 
@@ -340,48 +340,48 @@ func TestFilterSearchResults_DropStats(t *testing.T) {
 		}
 		got, stats := filterSearchResults(results, 3, 1)
 		if len(got) != 1 || got[0].Name != "ok" {
-			t.Fatalf("esperava só o ok, obteve %+v", got)
+			t.Fatalf("want only ok, got %+v", got)
 		}
 		want := dropStats{Input: 3, BySize: 1, BySeeders: 1}
 		if stats != want {
-			t.Errorf("esperava %+v, obteve %+v", want, stats)
+			t.Errorf("want %+v, got %+v", want, stats)
 		}
 	})
 }
 
-// --- Guarda de espaço em disco ---
+// --- Disk space guard ---
 
 func TestCheckDiskSpace(t *testing.T) {
 	dir := t.TempDir()
 
 	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}, 0); err != nil {
-		t.Errorf("com 1%% exigido esperava nil, obteve %v", err)
+		t.Errorf("with 1%% required want nil, got %v", err)
 	}
-	// 100% livre é impossível num volume em uso: força o caminho "abaixo do teto".
+	// 100% free is impossible on a volume in use: forces the "below the ceiling" path.
 	err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 100}, 0)
 	if !errors.Is(err, ErrInsufficientDiskSpace) {
-		t.Errorf("esperava ErrInsufficientDiskSpace, obteve %v", err)
+		t.Errorf("want ErrInsufficientDiskSpace, got %v", err)
 	}
 	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}, 0); err != nil {
-		t.Errorf("0 desliga a guarda, obteve %v", err)
+		t.Errorf("0 turns the guard off, got %v", err)
 	}
-	// Tamanho maior que o volume inteiro: barra mesmo com a politica de porcentagem desligada.
+	// Size larger than the whole volume: blocked even with the percent policy off.
 	err = checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}, math.MaxInt64)
 	if !errors.Is(err, ErrInsufficientDiskSpace) {
-		t.Errorf("torrent maior que o disco deve barrar mesmo com a guarda desligada, obteve %v", err)
+		t.Errorf("a torrent larger than the disk must be blocked even with the guard off, got %v", err)
 	}
-	// Um torrent de 1 byte cabe: o tamanho nao pode virar um "nao" automatico.
+	// A 1-byte torrent fits: the size can't become an automatic "no".
 	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}, 1); err != nil {
-		t.Errorf("torrent de 1 byte deve caber, obteve %v", err)
+		t.Errorf("a 1-byte torrent must fit, got %v", err)
 	}
-	// Erro de statfs não bloqueia.
-	missing := filepath.Join(dir, "nao-existe")
+	// A statfs error doesn't block.
+	missing := filepath.Join(dir, "does-not-exist")
 	if err := checkDiskSpace(&files.Config{CompletedAnimePath: missing, MinFreeDiskPercent: 100}, 0); err != nil {
-		t.Errorf("falha de statfs não deve bloquear, obteve %v", err)
+		t.Errorf("a statfs failure must not block, got %v", err)
 	}
 }
 
-// diskFullConfig devolve uma config cuja guarda de disco sempre barra.
+// diskFullConfig returns a config whose disk guard always blocks.
 func diskFullConfig(t *testing.T) *files.Config {
 	t.Helper()
 	configs := limitsConfig()
@@ -395,10 +395,10 @@ func TestAttemptDownloadWithRetries_DiskFullDoesNotCallAdd(t *testing.T) {
 	hash := attemptDownloadWithRetries(diskFullConfig(t), backend, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(1)}, {MagnetLink: fakeMagnet(2)}}, "ep")
 
 	if hash != "" {
-		t.Errorf("esperava hash vazio com disco cheio, obteve %q", hash)
+		t.Errorf("want an empty hash with a full disk, got %q", hash)
 	}
 	if len(backend.List()) != 0 {
-		t.Errorf("backend.Add não deve ser chamado nenhuma vez, cliente tem %d torrent(s)", len(backend.List()))
+		t.Errorf("backend.Add must never be called, the client has %d torrent(s)", len(backend.List()))
 	}
 }
 
@@ -421,21 +421,21 @@ func TestProcessAnimeEpisodes_DiskFullNotifiesNoDiskSpaceReason(t *testing.T) {
 
 	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
 	if len(result.newEpisodes) != 0 {
-		t.Errorf("nada deve ser registrado com disco cheio, obteve %d", len(result.newEpisodes))
+		t.Errorf("nothing must be recorded with a full disk, got %d", len(result.newEpisodes))
 	}
 
 	select {
 	case body := <-bodies:
 		if !strings.Contains(body, notifications.ReasonNoDiskSpace) {
-			t.Errorf("esperava a razão %q no webhook, obteve %q", notifications.ReasonNoDiskSpace, body)
+			t.Errorf("want reason %q in the webhook, got %q", notifications.ReasonNoDiskSpace, body)
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Error("nenhum webhook de falha recebido")
 	}
 }
 
-// TestHandleSavedEpisodes_DiskFullStillPrunes: disco cheio barra o Add, não o passe — a poda é
-// justamente o que libera espaço.
+// TestHandleSavedEpisodes_DiskFullStillPrunes: a full disk blocks the Add, not the pass — pruning
+// is precisely what frees space.
 func TestHandleSavedEpisodes_DiskFullStillPrunes(t *testing.T) {
 	configs := diskFullConfig(t)
 	configs.DeleteWatchedEpisodes = true
@@ -450,12 +450,12 @@ func TestHandleSavedEpisodes_DiskFullStillPrunes(t *testing.T) {
 	})
 
 	if !containsID(fm.deletedEpisodeKeys, files.EpisodeKey{Episode: 1}) || !containsID(fm.deletedEpisodeKeys, files.EpisodeKey{Episode: 2}) {
-		t.Errorf("a poda deve rodar com disco cheio, apagados = %v", fm.deletedEpisodeKeys)
+		t.Errorf("pruning must run with a full disk, deleted = %v", fm.deletedEpisodeKeys)
 	}
 }
 
-// TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook: registros novos criados para um torrent já
-// organizado (o caminho da migração da regra de batch) não redisparam DownloadCompleted.
+// TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook: new records created for an already organized
+// torrent (the batch-rule migration path) don't re-fire DownloadCompleted.
 func TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook(t *testing.T) {
 	events := make(chan string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -487,24 +487,25 @@ func TestOrganizeTorrent_PartiallyOrganizedSkipsWebhook(t *testing.T) {
 	}
 
 	if ok := organizeTorrent(hash, backend, files.NewLibrarian(files.NewOSFileSystem()), fm, fm.configs); !ok {
-		t.Fatal("organizeTorrent deveria ter sucesso")
+		t.Fatal("organizeTorrent should succeed")
 	}
 	if len(fm.upserted) != 1 {
-		t.Errorf("o marcador LibraryPaths deve ser gravado nos registros novos, upserts = %d", len(fm.upserted))
+		t.Errorf("the LibraryPaths marker must be written to the new records, upserts = %d", len(fm.upserted))
 	}
 	select {
 	case body := <-events:
-		t.Errorf("nenhum webhook deveria sair para um torrent já organizado, obteve %q", body)
+		t.Errorf("no webhook should go out for an already organized torrent, got %q", body)
 	case <-time.After(300 * time.Millisecond):
 	}
 }
 
-// TestProcessAnimeEpisodes_Issues: os motivos saem por processAnimeEpisodes, no mesmo canal que
-// ja devolve newEpisodes/checkedEpisodes/keysToDelete. Nenhum coletor global, nenhum mutex novo.
+// TestProcessAnimeEpisodes_Issues: the reasons come out through processAnimeEpisodes, in the same
+// channel that already returns newEpisodes/checkedEpisodes/keysToDelete. No global collector, no
+// new mutex.
 func TestProcessAnimeEpisodes_Issues(t *testing.T) {
 	const gib = int64(1024 * 1024 * 1024)
 
-	t.Run("todos os candidatos acima do teto", func(t *testing.T) {
+	t.Run("all candidates above the ceiling", func(t *testing.T) {
 		anime := animeWithEpisodes(1, anilist.MediaStatusReleasing, true, anilist.MediaFormatTV)
 		configs := &files.Config{
 			CompletedAnimePath:      t.TempDir(),
@@ -522,21 +523,21 @@ func TestProcessAnimeEpisodes_Issues(t *testing.T) {
 		result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, nil, searcher)
 
 		if len(result.issues) != 1 {
-			t.Fatalf("esperava 1 issue, obteve %d (%+v)", len(result.issues), result.issues)
+			t.Fatalf("want 1 issue, got %d (%+v)", len(result.issues), result.issues)
 		}
 		got := result.issues[0]
 		if got.Code != IssueAllAboveSizeLimit {
-			t.Errorf("esperava %q, obteve %q", IssueAllAboveSizeLimit, got.Code)
+			t.Errorf("want %q, got %q", IssueAllAboveSizeLimit, got.Code)
 		}
 		if got.Candidates != 2 || got.LimitGB != 3 {
 			t.Errorf("detalhes errados: %+v", got)
 		}
 		if got.AnimeID != anime.Media.Id || got.AnimeName == "" {
-			t.Errorf("identificação do anime faltando: %+v", got)
+			t.Errorf("anime identification missing: %+v", got)
 		}
 	})
 
-	t.Run("busca vazia vira no_torrent_found", func(t *testing.T) {
+	t.Run("empty search becomes no_torrent_found", func(t *testing.T) {
 		anime := animeWithEpisodes(1, anilist.MediaStatusReleasing, true, anilist.MediaFormatTV)
 		configs := &files.Config{
 			CompletedAnimePath:  t.TempDir(),
@@ -549,11 +550,11 @@ func TestProcessAnimeEpisodes_Issues(t *testing.T) {
 		result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, nil, searcher)
 
 		if len(result.issues) != 1 || result.issues[0].Code != IssueNoTorrentFound {
-			t.Fatalf("esperava um no_torrent_found, obteve %+v", result.issues)
+			t.Fatalf("want a no_torrent_found, got %+v", result.issues)
 		}
 	})
 
-	t.Run("limite por anime com batch sem resultado", func(t *testing.T) {
+	t.Run("per-anime limit with batch without result", func(t *testing.T) {
 		anime := animeWithEpisodes(10, anilist.MediaStatusReleasing, true, anilist.MediaFormatTV)
 		configs := &files.Config{
 			CompletedAnimePath:  t.TempDir(),
@@ -577,16 +578,38 @@ func TestProcessAnimeEpisodes_Issues(t *testing.T) {
 			}
 		}
 		if limit == nil {
-			t.Fatalf("esperava um max_episodes_per_anime, obteve %+v", result.issues)
+			t.Fatalf("want a max_episodes_per_anime, got %+v", result.issues)
 		}
 		if limit.Downloaded != 3 || limit.Pending != 7 {
-			t.Errorf("esperava downloaded=3 pending=7, obteve %+v", limit)
+			t.Errorf("want downloaded=3 pending=7, got %+v", limit)
 		}
 		if limit.BatchSkipped != BatchSkippedNoResult {
-			t.Errorf("esperava batch_skipped=%q, obteve %q", BatchSkippedNoResult, limit.BatchSkipped)
+			t.Errorf("want batch_skipped=%q, got %q", BatchSkippedNoResult, limit.BatchSkipped)
 		}
 		if len(limit.Episodes) != 0 {
-			t.Errorf("limite não carrega números de episódio, obteve %+v", limit.Episodes)
+			t.Errorf("the limit carries no episode numbers, got %+v", limit.Episodes)
 		}
 	})
+}
+
+// Flower and Asura: the only pack covering the window didn't fit on disk, and the guard used to
+// run only at download time — after the pack owned the window — so no episode got a candidate.
+// A pack that doesn't fit now leaves the window to the loose episodes.
+func TestPackThatDoesNotFitFallsBackToLooseEpisodes(t *testing.T) {
+	anime := animeWithEpisodes(12, anilist.MediaStatusFinished, true, "")
+	huge := nyaa.TorrentResult{Name: "[X] Anime 01-12 [BD Remux]", MagnetLink: fakeMagnet(9001), Size: math.MaxInt64}
+	searcher := searcherFor([]nyaa.TorrentResult{huge}, multipleFor(12, 1), nil, nil)
+	configs := limitsConfig()
+	configs.CompletedAnimePath = t.TempDir()
+
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher)
+
+	if len(result.newEpisodes) != 12 {
+		t.Fatalf("want the 12 loose episodes, got %d", len(result.newEpisodes))
+	}
+	for _, ep := range result.newEpisodes {
+		if ep.IsBatch {
+			t.Fatalf("episode %d came from the pack that doesn't fit", ep.EpisodeNumber)
+		}
+	}
 }

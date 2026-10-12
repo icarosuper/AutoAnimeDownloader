@@ -21,7 +21,7 @@ import (
 // httpGet is an indirection for http.Get so tests can replace it.
 var httpGet = http.Get
 
-// TorrentResult representa um resultado de torrent do Nyaa
+// TorrentResult is one torrent result from Nyaa
 type TorrentResult struct {
 	Name       string    `json:"name"`
 	Date       time.Time `json:"date"`
@@ -35,8 +35,12 @@ type TorrentResult struct {
 	Size       int64     `json:"size,omitempty"`
 	Fansub     string    `json:"fansub,omitempty"`
 	IsBatch    bool      `json:"IsBatch,omitempty"`
-	// DetailURL e a pagina /view/<id> da linha. So o caminho de pack a usa (PackFileRange), e
-	// so as buscas que devolvem pack a preenchem.
+	// UnlabeledPack marks a pack recognized only by having no episode number and a pack-sized
+	// size ("[man] Azumanga Daioh [BD 1080p HEVC FLAC]"). Its range must come from the file list:
+	// unlike a labeled pack, an unknown range never counts as "covers everything".
+	UnlabeledPack bool `json:"-"`
+	// DetailURL is the row's /view/<id> page. Only the pack path uses it (PackFileRange), and only the
+	// searches that return packs fill it.
 	DetailURL string `json:"detailUrl,omitempty"`
 }
 
@@ -46,9 +50,9 @@ var videoExtensions = map[string]bool{
 	".mpeg": true, ".ogm": true,
 }
 
-// IsVideoFile reporta se o nome tem extensao de video. Mora neste pacote, e nao no files, porque
-// os dois leem a mesma lista de arquivos de um pack — o Librarian depois de baixar, PackFileRange
-// antes — e files importa nyaa (o contrario daria ciclo).
+// IsVideoFile reports whether the name has a video extension. It lives in this package, not in
+// files, because both read the same file list of a pack — the Librarian after downloading,
+// PackFileRange before — and files imports nyaa (the reverse would be a cycle).
 func IsVideoFile(name string) bool {
 	return videoExtensions[strings.ToLower(filepath.Ext(name))]
 }
@@ -73,15 +77,14 @@ func MockNyaaHttpGet(fn func(string) (*http.Response, error)) (restore func()) {
 	return func() { httpGet = prev }
 }
 
-// GenerateSearchTitleVariants gera múltiplas variantes de busca para um título
-// priorizando versões limpas (sem caracteres especiais) sobre as originais
-// IMPORTANTE: Esta função deve ser usada APENAS para gerar queries de busca,
-// nunca para modificar títulos de torrents retornados pelo Nyaa
+// GenerateSearchTitleVariants builds several search variants for a title, preferring clean versions
+// (no special characters) over the originals. IMPORTANT: this function must be used ONLY to build
+// search queries, never to modify torrent titles returned by Nyaa
 func GenerateSearchTitleVariants(romaji, english string) []string {
 	variants := []string{}
 	seen := make(map[string]bool)
 
-	// Função auxiliar para adicionar variante se ainda não foi adicionada
+	// Helper that adds a variant if it wasn't added yet
 	addVariant := func(title string) {
 		if title == "" || seen[title] {
 			return
@@ -90,7 +93,15 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 		variants = append(variants, title)
 	}
 
-	// Prioridade 1: Romaji limpo (sem caracteres especiais)
+	// A sequel numbered in roman ("…Darou ka V: Houjou no Megami-hen") is released as "…Darou ka
+	// S5 - 08": neither the numeral nor the subtitle is in the release name, so every variant
+	// carrying them missed the live releases. The bare base title goes first; ExtractSeason
+	// already reads the numeral as the season, and that filter keeps the other seasons out.
+	if base, ok := romanSequelBase(romaji, english); ok {
+		addVariant(base)
+	}
+
+	// Priority 1: clean romaji (no special characters)
 	if romaji != "" {
 		cleanRomaji := removeSpecialCharacters(romaji)
 		addVariant(cleanRomaji)
@@ -99,7 +110,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 		addVariant(romaji)
 	}
 
-	// Prioridade 3: English limpo (sem caracteres especiais)
+	// Priority 3: clean English (no special characters)
 	if english != "" && english != romaji {
 		cleanEnglish := removeSpecialCharacters(english)
 		addVariant(cleanEnglish)
@@ -111,16 +122,33 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 	return variants
 }
 
-// removeSpecialCharacters normaliza para minusculas com apenas letras, digitos e espaco.
-// Morava num pacote stringutil proprio, com esta unica funcao e este unico chamador.
+// romanSequelBase is the title without the roman numeral that closes it, and without the
+// ": subtitle" after it ("…Darou ka V: Houjou no Megami-hen" → "…Darou ka"). It answers only when
+// the English title carries the SAME numeral as a word, so a name that merely ends in one ("Lupin
+// III", English "Lupin the 3rd") keeps its variants as they were.
+func romanSequelBase(romaji, english string) (string, bool) {
+	m := reRomanSeasonTitle.FindStringSubmatch(strings.TrimSpace(romaji))
+	if m == nil {
+		return "", false
+	}
+	for _, word := range strings.Fields(english) {
+		if strings.TrimSuffix(word, ":") == m[2] {
+			return m[1], true
+		}
+	}
+	return "", false
+}
+
+// removeSpecialCharacters lowercases and keeps only letters, digits and spaces. It used to live in
+// its own stringutil package, with this single function and this single caller.
 func removeSpecialCharacters(s string) string {
 	s = strings.ToLower(s)
 	s = reSpecialChars.ReplaceAllString(s, "")
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// extractFansub extrai o nome do fansub do título do torrent
-// Procura por padrões como [FANSUB] ou (FANSUB)
+// extractFansub extracts the fansub name from the torrent title. It looks for patterns like
+// [FANSUB] or (FANSUB)
 func extractFansub(name string) string {
 	matches := reFansub.FindStringSubmatch(name)
 	if len(matches) > 1 {
@@ -129,7 +157,7 @@ func extractFansub(name string) string {
 	return ""
 }
 
-// IsBatch verifica se o torrent é um batch (múltiplos episódios)
+// IsBatch reports whether the torrent is a batch (multiple episodes)
 func IsBatch(name string) bool {
 	nameLower := strings.ToLower(name)
 	for _, re := range reBatchPatterns {
@@ -140,16 +168,15 @@ func IsBatch(name string) bool {
 	return false
 }
 
-// BatchInfo contém informações extraídas de um torrent batch
+// BatchInfo holds the information extracted from a batch torrent
 type BatchInfo struct {
 	StartEpisode int
 	EndEpisode   int
 	Season       int
 }
 
-// ExtractBatchInfo extrai informações detalhadas de um batch
-// Consumida fora do pacote pelo daemon: e a faixa dela que decide QUAIS episodios recebem o
-// magnet do pack (pickBatches).
+// ExtractBatchInfo extracts the details of a batch. Consumed outside the package by the daemon: its
+// range is what decides WHICH episodes get the pack's magnet (pickBatches).
 func ExtractBatchInfo(torrentName string) BatchInfo {
 	info := BatchInfo{}
 
@@ -164,20 +191,20 @@ func ExtractBatchInfo(torrentName string) BatchInfo {
 	return info
 }
 
-// batchRange devolve a primeira faixa PLAUSIVEL do nome, e nao o primeiro casamento: reBatchRange
-// casa qualquer par de numeros ligados por "-" ou "~", e boa parte deles nao e episodio.
+// batchRange returns the first PLAUSIBLE range in the name, not the first match: reBatchRange
+// matches any pair of numbers joined by "-" or "~", and many of them aren't episodes.
 //
-// FindAll (e nao FindString) porque um casamento reprovado nao encerra a busca — "[EMBER] ...
-// (2021-2022) ..." tem o ano ANTES de onde uma faixa de verdade estaria. Ele e nao-sobreposto, o
-// que mantem "Hibike! Euphonium 2 - 01 ~ 13" sem faixa: o "01" e consumido pelo casamento
-// invertido "2 - 01" e o "01 ~ 13" nunca e visto. Faixa desconhecida cai em EndEpisode == 0, que
-// o chamador trata como cobertura a resolver pela lista de arquivos.
+// FindAll (not FindString) because a rejected match doesn't end the search — "[EMBER] ...
+// (2021-2022) ..." has the year BEFORE where a real range would be. It's non-overlapping, which
+// keeps "Hibike! Euphonium 2 - 01 ~ 13" without a range: the "01" is consumed by the inverted match
+// "2 - 01" and "01 ~ 13" is never seen. An unknown range falls into EndEpisode == 0, which the
+// caller treats as coverage to resolve from the file list.
 //
-// Indices (e nao FindAllStringSubmatch) porque a guarda de resolucao precisa do caractere
-// SEGUINTE ao casamento.
+// Indices (not FindAllStringSubmatch) because the resolution guard needs the character RIGHT AFTER
+// the match.
 func batchRange(torrentName string) (int, int, bool) {
 	for _, loc := range reBatchRange.FindAllStringSubmatchIndex(torrentName, -1) {
-		// "[720-1080p]" nao e uma faixa de 361 episodios.
+		// "[720-1080p]" is not a 361-episode range.
 		if end := loc[1]; end < len(torrentName) && strings.ContainsRune("pPiI", rune(torrentName[end])) {
 			continue
 		}
@@ -186,15 +213,15 @@ func batchRange(torrentName string) (int, int, bool) {
 		if errStart != nil || errEnd != nil {
 			continue
 		}
-		// Faixa invertida nao e faixa: em "Hibike! Euphonium 2 - 01 ~ 13" o casamento pega
-		// "2 - 01" (numero da temporada + primeiro episodio) e produz 2..1, que nao cobre
-		// episodio nenhum — o pack sumia de pickBatches e um pack pior era baixado no lugar.
+		// An inverted range is not a range: in "Hibike! Euphonium 2 - 01 ~ 13" the match takes "2 - 01"
+		// (season number + first episode) and yields 2..1, which covers no episode — the pack vanished
+		// from pickBatches and a worse pack was downloaded instead.
 		if last <= start {
 			continue
 		}
-		// Ano de lancamento: "[EMBER] ... (2021-2022) ..." virava a faixa 2021..2022, que
-		// nenhuma hipotese de eixo cobre — o pack completo era descartado em silencio. A banda
-		// so pega ano: nenhuma serie chega ao episodio 1900, e One Piece "1001-1100" passa.
+		// Release year: "[EMBER] ... (2021-2022) ..." became the range 2021..2022, which no axis
+		// hypothesis covers — the complete pack was silently dropped. The band only catches years: no
+		// series reaches episode 1900, and One Piece "1001-1100" passes.
 		if start >= 1900 && last <= 2100 {
 			continue
 		}
@@ -203,24 +230,24 @@ func batchRange(torrentName string) (int, int, bool) {
 	return 0, 0, false
 }
 
-// PackFileRange devolve a faixa de episodios que um pack REALMENTE traz, lida da lista de
-// arquivos da pagina de detalhe (`/view/<id>`), na numeracao que o grupo usou nos arquivos —
-// a mesma regua do nome, entao o chamador converte com o mesmo packAxis.
+// PackFileRange returns the episode range a pack REALLY carries, read from the file list on the
+// detail page (`/view/<id>`), in the numbering the group used in the files — the same ruler as the
+// name, so the caller converts it with the same packAxis.
 //
-// Existe porque o nome nao responde: medido em 24 packs de tres animes, 19 nao trazem faixa
-// nenhuma (sources.md, "Pagina de detalhe"). Sem esta chamada, faixa desconhecida vale como
-// "cobre tudo" e o daemon grava como baixado episodio que o pack nao tem. O caso que forcou:
-// "[EMBER] … (Season 2 | Part 2) … (Batch)" nao declara faixa e traz os arquivos 13..24 —
-// intersecao ZERO com o 1..12 que o daemon registrava.
+// It exists because the name doesn't answer: measured on 24 packs of three anime, 19 carry no range
+// at all (sources.md, "Pagina de detalhe"). Without this call, an unknown range counts as "covers
+// everything" and the daemon records as downloaded episodes the pack doesn't have. The case that
+// forced it: "[EMBER] … (Season 2 | Part 2) … (Batch)" declares no range and carries files 13..24 —
+// ZERO intersection with the 1..12 the daemon recorded.
 //
-// (info, false) quando o detalhe nao responde, nao tem lista de arquivos ou nenhum arquivo de
-// video da o numero: nao ha faixa a afirmar, e quem chama decide o que fazer com o "nao sei".
+// (info, false) when the detail page doesn't answer, has no file list, or no video file gives a
+// number: there's no range to assert, and the caller decides what to do with the "don't know".
 //
-// A faixa e min..max dos numeros lidos, entao pack cujos arquivos REINICIAM a numeracao por
-// season (S01-S04 numa pasta cada) fica com a faixa da maior season em vez do total. MEDIDO em
-// 30/ago/2026 e mantido de proposito: sao 6% dos packs, o delta 0 do packAxis escolhe todos eles
-// corretamente mesmo assim, e o desempate por contagem de arquivos por pasta contaria extras
-// ("Creditless Opening 1" -> episodio 1) como episodio. Numeros em decisions.md #84.
+// The range is min..max of the numbers read, so a pack whose files RESTART numbering per season
+// (S01-S04, one folder each) gets the largest season's range instead of the total. MEASURED on
+// 2026-08-30 and kept on purpose: it's 6% of packs, packAxis's delta 0 still picks all of them
+// correctly, and a tie-break by file count per folder would count extras ("Creditless Opening 1" ->
+// episode 1) as episodes. Numbers in decisions.md #84.
 func PackFileRange(detailURL string) (BatchInfo, bool) {
 	if detailURL == "" {
 		return BatchInfo{}, false
@@ -233,8 +260,8 @@ func PackFileRange(detailURL string) (BatchInfo, bool) {
 
 	first, last, files := 0, 0, 0
 	doc.Find(".torrent-file-list li").Each(func(_ int, s *goquery.Selection) {
-		// Pasta e nao arquivo: o nome dela costuma trazer a faixa do release inteiro
-		// ("… 001-206 [4x3]"), que e justamente o numero que nao vale para contar cobertura.
+		// A folder, not a file: its name usually carries the range of the whole release ("… 001-206
+		// [4x3]"), which is exactly the number that doesn't count toward coverage.
 		if s.Children().First().Is("a.folder") {
 			return
 		}
@@ -242,8 +269,8 @@ func PackFileRange(detailURL string) (BatchInfo, bool) {
 		if !IsVideoFile(name) {
 			return
 		}
-		// Numero ilegivel nao entra: e assim que NCOP/NCED e extras ficam de fora da faixa em
-		// vez de alarga-la.
+		// An unreadable number stays out: that's how NCOP/NCED and extras stay outside the range instead
+		// of widening it.
 		episode := ExtractEpisodeNumber(name)
 		if episode == nil {
 			return
@@ -272,8 +299,8 @@ func PackFileRange(detailURL string) (BatchInfo, bool) {
 	return BatchInfo{StartEpisode: first, EndEpisode: last}, true
 }
 
-// detailURL absolutiza o href da coluna de titulo ("/view/1323474"). Vazio quando a linha nao
-// traz link — sem ele PackFileRange nao tem o que buscar e a faixa fica desconhecida.
+// detailURL makes the title column's href absolute ("/view/1323474"). Empty when the row has no
+// link — without it PackFileRange has nothing to fetch and the range stays unknown.
 func detailURL(href string) string {
 	if !strings.HasPrefix(href, "/") {
 		return ""
@@ -281,8 +308,8 @@ func detailURL(href string) string {
 	return getNyaaBaseURL() + href
 }
 
-// fileListEntryName e o nome do arquivo numa linha da lista, sem o tamanho que vem junto no
-// mesmo <li> ("… - 001.mkv (259.9 MiB)") e sem os filhos de uma sublista.
+// fileListEntryName is the file name in a list row, without the size that comes in the same <li>
+// ("… - 001.mkv (259.9 MiB)") and without the children of a sublist.
 func fileListEntryName(s *goquery.Selection) string {
 	entry := s.Clone()
 	entry.Find("ul").Remove()
@@ -290,8 +317,8 @@ func fileListEntryName(s *goquery.Selection) string {
 	return strings.TrimSpace(entry.Text())
 }
 
-// isMovie verifica se o torrent é um filme
-// Se isFormatMovie for true, usa o formato do AniList (mais confiável)
+// isMovie reports whether the torrent is a movie. If isFormatMovie is true, it uses the AniList
+// format (more reliable)
 func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 	if isFormatMovie {
 		return true
@@ -308,11 +335,10 @@ func isMovie(torrentName, animeName string, isFormatMovie bool) bool {
 	return false
 }
 
-// hasMovieMarker reporta se o nome traz marcador explícito de filme, OVA/ONA ou
-// special. É a parte de isMovie que serve como guard na busca de episódio: o
-// ramo "não tem marcador de episódio" de isMovie não pode ser usado lá porque
-// reHasEpisode é mais restrito que ExtractEpisodeNumber (não cobre EP05, E05,
-// [05], " 05 (" etc.) e rejeitaria episódios legítimos.
+// hasMovieMarker reports whether the name carries an explicit movie, OVA/ONA or special marker.
+// It's the part of isMovie that works as a guard in the episode search: isMovie's "has no episode
+// marker" branch can't be used there because reHasEpisode is narrower than ExtractEpisodeNumber (it
+// doesn't cover EP05, E05, [05], " 05 (" etc.) and would reject legitimate episodes.
 func hasMovieMarker(torrentName string) bool {
 	for _, re := range reMovieKeywords {
 		if re.MatchString(torrentName) {
@@ -322,26 +348,26 @@ func hasMovieMarker(torrentName string) bool {
 	return reOvaPattern.MatchString(torrentName) || reSpecialPattern.MatchString(torrentName)
 }
 
-// enoughCandidates é o piso de candidatos aceitos que faz a busca parar de descer páginas.
-// O Nyaa devolve ordenado por seeders desc, então a partir de um punhado de candidatos a
-// página seguinte só traz opções piores — 3 já dá escolha ao ranking.
+// enoughCandidates is the floor of accepted candidates that makes the search stop going down pages.
+// Nyaa returns results sorted by seeders desc, so past a handful of candidates the next page only
+// brings worse options — 3 already gives the ranking a choice.
 const enoughCandidates = 3
 
-// maxSearchPages é o teto de páginas por busca (config max_search_pages), empurrado por
-// files.LoadConfigs. Mesmo padrão de SetPriorities.
+// maxSearchPages is the page ceiling per search (config max_search_pages), pushed by
+// files.LoadConfigs. Same pattern as SetPriorities.
 var maxSearchPages atomic.Int32
 
 func init() { maxSearchPages.Store(5) }
 
-// SetMaxSearchPages aplica o teto de páginas por busca e devolve uma função que restaura o
-// valor anterior (padrão de SetPriorities/MockNyaaHttpGet). Valor <= 0 vale como 1 página.
+// SetMaxSearchPages applies the page ceiling per search and returns a function that restores the
+// previous value (the SetPriorities/MockNyaaHttpGet pattern). A value <= 0 counts as 1 page.
 func SetMaxSearchPages(pages int) (restore func()) {
 	prev := maxSearchPages.Load()
 	maxSearchPages.Store(int32(pages))
 	return func() { maxSearchPages.Store(prev) }
 }
 
-// ActiveMaxSearchPages devolve o teto em uso, nunca menor que 1 (par de ActivePriorities).
+// ActiveMaxSearchPages returns the ceiling in use, never below 1 (pair of ActivePriorities).
 func ActiveMaxSearchPages() int {
 	if p := int(maxSearchPages.Load()); p > 1 {
 		return p
@@ -349,20 +375,20 @@ func ActiveMaxSearchPages() int {
 	return 1
 }
 
-// maxBatchSizeBytes é o teto de tamanho de pack (config max_batch_torrent_size_gb) em BYTES,
-// empurrado por files.LoadConfigs igual a maxSearchPages. O daemon já descarta pack acima do teto
-// em filterBySize, mas descartar SÓ lá é tarde demais: enoughCandidates conta o que a busca
-// aceitou, então três packs gigantes na página 1 encerram a descida e os packs parciais que
-// caberiam ficam nas páginas seguintes, nunca vistos (One Piece: os packs de 587 GiB / 171 GiB
-// param a busca antes dos de 61 GiB / 20 GiB / 16 GiB). Aplicar o teto aqui mantém o contador
-// honesto — só entra na conta pack que o daemon ainda pode usar.
+// maxBatchSizeBytes is the pack size ceiling (config max_batch_torrent_size_gb) in BYTES, pushed by
+// files.LoadConfigs like maxSearchPages. The daemon already drops packs above the ceiling in
+// filterBySize, but dropping ONLY there is too late: enoughCandidates counts what the search
+// accepted, so three giant packs on page 1 end the descent and the partial packs that would fit
+// stay on the following pages, never seen (One Piece: the 587 GiB / 171 GiB packs stop the search
+// before the 61 GiB / 20 GiB / 16 GiB ones). Applying the ceiling here keeps the counter honest —
+// only packs the daemon can still use count.
 //
-// 0 desliga, e é o valor padrão: sem push de config (testes, uso do pacote isolado) o
-// comportamento é o de antes.
+// 0 turns it off, and is the default: with no config push (tests, the package used alone) the
+// behavior is the old one.
 var maxBatchSizeBytes atomic.Int64
 
-// SetMaxBatchTorrentSizeGB aplica o teto de tamanho de pack e devolve uma função que restaura o
-// valor anterior (padrão de SetMaxSearchPages). Valor <= 0 desliga o filtro.
+// SetMaxBatchTorrentSizeGB applies the pack size ceiling and returns a function that restores the
+// previous value (the SetMaxSearchPages pattern). A value <= 0 turns the filter off.
 func SetMaxBatchTorrentSizeGB(gb float64) (restore func()) {
 	prev := maxBatchSizeBytes.Load()
 	if gb <= 0 {
@@ -373,28 +399,28 @@ func SetMaxBatchTorrentSizeGB(gb float64) (restore func()) {
 	return func() { maxBatchSizeBytes.Store(prev) }
 }
 
-// batchTooBig informa se o pack estoura o teto em uso. Tamanho 0 (não parseado) passa, mesma
-// regra de daemon.filterBySize — um tamanho que não deu para ler não é motivo para descartar.
+// batchTooBig reports whether the pack exceeds the ceiling in use. Size 0 (not parsed) passes, the
+// same rule as daemon.filterBySize — a size that couldn't be read is no reason to drop it.
 func batchTooBig(size int64) bool {
 	max := maxBatchSizeBytes.Load()
 	return max > 0 && size > 0 && size > max
 }
 
-// fetchSearchPages busca a página 1 de nyaaURL e continua para as seguintes ENQUANTO houver
-// linhas e accepted() estiver abaixo de floor, até ActiveMaxSearchPages().
+// fetchSearchPages fetches page 1 of nyaaURL and goes on to the next ones WHILE there are rows and
+// accepted() is below floor, up to ActiveMaxSearchPages().
 //
-// parse recebe o documento da página e devolve quantas LINHAS ela trazia (não quantas foram
-// aceitas): página vazia significa que a query acabou, e insistir seria fetch jogado fora.
+// parse receives the page document and returns how many ROWS it had (not how many were accepted):
+// an empty page means the query is over, and insisting would be a wasted fetch.
 //
-// Adaptativo porque a página 2 era buscada SEMPRE: numa busca que já resolve na página 1 — a
-// maioria — isso era um fetch desperdiçado, e é essa economia que paga o teto maior sem subir
-// o tráfego médio contra o nyaa.si.
+// Adaptive because page 2 used to be fetched ALWAYS: on a search already solved on page 1 — most of
+// them — that was a wasted fetch, and that saving is what pays for the higher ceiling without
+// raising the average traffic against nyaa.si.
 //
-// Sequencial de propósito: cada página só é pedida porque a anterior não bastou. Ver
-// decisions.md #57 para por que não há rajada paralela aqui.
+// Sequential on purpose: each page is only requested because the previous one wasn't enough. See
+// decisions.md #57 for why there's no parallel burst here.
 //
-// Só devolve erro se a PÁGINA 1 falhar (sem ela não há busca); falha em página seguinte
-// encerra a descida em silêncio, que é o comportamento best-effort que a página 2 já tinha.
+// It only returns an error if PAGE 1 fails (without it there's no search); a failure on a later
+// page silently ends the descent, which is the best-effort behavior page 2 already had.
 func fetchSearchPages(nyaaURL string, floor int, accepted func() int, parse func(*goquery.Document) int) error {
 	maxPages := ActiveMaxSearchPages()
 	for page := 1; page <= maxPages; page++ {
@@ -419,7 +445,7 @@ func fetchSearchPages(nyaaURL string, floor int, accepted func() int, parse func
 	return nil
 }
 
-// parsePagesWith devolve o parse para fetchSearchPages a partir do parseRow de cada busca.
+// parsePagesWith returns the parse for fetchSearchPages from each search's parseRow.
 func parsePagesWith(parseRow func(int, *goquery.Selection)) func(*goquery.Document) int {
 	return func(doc *goquery.Document) int {
 		rows := doc.Find(".torrent-list tbody tr")
@@ -435,29 +461,29 @@ func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
 	resp, err := httpGet(nyaaURL)
 	if err != nil {
 		logger.Logger.Debug().Err(err).Str("url", nyaaURL).Msg("Failed to fetch Nyaa page")
-		return nil, fmt.Errorf("erro ao fazer requisição: %v", err)
+		return nil, fmt.Errorf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Logger.Debug().Int("status_code", resp.StatusCode).Str("url", nyaaURL).Msg("Nyaa returned non-200 status")
-		return nil, fmt.Errorf("erro HTTP: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("HTTP error: status %d", resp.StatusCode)
 	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao parsear HTML: %v", err)
+		return nil, fmt.Errorf("failed to parse HTML: %v", err)
 	}
 	return doc, nil
 }
 
-// torrentSummaries formats each result as "name | S:412/L:3 | 1.4GiB | t=5 h=4.21", in the
-// order given (i.e. already sorted by priority when logged after SortTorrentResults).
-// t é a faixa de saúde (o que o critério health compara); h é o score cru, que só informa.
+// torrentSummaries formats each result as "name | S:412/L:3 | 1.4GiB | t=5 h=4.21", in the order
+// given (i.e. already sorted by priority when logged after SortTorrentResults). t is the health
+// band (what the health criterion compares); h is the raw score, informational only.
 //
-// Só o nome não basta para auditar "por que esse ganhou": os campos que decidem o sort
-// (seeders, tamanho, health) ficavam de fora e reproduzir a escolha exigia repetir a busca
-// à mão. Tamanho desconhecido (parse falhou) sai como "?".
+// The name alone isn't enough to audit "why did this one win": the fields that decide the sort
+// (seeders, size, health) were left out and reproducing the choice meant repeating the search by
+// hand. An unknown size (parse failed) shows as "?".
 func torrentSummaries(results []TorrentResult) []string {
 	summaries := make([]string, len(results))
 	for i, r := range results {
@@ -467,7 +493,7 @@ func torrentSummaries(results []TorrentResult) []string {
 	return summaries
 }
 
-// formatSize renders bytes for the log. Só para leitura humana — nada parseia de volta.
+// formatSize renders bytes for the log. For human reading only — nothing parses it back.
 func formatSize(bytes int64) string {
 	switch {
 	case bytes <= 0:
@@ -494,20 +520,21 @@ func deduplicateByMagnet(results []TorrentResult) []TorrentResult {
 	return unique
 }
 
-// longSeriesEpisodes é o total de episódios a partir do qual a busca por episódio também
-// tenta a query com zero-padding. Ver episodeQueries.
+// longSeriesEpisodes is the episode total from which the episode search also tries the zero-padded
+// query. See episodeQueries.
 const longSeriesEpisodes = 100
 
-// episodeQueries devolve as queries de busca do episódio: a simples ("one piece 1") e, em
-// série longa, também a com padding de 3 dígitos ("one piece 001").
+// episodeQueries returns the episode's search queries: the plain one ("one piece 1") and, for a
+// long series, also the one padded to 3 digits ("one piece 001").
 //
-// Sem padding, `q=one piece 1` casa tudo que contém "1" e, ordenado por seeders, as primeiras
-// centenas de linhas são os episódios 1160+ — o episódio 1 não aparece. Grupos numeram série
-// longa com padding (`[Judas] One Piece 001-574`, `[Erai-raws] Naruto Shippuuden - 001 ~ 079`).
+// Without padding, `q=one piece 1` matches everything containing "1" and, sorted by seeders, the
+// first few hundred rows are episodes 1160+ — episode 1 never shows up. Groups number long series
+// with padding (`[Judas] One Piece 001-574`, `[Erai-raws] Naruto Shippuuden - 001 ~ 079`).
 //
-// É variante ADICIONAL, não substituição: padding é convenção, não regra, e a query simples
-// continua pegando quem numera solto. Só entra acima de longSeriesEpisodes porque cada variante
-// custa fetches, e episódio >= 100 já tem 3 dígitos (padding não mudaria nada).
+// It's an ADDITIONAL variant, not a replacement: padding is a convention, not a rule, and the plain
+// query keeps catching those who number without it. It only kicks in above longSeriesEpisodes
+// because each variant costs fetches, and an episode >= 100 already has 3 digits (padding would
+// change nothing).
 func episodeQueries(query string, episode, totalEpisodes int) []string {
 	queries := []string{fmt.Sprintf("%s %d", query, episode)}
 	if totalEpisodes > longSeriesEpisodes && episode < 100 {
@@ -516,10 +543,9 @@ func episodeQueries(query string, episode, totalEpisodes int) []string {
 	return queries
 }
 
-// ScrapNyaa busca torrents no Nyaa baseado no nome do anime e episódio.
-// requestedSeason e requestedPart são extraídos upstream dos dados do Anilist.
-// totalEpisodes (opcional) é o total de episódios do anime, usado só para decidir o
-// zero-padding da query — 0/ausente vale como desconhecido.
+// ScrapNyaa searches Nyaa for torrents by anime name and episode. requestedSeason and requestedPart
+// are extracted upstream from the AniList data. totalEpisodes (optional) is the anime's episode
+// total, used only to decide the query's zero-padding — 0/missing counts as unknown.
 func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *int, totalEpisodes ...int) ([]TorrentResult, error) {
 	total := 0
 	if len(totalEpisodes) > 0 {
@@ -533,27 +559,26 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 
 	buildURL := func(q string) string {
 		params := url.Values{}
-		params.Set("f", "0")       // Filtro: sem filtro
-		params.Set("c", "1_2")     // Categoria: anime (english)
-		params.Set("q", q)         // Query de busca com episódio
-		params.Set("s", "seeders") // Ordenar por seeders
-		params.Set("o", "desc")    // Ordem decrescente
+		params.Set("f", "0")       // Filter: no filter
+		params.Set("c", "1_2")     // Category: anime (english)
+		params.Set("q", q)         // Search query with the episode
+		params.Set("s", "seeders") // Sort by seeders
+		params.Set("o", "desc")    // Descending order
 		return fmt.Sprintf("%s/?%s", getNyaaBaseURL(), params.Encode())
 	}
 
 	var results []TorrentResult
 
 	parseRow := func(_ int, s *goquery.Selection) {
-		// Encontrar todas as células (td) na linha atual
+		// Find all the cells (td) in the current row
 		cells := s.Find("td")
 
-		// Extrair dados de cada célula baseado na posição
-		// Preferir o texto visível do link (nome com espaços). Alguns sites
-		// preenchem o atributo title com pontos em vez de espaços (tests do projeto)
+		// Extract each cell's data by position. Prefer the link's visible text (name with spaces). Some
+		// sites fill the title attribute with dots instead of spaces (the project's tests)
 		name := strings.TrimSpace(cells.Eq(1).Find("a").Not(".comments").Text())
 		torrentLink := cells.Eq(2).Find("a").Eq(1).AttrOr("href", "")
 
-		// Extrair tamanho (cells.Eq(3) no Nyaa)
+		// Extract the size (cells.Eq(3) on Nyaa)
 		sizeStr := strings.TrimSpace(cells.Eq(3).Text())
 		size := parseSize(sizeStr)
 
@@ -564,23 +589,23 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
 		}
 
-		// Verificar se o torrent deve ser ignorado (dub, raw, hardcoded, etc.)
+		// Check whether the torrent must be ignored (dub, raw, hardcoded, etc.)
 		if ShouldIgnore(name) {
 			return
 		}
 
-		// Verificar se é batch - ignorar para busca de episódio único
+		// Check whether it's a batch - ignore it for a single-episode search
 		if IsBatch(name) {
 			return
 		}
 
-		// Filme/OVA/special não é episódio: "Naruto Shippuuden Movie 3" casa o
-		// padrão " 3 (" de ExtractEpisodeNumber e passaria como episódio 3.
+		// A movie/OVA/special is not an episode: "Naruto Shippuuden Movie 3" matches
+		// ExtractEpisodeNumber's " 3 (" pattern and would pass as episode 3.
 		if hasMovieMarker(name) {
 			return
 		}
 
-		// Extrair informações do nome do torrent
+		// Extract information from the torrent name
 		var animeEpisode *int
 		var season *int
 		var resolution *string
@@ -594,12 +619,12 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 			fansub = extractFansub(name)
 		}
 
-		// Filtrar por título base (garantir que o torrent pertence ao anime)
+		// Filter by base title (make sure the torrent belongs to the anime)
 		if query != "" && !titleMatchesQuery(name, query) {
 			return
 		}
 
-		// Filtrar por temporada
+		// Filter by season
 		if requestedSeason != nil {
 			if season == nil || *season != *requestedSeason {
 				return
@@ -610,7 +635,7 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 			}
 		}
 
-		// Filtrar por parte (hard filter: rejeita torrent sem marker ou com part errada)
+		// Filter by part (hard filter: rejects a torrent with no marker or the wrong part)
 		part := ExtractPart(name)
 		if requestedPart != nil {
 			if part == nil || *part != *requestedPart {
@@ -618,12 +643,12 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 			}
 		}
 
-		// Requer correspondência exata do episódio
+		// Requires an exact episode match
 		if animeEpisode == nil || *animeEpisode != episode {
 			return
 		}
 
-		// Adicionar resultado ao array
+		// Add the result to the array
 		results = append(results, TorrentResult{
 			Name:       name,
 			Seeders:    seeders,
@@ -658,7 +683,7 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		}
 		searched = true
 	}
-	// Só falha se NENHUMA variante respondeu: uma query que dá erro não pode anular a outra.
+	// Only fails if NO variant answered: a query that errors can't cancel the other.
 	if !searched {
 		return nil, firstErr
 	}
@@ -673,31 +698,36 @@ func ScrapNyaa(animeName string, episode int, requestedSeason, requestedPart *in
 		Msg("Found Nyaa results for single episode")
 
 	if len(results) == 0 {
-		return nil, nil // Nenhum resultado encontrado
+		return nil, nil // No result found
 	}
 
-	// Ordenar resultados por qualidade e fansub
+	// Sort results by quality and fansub
 	sortedResults := SortTorrentResults(results)
 	return sortedResults, nil
 }
 
-// ScrapNyaaForAnime busca UMA vez a pagina de resultados do anime e devolve packs e episodios na
-// MESMA lista. As duas buscas separadas que esta funcao substitui montavam a mesma URL
-// (?f=0&c=1_2&q=<titulo>&s=seeders&o=desc) e discordavam so no filtro de linha, o que custava
-// duas descidas de ate max_search_pages sobre o mesmo HTML, por anime, por ciclo.
+// minUnlabeledPackBytes is the smallest torrent without an episode number that is read as an
+// unlabeled pack. Below it the row is far more likely a special, a recap or a short ONA than a
+// season ("[Obscurerips] Azumanga Web Daioh" is 19 MiB).
+const minUnlabeledPackBytes = 1 << 30
+
+// ScrapNyaaForAnime fetches the anime's results page ONCE and returns packs and episodes in the
+// SAME list. The two separate searches this function replaces built the same URL
+// (?f=0&c=1_2&q=<title>&s=seeders&o=desc) and disagreed only on the row filter, which cost two
+// descents of up to max_search_pages over the same HTML, per anime, per cycle.
 //
-// Linha de pack entra com IsBatch: true; linha de episodio entra com Episode != nil. Quem
-// particiona e o daemon (partitionSearchResults), que e onde os tetos de tamanho de pack e de
-// episodio sao diferentes.
+// A pack row comes in with IsBatch: true; an episode row comes in with Episode != nil. The daemon
+// partitions them (partitionSearchResults), which is where the pack and episode size ceilings
+// differ.
 //
-// Devolve UMA lista de proposito: searchNyaaWithVariants para na primeira variante de titulo com
-// resultado, e "resultado" e uma fatia nao-vazia — uma assinatura de par exigiria generaliza-la.
+// It returns ONE list on purpose: searchNyaaWithVariants stops at the first title variant with a
+// result, and "result" is a non-empty slice — a pair signature would require generalizing it.
 func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, requestedPart *int) ([]TorrentResult, error) {
 	query := strings.TrimSpace(extractSeasonFromName(animeName))
 
 	params := url.Values{}
-	params.Set("f", "0")   // Filtro: sem filtro
-	params.Set("c", "1_2") // Categoria: anime (english)
+	params.Set("f", "0")   // Filter: no filter
+	params.Set("c", "1_2") // Category: anime (english)
 	params.Set("q", query)
 	params.Set("s", "seeders")
 	params.Set("o", "desc")
@@ -724,7 +754,7 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 		if ShouldIgnore(name) {
 			return
 		}
-		// Filtrar por titulo base (garantir que o torrent pertence ao anime)
+		// Filter by base title (make sure the torrent belongs to the anime)
 		if query != "" && !titleMatchesQuery(name, query) {
 			return
 		}
@@ -746,29 +776,33 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			DetailURL:  detailURL(cells.Eq(1).Find("a").Not(".comments").AttrOr("href", "")),
 		}
 
-		if IsBatch(name) {
-			// Temporada no caminho de pack: sem pedido explicito, pack de qualquer temporada
-			// serve. Era o comportamento da busca de batch antiga, e e diferente do caminho de
-			// episodio logo abaixo — por isso os dois filtros nao podem ser fundidos.
+		// A whole-series release often names nothing but the title and the source — old anime
+		// especially. Without this it fell through to the episode path, had no number, and the
+		// anime was left with dead loose episodes while live packs sat on the same page.
+		unlabeled := !IsBatch(name) && !hasMovieMarker(name) && ExtractEpisodeNumber(name) == nil && row.Size >= minUnlabeledPackBytes
+		if IsBatch(name) || unlabeled {
+			// Season on the pack path: with no explicit request, a pack of any season will do. That was the
+			// old batch search's behavior, and it differs from the episode path right below — which is why
+			// the two filters can't be merged. A first-season entry still drops later-season packs, in the
+			// daemon (partitionSearchResults), where the relations are known.
 			if requestedSeason != nil && (season == nil || *season != *requestedSeason) {
 				return
 			}
-			// Part no caminho de pack: so rejeita CONFLITO declarado. Pack sem marcador de
-			// part nao e pack errado — e o formato normal de lancamento, porque o pack e da
-			// season inteira e a AniList e que quebra a season em cours (sources.md,
-			// "Granularidade e numeracao dos packs"). Exigir o marcador zerava os packs de
-			// toda entrada "Part N".
+			// Part on the pack path: only a declared CONFLICT is rejected. A pack without a part marker
+			// isn't the wrong pack — it's the normal release format, because the pack is the whole season
+			// and it's AniList that splits the season into cours (sources.md, "Granularidade e numeracao dos
+			// packs"). Requiring the marker zeroed the packs of every "Part N" entry.
 			//
-			// Dali para a frente quem decide e a cobertura da faixa, no daemon (packAxis).
-			// Pack que TAMBEM nao traz faixa no nome nao tem numero para conferir: a faixa
-			// dele sai da lista de arquivos da pagina de detalhe (PackFileRange), e e isso
-			// que distingue o pack da season inteira do pack so da Part 1 (decisions.md #84).
+			// From there on, the range's coverage decides, in the daemon (packAxis). A pack that ALSO has no
+			// range in its name has no number to check: its range comes from the file list on the detail
+			// page (PackFileRange), and that's what tells the whole-season pack from the Part 1-only pack
+			// (decisions.md #84).
 			if requestedPart != nil && part != nil && *part != *requestedPart {
 				return
 			}
-			// Pack acima do teto sai aqui e não na filterBySize do daemon: aceitá-lo agora
-			// contaria para enoughCandidates e encerraria a descida antes dos packs parciais
-			// que cabem (ver maxBatchSizeBytes).
+			// A pack above the ceiling goes here and not in the daemon's filterBySize: accepting it now
+			// would count toward enoughCandidates and end the descent before the partial packs that fit (see
+			// maxBatchSizeBytes).
 			if batchTooBig(row.Size) {
 				logger.Logger.Debug().
 					Str("torrent", name).
@@ -777,17 +811,17 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 				return
 			}
 			row.IsBatch = true
+			row.UnlabeledPack = unlabeled
 			results = append(results, row)
 			return
 		}
 
-		// Filme/OVA/special nao e episodio: "Naruto Shippuuden Movie 3" casa o padrao " 3 (" de
-		// ExtractEpisodeNumber e passaria como episodio 3.
+		// A movie/OVA/special is not an episode: "Naruto Shippuuden Movie 3" matches
+		// ExtractEpisodeNumber's " 3 (" pattern and would pass as episode 3.
 		if hasMovieMarker(name) {
 			return
 		}
-		// Temporada no caminho de episodio: sem pedido explicito, so temporada 1 (ou sem
-		// marcador) passa.
+		// Season on the episode path: with no explicit request, only season 1 (or no marker) passes.
 		if requestedSeason != nil {
 			if season == nil || *season != *requestedSeason {
 				return
@@ -807,11 +841,10 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 		results = append(results, row)
 	}
 
-	// O piso de paginacao conta as duas listas somadas, entao pack que o daemon vai descartar por
-	// tamanho nao pode entrar na conta — e por isso que o teto de pack chega aqui por push
-	// (maxBatchSizeBytes), do mesmo jeito que max_search_pages. O filtro de seeders continua so
-	// no daemon: ele nao trunca a busca da mesma forma, porque o Nyaa ja devolve ordenado por
-	// seeders desc.
+	// The pagination floor counts both lists together, so a pack the daemon will drop for size can't
+	// count — that's why the pack ceiling arrives here by push (maxBatchSizeBytes), the same way as
+	// max_search_pages. The seeders filter stays only in the daemon: it doesn't truncate the search
+	// the same way, because Nyaa already returns results sorted by seeders desc.
 	if err := fetchSearchPages(nyaaURL, enoughCandidates, func() int { return len(results) }, parsePagesWith(parseRow)); err != nil {
 		return nil, err
 	}
@@ -827,28 +860,27 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 		return nil, nil
 	}
 
-	// Ordena a lista mista: particionar depois preserva a ordem relativa, entao cada lista sai
-	// ordenada corretamente.
+	// Sort the mixed list: partitioning afterwards keeps the relative order, so each list comes out
+	// correctly sorted.
 	return SortTorrentResults(results), nil
 }
 
-// ScrapNyaaForMovie busca torrents de filmes
-// Detecta automaticamente filmes e ordena por qualidade técnica
-// isFormatMovie indica se o AniList classifica como filme (format = MOVIE)
+// ScrapNyaaForMovie searches movie torrents. It detects movies automatically and sorts by technical
+// quality. isFormatMovie says whether AniList classifies it as a movie (format = MOVIE)
 func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult, error) {
-	// Se o parâmetro opcional foi passado, usa ele; caso contrário, assume false
+	// If the optional parameter was passed, use it; otherwise assume false
 	isMovieFormat := false
 	if len(isFormatMovie) > 0 {
 		isMovieFormat = isFormatMovie[0]
 	}
-	// Extrair temporada do nome se presente (filmes geralmente não têm)
+	// Strip the season from the name if present (movies usually don't have one)
 	sanitizedName := extractSeasonFromName(animeName)
 	query := strings.TrimSpace(sanitizedName)
 
-	// Construir URL com parâmetros
+	// Build the URL with parameters
 	params := url.Values{}
-	params.Set("f", "0")   // Filtro: sem filtro
-	params.Set("c", "1_2") // Categoria: anime (english)
+	params.Set("f", "0")   // Filter: no filter
+	params.Set("c", "1_2") // Category: anime (english)
 	params.Set("q", query)
 	params.Set("s", "seeders")
 	params.Set("o", "desc")
@@ -863,7 +895,7 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 
 	var results []TorrentResult
 
-	// Parsear linhas da tabela de torrents
+	// Parse the rows of the torrent table
 	parseRow := func(_ int, s *goquery.Selection) {
 		cells := s.Find("td")
 
@@ -878,27 +910,27 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 			logger.Logger.Debug().Str("name", name).Msg("Raw Nyaa row")
 		}
 
-		// Verificar se o torrent deve ser ignorado
+		// Check whether the torrent must be ignored
 		if ShouldIgnore(name) {
 			return
 		}
 
-		// Verificar se é filme
+		// Check whether it's a movie
 		if !isMovie(name, animeName, isMovieFormat) {
 			return
 		}
 
-		// Extrair informações
+		// Extract information
 		res := ExtractResolution(name)
 		resolution := &res
 		fansub := extractFansub(name)
 
-		// Filtrar por título base
+		// Filter by base title
 		if query != "" && !titleMatchesQuery(name, query) {
 			return
 		}
 
-		// Adicionar resultado
+		// Add the result
 		results = append(results, TorrentResult{
 			Name:       name,
 			Seeders:    seeders,
@@ -922,20 +954,20 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 		Msg("Found Nyaa movie results")
 
 	if len(results) == 0 {
-		return nil, nil // Nenhum filme encontrado
+		return nil, nil // No movie found
 	}
 
-	// Ordenar resultados usando ordenação específica para filmes
+	// Sort the results using the movie-specific ordering
 	sortedResults := SortMovieResults(results)
 	return sortedResults, nil
 }
 
-// ExtractEpisodeNumber extrai o número do episódio do nome do torrent
-// Testa os padrões em ordem de prioridade (do mais específico ao menos específico)
-// O underscore vira espaco antes de tudo: todo padrao de reEpisodePatterns pede espaco ao redor
-// do numero, e grupo que separa com "_" ("[DB]Vinland Saga_-_01_(...).mkv") nao casava nenhum.
-// Vale para nome de torrent e, principalmente, para nome de ARQUIVO dentro de um pack — e daqui
-// que o Librarian tira o numero para renomear no padrao Jellyfin.
+// ExtractEpisodeNumber extracts the episode number from the torrent name, trying the patterns in
+// priority order (most to least specific). The underscore becomes a space before anything else:
+// every pattern in reEpisodePatterns wants a space around the number, and a group that separates
+// with "_" ("[DB]Vinland Saga_-_01_(...).mkv") matched none. It applies to torrent names and, above
+// all, to FILE names inside a pack — this is where the Librarian gets the number to rename to the
+// Jellyfin pattern.
 func ExtractEpisodeNumber(name string) *int {
 	name = strings.ReplaceAll(name, "_", " ")
 	for _, p := range reEpisodePatterns {
@@ -957,8 +989,8 @@ var romanSeasonValues = map[string]int{
 	"II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10,
 }
 
-// ExtractSeason extrai o número da temporada do nome do torrent
-// Testa os padrões em ordem de prioridade
+// ExtractSeason extracts the season number from the torrent name, trying the patterns in priority
+// order
 func ExtractSeason(name string) *int {
 	for _, p := range reSeasonPatterns {
 		matches := p.re.FindStringSubmatch(name)
@@ -978,13 +1010,13 @@ func ExtractSeason(name string) *int {
 	return nil
 }
 
-// ExtractPart extrai o número da parte/cour do nome do torrent ou título Anilist
-// Testa os padrões em ordem de prioridade (mais específico primeiro)
+// ExtractPart extracts the part/cour number from the torrent name or the AniList title, trying the
+// patterns in priority order (most specific first).
 //
-// Nome que declara MAIS DE UMA part não tem part: "(Part 1 + Part 2)" e "(Season 4 Part 03+04)"
-// cobrem as duas metades, e devolver a primeira que casa fazia o pack ser lido como "da part 1" —
-// justamente o pack que serve para as duas. Sem número único a resposta é nil, e quem decide passa
-// a ser a cobertura da faixa (ver daemon.packAxis e sources.md, item 4).
+// A name that declares MORE THAN ONE part has no part: "(Part 1 + Part 2)" and "(Season 4 Part
+// 03+04)" cover both halves, and returning the first match made the pack read as "part 1's" —
+// precisely the pack that serves both. Without a single number the answer is nil, and the range's
+// coverage decides (see daemon.packAxis and sources.md, item 4).
 func ExtractPart(name string) *int {
 	if declared := declaredParts(name); len(declared) > 1 {
 		return nil
@@ -1003,7 +1035,7 @@ func ExtractPart(name string) *int {
 	return nil
 }
 
-// declaredParts sao os numeros de part/cour DISTINTOS que o nome declara, sem zero a esquerda.
+// declaredParts are the DISTINCT part/cour numbers the name declares, without leading zeros.
 func declaredParts(name string) map[int]bool {
 	declared := make(map[int]bool, 2)
 	for _, m := range reAnyPart.FindAllStringSubmatch(name, -1) {
@@ -1016,16 +1048,15 @@ func declaredParts(name string) map[int]bool {
 	return declared
 }
 
-// canonicalResolutions mapeia os apelidos de resolução nos tokens canônicos das listas
-// de Priorities. Sem isso "4k" e "2160p" são a mesma resolução ocupando dois índices
-// diferentes da lista, e qual vence depende só de como o grupo escreveu o nome do torrent.
-// "8k" fica de fora de propósito: continua sendo devolvido cru e, por não estar na lista
-// default, ranqueia como o pior — que é o tratamento certo para uma resolução que não
-// existe em anime.
+// canonicalResolutions maps resolution aliases to the canonical tokens of the Priorities lists.
+// Without it "4k" and "2160p" are the same resolution taking two different indexes of the list, and
+// which one wins depends only on how the group wrote the torrent name. "8k" is left out on purpose:
+// it keeps being returned raw and, not being in the default list, ranks as the worst — the right
+// treatment for a resolution that doesn't exist in anime.
 var canonicalResolutions = map[string]string{"4k": "2160p", "uhd": "2160p", "fhd": "1080p", "hd": "720p"}
 
-// ExtractResolution extrai a resolução do nome do torrent, já canonicalizada
-// (mesmo contrato de ExtractCodec, que devolve "HEVC" para "x265").
+// ExtractResolution extracts the resolution from the torrent name, already canonicalized (same
+// contract as ExtractCodec, which returns "HEVC" for "x265").
 func ExtractResolution(name string) string {
 	for _, p := range reResolutionPatterns {
 		matches := p.re.FindStringSubmatch(name)
@@ -1034,7 +1065,7 @@ func ExtractResolution(name string) string {
 			if canon, ok := canonicalResolutions[res]; ok {
 				return canon
 			}
-			// "1920x1080" -> "1080p": a altura é o que nomeia a resolução.
+			// "1920x1080" -> "1080p": the height is what names the resolution.
 			if _, height, ok := strings.Cut(res, "x"); ok {
 				return height + "p"
 			}
@@ -1044,10 +1075,9 @@ func ExtractResolution(name string) string {
 	return ""
 }
 
-// parseNyaaDate parseia a string de data do Nyaa para um objeto time.Time
+// parseNyaaDate parses Nyaa's date string into a time.Time
 func parseNyaaDate(dateString string) (time.Time, error) {
-	// As datas do Nyaa são tipicamente no formato "2025-07-06 14:49"
-	// Tentar diferentes formatos de data
+	// Nyaa dates are typically in the "2025-07-06 14:49" format. Try different date formats
 	formats := []string{
 		"2006-01-02 15:04",
 		"2006-01-02",
@@ -1061,28 +1091,28 @@ func parseNyaaDate(dateString string) (time.Time, error) {
 		}
 	}
 
-	return time.Time{}, fmt.Errorf("não foi possível parsear a data: %s", dateString)
+	return time.Time{}, fmt.Errorf("could not parse the date: %s", dateString)
 }
 
-// isWithinThreeMonths verifica se a data está dentro dos últimos 3 meses
+// isWithinThreeMonths reports whether the date is within the last 3 months
 func isWithinThreeMonths(date time.Time) bool {
 	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
 	return date.After(threeMonthsAgo)
 }
 
-// resolutionPriority retorna um valor de prioridade para a resolução (menor = melhor)
-// Baseado nas regras do Nyaa (Seção 3 do documento de regras)
+// resolutionPriority returns a priority value for the resolution (lower = better). Based on Nyaa's
+// rules (Section 3 of the rules document)
 func resolutionPriority(resolution string) int {
 	return priorityIndex(ActivePriorities().Resolutions, resolution)
 }
 
-// isUncensored verifica se o torrent contém "Uncensored" no título
+// isUncensored reports whether the torrent has "Uncensored" in the title
 func isUncensored(torrentName string) bool {
 	return strings.Contains(strings.ToLower(torrentName), "uncensored")
 }
 
-// fansubPriority retorna um valor de prioridade para o fansub (menor = melhor)
-// Baseado nas regras do Nyaa (Seção 4 do documento de regras)
+// fansubPriority returns a priority value for the fansub (lower = better). Based on Nyaa's rules
+// (Section 4 of the rules document)
 func fansubPriority(torrentName string) int {
 	nameLower := strings.ToLower(torrentName)
 	fansubs := ActivePriorities().Fansubs
@@ -1095,7 +1125,7 @@ func fansubPriority(torrentName string) int {
 	return best
 }
 
-// extractSource extrai a fonte do release (BD, WEB-DL, TV, etc.)
+// extractSource extracts the release source (BD, WEB-DL, TV, etc.)
 func extractSource(name string) string {
 	nameLower := strings.ToLower(name)
 	for _, sp := range reSourcePatterns {
@@ -1106,7 +1136,7 @@ func extractSource(name string) string {
 	return ""
 }
 
-// ExtractCodec extrai o codec de vídeo (HEVC, H.264, AV1, etc.)
+// ExtractCodec extracts the video codec (HEVC, H.264, AV1, etc.)
 func ExtractCodec(name string) string {
 	nameLower := strings.ToLower(name)
 	for _, cp := range reCodecPatterns {
@@ -1117,7 +1147,7 @@ func ExtractCodec(name string) string {
 	return ""
 }
 
-// extractAudio extrai o codec de áudio (FLAC, DDP, AAC, etc.)
+// extractAudio extracts the audio codec (FLAC, DDP, AAC, etc.)
 func extractAudio(name string) string {
 	nameLower := strings.ToLower(name)
 	for _, ap := range reAudioPatterns {
@@ -1128,32 +1158,31 @@ func extractAudio(name string) string {
 	return ""
 }
 
-// sourcePriority retorna prioridade da fonte (menor = melhor)
+// sourcePriority returns the source priority (lower = better)
 func sourcePriority(source string) int {
 	return priorityIndex(ActivePriorities().Sources, source)
 }
 
-// codecPriority retorna prioridade do codec (menor = melhor)
+// codecPriority returns the codec priority (lower = better)
 func codecPriority(codec string) int {
 	return priorityIndex(ActivePriorities().Codecs, codec)
 }
 
-// audioPriority retorna prioridade do áudio (menor = melhor)
+// audioPriority returns the audio priority (lower = better)
 func audioPriority(audio string) int {
 	return priorityIndex(ActivePriorities().Audio, audio)
 }
 
-// SortTorrentResults ordena os torrents por qualidade, aplicando os critérios de
-// CriteriaOrder que valem para episódio (episodeCriteria): uncensored, resolução,
-// codec, health, fansub e tamanho. Só `source` fica de fora — episódio semanal é
-// WEB-DL em ~todos os casos, então o critério nunca desempataria nada.
-// Baseado nas regras do Nyaa (Seção 8 do documento de regras)
+// SortTorrentResults sorts torrents by quality, applying the CriteriaOrder criteria that apply to
+// episodes (episodeCriteria): uncensored, resolution, codec, health, fansub and size. Only `source`
+// is left out — a weekly episode is WEB-DL in ~every case, so the criterion would never break a
+// tie. Based on Nyaa's rules (Section 8 of the rules document)
 func SortTorrentResults(results []TorrentResult) []TorrentResult {
 	return sortByCriteria(results, filterCriteria(ActivePriorities().CriteriaOrder, episodeCriteria))
 }
 
-// ParseSeeders converte a string de seeders para int (a coluna do Nyaa pode vir "-").
-// Consumida fora do pacote pelo piso de seeders em daemon.filterBySeeders.
+// ParseSeeders converts the seeders string to int (Nyaa's column can come as "-"). Consumed outside
+// the package by the seeders floor in daemon.filterBySeeders.
 func ParseSeeders(seedersStr string) int {
 	seedersStr = strings.TrimSpace(seedersStr)
 	if seedersStr == "" || seedersStr == "-" {
@@ -1178,8 +1207,8 @@ func torrentHealthScore(r TorrentResult) float64 {
 	return ratio * math.Log(float64(seeders)+1)
 }
 
-// parseSize converte a string de tamanho para bytes
-// Formatos comuns: "1.5 GiB", "500 MiB", "2.3 GiB", etc.
+// parseSize converts the size string to bytes. Common formats: "1.5 GiB", "500 MiB", "2.3 GiB",
+// etc.
 func parseSize(sizeStr string) int64 {
 	sizeStr = strings.TrimSpace(sizeStr)
 	if sizeStr == "" || sizeStr == "-" {
@@ -1192,13 +1221,13 @@ func parseSize(sizeStr string) int64 {
 		return 0
 	}
 
-	// Converter número para float
+	// Convert the number to float
 	value, err := strconv.ParseFloat(matches[1], 64)
 	if err != nil {
 		return 0
 	}
 
-	// Converter para bytes baseado na unidade
+	// Convert to bytes according to the unit
 	unit := strings.ToUpper(matches[2])
 	var multiplier int64 = 1
 
@@ -1216,7 +1245,7 @@ func parseSize(sizeStr string) int64 {
 	return int64(value * float64(multiplier))
 }
 
-// extractSeasonFromName remove informações de temporada do nome para query base
+// extractSeasonFromName strips season information from the name for the base query
 func extractSeasonFromName(name string) string {
 	result := name
 	for _, re := range reSeasonNamePatterns {
@@ -1225,15 +1254,14 @@ func extractSeasonFromName(name string) string {
 	return strings.TrimSpace(result)
 }
 
-// SortMovieResults ordena os resultados de busca de filmes por qualidade
-// Critérios de ordenação (em ordem de prioridade):
+// SortMovieResults sorts movie search results by quality. Sort criteria (in priority order):
 // 1. Source (BD > WEB-DL > TV)
-// 2. Resolução (1080p > 720p > 480p)
+// 2. Resolution (1080p > 720p > 480p)
 // 3. Codec (HEVC > H.264)
 // 4. Fansub (SubsPlease > Erai-raws > ...)
-// 5. Áudio (FLAC > DDP > AAC)
-// 6. Seeders (mais é melhor)
-// 7. Tamanho (menor é melhor para mesma qualidade)
+// 5. Audio (FLAC > DDP > AAC)
+// 6. Seeders (more is better)
+// 7. Size (smaller is better at the same quality)
 func SortMovieResults(results []TorrentResult) []TorrentResult {
 	return sortByCriteria(results, ActivePriorities().CriteriaOrder)
 }

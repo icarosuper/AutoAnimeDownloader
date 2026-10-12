@@ -102,6 +102,10 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#93** — A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)
 - [**#94** — Torrent travado é derrubado pelo caminho de falha, e só quem está *tentando* conta como travado](#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)
 - [**#95** — MyAnimeList is a list source, not a metadata source](#95-myanimelist-is-a-list-source-not-a-metadata-source)
+- [**#96** — A first-season entry rejects later-season packs, but a sequel without a marker doesn't](#96-a-first-season-entry-rejects-later-season-packs-but-a-sequel-without-a-marker-doesnt)
+- [**#97** — A pack that doesn't fit on disk is dropped before the choice, not at download time](#97-a-pack-that-doesnt-fit-on-disk-is-dropped-before-the-choice-not-at-download-time)
+- [**#98** — A large release without an episode number is an unlabeled pack, and only its file list makes it a pack](#98-a-large-release-without-an-episode-number-is-an-unlabeled-pack-and-only-its-file-list-makes-it-a-pack)
+- [**#99** — A roman-numeral sequel searches by its bare base title first](#99-a-roman-numeral-sequel-searches-by-its-bare-base-title-first)
 
 ---
 
@@ -2745,3 +2749,77 @@ duplicated); putting the MAL code in its own package (it needs `ttlCache`, the s
 `sendAnilistRequest` and `GetMediaByIDs`, all internal to `anilist`); treating `ErrMALEmpty` as an
 empty list; or hydrating before filtering.
 
+### 96. A first-season entry rejects later-season packs, but a sequel without a marker doesn't
+
+**Location:** `daemon/episodes.go` (`isFirstSeasonEntry`, the first case of
+`partitionSearchResults`); the permissive rule it narrows is the pack branch of
+`nyaa.ScrapNyaaForAnime`.
+
+With no season requested, the nyaa package accepts a pack of **any** season and lets the range
+coverage decide ([#79](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)). That broke on Medalist: the entry is season 1, progress 2, and
+`[Sylvar] Medalist Season 2 (BD Remux)` declares the files 1..9 — delta 0 matched, and episodes
+3..9 were assigned to the season 2 pack (it only didn't download because it didn't fit on disk).
+
+**What looks inconsistent: the drop happens only when the entry is CERTAINLY season 1** — no season
+marker in its titles (`ExtractAnimeSeasonPart`) and no `PREQUEL` edge of format TV/TV_SHORT. A
+sequel whose title carries no marker still accepts packs of any season, because there the pack's
+"Season 2" can be the right one under a different numbering, and coverage is still the better
+judge. It lives in the daemon and not in the nyaa filter because only the daemon has the relations.
+
+**Don't "fix" by:** moving it into `ScrapNyaaForAnime` (no relations there); or making the nyaa
+pack filter strict for every unmarked entry (it zeroes the packs of every sequel without a marker).
+
+### 97. A pack that doesn't fit on disk is dropped before the choice, not at download time
+
+**Location:** `daemon/episodes.go` (`packsThatFit`, called right before `pickBatches` in
+`processAnimeEpisodes`, and in `debug.go`).
+
+The disk guard ([#93](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)) already ran per candidate in
+`attemptDownloadWithRetries`, but by then `pickBatches` had given the pack the whole window. On
+Flower and Asura the only covering pack was a 78.8 GB BD remux; it failed the guard and every
+episode was left with no candidate, while the SubsPlease episodes had 26 seeders. Now the packs the
+guard would refuse leave first: the next pack covers the window, or the per-episode search does.
+
+**What looks redundant: the guard still runs again at download time.** The early call is a
+snapshot; the space can change between the choice and the `Add`, and loose episodes never went
+through this one.
+
+**Cost accepted:** a pack dropped here and one dropped at the `Add` look the same in the report
+(`BatchSkippedNoCoverage` when no pack is left to cover). Telling them apart needs its own code.
+
+### 98. A large release without an episode number is an unlabeled pack, and only its file list makes it a pack
+
+**Location:** `nyaa/nyaa.go` (`minUnlabeledPackBytes`, `TorrentResult.UnlabeledPack`, the
+`unlabeled` case of `ScrapNyaaForAnime`); `daemon/episodes.go` (`packSet.covering`);
+`nyaa/nyaa_match.go` (`truncateAtFirstMarker` dropping bracket groups from a markerless name).
+
+Old anime is released as one torrent named only by the title and the source:
+`[man] Azumanga Daioh [BD 1080p HEVC FLAC]` (82 seeders) carries no "batch", no range, no
+"complete". It wasn't `IsBatch`, had no episode number, and was dropped — Azumanga was left with
+dead loose episodes while ~15 live packs sat on the same page. Two things blocked it: the
+classification, and the title match (with no marker to cut at, `[BD 1080p HEVC FLAC]` was
+tokenized and sank the Jaccard below 0.8).
+
+**What looks inconsistent with [#84](#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo): an unknown range doesn't count as "covers
+everything" for this pack.** A labeled pack with an unresolved range still does (a Nyaa outage
+must not zero everyone's packs). An unlabeled one is a pack only by guess — size ≥ 1 GiB, no
+number, no movie marker — so it must prove it with the file list (`PackFileRange`); without it,
+`covering` skips it. It shares the `maxPackDetailFetches` budget.
+
+**Don't "fix" by:** lowering `minUnlabeledPackBytes` (a short or web special, like the 19 MiB
+`Azumanga Web Daioh`, would compete); or letting an unresolved unlabeled pack count as complete.
+
+### 99. A roman-numeral sequel searches by its bare base title first
+
+**Location:** `nyaa/nyaa.go` (`romanSequelBase`, the first variant in
+`GenerateSearchTitleVariants`); `reRomanSeasonTitle` in `nyaa/nyaa_regex.go`.
+
+DanMachi V's titles are "…Machigatteiru Darou ka **V: Houjou no Megami-hen**" and "…in a Dungeon?
+V". The releases say "…Machigatteiru Darou ka **S5** - 08". Every variant carried the numeral and
+the subtitle, so the title match required tokens the releases don't have, and only dead DubOnly
+rows (named after the full title) were found. `ExtractSeason` already read the "V" as season 5 —
+the filter was right, the query was wrong. The base title ("…Darou ka") now goes first; the
+season filter keeps the other seasons out.
+
+**What looks too strict: the numeral counts only when the English title carries the same one as a
+word.** "Lupin III" (English "Lupin the 3rd") is a name, not a season 3, and gets no base variant.

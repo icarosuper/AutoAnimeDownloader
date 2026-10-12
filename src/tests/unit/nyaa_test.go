@@ -62,8 +62,8 @@ func mockHttpGet(sampleHTML string) func() {
 	})
 }
 
-// mockHttpGetCapturing é o mockHttpGet que também registra cada URL pedida,
-// para os testes que verificam a query montada e não o resultado.
+// mockHttpGetCapturing is mockHttpGet that also records each requested URL, for the tests that
+// check the built query and not the result.
 func mockHttpGetCapturing(sampleHTML string, urls *[]string) func() {
 	return nyaa.MockNyaaHttpGet(func(url string) (*http.Response, error) {
 		*urls = append(*urls, url)
@@ -137,8 +137,8 @@ func TestNyaaModule_CanGetCorrectAnime_WithSpecialCharactersDifferences(t *testi
 	runEpisodeNameTest(options, t)
 }
 
-// mockHttpGetPerURL serve HTML dependente da URL e registra cada URL pedida — é o mock dos
-// testes de paginação, que verificam quantas páginas a busca foi buscar.
+// mockHttpGetPerURL serves URL-dependent HTML and records each requested URL — it's the mock of the
+// pagination tests, which check how many pages the search fetched.
 func mockHttpGetPerURL(html func(url string) string, urls *[]string) func() {
 	return nyaa.MockNyaaHttpGet(func(url string) (*http.Response, error) {
 		*urls = append(*urls, url)
@@ -150,7 +150,7 @@ func mockHttpGetPerURL(html func(url string) string, urls *[]string) func() {
 	})
 }
 
-// Página 1 com candidatos de sobra: a página 2 não pode ser pedida (era pedida SEMPRE).
+// Page 1 with plenty of candidates: page 2 must not be requested (it used to be requested ALWAYS).
 func TestScrapNyaa_StopsOnFirstPageWhenEnoughCandidates(t *testing.T) {
 	defer nyaa.SetMaxSearchPages(5)()
 
@@ -167,18 +167,18 @@ func TestScrapNyaa_StopsOnFirstPageWhenEnoughCandidates(t *testing.T) {
 		t.Fatalf("ScrapNyaa error: %v", err)
 	}
 	if len(results) != 3 {
-		t.Fatalf("esperava 3 candidatos, obtive %d", len(results))
+		t.Fatalf("want 3 candidates, got %d", len(results))
 	}
 	if len(urls) != 1 {
-		t.Fatalf("esperava 1 fetch (só a página 1), obtive %d: %v", len(urls), urls)
+		t.Fatalf("want 1 fetch (page 1 only), got %d: %v", len(urls), urls)
 	}
 }
 
-// Candidatos abaixo do piso e páginas sempre cheias: desce até o teto e para lá.
+// Candidates below the floor and pages always full: goes down to the ceiling and stops there.
 func TestScrapNyaa_PagesUntilCapWhenCandidatesAreThin(t *testing.T) {
 	defer nyaa.SetMaxSearchPages(3)()
 
-	// Linhas de outro anime: a página nunca fica vazia, mas nada é aceito.
+	// Rows from another anime: the page never gets empty, but nothing is accepted.
 	page := mockHtml([]string{"Kemono Jihen - 05 [1080p]", "Manaria Friends - 05 [1080p]"})
 	var urls []string
 	defer mockHttpGetPerURL(func(string) string { return page }, &urls)()
@@ -188,17 +188,17 @@ func TestScrapNyaa_PagesUntilCapWhenCandidatesAreThin(t *testing.T) {
 		t.Fatalf("ScrapNyaa error: %v", err)
 	}
 	if results != nil {
-		t.Fatalf("esperava nenhum candidato, obtive %v", results)
+		t.Fatalf("want no candidate, got %v", results)
 	}
 	if len(urls) != 3 {
-		t.Fatalf("esperava 3 fetches (teto), obtive %d: %v", len(urls), urls)
+		t.Fatalf("want 3 fetches (ceiling), got %d: %v", len(urls), urls)
 	}
 	if !strings.Contains(urls[2], "&p=3") {
-		t.Fatalf("a última página buscada deveria ser a 3, obtive %s", urls[2])
+		t.Fatalf("the last fetched page should be 3, got %s", urls[2])
 	}
 }
 
-// Página vazia = a query acabou: insistir até o teto seria fetch jogado fora.
+// Empty page = the query is over: insisting up to the ceiling would be a wasted fetch.
 func TestScrapNyaa_StopsWhenPageIsEmpty(t *testing.T) {
 	defer nyaa.SetMaxSearchPages(5)()
 
@@ -207,7 +207,7 @@ func TestScrapNyaa_StopsWhenPageIsEmpty(t *testing.T) {
 		if strings.Contains(url, "&p=") {
 			return mockHtml(nil)
 		}
-		return mockHtml([]string{"Show - 05 [1080p]"}) // 1 candidato, abaixo do piso
+		return mockHtml([]string{"Show - 05 [1080p]"}) // 1 candidate, below the floor
 	}, &urls)()
 
 	results, err := nyaa.ScrapNyaa("Show", 5, nil, nil)
@@ -215,14 +215,14 @@ func TestScrapNyaa_StopsWhenPageIsEmpty(t *testing.T) {
 		t.Fatalf("ScrapNyaa error: %v", err)
 	}
 	if len(results) != 1 {
-		t.Fatalf("esperava 1 candidato, obtive %d", len(results))
+		t.Fatalf("want 1 candidate, got %d", len(results))
 	}
 	if len(urls) != 2 {
-		t.Fatalf("esperava 2 fetches (página 1 + a vazia), obtive %d: %v", len(urls), urls)
+		t.Fatalf("want 2 fetches (page 1 + the empty one), got %d: %v", len(urls), urls)
 	}
 }
 
-// Batch lia só a página 1; agora pagina igual à busca de episódio.
+// Batch read only page 1; now it paginates like the episode search.
 func TestScrapNyaaForAnime_PaginatesLikeEpisodeSearch(t *testing.T) {
 	defer nyaa.SetMaxSearchPages(2)()
 
@@ -234,12 +234,12 @@ func TestScrapNyaaForAnime_PaginatesLikeEpisodeSearch(t *testing.T) {
 		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 	if len(urls) != 2 {
-		t.Fatalf("esperava 2 fetches (teto), obtive %d: %v", len(urls), urls)
+		t.Fatalf("want 2 fetches (ceiling), got %d: %v", len(urls), urls)
 	}
 }
 
-// Série longa: grupos numeram com zero-padding ("One Piece - 001"), e a query sem
-// padding afoga o episódio 1 nos 1160+ ordenados por seeders.
+// Long series: groups number with zero-padding ("One Piece - 001"), and the unpadded query drowns
+// episode 1 among the 1160+ sorted by seeders.
 func TestScrapNyaa_LongSeriesAlsoQueriesPaddedEpisode(t *testing.T) {
 	var urls []string
 	restore := mockHttpGetCapturing(mockHtml([]string{"[Group] One Piece - 001 [1080p]"}), &urls)
@@ -250,10 +250,10 @@ func TestScrapNyaa_LongSeriesAlsoQueriesPaddedEpisode(t *testing.T) {
 	}
 
 	if !slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "q=One+Piece+001") }) {
-		t.Fatalf("esperava uma query com o episódio zero-padded, obtive %v", urls)
+		t.Fatalf("want a query with the zero-padded episode, got %v", urls)
 	}
 	if !slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "q=One+Piece+1&") }) {
-		t.Fatalf("a query sem padding não pode ser substituída, obtive %v", urls)
+		t.Fatalf("the unpadded query must not be replaced, got %v", urls)
 	}
 }
 
@@ -267,11 +267,11 @@ func TestScrapNyaa_ShortSeriesKeepsPlainEpisode(t *testing.T) {
 	}
 
 	if slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "001") }) {
-		t.Fatalf("anime curto não deve gerar query com padding, obtive %v", urls)
+		t.Fatalf("a short anime must not build a padded query, got %v", urls)
 	}
 }
 
-// Sem total de episódios (chamada antiga) o comportamento é o de anime curto.
+// Without the episode total (old call) the behavior is the short anime one.
 func TestScrapNyaa_UnknownTotalKeepsPlainEpisode(t *testing.T) {
 	var urls []string
 	restore := mockHttpGetCapturing(mockHtml([]string{"[Group] Show - 01 [1080p]"}), &urls)
@@ -282,12 +282,12 @@ func TestScrapNyaa_UnknownTotalKeepsPlainEpisode(t *testing.T) {
 	}
 
 	if slices.ContainsFunc(urls, func(u string) bool { return strings.Contains(u, "001") }) {
-		t.Fatalf("sem total conhecido não deve haver padding, obtive %v", urls)
+		t.Fatalf("without a known total there must be no padding, got %v", urls)
 	}
 }
 
-// Um filme não pode ser aceito como episódio: "[DB] Naruto Shippuuden Movie 3"
-// casava o padrão " 3 (" de extractEpisodeNumber e virava "episódio 3".
+// A movie must not be accepted as an episode: "[DB] Naruto Shippuuden Movie 3" matched
+// extractEpisodeNumber's " 3 (" pattern and became "episode 3".
 func TestNyaaModule_IgnoresMovieOnEpisodeSearch(t *testing.T) {
 	options := testOptions{
 		animeName: "Naruto Shippuuden",
@@ -305,8 +305,8 @@ func TestNyaaModule_IgnoresMovieOnEpisodeSearch(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
-// "Persona" contém "ona": o marcador de OVA precisa de word boundary, senão o
-// guard de filme rejeita episódios legítimos.
+// "Persona" contains "ona": the OVA marker needs a word boundary, otherwise the movie guard rejects
+// legitimate episodes.
 func TestNyaaModule_OvaMarkerDoesNotMatchTitleSubstring(t *testing.T) {
 	options := testOptions{
 		animeName: "Persona Trinity Soul",
@@ -434,7 +434,7 @@ func TestNyaaModule_CanGetCorrectMagnets_OfSeason3Anime(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
-// Animes longos (One Piece) têm episódios de 4 dígitos.
+// Long anime (One Piece) have 4-digit episodes.
 func TestNyaaModule_CanGetFourDigitEpisode(t *testing.T) {
 	runEpisodeNameTest(testOptions{
 		animeName: "One Piece",
@@ -506,7 +506,7 @@ func TestSortTorrentResults_ByResolution(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 
-	// Verificar se está ordenado corretamente: 1080p > 720p > 480p
+	// Check it's sorted correctly: 1080p > 720p > 480p
 	if *sorted[0].Resolution != "1080p" {
 		t.Fatalf("expected first result to be 1080p, got %s", *sorted[0].Resolution)
 	}
@@ -531,7 +531,7 @@ func TestSortTorrentResults_ByFansub_SameResolution(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 
-	// Verificar se está ordenado corretamente por fansub: SubsPlease > Erai-Raws > Judas > ToonsHub > ASW
+	// Check it's sorted correctly by fansub: SubsPlease > Erai-Raws > Judas > ToonsHub > ASW
 	if !strings.Contains(sorted[0].Name, "SubsPlease") {
 		t.Fatalf("expected first result to be SubsPlease, got %s", sorted[0].Name)
 	}
@@ -562,8 +562,8 @@ func TestSortTorrentResults_MixedPriorities(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 
-	// Verificar se 1080p vem antes de 720p, independente do fansub
-	// Entre os 1080p, SubsPlease deve vir primeiro
+	// Check 1080p comes before 720p, regardless of fansub. Among the 1080p ones, SubsPlease must come
+	// first
 	if *sorted[0].Resolution != "1080p" {
 		t.Fatalf("expected first result to be 1080p, got %s", *sorted[0].Resolution)
 	}
@@ -585,7 +585,7 @@ func TestSortTorrentResults_WithUnknownResolution(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 
-	// Torrents com resolução conhecida devem vir antes dos sem resolução
+	// Torrents with a known resolution must come before those without
 	if sorted[0].Resolution == nil {
 		t.Fatalf("expected first result to have resolution, got nil")
 	}
@@ -616,7 +616,7 @@ func TestScrapNyaaForAnime_CanGetMultipleEpisodes(t *testing.T) {
 		t.Fatalf("expected 3 results, got %d", len(singles))
 	}
 
-	// Verificar que apenas os episódios 2, 3 e 5 foram retornados
+	// Check that only episodes 2, 3 and 5 were returned
 	episodes := make(map[int]bool)
 	for _, r := range singles {
 		if r.Episode != nil {
@@ -632,8 +632,8 @@ func TestScrapNyaaForAnime_CanGetMultipleEpisodes(t *testing.T) {
 	}
 }
 
-// O pack nao e mais descartado, e classificado: entra na lista com IsBatch, e nao como
-// "episodio 1" via packsAndSingles.
+// The pack is no longer dropped, it's classified: it goes into the list with IsBatch, not as
+// "episode 1" via packsAndSingles.
 func TestScrapNyaaForAnime_ClassifiesBatchInsteadOfDiscarding(t *testing.T) {
 	options := []string{
 		"[Erai-raws] Naruto - 001 ~ 220 [480p][Multiple Subtitle]",
@@ -667,7 +667,7 @@ func TestScrapNyaaForAnime_ClassifiesBatchInsteadOfDiscarding(t *testing.T) {
 func TestScrapNyaaForAnime_CanFilterByAnimeTitle(t *testing.T) {
 	options := testOptions{
 		animeName: "Kemono Friends",
-		episode:   0, // não usado neste teste
+		episode:   0, // not used in this test
 		correct: []string{
 			"Kemono Friends Episode 2",
 			"Kemono Friends Episode 5",
@@ -694,13 +694,13 @@ func TestScrapNyaaForAnime_CanFilterByAnimeTitle(t *testing.T) {
 		t.Fatalf("expected at least one result")
 	}
 
-	// Verificar que apenas torrents de "Kemono Friends" foram retornados
+	// Check that only "Kemono Friends" torrents were returned
 	for _, r := range singles {
 		if !strings.Contains(strings.ToLower(r.Name), "kemono friends") {
 			t.Fatalf("unexpected anime in results: %s", r.Name)
 		}
 
-		// Verificar que nenhum torrent incorreto está nos resultados
+		// Check that no incorrect torrent is in the results
 		for _, incorrect := range options.incorrect {
 			if r.Name == incorrect {
 				t.Fatalf("found incorrect torrent in results: %s", r.Name)
@@ -745,7 +745,7 @@ func TestScrapNyaaForAnime_WithSeasonFiltering(t *testing.T) {
 	}
 	_, singles := packsAndSingles(results)
 
-	// Deve retornar apenas os episódios da Season 2
+	// Must return only the Season 2 episodes
 	for _, r := range singles {
 		if r.Season == nil || *r.Season != 2 {
 			t.Fatalf("expected season 2, got %v in %s", r.Season, r.Name)
@@ -776,19 +776,19 @@ func TestScrapNyaaForAnime_ResultsAreSorted(t *testing.T) {
 		t.Fatalf("expected at least one result")
 	}
 
-	// Verificar que os resultados estão ordenados (1080p antes de 720p, SubsPlease primeiro entre 1080p)
+	// Check the results are sorted (1080p before 720p, SubsPlease first among the 1080p)
 	found1080p := false
 
 	for i, r := range singles {
 		if r.Resolution != nil && *r.Resolution == "1080p" {
 			found1080p = true
-			// SubsPlease deve ser o primeiro resultado 1080p
+			// SubsPlease must be the first 1080p result
 			if i == 0 && !strings.Contains(r.Name, "SubsPlease") {
 				t.Fatalf("expected first result to be SubsPlease 1080p")
 			}
 		}
 		if r.Resolution != nil && *r.Resolution == "720p" {
-			// 720p deve vir depois de 1080p
+			// 720p must come after 1080p
 			if found1080p && i == 0 {
 				t.Fatalf("expected 1080p to come before 720p")
 			}
@@ -799,7 +799,7 @@ func TestScrapNyaaForAnime_ResultsAreSorted(t *testing.T) {
 func TestScrapNyaaForAnime_CanGetCorrectAnimeMultipleSeasons(t *testing.T) {
 	options := testOptions{
 		animeName: "Lucky Star",
-		episode:   0, // não usado neste teste
+		episode:   0, // not used in this test
 		correct: []string{
 			"Lucky Star Episode 5",
 			"Lucky Star Episode 10",
@@ -832,7 +832,7 @@ func TestScrapNyaaForAnime_CanGetCorrectAnimeMultipleSeasons(t *testing.T) {
 
 	foundCorrect := make(map[string]bool)
 	for _, r := range singles {
-		// Nenhum torrent incorreto deve estar nos resultados
+		// No incorrect torrent may be in the results
 		for _, incorrect := range options.incorrect {
 			if r.Name == incorrect {
 				t.Fatalf("found incorrect torrent in results: %s", r.Name)
@@ -853,7 +853,7 @@ func TestScrapNyaaForAnime_CanGetCorrectAnimeMultipleSeasons(t *testing.T) {
 }
 
 // ============================================
-// TESTES PARA BATCHES E FILMES
+// TESTS FOR BATCHES AND MOVIES
 // ============================================
 
 func TestIsBatch_DetectsBatchTorrents(t *testing.T) {
@@ -967,8 +967,8 @@ func TestIsBatch_DetectsBatchTorrents(t *testing.T) {
 			torrent:  "[Group] Anime S01E05 [1080p]",
 			expected: false,
 		},
-		// Faixa no fim do nome, sem espaço depois: visto no Nyaa na busca do
-		// episódio 1 do One Piece (packs de 500 episódios lidos como "episódio 1").
+		// Range at the end of the name, with no space after: seen on Nyaa in the search for One Piece
+		// episode 1 (500-episode packs read as "episode 1").
 		{
 			name:     "Range at end of name",
 			torrent:  "One Piece EP 001-501",
@@ -1078,9 +1078,8 @@ func TestIsMovie_DetectsMovies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Usando reflexão para acessar função privada
-			// Na prática, a função isMovie é testada através dos resultados da busca
-			// Este é um teste unitário da lógica de detecção
+			// Using reflection to reach a private function. In practice, isMovie is tested through the
+			// search results. This is a unit test of the detection logic
 		})
 	}
 }
@@ -1095,37 +1094,36 @@ func TestExtractBatchInfo_ExtractsRangeAndSeason(t *testing.T) {
 		{"[Judas] Anime 01-12 [1080p]", 1, 12, 0},
 		{"[SubsPlease] Anime (001-100) [1080p]", 1, 100, 0},
 		{"[Group] Anime S2 01-24 [BD]", 1, 24, 2},
-		// Guarda de falso positivo: [720-1080p] nao e faixa de episodio. Sem ela, este pack
-		// completo seria lido como "cobre os episodios 720 a 1080".
-		// "[Group]" (nao "[X]") evita colisao com o guard de numeral romano de temporada
-		// (reRomanSeason le "X" como S10; fora do escopo desta task).
+		// False-positive guard: [720-1080p] is not an episode range. Without it, this complete pack would
+		// be read as "covers episodes 720 to 1080". "[Group]" (not "[X]") avoids colliding with the
+		// roman-numeral season guard (reRomanSeason reads "X" as S10; out of this task's scope).
 		{"[Group] Anime Complete Batch [720-1080p]", 0, 0, 0},
 		{"[Group] Anime Complete Batch", 0, 0, 0},
-		// Faixa invertida: o casamento pega "2 - 01" (temporada + primeiro episodio) e daria
-		// 2..1, uma faixa que nao cobre episodio nenhum.
+		// Inverted range: the match takes "2 - 01" (season + first episode) and would give 2..1, a range
+		// that covers no episode.
 		{"[Erai-raws] Hibike! Euphonium 2 - 01 ~ 13 [1080p][Multiple Subtitle]", 0, 0, 2},
-		// Ano de lancamento: medido em "[EMBER] Mushoku Tensei ... (2021-2022) (Season 1 ...)",
-		// que virava a faixa 2021..2022 e sumia da escolha de pack por nao cobrir episodio nenhum.
+		// Release year: measured on "[EMBER] Mushoku Tensei ... (2021-2022) (Season 1 ...)", which became
+		// the range 2021..2022 and vanished from the pack choice for covering no episode.
 		{"[EMBER] Anime (2021-2022) (Season 1) [BDRip] (Batch)", 0, 0, 1},
-		// Casamento reprovado nao encerra a varredura: a faixa de verdade vem depois do ano.
+		// A rejected match doesn't end the scan: the real range comes after the year.
 		{"[Group] Anime (2021-2022) 01-24 [BD]", 1, 24, 0},
-		// A banda so pega ano — serie longa numerada acima de 1000 continua sendo faixa.
+		// The band only catches years — a long series numbered above 1000 is still a range.
 		{"[Judas] One Piece 1001-1100 [1080p]", 1001, 1100, 0},
 	}
 
 	for _, tc := range cases {
 		got := nyaa.ExtractBatchInfo(tc.name)
 		if got.StartEpisode != tc.wantStart || got.EndEpisode != tc.wantEnd {
-			t.Errorf("%q: esperava faixa %d-%d, obteve %d-%d", tc.name, tc.wantStart, tc.wantEnd, got.StartEpisode, got.EndEpisode)
+			t.Errorf("%q: want range %d-%d, got %d-%d", tc.name, tc.wantStart, tc.wantEnd, got.StartEpisode, got.EndEpisode)
 		}
 		if got.Season != tc.wantSeason {
-			t.Errorf("%q: esperava temporada %d, obteve %d", tc.name, tc.wantSeason, got.Season)
+			t.Errorf("%q: want season %d, got %d", tc.name, tc.wantSeason, got.Season)
 		}
 	}
 }
 
-// Grupo que separa com "_" no lugar de espaco: todo padrao de episodio pede espaco ao redor do
-// numero, entao o nome inteiro nao casava nenhum e o arquivo ia para a biblioteca com nome cru.
+// A group that separates with "_" instead of a space: every episode pattern wants a space around
+// the number, so the whole name matched none and the file went into the library with its raw name.
 func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1133,7 +1131,7 @@ func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 	}{
 		{"[DB]Vinland Saga_-_01_(Dual Audio_10bit_BD1080p_x265).mkv", intPtr(1)},
 		{"[DB]Vinland Saga_-_24_(Dual Audio_10bit_BD1080p_x265).mkv", intPtr(24)},
-		// Opening/ending sem numero de episodio continua sem numero.
+		// An opening/ending without an episode number stays without a number.
 		{"[DB]Vinland Saga_-_NCED01_(10bit_BD1080p_x265).mkv", nil},
 	}
 
@@ -1141,17 +1139,17 @@ func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 		got := nyaa.ExtractEpisodeNumber(tc.name)
 		switch {
 		case tc.want == nil && got != nil:
-			t.Errorf("%q: esperava nenhum episodio, obteve %d", tc.name, *got)
+			t.Errorf("%q: want no episode, got %d", tc.name, *got)
 		case tc.want != nil && got == nil:
-			t.Errorf("%q: esperava episodio %d, obteve nenhum", tc.name, *tc.want)
+			t.Errorf("%q: want episode %d, got none", tc.name, *tc.want)
 		case tc.want != nil && *got != *tc.want:
-			t.Errorf("%q: esperava episodio %d, obteve %d", tc.name, *tc.want, *got)
+			t.Errorf("%q: want episode %d, got %d", tc.name, *tc.want, *got)
 		}
 	}
 }
 
-// fileListHtml monta a pagina de detalhe do Nyaa com a arvore de arquivos, no formato real: um
-// <li> por arquivo, com o tamanho num <span> dentro do MESMO <li>, e as pastas como <a.folder>.
+// fileListHtml builds Nyaa's detail page with the file tree, in the real format: one <li> per file,
+// with the size in a <span> inside the SAME <li>, and folders as <a.folder>.
 func fileListHtml(folder string, files []string) string {
 	var items []string
 	for _, f := range files {
@@ -1170,7 +1168,8 @@ func fileListHtml(folder string, files []string) string {
 }
 
 func TestPackFileRange_ReadsTheRangeFromTheFileList(t *testing.T) {
-	// O caso medido: "(Season 2 | Part 2) … (Batch)" nao declara faixa no nome e traz 13..24.
+	// The measured case: "(Season 2 | Part 2) … (Batch)" declares no range in the name and carries
+	// 13..24.
 	restore := mockHttpGet(fileListHtml("[EMBER] Anime (Season 2 | Part 2) (Batch)", []string{
 		"[EMBER] Anime - 13.mkv", "[EMBER] Anime - 14.mkv", "[EMBER] Anime - 24.mkv",
 	}))
@@ -1178,15 +1177,15 @@ func TestPackFileRange_ReadsTheRangeFromTheFileList(t *testing.T) {
 
 	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1891610")
 	if !ok {
-		t.Fatal("esperava a faixa lida dos arquivos")
+		t.Fatal("want the range read from the files")
 	}
 	if info.StartEpisode != 13 || info.EndEpisode != 24 {
-		t.Errorf("esperava 13-24, obteve %d-%d", info.StartEpisode, info.EndEpisode)
+		t.Errorf("want 13-24, got %d-%d", info.StartEpisode, info.EndEpisode)
 	}
 }
 
-// O nome da PASTA costuma trazer a faixa do release inteiro, e ele nao pode entrar na conta;
-// NCOP/NCED e arquivo que nao e video tambem nao alargam a faixa.
+// The FOLDER name usually carries the whole release's range, and it must not count; NCOP/NCED and
+// non-video files don't widen the range either.
 func TestPackFileRange_IgnoresFoldersExtrasAndNonVideo(t *testing.T) {
 	restore := mockHttpGet(fileListHtml("[Judas] Anime 001-574 [1080p]", []string{
 		"[Judas] Anime - 01.mkv", "[Judas] Anime - 02.mkv",
@@ -1196,17 +1195,18 @@ func TestPackFileRange_IgnoresFoldersExtrasAndNonVideo(t *testing.T) {
 
 	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1")
 	if !ok || info.StartEpisode != 1 || info.EndEpisode != 2 {
-		t.Errorf("esperava 1-2 (ok=%v), obteve %d-%d", ok, info.StartEpisode, info.EndEpisode)
+		t.Errorf("want 1-2 (ok=%v), got %d-%d", ok, info.StartEpisode, info.EndEpisode)
 	}
 }
 
-// Sem numero legivel nao ha faixa a afirmar: quem chama trata como desconhecida, nao como 1..total.
+// Without a readable number there's no range to assert: the caller treats it as unknown, not as
+// 1..total.
 func TestPackFileRange_UnreadableFileNamesReportUnknown(t *testing.T) {
 	restore := mockHttpGet(fileListHtml("[Group] Anime", []string{"Opening.mkv", "Interview.mkv"}))
 	defer restore()
 
 	if _, ok := nyaa.PackFileRange("https://nyaa.si/view/1"); ok {
-		t.Error("esperava faixa desconhecida quando nenhum arquivo dá o número")
+		t.Error("want an unknown range when no file gives the number")
 	}
 }
 
@@ -1219,11 +1219,12 @@ func TestPackFileRange_NoURLDoesNotFetch(t *testing.T) {
 	defer restore()
 
 	if _, ok := nyaa.PackFileRange(""); ok || fetched {
-		t.Error("sem URL de detalhe não há o que buscar")
+		t.Error("without a detail URL there is nothing to fetch")
 	}
 }
 
-// A URL do detalhe sai da coluna de titulo e chega absoluta: e o unico caminho ate PackFileRange.
+// The detail URL comes from the title column and arrives absolute: it's the only path to
+// PackFileRange.
 func TestScrapNyaaForAnime_CapturesTheDetailURL(t *testing.T) {
 	restore := mockHttpGet(mockHtml([]string{"[X] Frieren (01-28) [1080p]"}))
 	defer restore()
@@ -1233,10 +1234,10 @@ func TestScrapNyaaForAnime_CapturesTheDetailURL(t *testing.T) {
 		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 	if len(results) == 0 {
-		t.Fatal("esperava ao menos um resultado")
+		t.Fatal("want at least one result")
 	}
 	if want := "https://nyaa.si/view/1"; results[0].DetailURL != want {
-		t.Errorf("esperava %q, obteve %q", want, results[0].DetailURL)
+		t.Errorf("want %q, got %q", want, results[0].DetailURL)
 	}
 }
 
@@ -1266,14 +1267,14 @@ func TestScrapNyaaForAnime_FindsBatchTorrents(t *testing.T) {
 		t.Fatalf("expected at least one batch result")
 	}
 
-	// Verificar que apenas batches foram retornados
+	// Check that only batches were returned
 	for _, r := range packs {
 		if !nyaa.IsBatch(r.Name) {
 			t.Fatalf("non-batch torrent in results: %s", r.Name)
 		}
 	}
 
-	// Verificar que todos os torrents corretos foram encontrados
+	// Check that all the correct torrents were found
 	foundCorrect := make(map[string]bool)
 	for _, r := range packs {
 		for _, correct := range correct {
@@ -1281,7 +1282,7 @@ func TestScrapNyaaForAnime_FindsBatchTorrents(t *testing.T) {
 				foundCorrect[correct] = true
 			}
 		}
-		// Verificar que nenhum torrent incorreto está nos resultados
+		// Check that no incorrect torrent is in the results
 		for _, incorrect := range incorrect {
 			if r.Name == incorrect {
 				t.Fatalf("found incorrect torrent in results: %s", r.Name)
@@ -1316,7 +1317,7 @@ func TestScrapNyaaForAnime_FiltersBySeason(t *testing.T) {
 	}
 	packs, _ := packsAndSingles(results)
 
-	// Verificar que apenas temporada 2 foi retornada
+	// Check that only season 2 was returned
 	for _, r := range packs {
 		if r.Season == nil || *r.Season != 2 {
 			t.Fatalf("expected season 2, got %v for torrent: %s", r.Season, r.Name)
@@ -1329,8 +1330,8 @@ func TestScrapNyaaForMovie_FindsMovieTorrents(t *testing.T) {
 		"[SubsPlease] Suzume no Tojimari Movie (1080p)",
 		"[Group] Your Name (Movie) [1080p]",
 	}
-	// Não incluímos episódios na lista de incorrect, pois o mock HTML retorna todos
-	// O filtro isMovie deve remover os episódios automaticamente
+	// We don't include episodes in the incorrect list, since the mock HTML returns all of them. The
+	// isMovie filter must remove the episodes automatically
 
 	html := mockHtml(correct)
 	restore := mockHttpGet(html)
@@ -1346,9 +1347,9 @@ func TestScrapNyaaForMovie_FindsMovieTorrents(t *testing.T) {
 		t.Fatalf("expected at least one movie result")
 	}
 
-	// Verificar que todos os resultados são válidos
+	// Check that all results are valid
 	for _, r := range results {
-		// Verificar que tem Movie no nome ou é um filme conhecido
+		// Check it has Movie in the name or is a known movie
 		hasMovieKeyword := strings.Contains(strings.ToLower(r.Name), "movie") ||
 			strings.Contains(strings.ToLower(r.Name), "gekijouban")
 
@@ -1357,7 +1358,7 @@ func TestScrapNyaaForMovie_FindsMovieTorrents(t *testing.T) {
 		}
 	}
 
-	// Verificar que pelo menos um torrent correto foi encontrado
+	// Check that at least one correct torrent was found
 	found := false
 	for _, r := range results {
 		for _, correct := range correct {
@@ -1389,13 +1390,13 @@ func TestSortMovieResults_SortsByTechnicalQuality(t *testing.T) {
 
 	sorted := nyaa.SortMovieResults(results)
 
-	// Primeiro deve ser BD (melhor source)
+	// First must be BD (best source)
 	if !strings.Contains(sorted[0].Name, "BD ") && !strings.Contains(sorted[0].Name, "BDRip") {
 		t.Fatalf("Expected BD or BDRip first, got: %s", sorted[0].Name)
 	}
 
-	// Segundo deve ter melhor prioridade
-	// (prioridade: source > resolution > codec > fansub > audio > seeders > size)
+	// Second must have the better priority (priority: source > resolution > codec > fansub > audio >
+	// seeders > size)
 }
 
 func TestTitleMatchesQuery_AcceptsCorrectTorrents(t *testing.T) {
@@ -1411,11 +1412,11 @@ func TestTitleMatchesQuery_AcceptsCorrectTorrents(t *testing.T) {
 		{"SPY x FAMILY Season 3 - 03 [1080p]", "SPY x FAMILY"},
 		{"[SubsPlease] Machikado Mazoku S2 - 07 (1080p)", "Machikado Mazoku"},
 		{"My.Show.S01E02.1080p", "My.Show"},
-		// Torrents com metadados técnicos que inflavam o Jaccard (NF, AMZN, WEB-DL, EAC3, MultiSub)
+		// Torrents with technical metadata that inflated the Jaccard (NF, AMZN, WEB-DL, EAC3, MultiSub)
 		{"[Erai-raws] Akane-banashi - 07 [1080p NF WEB-DL AVC AAC][MultiSub][805A5B50]", "Akane-banashi"},
 		{"[Erai-raws] Nippon Sangoku - 07 [1080p AMZN WEB-DL AVC EAC3][MultiSub][86BD091C]", "Nippon Sangoku"},
 		{"[Erai-raws] Ichijyoma Mankitsu Gurashi - 06 [1080p AMZN WEB-DL AVC EAC3][MultiSub][BC657289]", "Ichijyoma Mankitsu Gurashi"},
-		// Fansub com ambos os títulos no nome (English + romaji) — threshold 0.4 p/ query ≥4 tokens
+		// Fansub with both titles in the name (English + romaji) — threshold 0.4 for a query of ≥4 tokens
 		{"[ToonsHub] ReZERO -Starting Life in Another World- S04E06 1080p CR WEB-DL DUAL AAC2.0 H.264 (Re:Zero kara Hajimeru Isekai Seikatsu, Dual-Audio, Multi-Subs)", "rezero starting life in another world"},
 	}
 	for _, tt := range tests {
@@ -1432,18 +1433,18 @@ func TestTitleMatchesQuery_RejectsSpinoffsAndWrongAnime(t *testing.T) {
 		torrent string
 		query   string
 	}{
-		// Spinoff com título muito diferente (query curta ≤3 tokens, threshold 0.8)
+		// Spinoff with a very different title (short query ≤3 tokens, threshold 0.8)
 		{"[SubsPlease] Sword Art Online Alternative Gun Gale Online - 05 (1080p)", "Sword Art Online"},
-		// Anime diferente com palavras em comum
+		// A different anime with words in common
 		{"Kemono Jihen Episode 5", "Kemono Friends"},
 		{"Manaria Friends Episode 5", "Kemono Friends"},
-		// Título parcial (falta parte do nome)
+		// Partial title (part of the name missing)
 		{"Silent Witch Episode 3", "Silent Witch: Chinmoku no Majo no Kakushigoto"},
 		{"Chinmoku no Majo no Kakushigoto Episode 3", "Silent Witch: Chinmoku no Majo no Kakushigoto"},
 		// Anime completamente diferente
 		{"Different Anime - 05 [1080p]", "Kemono Friends"},
-		// Mesmo formato de metadados Erai-raws mas título errado: tokens técnicos filtrados não devem
-		// mascarar a ausência do token de título correto.
+		// Same Erai-raws metadata format but the wrong title: filtered technical tokens must not mask the
+		// absence of the correct title token.
 		{"[Erai-raws] Different Show - 07 [1080p NF WEB-DL AVC AAC][MultiSub][AABBCCDD]", "Akane-banashi"},
 		{"[Erai-raws] Other Anime - 06 [1080p AMZN WEB-DL AVC EAC3][MultiSub][11223344]", "Ichijyoma Mankitsu Gurashi"},
 	}
@@ -1473,32 +1474,32 @@ func TestNyaaModule_DoesNotReturnSpinoffs(t *testing.T) {
 }
 
 // ============================================
-// TESTES PARA SEASON/PART FEATURE
+// TESTS FOR THE SEASON/PART FEATURE
 // ============================================
 
-// TestExtractPart verifica extração de número de parte/cour de nomes de torrents e títulos Anilist
+// TestExtractPart checks extracting the part/cour number from torrent names and AniList titles
 func TestExtractPart_ExtractsFromVariousFormats(t *testing.T) {
 	tests := []struct {
 		input    string
 		expected *int
 	}{
-		// Formatos encontrados nos samples do Nyaa
+		// Formats found in the Nyaa samples
 		{"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 07 [1080p]", intPtr(2)},
 		{"[EMBER] Hataraku Maou-sama! (2023) (Season 2 | Part 02) [1080p]", intPtr(2)},
 		{"[EMBER] Hataraku Maou-sama! (2022) (Season 2 | Part 01) [1080p]", intPtr(1)},
-		// Nome que declara DUAS parts nao e da primeira: o pack cobre as duas metades, e devolver
-		// a primeira fazia o filtro de part rejeita-lo justamente para a segunda. Sem numero unico
-		// quem decide e a cobertura da faixa (daemon.packAxis, decisions.md #79).
+		// A name that declares TWO parts isn't the first one's: the pack covers both halves, and
+		// returning the first made the part filter reject it precisely for the second. Without a single
+		// number the range's coverage decides (daemon.packAxis, decisions.md #79).
 		{"[DB] NieR:Automata Ver1.1a (Season 1 Part 1+2) [Dual Audio]", nil},
 		{"[EMBER] Shingeki no Kyojin (2023) (Season 4 Part 03+04) [BDRip]", nil},
 		{"[Fuchs] Anime - S02 (Season 2) (Part 1 + Part 2) [BDRip]", nil},
-		// Duas declaracoes do MESMO numero continuam sendo aquele numero.
+		// Two declarations of the SAME number are still that number.
 		{"[EMBER] Hataraku Maou-sama! (Season 2 | Part 02) (Part 2) [1080p]", intPtr(2)},
-		// Títulos Anilist (para ExtractAnimeSeasonPart)
+		// AniList titles (for ExtractAnimeSeasonPart)
 		{"Shingeki no Kyojin Season 3 Part 2", intPtr(2)},
 		{"Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", intPtr(2)},
 		{"NieR:Automata Ver1.1a Cour 2", intPtr(2)},
-		// Sem part
+		// No part
 		{"[SubsPlease] Hataraku Maou-sama S2 - 13 (1080p)", nil},
 		{"[SubsPlease] Shingeki no Kyojin - 07 (1080p)", nil},
 		{"Kaguya-sama wa Kokurasetai?: Tensaitachi no Renai Zunousen", nil},
@@ -1521,12 +1522,12 @@ func TestExtractPart_ExtractsFromVariousFormats(t *testing.T) {
 	}
 }
 
-// TestNyaaModule_KaguySa2_AcceptsSeason2Torrents confirma o fix do bug:
-// Kaguya S2 (romaji sem número de season) agora aceita torrents S02 quando season=2 é passado.
+// TestNyaaModule_KaguySa2_AcceptsSeason2Torrents confirms the bug fix: Kaguya S2 (romaji without a
+// season number) now accepts S02 torrents when season=2 is passed.
 func TestNyaaModule_KaguySa2_AcceptsSeason2Torrents(t *testing.T) {
 	season2 := 2
 	options := testOptions{
-		// Anilist id 112641: romaji não tem season number, season vem dos synonyms
+		// AniList id 112641: the romaji has no season number, the season comes from the synonyms
 		animeName: "Kaguya-sama wa Kokurasetai",
 		episode:   3,
 		season:    &season2,
@@ -1536,18 +1537,18 @@ func TestNyaaModule_KaguySa2_AcceptsSeason2Torrents(t *testing.T) {
 			"[SubsPlease] Kaguya-sama wa Kokurasetai S02 - 03 (1080p)",
 		},
 		incorrect: []string{
-			// Season 1 deve ser rejeitada (season=2 explícito filtra)
+			// Season 1 must be rejected (an explicit season=2 filters it)
 			"[SubsPlease] Kaguya-sama wa Kokurasetai S01 - 03 (1080p)",
 			"Kaguya-sama wa Kokurasetai Season 1 Episode 3",
-			// Episódio errado
+			// Wrong episode
 			"[MTBB] Kaguya-sama wa Kokurasetai S2 - 05 (1080p)",
 		},
 	}
 	runEpisodeNameTest(options, t)
 }
 
-// TestNyaaModule_SnKS3P2_SeasonAndPartFilter verifica filtro combinado de season=3 + part=2
-// (Anilist id 104578: Shingeki no Kyojin Season 3 Part 2)
+// TestNyaaModule_SnKS3P2_SeasonAndPartFilter checks the combined season=3 + part=2 filter (AniList
+// id 104578: Shingeki no Kyojin Season 3 Part 2)
 func TestNyaaModule_SnKS3P2_SeasonAndPartFilter(t *testing.T) {
 	season3 := 3
 	part2 := 2
@@ -1560,20 +1561,20 @@ func TestNyaaModule_SnKS3P2_SeasonAndPartFilter(t *testing.T) {
 			"[Erai-raws] Shingeki no Kyojin Season 3 Part 2 - 05 [1080p]",
 		},
 		incorrect: []string{
-			// Part 1 deve ser rejeitada (hard part filter)
+			// Part 1 must be rejected (hard part filter)
 			"[Erai-raws] Shingeki no Kyojin Season 3 Part 1 - 05 [1080p]",
-			// Season errada
+			// Wrong season
 			"[SubsPlease] Shingeki no Kyojin Season 2 Part 2 - 05 (1080p)",
-			// Episódio errado
+			// Wrong episode
 			"[Erai-raws] Shingeki no Kyojin Season 3 Part 2 - 07 [1080p]",
 		},
 	}
 	runEpisodeNameTest(options, t)
 }
 
-// TestNyaaModule_MushokuTenseiIIP2_PartFilter verifica filtro de season=2 + part=2
-// (Anilist id 166873: Mushoku Tensei II Part 2)
-// ExtractAnimeSeasonPart retorna season=2 (do título inglês) e part=2 (do romaji/inglês)
+// TestNyaaModule_MushokuTenseiIIP2_PartFilter checks the season=2 + part=2 filter (AniList id
+// 166873: Mushoku Tensei II Part 2). ExtractAnimeSeasonPart returns season=2 (from the English
+// title) and part=2 (from the romaji/English)
 func TestNyaaModule_MushokuTenseiIIP2_PartFilter(t *testing.T) {
 	season2 := 2
 	part2 := 2
@@ -1586,25 +1587,25 @@ func TestNyaaModule_MushokuTenseiIIP2_PartFilter(t *testing.T) {
 			"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 07 [1080p]",
 		},
 		incorrect: []string{
-			// Part 1 deve ser rejeitada
+			// Part 1 must be rejected
 			"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 1 - 07 [1080p]",
-			// Sem part marker: rejeitado pelo hard filter quando part é solicitada
+			// No part marker: rejected by the hard filter when a part is requested
 			"[SubsPlease] Mushoku Tensei II - 07 (1080p)",
-			// Episódio errado
+			// Wrong episode
 			"[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu Part 2 - 03 [1080p]",
 		},
 	}
 	runEpisodeNameTest(options, t)
 }
 
-// TestNyaaModule_NieRCour2_CourTreatedAsPart verifica que "Cour 2" é tratado como part=2
-// (Anilist id 167420: NieR:Automata Ver1.1a Cour 2)
+// TestNyaaModule_NieRCour2_CourTreatedAsPart checks that "Cour 2" is treated as part=2 (AniList id
+// 167420: NieR:Automata Ver1.1a Cour 2)
 func TestNyaaModule_NieRCour2_CourTreatedAsPart(t *testing.T) {
 	season2 := 2
 	part2 := 2
 	options := testOptions{
-		// Título inglês: "NieR:Automata Ver1.1a Cour 2" → ExtractPart = 2
-		// Título romaji: "NieR:Automata Ver1.1a 2nd Season" → ExtractSeason = 2
+		// English title: "NieR:Automata Ver1.1a Cour 2" → ExtractPart = 2. Romaji title: "NieR:Automata
+		// Ver1.1a 2nd Season" → ExtractSeason = 2
 		animeName: "NieR Automata Ver1.1a Cour 2",
 		episode:   5,
 		season:    &season2,
@@ -1620,10 +1621,10 @@ func TestNyaaModule_NieRCour2_CourTreatedAsPart(t *testing.T) {
 	runEpisodeNameTest(options, t)
 }
 
-// TestNyaaModule_RomanNumeralSequel_AcceptsSeasonFromTitleItself verifica o fix do bug:
-// sequências cujo título usa apenas um numeral romano (ex: "... II") como marcador de
-// season, sem "Season 2"/"S2" em lugar nenhum e sem o fansub reafirmar isso no nome do
-// torrent, agora são aceitas (Anilist id 194829: Katainaka no Ossan, Kensei ni Naru II).
+// TestNyaaModule_RomanNumeralSequel_AcceptsSeasonFromTitleItself checks the bug fix: sequels whose
+// title uses only a roman numeral (e.g. "... II") as the season marker, with no "Season 2"/"S2"
+// anywhere and without the fansub restating it in the torrent name, are now accepted (AniList id
+// 194829: Katainaka no Ossan, Kensei ni Naru II).
 func TestNyaaModule_RomanNumeralSequel_AcceptsSeasonFromTitleItself(t *testing.T) {
 	season2 := 2
 	options := testOptions{
@@ -1634,20 +1635,20 @@ func TestNyaaModule_RomanNumeralSequel_AcceptsSeasonFromTitleItself(t *testing.T
 			"[Erai-raws] Katainaka no Ossan, Kensei ni Naru II - 01 [1080p AMZN WEB-DL AVC EAC3][MultiSub][13F1C02B]",
 		},
 		incorrect: []string{
-			// Episódio errado
+			// Wrong episode
 			"[Erai-raws] Katainaka no Ossan, Kensei ni Naru II - 02 [1080p AMZN WEB-DL AVC EAC3][MultiSub][13F1C02B]",
 		},
 	}
 	runEpisodeNameTest(options, t)
 }
 
-// TestNyaaModule_HatarakuS2P2_PartHardFilter verifica que hard filter funciona corretamente
-// para Hataraku Maou-sama season 2 part 2 (Anilist id 155168)
+// TestNyaaModule_HatarakuS2P2_PartHardFilter checks that the hard filter works correctly for
+// Hataraku Maou-sama season 2 part 2 (AniList id 155168)
 func TestNyaaModule_HatarakuS2P2_PartHardFilter(t *testing.T) {
 	season2 := 2
 	part2 := 2
 
-	// Hard filter: com requestedPart=2, torrents sem part marker OU com part=1 são rejeitados
+	// Hard filter: with requestedPart=2, torrents without a part marker OR with part=1 are rejected
 	html := mockHtml([]string{
 		"[SubsPlease] Hataraku Maou-sama S2 - 01 (1080p)",        // ep=1, part=nil → rejeitado
 		"[EMBER] Hataraku Maou-sama! (Season 2 | Part 01) Batch", // part=1 → rejeitado (isBatch)
@@ -1663,11 +1664,11 @@ func TestNyaaModule_HatarakuS2P2_PartHardFilter(t *testing.T) {
 	}
 
 	for _, r := range results {
-		// Nenhum resultado deve ter part=nil ou part != 2
+		// No result may have part=nil or part != 2
 		if r.Part == nil || *r.Part != 2 {
 			t.Errorf("expected part=2, got %v in torrent: %s", r.Part, r.Name)
 		}
-		// Nenhum resultado deve ter season != 2
+		// No result may have season != 2
 		if r.Season != nil && *r.Season != 2 {
 			t.Errorf("expected season=2, got %d in torrent: %s", *r.Season, r.Name)
 		}
@@ -1684,7 +1685,8 @@ func TestNyaaModule_HatarakuS2P2_PartHardFilter(t *testing.T) {
 	}
 }
 
-// TestNyaaModule_PartFilter_NoPartRequested verifica que sem requestedPart, torrents com qualquer part são aceitos
+// TestNyaaModule_PartFilter_NoPartRequested checks that without requestedPart, torrents with any
+// part are accepted
 func TestNyaaModule_PartFilter_NoPartRequested(t *testing.T) {
 	options := testOptions{
 		animeName: "My Show Season 2",
@@ -1701,12 +1703,11 @@ func TestNyaaModule_PartFilter_NoPartRequested(t *testing.T) {
 
 func intPtr(n int) *int { return &n }
 
-// packsAndSingles reproduz a particao que o daemon faz sobre a lista unica de ScrapNyaaForAnime,
-// para que os testes das duas buscas antigas continuem valendo sem mudar de asserção.
-// Pack SEM marcador de part sobrevive a uma busca de "Part 2": o pack e da season inteira (a
-// AniList e que quebra a season em cours), e exigir o marcador zerava os packs de toda entrada
-// "Part N" — foi o que deixou Mushoku Tensei II Part 2 sem nenhum pack. So conflito declarado
-// rejeita; quem decide se o pack serve e a cobertura da faixa, no daemon (decisions.md #79).
+// A pack WITHOUT a part marker survives a "Part 2" search: the pack is the whole season (it's
+// AniList that splits the season into cours), and requiring the marker zeroed the packs of every
+// "Part N" entry — that's what left Mushoku Tensei II Part 2 without any pack. Only a declared
+// conflict rejects; whether the pack serves is decided by the range's coverage, in the daemon
+// (decisions.md #79).
 func TestScrapNyaaForAnime_PackWithoutPartMarkerSurvivesPartRequest(t *testing.T) {
 	options := []string{
 		"[Judas] Mushoku Tensei - 01 ~ 23 [BD 1080p][Batch]",
@@ -1729,16 +1730,18 @@ func TestScrapNyaaForAnime_PackWithoutPartMarkerSurvivesPartRequest(t *testing.T
 		got[p.Name] = true
 	}
 	if !got[options[0]] {
-		t.Fatalf("pack sem marcador de part deveria sobreviver, obteve %v", got)
+		t.Fatalf("a pack without a part marker should survive, got %v", got)
 	}
 	if got[options[1]] {
-		t.Fatalf("pack da part 1 nao deveria sobreviver a uma busca da part 2, obteve %v", got)
+		t.Fatalf("a part 1 pack should not survive a part 2 search, got %v", got)
 	}
 	if !got[options[2]] {
-		t.Fatalf("pack da part 2 deveria sobreviver, obteve %v", got)
+		t.Fatalf("a part 2 pack should survive, got %v", got)
 	}
 }
 
+// packsAndSingles reproduces the partition the daemon does over ScrapNyaaForAnime's single list, so
+// the tests of the two old searches keep holding without changing their assertions.
 func packsAndSingles(results []nyaa.TorrentResult) (packs, singles []nyaa.TorrentResult) {
 	for _, r := range results {
 		switch {
@@ -1751,9 +1754,9 @@ func packsAndSingles(results []nyaa.TorrentResult) (packs, singles []nyaa.Torren
 	return packs, singles
 }
 
-// A unificacao nao pode mudar a query: reSeasonNamePatterns (batch) e reSeasonStrip+rePartStrip
-// (multi) removiam o MESMO conjunto (Season N, S N, Nª Season, Cour N, Part N). Este teste e a
-// garantia de que o saneamento unificado nao regride.
+// The unification must not change the query: reSeasonNamePatterns (batch) and
+// reSeasonStrip+rePartStrip (multi) removed the SAME set (Season N, S N, Nth Season, Cour N, Part
+// N). This test guarantees the unified sanitizing doesn't regress.
 func TestScrapNyaaForAnime_QueryMatchesTheTwoOldSearches(t *testing.T) {
 	titles := []struct{ in, wantQuery string }{
 		{"Show", "Show"},
@@ -1776,13 +1779,13 @@ func TestScrapNyaaForAnime_QueryMatchesTheTwoOldSearches(t *testing.T) {
 		restore()
 
 		if !strings.Contains(gotURL, "q="+url.QueryEscape(tc.wantQuery)+"&") && !strings.HasSuffix(gotURL, "q="+url.QueryEscape(tc.wantQuery)) {
-			t.Errorf("%q: esperava a query %q na URL, obteve %q", tc.in, tc.wantQuery, gotURL)
+			t.Errorf("%q: want query %q in the URL, got %q", tc.in, tc.wantQuery, gotURL)
 		}
 	}
 }
 
-// Uma pagina com pack e episodio devolve os DOIS na mesma lista, distinguiveis por IsBatch /
-// Episode — a particao no daemon reproduz o que as duas funcoes antigas devolviam.
+// A page with a pack and an episode returns BOTH in the same list, distinguishable by IsBatch /
+// Episode — the partition in the daemon reproduces what the two old functions returned.
 func TestScrapNyaaForAnime_ReturnsPacksAndEpisodesInOneList(t *testing.T) {
 	html := mockHtml([]string{
 		"[SubsPlease] Frieren (01-28) [1080p]",
@@ -1805,21 +1808,21 @@ func TestScrapNyaaForAnime_ReturnsPacksAndEpisodesInOneList(t *testing.T) {
 		case r.Episode != nil:
 			singles++
 			if *r.Episode != 5 {
-				t.Errorf("episodio fora da lista pedida entrou: %d", *r.Episode)
+				t.Errorf("an episode outside the requested list got in: %d", *r.Episode)
 			}
 		default:
-			t.Errorf("resultado sem IsBatch e sem Episode: %q", r.Name)
+			t.Errorf("result with neither IsBatch nor Episode: %q", r.Name)
 		}
 	}
 	if packs != 1 {
-		t.Errorf("esperava 1 pack, obteve %d", packs)
+		t.Errorf("want 1 pack, got %d", packs)
 	}
 	if singles != 1 {
-		t.Errorf("esperava 1 episodio (so o 5 foi pedido), obteve %d", singles)
+		t.Errorf("want 1 episode (only 5 was requested), got %d", singles)
 	}
 }
 
-// O piso de paginacao (enoughCandidates = 3) conta as DUAS listas somadas.
+// The pagination floor (enoughCandidates = 3) counts BOTH lists together.
 func TestScrapNyaaForAnime_PaginationFloorCountsBothLists(t *testing.T) {
 	pages := 0
 	restore := nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
@@ -1837,12 +1840,12 @@ func TestScrapNyaaForAnime_PaginationFloorCountsBothLists(t *testing.T) {
 		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 	if pages != 1 {
-		t.Errorf("2 packs + 1 episodio ja atingem o piso: esperava 1 pagina, obteve %d", pages)
+		t.Errorf("2 packs + 1 episode already reach the floor: want 1 page, got %d", pages)
 	}
 }
 
-// rowWithSize e o getRow com a celula de tamanho preenchida — o getRow padrao deixa td[3] vazia
-// (Size 0), que e justamente o caso que passa livre pelo teto.
+// rowWithSize is getRow with the size cell filled — the default getRow leaves td[3] empty (Size 0),
+// which is precisely the case that passes the ceiling freely.
 func rowWithSize(name, size string) string {
 	return strings.Replace(getRow(name), "<td></td>\n\t  <td>"+time.Now().Format("2006-01-02 15:04"),
 		"<td>"+size+"</td>\n\t  <td>"+time.Now().Format("2006-01-02 15:04"), 1)
@@ -1853,9 +1856,9 @@ func pageWithRows(rows ...string) string {
 		strings.Join(rows, "\n") + `</tbody></table></body></html>`
 }
 
-// Pack acima de max_batch_torrent_size_gb nao pode contar para o piso de paginacao: era o caso
-// One Piece, onde os packs gigantes das primeiras paginas encerravam a descida e os parciais que
-// cabiam nunca eram vistos.
+// A pack above max_batch_torrent_size_gb must not count toward the pagination floor: that was the
+// One Piece case, where the giant packs of the first pages ended the descent and the partial ones
+// that fit were never seen.
 func TestScrapNyaaForAnime_OversizedBatchDoesNotStopPagination(t *testing.T) {
 	defer nyaa.SetMaxSearchPages(5)()
 	defer nyaa.SetMaxBatchTorrentSizeGB(100)()
@@ -1880,17 +1883,17 @@ func TestScrapNyaaForAnime_OversizedBatchDoesNotStopPagination(t *testing.T) {
 		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 	if len(urls) < 2 {
-		t.Fatalf("3 packs gigantes nao podem encerrar a descida: esperava >=2 fetches, obtive %d: %v", len(urls), urls)
+		t.Fatalf("3 giant packs must not end the descent: want >=2 fetches, got %d: %v", len(urls), urls)
 	}
 	if len(results) != 1 {
-		t.Fatalf("esperava so o pack de 61 GiB, obtive %d: %v", len(results), results)
+		t.Fatalf("want only the 61 GiB pack, got %d: %v", len(results), results)
 	}
 	if !strings.Contains(results[0].Name, "575-782") {
-		t.Fatalf("esperava o pack parcial de 61 GiB, obtive %q", results[0].Name)
+		t.Fatalf("want the 61 GiB partial pack, got %q", results[0].Name)
 	}
 }
 
-// Teto desligado (0) mantem o comportamento antigo: pack gigante entra e conta para o piso.
+// Ceiling off (0) keeps the old behavior: a giant pack goes in and counts toward the floor.
 func TestScrapNyaaForAnime_BatchSizeCeilingOffKeepsOversizedPacks(t *testing.T) {
 	defer nyaa.SetMaxSearchPages(5)()
 	defer nyaa.SetMaxBatchTorrentSizeGB(0)()
@@ -1909,19 +1912,19 @@ func TestScrapNyaaForAnime_BatchSizeCeilingOffKeepsOversizedPacks(t *testing.T) 
 		t.Fatalf("ScrapNyaaForAnime error: %v", err)
 	}
 	if len(results) != 3 {
-		t.Fatalf("com o teto desligado os 3 packs entram, obtive %d", len(results))
+		t.Fatalf("with the ceiling off the 3 packs go in, got %d", len(results))
 	}
 	if len(urls) != 1 {
-		t.Fatalf("3 packs aceitos atingem o piso: esperava 1 fetch, obtive %d", len(urls))
+		t.Fatalf("3 accepted packs reach the floor: want 1 fetch, got %d", len(urls))
 	}
 }
 
-// --- F2: titulo alternativo depois do marcador de temporada ---
+// --- F2: alternative title after the season marker ---
 
-// O caso real que motivou a correcao: o EMBER poe o marcador "Season 2" dentro de
-// "(Season 2 | Part 2)" e o romaji completo tres grupos adiante, entre parenteses. Cortar no
-// marcador deixava so [mushoku tensei jobless reincarnation], e a query em romaji era rejeitada
-// por falta de token — os UNICOS packs de Part 2 morriam antes de chegar ao caminho de batch.
+// The real case that motivated the fix: EMBER puts the "Season 2" marker inside "(Season 2 | Part
+// 2)" and the full romaji three groups later, in parentheses. Cutting at the marker left only
+// [mushoku tensei jobless reincarnation], and the romaji query was rejected for a missing token —
+// the ONLY Part 2 packs died before reaching the batch path.
 func TestTitleMatchesQuery_AltTitleAfterMarker(t *testing.T) {
 	const romaji = "Mushoku Tensei II: Isekai Ittara Honki Dasu"
 	tests := []struct {
@@ -1929,19 +1932,19 @@ func TestTitleMatchesQuery_AltTitleAfterMarker(t *testing.T) {
 		torrent string
 		query   string
 	}{
-		{"EMBER pack part 2, romaji entre parenteses",
+		{"EMBER pack part 2, romaji in parentheses",
 			"[EMBER] Mushoku Tensei: Jobless Reincarnation (2024) (Season 2 | Part 2) [BDRip] [1080p Dual Audio HEVC 10 bits DDP] (Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2) (Batch)",
 			romaji},
 		{"EMBER pack part 1",
 			"[EMBER] Mushoku Tensei: Jobless Reincarnation (2023) (Season 2 | Part 1 + Special) [1080p] [Dual Audio HEVC WEBRip DDP] (Mushoku Tensei II: Isekai Ittara Honki Dasu) (Batch)",
 			romaji},
-		{"Diddy pack de season, romaji depois de barra solta",
+		{"Diddy season pack, romaji after a loose bar",
 			"[Diddy] Mushoku Tensei - S02 (BD 1080p HEVC Opus) [Dual Audio] | Mushoku Tensei II: Isekai Ittara Honki Dasu | Jobless Reincarnation Season 2",
 			romaji},
-		{"NTRX pack de season, romaji depois de barra solta",
+		{"NTRX season pack, romaji after a loose bar",
 			"[NTRX] Mushoku Tensei: Jobless Reincarnation S02 (Season 2) REPACK (BD Remux 1080p AVC FLAC 2.0) [Dual Audio] | Mushoku Tensei II: Isekai Ittara Honki Dasu",
 			romaji},
-		{"VARYG episodio avulso, romaji entre parenteses depois do titulo do episodio",
+		{"VARYG loose episode, romaji in parentheses after the episode title",
 			"Mushoku Tensei Jobless Reincarnation S02E07 The Kidnapping and Confinement of Beast Girls 1080p NF WEB-DL AAC2.0 H 264-VARYG (Mushoku Tensei II: Isekai Ittara Honki Dasu, Multi-Subs)",
 			romaji},
 	}
@@ -1954,15 +1957,15 @@ func TestTitleMatchesQuery_AltTitleAfterMarker(t *testing.T) {
 	}
 }
 
-// O par do teste acima: a segunda tentativa amplia os tokens, nao afrouxa o match. Um titulo
-// alternativo depois do marcador que NAO e o anime pedido continua sendo rejeitado.
+// The pair of the test above: the second attempt widens the tokens, it doesn't loosen the match. An
+// alternative title after the marker that is NOT the requested anime is still rejected.
 func TestTitleMatchesQuery_AltTitleDoesNotAcceptWrongAnime(t *testing.T) {
 	tests := []struct{ torrent, query string }{
-		// Sequencia diferente: o romaji no rodape diz III, a query pede II.
+		// A different sequel: the romaji in the footer says III, the query asks for II.
 		{"[Erai-raws] Mushoku Tensei III: Isekai Ittara Honki Dasu - 01 [1080p CR WEB-DL AVC AAC][MultiSub][07335B96]",
 			"Mushoku Tensei II: Isekai Ittara Honki Dasu"},
-		// Pack real da season 2 contra a query da season 3: o rodape traz o romaji, mas com o
-		// numeral errado. E o token que a checagem 1 exige e nao acha.
+		// A real season 2 pack against the season 3 query: the footer carries the romaji, but with the
+		// wrong numeral. That's the token check 1 requires and doesn't find.
 		{"[EMBER] Mushoku Tensei: Jobless Reincarnation (2024) (Season 2 | Part 2) [BDRip] [1080p Dual Audio HEVC 10 bits DDP] (Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2) (Batch)",
 			"Mushoku Tensei III: Isekai Ittara Honki Dasu"},
 	}
@@ -1972,5 +1975,35 @@ func TestTitleMatchesQuery_AltTitleDoesNotAcceptWrongAnime(t *testing.T) {
 				t.Errorf("TitleMatchesQuery(%q, %q) = true, want false", tt.torrent, tt.query)
 			}
 		})
+	}
+}
+
+// Old anime is often released as one torrent named only by the title and the source. Large and
+// numberless, it is an unlabeled pack; small and numberless (a web short) it stays out.
+func TestScrapNyaaForAnime_LargeNumberlessRowIsUnlabeledPack(t *testing.T) {
+	html := pageWithRows(
+		rowWithSize("[man] Azumanga Daioh [BD 1080p HEVC FLAC]", "19.2 GiB"),
+		rowWithSize("[Obscurerips] Azumanga Web Daioh", "18.9 MiB"),
+	)
+	defer mockHttpGet(html)()
+
+	results, err := nyaa.ScrapNyaaForAnime("Azumanga Daioh", []int{1, 2}, nil, nil)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForAnime error: %v", err)
+	}
+	if len(results) != 1 || !results[0].IsBatch || !results[0].UnlabeledPack {
+		t.Fatalf("want only the BD release, as an unlabeled pack; got %+v", results)
+	}
+}
+
+// The base title goes first: the roman-numeral variants never match "…Darou ka S5 - 08".
+func TestGenerateSearchTitleVariants_RomanSeasonBaseFirst(t *testing.T) {
+	got := nyaa.GenerateSearchTitleVariants("Dungeon ni Deai wo Motomeru no wa Machigatteiru Darou ka V: Houjou no Megami-hen", "Is It Wrong to Try to Pick Up Girls in a Dungeon? V")
+	if len(got) == 0 || got[0] != "Dungeon ni Deai wo Motomeru no wa Machigatteiru Darou ka" {
+		t.Errorf("want the base title first, got %v", got)
+	}
+	// The English title doesn't carry the numeral: a name, not a sequel.
+	if got := nyaa.GenerateSearchTitleVariants("Lupin III", "Lupin the 3rd"); got[0] == "Lupin" {
+		t.Errorf("Lupin III must keep its variants, got %v", got)
 	}
 }

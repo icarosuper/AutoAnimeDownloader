@@ -11,13 +11,16 @@ var (
 	reSeasonStrip = regexp.MustCompile(`(?i)\s+(?:season\s*\d+|s\s*\d+|\d+(?:st|nd|rd|th)\s+season|cour\s*\d+)`)
 
 	// Batch detection patterns
+	// A roman numeral closing a title, with an optional ": subtitle" (romanSequelBase).
+	reRomanSeasonTitle = regexp.MustCompile(`^(.+?)\s+(II|III|IV|V|VI|VII|VIII|IX)(?:\s*:.*)?$`)
+
 	reBatchPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\(batch\)|\[batch\]|\s+batch\s+`),
 		regexp.MustCompile(`(?i)\(unofficial\s+batch\)`),
 		regexp.MustCompile(`(?i)\(\d{1,4}\s*[-~]\s*\d{1,4}\)`),
-		// O fim da faixa pode ser espaço, fim do nome, extensão ou colchete: exigir espaço
-		// deixava passar "One Piece EP 001-501" e "One Piece 001-501.mkv" — packs de 500
-		// episódios que a busca de episódio lia como "episódio 1" (ver decisions.md #53).
+		// The end of the range can be a space, the end of the name, an extension or a bracket: requiring
+		// a space let "One Piece EP 001-501" and "One Piece 001-501.mkv" through — 500-episode packs that
+		// the episode search read as "episode 1" (see decisions.md #53).
 		regexp.MustCompile(`(?i)\s\d{2,4}\s*[-~]\s*\d{2,4}(?:\s|$|\.|\[)`),
 		regexp.MustCompile(`(?i)\s\d{2,4}~\d{2,4}\s`),
 		regexp.MustCompile(`(?i)\(complete\)|\[complete\]|\s+complete\s+`),
@@ -45,8 +48,8 @@ var (
 		regexp.MustCompile(`(?i)theater\s+version`),
 		regexp.MustCompile(`(?i)theatrical`),
 	}
-	// \b é obrigatório: sem ele "ona" casa dentro de "Persona", "ova" dentro de
-	// "Nova", e o título do anime é lido como marcador de OVA.
+	// \b is required: without it "ona" matches inside "Persona", "ova" inside "Nova", and the anime
+	// title is read as an OVA marker.
 	reOvaPattern     = regexp.MustCompile(`(?i)\b(ova|ona)\b|original\s+(video|net)\s+animation`)
 	reSpecialPattern = regexp.MustCompile(`(?i)\(special\)|\[special\]|\sspecial\s|(tv\s+special|episode\s+sp)`)
 	reHasEpisode     = regexp.MustCompile(`(?i)(-\s?\d{1,4}|episode\s*\d{1,4}|s\d{1,2}e\d{1,4})`)
@@ -59,8 +62,8 @@ var (
 		re   *regexp.Regexp
 		desc string
 	}{
-		// 4 dígitos: animes longos (One Piece 1123+). Exceção: `[05]` fica em 3
-		// dígitos porque `[2025]` (ano) é muito mais comum que episódio de 4 dígitos entre colchetes.
+		// 4 digits: long anime (One Piece 1123+). Exception: `[05]` stays at 3 digits because `[2025]` (a
+		// year) is far more common than a 4-digit episode in brackets.
 		{regexp.MustCompile(`(?i)S\d{1,2}E(\d{1,4})`), "S01E05"},
 		{regexp.MustCompile(`(?i)\s+-\s+(\d{1,4})(?:\s|v\d+|$|\[)`), "- 05, - 05v2"},
 		{regexp.MustCompile(`(?i)\s+-\s+(\d{1,4})\s*\(`), "- 05 (1080p)"},
@@ -169,9 +172,9 @@ var (
 		{regexp.MustCompile(`(?i)\bCour\s*(\d+)\b`), "Cour 2"},
 	}
 
-	// Qualquer declaracao de part/cour no nome, para detectar as MULTIPLAS: "(Part 1 + Part 2)" e
-	// "(Season 4 Part 03+04)" nao sao packs da part 1/3 (ver ExtractPart). O grupo opcional cobre
-	// a forma compacta, em que o segundo numero nao repete a palavra "Part".
+	// Any part/cour declaration in the name, to detect MULTIPLE ones: "(Part 1 + Part 2)" and "(Season
+	// 4 Part 03+04)" are not packs of part 1/3 (see ExtractPart). The optional group covers the
+	// compact form, where the second number doesn't repeat the word "Part".
 	reAnyPart = regexp.MustCompile(`(?i)\b(?:part|cour)\s*0*(\d+)(?:\s*[+&]\s*0*(\d+))?`)
 
 	// Part stripping from query names (companion to reSeasonStrip)
@@ -180,9 +183,9 @@ var (
 	// Size parsing
 	reParseSizeRe = regexp.MustCompile(`(?i)^([\d.]+)\s*([KMGT]?i?B)$`)
 
-	// Tudo que nao e letra, digito ou espaco, para removeSpecialCharacters. Ele APAGA o que
-	// casa ("Re:Zero" -> "rezero"); nao confundir com reMatchNonAlpha (nyaa_match.go), que
-	// troca por espaco ("Re:Zero" -> "re zero"). As duas normalizacoes sao de proposito
-	// diferentes: esta monta a query de busca, aquela tokeniza para casar titulo.
+	// Everything that isn't a letter, digit or space, for removeSpecialCharacters. It DELETES what
+	// matches ("Re:Zero" -> "rezero"); not to be confused with reMatchNonAlpha (nyaa_match.go), which
+	// replaces with a space ("Re:Zero" -> "re zero"). The two normalizations differ on purpose: this
+	// one builds the search query, that one tokenizes to match titles.
 	reSpecialChars = regexp.MustCompile(`[^a-z0-9\s]`)
 )
