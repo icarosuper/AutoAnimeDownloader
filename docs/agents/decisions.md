@@ -2851,7 +2851,8 @@ Two rules, both only for the per-episode fallback:
 loose episodes) still runs every pass. A pack or a live episode that shows up is caught there;
 the skipped episodes still get whatever it found. A newly aired episode has no miss recorded and
 is searched right away. A skipped episode keeps its report row with the stats of its last real
-search.
+search; one that was never searched itself (skipped because an earlier one is missing) reports
+`awaiting_earlier_episode` — `no_torrent_found` would claim a search that didn't happen.
 
 **Cost accepted:** an episode that's never released (a fansub that skipped one) blocks the
 per-episode search of the ones after it — they're left to the anime search. And the state is in

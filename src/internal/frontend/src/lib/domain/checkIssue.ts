@@ -1,6 +1,6 @@
-// A fronteira é a mesma que lib/domain/animeState.ts documenta e defende: o backend manda
-// CÓDIGO + NÚMEROS, o frontend monta a frase. Uma string pronta vinda do Go obrigaria o daemon
-// a saber o locale do navegador.
+// The boundary is the same one lib/domain/animeState.ts documents and defends: the backend sends
+// CODE + NUMBERS, the frontend builds the sentence. A ready string from Go would force the daemon
+// to know the browser's locale.
 import * as m from '../i18n/messages.js'
 import type { Issue } from '../api/client.js'
 
@@ -22,18 +22,20 @@ export function issueMessage(issue: Issue): string {
       return m.lastcheck_disk_full()
     case 'torrent_rejected':
       return m.lastcheck_torrent_rejected({ candidates: issue.candidates ?? 0 })
+    case 'awaiting_earlier_episode':
+      return m.lastcheck_awaiting_earlier_episode()
     case 'max_episodes_per_anime':
       return m.lastcheck_max_episodes_per_anime({
         downloaded: issue.downloaded ?? 0,
         pending: issue.pending ?? 0,
       })
     default:
-      // Um código novo no backend não pode virar linha em branco na tela.
+      // A new code in the backend can't become a blank line on the screen.
       return m.lastcheck_unknown({ code: issue.code })
   }
 }
 
-/** A explicação de por que o batch não entrou naquele anime. "" quando ele nunca foi elegível. */
+/** The explanation of why the batch didn't make it into that anime. "" when it was never eligible. */
 export function batchNote(issue: Issue): string {
   switch (issue.batch_skipped) {
     case 'no_result':

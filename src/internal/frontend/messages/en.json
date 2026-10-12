@@ -411,6 +411,7 @@
   "lastcheck_no_torrent_found": "No torrent found on Nyaa.",
   "lastcheck_disk_full": "Not enough free disk space.",
   "lastcheck_torrent_rejected": "The torrent client rejected all {candidates} magnets.",
+  "lastcheck_awaiting_earlier_episode": "Not searched yet: an earlier episode is still missing.",
   "lastcheck_max_episodes_per_anime": "Per-anime limit reached: {downloaded} downloaded, {pending} still waiting.",
   "lastcheck_batch_no_result": "No batch torrent was found for this anime.",
   "lastcheck_batch_above_size_limit": "A batch was found but it is above the batch size ceiling.",

@@ -82,7 +82,8 @@ já existe. Se o arquivo de fato não estiver lá, o problema é da faixa declar
 That's the miss backoff ([decisions.md #100](decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes)):
 the episode's own search came back empty recently (`earlier_episode_missing: false`), or an earlier
 episode of the same anime ended the pass without a torrent (`true`). The report row keeps the stats
-of the last real search. To search it right now, run `make debug-anime` (Step 0) or restart the
+of the episode's last real search; one never searched itself shows `awaiting_earlier_episode`
+("Not searched yet: an earlier episode is still missing"). To search it right now, run `make debug-anime` (Step 0) or restart the
 daemon — the backoff lives in memory.
 
 **`disk_full` / "insufficient free disk space" while `df` shows plenty free** → read the error's

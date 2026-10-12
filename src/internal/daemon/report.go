@@ -7,82 +7,86 @@ import (
 	"time"
 )
 
-// Codigos de PROBLEMA: algo que devia ter baixado e nao baixou.
+// PROBLEM codes: something that should have downloaded and didn't.
 const (
 	IssueAllAboveSizeLimit = "all_above_size_limit"
 	IssueNoSeeders         = "no_seeders"
 	IssueNoTorrentFound    = "no_torrent_found"
 	IssueDiskFull          = "disk_full"
 	IssueTorrentRejected   = "torrent_rejected"
+	// IssueAwaitingEarlierEpisode: the episode wasn't searched at all, because an earlier episode
+	// of the same anime is still missing (decisions.md #100). Without its own code it fell into
+	// no_torrent_found, which claims a search that never happened.
+	IssueAwaitingEarlierEpisode = "awaiting_earlier_episode"
 )
 
-// Codigo de LIMITE: a config funcionando como configurada. Peso visual diferente na UI porque o
-// usuario frequentemente nao relaciona o limite com o sintoma ("por que so baixou 12 de 47?").
+// LIMIT code: the config working as configured. Different visual weight in the UI because the user
+// often doesn't connect the limit with the symptom ("why did it only download 12 of 47?").
 const IssueMaxEpisodesPerAnime = "max_episodes_per_anime"
 
-// Valores de Issue.BatchSkipped — o porque de max_episodes_per_anime estar valendo NAQUELE anime.
-// Batch desligado nao bloqueia nada por si so: ele so deixa o limite por anime valendo, e o
-// sintoma que o usuario sente e sempre o limite. Por isso e campo de detalhe, e nao codigo.
+// Values of Issue.BatchSkipped — why max_episodes_per_anime is in force in THAT anime. A skipped
+// batch blocks nothing by itself: it only leaves the per-anime limit in force, and the symptom the
+// user feels is always the limit. That's why it's a detail field and not a code.
 const (
-	BatchSkippedNoResult       = "no_result"        // a busca nao devolveu linha de pack nenhuma
-	BatchSkippedAboveSizeLimit = "above_size_limit" // havia packs, o filtro cortou todos
-	BatchSkippedNoCoverage     = "no_coverage"      // packs sobreviveram, nenhum cobre a janela
+	BatchSkippedNoResult       = "no_result"        // the search returned no pack row at all
+	BatchSkippedAboveSizeLimit = "above_size_limit" // there were packs, the filter cut them all
+	BatchSkippedNoCoverage     = "no_coverage"      // packs survived, none covers the window
 )
 
-// Issue e uma linha do relatorio: um par (anime, codigo), com os episodios afetados quando o
-// codigo e de problema.
+// Issue is one row of the report: an (anime, code) pair, with the affected episodes when the code is
+// a problem.
 //
-// Campos de detalhe achatados com omitempty, e nao um detail map[string]any: um mapa livre nao
-// gera Swagger utilizavel nem tipo TS decente, e o preco e uma struct de dez campos com tres
-// preenchidos por vez.
+// Detail fields flattened with omitempty, and not a detail map[string]any: a free map doesn't
+// generate usable Swagger nor a decent TS type, and the price is a struct of ten fields with three
+// filled at a time.
 type Issue struct {
 	AnimeID   int    `json:"anime_id" example:"269"`
 	AnimeName string `json:"anime_name" example:"Bleach"`
-	// Episodes so e preenchido em PROBLEMA: um problema acontece num episodio (ele foi buscado,
-	// os candidatos foram avaliados, aquele episodio nao baixou). O limite e o contrario — o
-	// daemon parou de considerar episodios ao atingir a conta, entao nao existe "os episodios
-	// afetados", existe uma quantidade que sobrou (Downloaded/Pending).
+	// Episodes is only filled in a PROBLEM: a problem happens to an episode (it was searched, the
+	// candidates were evaluated, that episode didn't download). The limit is the opposite — the
+	// daemon stopped considering episodes when it hit the count, so there are no "affected
+	// episodes", there's a quantity left over (Downloaded/Pending).
 	Episodes []int  `json:"episodes,omitempty"`
 	Code     string `json:"code" example:"all_above_size_limit"`
 
 	Candidates int     `json:"candidates,omitempty" example:"8"`
 	LimitGB    float64 `json:"limit_gb,omitempty" example:"3"`
 	MinSeeders int     `json:"min_seeders,omitempty" example:"1"`
-	// Downloaded e quantos episodios CONSUMIRAM uma vaga sob o teto, nao quantos baixaram neste
-	// passe: handleAlreadySavedEpisode tambem incrementa o contador para episodio ja salvo. E o
-	// numero certo para a frase "baixou N, sobraram M" — os N ja estao na biblioteca —, mas quem
-	// ler isso como "downloads deste passe" vai se enganar.
+	// Downloaded is how many episodes TOOK a slot under the ceiling, not how many downloaded in this
+	// pass: handleAlreadySavedEpisode also increments the counter for an already saved episode.
+	// It's the right number for the sentence "downloaded N, M left" — the N are already in the
+	// library —, but whoever reads it as "downloads of this pass" will be misled.
 	Downloaded   int    `json:"downloaded,omitempty" example:"12"`
 	Pending      int    `json:"pending,omitempty" example:"35"`
 	BatchSkipped string `json:"batch_skipped,omitempty" example:"no_result"`
 }
 
-// CheckReport e o relatorio do ULTIMO passe, e so dele. Nao e historico.
+// CheckReport is the report of the LAST pass, and only of it. It isn't history.
 type CheckReport struct {
 	FinishedAt time.Time `json:"finished_at" example:"2026-08-19T12:00:00Z"`
 	PassError  string    `json:"pass_error" example:""`
-	// PassErrorCode e a CAUSA do aborto, para o frontend montar a frase. PassError continua
-	// carregando o texto cru, que a tela mostra recolhido: sem ele um usuario que quer abrir
-	// issue nao tem o que colar. Ver passerror.go.
+	// PassErrorCode is the CAUSE of the abort, for the frontend to build the sentence. PassError keeps
+	// carrying the raw text, which the screen shows collapsed: without it a user who wants to open
+	// an issue has nothing to paste. See passerror.go.
 	PassErrorCode string  `json:"pass_error_code" example:"anilist"`
 	Problems      []Issue `json:"problems"`
 	Limits        []Issue `json:"limits"`
 }
 
-// isLimitCode separa as duas categorias. Hoje ha um unico codigo de limite; a funcao existe para
-// que acrescentar o segundo seja uma linha e nao uma cacada por comparacoes espalhadas.
+// isLimitCode separates the two categories. Today there's a single limit code; the function exists
+// so that adding the second one is one line and not a hunt for scattered comparisons.
 func isLimitCode(code string) bool {
 	return code == IssueMaxEpisodesPerAnime
 }
 
-// aggregateIssues junta os Issues crus de todos os animes em um por par (anime, codigo) e separa
-// em problemas e limites, cada lista ordenada por nome do anime.
+// aggregateIssues merges the raw Issues of every anime into one per (anime, code) pair and splits
+// them into problems and limits, each list sorted by anime name.
 //
-// ponytail: quando dois episodios do mesmo anime batem no mesmo codigo com detalhes diferentes
-// (ep 12 com 8 candidatos, ep 13 com 4), os campos de detalhe do PRIMEIRO vencem e os do segundo
-// somem. Somar seria mentira ("12 candidatos" nao existiu em busca nenhuma) e listar os dois
-// exigiria um detalhe por episodio, que e o relatorio-por-episodio que a spec descartou. Se um
-// dia isso incomodar, o caminho e Detail []struct{Episode int; ...} dentro do Issue.
+// ponytail: when two episodes of the same anime hit the same code with different details (ep 12 with
+// 8 candidates, ep 13 with 4), the FIRST one's detail fields win and the second's disappear. Summing
+// would be a lie ("12 candidates" existed in no search) and listing both would need a detail per
+// episode, which is the per-episode report the spec discarded. If that ever bothers, the way is
+// Detail []struct{Episode int; ...} inside the Issue.
 func aggregateIssues(raw []Issue) (problems, limits []Issue) {
 	type key struct {
 		animeID int
@@ -118,8 +122,8 @@ func aggregateIssues(raw []Issue) (problems, limits []Issue) {
 	return problems, limits
 }
 
-// sortIssues ordena por nome do anime, com o codigo como desempate — estavel e previsivel, sem
-// inventar um ranking de severidade que ninguem pediu.
+// sortIssues sorts by anime name, with the code as tiebreaker — stable and predictable, without
+// inventing a severity ranking nobody asked for.
 func sortIssues(issues []Issue) {
 	sort.SliceStable(issues, func(i, j int) bool {
 		if issues[i].AnimeName != issues[j].AnimeName {
@@ -129,13 +133,13 @@ func sortIssues(issues []Issue) {
 	})
 }
 
-// searchIssue traduz o que a busca por episodio descartou no codigo de problema mais especifico
-// que couber.
+// searchIssue translates what the per-episode search discarded into the most specific problem code
+// that fits.
 //
-// A ordem e CASCATA, nao conjunto: quando um filtro esvazia a lista, len(magnets) == 0 tambem e
-// verdade, e "nenhum torrent encontrado" e a resposta menos acionavel das tres — e mentirosa,
-// porque havia oito. A primeira condicao que casa vence, e a ordem e a regra de negocio; mesma
-// disciplina da cascata de deriveAnimeChip no frontend.
+// The order is a CASCADE, not a set: when a filter empties the list, len(magnets) == 0 is also
+// true, and "no torrent found" is the least actionable answer of the three — and a lying one,
+// because there were eight. The first condition that matches wins, and the order is the business
+// rule; same discipline as the deriveAnimeChip cascade in the frontend.
 func searchIssue(animeID int, animeName string, episode int, stats dropStats, configs *files.Config) Issue {
 	issue := Issue{AnimeID: animeID, AnimeName: animeName, Episodes: []int{episode}}
 	switch {

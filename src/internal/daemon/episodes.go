@@ -221,12 +221,15 @@ func processAnimeEpisodes(
 		// pack ever needs its own code, the way is to pass packStats here instead of overwriting this
 		// one.
 		var searchStats dropStats
+		// awaitingEarlier: skipped for an earlier missing episode, with no search of its own to report.
+		awaitingEarlier := false
 		if len(candidates) == 0 {
 			due := true
 			if searcher.misses != nil {
 				due, searchStats = searcher.misses.due(missKey, time.Now())
 			}
 			if stuck || !due {
+				awaitingEarlier = stuck && searchStats == dropStats{}
 				logger.Logger.Debug().
 					Str("episode", epName).
 					Bool("earlier_episode_missing", stuck).
@@ -247,7 +250,11 @@ func processAnimeEpisodes(
 			logger.Logger.Warn().
 				Str("episode", epName).
 				Msg("No torrent found for episode")
-			result.issues = append(result.issues, searchIssue(anime.Media.Id, animeTitle, ep.Episode, searchStats, configs))
+			issue := searchIssue(anime.Media.Id, animeTitle, ep.Episode, searchStats, configs)
+			if awaitingEarlier {
+				issue.Code = IssueAwaitingEarlierEpisode
+			}
+			result.issues = append(result.issues, issue)
 			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, notifications.ReasonNotFound)
 			continue
 		}

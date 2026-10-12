@@ -411,6 +411,7 @@
   "lastcheck_no_torrent_found": "Nenhum torrent encontrado no Nyaa.",
   "lastcheck_disk_full": "Espaço em disco insuficiente.",
   "lastcheck_torrent_rejected": "O cliente de torrent recusou todos os {candidates} magnets.",
+  "lastcheck_awaiting_earlier_episode": "Ainda não buscado: um episódio anterior continua faltando.",
   "lastcheck_max_episodes_per_anime": "Limite por anime atingido: {downloaded} baixados, {pending} na espera.",
   "lastcheck_batch_no_result": "Nenhum torrent de batch foi encontrado para este anime.",
   "lastcheck_batch_above_size_limit": "Um batch foi encontrado, mas está acima do teto de tamanho de batch.",

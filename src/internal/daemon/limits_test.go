@@ -636,8 +636,17 @@ func TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes(t *testing.T) {
 		return processAnimeEpisodes(limitsConfig(), torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher, nil)
 	}
 
-	if result := pass(); fmt.Sprint(searched) != "[1]" || len(result.issues) != 3 {
+	result := pass()
+	if fmt.Sprint(searched) != "[1]" || len(result.issues) != 3 {
 		t.Fatalf("first pass: want only episode 1 searched and 3 issues, got %v and %d", searched, len(result.issues))
+	}
+	// Only episode 1 was searched: 2 and 3 must not claim "no torrent found".
+	var codes []string
+	for _, issue := range result.issues {
+		codes = append(codes, issue.Code)
+	}
+	if want := fmt.Sprint([]string{IssueNoTorrentFound, IssueAwaitingEarlierEpisode, IssueAwaitingEarlierEpisode}); fmt.Sprint(codes) != want {
+		t.Errorf("first pass: want codes %s, got %v", want, codes)
 	}
 	if pass(); len(searched) != 0 {
 		t.Fatalf("second pass: want no search while episode 1 waits, got %v", searched)
