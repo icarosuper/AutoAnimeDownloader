@@ -285,6 +285,10 @@ func toInfo(t *torrent.Torrent) TorrentInfo {
 // param, while this scans all of them and prefers `urn:btih:`. That makes hybrid v1/v2
 // magnets that list `urn:btmh:` first parse here instead of being rejected outright.
 // Only `urn:btih:` (v1) is supported — a magnet with no btih xt is an error.
+// InfoHash is parseInfoHash for the daemon: the disk guard keys its reservations by the hash a
+// magnet will get BEFORE adding it, so the N episodes of one pack reserve its size once.
+func InfoHash(magnet string) (string, error) { return parseInfoHash(magnet) }
+
 func parseInfoHash(magnet string) (string, error) {
 	u, err := url.Parse(magnet)
 	if err != nil {

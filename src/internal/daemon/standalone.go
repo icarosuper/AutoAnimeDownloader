@@ -157,7 +157,8 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 	// the button do nothing for up to a day.
 	searcher := defaultNyaaSearcher()
 	searcher.misses = nil
-	result := processAnimeEpisodes(configs, backend, *anime, backend.List(), savedEpisodes, seriesIndex, blockedMap, searcher)
+	torrentsNow := backend.List()
+	result := processAnimeEpisodes(configs, backend, *anime, torrentsNow, savedEpisodes, seriesIndex, blockedMap, searcher, newDiskBudget(torrentsNow, savedEpisodes))
 
 	saveEpisodesToFile(fm, result.newEpisodes)
 

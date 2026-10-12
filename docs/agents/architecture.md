@@ -181,7 +181,10 @@ Os três passam pelo piso de `min_seeders` (`filterSearchResults`).
 - `checkDiskSpace` barra download, **nunca** o passe de verificação. Erro de `statfs` não bloqueia.
   Recebe o tamanho do torrent e é chamada **por candidato**: o segundo da lista pode caber onde o
   primeiro não coube, e o gatilho de tamanho vale mesmo com a porcentagem desligada
-  ([#93](decisions.md#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0))
+  ([#93](decisions.md#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)).
+  In the pass it goes through a per-pass `diskBudget` (`diskbudget.go`): the size is checked on top
+  of what the session's incomplete torrents and this pass's adds still have to write
+  ([#101](decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space))
 - O teto de tamanho de pack é aplicado **duas vezes**: na busca do Nyaa e de novo no filtro do daemon
   (decisions.md #80). Mexer só num dos dois não muda o comportamento
 

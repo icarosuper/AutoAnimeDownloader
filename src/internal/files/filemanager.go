@@ -62,6 +62,10 @@ type EpisodeStruct struct {
 	// min/max.
 	BatchStart int `json:"batch_start,omitempty"`
 	BatchEnd   int `json:"batch_end,omitempty"`
+	// TorrentSize is the size Nyaa announced for the torrent, in bytes, 0 when unknown (an old record
+	// or a hand-pasted magnet). The disk guard needs it for a torrent still waiting in the queue: rain
+	// only learns BytesTotal from the metadata, which a queued torrent never fetched (decisions.md #101).
+	TorrentSize int64 `json:"torrent_size,omitempty"`
 	// LibraryPaths are the hardlink paths created in the completed-anime library by
 	// JobOrganize. Empty means "not yet organized" — the marker JobOrganize uses to fire
 	// the completion webhook and write-back exactly once (idempotent across restarts).

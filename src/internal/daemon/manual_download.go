@@ -24,7 +24,7 @@ func addAndPrioritize(backend torrents.TorrentBackend, magnet string, sizeBytes 
 	// The disk space guard lives here (and not in torrents.Session.Add) because the torrents package
 	// doesn't know files.Config — passing the config there just to read a percentage would invert the
 	// dependency. This is the only Add of the manual paths.
-	if err := checkDiskSpace(configs, sizeBytes); err != nil {
+	if err := checkDiskSpace(configs, sizeBytes, 0); err != nil {
 		return "", err
 	}
 	hash, err := backend.Add(magnet)
@@ -205,7 +205,7 @@ func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBack
 
 	// Checked before the Nyaa search so the handler gets ErrInsufficientDiskSpace instead of the
 	// generic "failed after N attempts" (which would become a 500 instead of a 409).
-	if err := checkDiskSpace(configs, 0); err != nil {
+	if err := checkDiskSpace(configs, 0, 0); err != nil {
 		return files.EpisodeStruct{}, err
 	}
 

@@ -34,34 +34,40 @@ type FileManagerInterface interface {
 	RemoveStandaloneAnime(mediaID int) error
 }
 
-// ErrInsufficientDiskSpace e devolvido por checkDiskSpace quando o volume da biblioteca esta
-// abaixo de Config.MinFreeDiskPercent de espaco livre, ou quando o torrent que se quer adicionar
-// nao cabe no que sobra.
+// ErrInsufficientDiskSpace is returned by checkDiskSpace when the library volume is below
+// Config.MinFreeDiskPercent of free space, or when the torrent to be added doesn't fit in what's
+// left.
 var ErrInsufficientDiskSpace = errors.New("insufficient free disk space")
 
-// checkDiskSpace barra a ADICAO de novos torrents quando o volume da biblioteca esta cheio OU
-// quando o torrent pedido nao cabe nele.
+// checkDiskSpace blocks ADDING new torrents when the library volume is full OR when the requested
+// torrent doesn't fit in it.
 //
-// torrentSizeBytes e o tamanho anunciado pelo Nyaa, 0 quando desconhecido (magnet colado a mao) —
-// e nesse caso a guarda volta a ser a checagem de porcentagem que sempre foi. Sem ele um pack de
-// 61 GiB entrava num volume com 40 GiB livres e so parava de baixar quando o disco enchia, no meio
-// do download: a porcentagem livre so responde "ha espaco AGORA", nunca "ha espaco no fim".
+// torrentSizeBytes is the size Nyaa announced, 0 when unknown (hand-pasted magnet) — and then the
+// guard falls back to the percentage check it always was. Without it a 61 GiB pack got into a
+// volume with 40 GiB free and only stopped when the disk filled up, mid-download: the free
+// percentage only answers "is there space NOW", never "is there space at the end".
 //
-// As duas metades tem gatilhos diferentes de proposito. A porcentagem e politica do usuario e
-// desliga com min_free_disk_percent = 0; "o torrent e maior que o espaco livre" e aritmetica, e
-// vale mesmo com a politica desligada.
+// reservedBytes is what the torrents already added still have to write (see diskBudget): free
+// space alone let a pass queue 130 GiB of loose episodes, each one fitting on its own, into 6 GiB
+// of headroom (decisions.md #101). It counts the same as the torrent's own size.
 //
-// Nao barra o passe de verificacao: a poda de episodios assistidos, o deleteEpisodesByStatus e o
-// organize sao justamente o que LIBERA espaco, e um "if disco cheio { return }" no inicio do
-// passe deixaria o app travado no estado em que nao consegue se desentupir.
+// The two halves have different triggers on purpose. The percentage is the user's policy and turns
+// off with min_free_disk_percent = 0; "the torrent is bigger than the free space" is arithmetic, and
+// holds even with the policy off.
 //
-// Erro de statfs NAO bloqueia: um volume que nao responde (rede, permissao) nao e prova de disco
-// cheio, e transformar isso em "para de baixar tudo" e pior que o risco que a guarda cobre.
-func checkDiskSpace(configs *files.Config, torrentSizeBytes int64) error {
-	if configs.CompletedAnimePath == "" || (configs.MinFreeDiskPercent <= 0 && torrentSizeBytes <= 0) {
+// It doesn't block the verification pass: pruning watched episodes, deleteEpisodesByStatus and
+// organize are exactly what FREES space, and an "if disk full { return }" at the start of the pass
+// would leave the app stuck in the one state it can't unclog itself from.
+//
+// A statfs error does NOT block: a volume that doesn't answer (network, permission) is no proof of
+// a full disk, and turning it into "stop downloading everything" is worse than the risk the guard
+// covers.
+func checkDiskSpace(configs *files.Config, torrentSizeBytes, reservedBytes int64) error {
+	needed := torrentSizeBytes + reservedBytes
+	if configs.CompletedAnimePath == "" || (configs.MinFreeDiskPercent <= 0 && needed <= 0) {
 		return nil
 	}
-	// Mesmo volume que o diretorio de download, por construcao (ver Config.DownloadPath).
+	// Same volume as the download directory, by construction (see Config.DownloadPath).
 	total, free, err := files.DiskSpace(configs.CompletedAnimePath)
 	if err != nil {
 		logger.Logger.Debug().Err(err).Msg("Disk space guard: statfs failed, not blocking downloads")
@@ -70,14 +76,14 @@ func checkDiskSpace(configs *files.Config, torrentSizeBytes int64) error {
 	if total == 0 {
 		return nil
 	}
-	if torrentSizeBytes > 0 && float64(torrentSizeBytes) > float64(free) {
-		return fmt.Errorf("%w: torrent needs %d bytes, only %d free on %s", ErrInsufficientDiskSpace, torrentSizeBytes, free, configs.CompletedAnimePath)
+	if needed > 0 && float64(needed) > float64(free) {
+		return fmt.Errorf("%w: torrent needs %d bytes on top of %d reserved by torrents still downloading, only %d free on %s", ErrInsufficientDiskSpace, torrentSizeBytes, reservedBytes, free, configs.CompletedAnimePath)
 	}
 	if configs.MinFreeDiskPercent <= 0 {
 		return nil
 	}
-	if (float64(free)-float64(torrentSizeBytes))/float64(total)*100 < float64(configs.MinFreeDiskPercent) {
-		return fmt.Errorf("%w: %d%% free required on %s (torrent: %d bytes)", ErrInsufficientDiskSpace, configs.MinFreeDiskPercent, configs.CompletedAnimePath, torrentSizeBytes)
+	if (float64(free)-float64(needed))/float64(total)*100 < float64(configs.MinFreeDiskPercent) {
+		return fmt.Errorf("%w: %d%% free required on %s (torrent: %d bytes, reserved by torrents still downloading: %d bytes)", ErrInsufficientDiskSpace, configs.MinFreeDiskPercent, configs.CompletedAnimePath, torrentSizeBytes, reservedBytes)
 	}
 	return nil
 }
@@ -122,18 +128,18 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 	if backend == nil {
 		return
 	}
-	// Os bytes ja baixados FICAM quando ha algum: o re-add do proximo passe usa o mesmo id
-	// (Session.Add passa AddTorrentOptions{ID: hash}) e a rain cai no mesmo <DataDir>/<id>,
-	// enxerga os arquivos existentes (allocator.HasExisting) e roda o verificador, que
-	// reconstroi o bitfield. O download continua de onde parou. Sem isso, um erro transitorio
-	// num pack de 90 GiB a 90% custava o download inteiro de novo.
+	// The bytes already downloaded STAY when there are any: the next pass's re-add uses the same id
+	// (Session.Add passes AddTorrentOptions{ID: hash}) and rain lands in the same <DataDir>/<id>,
+	// sees the existing files (allocator.HasExisting) and runs the verifier, which rebuilds the
+	// bitfield. The download resumes where it stopped. Without this, a transient error on a 90 GiB
+	// pack at 90% cost the whole download again.
 	//
-	// PiecesHave e a fonte de progresso que sobrevive ao Stop — BytesCompleted zera quando a
-	// rain libera as pieces, e a failed torrent ja esta parada aqui.
+	// PiecesHave is the progress source that survives the Stop — BytesCompleted zeroes when rain
+	// frees the pieces, and the failed torrent is already stopped here.
 	//
-	// Zero peca verificada -> keepData=false: nao ha o que recuperar, e guardar a pasta so
-	// deixaria lixo permanente no disco quando a retentativa cair noutro infohash (o diretorio
-	// e por id do torrent, e nada varre o caminho de download).
+	// Zero verified pieces -> keepData=false: there's nothing to recover, and keeping the folder
+	// would only leave permanent garbage on disk when the retry lands on another infohash (the
+	// directory is per torrent id, and nothing sweeps the download path).
 	keepData := false
 	if info, ok := backend.Get(hash); ok && info.PiecesHave > 0 {
 		keepData = true
@@ -149,17 +155,17 @@ func getWebUiURL() string {
 	return WebUIURL(os.Getenv("PORT"), "/#/config?missingConfig=true")
 }
 
-// isConfigComplete: a BIBLIOTECA e o unico requisito. Conta da AniList nao entra — desde os
-// animes avulsos (decisions.md #49) o app funciona inteiro sem lista nenhuma, e exigir uma
-// conta so para o passe rodar deixaria essa instalacao presa na tela de configuracao.
+// isConfigComplete: the LIBRARY is the only requirement. An AniList account doesn't count — since
+// standalone animes (decisions.md #49) the app works entirely without any list, and requiring an
+// account just for the pass to run would leave that installation stuck on the config screen.
 func isConfigComplete(config *files.Config) bool {
-	// O diretorio de download e derivado da biblioteca (Config.DownloadPath), entao checar
-	// o derivado cobre o unico campo que o usuario configura.
+	// The download directory is derived from the library (Config.DownloadPath), so checking the
+	// derived one covers the only field the user configures.
 	return config.DownloadPath() != ""
 }
 
-// OpenBrowser abre a URL no navegador do usuario. Usado pelo passe de verificacao (config
-// incompleta) e pelo boot (primeira execucao, ver main.go).
+// OpenBrowser opens the URL in the user's browser. Used by the verification pass (incomplete
+// config) and by the boot (first run, see main.go).
 func OpenBrowser(webUIURL string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -247,9 +253,9 @@ func getAnimeTitleSafe(anime anilist.MediaList) string {
 	return "Unknown"
 }
 
-// ExtractAnimeSeasonPart extrai os números de season e part dos dados do Anilist.
-// Prioridade: english → romaji → synonyms. Cada campo é lido de forma independente —
-// english pode dar season e synonym pode dar part.
+// ExtractAnimeSeasonPart extracts the season and part numbers from the AniList data.
+// Priority: english → romaji → synonyms. Each field is read independently — english can give the
+// season and a synonym the part.
 func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, part *int) {
 	candidates := make([]string, 0, 2+len(synonyms))
 	if title.English != nil {
@@ -274,21 +280,20 @@ func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, par
 	return
 }
 
-// ComputeEpisodeOffset retorna o total de episódios do PREQUEL quando part >= 2.
-// Usado para converter o progresso relativo do Anilist no número absoluto usado
-// por fansubs com numeração contínua (ex: SubsPlease).
+// ComputeEpisodeOffset returns the PREQUEL's episode total when part >= 2.
+// Used to convert AniList's relative progress into the absolute number used by fansubs with
+// continuous numbering (e.g. SubsPlease).
 //
-// Só PREQUEL de TV/TV_SHORT entra na conta: filme de recap, OVA e ONA também chegam como
-// PREQUEL e com Episodes preenchido, mas não fazem parte da contagem que os fansubs seguem.
-// Na dúvida devolve 0 — offset errado manda a busca para um episódio inexistente, enquanto
-// offset ausente cai na numeração relativa, que é o que boa parte dos grupos usa.
+// Only a TV/TV_SHORT PREQUEL counts: recap movies, OVAs and ONAs also arrive as PREQUEL with
+// Episodes filled in, but they're not part of the count fansubs follow. When in doubt it returns
+// 0 — a wrong offset sends the search to a nonexistent episode, while a missing offset falls back
+// to relative numbering, which is what most groups use.
 //
-// A mesma seleção de "primeiro PREQUEL de TV/TV_SHORT" vive em anilist.prequelOf
-// (anilist/series.go), e as duas continuam separadas de propósito: aquela caminha a cadeia
-// INTEIRA (o eixo absoluto da série), esta dá UM salto e é gated por part >= 2. São as duas
-// hipóteses DIFERENTES de numeração de pack em daemon.packAxis — "contínua pela season" e
-// "absoluta pela série" —, então unificá-las apagaria a distinção que a heurística usa
-// (decisions.md #79).
+// The same "first TV/TV_SHORT PREQUEL" selection lives in anilist.prequelOf (anilist/series.go),
+// and the two stay separate on purpose: that one walks the WHOLE chain (the series' absolute
+// axis), this one takes ONE hop and is gated by part >= 2. They're the two DIFFERENT pack
+// numbering hypotheses in daemon.packAxis — "continuous by season" and "absolute by series" —, so
+// unifying them would erase the distinction the heuristic uses (decisions.md #79).
 func ComputeEpisodeOffset(relations anilist.MediaRelations, part *int) int {
 	if part == nil || *part < 2 {
 		return 0

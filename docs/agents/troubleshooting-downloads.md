@@ -85,6 +85,13 @@ episode of the same anime ended the pass without a torrent (`true`). The report 
 of the last real search. To search it right now, run `make debug-anime` (Step 0) or restart the
 daemon — the backoff lives in memory.
 
+**`disk_full` / "insufficient free disk space" while `df` shows plenty free** → read the error's
+`reserved by torrents still downloading` number before suspecting statfs. The guard counts what
+the torrents already in the session still have to write, plus what the same pass already added
+([decisions.md #101](decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)):
+a full queue refuses new torrents long before the disk itself fills. Free space comes back as the
+queue finishes or when queued torrents are deleted.
+
 A separate, new failure class is **"the torrent downloaded but nothing shows up in the library"** — the download succeeded but the `organize` job (hardlink into `completed_anime_path` + webhook) is failing or retrying. See the embedded-client section below.
 
 ---

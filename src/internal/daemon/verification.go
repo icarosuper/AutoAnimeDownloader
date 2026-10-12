@@ -258,6 +258,12 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	var keysToDelete []files.EpisodeKey
 
+	// One disk budget for the whole pass, shared by the parallel animes: what the queue still has to
+	// write counts against the free space, and so does every torrent this pass adds
+	// (decisions.md #101). From the same snapshot, so a torrent dropStalledTorrents just removed
+	// still reserves its bytes until the next pass — the safe side.
+	disk := newDiskBudget(downloadedTorrents, savedEpisodes)
+
 	// Phase 2: process each anime concurrently, bounded by maxConcurrentAnimes.
 	sem := make(chan struct{}, maxConcurrentAnimes)
 	resultCh := make(chan animeProcessResult, len(animes))
@@ -291,7 +297,7 @@ outer:
 			default:
 			}
 
-			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, seriesIndex, blockedMap, defaultNyaaSearcher())
+			resultCh <- processAnimeEpisodes(configs, backend, a, downloadedTorrents, savedEpisodes, seriesIndex, blockedMap, defaultNyaaSearcher(), disk)
 		}(anime)
 	}
 

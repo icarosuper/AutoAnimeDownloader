@@ -7,27 +7,27 @@ import (
 	"time"
 )
 
-// POSSE POR COBERTURA
+// OWNERSHIP BY COVERAGE
 //
-// A unidade de posse do daemon e a chave files.EpisodeKey{AnimeID, Episode}, e um pack de season
-// atravessa varios AnimeID: a AniList quebra cour e part em media ids separados, cada um com
-// numeracao propria a partir de 1. Resultado sem isto aqui: o cour 2 nao tem registro nenhum,
-// nao sabe que o arquivo dele ja esta em disco dentro do pack baixado sob o cour 1, e rebaixa.
+// The daemon's unit of ownership is the files.EpisodeKey{AnimeID, Episode} key, and a season pack
+// spans several AnimeIDs: AniList splits cour and part into separate media ids, each with its own
+// numbering from 1. The result without this: cour 2 has no record at all, doesn't know its file is
+// already on disk inside the pack downloaded under cour 1, and downloads it again.
 //
-// A conversao entre as duas reguas e o eixo absoluto da serie (anilist.Series, decisions.md #77):
-// abs = Offset(AnimeID) + numero local. Comparar 1..23 com 1..12 sem converter e comparar reguas
-// diferentes.
+// The conversion between the two rulers is the series' absolute axis (anilist.Series, decisions.md
+// #77): abs = Offset(AnimeID) + local number. Comparing 1..23 with 1..12 without converting is
+// comparing different rulers.
 
-// resolveSeriesIndex resolve o eixo absoluto dos animes do passe MAIS o de todo anime_id que ja
-// tem episodio em disco.
+// resolveSeriesIndex resolves the absolute axis of the pass's animes PLUS that of every anime_id
+// that already has an episode on disk.
 //
-// Os de disco sao justamente os que faltam: o cour anterior, ja COMPLETED, saiu do universo do
-// passe, e e o offset DELE que converte o BatchStart/BatchEnd do pack — gravado na numeracao
-// local daquela entrada — para o eixo da serie. Sem essa semente a posse por cobertura nao
-// enxergaria o pack que originou o bug.
+// The ones on disk are exactly the ones missing: the previous cour, already COMPLETED, left the
+// pass's universe, and it's ITS offset that converts the pack's BatchStart/BatchEnd — recorded in
+// that entry's local numbering — to the series axis. Without that seed, ownership by coverage
+// wouldn't see the pack that caused the bug.
 //
-// Erro nao aborta nada: GetSeriesIndex devolve o que conseguiu resolver, e id ausente do mapa so
-// significa que aquele anime nao participa da adocao neste passe.
+// An error aborts nothing: GetSeriesIndex returns what it managed to resolve, and an id missing
+// from the map only means that anime doesn't take part in the adoption this pass.
 func resolveSeriesIndex(animeIDs []int, savedEpisodes []files.EpisodeStruct) map[int]anilist.Series {
 	seed := make([]int, 0, len(animeIDs)+len(savedEpisodes))
 	seen := make(map[int]bool, len(animeIDs)+len(savedEpisodes))
@@ -55,19 +55,20 @@ func resolveSeriesIndex(animeIDs []int, savedEpisodes []files.EpisodeStruct) map
 	return index
 }
 
-// adoptCoveredEpisodes adota os episodios pendentes cujo conteudo JA esta em disco: um pack
-// baixado sob outra entrada da mesma serie cuja faixa declarada, no eixo absoluto, contem o
-// episodio pedido.
+// adoptCoveredEpisodes adopts the pending episodes whose content is ALREADY on disk: a pack
+// downloaded under another entry of the same series whose declared range, on the absolute axis,
+// contains the requested episode.
 //
-// Adotar e gravar o registro apontando para o hash que ja existe — exatamente o que aconteceria
-// se a busca reencontrasse o mesmo torrent, ja que Session.Add reusa o infohash. O ganho e nao
-// passar pelo Nyaa nem rebaixar o que esta la; de quebra o guard de exclusao passa a enxergar os
-// irmaos do outro cour (decisions.md #74) e o organize hardlinka os arquivos que nunca tiveram
-// dono (organizeTorrent ja trata grupo parcialmente organizado, sem notificar de novo).
+// Adopting is recording the record pointing to the hash that already exists — exactly what would
+// happen if the search found the same torrent again, since Session.Add reuses the infohash. The
+// gain is not going through Nyaa nor downloading again what's there; as a bonus the deletion guard
+// starts seeing the siblings from the other cour (decisions.md #74) and organize hardlinks the
+// files that never had an owner (organizeTorrent already handles a partially organized group,
+// without notifying again).
 //
-// Filme fica de fora: prequelOf so segue TV/TV_SHORT, entao um filme pos-season herda o offset da
-// season e o "episodio 1" dele cairia dentro da faixa do pack dela. Cobertura por range nao
-// distingue os dois.
+// Movies stay out: prequelOf only follows TV/TV_SHORT, so a post-season movie inherits the season's
+// offset and its "episode 1" would fall inside that season pack's range. Coverage by range can't
+// tell the two apart.
 func adoptCoveredEpisodes(
 	anime anilist.MediaList,
 	animeTitle string,
@@ -92,12 +93,12 @@ func adoptCoveredEpisodes(
 			continue
 		}
 
-		// A faixa e CONVERTIDA para a numeracao local de quem adota, nunca copiada como o dono
-		// a declara. Todo registro guarda a faixa na regua da SUA entrada (packAxis.localRange,
-		// decisions.md #79) e e assim que ela e lida de volta — findCoveringPack soma o offset
-		// do anime_id do proprio registro. Copiar 1..23 do cour 1 para debaixo do cour 2 faria
-		// esse registro ser lido como o absoluto 12..34: um cour 3 acharia cobertura para
-		// episodio que o pack nao tem, e ficaria com dono e sem arquivo.
+		// The range is CONVERTED to the adopter's local numbering, never copied as the owner declares it.
+		// Every record keeps the range on ITS entry's ruler (packAxis.localRange, decisions.md #79) and
+		// that's how it's read back — findCoveringPack adds the offset of the record's own anime_id.
+		// Copying cour 1's 1..23 under cour 2 would make that record read as the absolute 12..34: a cour
+		// 3 would find coverage for an episode the pack doesn't have, and would end up with an owner and
+		// no file.
 		delta := ownerOffset - series.Offset
 		batchStart, batchEnd := owner.BatchStart+delta, owner.BatchEnd+delta
 
@@ -119,21 +120,24 @@ func adoptCoveredEpisodes(
 			IsBatch:            true,
 			BatchStart:         batchStart,
 			BatchEnd:           batchEnd,
-			DownloadDate:       time.Now(),
+			// Same torrent, same size: once the owner's records are pruned, these are the ones the
+			// disk budget reads it from (newDiskBudget).
+			TorrentSize:  owner.TorrentSize,
+			DownloadDate: time.Now(),
 		})
 	}
 	return adopted
 }
 
-// findCoveringPack devolve o registro de pack, em QUALQUER anime_id, cuja faixa declarada contem
-// absEp no eixo absoluto — e cujo torrent ainda esta na sessao. Junto vem o offset do dono, que e
-// o que permite reescrever a faixa na regua de quem adota.
+// findCoveringPack returns the pack record, in ANY anime_id, whose declared range contains absEp on
+// the absolute axis — and whose torrent is still in the session. Along with it comes the owner's
+// offset, which is what allows rewriting the range on the adopter's ruler.
 //
-// Tres portas, todas obrigatorias: faixa declarada (pack sem faixa no nome grava BatchEnd == 0,
-// e desconhecida nao e "cobre tudo" — mesmo teto de canRemoveTorrent), torrent vivo (adotar um
-// hash que nao existe mais deixaria o episodio com registro e sem arquivo, invisivel para a
-// redescida) e MESMA serie (sem a comparacao de Key, "absoluto 12" casaria com o pack de qualquer
-// outro anime).
+// Three gates, all mandatory: a declared range (a pack without a range in its name records BatchEnd
+// == 0, and unknown isn't "covers everything" — same ceiling as canRemoveTorrent), a live torrent
+// (adopting a hash that no longer exists would leave the episode with a record and no file,
+// invisible to the re-download) and the SAME series (without the Key comparison, "absolute 12"
+// would match the pack of any other anime).
 func findCoveringPack(
 	savedEpisodes []files.EpisodeStruct,
 	seriesIndex map[int]anilist.Series,
@@ -160,11 +164,11 @@ func findCoveringPack(
 	return nil, 0
 }
 
-// dropAdopted tira da lista os episodios que a adocao ja resolveu.
+// dropAdopted removes from the list the episodes the adoption already resolved.
 //
-// Roda nos DOIS pontos de selecao: selectEpisodes e pura e nao sabe da adocao, entao a segunda
-// passada (limite levantado, caminho de pack) traria os adotados de volta e o daemon baixaria o
-// que acabou de adotar.
+// It runs at BOTH selection points: selectEpisodes is pure and doesn't know about the adoption, so
+// the second run (limit lifted, pack path) would bring the adopted ones back and the daemon would
+// download what it just adopted.
 func dropAdopted(episodes []anilist.AiringNode, adopted []files.EpisodeStruct) []anilist.AiringNode {
 	if len(adopted) == 0 {
 		return episodes

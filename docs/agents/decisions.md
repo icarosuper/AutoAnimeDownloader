@@ -107,6 +107,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#98** — A large release without an episode number is an unlabeled pack, and only its file list makes it a pack](#98-a-large-release-without-an-episode-number-is-an-unlabeled-pack-and-only-its-file-list-makes-it-a-pack)
 - [**#99** — A roman-numeral sequel searches by its bare base title first](#99-a-roman-numeral-sequel-searches-by-its-bare-base-title-first)
 - [**#100** — An empty per-episode search waits before repeating, and stops the later episodes](#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes)
+- [**#101** — The disk guard counts what the queue still has to write, not only free space](#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)
 
 ---
 
@@ -2641,6 +2642,8 @@ a falha de verdade carrega `ErrFromCache`.
 direito dele. "Este torrent é maior que o disco" não é política, é aritmética: o download vai
 encher o volume e travar no meio de qualquer jeito, e deixá-lo entrar não realiza desejo nenhum.
 
+**Amended by [#101](#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space):** the size is compared with the free space MINUS what the torrents already added still have to write, not with the free space alone.
+
 **Por que o tamanho não veio antes:** ele existia desde sempre no resultado do Nyaa
 (`nyaa.TorrentResult.Size`, o mesmo dado dos tetos `max_batch_torrent_size_gb`/
 `max_episode_torrent_size_gb`), mas se perdia no caminho — `resolvedMagnets` guardava
@@ -2857,3 +2860,46 @@ memory: a restart forgets it, at the price of one full round of searches.
 **Don't "fix" by:** applying it to the manual download (the button would do nothing for up to a
 day — `misses` is nil there) or to `RunAnimeDebug` (a diagnostic must show every episode's search —
 the one deliberate gap in [#58](#58-runanimedebug-espelha-processanimeepisodes-enumeração-resolução-de-pack-e-fallback-single)'s mirror); or persisting it to disk.
+
+### 101. The disk guard counts what the queue still has to write, not only free space
+
+**Location:** `daemon/diskbudget.go` (`diskBudget`, `newDiskBudget`); `checkDiskSpace`'s
+`reservedBytes` in `daemon/helpers.go`; built once per pass in `daemon/verification.go` and in
+`DownloadStandaloneAnime`; used by `packsThatFit` and `attemptDownloadWithRetries`;
+`files.EpisodeStruct.TorrentSize`; `torrents.InfoHash`.
+
+A clean run on a disk with 99 GB free and `min_free_disk_percent: 10` (~6 GB of headroom) queued
+58 torrents, ~130 GiB. The guard was right about every big pack (29 refused) and wrong about the
+sum: it compared each torrent with the free space NOW, and a torrent only takes its space as it
+downloads (rain creates sparse files). Each ~1.4 GiB loose episode fit on its own.
+
+**The rule:** a torrent fits when `size + reserved` fits, where `reserved` is what every incomplete
+torrent of the session still has to write plus everything this pass already added.
+
+- **Per pass, shared by the parallel animes.** `reserve` checks and counts under one lock — two
+  animes must not both take the last free bytes.
+- **Keyed by infohash** (`torrents.InfoHash` on the magnet, before `Add`). The N episodes of a pack
+  add the same magnet N times and pay once; a torrent already in the session pays nothing.
+- **A queued torrent's size comes from the record.** `BytesTotal` is 0 until the metadata arrives,
+  and a queued torrent never started. So the record now keeps the size Nyaa announced
+  (`torrent_size`). Remaining = `BytesTotal` (or the recorded size) minus what's written, with the
+  bitfield ratio as the written amount when it's larger (a paused torrent zeroes `BytesCompleted`).
+- **`packsThatFit` asks the same budget.** Asking free space alone there would let a pack win the
+  window and lose it at the add — #97's bug again.
+
+**Cost accepted:** a torrent with neither metadata nor a recorded size (records older than
+`torrent_size`, hand-pasted magnets) reserves nothing until its metadata arrives. And a pack can
+still pass `packsThatFit` and lose at the add when another anime of the same pass reserved the
+bytes in between — rare, and the episodes are retried next pass.
+
+**Not here:** the queue (`torrents/queue.go`) doesn't gate promotion by disk. The guard stops the
+over-commit when torrents are added; a queue already over-committed (from before this) still
+downloads everything it holds.
+
+**Manual downloads pass `reservedBytes = 0`** (`manual_download.go`): a magnet the user pastes is
+their call, and its size is usually unknown anyway.
+
+**Don't "fix" by:** summing reservations per record instead of per hash (a pack would count once
+per episode); checking free space alone in `packsThatFit`; or splitting `reserve` into a check and a
+separate count (the parallel animes would race between the two).
+

@@ -9,16 +9,16 @@ import (
 	"time"
 )
 
-// O caso real: Mushoku Tensei S1 baixado como UM torrent da season inteira (1..23) sob a entrada
-// do cour 1 (108465, 11 episodios). O cour 2 (127720) e outro media id, com numeracao propria
-// 1..12, e sem posse por cobertura ele rebaixa a season inteira do Nyaa.
+// The real case: Mushoku Tensei S1 downloaded as ONE torrent of the whole season (1..23) under the
+// cour 1 entry (108465, 11 episodes). Cour 2 (127720) is another media id, with its own numbering
+// 1..12, and without ownership by coverage it downloads the whole season again from Nyaa.
 const (
 	cour1ID    = 108465
 	cour2ID    = 127720
 	seasonHash = "aa11bb22cc33dd44ee55"
 )
 
-// cour2Anime monta a entrada do cour 2 com n episodios ja no ar, todos pendentes.
+// cour2Anime builds the cour 2 entry with n episodes already aired, all pending.
 func cour2Anime(n int) anilist.MediaList {
 	title := "Mushoku Tensei: Isekai Ittara Honki Dasu Part 2"
 	nodes := make([]anilist.AiringNode, n)
@@ -38,7 +38,7 @@ func cour2Anime(n int) anilist.MediaList {
 	}
 }
 
-// seasonPackOnDisk sao os 11 registros do cour 1, todos apontando para o pack que declara 1..23.
+// seasonPackOnDisk are the 11 records of cour 1, all pointing to the pack that declares 1..23.
 func seasonPackOnDisk() []files.EpisodeStruct {
 	saved := make([]files.EpisodeStruct, 11)
 	for i := range saved {
@@ -56,8 +56,9 @@ func seasonPackOnDisk() []files.EpisodeStruct {
 	return saved
 }
 
-// countingSearcher falha o teste se qualquer busca for disparada, e devolve um pack que casaria
-// com tudo — se a adocao nao funcionar, o teste acusa E o daemon teria baixado.
+// countingSearcher fails the test if any search is fired, and returns a pack that would match
+// everything — if the adoption doesn't work, the test flags it AND the daemon would have
+// downloaded.
 func countingSearcher(hit *bool) nyaaSearcher {
 	return nyaaSearcher{
 		searchAnime: func(_ anilist.Title, _ []string, _ []int) []nyaa.TorrentResult {
@@ -76,9 +77,9 @@ func coverageConfigs() *files.Config {
 	return &files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 1}
 }
 
-// TestCoverageOwnership_SeasonPackCoversNextCour: o pack 1..23 baixado sob o cour 1 cobre, no
-// eixo absoluto, os 12 episodios do cour 2 (offset 11 → abs 12..23). Nada vai para o Nyaa, nada e
-// baixado, e os 12 registros novos apontam para o hash que ja esta em disco.
+// TestCoverageOwnership_SeasonPackCoversNextCour: the 1..23 pack downloaded under cour 1 covers, on
+// the absolute axis, the 12 episodes of cour 2 (offset 11 → abs 12..23). Nothing goes to Nyaa,
+// nothing is downloaded, and the 12 new records point to the hash already on disk.
 func TestCoverageOwnership_SeasonPackCoversNextCour(t *testing.T) {
 	searched := false
 	backend := torrents.NewFakeBackend()
@@ -91,38 +92,38 @@ func TestCoverageOwnership_SeasonPackCoversNextCour(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched), nil,
 	)
 
 	if searched {
-		t.Error("nao deve buscar no Nyaa: o pack ja baixado cobre a janela inteira")
+		t.Error("must not search Nyaa: the already downloaded pack covers the whole window")
 	}
 	if len(backend.List()) > 0 {
-		t.Errorf("nao deve adicionar torrent, mas o cliente tem %d", len(backend.List()))
+		t.Errorf("must not add a torrent, but the client has %d", len(backend.List()))
 	}
 	if len(result.newEpisodes) != 12 {
-		t.Fatalf("esperava 12 registros adotados, obteve %d", len(result.newEpisodes))
+		t.Fatalf("expected 12 adopted records, got %d", len(result.newEpisodes))
 	}
 	for _, ep := range result.newEpisodes {
 		if ep.AnimeID != cour2ID || ep.EpisodeHash != seasonHash || !ep.IsBatch {
 			t.Fatalf("registro adotado errado: %+v", ep)
 		}
-		// A faixa e CONVERTIDA para a regua do cour 2: o pack 1..23 do cour 1 (offset 0) e
-		// -10..12 sob o cour 2 (offset 11). E exatamente o que assignBatches gravaria se a
-		// busca reencontrasse o mesmo torrent (packAxis.localRange, decisions.md #79).
+		// The range is CONVERTED to cour 2's ruler: cour 1's 1..23 pack (offset 0) is -10..12 under cour
+		// 2 (offset 11). It's exactly what assignBatches would record if the search found the same
+		// torrent again (packAxis.localRange, decisions.md #79).
 		if ep.BatchStart != -10 || ep.BatchEnd != 12 {
-			t.Fatalf("faixa do registro adotado deveria ser -10-12, obteve %d-%d", ep.BatchStart, ep.BatchEnd)
+			t.Fatalf("the adopted record's range should be -10-12, got %d-%d", ep.BatchStart, ep.BatchEnd)
 		}
 		if ep.EpisodeName != "Mushoku Tensei: Isekai Ittara Honki Dasu Part 2 1-12" {
-			t.Fatalf("nome exibido nao pode vazar a faixa negativa, obteve %q", ep.EpisodeName)
+			t.Fatalf("the displayed name must not leak the negative range, got %q", ep.EpisodeName)
 		}
 	}
 }
 
-// A faixa gravada e lida de volta somando o offset do anime_id do PROPRIO registro. Se a adocao
-// copiasse a faixa do dono sem converter, o registro do cour 2 (1..23 sob offset 11) seria lido
-// como o absoluto 12..34 e um terceiro cour acharia cobertura para episodio que o pack nao tem —
-// marcado como baixado, nunca buscado, arquivo inexistente.
+// The recorded range is read back adding the offset of the record's OWN anime_id. If the adoption
+// copied the owner's range without converting, the cour 2 record (1..23 under offset 11) would be
+// read as the absolute 12..34 and a third cour would find coverage for an episode the pack doesn't
+// have — marked as downloaded, never searched, nonexistent file.
 func TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour(t *testing.T) {
 	const cour3ID = 146065
 	index := map[int]anilist.Series{
@@ -135,21 +136,21 @@ func TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour(t *testing.T) 
 
 	adopted := adoptCoveredEpisodes(cour2Anime(12), "Cour 2", 12, pending, seasonPackOnDisk(), index, hashes)
 	if len(adopted) != 12 {
-		t.Fatalf("esperava os 12 do cour 2 adotados, obteve %d", len(adopted))
+		t.Fatalf("expected the 12 of cour 2 adopted, got %d", len(adopted))
 	}
 
-	// O cour 3 comeca no absoluto 24, um passo depois do fim do pack.
+	// Cour 3 starts at absolute 24, one step after the end of the pack.
 	cour3 := cour2Anime(13)
 	cour3.Id, cour3.Media.Id = cour3ID, cour3ID
 	saved := append(seasonPackOnDisk(), adopted...)
 	if leaked := adoptCoveredEpisodes(cour3, "Cour 3", 13, anilist.EpisodeList(cour3, 1), saved, index, hashes); len(leaked) != 0 {
-		t.Fatalf("o pack termina no absoluto 23: o cour 3 nao pode adotar nada, adotou %d (ep %d)", len(leaked), leaked[0].EpisodeNumber)
+		t.Fatalf("the pack ends at absolute 23: cour 3 can't adopt anything, adopted %d (ep %d)", len(leaked), leaked[0].EpisodeNumber)
 	}
 }
 
-// TestCoverageOwnership_UncoveredEpisodesStillSearch: o cour 2 tem 14 episodios, o pack cobre ate
-// o absoluto 23 (= local 12). Os dois que sobram continuam indo para a busca — adocao parcial nao
-// pode virar "esta tudo resolvido".
+// TestCoverageOwnership_UncoveredEpisodesStillSearch: cour 2 has 14 episodes, the pack covers up to
+// absolute 23 (= local 12). The two left over still go to the search — partial adoption can't
+// become "everything is solved".
 func TestCoverageOwnership_UncoveredEpisodesStillSearch(t *testing.T) {
 	searched := false
 	configs := coverageConfigs()
@@ -163,11 +164,11 @@ func TestCoverageOwnership_UncoveredEpisodesStillSearch(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched), nil,
 	)
 
 	if !searched {
-		t.Error("os episodios 13 e 14 nao sao cobertos pelo pack: a busca tem que rodar")
+		t.Error("episodes 13 and 14 aren't covered by the pack: the search has to run")
 	}
 	adopted := 0
 	for _, ep := range result.newEpisodes {
@@ -176,12 +177,12 @@ func TestCoverageOwnership_UncoveredEpisodesStillSearch(t *testing.T) {
 		}
 	}
 	if adopted != 12 {
-		t.Errorf("esperava 12 episodios adotados, obteve %d", adopted)
+		t.Errorf("expected 12 adopted episodes, got %d", adopted)
 	}
 }
 
-// TestCoverageOwnership_OtherSeriesIsNotOwnership: sem a comparacao de Key, "absoluto 12" casaria
-// com o pack de qualquer outro anime que tenha 12 na faixa.
+// TestCoverageOwnership_OtherSeriesIsNotOwnership: without the Key comparison, "absolute 12" would
+// match the pack of any other anime that has 12 in its range.
 func TestCoverageOwnership_OtherSeriesIsNotOwnership(t *testing.T) {
 	searched := false
 
@@ -191,19 +192,19 @@ func TestCoverageOwnership_OtherSeriesIsNotOwnership(t *testing.T) {
 		seasonPackOnDisk(),
 		map[int]anilist.Series{
 			cour1ID: {Key: cour1ID, Offset: 0},
-			cour2ID: {Key: 16498, Offset: 11}, // outra serie, mesmo offset
+			cour2ID: {Key: 16498, Offset: 11}, // another series, same offset
 		},
-		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched), nil,
 	)
 
 	if !searched {
-		t.Error("pack de outra serie nao e posse: a busca tem que rodar")
+		t.Error("a pack from another series isn't ownership: the search has to run")
 	}
 }
 
-// TestCoverageOwnership_PackNotInSessionIsNotOwnership: registro apontando para um torrent que
-// nao esta mais na sessao nao prova nada — adotar daria registro sem arquivo, invisivel para a
-// redescida.
+// TestCoverageOwnership_PackNotInSessionIsNotOwnership: a record pointing to a torrent no longer in
+// the session proves nothing — adopting would give a record without a file, invisible to the
+// re-download.
 func TestCoverageOwnership_PackNotInSessionIsNotOwnership(t *testing.T) {
 	searched := false
 
@@ -215,16 +216,17 @@ func TestCoverageOwnership_PackNotInSessionIsNotOwnership(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched), nil,
 	)
 
 	if !searched {
-		t.Error("torrent fora da sessao nao e posse: a busca tem que rodar")
+		t.Error("a torrent outside the session isn't ownership: the search has to run")
 	}
 }
 
-// TestCoverageOwnership_UnknownRangeIsNotOwnership: pack sem faixa no nome grava BatchStart == 0.
-// Desconhecida nao e "cobre tudo" — mesmo teto de canRemoveTorrent (decisions.md #74).
+// TestCoverageOwnership_UnknownRangeIsNotOwnership: a pack without a range in its name records
+// BatchStart == 0. Unknown isn't "covers everything" — same ceiling as canRemoveTorrent
+// (decisions.md #74).
 func TestCoverageOwnership_UnknownRangeIsNotOwnership(t *testing.T) {
 	searched := false
 
@@ -241,10 +243,10 @@ func TestCoverageOwnership_UnknownRangeIsNotOwnership(t *testing.T) {
 			cour1ID: {Key: cour1ID, Offset: 0},
 			cour2ID: {Key: cour1ID, Offset: 11},
 		},
-		map[files.EpisodeKey]bool{}, countingSearcher(&searched),
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched), nil,
 	)
 
 	if !searched {
-		t.Error("pack sem faixa declarada nao e posse: a busca tem que rodar")
+		t.Error("a pack without a declared range isn't ownership: the search has to run")
 	}
 }

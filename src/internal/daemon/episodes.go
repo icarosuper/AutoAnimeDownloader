@@ -105,6 +105,7 @@ func processAnimeEpisodes(
 	seriesIndex map[int]anilist.Series,
 	blockedMap map[files.EpisodeKey]bool,
 	searcher nyaaSearcher,
+	disk *diskBudget,
 ) animeProcessResult {
 	var result animeProcessResult
 	animeTitle := getAnimeTitleSafe(anime)
@@ -150,7 +151,7 @@ func processAnimeEpisodes(
 		if !isAnimeMovie(anime) && len(sel.toDownload) > 1 {
 			firstPending := sel.toDownload[0].Episode
 			axis := newPackAxis(anime, seriesIndex, totalEpisodes)
-			batches := pickBatches(newPackSet(packsThatFit(configs, packs), searcher.packRange), axis, firstPending, windowEnd(configs, firstPending))
+			batches := pickBatches(newPackSet(packsThatFit(configs, disk, packs), searcher.packRange), axis, firstPending, windowEnd(configs, firstPending))
 			switch {
 			case batches.len() > 0:
 				logger.Logger.Info().
@@ -256,7 +257,7 @@ func processAnimeEpisodes(
 		}
 		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
 
-		hash := attemptDownloadWithRetries(configs, backend, candidates, epName)
+		hash, torrentSize := attemptDownloadWithRetries(configs, backend, disk, candidates, epName)
 
 		if hash != "" {
 			result.newEpisodes = append(result.newEpisodes, files.EpisodeStruct{
@@ -269,6 +270,7 @@ func processAnimeEpisodes(
 				IsBatch:            skipSubfolder,
 				BatchStart:         resolved.batchStart,
 				BatchEnd:           resolved.batchEnd,
+				TorrentSize:        torrentSize,
 				DownloadDate:       time.Now(),
 			})
 			// Completion is handled event-driven: the session's onComplete callback (and
@@ -285,7 +287,7 @@ func processAnimeEpisodes(
 			}
 			// The best candidate's size counts: the disk can have headroom in percent and still not fit the
 			// pack this episode wanted.
-			if errors.Is(checkDiskSpace(configs, candidates[0].Size), ErrInsufficientDiskSpace) {
+			if errors.Is(disk.check(configs, candidates[0].Size), ErrInsufficientDiskSpace) {
 				reason = notifications.ReasonNoDiskSpace
 				issue.Code = IssueDiskFull
 				// A full disk isn't about the candidates: either none was tried (attemptDownloadWithRetries
@@ -481,10 +483,13 @@ func partitionSearchResults(configs *files.Config, anime anilist.MediaList, resu
 // the guard in attemptDownloadWithRetries comes too late: by then the pack already owns the window,
 // and a 78 GB remux that doesn't fit left every episode without a candidate even with live loose
 // episodes on Nyaa. Dropped here, the next pack or the per-episode search takes over.
-func packsThatFit(configs *files.Config, packs []nyaa.TorrentResult) []nyaa.TorrentResult {
+//
+// It asks the same budget the add will (disk): asking free space alone would let a pack win the
+// window here and lose it at the add to what the queue already reserved — the same bug.
+func packsThatFit(configs *files.Config, disk *diskBudget, packs []nyaa.TorrentResult) []nyaa.TorrentResult {
 	fit := make([]nyaa.TorrentResult, 0, len(packs))
 	for _, tr := range packs {
-		if err := checkDiskSpace(configs, tr.Size); err != nil {
+		if err := disk.check(configs, tr.Size); err != nil {
 			logger.Logger.Info().Err(err).Str("torrent", tr.Name).Msg("Skipping pack: it does not fit on disk")
 			continue
 		}
@@ -857,12 +862,18 @@ func handleAlreadySavedEpisode(maxEpisodes int, downloadedEpisodes *int, isInTor
 	return true, false
 }
 
-func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentBackend, candidates []nyaa.TorrentResult, fileName string) (hash string) {
+// attemptDownloadWithRetries returns the hash of the torrent it added and the size Nyaa announced
+// for it, which the record keeps so the disk budget can count the torrent while it waits in the
+// queue (newDiskBudget).
+func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentBackend, disk *diskBudget, candidates []nyaa.TorrentResult, fileName string) (hash string, size int64) {
 	// Full disk: not a single magnet is tried and there's no retry — the candidate isn't the problem,
-	// and trying 3 times would only fill the log. Each candidate's size is checked in the loop.
-	if err := checkDiskSpace(configs, 0); err != nil {
-		logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Skipping download: insufficient free disk space")
-		return ""
+	// and trying 3 times would only fill the log. Each candidate's size is checked in the loop. A
+	// candidate already paid for (another episode of the same pack) skips this: it adds no bytes.
+	if !disk.counts(candidates) {
+		if err := disk.check(configs, 0); err != nil {
+			logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Skipping download: insufficient free disk space")
+			return "", 0
+		}
 	}
 
 	maxAttempts := min(configs.EpisodeRetryLimit, len(candidates))
@@ -876,13 +887,15 @@ func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentB
 
 		// Per candidate, because each has a size: the next one in the list may fit where the first
 		// didn't.
-		if err := checkDiskSpace(configs, candidates[i].Size); err != nil {
+		undo, err := disk.reserve(configs, candidates[i])
+		if err != nil {
 			logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Skipping candidate: it does not fit on disk")
 			continue
 		}
 
 		h, err := backend.Add(candidates[i].MagnetLink)
 		if err != nil {
+			undo()
 			logger.Logger.Warn().Err(err).Str("episode", fileName).Msg("Failed to add torrent to embedded client")
 			continue
 		}
@@ -891,15 +904,16 @@ func attemptDownloadWithRetries(configs *files.Config, backend torrents.TorrentB
 				Str("episode", fileName).
 				Str("hash", h).
 				Msg("Successfully added episode to embedded torrent client")
-			return h
+			return h, candidates[i].Size
 		}
+		undo()
 	}
 
 	logger.Logger.Warn().
 		Str("episode", fileName).
 		Int("attempts", maxAttempts).
 		Msg("Failed to download episode after all attempts")
-	return ""
+	return "", 0
 }
 
 // RemoveEpisodesWithLinks removes the given episodes from the saved-episodes file and frees
