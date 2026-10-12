@@ -26,8 +26,10 @@ import (
 	"AutoAnimeDownloader/src/internal/torrents"
 	"AutoAnimeDownloader/src/internal/tray"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -213,8 +215,8 @@ func ensureStartupSession(manager *torrents.SessionManager, fileManager *files.F
 		logger.Logger.Info().Msg("Completed anime path not configured; torrent session will be created once the configuration is saved")
 		return
 	}
-	// Antes do Ensure: a sessao nova roda a adocao da fila assim que nasce, e ela precisa
-	// ja saber o limite para nao promover tudo o que a rain reabriu parado.
+	// Before Ensure: the new session runs the queue adoption as soon as it's born, and it needs to
+	// know the limit already so it doesn't promote everything rain reopened stopped.
 	manager.SetMaxActiveDownloads(configs.MaxConcurrentDownloads)
 	downloadPath := configs.DownloadPath()
 	if _, err := manager.Ensure(downloadPath); err != nil {
@@ -257,12 +259,12 @@ func main() {
 		logger.Logger.Fatal().Err(err).Msg("Failed to initialize files manager")
 	}
 
-	// Antes de qualquer LoadConfigs: e ele que cria o config.json com os defaults, o que
-	// apagaria o sinal de primeira execucao.
+	// Before any LoadConfigs: it's what creates config.json with the defaults, which would erase the
+	// first-run signal.
 	firstBoot := !fileManager.ConfigExists()
 
-	// Cache da AniList em disco. Antes de qualquer coisa que fale com a AniList: e o que faz
-	// as telas e o passe continuarem de pe quando ela esta fora do ar, restart incluido.
+	// AniList cache on disk. Before anything that talks to AniList: it's what keeps the screens and
+	// the pass standing while it's down, restart included.
 	anilist.EnablePersistence(fileManager.LoadAnilistCache, fileManager.SaveAnilistCache)
 
 	jobsFilePath, err := getJobsFilePath()
@@ -291,18 +293,18 @@ func main() {
 	)
 	jobQueue.SetOrchestration(torrentManager, librarian)
 	jobQueue.Start()
-	// Converte os AnimeID gravados de id de entrada para id de midia (decisions.md #43). Roda
-	// no boot, e nao so no passe de verificacao, porque a API ja comeca a servir /animes antes
-	// do primeiro tick — e com os ids no formato antigo a listagem duplica animes que estao em
-	// mais de uma conta. Falhar aqui nao e fatal: o passe de verificacao retenta e aborta se
-	// ainda nao tiver funcionado.
+	// Converts the saved AnimeIDs from entry id to media id (decisions.md #43). Runs at boot, not
+	// only in the verification pass, because the API starts serving /animes before the first tick —
+	// and with ids in the old format the listing duplicates animes that are in more than one
+	// account. Failing here isn't fatal: the verification pass retries and aborts if it still
+	// hasn't worked.
 	if err := daemon.MigrateAnimeIDsToMedia(fileManager); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to migrate anime IDs to AniList media IDs; the verification pass will retry")
 	} else if saved, err := fileManager.LoadSavedEpisodes(); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to load saved episodes for the tvshow.nfo backfill")
 	} else {
-		// So depois da migracao acima ter dado certo: com id de entrada o nfo sairia com o id
-		// errado, e ele nunca e reescrito. Idempotente (nao sobrescreve), entao roda todo boot.
+		// Only after the migration above succeeded: with an entry id the nfo would come out with the
+		// wrong id, and it's never rewritten. Idempotent (doesn't overwrite), so it runs every boot.
 		librarian.BackfillShowNFOs(saved)
 	}
 	// Defers run LIFO: register Close first so jobQueue.Stop() (which may run organize jobs
@@ -337,7 +339,9 @@ func main() {
 	state.SetNotifier(apiServer.WSManager)
 
 	go func() {
-		if err := apiServer.Start(); err != nil && err != context.Canceled {
+		// ErrServerClosed is the normal shutdown below (apiServer.Stop): treating it as fatal ran
+		// os.Exit(1) in the middle of the shutdown, skipping the deferred session Close and PID removal.
+		if err := apiServer.Start(); err != nil && err != context.Canceled && !errors.Is(err, http.ErrServerClosed) {
 			logger.Logger.Fatal().Err(err).Msg("API server failed")
 		}
 	}()
@@ -346,13 +350,13 @@ func main() {
 		Str("port", apiPort).
 		Msg("API server started successfully")
 
-	// Primeira execucao: abre a UI no status. Independe da config estar completa — o passe de
-	// verificacao ja abre /#/config quando falta a biblioteca, e este boot com defaults novos
-	// (ver files.getDefaultConfig) normalmente nao dispara aquele caminho.
+	// First run: opens the UI on the status page. Doesn't depend on the config being complete — the
+	// verification pass already opens /#/config when the library is missing, and this boot with new
+	// defaults (see files.getDefaultConfig) usually doesn't trigger that path.
 	//
-	// Espera a porta aceitar conexao antes de abrir: o Start() acima roda numa goroutine e o log
-	// logo abaixo dele sai ANTES do socket estar ligado, entao abrir direto e uma corrida cujo
-	// lado perdedor e uma aba com ERR_CONNECTION_REFUSED.
+	// Waits for the port to accept connections before opening: Start() above runs in a goroutine
+	// and the log right below it comes out BEFORE the socket is bound, so opening right away is a
+	// race whose losing side is a tab with ERR_CONNECTION_REFUSED.
 	if firstBoot {
 		go func() {
 			if err := daemon.WaitForListener(apiPort, 10*time.Second); err != nil {
@@ -405,8 +409,8 @@ func main() {
 		logger.Logger.Info().Msg("Daemon loop stopped")
 	}
 
-	// Depois de parar o loop (que e quem produz notificacao) e antes de sair: manda o que ainda
-	// estiver esperando a janela de agrupamento.
+	// After stopping the loop (which is what produces notifications) and before exiting: sends
+	// whatever is still waiting for the batching window.
 	notifications.Flush()
 
 	// Stop API server with timeout
