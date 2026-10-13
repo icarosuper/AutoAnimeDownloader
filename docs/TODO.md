@@ -66,7 +66,7 @@ two.
 - UI/UX overhaul of the webApp
 - Visual identity — logo, palette, favicon; feeds the social preview and the landing page
 - Publish the image on ghcr — the biggest win among the options measured in
-  [distribuicao.md](distribuicao.md), the Dockerfile already exists. A `curl` `install.sh` is the
+  [distribution.md](distribution.md), the Dockerfile already exists. A `curl` `install.sh` is the
   next step from there, if needed. `go install`, Homebrew, Scoop, .deb/.rpm and Flatpak were
   evaluated and discarded
 - Update the README — after the image, because that's what changes the install instructions
