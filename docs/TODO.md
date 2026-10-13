@@ -3,7 +3,7 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.3.0`.
+Current version: `v2.4.0`.
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
@@ -27,7 +27,7 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.4.0` — MyAnimeList integration
 
-- ~~Add MyAnimeList integration~~ — **implemented on 2026-10-12**, not released yet ([decisions.md #95](agents/decisions.md#95-myanimelist-is-a-list-source-not-a-metadata-source)). Spec:
+- ~~Add MyAnimeList integration~~ — **released in `v2.4.0` on 2026-10-13** ([decisions.md #95](agents/decisions.md#95-myanimelist-is-a-list-source-not-a-metadata-source)). Spec:
   [myanimelist-list-source](superpowers/specs/2026-10-12-myanimelist-list-source-design.md).
   MAL is a **list source** only (status + progress); identity, episodes and metadata stay on
   AniList, mapped through `idMal`. The list comes from the unofficial `load.json`, so no client ID
