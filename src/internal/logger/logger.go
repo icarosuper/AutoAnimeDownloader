@@ -1,11 +1,11 @@
 package logger
 
 import (
+	"AutoAnimeDownloader/src/internal/datadir"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -20,29 +20,6 @@ var (
 	logFilePath string
 )
 
-func getLogDirectory() (string, error) {
-	var baseFolder string
-
-	if runtime.GOOS == "windows" {
-		baseFolder = os.Getenv("APPDATA")
-	} else {
-		baseFolder = os.Getenv("HOME")
-	}
-
-	if baseFolder == "" {
-		return "", fmt.Errorf("unable to determine home directory")
-	}
-
-	logDir := filepath.Join(baseFolder, ".autoAnimeDownloader")
-
-	// Create directory if it doesn't exist
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create log directory: %w", err)
-	}
-
-	return logDir, nil
-}
-
 func Init(development bool) {
 	zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
 		return filepath.Base(file) + ":" + strconv.Itoa(line)
@@ -50,7 +27,7 @@ func Init(development bool) {
 
 	zerolog.TimeFieldFormat = time.RFC3339
 
-	logDir, err := getLogDirectory()
+	logDir, err := datadir.Path()
 	if err != nil {
 		logFilePath = ""
 	} else {
@@ -174,7 +151,7 @@ func GetLogFilePath() string {
 // GetExpectedLogFilePath returns the expected log file path without initializing the logger
 // This is useful for CLI tools that need to read logs without initializing the logger
 func GetExpectedLogFilePath() (string, error) {
-	logDir, err := getLogDirectory()
+	logDir, err := datadir.Path()
 	if err != nil {
 		return "", err
 	}

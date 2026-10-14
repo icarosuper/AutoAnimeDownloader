@@ -20,6 +20,7 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/api"
 	"AutoAnimeDownloader/src/internal/daemon"
+	"AutoAnimeDownloader/src/internal/datadir"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
@@ -61,59 +62,12 @@ func getPort() string {
 
 const pidFileName = "daemon.pid"
 
-func getJobsFilePath() (string, error) {
-	var baseFolder string
-
-	if runtime.GOOS == "windows" {
-		baseFolder = os.Getenv("APPDATA")
-	} else {
-		baseFolder = os.Getenv("HOME")
-	}
-
-	if baseFolder == "" {
-		return "", fmt.Errorf("unable to determine home directory")
-	}
-
-	return filepath.Join(baseFolder, ".autoAnimeDownloader", "pending_jobs.json"), nil
-}
-
-// getSessionDBPath returns the embedded torrent client's resume database path. It lives in
-// the config folder (not the data dir) so resume data survives a save-path change.
-func getSessionDBPath() (string, error) {
-	var baseFolder string
-
-	if runtime.GOOS == "windows" {
-		baseFolder = os.Getenv("APPDATA")
-	} else {
-		baseFolder = os.Getenv("HOME")
-	}
-
-	if baseFolder == "" {
-		return "", fmt.Errorf("unable to determine home directory")
-	}
-
-	return filepath.Join(baseFolder, ".autoAnimeDownloader", "session.db"), nil
-}
-
 func getPIDFilePath() (string, error) {
-	var baseFolder string
-
-	if runtime.GOOS == "windows" {
-		baseFolder = os.Getenv("APPDATA")
-	} else {
-		baseFolder = os.Getenv("HOME")
+	dir, err := datadir.Path()
+	if err != nil {
+		return "", err
 	}
-
-	if baseFolder == "" {
-		return "", fmt.Errorf("unable to determine home directory")
-	}
-
-	pidDir := filepath.Join(baseFolder, ".autoAnimeDownloader")
-	if err := os.MkdirAll(pidDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create PID directory: %w", err)
-	}
-
-	return filepath.Join(pidDir, pidFileName), nil
+	return filepath.Join(dir, pidFileName), nil
 }
 
 func createPIDFile() error {
@@ -267,20 +221,18 @@ func main() {
 	// the pass standing while it's down, restart included.
 	anilist.EnablePersistence(fileManager.LoadAnilistCache, fileManager.SaveAnilistCache)
 
-	jobsFilePath, err := getJobsFilePath()
+	dataDir, err := datadir.Path()
 	if err != nil {
-		logger.Logger.Fatal().Err(err).Msg("Failed to determine jobs file path")
+		logger.Logger.Fatal().Err(err).Msg("Failed to determine the data directory")
 	}
-	jobQueue := daemon.NewJobQueue(fileManager, jobsFilePath)
+	jobQueue := daemon.NewJobQueue(fileManager, filepath.Join(dataDir, "pending_jobs.json"))
 
 	// Embedded torrent client (rain) and the library organizer (hardlinks into the
 	// completed-anime folder). The session is created lazily by SessionManager once the
 	// save path is known (config may be incomplete at startup).
-	sessionDBPath, err := getSessionDBPath()
-	if err != nil {
-		logger.Logger.Fatal().Err(err).Msg("Failed to determine session database path")
-	}
-	torrentManager := torrents.NewSessionManager(sessionDBPath)
+	// The resume database lives in the data dir, not the download dir, so resume data survives a
+	// save-path change.
+	torrentManager := torrents.NewSessionManager(filepath.Join(dataDir, "session.db"))
 	librarian := files.NewLibrarian(files.NewOSFileSystem())
 
 	// Completion events enqueue a durable JobOrganize; failures notify and drop the torrent

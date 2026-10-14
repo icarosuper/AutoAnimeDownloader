@@ -1,19 +1,18 @@
 package files
 
 import (
+	"AutoAnimeDownloader/src/internal/datadir"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 )
 
-const configsFolder = ".autoAnimeDownloader"
 const configFileName = "config.json"
 const downloadedEpsFileName = "downloaded_episodes"
 const blockedEpsFileName = "blocked_episodes"
@@ -228,33 +227,6 @@ func getDefaultConfig() *Config {
 	}
 }
 
-func ensureConfigsFolder(fs FileSystem) (string, error) {
-	var baseFolder string
-
-	if runtime.GOOS == "windows" {
-		baseFolder = os.Getenv("APPDATA")
-	} else {
-		baseFolder = os.Getenv("HOME")
-	}
-
-	if baseFolder == "" {
-		return "", fmt.Errorf("unable to determine home directory")
-	}
-
-	configsFolderPath := filepath.Join(baseFolder, configsFolder)
-
-	_, err := fs.Stat(configsFolderPath)
-	if os.IsNotExist(err) {
-		if err := fs.Mkdir(configsFolderPath, 0755); err != nil {
-			return "", fmt.Errorf("failed to create configs folder: %w", err)
-		}
-	} else if err != nil {
-		return "", fmt.Errorf("failed to stat configs folder: %w", err)
-	}
-
-	return configsFolderPath, nil
-}
-
 func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath, standaloneAnimesPath string) *FileManager {
 	return &FileManager{
 		fs:                   fs,
@@ -271,9 +243,9 @@ func NewManager(fs FileSystem, configPath, episodesPath, blockedEpisodesPath, an
 
 func NewDefaultFileManager() (*FileManager, error) {
 	fs := NewOSFileSystem()
-	configsFolderPath, err := ensureConfigsFolder(fs)
+	configsFolderPath, err := datadir.Path()
 	if err != nil {
-		return nil, fmt.Errorf("failed to ensure configs folder: %w", err)
+		return nil, err
 	}
 
 	configPath := filepath.Join(configsFolderPath, configFileName)

@@ -62,7 +62,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `queue.json` | `~/.autoAnimeDownloader/` | Download queue state: `{"order": [...], "paused": [...]}`. Lives next to the resume database because it is torrent-client state, not user config. Missing/corrupted = rebuilt from `AddedAt`, never fatal — see decisions.md #41 |
 | `download_root.id` | `~/.autoAnimeDownloader/` | Id of the download folder the session is bound to. Its twin, `.aad_root`, lives **inside** the download folder; the pair is how a moved/trashed/replaced folder is detected — see decisions.md #34 |
 
-Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). See `configsFolder` in `files/filemanager.go` and `getJobsFilePath` / `getSessionDBPath` / `getPIDFilePath` in `cmd/daemon/main.go`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
+Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). The path is computed in **one** place, `datadir.Path()` — every file above (and the logger and the CLI's PID file) goes through it. It's a leaf package on purpose: `files` imports `logger`, so the function can't live in `files`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
 
 ## On-Disk Layout
 

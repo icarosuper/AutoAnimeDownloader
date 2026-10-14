@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"AutoAnimeDownloader/src/internal/datadir"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,24 +17,11 @@ const pidFileName = "daemon.pid"
 const systemdServiceName = "autoanimedownloader.service"
 
 func getPIDFilePath() (string, error) {
-	var baseFolder string
-
-	if runtime.GOOS == "windows" {
-		baseFolder = os.Getenv("APPDATA")
-	} else {
-		baseFolder = os.Getenv("HOME")
+	dir, err := datadir.Path()
+	if err != nil {
+		return "", err
 	}
-
-	if baseFolder == "" {
-		return "", fmt.Errorf("unable to determine home directory")
-	}
-
-	pidDir := filepath.Join(baseFolder, ".autoAnimeDownloader")
-	if err := os.MkdirAll(pidDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create PID directory: %w", err)
-	}
-
-	return filepath.Join(pidDir, pidFileName), nil
+	return filepath.Join(dir, pidFileName), nil
 }
 
 // isSystemdAvailable checks if systemd is available and the service is installed

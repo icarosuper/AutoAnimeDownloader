@@ -50,8 +50,8 @@ start. They are not read by the Go code, and they do nothing after the file exis
 
 | Variable | Where | Description |
 |----------|-------|-------------|
-| `HOME` | `files/filemanager.go`, `logger/logger.go`, `cmd/daemon/main.go` | Linux/macOS: base for `~/.autoAnimeDownloader/` |
-| `APPDATA` | same files | Windows: base for `%APPDATA%\AutoAnimeDownloader\` |
+| `HOME` | `datadir/datadir.go` | Linux/macOS: base for `~/.autoAnimeDownloader/` |
+| `APPDATA` | `datadir/datadir.go` | Windows: base for `%APPDATA%\.autoAnimeDownloader\` |
 
 ## Test-Only
 
