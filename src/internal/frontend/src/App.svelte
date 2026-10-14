@@ -9,6 +9,7 @@
   import Notifications from "./routes/Notifications.svelte";
   import Downloads from "./routes/Downloads.svelte";
   import AddAnime from "./routes/AddAnime.svelte";
+  import Report from "./routes/Report.svelte";
 
   const routes: Record<string, unknown> = {
     "/": Status,
@@ -20,6 +21,7 @@
     "/priorities": Priorities,
     "/logs": Logs,
     "/notifications": Notifications,
+    "/report": Report,
   };
 </script>
 

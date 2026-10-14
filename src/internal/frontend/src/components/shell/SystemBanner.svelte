@@ -1,43 +1,65 @@
 <script lang="ts">
-  // Banner de sistema — UM só, com precedência, hospedado no AppShell (spec: decisions.md #66).
-  // Não é toast: toast é falha de uma AÇÃO que o usuário pediu e some sozinho; banner é estado
-  // DEGRADADO que persiste entre polls e explica por que a tela inteira parece errada. O valor
-  // dele não é reportar o erro — é dizer por que a lista está velha ou incompleta, coisa que
-  // hoje o usuário conclui sozinho (errado) como "sumiu anime".
+  // System banner — ONE only, with precedence, hosted in the AppShell (spec: decisions.md #66).
+  // It's not a toast: a toast is the failure of an ACTION the user asked for and goes away on its
+  // own; the banner is a DEGRADED state that persists across polls and explains why the whole
+  // screen looks wrong. Its value isn't reporting the error — it's saying why the list is stale or
+  // incomplete, which the user would otherwise conclude on their own (wrongly) as "animes vanished".
+  //
+  // Its /status poll also watches `pending_crash_at`: the shell's only status poller, and the first
+  // answer after mount is what tells a fresh page load from a tab that was already open.
   import { onDestroy, onMount } from 'svelte'
-  import { AlertTriangle, ExternalLink } from '@lucide/svelte'
+  import { push } from 'svelte-spa-router'
+  import { AlertTriangle } from '@lucide/svelte'
   import { getStatus, type AnilistHealth } from '../../lib/api/client.js'
   import { backendHealth } from '../../lib/stores/backendHealth.js'
   import { pickBanner, secondsUntil } from '../../lib/domain/systemBanner.js'
+  import { crashReaction, lastSeenCrash, rememberSeenCrash, reportHref } from '../../lib/report.js'
+  import { toast } from '../../lib/stores/toast.js'
   import { locale } from '../../lib/stores/locale.js'
   import * as m from '../../lib/i18n/messages.js'
 
-  const REPO_ISSUES = 'https://github.com/icarosuper/AutoAnimeDownloader/issues/new'
-  // Poll só para alimentar o banner. Devagar de propósito: o estado que ele mostra muda em
-  // escala de minutos (outage, timeout de 1 min do rate limit), não de segundos.
+  // Polled only to feed the banner. Slow on purpose: the state it shows changes on a scale of
+  // minutes (outage, the rate limit's 1-minute timeout), not seconds.
   const STATUS_POLL_MS = 30000
+  // The crash toast stays until it's read: the daemon restarted behind the user's back.
+  const CRASH_TOAST_MS = 60 * 60 * 1000
 
   let anilist: AnilistHealth | null = null
   let now = Date.now()
   let pollId: ReturnType<typeof setInterval> | null = null
   let tickId: ReturnType<typeof setInterval> | null = null
+  let freshLoad = true
 
   async function loadStatus() {
     try {
-      // silent: uma falha aqui já é contada pelo backendHealth e vira o próprio banner. Um
-      // toast a cada 30s com o daemon fora do ar seria só barulho.
-      anilist = (await getStatus({ silent: true })).anilist ?? null
+      // silent: a failure here is already counted by backendHealth and becomes the banner itself.
+      // A toast every 30s with the daemon down would be just noise.
+      const status = await getStatus({ silent: true })
+      anilist = status.anilist ?? null
+      reactToCrash(status.pending_crash_at)
     } catch {
-      // O estado da AniList fica com o último valor conhecido; a precedência do banner garante
-      // que ele não seja mostrado enquanto o backend estiver fora — seria informação datada.
+      // The AniList state keeps its last known value; the banner's precedence guarantees it isn't
+      // shown while the backend is down — it would be stale information.
+    }
+  }
+
+  function reactToCrash(pendingCrashAt: string | null | undefined) {
+    const reaction = crashReaction(pendingCrashAt, lastSeenCrash(), freshLoad)
+    freshLoad = false
+    if (!reaction || !pendingCrashAt) return
+    rememberSeenCrash(pendingCrashAt)
+    if (reaction === 'open') {
+      push('/report?crash=1')
+    } else {
+      toast.error(m.report_crash_toast(), CRASH_TOAST_MS, { href: '#/report?crash=1', label: m.report_toast_link() })
     }
   }
 
   onMount(() => {
     loadStatus()
     pollId = setInterval(loadStatus, STATUS_POLL_MS)
-    // Segundo timer só para a contagem regressiva do rate limit, que é o único caso em que se
-    // sabe o tempo exato que falta (Retry-After).
+    // Second timer only for the rate limit countdown, the one case where the exact remaining time
+    // is known (Retry-After).
     tickId = setInterval(() => (now = Date.now()), 1000)
   })
 
@@ -48,8 +70,8 @@
 
   $: banner = pickBanner($backendHealth, anilist)
   $: seconds = banner ? secondsUntil(banner.retryAt, now) : 0
-  // Data curta e sem segundos: o que o usuário precisa saber é se o cache é de hoje ou da
-  // semana passada, não o instante exato da gravação.
+  // Short date without seconds: what the user needs to know is whether the cache is from today or
+  // last week, not the exact moment it was written.
   $: cacheText =
     $locale && banner?.cachedAt
       ? m.banner_serving_cache({
@@ -72,17 +94,16 @@
                 : m.banner_anilist_rate_limited_no_eta()
       : ''
 
-  // Título e corpo pré-preenchidos: o report só vale se trouxer o que só o usuário tem.
-  $: reportHref = banner
-    ? `${REPO_ISSUES}?title=${encodeURIComponent(`[${banner.kind}] `)}&body=${encodeURIComponent(
-        `**O que aconteceu:**\n\n\n---\nBanner: \`${banner.kind}\`\nDetalhe: \`${banner.detail ?? '-'}\`\n`,
-      )}`
+  // The report screen, pre-filled with the banner: it adds the redacted log and environment that a
+  // bare GitHub link never carried.
+  $: bannerReportHref = banner
+    ? reportHref({ error: banner.detail ?? text, context: `banner: ${banner.kind}` })
     : ''
 </script>
 
 {#if banner}
-  <!-- role="alert" e não "status": o conteúdo abaixo do banner está errado ou parado, e o
-       leitor de tela precisa saber disso antes de continuar lendo a página. -->
+  <!-- role="alert" and not "status": the content below the banner is wrong or frozen, and the
+       screen reader needs to know that before reading on. -->
   <div
     role="alert"
     data-testid="system-banner"
@@ -98,20 +119,17 @@
         <span class="block text-caption opacity-80">{cacheText}</span>
       {/if}
       {#if banner.detail}
-        <!-- Mensagem crua da AniList. Um 403 de IP bloqueado explica o motivo por escrito e é a
-             única informação que o frontend não tem como reconstruir — mostrar verbatim. -->
+        <!-- AniList's raw message. A blocked-IP 403 explains the reason in writing and is the only
+             information the frontend can't rebuild — shown verbatim. -->
         <span class="block text-caption opacity-80">{banner.detail}</span>
       {/if}
     </span>
     {#if banner.reportable}
       <a
-        href={reportHref}
-        target="_blank"
-        rel="noopener noreferrer"
+        href={bannerReportHref}
         class="inline-flex shrink-0 items-center gap-1 underline underline-offset-2 hover:opacity-80"
       >
         {$locale && m.banner_report()}
-        <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
       </a>
     {/if}
   </div>

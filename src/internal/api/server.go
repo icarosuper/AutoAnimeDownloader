@@ -46,6 +46,9 @@ type Server struct {
 	JobQueue      *daemon.JobQueue
 	Torrents      torrents.TorrentBackend
 	Librarian     files.Librarian
+	// DataDir is where the diagnostics endpoints read the bug report files from. Empty (tests that
+	// don't set it) means no pending crash and no bundle.
+	DataDir string
 
 	mu                 sync.Mutex
 	currentLoopControl *daemon.LoopControl
@@ -107,6 +110,8 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))
 	apiMux.HandleFunc("/api/v1/logs", handleLogs(s))
+	apiMux.HandleFunc("/api/v1/diagnostics", handleDiagnostics(s))
+	apiMux.HandleFunc("/api/v1/diagnostics/crash", handleDiagnosticsCrash(s))
 	apiMux.HandleFunc("/api/v1/torrents", handleTorrents(s))
 	// Single pattern for every method on this path: Go 1.22+ ServeMux patterns without a
 	// method prefix match all verbs, so handleTorrentDelete's own method check is what turns

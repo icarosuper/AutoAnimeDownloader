@@ -1,10 +1,10 @@
 # Architecture
 
-> **Como usar este arquivo.** Ele responde *"qual arquivo eu abro e o que me morde lá"* — fluxo
-> entre arquivos, invariante que dói quebrar, fato negativo, nome ambíguo e o ponteiro para a
-> decisão. Ele **não** lista símbolo com uma linha de propósito: para "que funções existem neste
-> pacote", `grep '^func ' <arquivo>.go` responde de graça e sempre atualizado. Leia o mapa de
-> componentes e o fluxo, depois pule direto para a seção do pacote que você vai tocar.
+> **How to use this file.** It answers *"which file do I open and what bites me there"* — flow
+> between files, invariants that hurt to break, negative facts, ambiguous names and the pointer to
+> the decision. It does **not** list symbols with a one-line purpose: for "which functions exist in
+> this package", `grep '^func ' <file>.go` answers for free and always up to date. Read the
+> component map and the flow, then jump straight to the section of the package you'll touch.
 
 ## Components
 
@@ -18,11 +18,13 @@ src/internal/
   anilist/           → GraphQL client for Anilist API
   nyaa/              → HTML scraper for Nyaa torrent site
   torrents/          → Embedded BitTorrent client (github.com/cenkalti/rain/v2) behind a TorrentBackend interface
-  frontend/          → Svelte 5 + Vite + Tailwind 3 web UI (compiled to Go embed). Sem
-                       biblioteca de componentes: os primitivos moram em components/ui/ e as
-                       cores em lib/design/tokens.css (decisions.md #91)
+  frontend/          → Svelte 5 + Vite + Tailwind 3 web UI (compiled to Go embed). No
+                       component library: the primitives live in components/ui/ and the
+                       colors in lib/design/tokens.css (decisions.md #91)
   notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on NewEpisode/DownloadFailed; by job queue on DownloadCompleted.
   logger/            → zerolog-based structured logger (console + rotating file)
+  datadir/           → The data dir path (~/.autoAnimeDownloader, %APPDATA%\.autoAnimeDownloader) — leaf package
+  diagnostics/       → Bug report bundle (redacted environment, config, log) and the crash file lifecycle
   tray/              → System tray icon (fyne/systray)
   version/           → Build-time version injection via ldflags
 src/tests/
@@ -52,7 +54,7 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 |------|-----------------|---------|
 | `config.json` | `~/.autoAnimeDownloader/` | User settings (Anilist usernames, paths, intervals) |
 | `downloaded_episodes` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL, no extension) |
-| `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of `{anime_id, episode}`, no extension). O formato antigo (array de ids de nó da AniList) é descartado com aviso ao ser lido — ver decisions.md #52 |
+| `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of `{anime_id, episode}`, no extension). The old format (an array of AniList node ids) is discarded with a warning when read — see decisions.md #52 |
 | `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList **media** ID (JSON map, no extension) |
 | `standalone_animes` | `~/.autoAnimeDownloader/` | Media IDs tracked **without** being in any AniList list (JSON array of IDs, no extension) |
 | `anilist_cache` | `~/.autoAnimeDownloader/` | Snapshot of the `anilist` caches (MAL lists and the MAL→AniList id mapping included), so the app survives AniList being down (JSON, no extension). **Opaque** bytes to `files` on purpose: the schema belongs to `anilist` (`persist.go`), and that's what keeps `files` from importing `anilist` just to persist its cache. Disposable — deleting it only costs an outage with no safety net until the next fetch |
@@ -60,9 +62,12 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
 | `queue.json` | `~/.autoAnimeDownloader/` | Download queue state: `{"order": [...], "paused": [...]}`. Lives next to the resume database because it is torrent-client state, not user config. Missing/corrupted = rebuilt from `AddedAt`, never fatal — see decisions.md #41 |
+| `crash.log` | `~/.autoAnimeDownloader/` | Where the Go runtime writes a fatal panic (`debug.SetCrashOutput`, set in `main.go` before `logger.Init`). Empty on a clean run |
+| `crash-pending.log` | `~/.autoAnimeDownloader/` | The previous run's crash, promoted from `crash.log` at boot. Its existence is `pending_crash_at` in `/status` |
+| `crashes/` | `~/.autoAnimeDownloader/` | Handled crashes (`crash-<yyyymmdd-hhmmss>.log`, named from the crash's mtime), newest 5 kept |
 | `download_root.id` | `~/.autoAnimeDownloader/` | Id of the download folder the session is bound to. Its twin, `.aad_root`, lives **inside** the download folder; the pair is how a moved/trashed/replaced folder is detected — see decisions.md #34 |
 
-Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). The path is computed in **one** place, `datadir.Path()` — every file above (and the logger and the CLI's PID file) goes through it. It's a leaf package on purpose: `files` imports `logger`, so the function can't live in `files`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
+Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). The path is computed in **one** place, `datadir.Path()` — every file above (and the logger, the CLI's PID file and the crash files) goes through it. It's a leaf package on purpose: `files` imports `logger`, so the function can't live in `files`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
 
 ## On-Disk Layout
 
@@ -78,14 +83,14 @@ Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state file
 
 ## API
 
-A tabela abaixo é a **única** doc de endpoint: não há mais spec OpenAPI nem `/swagger/`
-(removidos — valiam 33% do binário e nada consumia o spec).
+The table below is the **only** endpoint doc: there is no OpenAPI spec or `/swagger/` anymore
+(removed — they were 33% of the binary and nothing consumed the spec).
 
 Key endpoints:
 
 | Method | Endpoint | Handler func | File |
 |--------|----------|-------------|------|
-| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — o limiar de `disk_low` mora **só** no servidor. O estado da AniList é escrito por **qualquer** chamada (passe ou poll do frontend), porque todas passam por `sendAnilistRequest` — decisions.md #65/#66. `anilist.cache_saved_at` é preenchido na **leitura**, não na escrita do estado: não é fato sobre a AniList, é o que o banner usa para dizer de quando é o cache que está na tela |
+| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — the `disk_low` threshold lives **only** on the server. The AniList state is written by **any** call (a pass or a frontend poll), because they all go through `sendAnilistRequest` — decisions.md #65/#66. `anilist.cache_saved_at` is filled in on **read**, not when the state is written: it's not a fact about AniList, it's what the banner uses to say how old the cache on screen is. `pending_crash_at` (mtime of `crash-pending.log`, `null` when there is none) is what makes the web UI offer the report screen after a crash |
 | `GET` | `/api/v1/last-check` | `handleLastCheck` | `endpoint_last_check.go` — só memória. `problems` (devia ter baixado e não baixou) e `limits` (a config funcionando como configurada). Quando há `pass_error` as duas listas vêm vazias, porque `SetLastCheckError` limpa o relatório (decisions.md #82). Download manual fica fora: aquele caminho devolve o erro na própria resposta HTTP |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
@@ -105,6 +110,8 @@ Key endpoints:
 | `POST` | `/api/v1/daemon/start` | `handleDaemonStart` | `endpoint_daemon_start.go` |
 | `POST` | `/api/v1/daemon/stop` | `handleDaemonStop` | `endpoint_daemon_stop.go` |
 | `GET` | `/api/v1/logs` | `handleLogs` | `endpoint_logs.go` |
+| `GET` | `/api/v1/diagnostics?titles=<bool>&error=&context=&anime=` | `handleDiagnostics` | `endpoint_diagnostics.go` — `{bundle, environment}`. `titles` defaults to on; `error`/`context`/`anime` are the error toast's, echoed into the bundle's Context section after redaction |
+| `DELETE` | `/api/v1/diagnostics/crash` | `handleDiagnosticsCrash` | `endpoint_diagnostics.go` — moves `crash-pending.log` to `crashes/`. Idempotent; answers the usual 200 envelope, not 204, because `apiRequest` always parses the body |
 | `POST` | `/api/v1/notifications/webhooks/{name}/test` | `handleNotificationWebhookTest` | `endpoint_notifications.go` |
 | `GET` | `/api/v1/torrents` | `handleTorrents` | `endpoint_torrents.go` |
 | `POST` | `/api/v1/torrents/{hash}/pause` | `handleTorrentPause` | `endpoint_torrents.go` |
@@ -527,60 +534,98 @@ usa header para título.
 Variáveis de template (URL, headers e corpo): `{{title}}`, `{{message}}`, `{{anime_name}}`,
 `{{episode}}`, `{{reason}}`, `{{count}}`. Numa janela com N > 1, `{{message}}` vira uma linha por item.
 
-### Pacotes pequenos
+### `src/internal/diagnostics/` — bug report
 
-- **`logger/`** — zerolog, console + `daemon.log` rotativo. `InitDebug` manda o trace para outro
-  arquivo, para que `--debug-anime` nunca toque o `~/.autoAnimeDownloader`
-- **`version/`** — `Version`, `"dev"` por padrão, sobrescrito por ldflags
-- **`cli/`** — controle de ciclo de vida do daemon para o binário da CLI (`cmd/cli` é o único
-  importador). Dois caminhos, nessa ordem: systemd **user** unit e, se ela não estiver instalada, um
-  PID file. **Não há integração com o Windows Service Manager** — ela existiu, chamando `sc`/`net`,
-  mas nada no repo instala esse serviço (`development.md` diz que serviço no Windows não é
-  suportado) e `package-windows` nem entrega o binário da CLI, então os três caminhos eram
-  inalcançáveis em todo artefato publicado. No Windows vale o PID file
-- **`tray/`** — build-tagged: a implementação real precisa de CGO, então `tray_stub.go` mantém o build
-  sem CGO compilando (a CI cobra isso em `build.yml`). No Linux o daemon só sobe a tray com `DISPLAY`
-  não-vazio
-- **`frontend/embed.go`** — `//go:embed dist/*`. `dist/` precisa existir **antes** do `go build`, e é
-  por isso que o frontend sempre compila primeiro
+Builds the report bundle from **files in the data dir only** — config, `anime_settings`,
+`daemon.log` (or the newest `daemon-*.log.gz` after a rotation), `crash-pending.log` — and never
+asks the running daemon. That's what lets the planned CLI `report` command build the same bundle
+with the daemon dead. The config is read as a raw map, **not** through `LoadConfigs`: a config that
+fails to load is exactly what a report must still carry. Nothing is ever sent; the user attaches
+the file by hand ([decisions.md #102](decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)).
+
+- **Redaction is by log key** (`redact.go`, `keyClasses`): keep / drop / pseudonymize (usernames →
+  `userN`) / title (`<title-N>` when titles are off). A key missing from the table is treated as a
+  title at runtime, and `keys_test.go` fails the build for any `.Str("key", …)` in the source that
+  isn't classified ([decisions.md #103](decisions.md#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)).
+  On top of the keys, free text is scrubbed: webhook URLs/headers anywhere → `<webhook-N>`, the
+  home dir → `~`, URLs to hosts outside the allowlist → `<url>`. `"HTTP request"` lines are dropped
+  whole (they carry the LAN IPs)
+- **Crash lifecycle** (`crash.go`): the runtime writes a fatal panic to `crash.log`; the next boot
+  (`StartCrashCapture`) promotes a non-empty one to `crash-pending.log`; handling it in the UI
+  (`DELETE /diagnostics/crash`) moves it to `crashes/`, newest 5 kept. An older pending crash
+  nobody handled is archived before a new one takes its place, so none is lost
+- `environment.go` reads the OS through a `host` struct (goos/getenv/readFile) so the docker,
+  systemd and desktop detection is testable without the real machine
+
+### Small packages
+
+- **`datadir/`** — `Path()`: the data dir, created if missing. Not cached: it's a stat and a
+  `MkdirAll`, and callers run once at boot
+- **`logger/`** — zerolog, console + rotating `daemon.log`. `InitDebug` sends the trace to another
+  file, so that `--debug-anime` never touches `~/.autoAnimeDownloader`
+- **`version/`** — `Version`, `"dev"` by default, overridden by ldflags
+- **`cli/`** — daemon lifecycle control for the CLI binary (`cmd/cli` is the only importer). Two
+  paths, in this order: a systemd **user** unit and, if it isn't installed, a PID file. **There is no
+  Windows Service Manager integration** — it existed, calling `sc`/`net`, but nothing in the repo
+  installs that service (`development.md` says a Windows service isn't supported) and
+  `package-windows` doesn't even ship the CLI binary, so all three paths were unreachable in every
+  published artifact. On Windows the PID file applies
+- **`tray/`** — build-tagged: the real implementation needs CGO, so `tray_stub.go` keeps the
+  CGO-less build compiling (CI enforces it in `build.yml`). On Linux the daemon only starts the
+  tray with a non-empty `DISPLAY`. "Report a problem" opens `#/report` in the browser
+- **`frontend/embed.go`** — `//go:embed dist/*`. `dist/` has to exist **before** `go build`, which
+  is why the frontend always builds first
 
 ### `src/internal/frontend/src/` — Svelte 5
 
-Não há biblioteca de componentes: o daisyUI foi removido (decisions.md #91). Botão, modal,
-checkbox, chip e afins moram em `components/ui/`; cor sai de `lib/design/tokens.css`, que é a
-fonte da verdade única e faz a troca de tema pelo seu próprio `[data-theme]`.
+There is no component library: daisyUI was removed (decisions.md #91). Button, modal, checkbox,
+chip and the like live in `components/ui/`; color comes from `lib/design/tokens.css`, which is the
+single source of truth and switches themes through its own `[data-theme]`.
 
-**Rotas** (hash router): `Status.svelte` (`#/`), `AddAnime.svelte` (`#/add`), `Downloads.svelte`
+**Routes** (hash router): `Status.svelte` (`#/`), `AddAnime.svelte` (`#/add`), `Downloads.svelte`
 (`#/downloads`), `AnimeDetail.svelte` (`#/status/:id`), `Config.svelte` (`#/config`),
 `Priorities.svelte` (`#/priorities`), `Logs.svelte` (`#/logs`), `Notifications.svelte`
-(`#/notifications`).
+(`#/notifications`), `Report.svelte` (`#/report`).
 
-**Fatos negativos que economizam busca:**
+**Negative facts that save a search:**
 
-- **Status e lista de animes são uma tela só.** Não existe rota "Biblioteca" separada
-- **Não existe `Layout.svelte`** — foi apagado; o shell é `AppShell.svelte`. Ele escrevia os seis links
-  de navegação duas vezes, um bloco desktop e um mobile
-- **Não existe endpoint de health-check.** `stores/backendHealth.ts` deriva a saúde do backend dentro
-  do `apiRequest`, das respostas que o app já faz
-- `AnimeDetail` não tem coluna `#`: ela repetia, em outra fonte, o número que o título do episódio já
-  carrega
+- **Status and the anime list are one screen.** There is no separate "Library" route
+- **There is no `Layout.svelte`** — it was deleted; the shell is `AppShell.svelte`. It wrote the six
+  navigation links twice, a desktop block and a mobile one
+- **There is no health-check endpoint.** `stores/backendHealth.ts` derives backend health inside
+  `apiRequest`, from the responses the app already makes
+- **There is one toast store**, `stores/toast.ts`. A second one (`toasts.ts`) used to receive the
+  client's automatic error toasts and nothing rendered it — every one of them was silently lost
+- `AnimeDetail` has no `#` column: it repeated, in another font, the number the episode title
+  already carries
 
-**Estrutura:** `components/shell/` (AppShell, NavRail, NavTabBar, MoreMenu, SystemBanner),
-`components/ui/` (primitivas), `lib/domain/` (lógica pura, sem import de Svelte, coberta por vitest),
-`lib/stores/`, `lib/utils/`, `lib/api/client.ts` (wrappers tipados por endpoint) e
-`lib/websocket/client.ts`.
+**Structure:** `components/shell/` (AppShell, NavRail, NavTabBar, MoreMenu, SystemBanner),
+`components/ui/` (primitives), `lib/domain/` (pure logic, no Svelte import, covered by vitest),
+`lib/stores/`, `lib/utils/`, `lib/api/client.ts` (typed wrappers per endpoint),
+`lib/websocket/client.ts` and `lib/report.ts` (links to the report screen and to GitHub; `REPO_URL`
+lives only there).
 
-**Regras da camada de UI:**
+**UI layer rules:**
 
-- **Nenhum componente de `ui/` contém hex literal** — todos consomem os nomes semânticos do Tailwind
-  apoiados em `lib/design/tokens.css`
-- `lib/navItems.ts` é a **fonte única** da lista de navegação, lida por `NavRail`/`NavTabBar`/`MoreMenu`
-- `AppShell` escolhe `NavRail` vs `NavTabBar` por `matchMedia` em JS, **não** por `hidden md:flex` —
-  a versão CSS manteria os dois montados, duplicando ids
-- `torrentStatus.ts` tem de ser mantido em sincronia à mão com `statusSlug()` em
+- **No `ui/` component contains a hex literal** — they all consume the semantic Tailwind names
+  backed by `lib/design/tokens.css`
+- `lib/navItems.ts` is the **single source** of the navigation list, read by `NavRail`/`NavTabBar`/`MoreMenu`
+- `AppShell` picks `NavRail` vs `NavTabBar` by `matchMedia` in JS, **not** by `hidden md:flex` — the
+  CSS version would keep both mounted, duplicating ids
+- `torrentStatus.ts` has to be kept in sync by hand with `statusSlug()` in
   `src/internal/torrents/status.go`
-- **Banner é estado degradado; toast é falha de ação.** `lib/domain/systemBanner.ts` escolhe UM banner
-  por precedência (backend inacessível → backend 5xx → AniList fora → rate limit), nunca empilha
-  (decisions.md #66). Erros do client caem em `toasts.add`, salvo quando quem chama pede o contrário
-- Progresso vem de **um** `Stats()` por torrent, puxado só enquanto uma tela está aberta
-  (decisions.md #30) — `speedHistory` e `stallTracker` não fazem poll próprio: a tela dona empurra
+- **A banner is degraded state; a toast is a failed action.** `lib/domain/systemBanner.ts` picks ONE
+  banner by precedence (backend unreachable → backend 5xx → AniList down → rate limit), never stacks
+  them (decisions.md #66). Client errors become a `toast.error` unless the caller passes `silent`.
+  A reportable banner's "Report" link opens `#/report` too, pre-filled with the banner's kind and
+  detail — not a bare GitHub link.
+  An **unexpected** failure (5xx, network, unreadable response — not a 4xx, not an abort) gets a
+  10 s toast with a Report link to `#/report` pre-filled with the error. `toast.ts` skips a toast
+  identical to one already on screen, because most pages also toast the same `err.message` in
+  their catch — the client's one, with the link, wins
+- **Crash → report screen.** `SystemBanner` polls `/status` every 30 s; a new `pending_crash_at`
+  opens `#/report?crash=1` on a fresh page load and only toasts in a tab that was already open (a
+  route change could throw away an unsaved form). The last crash reacted to is remembered in
+  `localStorage` (`aad.lastPendingCrash`)
+- Progress comes from **one** `Stats()` per torrent, pulled only while a screen is open
+  (decisions.md #30) — `speedHistory` and `stallTracker` don't poll on their own: the owning screen pushes them

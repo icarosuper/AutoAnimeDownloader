@@ -199,6 +199,21 @@ func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearch
 
 **A pack fixture needs a realistic name** (`"[X] Anime 001-100 [1080p]"`), not a bare `"batch"` string — `newPackSet` reads the episode range from the **name** (`nyaa.ExtractBatchInfo`) first, and a name with no parseable range sends it to the Nyaa detail page, which changes which episodes the pack ends up covering in the test. To exercise the detail path, set `searcher.packRange` (or pass a `detail` func to `newPackSet`) instead of mocking HTTP: `func(nyaa.TorrentResult) (nyaa.BatchInfo, bool)`. `newPackSet(results, nil)` = range from the name only, which is what most pack tests want.
 
+## A New Log Key Must Be Classified
+
+`diagnostics/keys_test.go` (`TestEveryLogKeyIsClassified`) fails when a zerolog field with a
+literal key (`.Str("foo", …)`, `.Int(…)`, `.Interface(…)`…) appears anywhere under `src/` (minus
+`src/tests` and `_test.go` files) and `foo` isn't in `keyClasses` in `diagnostics/redact.go`. The
+fix is one line in that table, picking by what the **value** can hold:
+
+- `keep` — counts, flags, durations, status words, error codes: nothing about the user
+- `title` — anything that can name an anime or a file: titles, torrent names, hashes, paths,
+  URLs, AniList/MAL ids. Hidden when the user unticks "include titles"
+- `pseudonymize` — account names (AniList/MAL usernames) → `user1`, `user2`…
+- `drop` — never useful in a report and identifying (`remote_addr`)
+
+When in doubt, `title`. See [decisions.md #103](decisions.md#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified).
+
 ## Never Let Background Work Outlive Its Test
 
 Two entry points start work in a goroutine and return immediately: `handleCheck` (POST `/check`) and `daemon.StartLoop`. **A test that triggers either must wait for it to finish before returning.**

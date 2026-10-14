@@ -108,6 +108,8 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#99** — A roman-numeral sequel searches by its bare base title first](#99-a-roman-numeral-sequel-searches-by-its-bare-base-title-first)
 - [**#100** — An empty per-episode search waits before repeating, and stops the later episodes](#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes)
 - [**#101** — The disk guard counts what the queue still has to write, not only free space](#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)
+- [**#102** — The bug report has no backend: consent is the act of attaching the file](#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)
+- [**#103** — Log redaction is by key, and a test forces every new key to be classified](#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)
 
 ---
 
@@ -2904,3 +2906,55 @@ their call, and its size is usually unknown anyway.
 per episode); checking free space alone in `packsThatFit`; or splitting `reserve` into a check and a
 separate count (the parallel animes would race between the two).
 
+---
+
+### 102. The bug report has no backend: consent is the act of attaching the file
+
+**The rule:** nothing in the app sends a report anywhere. The daemon builds a redacted bundle
+locally (`GET /api/v1/diagnostics`), the report screen shows it in full, downloads it as a `.txt`
+and opens the GitHub issue form pre-filled through the URL. The user attaches the file by hand.
+
+- **Why no backend.** An upload endpoint is a server to run, a place where logs of other people's
+  machines pile up, and an abuse target — for a self-hosted app with no account system. GitHub
+  already has identity, moderation and a conversation with the reporter.
+- **Why the file isn't in the URL.** GitHub cuts long URLs off, and a URL ends up in browser
+  history and server logs. Only the short `environment` summary and the user's own text go there
+  (the text truncated to a 4000-char encoded budget, `report.ts`).
+- **Consent = attaching.** The preview is exactly the file (the titles checkbox regenerates both),
+  and the screen says the issue is public. There is no separate "I agree" step to keep in sync.
+- **Reading from disk, not from the daemon** (`diagnostics` package): the same bundle can be built
+  by a CLI command with the daemon dead (planned for `v2.6.0`).
+
+**Cost accepted:** a user who doesn't attach the file sends an issue with only the environment
+summary. The issue form's required "I attached the report file" checkbox is the only nudge.
+
+**Don't "fix" by:** adding an upload/"send report" button, putting the bundle in the issue URL, or
+having the endpoint read state from the running daemon instead of the files.
+
+---
+
+### 103. Log redaction is by key, and a test forces every new key to be classified
+
+**The rule:** the bundle's log lines are JSON, and each field is redacted by its **key** through
+`keyClasses` in `diagnostics/redact.go`: `keep`, `drop` (`remote_addr`), `pseudonymize` (account
+names → `user1`, `user2`…, stable within one report) or `title` (anime names, torrent names, paths,
+ids → `<title-N>` when the user unticks "include titles"). Free text — `message`, `error` and kept
+strings — then goes through the text scrubber: webhook URLs and header values anywhere →
+`<webhook-N>`, the home dir → `~`, URLs to hosts outside the allowlist → `<url>`, known usernames →
+`userN`. `"HTTP request"` lines are dropped whole (they carry the LAN IPs of whoever opened the UI).
+
+- **Why by key and not by regex over the text.** A title has no shape a regex can find; the key is
+  the only reliable signal of what a value is. The text scrubber only catches what does have a shape
+  (URLs, the configured webhooks, the configured usernames, the home path).
+- **A key missing from the table is treated as a `title`** — the strictest class that still keeps
+  the line readable. That's the runtime safety net; the real guard is the test.
+- **`keys_test.go` (`TestEveryLogKeyIsClassified`)** greps every non-test `.go` file under `src/`
+  (minus `src/tests`) for zerolog field calls with a literal key (`.Str("anime", …)`, `.Int(…)`,
+  `.Interface(…)`…) and fails listing each key `keyClasses` doesn't have. A new log field can't
+  reach a report without someone deciding what it is.
+
+**Cost accepted:** a key built at runtime (not a string literal) escapes the test and falls back to
+`title`. None exists today.
+
+**Don't "fix" by:** defaulting unknown keys to `keep`, replacing the table with a regex over the
+whole line, or silencing the test by adding a key as `keep` without checking what it carries.

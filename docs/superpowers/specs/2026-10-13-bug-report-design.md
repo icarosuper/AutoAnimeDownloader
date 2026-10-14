@@ -1,7 +1,7 @@
 # Bug report
 
 **Date:** 2026-10-13
-**Status:** approved design, not implemented
+**Status:** implemented on 2026-10-14 — decisions are [decisions.md #102](../../agents/decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file) and [#103](../../agents/decisions.md#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified); see "What changed in the implementation" at the end
 **Origin:** `v2.5.0` in [TODO.md](../../TODO.md) — "Bug report mechanism — must exist well before
 promoting the project, otherwise feedback arrives without context"
 **Expected scope:** new `src/internal/diagnostics` and `src/internal/datadir` packages, `src/internal/api` (one endpoint, one
@@ -298,3 +298,24 @@ Found while designing this; fixed as part of the implementation.
 - the crash file rename at boot (pending exists / doesn't / empty `crash.log`); the move to
   `crashes/` and the prune to 5
 - the endpoint: params passed through, `DELETE` idempotent
+
+## What changed in the implementation
+
+- **`DELETE /api/v1/diagnostics/crash` answers 200 with the usual envelope, not 204.** Every
+  endpoint answers through `JSONSuccess`, and the frontend's `apiRequest` always parses the body —
+  a 204 would make it fail on an empty body.
+- **The Logs copy fallback copies for real** (fix 2). Instead of selecting the text and asking for
+  Ctrl+C, it puts the line in a hidden textarea and runs `document.execCommand('copy')`, which
+  still works outside a secure context.
+- **The toast store skips a toast identical to one already on screen** (fix 1). Once the client's
+  automatic error toasts became visible, ~30 pages that also toast `err.message` in their catch
+  showed every error twice. The first one wins — the client's, with the Report link.
+- **The anime id is hidden in the error and context text too**, not only in the `anime` field:
+  the context line carries the endpoint (`GET /animes/21/episodes 500`).
+- **The renamed specs (fix 4):** `2026-08-10-batch-episode-limit`, `2026-08-13-batch-per-filter`,
+  `2026-08-16-multiple-sources-stage0`, `2026-08-24-subtitle-language-filter`,
+  `2026-08-28-torrent-file-list`, `2026-08-28-priority-presets`, `2026-09-05-anilist-local-cache`,
+  `2026-09-13-source-as-descriptor`.
+- **The system banner's "Report" link opens `#/report`** (pre-filled with the banner's kind and
+  detail) instead of a bare GitHub issue, so a backend error caught by the banner also carries the
+  redacted log and environment.

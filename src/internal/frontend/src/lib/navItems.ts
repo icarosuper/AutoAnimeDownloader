@@ -1,41 +1,41 @@
 /**
- * Fonte única dos itens de navegação do shell (Fase 1 do redesign de UI, spec §5).
+ * Single source of the shell's navigation items (UI redesign Phase 1, spec §5).
  *
- * Antes desta fase, `components/Layout.svelte` escrevia os seis links de navegação DUAS
- * VEZES — um bloco para o header desktop, outro para o menu mobile — com as classes de
- * estado ativo repetidas em cada bloco. `NavRail`, `NavTabBar` e `MoreMenu` consomem os
- * arrays abaixo em vez de declarar a lista de novo.
+ * Before that phase, `components/Layout.svelte` wrote the six navigation links TWICE — one block
+ * for the desktop header, another for the mobile menu — with the active-state classes repeated in
+ * each block. `NavRail`, `NavTabBar` and `MoreMenu` consume the arrays below instead of declaring
+ * the list again.
  *
- * `label` guarda a REFERÊNCIA da função de mensagem do paraglide (não o texto já resolvido).
- * Essas funções lêem o locale atual via `getLocale()` (não são stores), então precisam ser
- * chamadas dentro do idioma reativo `$: T = $locale && { ... }` já usado em todo o app — só
- * assim a troca de idioma dispara um novo render. Quem consumir este array deve mapear
- * `item.label()` dentro desse bloco reativo, não direto no template.
+ * `label` holds the REFERENCE to the paraglide message function (not the resolved text). Those
+ * functions read the current locale via `getLocale()` (they aren't stores), so they have to be
+ * called inside the reactive `$: T = $locale && { ... }` block already used across the app — only
+ * then does a language switch trigger a new render. Whoever consumes this array should map
+ * `item.label()` inside that reactive block, not straight in the template.
  */
-import { Activity, Bell, Download, Ellipsis, ListOrdered, Plus, ScrollText, Settings } from '@lucide/svelte'
+import { Activity, Bell, Bug, Download, Ellipsis, ListOrdered, Plus, ScrollText, Settings } from '@lucide/svelte'
 import * as m from './i18n/messages.js'
 
-/** Todo ícone Lucide usado aqui tem essa mesma assinatura de componente. */
+/** Every Lucide icon used here has this same component signature. */
 type IconComponent = typeof Activity
 
 export interface NavItem {
-  /** id estável — key do #each e sufixo de outros ids derivados (ex. inputs, testids) */
+  /** stable id — the #each key and the suffix of other derived ids (e.g. inputs, testids) */
   id: string
-  /** rota (hash) de destino, ex. '/status' */
+  /** target (hash) route, e.g. '/status' */
   path: string
-  /** paths adicionais que também marcam este item como ativo (ex. '/' para Status) */
+  /** extra paths that also mark this item as active (e.g. '/' for Status) */
   activePaths?: string[]
   icon: IconComponent
-  /** função de mensagem i18n — chame dentro de um `$: T = $locale && {...}` reativo */
+  /** i18n message function — call it inside a reactive `$: T = $locale && {...}` */
   label: () => string
 }
 
 /**
- * Grupo de cima do rail / primeiras colunas da tab bar: Status, Adicionar anime, Downloads.
+ * Top group of the rail / first columns of the tab bar: Status, Add anime, Downloads.
  *
- * "Adicionar anime" fica em SEGUNDO lugar e com o mesmo destaque do Status — é a porta de
- * entrada de qualquer anime na biblioteca, e enterrá-la no MoreMenu (onde nasceu) escondia a
- * única ação que uma instalação sem conta do AniList tem para fazer.
+ * "Add anime" comes SECOND and with the same weight as Status — it's the entry point of any anime
+ * into the library, and burying it in the MoreMenu (where it was born) hid the only action an
+ * install without an AniList account has to take.
  */
 export const primaryNavItems: NavItem[] = [
   { id: 'status', path: '/status', activePaths: ['/'], icon: Activity, label: m.nav_status },
@@ -43,27 +43,28 @@ export const primaryNavItems: NavItem[] = [
   { id: 'downloads', path: '/downloads', icon: Download, label: m.nav_downloads },
 ]
 
-/** Grupo de baixo do rail (depois do divisor) / terceira coluna da tab bar: Configurações. */
+/** Bottom group of the rail (after the divider) / third column of the tab bar: Configuration. */
 export const secondaryNavItems: NavItem[] = [
   { id: 'config', path: '/config', icon: Settings, label: m.nav_config },
 ]
 
-/** Itens hospedados dentro do MoreMenu, atrás do gatilho "Mais". */
+/** Items hosted inside the MoreMenu, behind the "More" trigger. */
 export const moreMenuItems: NavItem[] = [
   { id: 'notifications', path: '/notifications', icon: Bell, label: m.nav_notifications },
   { id: 'priorities', path: '/priorities', icon: ListOrdered, label: m.nav_priorities },
   { id: 'logs', path: '/logs', icon: ScrollText, label: m.nav_logs },
+  { id: 'report', path: '/report', icon: Bug, label: m.nav_report },
 ]
 
-/** Ícone + rótulo do gatilho "Mais" em si — não é uma rota, abre o MoreMenu. */
+/** Icon + label of the "More" trigger itself — not a route, it opens the MoreMenu. */
 export const moreTriggerIcon: IconComponent = Ellipsis
 export const moreTriggerLabel: () => string = m.nav_more
 
 /**
- * currentPath corresponde à rota deste item (exata ou um dos activePaths)? Aceita só o
- * subconjunto de campos usados (não `NavItem` inteiro) porque quem chama normalmente já
- * mapeou `label` de função para string resolvida (ver o `$: T = $locale && {...}` de
- * NavRail/NavTabBar/MoreMenu) antes de checar o item ativo.
+ * Does currentPath match this item's route (exactly or one of the activePaths)? Takes only the
+ * subset of fields used (not the whole `NavItem`) because callers usually already mapped `label`
+ * from a function to a resolved string (see the `$: T = $locale && {...}` of
+ * NavRail/NavTabBar/MoreMenu) before checking the active item.
  */
 export function isNavItemActive(
   item: Pick<NavItem, 'path' | 'activePaths'>,
@@ -72,7 +73,7 @@ export function isNavItemActive(
   return currentPath === item.path || (item.activePaths ?? []).includes(currentPath)
 }
 
-/** currentPath é uma das rotas hospedadas no MoreMenu? Usado para destacar o gatilho "Mais". */
+/** Is currentPath one of the routes hosted in the MoreMenu? Used to highlight the "More" trigger. */
 export function isMoreMenuActive(currentPath: string): boolean {
   return moreMenuItems.some((item) => isNavItemActive(item, currentPath))
 }

@@ -52,6 +52,7 @@ start. They are not read by the Go code, and they do nothing after the file exis
 |----------|-------|-------------|
 | `HOME` | `datadir/datadir.go` | Linux/macOS: base for `~/.autoAnimeDownloader/` |
 | `APPDATA` | `datadir/datadir.go` | Windows: base for `%APPDATA%\.autoAnimeDownloader\` |
+| `INVOCATION_ID`, `XDG_CURRENT_DESKTOP`, `XDG_SESSION_TYPE` | `diagnostics/environment.go` | Read only to describe the machine in a bug report (running under systemd, desktop, session). They change no behavior |
 
 ## Test-Only
 

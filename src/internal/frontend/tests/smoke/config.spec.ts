@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { baseConfig } from './helpers.js'
+import { baseConfig, makeStatusResponse } from './helpers.js'
 
 /**
  * The screen draws ONE group at a time, so a field only exists in the DOM while its group is open —
@@ -12,6 +12,9 @@ import { baseConfig } from './helpers.js'
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/config', route => route.fulfill({ json: baseConfig }))
+  // The NavRail asks /status for the version; unmocked, the dev server's HTML fails to parse and
+  // the client's error toast is one more role="alert" on screen.
+  await page.route('**/api/v1/status', route => route.fulfill({ json: makeStatusResponse() }))
   await page.route('**/api/v1/ws', route => route.abort())
 })
 

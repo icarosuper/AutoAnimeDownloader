@@ -21,6 +21,7 @@ import (
 	"AutoAnimeDownloader/src/internal/api"
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/datadir"
+	"AutoAnimeDownloader/src/internal/diagnostics"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
@@ -35,6 +36,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -68,6 +70,23 @@ func getPIDFilePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, pidFileName), nil
+}
+
+// startCrashCapture makes the runtime write a fatal panic to <data dir>/crash.log as well as stderr:
+// stderr alone never reaches daemon.log, and on Windows it goes nowhere. The previous run's crash
+// becomes the pending one the report screen offers.
+func startCrashCapture() error {
+	dir, err := datadir.Path()
+	if err != nil {
+		return err
+	}
+	f, err := diagnostics.StartCrashCapture(dir)
+	if err != nil {
+		return err
+	}
+	// SetCrashOutput duplicates the descriptor, so the file can be closed here.
+	defer f.Close()
+	return debug.SetCrashOutput(f, debug.CrashOptions{})
 }
 
 func createPIDFile() error {
@@ -189,12 +208,19 @@ func main() {
 		return
 	}
 
+	// Before anything else that can panic. After the --debug-anime branch, which promises not to
+	// touch the data dir.
+	crashCaptureErr := startCrashCapture()
+
 	environment := getEnvironment()
 	isDevelopment := environment == "dev"
 	logger.Init(isDevelopment)
 	logger.Logger.Info().
 		Str("environment", environment).
 		Msg("Starting Auto Anime Downloader...")
+	if crashCaptureErr != nil {
+		logger.Logger.Warn().Err(crashCaptureErr).Msg("Crash capture is off; a panic will only reach stderr")
+	}
 
 	// Create PID file when daemon starts
 	if err := createPIDFile(); err != nil {
@@ -286,6 +312,7 @@ func main() {
 	apiServer.JobQueue = jobQueue
 	apiServer.Torrents = torrentManager
 	apiServer.Librarian = librarian
+	apiServer.DataDir = dataDir
 
 	// Set WebSocket manager as state notifier
 	state.SetNotifier(apiServer.WSManager)

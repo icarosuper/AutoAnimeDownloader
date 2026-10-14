@@ -74,6 +74,8 @@ func (tm *TrayManager) onReady() {
 
 	mCheckEpisodes := systray.AddMenuItem("Check for new episodes", "Starts a verification for new anime episodes")
 
+	mReport := systray.AddMenuItem("Report a problem", "Opens the bug report page on your browser")
+
 	systray.AddSeparator()
 
 	mQuit := systray.AddMenuItem("Quit", "Shuts the app down")
@@ -86,6 +88,8 @@ func (tm *TrayManager) onReady() {
 				tm.openWebUI()
 			case <-mCheckEpisodes.ClickedCh:
 				tm.triggerCheck()
+			case <-mReport.ClickedCh:
+				tm.openURL(daemon.WebUIURL(tm.apiPort, "/#/report"))
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return
@@ -100,8 +104,10 @@ func (tm *TrayManager) onExit() {
 }
 
 func (tm *TrayManager) openWebUI() {
-	url := tm.getWebUiURL()
+	tm.openURL(tm.getWebUiURL())
+}
 
+func (tm *TrayManager) openURL(url string) {
 	if err := openBrowser(url); err != nil {
 		logger.Logger.Error().
 			Err(err).

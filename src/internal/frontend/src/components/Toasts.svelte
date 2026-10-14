@@ -1,11 +1,11 @@
 <script lang="ts">
-  // Empilhamento de toasts. Antes montava sobre `.toast`/`.alert` do daisyUI; agora a caixa é
-  // a mesma superfície elevada que ActionMenu/MoreMenu usam (`bg-menu` + `shadow-elevation`),
-  // com a cor de status apenas na borda e no ícone. Fundo sólido de propósito: o toast flutua
-  // sobre a lista, e o `bg-*-tint/12` do Chip deixaria o conteúdo de baixo vazar através dele.
+  // Toast stack. It used to build on daisyUI's `.toast`/`.alert`; now the box is the same elevated
+  // surface ActionMenu/MoreMenu use (`bg-menu` + `shadow-elevation`), with the status color only on
+  // the border and the icon. Solid background on purpose: the toast floats over the list, and the
+  // Chip's `bg-*-tint/12` would let the content below bleed through it.
   import { toasts, type Toast } from '../lib/stores/toast.js'
 
-  // Mesmo vocabulário de status de ui/Chip.svelte.
+  // Same status vocabulary as ui/Chip.svelte.
   const VARIANT_CLASSES: Record<Toast['type'], string> = {
     success: 'border-ok-tint/28 text-ok',
     error: 'border-danger-tint/28 text-danger',

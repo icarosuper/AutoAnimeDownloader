@@ -1,18 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get } from 'svelte/store'
 import { getStatus, getAnimes, getTorrents, getAnimeDetail } from '../../src/lib/api/client.js'
-import { toasts } from '../../src/lib/stores/toasts.js'
+import { toasts } from '../../src/lib/stores/toast.js'
 import { locale } from '../../src/lib/stores/locale.js'
 
 describe('api client', () => {
   const mockFetch = vi.fn()
 
   beforeEach(() => {
+    // Fake timers so afterEach can expire every toast: the store drops a toast identical to one
+    // still on screen, and the tests reuse messages.
+    vi.useFakeTimers()
     vi.stubGlobal('fetch', mockFetch)
     mockFetch.mockReset()
   })
 
   afterEach(() => {
+    vi.runAllTimers()
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
@@ -109,5 +114,40 @@ describe('api client', () => {
     await expect(getStatus()).rejects.toBe('boom')
     const list = get(toasts)
     expect(list[list.length - 1].message).toBe('Unknown error')
+  })
+
+  it('a 5xx toast links to the report screen with the request as context', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ success: false, error: { code: 'ERR', message: 'Internal error' } }),
+    })
+    await expect(getAnimeDetail(42)).rejects.toThrow()
+    const href = get(toasts).at(-1)!.link!.href
+    const params = new URLSearchParams(href.split('?')[1])
+    expect(href.startsWith('#/report?')).toBe(true)
+    expect(params.get('error')).toBe('Internal error')
+    expect(params.get('context')).toBe('GET /animes/42/episodes 500')
+    expect(params.get('anime')).toBe('42')
+  })
+
+  it('a 4xx toast has no report link', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ success: false, error: { code: 'ERR', message: 'Bad input' } }),
+    })
+    await expect(getAnimes()).rejects.toThrow('Bad input')
+    const last = get(toasts).at(-1)!
+    expect(last.message).toBe('Bad input')
+    expect(last.link).toBeUndefined()
+  })
+
+  it('an aborted request toasts without a report link', async () => {
+    const abort = new Error('aborted')
+    abort.name = 'AbortError'
+    mockFetch.mockRejectedValueOnce(abort)
+    await expect(getAnimes()).rejects.toThrow('aborted')
+    expect(get(toasts).at(-1)!.link).toBeUndefined()
   })
 })

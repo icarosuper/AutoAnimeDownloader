@@ -56,3 +56,15 @@ describe('toast helpers', () => {
     expect(get(toasts).length).toBe(count - 1)
   })
 })
+
+describe('toast dedupe', () => {
+  it('drops an error toast identical to one still on screen', () => {
+    vi.useFakeTimers()
+    const before = get(toasts).length
+    toast.error('Same failure', 4000, { href: '#/report', label: 'Report' })
+    toast.error('Same failure')
+    const all = get(toasts)
+    expect(all.length).toBe(before + 1)
+    expect(all.at(-1)!.link?.href).toBe('#/report')
+  })
+})

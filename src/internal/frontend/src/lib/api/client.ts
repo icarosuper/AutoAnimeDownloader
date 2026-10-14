@@ -1,4 +1,5 @@
-import { toasts } from '../stores/toasts.js'
+import { toast } from '../stores/toast.js'
+import { animeIdFromEndpoint, isUnexpectedFailure, reportHref, type ReportContext } from '../report.js'
 import { backendHealth } from '../stores/backendHealth.js'
 import * as m from '../i18n/messages.js'
 
@@ -20,6 +21,9 @@ const getApiBaseUrl = (): string => {
 }
 
 const API_BASE_URL = getApiBaseUrl()
+
+/** Error toasts with a Report link stay longer: 4s isn't enough to read one and decide to click. */
+const REPORT_TOAST_MS = 10000
 
 interface ApiResponse<T> {
   success: boolean
@@ -109,7 +113,19 @@ async function apiRequest<T>(
           : error instanceof Error
             ? error.message
             : m.api_toast_unknown()
-      toasts.add(message)
+      if (isUnexpectedFailure(responseStatus, error)) {
+        const raw = error instanceof Error ? error.message : String(error)
+        toast.error(message, REPORT_TOAST_MS, {
+          href: reportHref({
+            error: raw,
+            context: `${method} ${endpoint} ${responseStatus}`,
+            anime: animeIdFromEndpoint(endpoint),
+          }),
+          label: m.report_toast_link(),
+        })
+      } else {
+        toast.error(message)
+      }
     }
     throw error
   }
@@ -133,6 +149,8 @@ export interface StatusResponse {
    * Consumers treat absence as "no information", never as "all is well".
    */
   anilist?: AnilistHealth
+  /** When the daemon last crashed, while the report is unhandled. Absent on the WebSocket push. */
+  pending_crash_at?: string | null
 }
 
 /**
@@ -179,14 +197,14 @@ export interface Config {
   completed_anime_path: string
   check_interval: number
   max_episodes_per_anime: number
-  /** Tetos de tamanho de torrent em GiB. 0 desliga. */
+  /** Torrent size ceilings in GiB. 0 disables. */
   max_batch_torrent_size_gb: number
   max_episode_torrent_size_gb: number
   /** Seeders floor: a torrent below this is dropped from the search. 0 disables. */
   min_seeders: number
   /** Ceiling of Nyaa pages per search. The search only goes deeper if it has few candidates. */
   max_search_pages: number
-  /** Abaixo desta porcentagem de espaco livre o download e pausado. 0 desliga. */
+  /** Below this percentage of free space, downloads pause. 0 disables. */
   min_free_disk_percent: number
   episode_retry_limit: number
   max_concurrent_downloads: number
@@ -428,6 +446,27 @@ export async function stopDaemon(): Promise<void> {
 export async function getLogs(lines?: number): Promise<LogsResponse> {
   const endpoint = lines ? `/logs?lines=${lines}` : '/logs'
   return apiRequest<LogsResponse>('GET', endpoint)
+}
+
+export interface DiagnosticsReport {
+  /** The redacted bundle: what the preview shows and the downloaded file carries. */
+  bundle: string
+  /** Short summary for the issue URL. */
+  environment: string
+}
+
+/** `silent`: the report screen draws its own failure — it's the screen for reporting failures. */
+export async function getDiagnostics(titles: boolean, ctx: ReportContext): Promise<DiagnosticsReport> {
+  const params = new URLSearchParams({ titles: String(titles) })
+  for (const [key, value] of Object.entries(ctx)) {
+    if (value) params.set(key, value)
+  }
+  return apiRequest<DiagnosticsReport>('GET', `/diagnostics?${params.toString()}`, null, { silent: true })
+}
+
+/** Marks the pending crash as handled; it moves to the crashes/ folder. Idempotent. */
+export async function dismissPendingCrash(): Promise<void> {
+  return apiRequest<void>('DELETE', '/diagnostics/crash', null, { silent: true })
 }
 
 export async function getTorrents(): Promise<TorrentInfo[]> {

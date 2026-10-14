@@ -1,0 +1,45 @@
+# The app's report screen (#/report) opens this form with what-happened and environment filled in
+# through the URL (?template=bug_report.yml&<field id>=...), so the field ids are an API: renaming
+# one breaks the pre-fill.
+name: Bug report
+description: Something doesn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The fastest way to file this is from the app itself: **More → Report a problem** in the web
+        UI, or **Report a problem** in the tray menu. It fills in the environment and gives you a
+        report file to attach.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Filled in by the report screen. Otherwise, the app version and your OS.
+      render: text
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install AutoAnimeDownloader?
+      options:
+        - AUR
+        - Docker
+        - Windows installer
+        - Release binary
+        - Built from source
+    validations:
+      required: true
+  - type: checkboxes
+    id: attachment-check
+    attributes:
+      label: Report file
+      options:
+        - label: I attached the report file (or I couldn't open the report screen)
+          required: true

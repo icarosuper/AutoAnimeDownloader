@@ -35,8 +35,9 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 ## `v2.5.0` — bug report
 
 - Bug report mechanism — must exist well before promoting the project, otherwise feedback arrives
-  without context. Design approved in the
-  [spec](superpowers/specs/2026-10-13-bug-report-design.md)
+  without context. **Implemented on 2026-10-14, not released yet** ([decisions.md #102](agents/decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file),
+  [#103](agents/decisions.md#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)). Spec:
+  [bug-report](superpowers/specs/2026-10-13-bug-report-design.md)
 
 ## `v2.6.0` — CLI parity
 

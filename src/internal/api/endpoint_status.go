@@ -2,6 +2,7 @@ package api
 
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
+	"AutoAnimeDownloader/src/internal/diagnostics"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/version"
 	"net/http"
@@ -23,6 +24,9 @@ type StatusResponse struct {
 	// frontend's poll). It travels here, and not in its own endpoint, because /status is already
 	// polled and is already the payload the WebSocket pushes — see decisions.md #66.
 	Anilist anilist.Health `json:"anilist"`
+	// PendingCrashAt is when the daemon last crashed, while nobody has handled the report yet; null
+	// otherwise. The UI opens the report screen (fresh page load) or toasts (tab already open).
+	PendingCrashAt *time.Time `json:"pending_crash_at"`
 }
 
 // handleStatus returns the current status of the daemon, including last check time, error state,
@@ -55,6 +59,9 @@ func handleStatus(server *Server) http.HandlerFunc {
 			DiskFree:  diskFree,
 			DiskLow:   diskLow,
 			Anilist:   anilist.CurrentHealth(),
+		}
+		if server.DataDir != "" {
+			response.PendingCrashAt = diagnostics.PendingCrashAt(server.DataDir)
 		}
 
 		JSONSuccess(w, http.StatusOK, response)
