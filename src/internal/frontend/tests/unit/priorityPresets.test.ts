@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applyPreset, PRESETS } from '../../src/lib/domain/priorityPresets'
 
 describe('applyPreset', () => {
-  it('promove só o que já está na lista', () => {
+  it('promotes only what is already in the list', () => {
     expect(applyPreset(['hevc', 'av1', 'h.264', 'xvid'], ['h.264'])).toEqual([
       'h.264',
       'hevc',
@@ -11,21 +11,21 @@ describe('applyPreset', () => {
     ])
   })
 
-  it('preserva token adicionado à mão, empurrando para baixo', () => {
+  it('keeps a hand-added token, pushing it down', () => {
     expect(applyPreset(['hevc', 'vp9', 'h.264'], ['h.264'])).toEqual(['h.264', 'hevc', 'vp9'])
   })
 
-  it('é no-op para token que não existe na lista', () => {
+  it('is a no-op for a token not in the list', () => {
     const list = ['hevc', 'av1']
     expect(applyPreset(list, ['h.264'])).toEqual(list)
   })
 
-  it('promove na ordem do preset', () => {
+  it("promotes in the preset's order", () => {
     expect(applyPreset(['h.264', 'hevc', 'av1'], ['av1', 'hevc'])).toEqual(['av1', 'hevc', 'h.264'])
   })
 
-  it('todo token de preset existe na lista default de codecs', () => {
-    // Espelha o default do backend (nyaa.DefaultPriorities), garantido lá pelo teste
+  it('every preset token exists in the default codecs list', () => {
+    // Mirrors the backend default (nyaa.DefaultPriorities), guaranteed there by
     // TestDefaultPriorities_TokensAreReachable.
     const defaults = ['h.264', 'hevc', 'av1', 'xvid']
     for (const p of PRESETS.codecs ?? []) {

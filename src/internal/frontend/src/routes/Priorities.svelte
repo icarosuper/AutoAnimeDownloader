@@ -11,23 +11,43 @@
   import Checkbox from "../components/ui/Checkbox.svelte";
   import { toast } from "../lib/stores/toast.js";
   import { PRESETS, applyPreset } from "../lib/domain/priorityPresets.js";
+  import * as m from "../lib/i18n/messages.js";
+  import { locale } from "../lib/stores/locale.js";
 
-  // scope: a lista existe mas não vale para episódio — só SortMovieResults lê source e áudio.
-  const LISTS: { key: keyof Priorities; label: string; scope?: string }[] = [
-    { key: "criteria_order", label: "Ordem dos critérios" },
-    { key: "fansubs", label: "Fansubs" },
-    { key: "resolutions", label: "Resoluções" },
-    { key: "sources", label: "Source", scope: "só filmes" },
-    { key: "codecs", label: "Codec" },
-    { key: "audio", label: "Áudio", scope: "só filmes" },
-    { key: "ignore_list", label: "Lista de bloqueio" },
+  // moviesOnly: the list exists but doesn't apply to episodes — only SortMovieResults reads source
+  // and audio.
+  const LISTS: { key: keyof Priorities; label: () => string; moviesOnly?: boolean }[] = [
+    { key: "criteria_order", label: m.priorities_list_criteria_order },
+    { key: "fansubs", label: m.priorities_list_fansubs },
+    { key: "resolutions", label: m.priorities_list_resolutions },
+    { key: "sources", label: m.priorities_list_sources, moviesOnly: true },
+    { key: "codecs", label: m.priorities_list_codecs },
+    { key: "audio", label: m.priorities_list_audio, moviesOnly: true },
+    { key: "ignore_list", label: m.priorities_list_ignore_list },
   ];
 
-  // Linha fixa em vez de tooltip: tooltip não existe em touch, e esta tela é usada no celular.
-  const NOTES: Partial<Record<keyof Priorities, string>> = {
-    criteria_order: "As entradas source e audio não valem para episódio — só para filmes.",
-    codecs:
-      "H.264 toca direto em qualquer player; HEVC/AV1 ocupam menos espaço mas viram transcode no navegador, o que dessincroniza a legenda.",
+  // A fixed line instead of a tooltip: tooltips don't exist on touch, and this screen is used on
+  // the phone.
+  const NOTES: Partial<Record<keyof Priorities, () => string>> = {
+    criteria_order: m.priorities_note_criteria_order,
+    codecs: m.priorities_note_codecs,
+  };
+
+  $: T = $locale && {
+    title: m.priorities_title(),
+    subtitle: m.priorities_subtitle(),
+    loading: m.priorities_loading(),
+    moviesOnly: m.priorities_scope_movies_only(),
+    resetList: m.priorities_reset_list(),
+    addPlaceholder: m.priorities_add_placeholder(),
+    resetAll: m.priorities_reset_all(),
+    save: m.priorities_save(),
+    saving: m.priorities_saving(),
+    lists: LISTS.map((l) => ({ ...l, label: l.label() })),
+    notes: Object.fromEntries(Object.entries(NOTES).map(([k, f]) => [k, f()])) as Partial<Record<keyof Priorities, string>>,
+    presets: Object.fromEntries(
+      Object.entries(PRESETS).map(([k, list]) => [k, (list ?? []).map((p) => ({ ...p, label: p.label(), desc: p.desc() }))]),
+    ) as Partial<Record<keyof Priorities, { key: string; label: string; desc: string; first: string[] }[]>>,
   };
 
   let config: Config | null = null;
@@ -43,7 +63,7 @@
       config = c;
       defaults = d;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao carregar prioridades");
+      toast.error(err instanceof Error ? err.message : m.priorities_toast_load_error());
     } finally {
       loading = false;
     }
@@ -60,13 +80,13 @@
   }
 
   /**
-   * As linhas da lista: o que está salvo (marcado, na ordem) seguido dos tokens canônicos
-   * que ficaram de fora (desmarcados, no fim). Token ausente da lista já é tratado como o
-   * pior pelo backend (`priorityIndex` devolve `len(list)`), então "desmarcado no fim" é
-   * exatamente o que desmarcar significa — e nada some da tela, que era o problema do X.
+   * The list's rows: what is saved (checked, in order) followed by the canonical tokens left out
+   * (unchecked, at the end). A token missing from the list is already treated as the worst by the
+   * backend (`priorityIndex` returns `len(list)`), so "unchecked at the end" is exactly what
+   * unchecking means — and nothing disappears from the screen, which was the problem with the X.
    *
-   * `custom` = não está no default: o que o usuário digitou, mais o legado inerte de um
-   * config.json antigo (`x265`, `4k`). Só esses podem ser removidos de vez.
+   * `custom` = not in the default: what the user typed, plus the inert leftovers of an old
+   * config.json (`x265`, `4k`). Only those can be removed for good.
    */
   function rows(key: keyof Priorities, list: string[], def: Priorities | null) {
     const canon = def?.[key] ?? [];
@@ -122,9 +142,9 @@
     try {
       saving = true;
       await updateConfig(config);
-      toast.success("Prioridades salvas");
+      toast.success(m.priorities_toast_saved());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao salvar prioridades");
+      toast.error(err instanceof Error ? err.message : m.priorities_toast_save_error());
     } finally {
       saving = false;
     }
@@ -135,37 +155,35 @@
 
 <div class="space-y-6">
   <div>
-    <h1 class="text-2xl font-semibold text-heading">Prioridades dos torrents</h1>
-    <p class="text-sm text-subtle mt-0.5">
-      Controla a ordem de preferência usada para ranquear e filtrar releases do Nyaa.
-    </p>
+    <h1 class="text-2xl font-semibold text-heading">{T && T.title}</h1>
+    <p class="text-sm text-subtle mt-0.5">{T && T.subtitle}</p>
   </div>
 
   {#if loading}
-    <Loading message="Carregando..." />
-  {:else if config}
+    <Loading message={(T && T.loading) || ""} />
+  {:else if config && T}
     <div class="space-y-4">
-      {#each LISTS as { key, label, scope } (key)}
+      {#each T.lists as { key, label, moviesOnly } (key)}
         {@const items = rows(key, config.priorities[key], defaults)}
         <div class="flex flex-col rounded-card border border-default bg-sunken">
           <div class="flex flex-col gap-3 p-5">
             <div class="flex items-center justify-between">
               <h2 class="text-sm font-semibold text-subtle uppercase tracking-wider">
                 {label}
-                {#if scope}<span class="normal-case tracking-normal font-normal text-subtle">({scope})</span>{/if}
+                {#if moviesOnly}<span class="normal-case tracking-normal font-normal text-subtle">({T.moviesOnly})</span>{/if}
               </h2>
               <button
                 type="button"
                 on:click={() => resetList(key)}
                 class="text-xs font-medium text-subtle hover:text-heading transition-colors"
               >
-                Resetar esta lista
+                {T.resetList}
               </button>
             </div>
 
-            {#if PRESETS[key]}
+            {#if T.presets[key]}
               <div class="flex flex-wrap gap-2">
-                {#each PRESETS[key] ?? [] as p (p.key)}
+                {#each T.presets[key] ?? [] as p (p.key)}
                   <button
                     type="button"
                     on:click={() => preset(key, p.first)}
@@ -185,7 +203,7 @@
                     <Checkbox
                       checked={row.on}
                       disabled={row.custom}
-                      label={row.custom ? `${row.item} — adicionado por você, remova no ✕` : `Usar ${row.item}`}
+                      label={$locale && (row.custom ? m.priorities_item_custom({ item: row.item }) : m.priorities_item_use({ item: row.item }))}
                       labelHidden
                       on:change={() => toggle(key, row.item, !row.on)}
                     />
@@ -196,7 +214,7 @@
                         type="button"
                         on:click={() => move(key, i, -1)}
                         disabled={i === 0}
-                        aria-label="Mover {row.item} para cima"
+                        aria-label={$locale && m.priorities_move_up({ item: row.item })}
                         class="text-subtle hover:text-heading disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         ↑
@@ -205,7 +223,7 @@
                         type="button"
                         on:click={() => move(key, i, 1)}
                         disabled={i === config.priorities[key].length - 1}
-                        aria-label="Mover {row.item} para baixo"
+                        aria-label={$locale && m.priorities_move_down({ item: row.item })}
                         class="text-subtle hover:text-heading disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         ↓
@@ -215,7 +233,7 @@
                       <button
                         type="button"
                         on:click={() => remove(key, i)}
-                        aria-label="Remover {row.item}"
+                        aria-label={$locale && m.priorities_remove({ item: row.item })}
                         class="text-subtle hover:text-danger transition-colors"
                       >
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -228,19 +246,19 @@
               </ol>
             {/if}
 
-            {#if NOTES[key]}
-              <p class="text-xs text-subtle">{NOTES[key]}</p>
+            {#if T.notes[key]}
+              <p class="text-xs text-subtle">{T.notes[key]}</p>
             {/if}
 
-            <!-- criteria_order é conjunto fechado (sortByCriteria pula em silêncio o critério que
-                 não conhece) e todo critério já aparece acima, marcado ou desmarcado: não há o que
-                 adicionar, e texto livre ali só produziria config inerte. -->
+            <!-- criteria_order is a closed set (sortByCriteria silently skips a criterion it doesn't
+                 know) and every criterion already shows above, checked or not: there's nothing to
+                 add, and free text there would only produce inert config. -->
             {#if key !== "criteria_order"}
             <div class="flex gap-2">
               <input
                 type="text"
                 bind:value={newItem[key]}
-                placeholder="Adicionar item"
+                placeholder={T.addPlaceholder}
                 class="flex-1 block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent sm:text-sm px-3 py-2"
                 on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(key); } }}
               />
@@ -265,7 +283,7 @@
         disabled={saving}
         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-default text-body hover:bg-control font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        Resetar tudo
+        {T.resetAll}
       </button>
       <button
         type="button"
@@ -273,7 +291,7 @@
         disabled={saving}
         class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-on-accent hover:opacity-90 font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {saving ? "Salvando..." : "Salvar"}
+        {saving ? T.saving : T.save}
       </button>
     </div>
   {/if}

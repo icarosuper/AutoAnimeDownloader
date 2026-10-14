@@ -309,7 +309,7 @@
       await action(hash);
       await load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Action failed");
+      toast.error(err instanceof Error ? err.message : m.downloads_toast_action_error());
     } finally {
       const next = new Set(busy);
       next.delete(hash);
@@ -389,7 +389,7 @@
       await prioritizeTorrents(hashes);
       toast.success(m.downloads_bulk_prioritized({ count: hashes.length }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Action failed");
+      toast.error(err instanceof Error ? err.message : m.downloads_toast_action_error());
     } finally {
       bulkBusy = false;
     }

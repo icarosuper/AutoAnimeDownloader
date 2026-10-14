@@ -14,7 +14,7 @@ const getConfig = vi.mocked(client.getConfig)
 const getPriorityDefaults = vi.mocked(client.getPriorityDefaults)
 const updateConfig = vi.mocked(client.updateConfig)
 
-/** As sete listas menos criteria_order, a única sem campo de adicionar. */
+/** The seven lists minus criteria_order, the only one without an add field. */
 const LISTS_WITH_ADD = 6
 
 const CRITERIA = ['uncensored', 'source', 'resolution', 'health', 'codec', 'fansub', 'audio', 'size']
@@ -32,7 +32,7 @@ function priorities(over: Partial<P> = {}): P {
   }
 }
 
-/** Renderiza com o config do usuário divergindo (ou não) dos defaults do backend. */
+/** Renders with the user's config diverging (or not) from the backend defaults. jsdom's locale is en. */
 async function setup(userPriorities: P = priorities()) {
   getConfig.mockResolvedValue({ priorities: userPriorities } as Config)
   getPriorityDefaults.mockResolvedValue(priorities())
@@ -44,49 +44,49 @@ async function setup(userPriorities: P = priorities()) {
 beforeEach(() => vi.clearAllMocks())
 
 describe('Priorities', () => {
-  // Desmarcar não some da tela: token fora da lista já ranqueia como o pior no backend,
-  // então ele continua visível, desmarcado, e volta com um clique.
-  it('mostra o token canônico ausente da lista do usuário, desmarcado', async () => {
+  // Unchecking doesn't remove it from the screen: a token outside the list already ranks as the
+  // worst in the backend, so it stays visible, unchecked, and comes back with one click.
+  it("shows the canonical token missing from the user's list, unchecked", async () => {
     await setup(priorities({ codecs: ['h.264', 'hevc'] }))
 
-    // O glyph "✓" do Checkbox entra no textContent do <label>, daí o matcher por regex.
-    expect((screen.getByLabelText(/Usar av1$/) as HTMLInputElement).checked).toBe(false)
-    expect((screen.getByLabelText(/Usar h\.264$/) as HTMLInputElement).checked).toBe(true)
+    // The Checkbox's "✓" glyph is part of the <label>'s textContent, hence the regex matcher.
+    expect((screen.getByLabelText(/Use av1$/) as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByLabelText(/Use h\.264$/) as HTMLInputElement).checked).toBe(true)
   })
 
-  it('marcar/desmarcar entra e sai da lista salva', async () => {
+  it('checking/unchecking adds to and removes from the saved list', async () => {
     await setup(priorities({ codecs: ['h.264', 'hevc', 'av1', 'xvid'] }))
 
-    await fireEvent.click(screen.getByLabelText(/Usar av1$/))
-    await fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await fireEvent.click(screen.getByLabelText(/Use av1$/))
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(updateConfig).toHaveBeenCalled())
     expect(updateConfig.mock.calls[0][0].priorities.codecs).toEqual(['h.264', 'hevc', 'xvid'])
   })
 
-  // ✕ só no que o usuário criou (inclui o legado inerte de um config.json antigo, como "x265").
-  it('só oferece remover item que não está no default', async () => {
+  // ✕ only on what the user created (including the inert leftovers of an old config.json, like "x265").
+  it('only offers to remove an item that is not in the default', async () => {
     await setup(priorities({ codecs: ['h.264', 'x265'] }))
 
-    expect(screen.getByLabelText('Remover x265')).toBeTruthy()
-    expect(screen.queryByLabelText('Remover h.264')).toBeNull()
+    expect(screen.getByLabelText('Remove x265')).toBeTruthy()
+    expect(screen.queryByLabelText('Remove h.264')).toBeNull()
   })
 
-  // criteria_order é conjunto fechado (o backend pula em silêncio o critério que não conhece) e
-  // os oito já aparecem sempre, marcados ou não: não há campo de adicionar ali.
-  it('ordem dos critérios não tem campo de adicionar, e mostra o critério que falta desmarcado', async () => {
+  // criteria_order is a closed set (the backend silently skips a criterion it doesn't know) and
+  // all eight always show, checked or not: there's no add field there.
+  it('criteria order has no add field, and shows the missing criterion unchecked', async () => {
     await setup(priorities({ criteria_order: ['resolution', 'fansub'] }))
 
-    expect(screen.getAllByPlaceholderText('Adicionar item')).toHaveLength(LISTS_WITH_ADD)
-    expect((screen.getByLabelText(/Usar codec$/) as HTMLInputElement).checked).toBe(false)
-    expect((screen.getByLabelText(/Usar resolution$/) as HTMLInputElement).checked).toBe(true)
+    expect(screen.getAllByPlaceholderText('Add item')).toHaveLength(LISTS_WITH_ADD)
+    expect((screen.getByLabelText(/Use codec$/) as HTMLInputElement).checked).toBe(false)
+    expect((screen.getByLabelText(/Use resolution$/) as HTMLInputElement).checked).toBe(true)
   })
 
-  it('preset de codec promove só o que já está na lista', async () => {
+  it('the codec preset only promotes what is already in the list', async () => {
     await setup(priorities({ codecs: ['hevc', 'av1', 'h.264', 'xvid'] }))
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Prefiro compatibilidade' }))
-    await fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'I prefer compatibility' }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(updateConfig).toHaveBeenCalled())
     expect(updateConfig.mock.calls[0][0].priorities.codecs).toEqual(['h.264', 'hevc', 'av1', 'xvid'])
