@@ -1,15 +1,15 @@
 <script lang="ts">
-  // Logs — spec §9.5 (Fase 7). O visualizador vira um grid de 4 colunas
-  // (82px 60px 90px 1fr: horário · nível · origem · mensagem) sobre --bg-sunken, mais escuro
-  // que os cards ao redor, para ler como um terminal.
+  // Logs — spec §9.5 (Phase 7). The viewer becomes a 4-column grid
+  // (82px 60px 90px 1fr: time · level · source · message) on --bg-sunken, darker than the cards
+  // around it, to read like a terminal.
   //
-  // A coluna ORIGEM é derivada do `caller` do zerolog por `logSourceFromCaller` — aproximação
-  // deliberada (o backend não tem campo `component` estruturado; isso é backlog, §3 do spec).
+  // The SOURCE column is derived from zerolog's `caller` by `logSourceFromCaller` — a deliberate
+  // approximation (the backend has no structured `component` field; that's backlog, §3 of the spec).
   //
-  // Preservado da tela antiga: filtro por nível (agora em pills COM CONTAGEM, era um <select>
-  // sem contagem), busca com destaque do trecho, seletor de número de linhas, recarga
-  // automática com intervalo escolhível, acompanhar-o-fim, botão de voltar ao topo com o
-  // contador de linhas novas, cópia de linha e o estado da view na querystring.
+  // Kept from the old screen: level filter (now pills WITH A COUNT, it was a <select> without one),
+  // search with the match highlighted, line count selector, auto reload with a selectable interval,
+  // follow-the-end, back-to-top button with the new-lines counter, line copy and the view state in
+  // the querystring.
   import { onMount, onDestroy, tick } from "svelte";
   import { ArrowUp, Copy, Search, X } from "@lucide/svelte";
   import { getLogs, type LogsResponse } from "../lib/api/client.js";
@@ -74,8 +74,8 @@
       .replace(/"/g, "&quot;");
   }
 
-  // Escapa ANTES de injetar o <mark>: o conteúdo vem do log do daemon, que carrega nomes de
-  // torrent arbitrários. É por isso que a busca destaca via {@html} sem abrir XSS.
+  // Escapes BEFORE injecting the <mark>: the content comes from the daemon's log, which carries
+  // arbitrary torrent names. That's why the search can highlight via {@html} without opening XSS.
   function highlightMatch(text: string, query: string): string {
     const safe = escapeHtml(text);
     if (!query.trim()) return safe;
@@ -101,10 +101,10 @@
   };
 
   /**
-   * A busca corre sobre a linha CRUA (acha também o que está em extras/caller, não só na
-   * mensagem); o filtro de nível corre sobre a linha já parseada. As contagens das pills são
-   * tiradas do resultado da busca, antes do filtro de nível — senão, escolher "Error" zeraria
-   * a contagem de todas as outras pills e o filtro viraria um caminho sem volta visível.
+   * The search runs over the RAW line (it also finds what's in extras/caller, not only in the
+   * message); the level filter runs over the parsed line. The pill counts come from the search
+   * result, before the level filter — otherwise picking "Error" would zero the count of every
+   * other pill and the filter would become a path with no visible way back.
    */
   $: searched = [...logs].slice(0, linesToLoad).reverse().filter(
     (l) => !searchQuery.trim() || l.toLowerCase().includes(searchQuery.toLowerCase().trim())
@@ -127,8 +127,8 @@
   $: if (parsedLogs && autoScroll) scrollToTop();
   $: if (liveReload) startLiveReload(); else stopLiveReload();
 
-  // A lista é renderizada do mais novo para o mais antigo, então "acompanhar o fim" é rolar
-  // para o TOPO. Nome preservado da tela antiga para não confundir quem conhece o código.
+  // The list renders newest first, so "follow the end" means scrolling to the TOP. The name is kept
+  // from the old screen so it doesn't confuse whoever knows the code.
   async function scrollToTop() {
     await tick();
     if (logContainer) logContainer.scrollTop = 0;
@@ -179,10 +179,29 @@
 
   async function copyLine(text: string) {
     try {
-      await navigator.clipboard.writeText(text);
+      // navigator.clipboard only exists in a secure context, and the UI is routinely reached over
+      // plain http from another machine on the LAN. There, a selected textarea + execCommand still
+      // copies.
+      if (navigator.clipboard) await navigator.clipboard.writeText(text);
+      else if (!copyBySelection(text)) throw new Error("copy refused");
       toast.success(m.logs_copy_success());
     } catch {
       toast.error(m.logs_copy_error());
+    }
+  }
+
+  function copyBySelection(text: string): boolean {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      return document.execCommand("copy");
+    } finally {
+      area.remove();
     }
   }
 
@@ -205,8 +224,8 @@
     if (q) searchQuery = q;
   }
 
-  // A origem só é interessante quando existe: uma linha do formato console não tem `caller`,
-  // e "other" em toda linha seria ruído numa coluna fixa.
+  // The source is only interesting when it exists: a console-format line has no `caller`, and
+  // "other" on every line would be noise in a fixed column.
   function sourceOf(parsed: ParsedLogLine): string {
     return parsed.caller ? logSourceFromCaller(parsed.caller) : "";
   }
@@ -226,7 +245,7 @@
     <p class="mt-0.5 text-caption text-subtle">{T && T.subtitle}</p>
   </div>
 
-  <!-- Controles -->
+  <!-- Controls -->
   <div class="mb-3 flex-none rounded-card border border-default bg-card">
     <div class="flex flex-col gap-3 border-b border-divider p-3 sm:flex-row sm:items-center">
       <label class="flex w-full shrink-0 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-1.5 sm:w-64">
@@ -283,7 +302,7 @@
       <div class="flex items-center gap-2">
         <Checkbox bind:checked={liveReload} label={(T && T.labelLive) || ""} />
         {#if liveReload}
-          <!-- PulseDot só onde há algo realmente vivo (§6): o poll ligado. -->
+          <!-- PulseDot only where something is really live (§6): the poll is on. -->
           <PulseDot variant="ok" size={7} />
           <select
             bind:value={liveReloadSeconds}
@@ -309,7 +328,7 @@
     </div>
   </div>
 
-  <!-- Corpo -->
+  <!-- Body -->
   {#if loading}
     <div class="flex flex-1 items-center justify-center">
       <Loading message={T && T.loading || ""} />
@@ -317,8 +336,8 @@
   {:else}
     <div class="relative min-h-0 flex-1">
       <div class="absolute inset-0 flex flex-col overflow-hidden rounded-card border border-default bg-sunken">
-        <!-- Cabeçalho de coluna: mesmo grid das linhas, para as colunas não desalinharem.
-             Escondido no mobile, onde as linhas empilham e não há colunas para rotular. -->
+        <!-- Column header: same grid as the rows, so the columns don't misalign. Hidden on
+             mobile, where the rows stack and there are no columns to label. -->
         <div
           class="hidden flex-none grid-cols-[82px_60px_90px_1fr] gap-2 border-b border-divider px-3 py-2 font-mono text-mono-label uppercase text-subtle md:grid"
         >
@@ -336,15 +355,15 @@
               </p>
             </div>
           {:else}
-            <!-- <ul>/<li> e não <div>: as linhas SÃO uma lista, e isso dá a leitores de tela e
-                 aos smoke tests uma âncora de papel (`listitem`) em vez de uma classe CSS —
-                 que aqui mudaria com o breakpoint, já que o grid só existe a partir de `md`. -->
+            <!-- <ul>/<li> and not <div>: the rows ARE a list, and that gives screen readers and the
+                 smoke tests a role anchor (`listitem`) instead of a CSS class — which here would
+                 change with the breakpoint, since the grid only exists from `md` up. -->
             <ul>
             {#each parsedLogs as parsed}
-              <!-- O grid de 4 colunas só vale de `md` para cima. Abaixo disso as três colunas
-                   fixas (82+60+90px) deixariam ~130px para a mensagem numa tela de 390px, e ela
-                   quebraria em uma palavra por linha; no mobile os metadados ficam numa linha e
-                   a mensagem embaixo, em largura total. Mesma razão do E11 em Downloads. -->
+              <!-- The 4-column grid only applies from `md` up. Below that, the three fixed columns
+                   (82+60+90px) would leave ~130px for the message on a 390px screen, and it would
+                   wrap one word per line; on mobile the metadata sits on one line and the message
+                   below it, full width. Same reason as E11 in Downloads. -->
               <li
                 class="group flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-divider px-3 py-1.5 hover:bg-control/60 md:grid md:grid-cols-[82px_60px_90px_1fr] md:items-start"
               >
@@ -355,9 +374,8 @@
                     parsed.level
                   ]}"
                 >
-                  <!-- Nível inteiro: a tela antiga cortava em 4 caracteres ("DEBU", "ERRO")
-                       para caber numa coluna de 40px; a coluna de 60px do §9.5 comporta a
-                       palavra completa em mono 10px. -->
+                  <!-- The whole level: the old screen cut it to 4 characters ("DEBU", "ERRO") to
+                       fit a 40px column; §9.5's 60px column fits the full word in 10px mono. -->
                   {parsed.level}
                 </span>
 
