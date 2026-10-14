@@ -413,7 +413,7 @@ func sendAnilistRequest[T any](query string, variables RequestVariables, priorit
 	// customLists of decisions.md #11: that one comes back 200 WITHOUT an errors field. See #65.
 	if status, message := firstError(body); status != 0 {
 		setHealth(classify(status), message, time.Time{})
-		logger.Logger.Warn().Int("graphql_status", status).Str("message", message).Msg("Anilist returned an error inside a 200 response")
+		logger.Logger.Warn().Int("graphql_status", status).Str("graphql_message", message).Msg("Anilist returned an error inside a 200 response")
 		return nil, fmt.Errorf("API returned error %d: %s", status, message)
 	}
 	clearHealth()
