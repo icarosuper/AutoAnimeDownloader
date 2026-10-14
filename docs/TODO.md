@@ -35,7 +35,8 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 ## `v2.5.0` — bug report
 
 - Bug report mechanism — must exist well before promoting the project, otherwise feedback arrives
-  without context
+  without context. Design approved in the
+  [spec](superpowers/specs/2026-10-13-bug-report-design.md)
 
 ## `v2.6.0` — CLI parity
 
