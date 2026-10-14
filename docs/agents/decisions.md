@@ -2,10 +2,10 @@
 
 Patterns that look wrong but are intentional. Read before "fixing" anything.
 
-## Índice
+## Index
 
-As entradas **não estão em ordem numérica** no arquivo — use este índice, ou `grep -n "^### 59\."`.
-Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo inteiro.
+The entries are **not in numeric order** in the file — use this index, or `grep -n "^### 59\."`.
+Each entry is self-contained: read only the one the reference points to, not the whole file.
 
 - [**#1** — Var-swap mocking for anilist and nyaa HTTP clients](#1-var-swap-mocking-for-anilist-and-nyaa-http-clients)
 - [**#2** — FileManagerInterface declared twice](#2-filemanagerinterface-declared-twice)
@@ -79,19 +79,19 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#70** — Resolução canonicaliza no extrator, e os presets de codec são reordenação no frontend](#70-resolução-canonicaliza-no-extrator-e-os-presets-de-codec-são-reordenação-no-frontend)
 - [**#71** — A AniList não tem id de franquia: a cadeia de PREQUEL é a única fonte, e busca por nome é armadilha](#71-a-anilist-não-tem-id-de-franquia-a-cadeia-de-prequel-é-a-única-fonte-e-busca-por-nome-é-armadilha)
 - [**#72** — O orçamento da AniList se mede pelos headers da resposta, não por um contador nosso](#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso)
-- [**#73** — O frontend não busca direto na AniList, mesmo podendo](#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo)
+- [**#73** — The frontend doesn't query AniList directly, even though it could](#73-the-frontend-doesnt-query-anilist-directly-even-though-it-could)
 - [**#74** — A unidade do guard de exclusão de pack é o conteúdo do torrent, não a lista de registros](#74-a-unidade-do-guard-de-exclusão-de-pack-é-o-conteúdo-do-torrent-não-a-lista-de-registros)
 - [**#75** — O corte no marcador e a primeira tentativa do match de titulo, nao a unica](#75-o-corte-no-marcador-e-a-primeira-tentativa-do-match-de-titulo-nao-a-unica)
 - [**#76** — searchNyaaWithVariants para na primeira variante que devolve qualquer resultado — medido, e fica assim](#76-searchnyaawithvariants-para-na-primeira-variante-que-devolve-qualquer-resultado--medido-e-fica-assim)
-- [**#77** — O eixo absoluto por série é um BFS de duas em duas gerações, e o nível cortado volta para a fila](#77-o-eixo-absoluto-por-série-é-um-bfs-de-duas-em-duas-gerações-e-o-nível-cortado-volta-para-a-fila)
+- [**#77** — The per-series absolute axis is a BFS two generations at a time, and the cut level goes back to the queue](#77-the-per-series-absolute-axis-is-a-bfs-two-generations-at-a-time-and-the-cut-level-goes-back-to-the-queue)
 - [**#78** — A unidade de posse de um torrent é a cobertura no eixo absoluto, não a chave (anime_id, episódio)](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)
 - [**#79** — A escolha de pack pergunta "cobre a janela?", não "é da part N?" — e a numeração do pack é palpite entre três hipóteses](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)
 - [**#80** — O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon](#80-o-teto-de-tamanho-de-pack-é-aplicado-duas-vezes-na-busca-do-nyaa-e-no-filtro-do-daemon)
 - [**#81** — A precedência dos códigos do relatório é cascata, não conjunto](#81-a-precedência-dos-códigos-do-relatório-é-cascata-não-conjunto)
 - [**#82** — SetLastCheckError limpa o relatório da última verificação](#82-setlastcheckerror-limpa-o-relatório-da-última-verificação)
 - [**#83** — A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento](#83-a-faixa-do-nome-do-pack-é-o-primeiro-casamento-plausível-não-o-primeiro-casamento)
-- [**#84** — A cobertura de um pack sem faixa no nome vem da lista de arquivos, e não da suposição de que ele cobre tudo](#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
-- [**#85** — O custo do frontend na AniList é por CONTA e por ÓRFÃO, não por aba](#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba)
+- [**#84** — A pack without a range in its name gets its coverage from the file list, not from assuming it covers everything](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
+- [**#85** — The frontend's AniList cost is per ACCOUNT and per ORPHAN, not per tab](#85-the-frontends-anilist-cost-is-per-account-and-per-orphan-not-per-tab)
 - [**#86** — O botão Testar responde o status do serviço, não "o preset existe"](#86-o-botão-testar-responde-o-status-do-serviço-não-o-preset-existe)
 - [**#87** — Headers do webhook viram lista de pares enquanto o formulário está aberto](#87-headers-do-webhook-viram-lista-de-pares-enquanto-o-formulário-está-aberto)
 - [**#88** — A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`](#88-a-barra-de-progresso-deriva-baixados-de-episodes_pending-e-não-de-episodes_downloaded)
@@ -100,7 +100,7 @@ Cada entrada é autocontida: leia só a que a referência aponta, não o arquivo
 - [**#91** — Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor](#91-não-há-biblioteca-de-componentes-o-daisyui-saiu-porque-era-um-segundo-vocabulário-de-cor)
 - [**#92** — O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)
 - [**#93** — A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)
-- [**#94** — Torrent travado é derrubado pelo caminho de falha, e só quem está *tentando* conta como travado](#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)
+- [**#94** — A stalled torrent is dropped through the failure path, and only one that is *trying* counts as stalled](#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)
 - [**#95** — MyAnimeList is a list source, not a metadata source](#95-myanimelist-is-a-list-source-not-a-metadata-source)
 - [**#96** — A first-season entry rejects later-season packs, but a sequel without a marker doesn't](#96-a-first-season-entry-rejects-later-season-packs-but-a-sequel-without-a-marker-doesnt)
 - [**#97** — A pack that doesn't fit on disk is dropped before the choice, not at download time](#97-a-pack-that-doesnt-fit-on-disk-is-dropped-before-the-choice-not-at-download-time)
@@ -922,7 +922,7 @@ A URL fica fora porque escape de URL tem regras próprias, e os headers passam p
 
 ### 48. `max_episodes_per_anime` nunca limitou batch — a regra agora vive na janela de packs, não num teto de contagem
 
-**Ver também:** [`2026-08-13-batch-por-filtro-design.md`](../superpowers/specs/2026-08-13-batch-por-filtro-design.md) — a spec que substituiu o teto de contagem (`max_batch_episodes`) descrito abaixo por elegibilidade decidida pelo resultado da busca. As entradas 59-62 logo após esta documentam o desenho atual em detalhe.
+**Ver também:** [`2026-08-13-batch-per-filter-design.md`](../superpowers/specs/2026-08-13-batch-per-filter-design.md) — a spec que substituiu o teto de contagem (`max_batch_episodes`) descrito abaixo por elegibilidade decidida pelo resultado da busca. As entradas 59-62 logo após esta documentam o desenho atual em detalhe.
 
 **Location (histórico):** quando esta decisão foi escrita, `daemon/episodes.go` tinha `willBatchAnime` e `resolveSearchStrategy`; ambos foram removidos pela spec de batch-por-filtro. O que existe hoje: `daemon/episodes.go` — `selectEpisodes`, `effectiveMax`, `windowEnd`, `partitionSearchResults`, `pickBatches`, `packSet.covering`, `assignBatches`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
 
@@ -1229,7 +1229,7 @@ O `PUT /animes/{id}/settings` usa ponteiro (`*int`) e faz merge parcial: um `PUT
 
 **Location:** `daemon/debug.go` — `RunAnimeDebug`; espelha `daemon/episodes.go` — `processAnimeEpisodes`.
 
-**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, roda a mesma busca por anime + `partitionSearchResults`/`pickBatches` para decidir se um pack cobre a janela (e, se sim, re-roda `selectEpisodes` com o teto levantado), e cai em `searchSingleEpisode` quando nenhum episódio pendente recebeu magnet de pack/filme — três trechos duplicados do loop de produção. Ver a spec `2026-08-13-batch-por-filtro-design.md`: essa entrada documentava `willBatchAnime`/`resolveSearchStrategy`, removidos por essa spec — elegibilidade a pack agora é decidida pelo resultado da busca filtrada, não por metadado do AniList (ver entrada nova sobre isso).
+**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, roda a mesma busca por anime + `partitionSearchResults`/`pickBatches` para decidir se um pack cobre a janela (e, se sim, re-roda `selectEpisodes` com o teto levantado), e cai em `searchSingleEpisode` quando nenhum episódio pendente recebeu magnet de pack/filme — três trechos duplicados do loop de produção. Ver a spec `2026-08-13-batch-per-filter-design.md`: essa entrada documentava `willBatchAnime`/`resolveSearchStrategy`, removidos por essa spec — elegibilidade a pack agora é decidida pelo resultado da busca filtrada, não por metadado do AniList (ver entrada nova sobre isso).
 
 **Why it's right:**
 
@@ -1767,7 +1767,7 @@ fallback do gate.
 
 ---
 
-### 73. O frontend não busca direto na AniList, mesmo podendo
+### 73. The frontend doesn't query AniList directly, even though it could
 
 **Location:** política para `src/internal/frontend` e `src/internal/api/endpoint_animes.go` — hoje
 todo acesso à AniList passa pelo backend.
@@ -1968,7 +1968,7 @@ põe o romaji primeiro porque é ele que casa a maioria dos releases).
 
 ---
 
-### 77. O eixo absoluto por série é um BFS de duas em duas gerações, e o nível cortado volta para a fila
+### 77. The per-series absolute axis is a BFS two generations at a time, and the cut level goes back to the queue
 
 **Location:** `src/internal/anilist/series.go` — `Series`, `GetSeriesIndex`, `walkSeries`,
 `recordLink`, `prequelOf`, `resolveSeries`, `seriesCache`. Travado por `series_test.go`.
@@ -2200,7 +2200,7 @@ A banda `start >= 1900 && last <= 2100` só pega ano: nenhuma série chega ao ep
 
 ---
 
-### 84. A cobertura de um pack sem faixa no nome vem da lista de arquivos, e não da suposição de que ele cobre tudo
+### 84. A pack without a range in its name gets its coverage from the file list, not from assuming it covers everything
 
 **Location:** `nyaa/nyaa.go` — `PackFileRange`, `TorrentResult.DetailURL`, `detailURL`, `fileListEntryName`; `daemon/episodes.go` — `packCandidate`, `packSet`, `maxPackDetailFetches`, `pickBatches`, `assignBatches`; `daemon/search.go` — `nyaaSearcher.packRange`.
 
@@ -2245,12 +2245,12 @@ A lista de arquivos da página de detalhe responde antes de baixar, e responde b
 
 ---
 
-### 85. O custo do frontend na AniList é por CONTA e por ÓRFÃO, não por aba
+### 85. The frontend's AniList cost is per ACCOUNT and per ORPHAN, not per tab
 
 **Location:** `api/endpoint_animes.go` — `refreshOrphanAnimes`, `refreshStandaloneOrphans`;
 `anilist/anilist.go` — `GetAnimeInfoByIDs`, `GetCustomListsMap`, `frontendListCache`,
 `customListsEmptyTTL`. Complementa a [#72](#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso)
-(como saber quanto sobrou) e a [#73](#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo)
+(como saber quanto sobrou) e a [#73](#73-the-frontend-doesnt-query-anilist-directly-even-though-it-could)
 (por que não mover a busca para o browser).
 
 **O que parece:** cada aba aberta faz poll de `GET /animes` a cada 30s, então N abas custam N
@@ -2662,7 +2662,7 @@ checagem sem tamanho **antes** do loop continua existindo, e é outra coisa: dis
 significa que nenhum candidato serve, e tentar N vezes só encheria o log.
 
 
-### 94. Torrent travado é derrubado pelo caminho de falha, e só quem está *tentando* conta como travado
+### 94. A stalled torrent is dropped through the failure path, and only one that is *trying* counts as stalled
 
 **Location:** `daemon/stalled.go` (`dropStalledTorrents`, `stalling`, `stalledTorrentTimeout`),
 chamado em `daemon/verification.go` logo depois do `backend.List()`.
@@ -2735,7 +2735,7 @@ the requested statuses go to `GetMediaByIDs`. `mediaByIDCache` lives 60s and `/a
 polled every 30s per tab, so hydrating a ~300-entry list (mostly `COMPLETED`) would cost ~6 AniList
 queries per minute per MAL account — the burn
 [#46](#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)
-and [#85](#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba) closed. The deletion
+and [#85](#85-the-frontends-anilist-cost-is-per-account-and-per-orphan-not-per-tab) closed. The deletion
 vote never hydrates at all: it only needs AniList id + status.
 
 **Caches:** `malListCache` (raw list, 60s) and `malIDMapCache` (MAL→AniList id, 24h, `0` = no
@@ -2804,7 +2804,7 @@ dead loose episodes while ~15 live packs sat on the same page. Two things blocke
 classification, and the title match (with no marker to cut at, `[BD 1080p HEVC FLAC]` was
 tokenized and sank the Jaccard below 0.8).
 
-**What looks inconsistent with [#84](#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo): an unknown range doesn't count as "covers
+**What looks inconsistent with [#84](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything): an unknown range doesn't count as "covers
 everything" for this pack.** A labeled pack with an unresolved range still does (a Nyaa outage
 must not zero everyone's packs). An unlabeled one is a pack only by guess — size ≥ 1 GiB, no
 number, no movie marker — so it must prove it with the file list (`PackFileRange`); without it,

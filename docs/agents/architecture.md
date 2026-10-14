@@ -191,7 +191,7 @@ Os três passam pelo piso de `min_seeders` (`filterSearchResults`).
 **Custo de rede.** `packSet` resolve a faixa de um pack **sob demanda** — do nome quando o nome traz,
 senão da página de detalhe — e memoriza **inclusive a falha**; sem isso `assignBatches`, que varre os
 packs uma vez por episódio, viraria uma requisição por episódio. Teto de `maxPackDetailFetches` (3)
-páginas de detalhe por anime por passe. Ver [decisions.md #84](decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo).
+páginas de detalhe por anime por passe. Ver [decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything).
 
 **Eixos de numeração.** `packAxis` são as hipóteses de quanto somar ao número **local** da entrada:
 relativa (0, sempre primeira), contínua pela season (`ComputeEpisodeOffset` — o gate exige `part >= 2`
@@ -215,7 +215,7 @@ anterior já `COMPLETED` saiu do universo do passe, e é o offset dele que conve
 **`stalled.go`** — chamado no topo do passe, logo depois do `backend.List()`. Torrent a zero peers
 por mais de uma hora **sai da sessão** pelo mesmo `HandleTorrentFailure` de um torrent que a rain
 parou com erro: nada de caminho novo, e o passe seguinte procura de novo no Nyaa
-([#94](decisions.md#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)).
+([#94](decisions.md#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)).
 O relógio é de pacote (`stalledTorrents`), em memória, e **não** é o `stallTracker.ts` do frontend —
 aquele pinta o chip "sem seeds" aos 10 minutos e não conversa com o daemon. O snapshot passado para
 a função não é refeito depois do drop: quem saiu volta a ser procurado só no próximo passe.
@@ -359,15 +359,15 @@ ser lido**: ele é de uma conta arbitrária. Status é por conta:
   status de `DeleteStatuses` (não precisam ser o mesmo). Conta que não acompanha não vota; conta em
   status neutro (`PLANNING`) **veta**, e conta cuja lista falhou também
 
-**Dois filtros de status, nomes parecidos, coisas diferentes** {#media-status-filter}:
-`Config.DownloadStatuses` filtra por status de **lista** (`MediaListStatus` — a relação do usuário com
-o anime, ex. `CURRENT`) e é aplicado server-side pela AniList (`status_in`). `Config.DownloadMediaStatuses`
-filtra por status da **mídia** (`MediaStatus` — o estado de exibição do anime, ex. `RELEASING`); a
-AniList não aceita esse no mesmo filtro, então os dois consumidores o aplicam client-side via
-`anilist.MediaStatusAllowed`: `searchAnilist` (`daemon/verification.go`, pipeline de download, logo
-após o fetch por conta e antes do dedup) e `fetchAniListEntries` (`api/endpoint_animes.go`, listagem
-do frontend). **Nenhum dos dois filtros esconde anime que já tem episódio baixado**, qualquer que seja
-o status atual — ver `endpoint_animes.go` acima.
+<a id="media-status-filter"></a>**Two status filters, similar names, different things**:
+`Config.DownloadStatuses` filters by **list** status (`MediaListStatus` — the user's relationship with
+the anime, e.g. `CURRENT`) and is applied server-side by AniList (`status_in`). `Config.DownloadMediaStatuses`
+filters by **media** status (`MediaStatus` — the anime's airing state, e.g. `RELEASING`); AniList
+doesn't accept that one in the same filter, so both consumers apply it client-side via
+`anilist.MediaStatusAllowed`: `searchAnilist` (`daemon/verification.go`, the download pipeline, right
+after the per-account fetch and before the dedup) and `fetchAniListEntries` (`api/endpoint_animes.go`,
+the frontend listing). **Neither filter hides an anime that already has a downloaded episode**,
+whatever its current status — see `endpoint_animes.go` above.
 
 **Toda query declara uma `Priority`, e não há valor padrão de propósito**: query nova não compila sem
 alguém decidir a criticidade. O gate de orçamento (`health.go`) recusa `PriorityDisposable` com

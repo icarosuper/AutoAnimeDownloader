@@ -12,7 +12,7 @@ configs), `src/tests/mocks` e `src/tests/unit/nyaa_test.go` (fixtures deixam de 
 
 ## O objetivo é publicabilidade, não múltiplas fontes
 
-Esta spec **não** é a continuação da [Etapa 0](2026-08-16-fontes-multiplas-etapa0-design.md). Aquela
+Esta spec **não** é a continuação da [Etapa 0](2026-08-16-multiple-sources-stage0-design.md). Aquela
 pergunta se existe swarm alternativo para anime velho, continua sem resposta, e nada aqui a
 responde. Trocar de indexador continua não ressuscitando swarm.
 
@@ -97,7 +97,7 @@ busca, não é específico de fonte. O teto de páginas continua sendo `max_sear
 Nenhuma dependência nova. Para `json`/`rss`, `fields` carrega caminho de campo em vez de seletor CSS.
 
 `detail` é opcional. Fonte sem ele desliga o `packRange` — pack sem faixa no nome grava faixa zero,
-que é exatamente o fallback que [decisions.md #84](../../agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
+que é exatamente o fallback que [decisions.md #84](../../agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
 já definiu.
 
 ### O contrato que a fonte precisa cumprir — e quem reprova

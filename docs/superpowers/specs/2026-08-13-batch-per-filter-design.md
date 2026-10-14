@@ -3,7 +3,7 @@
 Data: 2026-08-13
 
 Substitui a regra batch↔limite de
-[`2026-08-10-limite-episodios-batch-design.md`](2026-08-10-limite-episodios-batch-design.md) na
+[`2026-08-10-batch-episode-limit-design.md`](2026-08-10-batch-episode-limit-design.md) na
 parte em que ela decide elegibilidade **antes** de buscar. O resto daquela spec (teto de tamanho,
 guarda de disco, a regra de que o limite por anime não se aplica a batch) continua valendo.
 

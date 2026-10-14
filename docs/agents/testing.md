@@ -19,27 +19,27 @@ docker compose -f docker/docker-compose.test.yml up --build \
 
 `go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions.md#23-integration-tests-skip-unless-daemon_url-is-set-explicitly). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
 
-Mesmo gate, mesma razão, para o smoke contra a AniList de verdade:
+Same gate, same reason, for the smoke test against the real AniList:
 
 ```bash
 AAD_LIVE_ANILIST=1 go test ./src/internal/anilist/ -run Live -v
 ```
 
-`live_smoke_test.go` mede o que nenhum mock prova: o tamanho da JANELA de `airingSchedule` que a AniList devolve (One Piece começa no episódio 1123; anime antigo volta com agenda vazia) — a premissa de `EpisodeList`, ver [Decisions #52](decisions.md#52-a-lista-de-episódios-é-sintetizada-e-a-chave-de-um-episódio-é-anime-número). Rode-o quando mexer em `anilist/episodes.go`.
+`live_smoke_test.go` measures what no mock proves: the size of the `airingSchedule` WINDOW AniList returns (One Piece starts at episode 1123; an old anime comes back with an empty schedule) — the premise of `EpisodeList`, see [Decisions #52](decisions.md#52-a-lista-de-episódios-é-sintetizada-e-a-chave-de-um-episódio-é-anime-número). Run it when you touch `anilist/episodes.go`.
 
-Mesmo gate, contra o Nyaa de verdade:
+Same gate, against the real Nyaa:
 
 ```bash
 AAD_LIVE_NYAA=1 go test ./src/internal/nyaa/ -run Live -v -timeout 25m
 ```
 
-`live_pack_measure_test.go` **não é teste de regressão — é instrumento de medição**: ele nunca
-falha, só imprime. Para cada pack real de uma amostra de buscas ele mostra a faixa do nome, a que
-`PackFileRange` lê da lista de arquivos, a árvore de pastas com contagem e faixa de cada uma, e o
-tamanho por episódio. É o que produziu os números de [Decisions #84](decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
-e da seção "Página de detalhe" do [sources.md](sources.md). Rode-o antes de reabrir qualquer
-decisão sobre cobertura ou teto de pack — leva ~2min e faz ~70 requisições ao nyaa.si, com 1.5s de
-espaçamento. `AAD_LIVE_QUERIES="a batch|b batch"` troca a amostra neutra.
+`live_pack_measure_test.go` **is not a regression test — it's a measuring instrument**: it never
+fails, it only prints. For each real pack in a sample of searches it shows the range in the name,
+the one `PackFileRange` reads from the file list, the folder tree with each folder's count and
+range, and the size per episode. It's what produced the numbers in [Decisions #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
+and in the "Detail page" section of [sources.md](sources.md). Run it before reopening any decision
+about pack coverage or the pack ceiling — it takes ~2min and makes ~70 requests to nyaa.si, 1.5s
+apart. `AAD_LIVE_QUERIES="a batch|b batch"` replaces the neutral sample.
 
 ## Test Structure
 
@@ -75,12 +75,12 @@ defer restore()
 
 Same pattern for Nyaa: `nyaa.MockNyaaHttpGet(fn) (restore func())`.
 
-`MockAniListDo` também limpa **todo** estado de pacote do `anilist` nas duas pontas — os cinco
-caches, a saúde, a leitura de orçamento e a persistência em disco. A persistência entra nessa lista
-porque a gravação do snapshot é **agendada** (`persistDebounce`, 5s): sem desligá-la, um flush que
-dispara depois do teste terminar escreveria no `t.TempDir()` de outro. Um teste que queira exercitar
-o snapshot chama `EnablePersistence` **depois** de instalar o mock, e força a gravação com
-`flushCache()` em vez de esperar o debounce (ver `anilist/persist_test.go`).
+`MockAniListDo` also clears **all** of `anilist`'s package state at both ends — the five caches,
+the health, the budget reading and the disk persistence. Persistence is on that list because the
+snapshot write is **scheduled** (`persistDebounce`, 5s): without turning it off, a flush that fires
+after the test ends would write into another test's `t.TempDir()`. A test that wants to exercise
+the snapshot calls `EnablePersistence` **after** installing the mock, and forces the write with
+`flushCache()` instead of waiting for the debounce (see `anilist/persist_test.go`).
 
 ### 2. Interface Injection (Torrent backend)
 

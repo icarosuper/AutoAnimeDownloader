@@ -2,8 +2,8 @@
 
 **Data:** 2026-08-24
 **Status:** desenhado, não implementado
-**Fecha:** "Filtro por idioma de legenda nas prioridades (ex.: PT-BR)" do
-[TODO-competitive.md](../../TODO-competitive.md)
+**Closes:** "Filtro por idioma de legenda nas prioridades (ex.: PT-BR)" from `TODO-competitive.md`
+(a local list that was never committed — there is no such file in the repo)
 **Escopo:** `internal/nyaa` (config, sinal, ordenação, categoria de busca),
 `internal/daemon/search.go` (filtro duro), `internal/files` (campo de config),
 `frontend/routes/Priorities.svelte` (UI).

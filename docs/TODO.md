@@ -12,10 +12,10 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 > The old Stage 1 (close the ceilings of what already runs) closed on 2026-08-30 **with no code**:
 > all three items were measured and all three said not to touch anything. Pack numbering by folder
-> and per-episode pack ceiling in [decisions.md #84](agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo)
+> and per-episode pack ceiling in [decisions.md #84](agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
 > and [sources.md](agents/sources.md); frontend cost on AniList in
-> [decisions.md #85](agents/decisions.md#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba),
-> which closes the re-evaluation of [#73](agents/decisions.md#73-o-frontend-não-busca-direto-na-anilist-mesmo-podendo).
+> [decisions.md #85](agents/decisions.md#85-the-frontends-anilist-cost-is-per-account-and-per-orphan-not-per-tab),
+> which closes the re-evaluation of [#73](agents/decisions.md#73-the-frontend-doesnt-query-anilist-directly-even-though-it-could).
 > The instrument for the first two lives in `nyaa/live_pack_measure_test.go` (`AAD_LIVE_NYAA=1`).
 
 > The **local anime cache** closed on 2026-09-07: AniList is served from an on-disk snapshot when it
@@ -23,7 +23,7 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 > ([#92](agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)).
 > Covers came for free (the URL is a `Media` field, already in the snapshot) and a pass in cache
 > mode deletes, by explicit decision — both things, and what changed relative to the survey, are at
-> the end of the [spec](superpowers/specs/2026-09-05-cache-local-anilist-design.md).
+> the end of the [spec](superpowers/specs/2026-09-05-anilist-local-cache-design.md).
 
 ## `v2.4.0` — MyAnimeList integration
 
@@ -54,7 +54,7 @@ two.
   path for existing users → needs a migration or an explicit release note
 - **Take Nyaa out of the repository (source as an external descriptor)** — spec designed on
   2026-09-13 and never executed:
-  [fonte-como-descriptor](superpowers/specs/2026-09-13-fonte-como-descriptor-design.md).
+  [source-as-descriptor](superpowers/specs/2026-09-13-source-as-descriptor-design.md).
   The goal is **publishability**, not multiple sources: Nyaa's address, query and layout leave the
   binary for a JSON file the user puts next to `config.json`. A compiled Go plugin is out (the
   `plugin` package is Linux-only and requires the same compiler and the same deps). The processing
@@ -105,12 +105,12 @@ at 0%) or a huge pack the size ceiling rejects. The order isn't preference: the 
 > a torrent failure now keeps the bytes already downloaded (amendment to
 > [#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist))
 > and a torrent at zero peers for more than an hour is now dropped through the same failure path
-> ([#94](agents/decisions.md#94-torrent-travado-é-derrubado-pelo-caminho-de-falha-e-só-quem-está-tentando-conta-como-travado)).
+> ([#94](agents/decisions.md#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)).
 > None of the three was measured live — the tests are unit tests, and the pass in the third item
 > below is what actually exercises them.
 
 - **Run Stage 0 of multiple sources** — spec designed on 2026-08-16 and never executed:
-  [fontes-multiplas-etapa0](superpowers/specs/2026-08-16-fontes-multiplas-etapa0-design.md).
+  [multiple-sources-stage0](superpowers/specs/2026-08-16-multiple-sources-stage0-design.md).
   Single question: where Nyaa is dead, is there a **different** infohash with **live** peers?
   Switching indexers doesn't revive a swarm — AnimeTosho mirrors Nyaa (75/75 `nyaa_id`), and only
   TokyoTosho aggregates outside trackers. Decision criterion fixed before measuring (≥ 1/3
@@ -127,7 +127,7 @@ at 0%) or a huge pack the size ceiling rejects. The order isn't preference: the 
   priority) and Debrid. **Choose after the previous item**, which is what says whether an
   alternative remains
 - **Live pass on a multi-part franchise (Attack on Titan)** — the per-series absolute axis, the
-  `packAxis` and ownership by coverage ([#77](agents/decisions.md#77-o-eixo-absoluto-por-série-é-um-bfs-de-duas-em-duas-gerações-e-o-nível-cortado-volta-para-a-fila)/[#78](agents/decisions.md#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)/[#79](agents/decisions.md#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)/[#84](agents/decisions.md#84-a-cobertura-de-um-pack-sem-faixa-no-nome-vem-da-lista-de-arquivos-e-não-da-suposição-de-que-ele-cobre-tudo))
+  `packAxis` and ownership by coverage ([#77](agents/decisions.md#77-the-per-series-absolute-axis-is-a-bfs-two-generations-at-a-time-and-the-cut-level-goes-back-to-the-queue)/[#78](agents/decisions.md#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)/[#79](agents/decisions.md#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)/[#84](agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything))
   were written in August and only have unit tests plus a **listing** measurement. No real
   end-to-end download has run on the S1 → Final Season Part 3 chain, which is exactly where the
   four numbering conventions from the "Granularidade" section of [sources.md](agents/sources.md)

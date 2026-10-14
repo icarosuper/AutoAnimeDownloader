@@ -16,7 +16,7 @@ progress"**. Everything else — identity, episodes, airing schedule, series off
 `tvshow.nfo`, the disk cache — keeps coming from AniList.
 
 The anime identity is AniList's `Media.Id`
-([decisions.md #43](../agents/decisions.md#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)):
+([decisions.md #43](../../agents/decisions.md#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)):
 `episodes.json`, `anime_settings`, `blocked_episodes`, `standalone_animes`, the `/animes/{id}/*`
 routes and the library folders are all keyed by it. Making MAL a second metadata source would mean
 a second identity and a duplicate of most of the app. As a list source it never leaves the
@@ -87,14 +87,14 @@ Two steps, both reusing what already exists, and **in this order with a filter b
 The filter has to come before the media step. `mediaByIDCache` lives 60s, and `/api/v1/animes`
 is polled every 30s per tab: fetching media for the whole list (~300 entries, mostly `COMPLETED`)
 would cost ~6 AniList queries **per minute per MAL account**, exactly the poll-driven burn that
-[#46](../agents/decisions.md#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)
-and [#85](../agents/decisions.md#85-o-custo-do-frontend-na-anilist-é-por-conta-e-por-órfão-não-por-aba) closed. Filtered to
+[#46](../../agents/decisions.md#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)
+and [#85](../../agents/decisions.md#85-the-frontends-anilist-cost-is-per-account-and-per-orphan-not-per-tab) closed. Filtered to
 `CURRENT`/`REPEATING` it's a handful of ids, so 1 query per minute — the same order as an AniList
 account's list. The mapping costs ~6 queries once a day. The deletion vote (see Call sites)
 needs only AniList id + status, so it never reaches step 3.
 
 This goes through `sendAnilistRequest`, so the budget gate
-([#72](../agents/decisions.md#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso))
+([#72](../../agents/decisions.md#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso))
 and the health tracking cover it without changes.
 
 A MAL entry with no AniList counterpart gets a `Warn` log (with the MAL id and title) and is
@@ -124,12 +124,12 @@ MediaList{Id: 0, Status: mapped, Progress: num_watched_episodes, Media: <from Ge
 | `malIDMapCache` (new) | MAL id | AniList id (`0` = none) | 24h | yes |
 
 - 60s is the `frontendListCache` TTL, chosen for the same reason
-  ([#46](../agents/decisions.md#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)):
+  ([#46](../../agents/decisions.md#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)):
   `GET /api/v1/animes` is polled every 30s per open tab. With the cache that's at most
   1 page fetch per minute per MAL account (2 for lists over 300)
 - Both go into the `persist.go` snapshot as two new `omitempty` fields. An old snapshot without
   them loads fine, and they come back with TTL zero like the others
-  ([#92](../agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache))
+  ([#92](../../agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache))
 - **MAL down**: serve the stale list and return `ErrFromCache`, the same contract as the AniList
   lists. Every caller already accepts `ErrFromCache` as an answer
 - **AniList down**: the mapping and the media come from their persisted caches, so a MAL account
@@ -235,7 +235,7 @@ failed, it stays `anilist`.
 
 - `load.json` parsing and pagination (300 + rest, an empty page, a `400`) against `httptest`,
   in the style of the existing var-swap mock
-  ([#1](../agents/decisions.md#1-var-swap-mocking-for-anilist-and-nyaa-http-clients))
+  ([#1](../../agents/decisions.md#1-var-swap-mocking-for-anilist-and-nyaa-http-clients))
 - Status mapping, including `is_rewatching` over `COMPLETED`
 - MAL id with no AniList counterpart: skipped, cached as `0`, no second request
 - MAL down with a cached list → `ErrFromCache` + stale list

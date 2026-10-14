@@ -1,6 +1,6 @@
 # Config Reference
 
-All fields in `config.json` (`~/.autoAnimeDownloader/config.json` on Linux, `%APPDATA%\AutoAnimeDownloader\config.json` on Windows).
+All fields in `config.json` (`~/.autoAnimeDownloader/config.json` on Linux, `%APPDATA%\.autoAnimeDownloader\config.json` on Windows).
 
 Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefaultConfig()`.
 
