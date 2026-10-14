@@ -25,8 +25,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os/exec"
-	"runtime"
 	"time"
 
 	"fyne.io/systray"
@@ -108,15 +106,12 @@ func (tm *TrayManager) openWebUI() {
 }
 
 func (tm *TrayManager) openURL(url string) {
-	if err := openBrowser(url); err != nil {
+	// OpenBrowser logs the success itself.
+	if err := daemon.OpenBrowser(url); err != nil {
 		logger.Logger.Error().
 			Err(err).
 			Str("url", url).
 			Msg("Failed to open browser")
-	} else {
-		logger.Logger.Info().
-			Str("url", url).
-			Msg("Opened Web UI in browser")
 	}
 }
 
@@ -161,19 +156,4 @@ func (tm *TrayManager) triggerCheck() {
 				Msg("Failed to trigger check")
 		}
 	}()
-}
-
-func openBrowser(url string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", url)
-	default:
-		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
-	}
-	return cmd.Run()
 }
