@@ -1,10 +1,10 @@
 <script lang="ts">
-  // Downloads — spec §9.3 (Fase 5). A tabela plana vira um accordion por anime: cabeçalho de
-  // grupo com progresso agregado e ações em lote, linhas de torrent recuadas dentro dele.
+  // Downloads — spec §9.3 (Phase 5). The flat table becomes an accordion per anime: a group
+  // header with aggregate progress and bulk actions, torrent rows indented inside it.
   //
-  // Tudo que a tela já fazia continua: busca, ordenação, poda da seleção ao visível, `busy`
-  // por hash — e, principalmente, o ESTADO DA VIEW NA URL, que agora carrega também quais
-  // grupos estão recolhidos (ver o comentário de `ViewState` em torrentFilters.ts).
+  // Everything the screen already did still works: search, sorting, pruning the selection to
+  // what's visible, `busy` per hash — and, above all, the VIEW STATE IN THE URL, which now also
+  // carries which groups are collapsed (see the `ViewState` comment in torrentFilters.ts).
   import { onMount, onDestroy } from "svelte";
   import { querystring, replace } from "svelte-spa-router";
   import { ChevronDown, ChevronRight, ChevronsUp, Pause, Play, RefreshCw, Trash2 } from "@lucide/svelte";
@@ -89,52 +89,52 @@
 
   let torrents: TorrentInfo[] = [];
   let loading = true;
-  // Hashes com ação em voo: desabilitam os botões daquela linha sem congelar a tabela toda.
+  // Hashes with an action in flight: they disable that row's buttons without freezing the table.
   let busy = new Set<string>();
 
-  // Capas por anime_id. Buscadas UMA vez (não entram no polling de 2s) — são dado estático de
-  // apresentação; se a chamada falhar, `Cover` cai no fallback hachurado e a tela segue.
+  // Covers by anime_id. Fetched ONCE (not part of the 2s polling) — they're static presentation
+  // data; if the call fails, `Cover` falls back to the hatched placeholder and the screen goes on.
   let coversByAnimeId = new Map<number, string | undefined>();
 
-  // Estado da view (busca/filtro/ordenação/grupos recolhidos) vive na URL, não em localStorage
-  // — veja encodeViewState/decodeViewState em torrentFilters.ts.
+  // View state (search/filter/sort/collapsed groups) lives in the URL, not in localStorage — see
+  // encodeViewState/decodeViewState in torrentFilters.ts.
   let viewState: ViewState = DEFAULT_VIEW_STATE;
 
-  // Seleção em massa: Set de hashes, sempre podado para o que está visível (pós-filtro).
+  // Bulk selection: a Set of hashes, always pruned to what's visible (post-filter).
   let selected = new Set<string>();
   let bulkBusy = false;
 
-  // Diálogo de exclusão — serve tanto para 1 linha quanto para o lote selecionado.
+  // Delete dialog — serves both a single row and the selected batch.
   let deleteDialogOpen = false;
   let pendingDeleteHashes: string[] = [];
   let pendingDeleteName = "";
-  // Preenchido só quando a exclusão é do grupo inteiro (o botão do cabeçalho do anime).
+  // Filled in only when deleting the whole group (the anime header's button).
   let pendingDeleteAnimeId: number | undefined;
-  // Ids dos avulsos, do mesmo GET /animes das capas: para o avulso o 2º check do diálogo deixa
-  // de acompanhar o anime em vez de só bloquear os episódios.
+  // Ids of the standalone animes, from the same GET /animes as the covers: for a standalone anime
+  // the dialog's 2nd checkbox stops tracking the anime instead of only blocking the episodes.
   let standaloneAnimeIds = new Set<number>();
 
-  // 'queued' aceita pausar: com `paused` explícito na fila, pausar um enfileirado quer dizer
-  // "não inicie sozinho quando o slot vagar" — antes disso, a única forma de impedir que um
-  // episódio começasse era deletar o torrent.
+  // 'queued' can be paused: with an explicit `paused` in the queue, pausing a queued torrent means
+  // "don't start on your own when a slot frees up" — before that, the only way to keep an episode
+  // from starting was to delete the torrent.
   function canPause(t: TorrentInfo): boolean {
     return t.status !== "stopped" && t.status !== "stopping";
   }
-  // 'queued' aceita retomar: com limite de downloads simultâneos, retomar significa "volta
-  // para o FIM da fila", então num torrent já enfileirado o botão o desprioriza — que é
-  // exatamente o oposto do Priorizar ao lado, e por isso os dois convivem.
+  // 'queued' can be resumed: with a limit on simultaneous downloads, resuming means "back to the
+  // END of the queue", so on an already-queued torrent the button deprioritizes it — exactly the
+  // opposite of Prioritize next to it, which is why both exist side by side.
   function canResume(t: TorrentInfo): boolean {
     return t.status === "stopped" || t.status === "queued";
   }
-  // Priorizar é furar a fila. Não faz sentido num torrent que já terminou (o backend
-  // devolve erro) nem num que já está baixando.
+  // Prioritizing is jumping the queue. It makes no sense on a torrent that already finished (the
+  // backend returns an error) nor on one that's already downloading.
   function canPrioritize(t: TorrentInfo): boolean {
     return !t.completed && canResume(t);
   }
 
-  // Contagens das pills: derivadas da lista só com a BUSCA aplicada, nunca com o filtro atual.
-  // Se elas respeitassem o filtro, escolher "Seeding" zeraria as outras três e o usuário
-  // perderia justamente a informação que a pill existe para dar ("tem algo ali?").
+  // Pill counts: derived from the list with only the SEARCH applied, never the current filter. If
+  // they honored the filter, picking "Seeding" would zero the other three and the user would lose
+  // exactly the information the pill exists to give ("is there anything there?").
   $: searchedTorrents = filterTorrents(torrents, { query: viewState.query, statuses: [] });
   $: counts = {
     all: searchedTorrents.length,
@@ -143,11 +143,11 @@
     problems: searchedTorrents.filter(isProblemTorrent).length,
   };
 
-  // Ordena só quando o usuário clica num cabeçalho; 'default' preserva a ordem do backend.
+  // Sorts only when the user clicks a header; 'default' keeps the backend's order.
   $: visibleTorrents = sortTorrents(filterTorrents(torrents, viewState), viewState.sort, viewState.dir);
-  // A ordem DOS GRUPOS é fixa (problemas → baixando → resto, ver groupTorrents); a ordenação
-  // escolhida pelo usuário vale DENTRO de cada grupo. Assim quem ordena por "peers" continua
-  // com os grupos quebrados no topo, onde consegue vê-los.
+  // The order OF THE GROUPS is fixed (problems → downloading → the rest, see groupTorrents); the
+  // sort the user picks applies WITHIN each group. That way whoever sorts by "peers" still has the
+  // broken groups at the top, where they can see them.
   $: groups = groupTorrents(visibleTorrents);
 
   $: speeds = visibleTorrents.reduce(
@@ -155,9 +155,9 @@
     { download: 0, upload: 0 },
   );
 
-  // Poda a seleção sempre que a lista visível mudar (filtro/busca mudou, ou o polling trouxe/tirou
-  // um torrent). Não referencia `selected` diretamente na expressão do $: para não criar um loop
-  // reativo — a leitura/escrita acontece dentro da função.
+  // Prunes the selection whenever the visible list changes (filter/search changed, or the polling
+  // brought/removed a torrent). It doesn't reference `selected` directly in the $: expression to
+  // avoid a reactive loop — the read/write happens inside the function.
   $: pruneSelectionToVisible(visibleTorrents);
 
   function pruneSelectionToVisible(visible: TorrentInfo[]) {
@@ -175,7 +175,7 @@
   $: someVisibleSelected = selected.size > 0 && !allVisibleSelected;
 
   function toggleSelectAll() {
-    // Select-all marca só as linhas visíveis (pós-filtro), nunca a lista inteira.
+    // Select-all checks only the visible rows (post-filter), never the whole list.
     selected = allVisibleSelected ? new Set() : new Set(visibleTorrents.map((t) => t.hash));
   }
 
@@ -242,9 +242,9 @@
   }
 
   /**
-   * Cor da barra agregada do grupo. A primeira versão usava sempre `accent` (salvo problemas),
-   * o que pintava de roxo um grupo 100% concluído — lendo como "ainda baixando" ao lado de
-   * chips verdes de "Seeding".
+   * Color of the group's aggregate bar. The first version always used `accent` (except for
+   * problems), which painted a 100% complete group purple — reading as "still downloading" next
+   * to green "Seeding" chips.
    */
   function groupVariant(g: { problemCount: number; downloadingCount: number; torrents: TorrentInfo[] }) {
     if (g.problemCount > 0) return "danger" as const;
@@ -272,18 +272,18 @@
       console.error("Failed to load torrents:", err);
     } finally {
       loading = false;
-      // Só os painéis ABERTOS refazem a lista de arquivos, e no mesmo tick do poll da tela.
-      // A lista nunca entra no GET /torrents: seria multiplicar o payload de um poll de 2s
-      // por N para um dado que quase sempre ninguém está olhando.
+      // Only the OPEN panels refetch the file list, and on the same tick as the screen's poll.
+      // The list never goes into GET /torrents: that would multiply the payload of a 2s poll by
+      // N for data nobody is looking at almost all the time.
       filesTick += 1;
     }
   }
 
-  // Terceiro nível do accordion: grupo por anime → linha de torrent → arquivos. Vale para
-  // TODA linha, inclusive torrent de episódio único — o arquivo de dentro traz fansub,
-  // resolução e codec, que o nome do torrent nem sempre repete.
-  // Estado local, não na URL: é efêmero ("deixa eu ver o que veio"), diferente do filtro e
-  // dos grupos recolhidos, que o usuário compartilha em link.
+  // Third level of the accordion: group per anime → torrent row → files. It applies to EVERY row,
+  // single-episode torrents included — the file inside carries fansub, resolution and codec,
+  // which the torrent name doesn't always repeat.
+  // Local state, not in the URL: it's ephemeral ("let me see what came"), unlike the filter and
+  // the collapsed groups, which the user shares as a link.
   let openFiles = new Set<string>();
   let filesTick = 0;
 
@@ -299,7 +299,7 @@
       coversByAnimeId = new Map(animes.map((a) => [a.anime_id, a.cover_image]));
       standaloneAnimeIds = new Set(animes.filter((a) => a.is_standalone).map((a) => a.anime_id));
     } catch {
-      // Dado de apresentação — o accordion funciona igual com o fallback hachurado.
+      // Presentation data — the accordion works the same with the hatched fallback.
     }
   }
 
@@ -317,9 +317,9 @@
     }
   }
 
-  // Ações em lote: cada uma filtra o que faz sentido (ex.: não manda pausar quem já está
-  // stopped/stopping) e dispara N requisições aos endpoints por hash já existentes — não há
-  // endpoint de lote no backend.
+  // Bulk actions: each one filters what makes sense (e.g. doesn't pause what's already
+  // stopped/stopping) and fires N requests to the existing per-hash endpoints — there is no bulk
+  // endpoint in the backend.
   async function runBulk(
     hashes: string[],
     action: (h: string) => Promise<void>,
@@ -353,7 +353,7 @@
     if (result.failed > 0) toast.error(m.downloads_bulk_partial_error({ failed: result.failed }));
   }
 
-  /** Alvos de uma ação em lote: `scope` limita ao grupo; sem ele, é a seleção inteira. */
+  /** Targets of a bulk action: `scope` limits it to the group; without it, it's the whole selection. */
   function bulkTargets(scope: TorrentInfo[] | null, predicate?: (t: TorrentInfo) => boolean) {
     const pool = scope ?? visibleTorrents.filter((t) => selected.has(t.hash));
     return pool.filter((t) => (predicate ? predicate(t) : true)).map((t) => t.hash);
@@ -374,10 +374,10 @@
   }
 
   /**
-   * Priorizar em lote é UMA requisição, não N — N chamadas ao endpoint por hash se atropelam
-   * (cada uma passa na frente da anterior) e inverteriam o lote. Por isso não passa por
-   * `runBulk`/`reportBulk`: não existe sucesso parcial para contar, e o backend ignora em
-   * silêncio o que já completou, então nem dá para verificar o denominador daqui.
+   * Bulk prioritize is ONE request, not N — N calls to the per-hash endpoint trip over each other
+   * (each one jumps ahead of the previous) and would reverse the batch. That's why it doesn't go
+   * through `runBulk`/`reportBulk`: there's no partial success to count, and the backend silently
+   * ignores what already completed, so the denominator can't even be checked from here.
    */
   async function handlePrioritize(hashes: string[]) {
     if (hashes.length === 0) {
@@ -404,8 +404,8 @@
     await load();
   }
 
-  // `animeId` só vem preenchido quando esta linha é o único torrent do anime (batch, ou grupo de
-  // um): aí excluí-la é excluir o anime, e o diálogo precisa do texto/untrack de anime.
+  // `animeId` is filled in only when this row is the anime's only torrent (a batch, or a group of
+  // one): then deleting it is deleting the anime, and the dialog needs the anime text/untrack.
   function handleDeleteRow(t: TorrentInfo, animeId?: number) {
     pendingDeleteHashes = [t.hash];
     pendingDeleteName = t.anime_name || t.name;
@@ -446,9 +446,9 @@
       reportBulk(result, m.downloads_bulk_deleted);
     }
 
-    // Avulso + exclusão do anime inteiro: o check prometeu parar de acompanhar. Sem isso o
-    // registro avulso continuaria e o próximo passe baixaria tudo de novo. delete_episodes=false
-    // porque os arquivos já foram tratados acima, conforme o primeiro check.
+    // Standalone + deleting the whole anime: the checkbox promised to stop tracking. Without this
+    // the standalone record would stay and the next pass would download everything again.
+    // delete_episodes=false because the files were already handled above, per the first checkbox.
     if (block && animeId !== undefined && standaloneAnimeIds.has(animeId)) {
       try {
         await removeStandaloneAnime(animeId, false);
@@ -469,11 +469,11 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
   let wsClient: WebSocketClient | null = null;
 
-  // O banner de "sem conexão" (spec §9.3) precisa de um estado de WebSocket que valha para
-  // ESTA tela. Antes só Status.svelte abria a conexão, então quem entrasse direto em
-  // /downloads via o store parado no valor inicial 'disconnected' e o banner apareceria
-  // sempre. A tela abre a própria conexão, com callback de status vazio — Downloads não exibe
-  // estado do daemon, só precisa saber se o canal está de pé.
+  // The "no connection" banner (spec §9.3) needs a WebSocket state that holds for THIS screen.
+  // Before, only Status.svelte opened the connection, so whoever went straight to /downloads saw
+  // the store stuck at its initial 'disconnected' value and the banner would always show. The
+  // screen opens its own connection, with an empty status callback — Downloads doesn't show
+  // daemon state, it only needs to know whether the channel is up.
   function connectWs() {
     wsClient?.disconnect();
     wsClient = new WebSocketClient();
@@ -488,8 +488,8 @@
     load();
     loadCovers();
     connectWs();
-    // Polling só enquanto a tela está montada: cada snapshot custa um Stats() por torrent,
-    // que é round-trip bloqueante para dentro da goroutine de cada um.
+    // Polling only while the screen is mounted: each snapshot costs one Stats() per torrent, which
+    // is a blocking round-trip into each one's goroutine.
     pollInterval = setInterval(load, POLL_MS);
   });
 
@@ -499,20 +499,20 @@
     wsClient = null;
   });
 
-  // Grid das linhas de torrent, compartilhado com o cabeçalho de colunas para que os dois não
-  // saiam de alinhamento. O recuo de 66px do spec vem do padding-left, não de uma coluna.
+  // Grid of the torrent rows, shared with the column header so the two don't fall out of
+  // alignment. The spec's 66px indent comes from padding-left, not from a column.
   //
-  // Só a partir de `lg`: as sete trilhas somam ~740px, então abaixo disso o grid empurrava a
-  // PÁGINA INTEIRA para rolagem horizontal e espremia o título do grupo até "D..". No mobile
-  // vira `flex-wrap`, e as células fluem em duas ou três linhas dentro da largura disponível.
+  // Only from `lg` up: the seven tracks add up to ~740px, so below that the grid pushed the WHOLE
+  // PAGE into horizontal scrolling and squeezed the group title down to "D..". On mobile it
+  // becomes `flex-wrap`, and the cells flow in two or three lines within the available width.
   //
-  // O corte era `md` (768px) e não bastava: descontando o rail e o padding do main sobram ~628px
-  // ali, contra os ~740px que as trilhas exigem — a rolagem horizontal que o comentário acima
-  // descreve acontecia exatamente na faixa 768–880px. `lg` (1024px) é o primeiro breakpoint que
-  // realmente cabe. Mesmo critério da lista de animes em Status.svelte (ver LIST_GRID).
+  // The cutoff used to be `md` (768px) and it wasn't enough: minus the rail and main's padding,
+  // ~628px are left there, against the ~740px the tracks need — the horizontal scroll described
+  // above happened exactly in the 768–880px range. `lg` (1024px) is the first breakpoint that
+  // really fits. Same criterion as the anime list in Status.svelte (see LIST_GRID).
   const ROW_GRID =
     "flex flex-wrap items-center gap-x-3 gap-y-2 lg:grid lg:grid-cols-[28px_78px_128px_minmax(120px,1fr)_150px_104px] lg:items-center lg:gap-3";
-  /** Recuo das linhas dentro do grupo — 66px no desktop, só o padding do card no mobile. */
+  /** Indent of the rows inside the group — 66px on desktop, only the card's padding on mobile. */
   const ROW_INDENT = "pl-4 pr-4 lg:pl-[66px]";
 </script>
 
@@ -527,30 +527,29 @@
 />
 
 <div class="space-y-4.5">
-  <!-- Header: título + barra de resumo de banda.
-       `min-w-[240px]` no bloco do título, e não `min-w-0`: `flex-1` é flex-basis 0%, e a quebra
-       de linha de um container `flex-wrap` decide pelo tamanho principal HIPOTÉTICO de cada item
-       — com basis 0 e min-width 0 o título contribuía ~0, a caixa de velocidade (433px de
-       max-content) nunca ia para a linha de baixo e o título ficava com as sobras, quebrando o
-       subtítulo em uma palavra por linha (medido: 7 linhas em 500px, 4 em 768px). O min-width
-       ENTRA nesse tamanho hipotético, então ele é o que empurra a caixa para a próxima linha —
-       em qualquer largura, sem depender de breakpoint (um `sm:flex-col` consertaria 375px e
-       deixaria a faixa dos 500–768px igual). -->
+  <!-- Header: title + bandwidth summary bar.
+       `min-w-[240px]` on the title block, not `min-w-0`: `flex-1` is flex-basis 0%, and a
+       `flex-wrap` container decides line breaks by each item's HYPOTHETICAL main size — with
+       basis 0 and min-width 0 the title contributed ~0, the speed box (433px max-content) never
+       went to the next line and the title got the leftovers, breaking the subtitle into one word
+       per line (measured: 7 lines at 500px, 4 at 768px). The min-width IS part of that
+       hypothetical size, so it's what pushes the box to the next line — at any width, with no
+       breakpoint (an `sm:flex-col` would fix 375px and leave the 500–768px range the same). -->
   <div class="flex flex-wrap items-center gap-3">
     <div class="min-w-[240px] flex-1">
       <h1 class="text-screen-title text-heading">{T && T.title}</h1>
       <p class="mt-0.5 text-caption text-subtle">{T && T.subtitle}</p>
     </div>
 
-    <!-- `flex-wrap` aqui dentro também: em 375px o conteúdo da caixa mede ~337px contra ~343px
-         disponíveis, então um valor de velocidade mais largo estouraria a linha. -->
+    <!-- `flex-wrap` in here too: at 375px the box's content measures ~337px against ~343px
+         available, so a wider speed value would overflow the line. -->
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-default bg-control px-3 py-2">
       <span class="font-mono text-[15px] font-bold text-ok">↓ {formatSpeed(speeds.download, fmtLocale)}</span>
       <span class="h-[14px] w-px bg-default" aria-hidden="true"></span>
       <span class="font-mono text-[15px] font-bold text-neutral">↑ {formatSpeed(speeds.upload, fmtLocale)}</span>
-      <!-- Este divisor sai abaixo de `sm`: é exatamente onde a contagem desce para a segunda
-           linha da caixa, e um separador no fim da linha, sem nada depois dele, lê como sujeira.
-           O `gap-x-3` continua separando os dois blocos quando eles couberem na mesma linha. -->
+      <!-- This divider goes away below `sm`: that's exactly where the count drops to the box's
+           second line, and a separator at the end of a line, with nothing after it, reads as junk.
+           The `gap-x-3` still separates the two blocks when they fit on the same line. -->
       <span class="hidden h-[14px] w-px bg-default sm:inline-block" aria-hidden="true"></span>
       <span class="text-caption text-subtle">
         {$locale && m.downloads_summary_counts({ downloading: counts.downloading, seeding: counts.seeding })}
@@ -563,7 +562,7 @@
     </p>
   </div>
 
-  <!-- Banner de WebSocket caído — só quando desconectado (spec §9.3/§8) -->
+  <!-- WebSocket down banner — only when disconnected (spec §9.3/§8) -->
   {#if $wsConnectionState === "disconnected"}
     <div
       role="alert"
@@ -613,8 +612,8 @@
           </div>
         </div>
       {:else}
-        <!-- Ordenações que não têm coluna própria no accordion continuam acessíveis aqui, com
-             o mesmo `setSort` — nenhuma chave de ordenação foi perdida no redesenho. -->
+        <!-- Sorts without a column of their own in the accordion stay reachable here, with the
+             same `setSort` — no sort key was lost in the redesign. -->
         <div class="flex flex-wrap items-center gap-2 border-b border-divider px-4 py-2">
           <span class="font-mono text-mono-label uppercase text-subtle">{T && T.sortBy}</span>
           {#each [
@@ -636,8 +635,8 @@
           {/each}
         </div>
 
-        <!-- Cabeçalho de colunas das linhas de torrent. Recuado igual às linhas, e é aqui que
-             a ordenação por coluna (preservada do layout anterior) continua vivendo. -->
+        <!-- Column header of the torrent rows. Indented like the rows, and it's where sorting by
+             column (kept from the previous layout) still lives. -->
         <div class="{ROW_GRID} hidden border-b border-divider py-2.5 {ROW_INDENT} lg:grid">
           <span></span>
           <span class="font-mono text-mono-label uppercase text-subtle">{T && T.colEpisode}</span>
@@ -678,11 +677,11 @@
                 <Cover src={group.animeId !== undefined ? coversByAnimeId.get(group.animeId) : undefined} alt={group.name} />
               </div>
 
-              <!-- O botão cobre título/contagem/barra: alvo grande para expandir, sem aninhar
-                   o checkbox e as ações do grupo dentro de outro elemento clicável.
-                   `min-w-[180px]`, não `min-w-0`: com o cabeçalho em flex-wrap, uma coluna que
-                   encolhe até zero nunca empurra os botões de lote para a linha de baixo — no
-                   mobile o nome do grupo virava "B..". -->
+              <!-- The button covers title/count/bar: a big target to expand, without nesting the
+                   checkbox and the group's actions inside another clickable element.
+                   `min-w-[180px]`, not `min-w-0`: with the header in flex-wrap, a column that
+                   shrinks to zero never pushes the bulk buttons to the next line — on mobile the
+                   group name became "B..". -->
               <button
                 type="button"
                 class="flex min-w-[180px] flex-1 items-center gap-3 text-left"
@@ -723,17 +722,17 @@
                 />
               </button>
 
-              <!-- Ações em lote do grupo, quadrados de 32px.
-                   O tooltip sai do `data-tip` do wrapper (CSS em src/app.css, que substituiu o do daisyUI).
-                   v5), mesmo padrão do NavRail. `tooltip-left` porque estes botões ficam
-                   colados na borda direita do card. O texto é só o RÓTULO DA AÇÃO: o
-                   `aria-label` concatena " — {nome}", que no tooltip seria ruído.
+              <!-- The group's bulk actions, 32px squares.
+                   The tooltip comes from the wrapper's `data-tip` (CSS in src/app.css, which
+                   replaced daisyUI's), same pattern as the NavRail. `tooltip-left` because these
+                   buttons sit against the card's right edge. The text is only the ACTION LABEL:
+                   the `aria-label` appends " — {name}", which would be noise in the tooltip.
 
-                   Grupo de um torrent só (batch, ou anime com um episódio) aberto não ganha barra
-                   de lote: ela repetiria pausar/excluir a um palmo dos mesmos botões da linha. As
-                   ações da linha são um superconjunto (têm announce e respeitam o estado), e o
-                   excluir de lá já usa o escopo do anime quando a linha é o grupo inteiro.
-                   Recolhido a barra volta — senão o grupo ficaria sem nenhuma ação. -->
+                   An open group with a single torrent (a batch, or an anime with one episode)
+                   gets no bulk bar: it would repeat pause/delete an inch away from the row's own
+                   buttons. The row's actions are a superset (they have announce and respect the
+                   state), and its delete already uses the anime scope when the row is the whole
+                   group. Collapsed, the bar comes back — otherwise the group would have no action. -->
               {#if group.torrents.length > 1 || closed}
               <div class="flex shrink-0 items-center gap-1">
                 <div class="tooltip tooltip-left" data-tip={T && T.bulkPrioritize}>
@@ -799,9 +798,9 @@
                     on:change={() => toggleSelect(t.hash)}
                   />
 
-                  <!-- Seta de expandir + rótulo do episódio no mesmo alvo: o número sozinho
-                       não era clicável, e um sexto botão na coluna de ações (que já tem cinco
-                       em 104px) transbordaria. -->
+                  <!-- Expand arrow + episode label in the same target: the number alone wasn't
+                       clickable, and a sixth button in the actions column (which already has
+                       five in 104px) would overflow. -->
                   <button
                     type="button"
                     class="flex items-center gap-1 font-mono text-[13px] font-bold text-heading"
@@ -824,12 +823,12 @@
                     {/if}
                   </button>
 
-                  <!-- A posição na fila entra no chip que já existe, sem coluna nova. Ela NÃO
-                       entra em `statusLabel()`: o filtro de status da toolbar chama a mesma
-                       função, e "Na fila #7" não faria sentido nenhum ali.
-                       Os números saem não-contíguos dentro de um grupo (#2, #5, #6) quando
-                       outro anime está intercalado na fila — é justamente o que comunica que
-                       a fila é global; renumerar por grupo destruiria essa informação. -->
+                  <!-- The queue position goes into the existing chip, with no new column. It does
+                       NOT go into `statusLabel()`: the toolbar's status filter calls the same
+                       function, and "Queued #7" would make no sense there.
+                       The numbers come out non-contiguous within a group (#2, #5, #6) when
+                       another anime is interleaved in the queue — that's exactly what tells the
+                       queue is global; renumbering per group would destroy that information. -->
                   <span>
                     <Chip variant={statusVariant(t)}>
                       {$locale &&
@@ -840,8 +839,8 @@
                   </span>
 
                   <div class="w-full min-w-0 lg:w-auto">
-                    <!-- bytes_total fica em 0 até a metadata chegar; sem ela o percentual não
-                         significa nada ainda, então a barra fica no trilho vazio. -->
+                    <!-- bytes_total stays at 0 until the metadata arrives; without it the
+                         percentage means nothing yet, so the bar stays on the empty track. -->
                     <ProgressBar
                       value={t.bytes_total > 0 ? t.progress : 0}
                       thickness={4}
@@ -852,9 +851,9 @@
                       {#if t.bytes_total === 0}
                         —
                       {:else if t.bytes_completed === 0 && t.progress > 0}
-                        <!-- Pausar zera bytes_completed (o rain libera os dados das peças) mas
-                             `progress` continua reportando a fração real. Mostrar "0 B / 1,4 GB"
-                             ao lado de uma barra não-vazia leria como contradição. -->
+                        <!-- Pausing zeroes bytes_completed (rain releases the pieces' data) but
+                             `progress` still reports the real fraction. Showing "0 B / 1.4 GB"
+                             next to a non-empty bar would read as a contradiction. -->
                         {formatPercent(t.progress, fmtLocale)}
                       {:else}
                         {formatPercent(t.progress, fmtLocale)} · {formatBytes(t.bytes_completed, fmtLocale)} / {formatBytes(t.bytes_total, fmtLocale)}
@@ -867,13 +866,13 @@
                     <p class="truncate">↓ {formatSpeed(t.download_speed, fmtLocale)} · ↑ {formatSpeed(t.upload_speed, fmtLocale)}</p>
                   </div>
 
-                  <!-- Ações individuais, quadrados de 28px.
-                       Play e Pause são dois `{#if}` INDEPENDENTES, não os dois ramos de um
-                       if/else: um torrent `queued` tem `canResume === true`, então no if/else
-                       ele caía no ramo do Play e o Pause nunca chegava ao DOM. Relaxar
-                       `canPause` sozinho não renderizaria nada. Um enfileirado fica com os três,
-                       cada um numa direção: Priorizar sobe, Play desce para o fim da fila,
-                       Pause tira da rotação. -->
+                  <!-- Per-row actions, 28px squares.
+                       Play and Pause are two INDEPENDENT `{#if}`s, not the two branches of an
+                       if/else: a `queued` torrent has `canResume === true`, so in the if/else it
+                       fell into the Play branch and Pause never reached the DOM. Relaxing
+                       `canPause` alone would render nothing. A queued torrent gets all three,
+                       each in one direction: Prioritize moves it up, Play moves it to the end of
+                       the queue, Pause takes it out of rotation. -->
                   <div class="flex items-center justify-end gap-1">
                     {#if canPrioritize(t)}
                       <div class="tooltip" data-tip={T && T.prioritize}>
