@@ -30,3 +30,5 @@ daemon.log
 # Playwright output
 **/test-results/*
 
+# Markdownlint config
+.markdownlint.json

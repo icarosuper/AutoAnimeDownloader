@@ -36,45 +36,54 @@ var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
 // disparando em português sem mudar nada. Um preset com linguagem desconhecida tambem cai no
 // default: melhor um texto em português do que um {{title}} vazio.
 type localeStrings struct {
-	NewEpisodeTitle          string
-	NewEpisodeMsg            string
-	NewEpisodeBatchTitle     string
-	DownloadFailedTitle      string
-	DownloadFailedMsg        string
-	DownloadFailedBatchTitle string
-	DownloadCompletedTitle   string
-	DownloadCompletedMsg     string
+	NewEpisodeTitle             string
+	NewEpisodeMsg               string
+	NewEpisodeRangeMsg          string
+	NewEpisodeBatchTitle        string
+	DownloadFailedTitle         string
+	DownloadFailedMsg           string
+	DownloadFailedRangeMsg      string
+	DownloadFailedBatchTitle    string
+	DownloadCompletedTitle      string
+	DownloadCompletedMsg        string
+	DownloadCompletedRangeMsg   string
 	DownloadCompletedBatchTitle string
-	ReasonAllFailed          string
+	ReasonAllFailed             string
 }
 
 func getLocaleStrings(lang string) localeStrings {
 	switch lang {
 	case "en":
 		return localeStrings{
-			NewEpisodeTitle:         "New episode detected",
-			NewEpisodeMsg:           "%s EP %d detected, starting download",
-			NewEpisodeBatchTitle:    "%d new episodes detected",
-			DownloadFailedTitle:     "Download failed",
-			DownloadFailedMsg:       "%s EP %d failed: %s",
-			DownloadFailedBatchTitle: "%d download errors",
-			DownloadCompletedTitle:  "Download completed",
-			DownloadCompletedMsg:    "%s EP %d downloaded successfully",
+			NewEpisodeTitle:             "New episode detected",
+			NewEpisodeMsg:               "%s EP %d detected, starting download",
+			NewEpisodeRangeMsg:          "%s EPs %d-%d detected, starting download",
+			NewEpisodeBatchTitle:        "%d new episodes detected",
+			DownloadFailedTitle:         "Download failed",
+			DownloadFailedMsg:           "%s EP %d failed: %s",
+			DownloadFailedRangeMsg:      "%s EPs %d-%d failed: %s",
+			DownloadFailedBatchTitle:    "%d download errors",
+			DownloadCompletedTitle:      "Download completed",
+			DownloadCompletedMsg:        "%s EP %d downloaded successfully",
+			DownloadCompletedRangeMsg:   "%s EPs %d-%d downloaded successfully",
 			DownloadCompletedBatchTitle: "%d downloads completed",
-			ReasonAllFailed:         "all attempts failed",
+			ReasonAllFailed:             "all attempts failed",
 		}
 	default:
 		return localeStrings{
-			NewEpisodeTitle:         "Novo episódio detectado",
-			NewEpisodeMsg:           "%s EP %d detectado, iniciando download",
-			NewEpisodeBatchTitle:    "%d novos episódios detectados",
-			DownloadFailedTitle:     "Erro no download",
-			DownloadFailedMsg:       "%s EP %d falhou: %s",
-			DownloadFailedBatchTitle: "%d erros no download",
-			DownloadCompletedTitle:  "Download concluído",
-			DownloadCompletedMsg:    "%s EP %d foi baixado com sucesso",
+			NewEpisodeTitle:             "Novo episódio detectado",
+			NewEpisodeMsg:               "%s EP %d detectado, iniciando download",
+			NewEpisodeRangeMsg:          "%s EPs %d-%d detectado, iniciando download",
+			NewEpisodeBatchTitle:        "%d novos episódios detectados",
+			DownloadFailedTitle:         "Erro no download",
+			DownloadFailedMsg:           "%s EP %d falhou: %s",
+			DownloadFailedRangeMsg:      "%s EPs %d-%d falhou: %s",
+			DownloadFailedBatchTitle:    "%d erros no download",
+			DownloadCompletedTitle:      "Download concluído",
+			DownloadCompletedMsg:        "%s EP %d foi baixado com sucesso",
+			DownloadCompletedRangeMsg:   "%s EPs %d-%d foi baixado com sucesso",
 			DownloadCompletedBatchTitle: "%d downloads concluídos",
-			ReasonAllFailed:         "todas as tentativas falharam",
+			ReasonAllFailed:             "todas as tentativas falharam",
 		}
 	}
 }
@@ -98,43 +107,108 @@ func interpolate(template string, vars map[string]string) string {
 	})
 }
 
-func buildVars(animeName string, episode int, event Event, reason string, lang string) map[string]string {
-	return buildBatchVars(event, []item{{animeName: animeName, episode: episode, reason: reason}}, lang)
+func buildVars(animeName string, episode int, event Event, reason string, lang string, animeID int, torrentHash string) map[string]string {
+	return buildBatchVars(event, []item{{animeName: animeName, episode: episode, reason: reason, animeID: animeID, torrentHash: torrentHash}}, lang)
 }
 
 // buildBatchVars monta as variaveis de template para os itens de uma janela. Com um item so o
 // resultado e identico ao de antes do agrupamento — e por isso que ligar o batching nao muda a
 // aparencia das notificacoes de quem recebe uma de cada vez.
 //
-// Com N > 1, `anime_name`, `episode` e `reason` ficam VAZIOS: nao existe valor unico para eles e
-// mandar o do primeiro item faria o template mentir sobre os outros N-1. Quem quer identificar os
-// episodios usa `message` (uma linha por item) ou `count`.
+// Com N > 1, `anime_name`, `episode`, `reason`, `anime_id` e `torrent_hash` ficam VAZIOS:
+// nao existe valor unico para eles e mandar o do primeiro item faria o template mentir sobre
+// os outros N-1. Quem quer identificar os episodios usa `message` (uma linha por item) ou
+// `count`.
+//
+// `message` colapsa sequencias consecutivas do mesmo anime em um range: 24 episodios do Index
+// viram "Index EPs 1-24 detectado, initiando download" em vez de 24 linhas identicas. Um range
+// e uma linha so, e episodios NAO consecutivos (ou de animes diferentes) ficam em linhas
+// separadas — o colapsamento e por (anime, faixa continua), nunca por anime solto.
 func buildBatchVars(event Event, items []item, lang string) map[string]string {
-	lines := make([]string, 0, len(items))
-	for _, it := range items {
-		_, message := eventStrings(it.animeName, it.episode, event, it.reason, lang)
-		lines = append(lines, message)
-	}
+	lines := batchLines(event, items, lang)
 
 	vars := map[string]string{
-		"title":      batchTitle(event, items, lang),
-		"message":    strings.Join(lines, "\n"),
-		"anime_name": "",
-		"episode":    "",
-		"reason":     "",
-		"count":      fmt.Sprintf("%d", len(items)),
-		"quality":    "",
-		"file_path":  "",
-		"timestamp":  time.Now().Format("2006-01-02 15:04"),
+		"title":        batchTitle(event, items, lang),
+		"message":      strings.Join(lines, "\n"),
+		"anime_name":   "",
+		"episode":      "",
+		"reason":       "",
+		"anime_id":     "",
+		"torrent_hash": "",
+		"count":        fmt.Sprintf("%d", len(items)),
+		"quality":      "",
+		"file_path":    "",
+		"timestamp":    time.Now().Format("2006-01-02 15:04"),
 	}
 
 	if len(items) == 1 {
 		vars["anime_name"] = items[0].animeName
 		vars["episode"] = fmt.Sprintf("%d", items[0].episode)
 		vars["reason"] = items[0].reason
+		vars["anime_id"] = fmt.Sprintf("%d", items[0].animeID)
+		vars["torrent_hash"] = items[0].torrentHash
 	}
 
 	return vars
+}
+
+// batchLines monta uma linha por (anime, faixa continua) da janela, em ordem de chegada. Itens
+// consecutivos do mesmo anime sao agrupados num range; uma quebra de anime ou de numero reinicia
+// a linha. O resultado e o que aparece em {{message}}.
+//
+// A ordem e a ordem de chegada (a ordem em que os episodios foram detectados), nao uma
+// ordenacao: o daemon descobre os episodios pela agenda da AniList, que ja vem em ordem, e o
+// batch acumula nessa ordem. Reordenar aqui teria que ser feito no proprio item, e o unico
+// consumidor que se importa com ordem e o texto humano.
+func batchLines(event Event, items []item, lang string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+
+	runs := make([]run, 0, len(items))
+	for _, it := range items {
+		if len(runs) > 0 && runs[len(runs)-1].name == it.animeName &&
+			runs[len(runs)-1].end+1 == it.episode {
+			// Mesmo anime, numero consecutivo: estende o range atual.
+			runs[len(runs)-1].end = it.episode
+			if it.reason != "" {
+				runs[len(runs)-1].reason = it.reason
+			}
+			continue
+		}
+		runs = append(runs, run{name: it.animeName, start: it.episode, end: it.episode, reason: it.reason})
+	}
+
+	lines := make([]string, 0, len(runs))
+	for _, r := range runs {
+		lines = append(lines, batchRunLine(event, r, lang))
+	}
+	return lines
+}
+
+func batchRunLine(event Event, r run, lang string) string {
+	s := getLocaleStrings(lang)
+	switch event {
+	case NewEpisode:
+		if r.start == r.end {
+			return fmt.Sprintf(s.NewEpisodeMsg, r.name, r.start)
+		}
+		return fmt.Sprintf(s.NewEpisodeRangeMsg, r.name, r.start, r.end)
+	case DownloadFailed:
+		if r.reason == "" {
+			r.reason = s.ReasonAllFailed
+		}
+		if r.start == r.end {
+			return fmt.Sprintf(s.DownloadFailedMsg, r.name, r.start, r.reason)
+		}
+		return fmt.Sprintf(s.DownloadFailedRangeMsg, r.name, r.start, r.end, r.reason)
+	case DownloadCompleted:
+		if r.start == r.end {
+			return fmt.Sprintf(s.DownloadCompletedMsg, r.name, r.start)
+		}
+		return fmt.Sprintf(s.DownloadCompletedRangeMsg, r.name, r.start, r.end)
+	}
+	return ""
 }
 
 func batchTitle(event Event, items []item, lang string) string {
@@ -234,29 +308,59 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 		req.Header.Set(k, strings.NewReplacer("\n", " ", "\r", " ").Replace(interpolate(v, vars)))
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Logger.Error().Err(err).Str("webhook", preset.Name).Msg("Webhook request failed")
-		return err
+	attempts := preset.RetryAttempts
+	if attempts < 1 {
+		attempts = 1 // 0 desliga a retentativa: uma única tentativa, sem retry
 	}
-	defer resp.Body.Close()
+	backoff := time.Duration(preset.RetryBackoffSeconds) * time.Second
 
-	if resp.StatusCode >= 400 {
-		logger.Logger.Warn().
-			Str("webhook", preset.Name).
-			Int("status", resp.StatusCode).
-			Msg("Webhook returned error status")
-		return fmt.Errorf("webhook %q returned status %d", preset.Name, resp.StatusCode)
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.Logger.Error().Err(err).Str("webhook", preset.Name).Msg("Webhook request failed")
+			lastErr = err
+		} else {
+			if resp.StatusCode >= 400 {
+				logger.Logger.Warn().
+					Str("webhook", preset.Name).
+					Int("status", resp.StatusCode).
+					Msg("Webhook returned error status")
+				lastErr = fmt.Errorf("webhook %q returned status %d", preset.Name, resp.StatusCode)
+			} else {
+				resp.Body.Close()
+				return nil
+			}
+			resp.Body.Close()
+		}
+
+		if attempt < attempts {
+			sleep := backoff * time.Duration(1<<(attempt-1))
+			logger.Logger.Info().Str("webhook", preset.Name).Int("attempt", attempt).Dur("sleep", sleep).Msg("Webhook retrying")
+			time.Sleep(sleep)
+		}
 	}
-	return nil
+	return lastErr
 }
 
 // item e um evento aguardando na janela de agrupamento.
 type item struct {
-	animeName string
-	episode   int
-	reason    string
+	animeName   string
+	episode     int
+	reason      string
+	animeID     int
+	torrentHash string
+}
+
+// run e uma faixa continua de episodios do mesmo anime dentro de uma janela: o resultado do
+// colapsamento que batchLines aplica para que 24 episodios consecutives do Index não virem 24
+// linhas identicas no {{message}}.
+type run struct {
+	name   string
+	start  int
+	end    int
+	reason string
 }
 
 // batch acumula os itens de uma janela de um evento. O timer e guardado junto para que Flush
@@ -275,19 +379,36 @@ var (
 // Notify fires webhooks subscribed to the given event in background goroutines.
 // No-op if cfg is nil or has no webhooks.
 //
+// animeID is the AniList media ID and torrentHash the infohash; both are exposed
+// as {{anime_id}} and {{torrent_hash}} in templates. For a batch window only the
+// first item's values are emitted (consistent with anime_name/episode/reason).
+//
 // Com cfg.Notifications.BatchWindowSeconds > 0 o evento entra numa fila por tipo de evento e sai
 // junto com os outros da mesma janela, num webhook so. Um backfill de biblioteca dispara um
 // DownloadCompleted por torrent (77 num caso real) e servicos como o ntfy.sh respondem 429 a
 // partir de um certo volume — ver decisions.md #47.
-func Notify(cfg *files.Config, event Event, animeName string, episode int, reason string) {
+func Notify(cfg *files.Config, event Event, animeName string, episode int, reason string, animeID int, torrentHash string, animeSettings ...map[int]files.AnimeSettings) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 {
 		return
 	}
 
-	it := item{animeName: animeName, episode: episode, reason: reason}
+	webhooks := cfg.Notifications.Webhooks
+	if len(animeSettings) > 0 {
+		if s, ok := animeSettings[0][animeID]; ok && len(s.WebhookPresetNames) > 0 {
+			var filtered []files.WebhookPreset
+			for _, w := range webhooks {
+				if slices.Contains(s.WebhookPresetNames, w.Name) {
+					filtered = append(filtered, w)
+				}
+			}
+			webhooks = filtered
+		}
+	}
+
+	it := item{animeName: animeName, episode: episode, reason: reason, animeID: animeID, torrentHash: torrentHash}
 	window := time.Duration(cfg.Notifications.BatchWindowSeconds) * time.Second
 	if window <= 0 {
-		fireBatch(event, []item{it}, cfg.Notifications.Webhooks, false)
+		fireBatch(event, []item{it}, webhooks, false)
 		return
 	}
 
@@ -298,11 +419,11 @@ func Notify(cfg *files.Config, event Event, animeName string, episode int, reaso
 		b.items = append(b.items, it)
 		// Os webhooks da janela sao os da ultima config vista: se o usuario mexeu nos presets no
 		// meio da janela, o que vale e o mais recente.
-		b.webhook = cfg.Notifications.Webhooks
+		b.webhook = webhooks
 		return
 	}
 
-	b := &batch{items: []item{it}, webhook: cfg.Notifications.Webhooks}
+	b := &batch{items: []item{it}, webhook: webhooks}
 	pendingBatch[event] = b
 	b.timer = time.AfterFunc(window, func() { flushEvent(event, false) })
 }
@@ -376,9 +497,27 @@ var ErrWebhookNotFound = errors.New("webhook not found")
 func FireTestWebhook(cfg *files.Config, name string) error {
 	for _, preset := range cfg.Notifications.Webhooks {
 		if preset.Name == name {
-			vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "", preset.Language)
+			vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "", preset.Language, 517276, "a"+strings.Repeat("0", 39))
 			return fireWebhook(preset, vars)
 		}
 	}
 	return fmt.Errorf("%w: %q", ErrWebhookNotFound, name)
+}
+
+// WebhookPreview returns the interpolated URL, method, headers, and body for a preset without
+// sending anything. Used by the config UI so users can see exactly what will be sent before
+// saving.
+func WebhookPreview(preset files.WebhookPreset) (url, method string, headers map[string]string, body string) {
+	vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "", preset.Language, 517276, "a"+strings.Repeat("0", 39))
+	bodyVars := vars
+	if presetIsJSON(preset) {
+		bodyVars = escapeVarsForJSON(vars)
+	}
+	url = interpolate(preset.URL, vars)
+	body = interpolate(preset.Body, bodyVars)
+	headers = make(map[string]string, len(preset.Headers))
+	for k, v := range preset.Headers {
+		headers[k] = strings.NewReplacer("\n", " ", "\r", " ").Replace(interpolate(v, vars))
+	}
+	return url, preset.Method, headers, body
 }

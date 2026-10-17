@@ -96,6 +96,7 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 
 	animeName := ""
 	episodeNumber := 0
+	animeID := 0
 	if saved, err := fileManager.LoadSavedEpisodes(); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load saved episodes for the webhook")
 	} else {
@@ -103,6 +104,7 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 			if ep.EpisodeHash == hash {
 				animeName = ep.AnimeName
 				episodeNumber = ep.EpisodeNumber
+				animeID = ep.AnimeID
 				break
 			}
 		}
@@ -116,7 +118,11 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 	if configs, err := fileManager.LoadConfigs(); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load configs, skipping webhook")
 	} else {
-		notifications.Notify(configs, notifications.DownloadFailed, animeName, episodeNumber, reason)
+		var animeSettings map[int]files.AnimeSettings
+		if s, err := fileManager.LoadAnimeSettings(animeID); err == nil && s != nil {
+			animeSettings = map[int]files.AnimeSettings{animeID: *s}
+		}
+		notifications.Notify(configs, notifications.DownloadFailed, animeName, episodeNumber, reason, animeID, hash, animeSettings)
 	}
 
 	if backend == nil {

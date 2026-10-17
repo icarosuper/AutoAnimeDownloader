@@ -229,11 +229,11 @@ func processAnimeEpisodes(
 				Str("episode", epName).
 				Msg("No torrent found for episode")
 			result.issues = append(result.issues, searchIssue(anime.Media.Id, animeTitle, ep.Episode, searchStats, configs))
-			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, notifications.ReasonNotFound)
+			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, notifications.ReasonNotFound, anime.Media.Id, "")
 			continue
 		}
 
-		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
+		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "", anime.Media.Id, "")
 
 		hash := attemptDownloadWithRetries(configs, backend, candidates, epName)
 
@@ -275,7 +275,7 @@ func processAnimeEpisodes(
 			result.issues = append(result.issues, issue)
 			// O batch de notificacoes (BatchWindowSeconds) junta os N episodios do passe numa
 			// mensagem so, entao disco cheio nao vira enxurrada.
-			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, reason)
+			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, reason, anime.Media.Id, "")
 		}
 	}
 

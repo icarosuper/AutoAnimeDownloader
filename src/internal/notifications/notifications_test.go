@@ -47,7 +47,7 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 		Body:    "{{anime_name}} EP {{episode}}",
 	}
 
-	vars := buildVars("Frieren", 5, NewEpisode, "", "")
+	vars := buildVars("Frieren", 5, NewEpisode, "", "", 517276, "a" + strings.Repeat("0", 39))
 	fireWebhook(preset, vars)
 
 	if capturedBody != "Frieren EP 5" {
@@ -59,7 +59,7 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 }
 
 func TestBuildVarsDownloadFailedReason(t *testing.T) {
-	vars := buildVars("Frieren", 5, DownloadFailed, ReasonNotFound, "")
+	vars := buildVars("Frieren", 5, DownloadFailed, ReasonNotFound, "", 517276, "a" + strings.Repeat("0", 39))
 	if vars["reason"] != ReasonNotFound {
 		t.Fatalf("reason var = %q", vars["reason"])
 	}
@@ -99,11 +99,11 @@ func TestFireTestWebhookFires(t *testing.T) {
 }
 
 func TestNotifyNoOp_WhenNoWebhooks(t *testing.T) {
-	Notify(&files.Config{}, NewEpisode, "Frieren", 5, "")
+	Notify(&files.Config{}, NewEpisode, "Frieren", 5, "", 0, "")
 }
 
 func TestNotifyNoOp_WhenNilConfig(t *testing.T) {
-	Notify(nil, NewEpisode, "Frieren", 5, "")
+	Notify(nil, NewEpisode, "Frieren", 5, "", 0, "")
 }
 
 func TestNotify_SkipsWebhookWhenEventNotSubscribed(t *testing.T) {
@@ -121,7 +121,7 @@ func TestNotify_SkipsWebhookWhenEventNotSubscribed(t *testing.T) {
 		},
 	}
 
-	Notify(cfg, NewEpisode, "Frieren", 5, "")
+	Notify(cfg, NewEpisode, "Frieren", 5, "", 0, "")
 
 	select {
 	case <-fired:
@@ -145,7 +145,7 @@ func TestNotify_FiresWebhookWhenEventSubscribed(t *testing.T) {
 		},
 	}
 
-	Notify(cfg, NewEpisode, "Frieren", 5, "")
+	Notify(cfg, NewEpisode, "Frieren", 5, "", 0, "")
 
 	select {
 	case <-fired:
@@ -211,9 +211,9 @@ func TestNotify_BatchesEventsWithinWindow(t *testing.T) {
 	t.Cleanup(Flush)
 	cfg := cfgWithWindow(srv.URL, 1, nil, "{{count}}|{{title}}|{{message}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
-	Notify(cfg, DownloadCompleted, "Dandadan", 3, "")
+	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "", 0, "")
+	Notify(cfg, DownloadCompleted, "Frieren", 5, "", 0, "")
+	Notify(cfg, DownloadCompleted, "Dandadan", 3, "", 0, "")
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
@@ -235,8 +235,8 @@ func TestNotify_SeparateBatchPerEvent(t *testing.T) {
 	t.Cleanup(Flush)
 	cfg := cfgWithWindow(srv.URL, 1, nil, "{{title}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadFailed, "Frieren", 5, ReasonNotFound)
+	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "", 0, "")
+	Notify(cfg, DownloadFailed, "Frieren", 5, ReasonNotFound, 0, "")
 
 	got := drain(bodies, 2, 3*time.Second)
 	if len(got) != 2 {
@@ -256,10 +256,10 @@ func TestNotify_SingleItemBatchMatchesUnbatched(t *testing.T) {
 	t.Cleanup(Flush)
 	const body = "{{title}}|{{message}}|{{anime_name}}|{{episode}}|{{reason}}"
 
-	Notify(cfgWithWindow(srv.URL, 0, nil, body), DownloadFailed, "Frieren", 5, ReasonNotFound)
+	Notify(cfgWithWindow(srv.URL, 0, nil, body), DownloadFailed, "Frieren", 5, ReasonNotFound, 0, "")
 	unbatched := drain(bodies, 1, time.Second)
 
-	Notify(cfgWithWindow(srv.URL, 1, nil, body), DownloadFailed, "Frieren", 5, ReasonNotFound)
+	Notify(cfgWithWindow(srv.URL, 1, nil, body), DownloadFailed, "Frieren", 5, ReasonNotFound, 0, "")
 	batched := drain(bodies, 1, 3*time.Second)
 
 	if len(unbatched) != 1 || len(batched) != 1 {
@@ -275,8 +275,8 @@ func TestNotify_WindowZeroFiresImmediately(t *testing.T) {
 	srv, bodies := collector(t)
 	cfg := cfgWithWindow(srv.URL, 0, nil, "{{title}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "", 0, "")
+	Notify(cfg, DownloadCompleted, "Frieren", 5, "", 0, "")
 
 	got := drain(bodies, 2, time.Second)
 	if len(got) != 2 {
@@ -291,8 +291,8 @@ func TestFlush_SendsPendingBatch(t *testing.T) {
 	// Janela longa: só o Flush pode fazer isso sair dentro do teste.
 	cfg := cfgWithWindow(srv.URL, 3600, nil, "{{count}}")
 
-	Notify(cfg, NewEpisode, "Re:ZERO", 12, "")
-	Notify(cfg, NewEpisode, "Frieren", 5, "")
+	Notify(cfg, NewEpisode, "Re:ZERO", 12, "", 0, "")
+	Notify(cfg, NewEpisode, "Frieren", 5, "", 0, "")
 
 	if got := drain(bodies, 1, 200*time.Millisecond); len(got) != 0 {
 		t.Fatalf("nada devia sair antes do Flush, obteve %v", got)
@@ -312,6 +312,84 @@ func TestFlush_SendsPendingBatch(t *testing.T) {
 // TestFireWebhook_EscapesJSONBody: nome com aspas e o \n do agrupamento quebrariam o body dos
 // presets que embutem {{message}} num JSON (Discord, Slack, Telegram...), e o serviço responderia
 // 400 com a notificação sumindo sem explicação.
+// TestBuildVars_BatchCollapsesConsecutiveRun: 24 episodios consecutivos do mesmo anime num
+// mesmo {{message}} viram uma linha so com range ("Index EPs 1-24 detectado, initiando download")
+// em vez de 24 linhas identicas. Episodios nao consecutivos ou de animes diferentes ficam em
+// linhas separadas — o colapsamento e por (anime, faixa continua), nunca por anime solto.
+func TestBuildVars_BatchCollapsesConsecutiveRun(t *testing.T) {
+	items := make([]item, 24)
+	for i := range items {
+		items[i] = item{animeName: "A Certain Magical Index", episode: i + 1}
+	}
+	vars := buildBatchVars(NewEpisode, items, "")
+
+	want := "A Certain Magical Index EPs 1-24 detectado, iniciando download"
+	if vars["message"] != want {
+		t.Errorf("message = %q, want %q", vars["message"], want)
+	}
+	if vars["count"] != "24" {
+		t.Errorf("count = %q, want 24", vars["count"])
+	}
+	// count e o total de itens da janela, nao o de linhas: o range inteiro e uma unica linha.
+}
+
+// TestBuildVars_BatchKeepsSeparateLinesOnGap: uma quebra de numero ou de anime reinicia a linha.
+func TestBuildVars_BatchKeepsSeparateLinesOnGap(t *testing.T) {
+	items := []item{
+		{animeName: "Index", episode: 1},
+		{animeName: "Index", episode: 2},
+		{animeName: "Index", episode: 4}, // buraco: o 3 falta
+		{animeName: "Frieren", episode: 5},
+	}
+	vars := buildBatchVars(NewEpisode, items, "")
+
+	want := "Index EPs 1-2 detectado, iniciando download\n" +
+		"Index EP 4 detectado, iniciando download\n" +
+		"Frieren EP 5 detectado, iniciando download"
+	if vars["message"] != want {
+		t.Errorf("message = %q, want %q", vars["message"], want)
+	}
+}
+
+// TestBuildVars_BatchRangeDownloadFailed: o range tambem vale para download_failed, e o reason
+// do primeiro item da faixa e o que vira no {{reason}} (o default so entra quando estiver vazio).
+func TestBuildVars_BatchRangeDownloadFailed(t *testing.T) {
+	items := []item{
+		{animeName: "Index", episode: 1, reason: ReasonNotFound},
+		{animeName: "Index", episode: 2, reason: ReasonNotFound},
+		{animeName: "Index", episode: 3, reason: ReasonNotFound},
+	}
+	vars := buildBatchVars(DownloadFailed, items, "")
+
+	want := "Index EPs 1-3 falhou: " + ReasonNotFound
+	if vars["message"] != want {
+		t.Errorf("message = %q, want %q", vars["message"], want)
+	}
+}
+
+// TestBuildVars_BatchRangeEnglish: a mesma linha em ingles.
+func TestBuildVars_BatchRangeEnglish(t *testing.T) {
+	items := make([]item, 5)
+	for i := range items {
+		items[i] = item{animeName: "Index", episode: i + 1}
+	}
+	vars := buildBatchVars(NewEpisode, items, "en")
+
+	want := "Index EPs 1-5 detected, starting download"
+	if vars["message"] != want {
+		t.Errorf("message = %q, want %q", vars["message"], want)
+	}
+}
+
+// TestBuildVars_SingleItemUnchanged: um item so continua idendico ao antes do colapsamento — a
+// linha unica, sem range.
+func TestBuildVars_SingleItemUnchanged(t *testing.T) {
+vars := buildVars("Frieren", 5, NewEpisode, "", "", 517276, "a" + strings.Repeat("0", 39))
+	if vars["message"] != "Frieren EP 5 detectado, iniciando download" {
+		t.Errorf("message = %q", vars["message"])
+	}
+}
+
 func TestFireWebhook_EscapesJSONBody(t *testing.T) {
 	srv, bodies := collector(t)
 	t.Cleanup(Flush)
@@ -319,8 +397,8 @@ func TestFireWebhook_EscapesJSONBody(t *testing.T) {
 		map[string]string{"Content-Type": "application/json"},
 		`{"content":"{{message}}"}`)
 
-	Notify(cfg, DownloadCompleted, `Re:"ZERO"`, 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+	Notify(cfg, DownloadCompleted, `Re:"ZERO"`, 12, "", 0, "")
+	Notify(cfg, DownloadCompleted, "Frieren", 5, "", 0, "")
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
@@ -346,8 +424,8 @@ func TestFireWebhook_DoesNotEscapePlainTextBody(t *testing.T) {
 	t.Cleanup(Flush)
 	cfg := cfgWithWindow(srv.URL, 1, map[string]string{"Title": "{{title}}"}, "{{message}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "", 0, "")
+	Notify(cfg, DownloadCompleted, "Frieren", 5, "", 0, "")
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
@@ -364,7 +442,7 @@ func TestFireWebhook_DoesNotEscapePlainTextBody(t *testing.T) {
 // TestBuildVars_Language: o {{title}}/{{message}} do preset depende do campo `language`, e um
 // config.json antigo (campo ausente) continua em português como antes.
 func TestBuildVars_Language(t *testing.T) {
-	pt := buildVars("Frieren", 5, NewEpisode, "", "")
+	pt := buildVars("Frieren", 5, NewEpisode, "", "", 517276, "a" + strings.Repeat("0", 39))
 	if pt["title"] != "Novo episódio detectado" {
 		t.Errorf("default lang title = %q", pt["title"])
 	}
@@ -372,7 +450,7 @@ func TestBuildVars_Language(t *testing.T) {
 		t.Errorf("default lang message = %q", pt["message"])
 	}
 
-	en := buildVars("Frieren", 5, NewEpisode, "", "en")
+	en := buildVars("Frieren", 5, NewEpisode, "", "en", 517276, "a" + strings.Repeat("0", 39))
 	if en["title"] != "New episode detected" {
 		t.Errorf("en title = %q", en["title"])
 	}
@@ -381,7 +459,7 @@ func TestBuildVars_Language(t *testing.T) {
 	}
 
 	// Linguagem desconhecida cai no default.
-	xx := buildVars("Frieren", 5, DownloadCompleted, "", "xx")
+	xx := buildVars("Frieren", 5, DownloadCompleted, "", "xx", 517276, "a" + strings.Repeat("0", 39))
 	if xx["title"] != "Download concluído" {
 		t.Errorf("unknown lang title = %q", xx["title"])
 	}
@@ -403,7 +481,7 @@ func TestNotify_PresetLanguage(t *testing.T) {
 		},
 	}
 
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+	Notify(cfg, DownloadCompleted, "Frieren", 5, "", 0, "")
 
 	got := drain(bodies, 2, 3*time.Second)
 	if len(got) != 2 {
@@ -466,5 +544,230 @@ func TestFireWebhook_StripsNewlinesFromHeaders(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("request nunca chegou — net/http recusou o header")
+	}
+}
+
+// TestFireWebhook_RetriesOn5xx: um 5xx e transitório — o servico de webhook pode
+// ter um recém-ligado (cold start) ou pode estar sobrecarregado. O default e 3 tentativas
+// com backoff exponencial, e o disparo so devolve erro apos todas.
+func TestFireWebhook_RetriesOn5xx(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	preset := files.WebhookPreset{
+		Name: "hook", URL: srv.URL, Method: "POST",
+		Headers: map[string]string{}, Body: "x", Events: []string{"download_completed"},
+		RetryAttempts: 3, RetryBackoffSeconds: 0, // backoff 0: sem sleep, o teste roda rápido
+	}
+
+	err := fireWebhook(preset, buildVars("Frieren", 5, DownloadCompleted, "", "", 517276, "a" + strings.Repeat("0", 39)))
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if attempts != 3 {
+		t.Errorf("esperava 3 tentativas, obteve %d", attempts)
+	}
+}
+
+// TestFireWebhook_RetrySucceedsAfterFailure: a primeira falha (429) e seguida de uma
+// resposta 200 — o disparo deve devolver nil e ter feito 2 requests.
+func TestFireWebhook_RetrySucceedsAfterFailure(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		if attempts == 1 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	preset := files.WebhookPreset{
+		Name: "hook", URL: srv.URL, Method: "POST",
+		Headers: map[string]string{}, Body: "x", Events: []string{"download_completed"},
+		RetryAttempts: 3, RetryBackoffSeconds: 0,
+	}
+
+	if err := fireWebhook(preset, buildVars("Frieren", 5, DownloadCompleted, "", "", 517276, "a" + strings.Repeat("0", 39))); err != nil {
+		t.Fatalf("expected success after retry, got %v", err)
+	}
+	if attempts != 2 {
+		t.Errorf("esperava 2 requests, obteve %d", attempts)
+	}
+}
+
+// TestFireWebhook_NoRetryOnSuccess: um 200 na primeira tentativa não dispara retry.
+func TestFireWebhook_NoRetryOnSuccess(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	preset := files.WebhookPreset{
+		Name: "hook", URL: srv.URL, Method: "POST",
+		Headers: map[string]string{}, Body: "x", Events: []string{"download_completed"},
+		RetryAttempts: 5, RetryBackoffSeconds: 0,
+	}
+
+	if err := fireWebhook(preset, buildVars("Frieren", 5, DownloadCompleted, "", "", 517276, "a" + strings.Repeat("0", 39))); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if attempts != 1 {
+		t.Errorf("esperava 1 request, obteve %d", attempts)
+	}
+}
+
+// TestFireWebhook_RetryDisabled: retry_attempts = 0 desliga a retentativa, e um 5xx vira
+// erro imediato com uma so tentativa.
+func TestFireWebhook_RetryDisabled(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	preset := files.WebhookPreset{
+		Name: "hook", URL: srv.URL, Method: "POST",
+		Headers: map[string]string{}, Body: "x", Events: []string{"download_completed"},
+		RetryAttempts: 0, RetryBackoffSeconds: 0,
+	}
+
+	err := fireWebhook(preset, buildVars("Frieren", 5, DownloadCompleted, "", "", 517276, "a" + strings.Repeat("0", 39)))
+	if err == nil {
+		t.Fatal("expected error with retry disabled")
+	}
+	if attempts != 1 {
+		t.Errorf("esperava 1 tentativa com retry desligado, obteve %d", attempts)
+	}
+}
+
+// TestNotify_AnimeOverrideFiltersWebhooks: quando AnimeSettings.WebhookPresetNames lista apenas
+// um preset, apenas esse dispara; os outros saem do lote.
+func TestNotify_AnimeOverrideFiltersWebhooks(t *testing.T) {
+	firedA := make(chan struct{}, 1)
+	firedB := make(chan struct{}, 1)
+	srvA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		firedA <- struct{}{}
+	}))
+	defer srvA.Close()
+	srvB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		firedB <- struct{}{}
+	}))
+	defer srvB.Close()
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "hook-a", URL: srvA.URL, Method: "POST", Headers: map[string]string{}, Body: "test", Events: []string{"new_episode"}},
+				{Name: "hook-b", URL: srvB.URL, Method: "POST", Headers: map[string]string{}, Body: "test", Events: []string{"new_episode"}},
+			},
+		},
+	}
+
+	settings := map[int]files.AnimeSettings{
+		42: {WebhookPresetNames: []string{"hook-a"}},
+	}
+	Notify(cfg, NewEpisode, "Frieren", 5, "", 42, "", settings)
+
+	select {
+	case <-firedA:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("hook-a should have fired for anime override")
+	}
+	select {
+	case <-firedB:
+		t.Fatal("hook-b should NOT have fired for anime override")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// TestNotify_AnimeOverrideNoMatch: quando WebhookPresetNames lista nomes que nao existem,
+// nenhum webhook dispara.
+func TestNotify_AnimeOverrideNoMatch(t *testing.T) {
+	fired := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fired <- struct{}{}
+	}))
+	defer srv.Close()
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "test", Events: []string{"new_episode"}},
+			},
+		},
+	}
+
+	settings := map[int]files.AnimeSettings{
+		42: {WebhookPresetNames: []string{"nonexistent"}},
+	}
+	Notify(cfg, NewEpisode, "Frieren", 5, "", 42, "", settings)
+
+	select {
+	case <-fired:
+		t.Fatal("no webhook should have fired for nonexistent preset name")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// TestNotify_AnimeOverrideEmptyNames: quando WebhookPresetNames esta vazio, todos disparam
+// (mesmo comportamento de nao haver override).
+func TestNotify_AnimeOverrideEmptyNames(t *testing.T) {
+	fired := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fired <- struct{}{}
+	}))
+	defer srv.Close()
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "test", Events: []string{"new_episode"}},
+			},
+		},
+	}
+
+	settings := map[int]files.AnimeSettings{
+		42: {}, // WebhookPresetNames vazio -> sem override
+	}
+	Notify(cfg, NewEpisode, "Frieren", 5, "", 42, "", settings)
+
+	select {
+	case <-fired:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("webhook should have fired when override names are empty")
+	}
+}
+
+// TestNotify_AnimeOverrideNoSettings: quando nao sao passadas configuracoes de anime, todos
+// disparam (comportamento atual preservado).
+func TestNotify_AnimeOverrideNoSettings(t *testing.T) {
+	fired := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fired <- struct{}{}
+	}))
+	defer srv.Close()
+
+	cfg := &files.Config{
+		Notifications: files.NotificationsConfig{
+			Webhooks: []files.WebhookPreset{
+				{Name: "hook", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "test", Events: []string{"new_episode"}},
+			},
+		},
+	}
+
+	Notify(cfg, NewEpisode, "Frieren", 5, "", 42, "")
+	select {
+	case <-fired:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("webhook should have fired when no anime settings are passed")
 	}
 }

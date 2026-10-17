@@ -190,6 +190,8 @@ export interface Config {
   excluded_list?: string
   excluded_lists: string[]
   rename_files_for_jellyfin: boolean
+  /** Remove o torrent da sessao (para de semear) apos o organize concluir. */
+  disable_seeding: boolean
   download_statuses: string[]
   download_media_statuses: string[]
   delete_statuses: string[]
@@ -369,6 +371,8 @@ export interface AnimeDetailResponse {
 export interface AnimeSettings {
   /** Progresso manual — só é lido para anime avulso (o de lista vem da AniList). */
   progress?: number
+  /** Webhooks permitidos para este anime. Vazio/nulo = todos os globais disparam. */
+  webhook_preset_names?: string[]
 }
 
 export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {
@@ -505,6 +509,26 @@ export async function removeStandaloneAnime(mediaId: number, deleteEpisodes: boo
   return apiRequest<void>('DELETE', `/standalone-animes/${mediaId}?${params.toString()}`)
 }
 
+export interface WebhookPreview {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string
+}
+
+export async function previewWebhook(name: string): Promise<WebhookPreview> {
+  const res = await fetch('/api/v1/notifications/webhooks/' + encodeURIComponent(name) + '/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) {
+    const data = await res.json()
+    throw new Error(data.error?.message ?? 'Failed to preview webhook')
+  }
+  return (await res.json()).data as WebhookPreview
+}
+
 export async function testWebhook(name: string): Promise<void> {
   const res = await fetch(
     `/api/v1/notifications/webhooks/${encodeURIComponent(name)}/test`,
@@ -514,5 +538,26 @@ export async function testWebhook(name: string): Promise<void> {
     const data = await res.json()
     throw new Error(data.error?.message ?? 'Failed to test webhook')
   }
+}
+
+export async function batchDeleteEpisodes(
+  animeId: number,
+  episodes: number[],
+  keepData: boolean,
+  block: boolean,
+): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/batch-delete`, {
+    episodes,
+    keep_data: keepData,
+    block,
+  })
+}
+
+export async function batchRedownloadEpisodes(animeId: number, episodes: number[]): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/batch-redownload`, { episodes })
+}
+
+export async function runAnimeDebug(animeId: number): Promise<unknown> {
+  return apiRequest<unknown>('POST', `/debug/anime/${animeId}`)
 }
 

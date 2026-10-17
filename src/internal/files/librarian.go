@@ -51,6 +51,10 @@ type OrganizeRequest struct {
 	// EpisodeNumber is used for the Jellyfin name; required when RenameJellyfin is set
 	// for a single episode.
 	EpisodeNumber *int
+	// Season, quando definido, cria a pasta "Season XX" dentro da pasta do anime e
+	// nomeia os arquivos como "Anime - SXXEYY.ext" (padrao Jellyfin).
+	// Quando nil ou 0, mantem o comportamento atual (pasta do anime, "Anime - EYY.ext").
+	Season *int
 	// IsBatch marks multi-episode/movie torrents: the episode number comes from each
 	// file's own name instead of EpisodeNumber.
 	IsBatch bool
@@ -128,6 +132,11 @@ func jellyfinName(animeName string, episodeNumber int, ext string) string {
 	return fmt.Sprintf("%s - E%02d%s", sanitizeName(animeName), episodeNumber, ext)
 }
 
+// jellyfinNameSeason returns "Anime - S01E05.ext".
+func jellyfinNameSeason(animeName string, season, episodeNumber int, ext string) string {
+	return fmt.Sprintf("%s - S%02dE%02d%s", sanitizeName(animeName), season, episodeNumber, ext)
+}
+
 func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 	// Guard first: with an empty CompletedPath, filepath.Join below yields a relative
 	// path and MkdirAll would create the library folder in the process' working dir.
@@ -144,6 +153,11 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 	}
 
 	destDir := filepath.Join(req.CompletedPath, sanitizeName(req.AnimeName))
+	// Com Season definido, cria a subpasta "Season XX" (padrao Jellyfin:
+	// biblioteca/anime/Season 01/anime - S01E01.ext).
+	if req.Season != nil && *req.Season > 0 {
+		destDir = filepath.Join(destDir, fmt.Sprintf("Season %02d", *req.Season))
+	}
 
 	// Track whether we created destDir, so we can clean it up on a cross-device failure
 	// without leaving an orphan folder in the library.
@@ -180,14 +194,23 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		destName := filepath.Base(rel)
 		switch {
 		case singleJellyfin:
-			destName = jellyfinName(req.AnimeName, *req.EpisodeNumber, filepath.Ext(rel))
+			if req.Season != nil && *req.Season > 0 {
+				destName = jellyfinNameSeason(req.AnimeName, *req.Season, *req.EpisodeNumber, filepath.Ext(rel))
+			} else {
+				destName = jellyfinName(req.AnimeName, *req.EpisodeNumber, filepath.Ext(rel))
+			}
 		case req.IsBatch && req.RenameJellyfin:
 			// Pack: o numero sai do proprio nome do arquivo, para os episodios do pack se
 			// misturarem na pasta com os avulsos em vez de manter o nome cru do fansub.
 			// Sem numero legivel (NCOP/NCED, extra, filme) ou com colisao entre dois
 			// arquivos do mesmo pack, fica o nome cru.
 			if n := nyaa.ExtractEpisodeNumber(destName); n != nil {
-				if jf := jellyfinName(req.AnimeName, *n-packOffset, filepath.Ext(rel)); !used[jf] {
+				epNum := *n - packOffset
+				if req.Season != nil && *req.Season > 0 {
+					if jf := jellyfinNameSeason(req.AnimeName, *req.Season, epNum, filepath.Ext(rel)); !used[jf] {
+						destName = jf
+					}
+				} else if jf := jellyfinName(req.AnimeName, epNum, filepath.Ext(rel)); !used[jf] {
 					destName = jf
 				}
 			}

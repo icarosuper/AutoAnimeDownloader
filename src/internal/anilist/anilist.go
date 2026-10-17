@@ -192,8 +192,14 @@ type AniListResponse struct {
 	Data struct {
 		Page struct {
 			MediaList []MediaList `json:"mediaList"`
+			PageInfo  PageInfo    `json:"pageInfo"`
 		} `json:"Page"`
 	} `json:"data"`
+}
+
+type PageInfo struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
 }
 
 type MediaListStatus string
@@ -489,8 +495,8 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 
 func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, error) {
 	query := `
-		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
-			Page {
+		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus], $page: Int, $perPage: Int) {
+			Page(page: $page, perPage: $perPage) {
 				mediaList(userName: $userName, type: $type, status_in: $statuses) {
 					id
 					status
@@ -535,6 +541,10 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 						}
 					}
 				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
 			}
 		}
 	`
@@ -543,23 +553,33 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 		return &AniListResponse{}, nil
 	}
 
-	variables := RequestVariables{
-		"userName": userName,
-		"type":     "ANIME",
-		"statuses": statuses,
-	}
-
 	key := userName + "\x00" + strings.Join(statuses, "\x00")
-	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityCritical)
-	if err != nil {
-		if stale, ok := staleList(passListCache, key); ok {
-			return mediaListResponse(stale), ErrFromCache
+	var allMediaList []MediaList
+	page := 1
+	perPage := 500 // AniList maximo: 500 entries por pagina
+	for {
+		variables := RequestVariables{
+			"userName": userName,
+			"type":     "ANIME",
+			"statuses": statuses,
+			"page":     page,
+			"perPage":  perPage,
 		}
-		return nil, err
+		resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityCritical)
+		if err != nil {
+			if stale, ok := staleList(passListCache, key); ok {
+				return mediaListResponse(stale), ErrFromCache
+			}
+			return nil, err
+		}
+		allMediaList = append(allMediaList, resp.Data.Page.MediaList...)
+		if !resp.Data.Page.PageInfo.HasNextPage {
+			break
+		}
+		page++
 	}
-
-	storeList(passListCache, key, resp.Data.Page.MediaList, 0)
-	return resp, nil
+	storeList(passListCache, key, allMediaList, 0)
+	return mediaListResponse(allMediaList), nil
 }
 
 // GetFrontendAnimeList alimenta /api/v1/animes, que o frontend faz poll a cada 30s por aba.
@@ -569,8 +589,8 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 // atraso na tela e barato perto de derrubar o daemon.
 func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse, error) {
 	query := `
-		query GetFrontendAnimeList($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
-			Page {
+		query GetFrontendAnimeList($userName: String, $type: MediaType, $statuses: [MediaListStatus], $page: Int, $perPage: Int) {
+			Page(page: $page, perPage: $perPage) {
 				mediaList(userName: $userName, type: $type, status_in: $statuses) {
 					id
 					progress
@@ -602,6 +622,10 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 						}
 					}
 				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
 			}
 		}
 	`
@@ -615,35 +639,35 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 		return mediaListResponse(list), nil
 	}
 
-	variables := RequestVariables{
-		"userName": userName,
-		"type":     "ANIME",
-		"statuses": statuses,
-	}
-
-	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityDisposable)
-	if err != nil {
-		if stale, ok := staleList(frontendListCache, key); ok {
-			// Recusado pelo gate de orcamento: esta lista muda quando o usuario mexe na
-			// AniList, e nao a cada 30s. Servir a leitura vencida deixa a tela funcionando e
-			// devolve o balde para o passe do daemon, que e o unico que nao pode ser adiado.
-			// Ver decisions.md #72. Sem erro de proposito: a recusa foi NOSSA, o dado tem
-			// segundos de idade e o proximo poll ja volta fresco — a tela nao ganha nada
-			// sabendo disso.
-			if errors.Is(err, ErrBudgetLow) {
-				return mediaListResponse(stale), nil
-			}
-			// Qualquer outra falha e a AniList fora do ar, e a idade do dado passa a ser
-			// desconhecida (pode vir do snapshot em disco, de dias atras). Aqui o chamador TEM
-			// de saber: /animes usa para nao disparar o refresh de orfaos contra uma API que
-			// nao responde.
-			return mediaListResponse(stale), ErrFromCache
+	var allMediaList []MediaList
+	page := 1
+	perPage := 500
+	for {
+		variables := RequestVariables{
+			"userName": userName,
+			"type":     "ANIME",
+			"statuses": statuses,
+			"page":     page,
+			"perPage":  perPage,
 		}
-		return nil, err
+		resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityDisposable)
+		if err != nil {
+			if stale, ok := staleList(frontendListCache, key); ok {
+				if errors.Is(err, ErrBudgetLow) {
+					return mediaListResponse(stale), nil
+				}
+				return mediaListResponse(stale), ErrFromCache
+			}
+			return nil, err
+		}
+		allMediaList = append(allMediaList, resp.Data.Page.MediaList...)
+		if !resp.Data.Page.PageInfo.HasNextPage {
+			break
+		}
+		page++
 	}
-
-	storeList(frontendListCache, key, resp.Data.Page.MediaList, frontendListTTL)
-	return mediaListResponse(resp.Data.Page.MediaList), nil
+	storeList(frontendListCache, key, allMediaList, frontendListTTL)
+	return mediaListResponse(allMediaList), nil
 }
 
 // mediaListResponse embrulha uma lista num AniListResponse. Nasceu para GetFrontendAnimeList e

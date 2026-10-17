@@ -130,6 +130,7 @@
     watched_episodes_to_keep: 0,
     excluded_lists: [],
     rename_files_for_jellyfin: false,
+    disable_seeding: false,
     download_statuses: ["CURRENT", "REPEATING"],
     download_media_statuses: ["RELEASING", "FINISHED"],
     delete_statuses: [],

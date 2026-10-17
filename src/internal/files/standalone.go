@@ -53,3 +53,26 @@ func (m *FileManager) RemoveStandaloneAnime(mediaID int) error {
 
 	return m.saveIntListLocked(m.standaloneAnimesPath, filtered, "standalone animes")
 }
+
+// SaveStandaloneAnimes substitui o arquivo inteiro. E o que export/import de avulsos precisa:
+// migrar uma instalacao era um JSON int-list, e重建-la pelo CLI sem um writer-by-id era
+// impossible — o unico caminho era hand-editar. O caller e responsavel por idempotencia
+// (um id duplicado no JSON de entrada e gravado duas vezes, e o LoadStandaloneAnimes devolve
+// ambas).
+func (m *FileManager) SaveStandaloneAnimes(ids []int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Dedup preservando ordem: o arquivo e um conjunto, e a ordem de gravacao nao importa,
+	// mas um export seguido de import nao pode duplicar o que o usuario ja tinha.
+	seen := make(map[int]bool, len(ids))
+	out := make([]int, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return m.saveIntListLocked(m.standaloneAnimesPath, out, "standalone animes")
+}

@@ -7,7 +7,14 @@
   // A seção "Fila e problemas" do artboard 1b foi DESCARTADA de propósito (spec §9.1): é
   // redundante com a tela de Downloads, que existe justamente para isso.
   import { onMount, onDestroy } from "svelte";
-  import { ChevronRight, Eye, Search, Unlink, X } from "@lucide/svelte";
+import {
+    ChevronRight,
+    Eye,
+    Search,
+    Unlink,
+    X,
+    Clock,
+  } from "@lucide/svelte";
   import {
     getStatus,
     getAnimes,
@@ -128,6 +135,7 @@
   let search = "";
   let filterUnwatched = false;
   let filterStandalone = false;
+  let filterNextAiring = false;
   let now = Date.now();
   // spec §8: o progresso não vem do WebSocket, vem do poll HTTP. Quando um poll falha a UI
   // precisa DIZER isso em vez de continuar exibindo o último número como se fosse ao vivo.
@@ -138,7 +146,7 @@
 
   $: fmtLocale = ($locale ?? "en") as FormatLocale;
 
-  $: filteredAnimes = filterAnimes(animes, search, filterUnwatched, filterStandalone);
+  $: filteredAnimes = filterAnimes(animes, search, filterUnwatched, filterStandalone, filterNextAiring);
   $: sortedAnimes = sortAnimes(filteredAnimes, sortKey, sortDir);
 
   $: nextCheckIn = status
@@ -826,7 +834,7 @@
       <div class="flex shrink-0 flex-col gap-3 border-b border-divider p-4 sm:flex-row sm:items-center">
         <h2 class="flex-1 text-card-title text-heading">{T && T.animesHeader}</h2>
 
-        {#if search || filterUnwatched || filterStandalone}
+        {#if search || filterUnwatched || filterStandalone || filterNextAiring}
           <span class="whitespace-nowrap font-mono text-[12px] text-subtle">
             {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
           </span>
@@ -883,6 +891,18 @@
             >
               <Unlink size={14} strokeWidth={2} />
               {T && T.filterStandalone}
+            </button>
+
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {filterNextAiring
+                ? 'border-accent bg-accent-tint/16 text-accent'
+                : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
+              aria-pressed={filterNextAiring}
+              on:click={() => (filterNextAiring = !filterNextAiring)}
+            >
+              <Clock size={14} strokeWidth={2} />
+              {T && T.status_filter_next_airing}
             </button>
           </div>
         </div>

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
@@ -365,6 +366,12 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 		RenameJellyfin: configs.RenameFilesForJellyfin,
 		TotalEpisodes:  matched[0].AnimeTotalEpisodes,
 	}
+	// Extrai o numero da season do nome do anime (ex: "Attack on Titan Season 4" -> 4)
+	// para organizacao Jellyfin: biblioteca/anime/Season 04/anime - S04E01.ext.
+	title := anilist.Title{Romaji: &matched[0].AnimeName}
+	if season, _ := ExtractAnimeSeasonPart(title, nil); season != nil && *season > 0 {
+		req.Season = season
+	}
 	if !isBatch {
 		ep := matched[0].EpisodeNumber
 		req.EpisodeNumber = &ep
@@ -393,8 +400,19 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	if partiallyOrganized {
 		logger.Logger.Debug().Str("hash", hash).Msg("Organize: group was already partially organized, skipping the completion webhook")
 	} else {
-		notifications.Notify(configs, notifications.DownloadCompleted, matched[0].AnimeName, matched[0].EpisodeNumber, "")
+		var animeSettings map[int]files.AnimeSettings
+		if s, err := fm.LoadAnimeSettings(matched[0].AnimeID); err == nil && s != nil {
+			animeSettings = map[int]files.AnimeSettings{matched[0].AnimeID: *s}
+		}
+		notifications.Notify(configs, notifications.DownloadCompleted, matched[0].AnimeName, matched[0].EpisodeNumber, "", matched[0].AnimeID, matched[0].EpisodeHash, animeSettings)
 	}
 	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", len(created)).Msg("Organized torrent into library")
+	if configs.DisableSeeding {
+		if err := backend.Remove(hash, true); err != nil {
+			logger.Logger.Warn().Err(err).Str("hash", hash).Msg("DisableSeeding: failed to remove seeding torrent")
+		} else {
+			logger.Logger.Info().Str("hash", hash).Msg("DisableSeeding: removed seeding torrent after organize")
+		}
+	}
 	return true
 }

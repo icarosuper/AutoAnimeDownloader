@@ -69,17 +69,23 @@ type EpisodeStruct struct {
 }
 
 type WebhookPreset struct {
-	Name     string            `json:"name"`
-	URL      string            `json:"url"`
-	Method   string            `json:"method"`
-	Headers  map[string]string `json:"headers"`
-	Body     string            `json:"body"`
-	Events   []string          `json:"events"`
+	Name    string            `json:"name"`
+	URL     string            `json:"url"`
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+	Events  []string          `json:"events"`
 	// Language is the locale used to render the built-in {{title}}/{{message}} strings when the
 	// preset body does not supply its own. Empty means "use the daemon default" (pt-BR), so a
 	// config.json written by an older release keeps firing in Portuguese exactly as before.
 	// Supported values: "pt-BR", "en".
 	Language string `json:"language,omitempty"`
+	// RetryAttempts is the number of retry attempts for transient webhook failures (429 or
+	// 5xx). 0 disables retry. Default 3.
+	RetryAttempts int `json:"retry_attempts,omitempty"`
+	// RetryBackoffSeconds is the base backoff in seconds between retries, doubled each
+	// attempt (exponential). Default 30.
+	RetryBackoffSeconds int `json:"retry_backoff_seconds,omitempty"`
 }
 
 type NotificationsConfig struct {
@@ -133,6 +139,10 @@ type Config struct {
 	DownloadStatuses       []string `json:"download_statuses"`
 	DownloadMediaStatuses  []string `json:"download_media_statuses"`
 	DeleteStatuses         []string `json:"delete_statuses"`
+	// DisableSeeding remove o torrent da sessao (e para de semear) logo apos o organize
+	// concluir, para usuarios que nao querem manter copia em seeding na biblioteca de
+	// download. Os hardlinks da biblioteca permanecem; so a copia de seeding some.
+	DisableSeeding bool `json:"disable_seeding,omitempty"`
 	// AnimeIDsAreMediaIDs marca que daemon.MigrateAnimeIDsToMedia ja converteu os AnimeID
 	// gravados de id de ENTRADA (MediaList, por conta) para id de MIDIA (ver decisions.md #43).
 	// O default e false de proposito: um config.json anterior a este campo desserializa por
@@ -169,6 +179,13 @@ type AnimeSettings struct {
 	// de packs sucessivos nao tem o que o mova. Ausente le 0, que e o comportamento de antes.
 	// Anime de lista nunca usa este campo: quem manda la e a AniList.
 	Progress int `json:"progress,omitempty"`
+	// WebhookPresetNames, quando nao vazio, restringe os webhooks disparados para este anime
+	// apenas aos presets cujos nomes estao nesta lista. Quando vazio/nil, todos os webhooks
+	// globais disparam normalmente (comportamento atual).
+	WebhookPresetNames []string `json:"webhook_preset_names,omitempty"`
+	// DownloadFolderOverride, quando nao vazio, faz os torrents deste anime baixarem para esta
+	// pasta em vez de DownloadPath. Vazio/nulo usa o caminho global configurado.
+	DownloadFolderOverride string `json:"download_folder_override,omitempty"`
 }
 
 type FileManager struct {
@@ -374,6 +391,23 @@ func (m *FileManager) SaveConfigs(config *Config) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.saveConfigsLocked(config)
+}
+
+// FindWebhookPreset returns the webhook preset with the given name, or an error if not found.
+func (m *FileManager) FindWebhookPreset(name string) (WebhookPreset, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	config, err := m.LoadConfigs()
+	if err != nil {
+		return WebhookPreset{}, err
+	}
+	for _, preset := range config.Notifications.Webhooks {
+		if preset.Name == name {
+			return preset, nil
+		}
+	}
+	return WebhookPreset{}, fmt.Errorf("webhook preset %q not found", name)
 }
 
 // writeAtomic grava via arquivo temporario + rename, para que um leitor (ou uma queda de

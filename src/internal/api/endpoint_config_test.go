@@ -205,6 +205,14 @@ func (m *mockFileManager) RemoveStandaloneAnime(mediaID int) error {
 	return nil
 }
 
+func (m *mockFileManager) SaveStandaloneAnimes(ids []int) error {
+	if m.saveErr != nil {
+		return m.saveErr
+	}
+	m.standaloneAnimes = ids
+	return nil
+}
+
 func TestHandleGetConfig(t *testing.T) {
 	state := daemon.NewState()
 	mockFM := &mockFileManager{}

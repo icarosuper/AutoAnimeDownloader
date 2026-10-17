@@ -5,8 +5,10 @@
     getConfig,
     updateConfig,
     testWebhook,
+    previewWebhook,
     type Config,
     type WebhookPreset,
+    type WebhookPreview,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
   import Input from "../components/Input.svelte";
@@ -21,6 +23,8 @@
     sectionWebhooks: m.notifications_section_webhooks(),
     btnAdd: m.notifications_btn_add(),
     btnTest: m.notifications_btn_test(),
+    btnPreview: m.notifications_btn_preview(),
+    previewTitle: m.notifications_preview_title(),
     btnRemove: m.notifications_btn_remove(),
     btnConfirm: m.notifications_btn_confirm(),
     btnCancel: m.common_cancel(),
@@ -68,6 +72,9 @@
   let savedWebhookNames = new Set<string>();
   let loading = true;
   let saving = false;
+  let preview: WebhookPreview | null = null;
+  let previewing = false;
+  let previewingName: string = '';
 
   let showWebhookForm = false;
   let editingIndex: number | null = null;
@@ -143,6 +150,20 @@
     }
   }
 
+  async function previewWebhookHandler(name: string) {
+    previewing = true;
+    previewingName = name;
+    preview = null;
+    try {
+      preview = await previewWebhook(name);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : m.notifications_toast_test_err());
+    } finally {
+      previewing = false;
+      previewingName = '';
+    }
+  }
+
   function addHeaderRow() {
     headerRows = [...headerRows, { key: '', value: '' }];
   }
@@ -170,6 +191,8 @@
       fullConfig = await getConfig();
       notifications = fullConfig.notifications ?? { webhooks: [], batch_window_seconds: 0 };
       savedWebhookNames = new Set(notifications.webhooks.map(h => h.name));
+      preview = null;
+      previewing = false;
       toast.success(m.notifications_toast_saved());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : m.notifications_toast_save_err());
@@ -219,16 +242,26 @@
                     <span class="text-xs text-subtle ml-2 truncate">{hook.url.length > 50 ? hook.url.slice(0, 50) + '…' : hook.url}</span>
                   </div>
                   <div class="flex gap-2 shrink-0">
-                    {#if savedWebhookNames.has(hook.name)}
-                      <button
-                        type="button"
-                        on:click={() => testWebhookHandler(hook.name)}
-                        class="inline-flex items-center px-2 py-1 rounded text-xs border border-default text-body hover:bg-control transition-colors"
-                      >
-                        {T && T.btnTest}
-                      </button>
-                    {/if}
-                    <button
+{#if savedWebhookNames.has(hook.name)}
+                       <button
+                         type="button"
+                         on:click={() => testWebhookHandler(hook.name)}
+                         class="inline-flex items-center px-2 py-1 rounded text-xs border border-default text-body hover:bg-control transition-colors"
+                       >
+                         {T && T.btnTest}
+                       </button>
+                     {/if}
+{#if savedWebhookNames.has(hook.name)}
+                        <button
+                          type="button"
+                          on:click={() => previewWebhookHandler(hook.name)}
+                          disabled={previewing}
+                          class="inline-flex items-center px-2 py-1 rounded text-xs border border-accent/30 text-accent hover:bg-accent/10 transition-colors disabled:opacity-50"
+                        >
+                          {previewing && previewingName === hook.name ? '...' : T && T.btnPreview}
+                        </button>
+                      {/if}
+                     <button
                       type="button"
                       on:click={() => editWebhook(i)}
                       class="inline-flex items-center px-2 py-1 rounded text-xs border border-default text-body hover:bg-control transition-colors"
@@ -245,6 +278,36 @@
                   </div>
                 </div>
               {/each}
+            </div>
+          {/if}
+
+          {#if preview}
+            <div class="flex flex-col rounded-card border border-default bg-sunken p-5">
+              <h2 class="text-sm font-semibold text-subtle uppercase tracking-wider mb-3">{T && T.previewTitle}</h2>
+              <div class="flex flex-col gap-3">
+                <div class="flex gap-2 items-center">
+                  <span class="text-xs text-subtle">Method:</span>
+                  <span class="text-xs font-mono bg-card px-2 py-1 rounded">{preview.method}</span>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-xs text-subtle">URL:</span>
+                  <code class="text-xs font-mono bg-card px-2 py-1 rounded break-all">{preview.url}</code>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-xs text-subtle">Headers:</span>
+                  <div class="flex flex-wrap gap-2">
+                    {#each Object.entries(preview.headers) as [key, value]}
+                      <span class="text-xs font-mono bg-card px-2 py-1 rounded">
+                        {key}: {value}
+                      </span>
+                    {/each}
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <span class="text-xs text-subtle">Body:</span>
+                  <pre class="text-xs font-mono bg-card p-2 rounded overflow-x-auto whitespace-pre-wrap">{preview.body}</pre>
+                </div>
+              </div>
             </div>
           {/if}
 

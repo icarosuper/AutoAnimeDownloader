@@ -33,6 +33,7 @@ type FileManagerInterface interface {
 	LoadAnimeSettings(animeID int) (*files.AnimeSettings, error)
 	SaveAnimeSettings(animeID int, settings files.AnimeSettings) error
 	LoadStandaloneAnimes() ([]int, error)
+	SaveStandaloneAnimes(ids []int) error
 	AddStandaloneAnime(mediaID int) error
 	RemoveStandaloneAnime(mediaID int) error
 }
@@ -98,11 +99,14 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/release", handleReleaseEpisode(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/replace", handleReplaceEpisodeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}", handleDeleteEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/batch-delete", handleBatchEpisodeDelete(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/batch-redownload", handleBatchEpisodeRedownload(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/replace", handleReplaceAnimeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/settings", handleAnimeSettings(s))
 	apiMux.HandleFunc("/api/v1/anilist/search", handleAniListSearch(s))
 	apiMux.HandleFunc("/api/v1/standalone-animes", handleStandaloneAnimeAdd(s))
 	apiMux.HandleFunc("/api/v1/standalone-animes/{id}", handleStandaloneAnimeRemove(s))
+	apiMux.HandleFunc("/api/v1/debug/anime/{id}", handleAnimeDebug(s))
 	apiMux.HandleFunc("/api/v1/check", handleCheck(s))
 	apiMux.HandleFunc("/api/v1/daemon/start", handleDaemonStart(s))
 	apiMux.HandleFunc("/api/v1/daemon/stop", handleDaemonStop(s))
@@ -124,6 +128,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/files", handleTorrentFiles(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/prioritize", handleTorrentPrioritize(s))
 	apiMux.HandleFunc("/api/v1/notifications/webhooks/{name}/test", handleNotificationWebhookTest(s))
+	apiMux.HandleFunc("/api/v1/notifications/webhooks/{name}/preview", handleNotificationWebhookPreview(s))
 
 	// WebSocket route (no JSON middleware)
 	mux.HandleFunc("/api/v1/ws", s.handleWebSocket())

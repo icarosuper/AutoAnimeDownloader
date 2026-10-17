@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
 
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/logger"
@@ -104,4 +106,49 @@ func withStandaloneProgress(fm FileManagerInterface, ml *anilist.MediaList) *ani
 		ml.Progress = s.Progress
 	}
 	return ml
+}
+
+// handleStandaloneAnimes serves GET (list), POST (add one) and PUT (replace the whole file).
+//
+// The file is an int-list with no per-id metadata, so there is nothing to PATCH: the only sane
+// bulk write is a wholesale replacement, which is what the CLI's `standalones import` needs to
+// round-trip an export. GET and POST stay on the same path as before; PUT is new.
+func handleStandaloneAnimes(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			ids, err := server.FileManager.LoadStandaloneAnimes()
+			if err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to load standalone animes")
+				JSONInternalError(w, err)
+				return
+			}
+			JSONSuccess(w, http.StatusOK, ids)
+
+		case http.MethodPost:
+			handleStandaloneAnimeAdd(server)(w, r)
+
+		case http.MethodPut:
+			var ids []int
+			if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
+				JSONError(w, http.StatusBadRequest, "INVALID_BODY", "Body must be a JSON array of media ids")
+				return
+			}
+			for _, id := range ids {
+				if id <= 0 {
+					JSONError(w, http.StatusBadRequest, "INVALID_BODY", "Media ids must be positive")
+					return
+				}
+			}
+			if err := server.FileManager.SaveStandaloneAnimes(ids); err != nil {
+				logger.Logger.Error().Err(err).Msg("Failed to save standalone animes")
+				JSONInternalError(w, err)
+				return
+			}
+			JSONSuccess(w, http.StatusOK, map[string]any{"message": "Standalone animes replaced", "count": len(ids)})
+
+		default:
+			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only GET, POST and PUT are allowed")
+		}
+	}
 }

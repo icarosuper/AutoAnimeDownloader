@@ -25,11 +25,13 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -155,8 +157,104 @@ func main() {
 			{
 				Name:  "episodes",
 				Usage: "List downloaded episodes",
-				Action: func(c *cli.Context) error {
-					return handleEpisodes()
+				Subcommands: []*cli.Command{
+					{
+						Name:  "list",
+						Usage: "List downloaded episodes",
+						Action: func(c *cli.Context) error {
+							return handleEpisodes()
+						},
+					},
+					{
+						Name:      "delete",
+						Usage:     "Delete episodes from disk and from the library",
+						ArgsUsage: "<animeId> <episodeNumber> [<episodeNumber> ...]",
+						Description: "Removes the episode files, the hardlinks in the library, the torrent\n" +
+							"(with --keep-data to leave the files), and the record in downloaded_episodes.\n" +
+							"Same call the web UI makes when you delete one or more rows.",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:    "keep-data",
+								Usage:   "Delete the torrent but leave the downloaded files on disk",
+							},
+							&cli.BoolFlag{
+								Name:    "block",
+								Usage:   "Also block the episode so the daemon does not re-download it",
+							},
+						},
+						Action: func(c *cli.Context) error {
+							return handleEpisodeDelete(c)
+						},
+					},
+					{
+						Name:      "redownload",
+						Usage:     "Re-download an episode that is already on disk",
+						ArgsUsage: "<animeId> <episodeNumber> [<episodeNumber> ...]",
+						Description: "Drops the torrent and the record, then queues a fresh download.\n" +
+							"Same call the web UI makes when you click re-download.",
+						Action: func(c *cli.Context) error {
+							return handleEpisodeRedownload(c)
+						},
+					},
+				},
+			},
+			{
+				Name:  "standalones",
+				Usage: "Manage standalone (not-on-AniList) anime tracking",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "list",
+						Usage: "List tracked standalone media ids",
+						Action: func(c *cli.Context) error {
+							return handleStandalonesList()
+						},
+					},
+					{
+						Name:      "add",
+						Usage:     "Start tracking a standalone anime and download what is available",
+						ArgsUsage: "<mediaId>",
+						Action: func(c *cli.Context) error {
+							return handleStandalonesAdd(c)
+						},
+					},
+					{
+						Name:      "remove",
+						Usage:     "Stop tracking a standalone anime",
+						ArgsUsage: "<mediaId>",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:    "delete-episodes",
+								Usage:   "Also delete the downloaded episode files",
+							},
+						},
+						Action: func(c *cli.Context) error {
+							return handleStandalonesRemove(c)
+						},
+					},
+					{
+						Name:  "export",
+						Usage: "Print the tracked media ids as JSON",
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "file",
+								Usage:   "Write to this file instead of stdout",
+								Value:   "",
+							},
+						},
+						Action: func(c *cli.Context) error {
+							return handleStandalonesExport(c)
+						},
+					},
+					{
+						Name:      "import",
+						Usage:     "Replace the tracked list with the media ids from a file (or stdin)",
+						ArgsUsage: "[file]",
+						Description: "Reads a JSON int-list, deduplicates and writes it back. The file\n" +
+							"is the output of `standalones export`, so migrating a setup is one pipe.",
+						Action: func(c *cli.Context) error {
+							return handleStandalonesImport(c)
+						},
+					},
 				},
 			},
 			{
@@ -183,6 +281,20 @@ func main() {
 				},
 				Action: func(c *cli.Context) error {
 					return handleLogs(c.Int("lines"), c.String("level"), c.String("search"))
+				},
+			},
+			{
+				Name:  "debug",
+				Usage: "Reproduce the daemon's search/match pipeline for one anime without downloading",
+				ArgsUsage: "<animeId>",
+				Description: "Runs the same search, pack-axis and selection logic the daemon runs for\n" +
+					"this anime, logs every Nyaa row and which ones matched, and writes the machine-\n" +
+					"readable summary to <completed_anime_path>/.debug_<id>_N/summary.json. Nothing is\n" +
+					"downloaded and nothing in downloaded_episodes is touched — the existing\n" +
+					"scripts/robustness-animes.txt workflow, which used to require building the daemon\n" +
+					"directly, is now reachable from the CLI.",
+				Action: func(c *cli.Context) error {
+					return handleDebug(c)
 				},
 			},
 			{
@@ -297,19 +409,67 @@ func handleConfigGet() error {
 	if outputJSON {
 		outputJSONResponse(config)
 	} else {
+		// Every key the daemon serves, rendered as a flat table. The old hand-written list
+		// covered 7 of ~25 and read as "the other fields don't exist" — the docs claim `config get`
+		// is the authoritative key list, so it has to actually list them. The order is the struct
+		// field order, which is also the order `config set` accepts (it is case/underscore
+		// insensitive), so scanning the output top-to-bottom gives the valid spellings.
+		raw, err := json.Marshal(config)
+		if err != nil {
+			return fmt.Errorf("failed to encode config: %w", err)
+		}
+		var fields map[string]any
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return fmt.Errorf("failed to decode config: %w", err)
+		}
+
 		t := table.NewWriter()
 		t.SetOutputMirror(os.Stdout)
-		t.AppendHeader(table.Row{"Field", "Value"})
-		t.AppendRow(table.Row{"Anilist Usernames", strings.Join(config.AnilistUsernames, ", ")})
-		t.AppendRow(table.Row{"Completed Anime Path", config.CompletedAnimePath})
-		t.AppendRow(table.Row{"Check Interval", fmt.Sprintf("%d minutes", config.CheckInterval)})
-		t.AppendRow(table.Row{"Max Episodes Per Anime", config.MaxEpisodesPerAnime})
-		t.AppendRow(table.Row{"Episode Retry Limit", config.EpisodeRetryLimit})
-		t.AppendRow(table.Row{"Delete Watched Episodes", config.DeleteWatchedEpisodes})
-		t.AppendRow(table.Row{"Excluded Lists", strings.Join(config.ExcludedLists, ", ")})
+		t.AppendHeader(table.Row{"Key", "Value"})
+		for _, name := range sortedJSONKeys(fields) {
+			t.AppendRow(table.Row{name, formatConfigValue(fields[name])})
+		}
 		t.Render()
 	}
 	return nil
+}
+
+// sortedJSONKeys returns the JSON field names of a config in struct-declared order. json.Unmarshal
+// preserves insertion order only when decoding into a map[string]any built by encoding a struct
+// (the encoder writes fields in declaration order), so sorting alphabetically would lose the
+// mental model of "top of the file = top of the table".
+func sortedJSONKeys(fields map[string]any) []string {
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// formatConfigValue turns a decoded JSON value into the one-line form `config set` expects: lists
+// comma-separated, bools as true/false, numbers plain. It mirrors parseConfigValue's list branch so
+// `config get` and `config set` round-trip.
+func formatConfigValue(v any) string {
+	switch val := v.(type) {
+	case []any:
+		items := make([]string, 0, len(val))
+		for _, item := range val {
+			if s, ok := item.(string); ok {
+				items = append(items, s)
+			} else {
+				b, _ := json.Marshal(item)
+				items = append(items, string(b))
+			}
+		}
+		return strings.Join(items, ", ")
+	case bool:
+		return strconv.FormatBool(val)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }
 
 // handleConfigSet patches ONE key of config.json by its JSON name, without the CLI knowing the
@@ -319,6 +479,11 @@ func handleConfigGet() error {
 //
 // The saved value is also the type oracle: a key that already holds a list accepts the
 // comma-separated form, everything else is JSON-parsed and falls back to a plain string.
+//
+// Dotted paths reach into nested objects — `notifications.batch_window_seconds 30` and
+// `priorities.fansubs 1080p,1080p-raw` set a field inside a sub-object without the CLI needing to
+// know the shape. A segment that does not exist (typo, or a field the daemon stopped serving) is
+// an "unknown key" error, same as a bad top-level one.
 func handleConfigSet(key, value string) error {
 	client := getClient()
 	config, err := client.GetConfig()
@@ -335,13 +500,13 @@ func handleConfigSet(key, value string) error {
 		return fmt.Errorf("failed to decode current config: %w", err)
 	}
 
-	name, ok := matchConfigKey(fields, key)
-	if !ok {
-		return fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", key)
+	target, err := resolveDotted(fields, key)
+	if err != nil {
+		return err
 	}
-	fields[name] = parseConfigValue(fields[name], value)
+	target.set(parseConfigValue(target.current, value))
 
-	patched, err := json.Marshal(fields)
+	patched, err := json.Marshal(target.root)
 	if err != nil {
 		return fmt.Errorf("failed to encode config: %w", err)
 	}
@@ -357,9 +522,79 @@ func handleConfigSet(key, value string) error {
 	if outputJSON {
 		outputJSONResponse(map[string]string{"message": "Configuration updated"})
 	} else {
-		fmt.Printf("Configuration updated: %s = %s\n", name, value)
+		fmt.Printf("Configuration updated: %s = %s\n", key, value)
 	}
 	return nil
+}
+
+// configTarget is the leaf of a dotted path: the map it lives in, the key under which it is
+// stored, and the value currently there (used only as the type oracle for lists).
+type configTarget struct {
+	root    map[string]any
+	key     string
+	current any
+}
+
+// set writes v under t.key into t.root, creating the map if it was nil (a brand-new nested object
+// is a valid write — e.g. adding the first webhook to an empty notifications.webhooks list is a
+// list mutation, not a map creation, but `notifications.new_key foo` is a real first-time field).
+func (t *configTarget) set(v any) {
+	if t.root == nil {
+		t.root = map[string]any{}
+	}
+	t.root[t.key] = v
+}
+
+// resolveDotted walks `key` into fields. A key without dots is matched case/underscore-insensitively
+// against the top-level JSON names (matchConfigKey). A dotted key splits on the first dot only for
+// the top-level match, then recurses: `notifications.batch_window_seconds` → fields["notifications"]
+// → ["batch_window_seconds"]. Each segment is matched case/underscore-insensitively against the
+// keys of the object it lands in, so `Max_Search_Pages` and `maxSearchPages` resolve identically.
+//
+// The leaf's container map is returned so the caller can mutate it in place; the root is the same
+// map the whole walk started from, so one Marshal round-trips the whole change.
+func resolveDotted(fields map[string]any, key string) (*configTarget, error) {
+	dot := strings.IndexByte(key, '.')
+	if dot < 0 {
+		name, ok := matchConfigKey(fields, key)
+		if !ok {
+			return nil, fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", key)
+		}
+		return &configTarget{root: fields, key: name, current: fields[name]}, nil
+	}
+
+	head := key[:dot]
+	rest := key[dot+1:]
+	name, ok := matchConfigKey(fields, head)
+	if !ok {
+		return nil, fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", key)
+	}
+	return resolveDottedNested(fields, name, rest)
+}
+
+// resolveDottedNested walks the remaining dotted path into the sub-object reached by `name`. It
+// does not re-match `name` — that was already resolved by the caller — it only descends.
+func resolveDottedNested(root map[string]any, name, rest string) (*configTarget, error) {
+	cur := root[name]
+	m, ok := cur.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unknown config key: %s (not an object)", name)
+	}
+	if strings.IndexByte(rest, '.') < 0 {
+		leaf, ok := matchConfigKey(m, rest)
+		if !ok {
+			return nil, fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", name+"."+rest)
+		}
+		return &configTarget{root: m, key: leaf, current: m[leaf]}, nil
+	}
+	dot := strings.IndexByte(rest, '.')
+	head := rest[:dot]
+	rest = rest[dot+1:]
+	leaf, ok := matchConfigKey(m, head)
+	if !ok {
+		return nil, fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", name+"."+head)
+	}
+	return resolveDottedNested(m, leaf, rest)
 }
 
 // matchConfigKey resolves a user-typed key to the real JSON name, ignoring case and underscores so
@@ -734,4 +969,250 @@ func outputJSONResponse(data interface{}) {
 	if err := encoder.Encode(data); err != nil {
 		fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
 	}
+}
+
+// --- episodes ---
+
+func handleEpisodeDelete(c *cli.Context) error {
+	args := c.Args()
+	if args.Len() < 2 {
+		return fmt.Errorf("usage: episodes delete <animeId> <episodeNumber> [<episodeNumber> ...]")
+	}
+	animeID, err := strconv.Atoi(args.Get(0))
+	if err != nil || animeID <= 0 {
+		return fmt.Errorf("invalid anime id: %s", args.Get(0))
+	}
+
+	var episodes []int
+	for _, a := range args.Slice()[1:] {
+		n, err := strconv.Atoi(a)
+		if err != nil || n <= 0 {
+			return fmt.Errorf("invalid episode number: %s", a)
+		}
+		episodes = append(episodes, n)
+	}
+
+	client := getClient()
+	count, err := client.BatchDeleteEpisodes(animeID, episodes, c.Bool("keep-data"), c.Bool("block"))
+	if err != nil {
+		return err
+	}
+
+	if outputJSON {
+		outputJSONResponse(map[string]any{"message": "Episodes deleted", "anime_id": animeID, "episodes": episodes, "count": count})
+	} else {
+		fmt.Printf("Deleted %d episode(s) of anime %d\n", count, animeID)
+	}
+	return nil
+}
+
+func handleEpisodeRedownload(c *cli.Context) error {
+	args := c.Args()
+	if args.Len() < 2 {
+		return fmt.Errorf("usage: episodes redownload <animeId> <episodeNumber> [<episodeNumber> ...]")
+	}
+	animeID, err := strconv.Atoi(args.Get(0))
+	if err != nil || animeID <= 0 {
+		return fmt.Errorf("invalid anime id: %s", args.Get(0))
+	}
+
+	var episodes []int
+	for _, a := range args.Slice()[1:] {
+		n, err := strconv.Atoi(a)
+		if err != nil || n <= 0 {
+			return fmt.Errorf("invalid episode number: %s", a)
+		}
+		episodes = append(episodes, n)
+	}
+
+	client := getClient()
+	count, err := client.BatchRedownloadEpisodes(animeID, episodes)
+	if err != nil {
+		return err
+	}
+
+	if outputJSON {
+		outputJSONResponse(map[string]any{"message": "Episodes redownload started", "anime_id": animeID, "episodes": episodes, "count": count})
+	} else {
+		fmt.Printf("Re-downloading %d episode(s) of anime %d\n", count, animeID)
+	}
+	return nil
+}
+
+// --- standalones ---
+
+func handleStandalonesList() error {
+	client := getClient()
+	ids, err := client.LoadStandaloneAnimes()
+	if err != nil {
+		return err
+	}
+
+	if outputJSON {
+		outputJSONResponse(ids)
+		return nil
+	}
+
+	if len(ids) == 0 {
+		fmt.Println("No standalone animes tracked")
+		return nil
+	}
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"Media ID"})
+	for _, id := range ids {
+		t.AppendRow(table.Row{id})
+	}
+	t.Render()
+	return nil
+}
+
+func handleStandalonesAdd(c *cli.Context) error {
+	if c.NArg() != 1 {
+		return fmt.Errorf("usage: standalones add <mediaId>")
+	}
+	mediaID, err := strconv.Atoi(c.Args().Get(0))
+	if err != nil || mediaID <= 0 {
+		return fmt.Errorf("invalid media id: %s", c.Args().Get(0))
+	}
+
+	client := getClient()
+	added, err := client.AddStandaloneAnime(mediaID)
+	if err != nil {
+		return err
+	}
+
+	if outputJSON {
+		outputJSONResponse(map[string]any{"media_id": mediaID, "added": added})
+	} else {
+		fmt.Printf("Standalone anime %d tracked; %d episode(s) queued\n", mediaID, added)
+	}
+	return nil
+}
+
+func handleStandalonesRemove(c *cli.Context) error {
+	if c.NArg() != 1 {
+		return fmt.Errorf("usage: standalones remove <mediaId>")
+	}
+	mediaID, err := strconv.Atoi(c.Args().Get(0))
+	if err != nil || mediaID <= 0 {
+		return fmt.Errorf("invalid media id: %s", c.Args().Get(0))
+	}
+
+	client := getClient()
+	if err := client.RemoveStandaloneAnime(mediaID, c.Bool("delete-episodes")); err != nil {
+		return err
+	}
+
+	if outputJSON {
+		outputJSONResponse(map[string]any{"media_id": mediaID, "deleted_episodes": c.Bool("delete-episodes")})
+	} else {
+		fmt.Printf("Standalone anime %d untracked\n", mediaID)
+	}
+	return nil
+}
+
+func handleStandalonesExport(c *cli.Context) error {
+	client := getClient()
+	ids, err := client.LoadStandaloneAnimes()
+	if err != nil {
+		return err
+	}
+
+	file := c.String("file")
+	if file == "" {
+		if outputJSON {
+			outputJSONResponse(ids)
+		} else {
+			b, _ := json.Marshal(ids)
+			fmt.Println(string(b))
+		}
+		return nil
+	}
+
+	// Pretty-printed JSON, matching the on-disk format SaveStandaloneAnimes writes, so the file
+	// is directly importable back without a re-format step.
+	b, err := json.MarshalIndent(ids, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+	if err := os.WriteFile(file, b, 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", file, err)
+	}
+	fmt.Printf("Exported %d standalone animes to %s\n", len(ids), file)
+	return nil
+}
+
+func handleStandalonesImport(c *cli.Context) error {
+	var data []byte
+	var source string
+	if c.NArg() == 0 {
+		data, _ = io.ReadAll(os.Stdin)
+		source = "stdin"
+	} else {
+		source = c.Args().Get(0)
+		var err error
+		data, err = os.ReadFile(source)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", source, err)
+		}
+	}
+
+	var ids []int
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return fmt.Errorf("input is not a JSON int-list: %w", err)
+	}
+	for _, id := range ids {
+		if id <= 0 {
+			return fmt.Errorf("invalid media id %d: ids must be positive", id)
+		}
+	}
+
+	client := getClient()
+	if err := client.SaveStandaloneAnimes(ids); err != nil {
+		return err
+	}
+
+	if outputJSON {
+		outputJSONResponse(map[string]any{"source": source, "count": len(ids)})
+	} else {
+		fmt.Printf("Imported %d standalone animes from %s\n", len(ids), source)
+	}
+	return nil
+}
+
+// --- debug ---
+
+func handleDebug(c *cli.Context) error {
+	if c.NArg() != 1 {
+		return fmt.Errorf("usage: debug <animeId>")
+	}
+	animeID, err := strconv.Atoi(c.Args().Get(0))
+	if err != nil || animeID <= 0 {
+		return fmt.Errorf("invalid anime id: %s", c.Args().Get(0))
+	}
+
+	client := getClient()
+	summary, err := client.RunAnimeDebug(animeID)
+	if err != nil {
+		return err
+	}
+
+	if outputJSON {
+		outputJSONResponse(summary)
+	} else {
+		fmt.Printf("Anime: %s (id %d)\n", summary.AnimeName, summary.AnimeID)
+		would := 0
+		magnets := 0
+		for _, ep := range summary.Episodes {
+			if ep.WouldSearch {
+				would++
+				magnets += ep.MagnetsFound
+			}
+		}
+		fmt.Printf("Episodes: %d total, %d would search, %d magnets found\n",
+			len(summary.Episodes), would, magnets)
+	}
+	return nil
 }

@@ -14,14 +14,17 @@ export function filterAnimes(
   search: string,
   filterUnwatched: boolean,
   filterStandalone = false,
+  filterNextAiring = false,
 ): AnimeInfo[] {
   const term = normalizeName(search.trim())
+  const now = Date.now() / 1000
   return animes.filter(a => {
     // Busca por QUALQUER titulo do anime — o usuario pode conhecer so o romaji, o kanji ou um
     // sinonimo, enquanto o card mostra o ingles.
     if (term && ![a.name, ...(a.alt_names ?? [])].some(n => normalizeName(n).includes(term))) return false
     if (filterUnwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false
     if (filterStandalone && !a.is_standalone) return false
+    if (filterNextAiring && (!a.next_airing_at || a.next_airing_at <= now)) return false
     return true
   })
 }
