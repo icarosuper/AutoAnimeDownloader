@@ -20,6 +20,7 @@
     replaceEpisodeWithMagnet,
     replaceAnimeWithMagnet,
     updateAnimeSettings,
+    getAnimeSettings,
     removeStandaloneAnime,
     deleteTorrent,
     getLastCheck,
@@ -97,11 +98,16 @@
   // num bloco recolhível logo abaixo do cabeçalho — recolhido por padrão porque é ajuste fino,
   // não o que se vem fazer nesta tela.
 
-  // Progresso manual do avulso. Prefill de `anime.episodes_watched`, que já traz o valor salvo
-  // (o backend injeta AnimeSettings.progress no MediaList sintético).
-  let progressInput = 0;
-  let progressSaving = false;
-  $: progressInput = anime?.episodes_watched ?? 0;
+// Progresso manual do avulso. Prefill de `anime.episodes_watched`, que já traz o valor salvo
+// (o backend injeta AnimeSettings.progress no MediaList sintético).
+let progressInput = 0;
+let progressSaving = false;
+$: progressInput = anime?.episodes_watched ?? 0;
+
+// Configuracoes por anime (só para avulsos): presets de webhook e pasta de download.
+let webhookPresetNamesInput = "";
+let downloadFolderInput = "";
+let settingsSaving = false;
 
   async function saveProgress(value: number) {
     progressSaving = true;
@@ -113,6 +119,26 @@
       toast.error(err instanceof Error ? err.message : m.detail_toast_progress_error());
     } finally {
       progressSaving = false;
+    }
+  }
+
+  async function saveSettings() {
+    settingsSaving = true;
+    try {
+      const presets = webhookPresetNamesInput
+        .split(",")
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      await updateAnimeSettings(animeId, {
+        webhook_preset_names: presets,
+        download_folder_override: downloadFolderInput || undefined,
+      });
+      toast.success(m.detail_toast_settings_saved());
+      await loadData(animeId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_toast_settings_error());
+    } finally {
+      settingsSaving = false;
     }
   }
 
@@ -438,13 +464,16 @@
     try {
       loading = true;
 
-      const [detailData, animesData] = await Promise.all([
+      const [detailData, animesData, settingsData] = await Promise.all([
         getAnimeDetail(id),
         getAnimes(),
+        getAnimeSettings(id),
       ]);
 
       detail = detailData;
       anime = animesData.find((a) => a.anime_id === id) ?? null;
+      webhookPresetNamesInput = (settingsData.webhook_preset_names ?? []).join(", ");
+      downloadFolderInput = settingsData.download_folder_override ?? "";
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.detail_toast_load_error());
     } finally {
@@ -920,6 +949,35 @@
             </div>
             <p class="mt-1 text-caption text-subtle">{$locale && m.detail_progress_hint()}</p>
           {/if}
+
+          <div class="mt-4 p-3 rounded-field border border-default bg-control">
+            <h3 class="text-xs font-semibold text-heading mb-2">{$locale && m.detail_settings_title()}</h3>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-copy text-heading">{$locale && m.detail_webhook_presets_label()}</label>
+              <input
+                id="anime-webhook-presets"
+                type="text"
+                bind:value={webhookPresetNamesInput}
+                placeholder={$locale && m.detail_webhook_presets_placeholder()}
+                class="w-full rounded-field border border-default bg-control px-2 py-1 text-copy text-heading outline-none focus:border-accent"
+              />
+              <p class="text-[11px] text-caption text-subtle">{$locale && m.detail_webhook_presets_hint()}</p>
+            </div>
+            <div class="flex flex-col gap-1 mt-1">
+              <label class="text-xs text-copy text-heading">{$locale && m.detail_download_folder_override_label()}</label>
+              <input
+                id="anime-download-folder"
+                type="text"
+                bind:value={downloadFolderInput}
+                placeholder={$locale && m.detail_download_folder_override_placeholder()}
+                class="w-full rounded-field border border-default bg-control px-2 py-1 text-copy text-heading outline-none focus:border-accent"
+              />
+              <p class="text-[11px] text-caption text-subtle">{$locale && m.detail_download_folder_override_hint()}</p>
+            </div>
+            <Button variant="ghost" disabled={settingsSaving} on:click={saveSettings}>
+              {settingsSaving ? "..." : ($locale && m.common_save())}
+            </Button>
+          </div>
         {/if}
       </div>
 

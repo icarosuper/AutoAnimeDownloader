@@ -216,6 +216,7 @@ func ensureStartupSession(manager *torrents.SessionManager, fileManager *files.F
 	// Antes do Ensure: a sessao nova roda a adocao da fila assim que nasce, e ela precisa
 	// ja saber o limite para nao promover tudo o que a rain reabriu parado.
 	manager.SetMaxActiveDownloads(configs.MaxConcurrentDownloads)
+	manager.SetDisableSeeding(configs.DisableSeeding)
 	downloadPath := configs.DownloadPath()
 	if _, err := manager.Ensure(downloadPath); err != nil {
 		logger.Logger.Error().Err(err).Str("download_path", downloadPath).Msg("Failed to create the embedded torrent session at startup; the verification pass will retry")

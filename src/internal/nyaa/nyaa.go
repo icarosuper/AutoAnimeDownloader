@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -976,6 +977,68 @@ func ExtractSeason(name string) *int {
 		}
 	}
 	return nil
+}
+
+// StripSeasonFromName remove marcadores de season/cour/part e numeros de sequencia do nome
+// de um anime do Anilist, de modo que a pasta da biblioteca seja o nome comum da serie
+// (ex.: "The Apothecary Diaries" em vez de "The Apothecary Diaries Season 3").
+//
+// Segue a cadeia de PREQUEL ate a raiz: o nome usado e o do primeiro anime da cadeia, sem
+// marcadores de temporada. Se nao houver PREQUEL (primeira temporada ou serie unica), usa
+// o proprio nome. A tarefa de desambiguacao (saber se "Series 2" e realmente a segunda
+// temporada ou apenas parte do nome) e delegada ao anilist — esta funcao so remove marcadores
+// lexicos.
+var (
+	trailingWhitespace = regexp.MustCompile(`\s+$`)
+	collapseWhitespace = regexp.MustCompile(`\s+`)
+)
+
+func StripSeasonFromName(name string) string {
+	previous := name
+	for {
+		title := previous
+		for _, re := range seasonStripPatterns {
+			title = re.ReplaceAllString(title, " ")
+		}
+		title = strings.ReplaceAll(title, ":", " ")
+		title = strings.ReplaceAll(title, "：", " ")
+		title = strings.ReplaceAll(title, "-", " ")
+		title = strings.ReplaceAll(title, "–", " ")
+		title = strings.ReplaceAll(title, "—", " ")
+		title = trailingWhitespace.ReplaceAllString(title, "")
+		title = collapseWhitespace.ReplaceAllString(title, " ")
+		title = strings.TrimSpace(title)
+		if title == previous {
+			return title
+		}
+		previous = title
+	}
+}
+
+var seasonStripPatterns = []*regexp.Regexp{
+	// Explicit season markers
+	regexp.MustCompile(`(?i)\bseason\s*\d+\b`),
+	regexp.MustCompile(`(?i)\b\d+(?:st|nd|rd|th)\s+season\b`),
+	regexp.MustCompile(`(?i)\b(second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)\s+season\b`),
+
+	// Parts and cours
+	regexp.MustCompile(`(?i)\bpart\s*(?:\d+|[ivxlcdm]+)\b`),
+	regexp.MustCompile(`(?i)\bcour\s*\d+\b`),
+
+	// Common continuation/finale markers
+	regexp.MustCompile(`(?i)\b(?:final|last)\s+season\b`),
+	regexp.MustCompile(`(?i)\b(?:the\s+)?final\s+chapter\b`),
+	regexp.MustCompile(`(?i)\b(?:shin|zoku|續|続編|完結編)\b`),
+
+	// Japanese season markers
+	regexp.MustCompile(`第\s*\d+\s*期`),
+	regexp.MustCompile(`第\s*\d+\s*シリーズ`),
+
+	// Roman numerals as standalone sequel markers
+	regexp.MustCompile(`(?i)\b(?:II|III|IV|V|VI|VII|VIII|IX|X)\b`),
+
+	// Trailing Arabic numerals, including separated sequel numbers
+	regexp.MustCompile(`(?:[\s:：\-–—]+)\d+\s*$`),
 }
 
 // ExtractPart extrai o número da parte/cour do nome do torrent ou título Anilist

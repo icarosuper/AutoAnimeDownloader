@@ -91,6 +91,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// seguinte. Roda ANTES do Ensure, quando ainda pode não haver sessão — o passo 0 do
 	// enforce é quem trata isso (ver decisions.md #41).
 	backend.SetMaxActiveDownloads(configs.MaxConcurrentDownloads)
+	backend.SetDisableSeeding(configs.DisableSeeding)
 
 	// Ensure the embedded torrent session exists for the current save path (created lazily,
 	// recreated if the save path changed or if the download folder was swapped underneath).

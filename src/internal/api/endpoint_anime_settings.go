@@ -11,8 +11,9 @@ import (
 // Progress e PONTEIRO porque o PUT e parcial: ausente tem de ser distinguivel de zero, ou um
 // corpo sem o campo zeraria o progresso salvo.
 type animeSettingsRequest struct {
-	Progress           *int      `json:"progress"`
-	WebhookPresetNames []string  `json:"webhook_preset_names,omitempty"`
+	Progress             *int      `json:"progress"`
+	WebhookPresetNames   []string  `json:"webhook_preset_names,omitempty"`
+	DownloadFolderOverride *string   `json:"download_folder_override,omitempty"`
 }
 
 func handleAnimeSettings(server *Server) http.HandlerFunc {
@@ -61,6 +62,9 @@ func handleAnimeSettings(server *Server) http.HandlerFunc {
 			}
 			if req.WebhookPresetNames != nil {
 				settings.WebhookPresetNames = req.WebhookPresetNames
+			}
+			if req.DownloadFolderOverride != nil {
+				settings.DownloadFolderOverride = *req.DownloadFolderOverride
 			}
 
 			if err := server.FileManager.SaveAnimeSettings(id, settings); err != nil {

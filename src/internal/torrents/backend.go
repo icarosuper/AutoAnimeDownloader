@@ -148,4 +148,7 @@ type TorrentBackend interface {
 	SetCallbacks(onComplete func(hash string), onFailed func(hash string, err error))
 	// Close shuts the backend down, flushing resume data.
 	Close() error
+	// SetDisableSeeding enables or disables direct download mode: when true, torrents are
+	// stopped immediately after finishing download so they never seed.
+	SetDisableSeeding(disable bool)
 }

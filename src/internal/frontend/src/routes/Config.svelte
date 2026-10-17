@@ -7,7 +7,7 @@
   // O layout novo é o índice lateral de 196px com UM grupo visível por vez. Os campos de
   // lista (anilist_usernames, excluded_lists) trocaram o par "input + botão +" pelo
   // ChipsInput do artboard 1e.
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { ArrowUpRight, Check } from "@lucide/svelte";
   import {
     getConfig,
@@ -15,6 +15,8 @@
     triggerCheck,
     type Config,
   } from "../lib/api/client.js";
+  import { WebSocketClient } from "../lib/websocket/client.js";
+  import { wsConnectionState } from "../lib/stores/wsState.js";
   import Loading from "../components/Loading.svelte";
   import Input from "../components/Input.svelte";
   import Button from "../components/ui/Button.svelte";
@@ -67,6 +69,8 @@
     hintMaxConcurrent: m.config_hint_max_concurrent(),
     labelRenameJellyfin: m.config_label_rename_jellyfin(),
     hintRenameJellyfin: m.config_hint_rename_jellyfin(),
+    labelDisableSeeding: m.config_label_disable_seeding(),
+    hintDisableSeeding: m.config_hint_disable_seeding(),
     labelExcludedList: m.config_label_excluded_list(),
     hintExcludedList: m.config_hint_excluded_list(),
     labelDownloadStatuses: m.config_label_download_statuses(),
@@ -343,9 +347,18 @@
     }
   }
 
+  let wsClient: WebSocketClient | null = null;
+
   onMount(() => {
     checkQueryParams();
     loadConfig();
+    wsClient = new WebSocketClient();
+    wsClient.connect(() => {}, (state) => wsConnectionState.set(state));
+  });
+
+  onDestroy(() => {
+    wsClient?.disconnect();
+    wsClient = null;
   });
 </script>
 
@@ -556,6 +569,16 @@
                 inline={true}
               />
               <p class="text-caption text-subtle">{T && T.hintRenameJellyfin}</p>
+            </div>
+
+            <div class="space-y-1.5 p-4.5">
+              <Toggle
+                id="disable_seeding"
+                bind:checked={config.disable_seeding}
+                label={(T && T.labelDisableSeeding) || ""}
+                inline={true}
+              />
+              <p class="text-caption text-subtle">{T && T.hintDisableSeeding}</p>
             </div>
 
             <div class="p-4.5">

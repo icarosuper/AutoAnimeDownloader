@@ -114,6 +114,7 @@ func ManualDownloadEpisodeWithMagnet(fm FileManagerInterface, backend torrents.T
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
+	backend.SetDisableSeeding(configs.DisableSeeding)
 
 	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
 	if err != nil {
@@ -148,6 +149,7 @@ func ManualDownloadAnimeWithMagnet(fm FileManagerInterface, backend torrents.Tor
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return nil, err
 	}
+	backend.SetDisableSeeding(configs.DisableSeeding)
 
 	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
 	if err != nil {
@@ -191,6 +193,7 @@ func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBack
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return files.EpisodeStruct{}, err
 	}
+	backend.SetDisableSeeding(configs.DisableSeeding)
 
 	details, err := resolveAnimeDetails(fm, animeId, configs.AnilistUsernames)
 	if err != nil {

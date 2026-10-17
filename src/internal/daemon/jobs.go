@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"encoding/json"
 	"fmt"
@@ -357,9 +358,14 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	}
 
 	isBatch := matched[0].IsBatch || len(matched) > 1
+	// O nome da pasta da biblioteca eh o nome da serie raiz (sem marcadores de season/cour/parte),
+	// para que todas as temporadas de uma serie caiam na mesma pasta, com a subpasta "Season XX"
+	// distinguindo cada uma (decisoes.md #45). "The Apothecary Diaries Season 3" vira
+	// "The Apothecary Diaries", e a season entra so na subpasta.
+	animeName := nyaa.StripSeasonFromName(matched[0].AnimeName)
 	req := files.OrganizeRequest{
 		TorrentDataDir: info.DataDir,
-		AnimeName:      matched[0].AnimeName,
+		AnimeName:      animeName,
 		AnimeID:        matched[0].AnimeID,
 		CompletedPath:  configs.CompletedAnimePath,
 		IsBatch:        isBatch,

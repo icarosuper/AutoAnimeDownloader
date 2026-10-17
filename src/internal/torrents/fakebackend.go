@@ -35,10 +35,12 @@ type FakeBackend struct {
 	files map[string][]FileInfo
 	// prioritizeCalls records every Prioritize(hash) for assertions.
 	prioritizeCalls []string
-	// MaxActiveDownloads records the last SetMaxActiveDownloads(n). The fake does NOT
-	// enforce a queue — that logic is unit-tested directly in queue_test.go, and modelling
-	// it here would make every daemon test depend on it.
-	MaxActiveDownloads int
+// MaxActiveDownloads records the last SetMaxActiveDownloads(n). The fake does NOT
+// enforce a queue — that logic is unit-tested directly in queue_test.go, and modelling
+// it here would make every daemon test depend on it.
+MaxActiveDownloads int
+// DisableSeeding records the last SetDisableSeeding(bool) for test assertions.
+DisableSeeding bool
 }
 
 var _ TorrentBackend = (*FakeBackend)(nil)
@@ -226,6 +228,12 @@ func (f *FakeBackend) SetMaxActiveDownloads(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.MaxActiveDownloads = n
+}
+
+func (f *FakeBackend) SetDisableSeeding(disable bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.DisableSeeding = disable
 }
 
 // AnnounceCalls returns the hashes passed to Announce, in order.

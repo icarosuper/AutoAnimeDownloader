@@ -22,6 +22,16 @@ type Session struct {
 	mu         sync.RWMutex
 	onComplete func(hash string)
 	onFailed   func(hash string, err error)
+
+	// disableSeeding stops a torrent immediately after it finishes downloading, so it never
+	// seeds (direct download mode). When true, NotifyComplete is answered with t.Stop() and
+	// the hash is recorded in completedHashes so that toInfo keeps reporting Completed: true
+	// even though rain's stats are zeroed after Stop().
+	disableSeeding bool
+	// completedHashes records hashes of torrents that completed and were stopped by
+	// disableSeeding. It outlives any single armListener invocation because organize runs on
+	// a later tick and needs Completed to remain true.
+	completedHashes sync.Map
 }
 
 // sessionOptions carries the deviations from the production rain config. It exists for the
@@ -93,7 +103,7 @@ func (s *Session) List() []TorrentInfo {
 	ts := s.ses.ListTorrents()
 	out := make([]TorrentInfo, 0, len(ts))
 	for _, t := range ts {
-		out = append(out, toInfo(t))
+		out = append(out, s.toInfo(t))
 	}
 	return out
 }
@@ -103,7 +113,7 @@ func (s *Session) Get(hash string) (TorrentInfo, bool) {
 	if t == nil {
 		return TorrentInfo{}, false
 	}
-	return toInfo(t), true
+	return s.toInfo(t), true
 }
 
 // Files prefere FileStats() (que traz o progresso por arquivo) e cai para Files() quando o
@@ -204,6 +214,15 @@ func (s *Session) Close() error {
 	return s.ses.Close()
 }
 
+// SetDisableSeeding enables or disables direct download mode: when true, torrents are
+// stopped immediately after finishing download so they never seed.
+func (s *Session) SetDisableSeeding(disable bool) {
+	s.mu.Lock()
+	s.disableSeeding = disable
+	s.mu.Unlock()
+	logger.Logger.Info().Bool("disable_seeding", disable).Msg("DisableSeeding: direct download mode updated")
+}
+
 // armListenerFor arms a listener by hash (used when a torrent is already present).
 func (s *Session) armListenerFor(hash string) {
 	if t := s.ses.GetTorrent(hash); t != nil && t.Stats().Status != torrent.Seeding {
@@ -221,7 +240,14 @@ func (s *Session) armListener(t *torrent.Torrent) {
 		case <-t.NotifyComplete():
 			s.mu.RLock()
 			cb := s.onComplete
+			ds := s.disableSeeding
 			s.mu.RUnlock()
+			if ds {
+				s.completedHashes.Store(hash, true)
+				if err := t.Stop(); err != nil {
+					logger.Logger.Warn().Err(err).Str("hash", hash).Msg("DisableSeeding: failed to stop completed torrent")
+				}
+			}
 			if cb != nil {
 				cb(hash)
 			}
@@ -246,7 +272,7 @@ func completedFromStats(st torrent.Stats) bool {
 	return st.Pieces.Total > 0 && st.Pieces.Have >= st.Pieces.Total
 }
 
-func toInfo(t *torrent.Torrent) TorrentInfo {
+func (s *Session) toInfo(t *torrent.Torrent) TorrentInfo {
 	// Um Stats() só: é round-trip bloqueante para dentro da goroutine do torrent, não getter.
 	st := t.Stats()
 
@@ -256,11 +282,23 @@ func toInfo(t *torrent.Torrent) TorrentInfo {
 		eta = &secs
 	}
 
+	completed := completedFromStats(st)
+	// With disableSeeding, a completed torrent is stopped right after NotifyComplete. rain
+	// then zeroes t.pieces, so completedFromStats reports false even though every piece is
+	// on disk. Preserve Completed: true from our record so organize and reconciliation can
+	// still find and process it.
+	if !completed {
+		hash := t.InfoHash().String()
+		if _, ok := s.completedHashes.Load(hash); ok {
+			completed = true
+		}
+	}
+
 	return TorrentInfo{
 		Hash:             t.InfoHash().String(),
 		Name:             t.Name(),
 		DataDir:          t.Dir(),
-		Completed:        completedFromStats(st),
+		Completed:        completed,
 		Status:           statusSlug(st.Status),
 		BytesCompleted:   st.Bytes.Completed,
 		BytesTotal:       st.Bytes.Total,

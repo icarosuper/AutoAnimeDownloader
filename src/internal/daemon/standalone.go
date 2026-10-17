@@ -120,6 +120,7 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return 0, err
 	}
+	backend.SetDisableSeeding(configs.DisableSeeding)
 
 	anime, err := anilist.GetMediaByID(mediaID, anilist.PriorityCritical)
 	// Cache local serve: o download avulso pedido a mao precisa de titulo e faixa de

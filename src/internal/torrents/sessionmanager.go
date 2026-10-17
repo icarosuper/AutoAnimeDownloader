@@ -387,3 +387,12 @@ func (m *SessionManager) Close() error {
 	m.session = nil
 	return err
 }
+
+// SetDisableSeeding enables or disables direct download mode on the current session.
+func (m *SessionManager) SetDisableSeeding(disable bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.session != nil {
+		m.session.SetDisableSeeding(disable)
+	}
+}

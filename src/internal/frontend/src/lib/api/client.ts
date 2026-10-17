@@ -156,6 +156,10 @@ export interface WebhookPreset {
 	 * an older release keeps firing in Portuguese exactly as before.
 	 */
 	language?: string
+	/** Number of retry attempts for transient webhook failures (429 or 5xx). 0 disables retry. */
+	retry_attempts?: number
+	/** Base backoff in seconds between retries, doubled each attempt. */
+	retry_backoff_seconds?: number
 }
 
 export interface Priorities {
@@ -373,6 +377,8 @@ export interface AnimeSettings {
   progress?: number
   /** Webhooks permitidos para este anime. Vazio/nulo = todos os globais disparam. */
   webhook_preset_names?: string[]
+  /** When set, torrents for this anime download to this folder instead of the global DownloadPath. */
+  download_folder_override?: string
 }
 
 export async function getAnimeDetail(animeId: number): Promise<AnimeDetailResponse> {
@@ -401,6 +407,11 @@ export async function replaceEpisodeWithMagnet(animeId: number, episodeNumber: n
 
 export async function replaceAnimeWithMagnet(animeId: number, magnet: string): Promise<void> {
   return apiRequest<void>('POST', `/animes/${animeId}/replace`, { magnet })
+}
+
+export async function getAnimeSettings(animeId: number): Promise<AnimeSettings> {
+  const resp = await apiRequest<AnimeSettings>('GET', `/animes/${animeId}/settings`)
+  return resp
 }
 
 export async function updateAnimeSettings(animeId: number, settings: AnimeSettings): Promise<void> {

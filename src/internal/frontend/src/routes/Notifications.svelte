@@ -43,6 +43,10 @@
     labelEvents: m.notifications_label_events(),
     labelLanguage: m.notifications_label_language(),
     hintLanguage: m.notifications_hint_language({ title: m.notifications_event_new_episode(), message: m.notifications_event_new_episode() }),
+    labelRetryAttempts: m.notifications_label_retry_attempts(),
+    hintRetryAttempts: m.notifications_hint_retry_attempts(),
+    labelRetryBackoff: m.notifications_label_retry_backoff(),
+    hintRetryBackoff: m.notifications_hint_retry_backoff(),
     eventNewEpisode: m.notifications_event_new_episode(),
     eventDownloadFailed: m.notifications_event_download_failed(),
     eventDownloadCompleted: m.notifications_event_download_completed(),
@@ -83,6 +87,11 @@
   // criaria a chave `language: ''` no objeto, e o backend grava "" como idioma em vez de omitir.
   // Um config.json antigo (campo ausente) tem que continuar sem o campo, disparando em pt-BR.
   let newWebhookLanguage: string = '';
+  // Retry fields are also kept separate from the object: empty string means "unset" (uses daemon
+  // defaults), and the backend omits the field when 0. Bound to number inputs, so stored as
+  // strings and parsed to numbers when confirming.
+  let newWebhookRetryAttempts: string = '';
+  let newWebhookRetryBackoff: string = '';
 
   // Os headers viram lista de pares ENQUANTO o formulario esta aberto, e so voltam a ser
   // Record<string,string> no Confirmar. O objeto nao serve para editar: renomear uma chave em
@@ -101,6 +110,8 @@
   function resetForm() {
     newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
     newWebhookLanguage = '';
+    newWebhookRetryAttempts = '';
+    newWebhookRetryBackoff = '';
     headerRows = [{ key: '', value: '' }];
     editingIndex = null;
     showWebhookForm = false;
@@ -109,8 +120,10 @@
   function applyPreset(key: string) {
     const p = WEBHOOK_PRESETS[key];
     newWebhook = { ...p };
-    // `language` e opional no tipo e no proprio preset: copiar so a propriedade que existir.
+    // `language` e opcional no tipo e no proprio preset: copiar so a propriedade que existir.
     newWebhookLanguage = p.language ?? '';
+    newWebhookRetryAttempts = p.retry_attempts !== undefined ? String(p.retry_attempts) : '';
+    newWebhookRetryBackoff = p.retry_backoff_seconds !== undefined ? String(p.retry_backoff_seconds) : '';
     headerRows = toRows(p.headers);
   }
 
@@ -118,6 +131,8 @@
     const h = notifications.webhooks[index];
     newWebhook = { ...h, headers: { ...h.headers }, events: [...(h.events ?? [])] };
     newWebhookLanguage = h.language ?? '';
+    newWebhookRetryAttempts = h.retry_attempts !== undefined ? String(h.retry_attempts) : '';
+    newWebhookRetryBackoff = h.retry_backoff_seconds !== undefined ? String(h.retry_backoff_seconds) : '';
     headerRows = toRows(h.headers);
     editingIndex = index;
     showWebhookForm = true;
@@ -125,10 +140,14 @@
 
   function confirmWebhook() {
     if (!newWebhook.name || !newWebhook.url) return;
-    // Só grava `language` quando o usuario escolheu um: um preset sem campo continua sem o
+    // So grava `language` quando o usuario escolheu um: um preset sem campo continua sem o
     // campo, e o daemon cai no padrao (pt-BR) como uma versao antiga.
     const webhook: WebhookPreset = { ...newWebhook, headers: fromRows(headerRows) };
     if (newWebhookLanguage) webhook.language = newWebhookLanguage;
+    const attempts = Number(newWebhookRetryAttempts);
+    if (newWebhookRetryAttempts !== '' && Number.isFinite(attempts)) webhook.retry_attempts = attempts;
+    const backoff = Number(newWebhookRetryBackoff);
+    if (newWebhookRetryBackoff !== '' && Number.isFinite(backoff)) webhook.retry_backoff_seconds = backoff;
     if (editingIndex !== null) {
       notifications.webhooks = notifications.webhooks.map((h, i) => i === editingIndex ? webhook : h);
     } else {
@@ -454,6 +473,31 @@
                   <option value="en">English</option>
                 </select>
                 <p class="text-xs text-subtle">{T && T.hintLanguage}</p>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                  <label for="webhook-retry-attempts" class="text-xs font-medium text-heading">{T && T.labelRetryAttempts}</label>
+                  <input
+                    id="webhook-retry-attempts"
+                    type="number"
+                    bind:value={newWebhookRetryAttempts}
+                    min="0"
+                    class="block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
+                  />
+                  <p class="text-xs text-subtle">{T && T.hintRetryAttempts}</p>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label for="webhook-retry-backoff" class="text-xs font-medium text-heading">{T && T.labelRetryBackoff}</label>
+                  <input
+                    id="webhook-retry-backoff"
+                    type="number"
+                    bind:value={newWebhookRetryBackoff}
+                    min="0"
+                    class="block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
+                  />
+                  <p class="text-xs text-subtle">{T && T.hintRetryBackoff}</p>
+                </div>
               </div>
 
               <div class="flex gap-2">
