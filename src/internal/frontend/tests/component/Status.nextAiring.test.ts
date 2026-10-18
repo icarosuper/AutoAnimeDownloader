@@ -63,31 +63,31 @@ async function renderWith(animes: AnimeInfo[]) {
   await tick()
 }
 
-describe('Status — próximo episódio na lista', () => {
-  // A lista renderiza duas vezes (grid do desktop e cards do mobile); no jsdom as duas saem no
-  // DOM porque `lg:hidden` é só CSS. Cada asserção abaixo mira uma delas de propósito.
-  it('preenche a coluna do desktop com o tempo cru, sem repetir o rótulo da coluna', async () => {
+describe('Status — next episode in the list', () => {
+  // The list renders twice (desktop grid and mobile cards); in jsdom both land in the DOM
+  // because `lg:hidden` is CSS only. Each assertion below aims at one of them on purpose.
+  it('fills the desktop column with the raw time, without repeating the column label', async () => {
     const inThreeDays = Math.floor(Date.now() / 1000) + 3 * 86400 + 60
     await renderWith([anime({ next_airing_at: inThreeDays })])
 
-    // Cabeçalho da coluna nova.
+    // New column header.
     expect(screen.getByText(/^Next ep\.$|^Próximo ep\.$/)).toBeTruthy()
-    // Célula: só o tempo, já que o rótulo está no cabeçalho.
+    // Cell: just the time, since the label is in the header.
     expect(screen.getByText(/^in 3 days$|^em 3 dias$/)).toBeTruthy()
   })
 
-  it('no card do mobile a frase vem inteira, junto do último download', async () => {
+  it('on the mobile card the whole phrase comes together, next to the last download', async () => {
     const inThreeDays = Math.floor(Date.now() / 1000) + 3 * 86400 + 60
     await renderWith([anime({ next_airing_at: inThreeDays })])
 
     expect(screen.getByText(/Next ep\. in 3 days|Próx\. ep\. em 3 dias/)).toBeTruthy()
   })
 
-  it('sem episódio agendado a coluna fica vazia e nada aparece no card', async () => {
+  it('with no scheduled episode the column stays empty and nothing appears on the card', async () => {
     await renderWith([anime()])
 
-    // O cabeçalho da coluna continua lá — é coluna, não badge. O que não pode aparecer é
-    // valor nenhum: nem a frase do card mobile, nem o tempo na célula do desktop.
+    // The column header is still there — it's a column, not a badge. What must not appear is
+    // any value: neither the mobile-card phrase, nor the time in the desktop cell.
     expect(screen.queryByText(/Next ep\. \S|Próx\. ep\. \S/)).toBeNull()
     expect(screen.queryByText(/in \d+ days|em \d+ dias/)).toBeNull()
   })

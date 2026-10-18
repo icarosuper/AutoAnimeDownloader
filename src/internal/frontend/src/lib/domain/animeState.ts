@@ -7,8 +7,8 @@ import type { AnimeInfo, TorrentInfo } from '../api/client.js'
  * is deliberate — see the module-level note below for why the boundary sits here.
  *
  * i18n boundary: the cascade below decides WHICH state applies (a business rule, testable
- * without a locale). Turning `AnimeChipState` into visible text ("Baixando ep. 5 · 42%",
- * "Atrasado 3 ep") is a Paraglide concern that belongs to whichever screen renders the chip
+ * without a locale). Turning `AnimeChipState` into visible text ("Downloading ep. 5 · 42%",
+ * "3 ep behind") is a Paraglide concern that belongs to whichever screen renders the chip
  * (Fase 3+) — it switches on `key` and interpolates `episodeNumber`/`percent`/`behindCount`
  * into the matching message function. Baking a string in here would force this module to
  * import the message tree and make every test locale-sensitive for no reason.
@@ -28,7 +28,7 @@ export type AnimeChipVariant = 'accent' | 'ok' | 'warn' | 'danger' | 'neutral'
 export interface AnimeChipState {
   key: AnimeChipKey
   variant: AnimeChipVariant
-  /** Only set for `blacklisted` — spec §7 calls for an dimmed/esmaecida row. */
+  /** Only set for `blacklisted` — spec §7 calls for a dimmed row. */
   dimmed?: boolean
   /** Only set for `downloading`. */
   episodeNumber?: number
@@ -38,7 +38,7 @@ export interface AnimeChipState {
   behindCount?: number
 }
 
-// spec §8 (stallTracker): the "sem seeds" branch fires once a torrent has sat at
+// spec §8 (stallTracker): the "no seeds" branch fires once a torrent has sat at
 // peers_total===0 for at least this long. The store only does the bookkeeping (since when is
 // a hash at zero peers); the threshold itself is a chip business rule, so it lives here.
 const NO_SEEDS_THRESHOLD_MS = 10 * 60 * 1000
@@ -75,8 +75,8 @@ export function deriveAnimeChip(
   }
 
   const stalled = related.find((t) => {
-    // Torrent completo (semeando) sem peers e so um seed ocioso, nao um download travado —
-    // sem esse filtro qualquer anime em dia virava "sem seeds" 10 min depois de abrir a tela.
+    // A completed (seeding) torrent with no peers is just an idle seed, not a stuck download —
+    // without this filter any up-to-date anime would become "no seeds" 10 min after opening the screen.
     if (t.completed) return false
     if (t.peers_total !== 0) return false
     const since = stalledSince.get(t.hash)
@@ -96,8 +96,8 @@ export function deriveAnimeChip(
     return { key: 'awaitingPremiere', variant: 'neutral' }
   }
 
-  // `episodes_pending` ja desconta o que foi assistido (o daemon nunca baixa episodio abaixo do
-  // progresso da AniList, entao ele nao e atraso) — ver countPendingEpisodes no backend.
+  // `episodes_pending` already subtracts what was watched (the daemon never downloads an episode
+  // below AniList progress, so that is not a gap) — see countPendingEpisodes on the backend.
   if (anime.episodes_pending === 0) {
     return { key: 'upToDate', variant: 'ok' }
   }

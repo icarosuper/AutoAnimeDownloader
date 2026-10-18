@@ -127,7 +127,7 @@ describe('deriveAnimeChip', () => {
     expect(chip).toEqual({ key: 'behind', variant: 'warn', behindCount: 3 })
   })
 
-  it('nada baixado mas tudo assistido nao e atraso (episodes_pending === 0)', () => {
+  it('nothing downloaded but everything watched is not a gap (episodes_pending === 0)', () => {
     const anime = makeAnime({ episodes_released: 8, episodes_downloaded: 0, episodes_watched: 8, episodes_pending: 0 })
     const chip = deriveAnimeChip(anime, [], NOW)
     expect(chip).toEqual({ key: 'upToDate', variant: 'ok' })

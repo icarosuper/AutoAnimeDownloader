@@ -25,7 +25,7 @@ Same gate, same reason, for the smoke test against the real AniList:
 AAD_LIVE_ANILIST=1 go test ./src/internal/anilist/ -run Live -v
 ```
 
-`live_smoke_test.go` measures what no mock proves: the size of the `airingSchedule` WINDOW AniList returns (One Piece starts at episode 1123; an old anime comes back with an empty schedule) — the premise of `EpisodeList`, see [Decisions #52](decisions.md#52-a-lista-de-episódios-é-sintetizada-e-a-chave-de-um-episódio-é-anime-número). Run it when you touch `anilist/episodes.go`.
+`live_smoke_test.go` measures what no mock proves: the size of the `airingSchedule` WINDOW AniList returns (One Piece starts at episode 1123; an old anime comes back with an empty schedule) — the premise of `EpisodeList`, see [Decisions #52](decisions.md#52-the-episode-list-is-synthesized-and-an-episodes-key-is-anime-number). Run it when you touch `anilist/episodes.go`.
 
 Same gate, against the real Nyaa:
 

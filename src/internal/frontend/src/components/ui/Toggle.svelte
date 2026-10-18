@@ -8,9 +8,9 @@
   export let label: string
   export let id: string = `toggle-${Math.random().toString(36).slice(2, 9)}`
   /**
-   * Linha de duas colunas: rótulo à esquerda, chave à direita. `flex-row-reverse` inverte a
-   * ORDEM VISUAL sem tocar na ordem do DOM, então a associação rótulo↔input e a ordem de
-   * tabulação continuam as mesmas.
+   * Two-column row: label on the left, switch on the right. `flex-row-reverse` inverts the
+   * VISUAL ORDER without touching DOM order, so the label↔input association and tab order
+   * stay the same.
    */
   export let inline = false
 </script>

@@ -13,9 +13,9 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 )
 
-// mockAniListRoutes responde por nome da query: GetMediaByID e SearchMedia tem corpo proprio,
-// todo o resto (lista do frontend, customLists) cai em listJSON. calls, quando nao nil, conta as
-// requisicoes — e como os testes provam que um caminho NAO tocou a AniList.
+// mockAniListRoutes responds by query name: GetMediaByID and SearchMedia have their own body,
+// everything else (frontend list, customLists) falls back to listJSON. calls, when not nil,
+// counts the requests — how the tests prove a path did NOT hit AniList.
 func mockAniListRoutes(calls *int, listJSON, mediaJSON, searchJSON string) func() {
 	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
 		body, _ := io.ReadAll(req.Body)
@@ -38,9 +38,9 @@ func mockAniListRoutes(calls *int, listJSON, mediaJSON, searchJSON string) func(
 	})
 }
 
-// batchMediaJSON converte um fixture de GetMediaByID (Media unico) na resposta que GetMediaByIDs
-// espera (Page.media[]) — as duas queries pedem os mesmos campos, entao os testes nao precisam de
-// duas copias de cada anime. Media null vira lista vazia, que e como id_in devolve id ausente.
+// batchMediaJSON converts a GetMediaByID fixture (single Media) into the response GetMediaByIDs
+// expects (Page.media[]) — both queries ask for the same fields, so the tests do not need two
+// copies of each anime. Null Media becomes an empty list, which is how id_in returns a missing id.
 func batchMediaJSON(mediaJSON string) string {
 	var single struct {
 		Data struct {
@@ -53,8 +53,8 @@ func batchMediaJSON(mediaJSON string) string {
 	return `{"data":{"Page":{"media":[` + string(single.Data.Media) + `]}}}`
 }
 
-// mockStandaloneAniList: a query por lista devolve vazio (o anime nao esta em lista nenhuma) e
-// a query por media id devolve o anime. E exatamente a situacao de um avulso.
+// mockStandaloneAniList: the list query returns empty (the anime is on no list) and the media-id
+// query returns the anime. Exactly the situation of a standalone.
 func mockStandaloneAniList(listJSON, mediaJSON string) func() {
 	return mockAniListRoutes(nil, listJSON, mediaJSON, mediaJSON)
 }
@@ -77,8 +77,8 @@ func standaloneServer(fm *mockFileManager) *Server {
 	return &Server{State: daemon.NewState(), FileManager: fm}
 }
 
-// TestHandleAnimeEpisodes_StandaloneAnimeIsNot404: sem o fallback de GetMediaByID a tela de
-// detalhe de um avulso simplesmente nao abre.
+// TestHandleAnimeEpisodes_StandaloneAnimeIsNot404: without the GetMediaByID fallback the
+// detail screen of a standalone simply does not open.
 func TestHandleAnimeEpisodes_StandaloneAnimeIsNot404(t *testing.T) {
 	defer mockStandaloneAniList(emptyListJSON, standaloneMediaJSON)()
 
@@ -90,22 +90,22 @@ func TestHandleAnimeEpisodes_StandaloneAnimeIsNot404(t *testing.T) {
 	handleAnimeEpisodes(standaloneServer(fm))(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("quero 200 para um avulso, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200 for a standalone, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var resp struct {
 		Data AnimeDetailResponse `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("resposta invalida: %v", err)
+		t.Fatalf("invalid response: %v", err)
 	}
 	if resp.Data.AnimeID != 21 || len(resp.Data.Episodes) != 1 {
-		t.Fatalf("detalhe do avulso incompleto: %+v", resp.Data)
+		t.Fatalf("incomplete standalone detail: %+v", resp.Data)
 	}
 }
 
-// TestHandleAnimeEpisodes_NonStandaloneUntrackedStill404: o fallback vale so para avulsos —
-// um anime que nao esta em lista nenhuma nem no arquivo continua 404.
+// TestHandleAnimeEpisodes_NonStandaloneUntrackedStill404: the fallback applies only to
+// standalones — an anime on no list and not in the file is still 404.
 func TestHandleAnimeEpisodes_NonStandaloneUntrackedStill404(t *testing.T) {
 	defer mockStandaloneAniList(emptyListJSON, standaloneMediaJSON)()
 
@@ -117,12 +117,12 @@ func TestHandleAnimeEpisodes_NonStandaloneUntrackedStill404(t *testing.T) {
 	handleAnimeEpisodes(standaloneServer(fm))(rec, req)
 
 	if rec.Code != http.StatusNotFound {
-		t.Fatalf("quero 404, veio %d", rec.Code)
+		t.Fatalf("want 404, got %d", rec.Code)
 	}
 }
 
-// TestHandleAnimes_StandaloneAppearsWithoutDownloadedEpisodes: sem isso o avulso so aparece na
-// lista do Status depois de ter episodio baixado.
+// TestHandleAnimes_StandaloneAppearsWithoutDownloadedEpisodes: without this the standalone only
+// shows up in the Status list after an episode has been downloaded.
 func TestHandleAnimes_StandaloneAppearsWithoutDownloadedEpisodes(t *testing.T) {
 	defer mockStandaloneAniList(emptyListJSON, standaloneMediaJSON)()
 
@@ -133,32 +133,32 @@ func TestHandleAnimes_StandaloneAppearsWithoutDownloadedEpisodes(t *testing.T) {
 	handleAnimes(standaloneServer(fm))(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("quero 200, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var resp struct {
 		Data []AnimeInfo `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("resposta invalida: %v", err)
+		t.Fatalf("invalid response: %v", err)
 	}
 	if len(resp.Data) != 1 {
-		t.Fatalf("quero 1 anime na lista, veio %d: %+v", len(resp.Data), resp.Data)
+		t.Fatalf("want 1 anime in the list, got %d: %+v", len(resp.Data), resp.Data)
 	}
 	got := resp.Data[0]
 	if got.AnimeID != 21 {
-		t.Fatalf("quero o anime 21, veio %+v", got)
+		t.Fatalf("want anime 21, got %+v", got)
 	}
 	if !got.IsStandalone {
-		t.Fatal("o avulso precisa vir marcado com is_standalone, senao o chip nunca aparece")
+		t.Fatal("the standalone must come flagged with is_standalone, or the chip never shows")
 	}
 	if got.CoverImage != "cover.jpg" || got.TotalEpisodes != 24 {
-		t.Fatalf("avulso sem capa/total: %+v", got)
+		t.Fatalf("standalone missing cover/total: %+v", got)
 	}
 }
 
-// TestHandleAnimes_StandaloneUsesSavedProgress: sem injetar o progresso salvo, a tela mostraria
-// 0 assistidos para um avulso cujo progresso o usuario acabou de gravar em AnimeSettings.
+// TestHandleAnimes_StandaloneUsesSavedProgress: without injecting the saved progress, the screen
+// would show 0 watched for a standalone whose progress the user just saved in AnimeSettings.
 func TestHandleAnimes_StandaloneUsesSavedProgress(t *testing.T) {
 	defer mockStandaloneAniList(emptyListJSON, standaloneMediaJSON)()
 
@@ -175,15 +175,15 @@ func TestHandleAnimes_StandaloneUsesSavedProgress(t *testing.T) {
 		Data []AnimeInfo `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("resposta invalida: %v", err)
+		t.Fatalf("invalid response: %v", err)
 	}
 	if len(resp.Data) != 1 || resp.Data[0].EpisodesWatched != 48 {
-		t.Fatalf("quero episodes_watched 48, veio %+v", resp.Data)
+		t.Fatalf("want episodes_watched 48, got %+v", resp.Data)
 	}
 }
 
-// TestHandleAnimes_ListedAnimeIsNotStandalone: is_standalone e origem, e um anime de lista nao
-// pode ganhar o chip.
+// TestHandleAnimes_ListedAnimeIsNotStandalone: is_standalone is origin, and a listed anime
+// must not get the chip.
 func TestHandleAnimes_ListedAnimeIsNotStandalone(t *testing.T) {
 	listJSON := `{"data":{"Page":{"mediaList":[{"id":1,"progress":0,"customLists":{},"media":{
 		"id": 21, "episodes": 24, "status": "RELEASING",
@@ -203,10 +203,10 @@ func TestHandleAnimes_ListedAnimeIsNotStandalone(t *testing.T) {
 		Data []AnimeInfo `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("resposta invalida: %v", err)
+		t.Fatalf("invalid response: %v", err)
 	}
 	if len(resp.Data) != 1 || resp.Data[0].IsStandalone {
-		t.Fatalf("anime de lista nao pode vir como avulso: %+v", resp.Data)
+		t.Fatalf("a listed anime must not come as standalone: %+v", resp.Data)
 	}
 }
 

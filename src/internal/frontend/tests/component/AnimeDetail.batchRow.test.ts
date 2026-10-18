@@ -23,8 +23,8 @@ vi.mock('../../src/lib/api/client.js', () => ({
   getLastCheck: vi.fn(),
 }))
 
-// O relatório da última verificação é buscado no mesmo tick do poll de torrents; um relatório
-// vazio é o default de todos os testes que não são sobre ele.
+// The last-check report is fetched on the same tick as the torrent poll; an empty report
+// is the default of every test that is not about it.
 beforeEach(() => {
   vi.mocked(client.getLastCheck).mockResolvedValue({
     finished_at: '0001-01-01T00:00:00Z', pass_error: '', problems: [], limits: [],
@@ -66,9 +66,9 @@ describe('AnimeDetail — a pack is one row', () => {
     const { container, getAllByText } = render(AnimeDetail, { props: { params: { id: '42' } } })
     await tick(); await tick()
 
-    // Desktop e mobile renderizam a mesma definição, então cada linha aparece duas vezes no DOM.
+    // Desktop and mobile render the same definition, so each row appears twice in the DOM.
     const rows = container.querySelectorAll('[data-episode-row]')
-    expect(rows.length).toBe(2 * 2) // 1 linha de pack + 1 episódio solto, nas duas vistas
+    expect(rows.length).toBe(2 * 2) // 1 pack row + 1 standalone episode, in both views
     expect(getAllByText(/1\s*[–-]\s*100/).length).toBeGreaterThan(0)
   })
 
@@ -82,10 +82,10 @@ describe('AnimeDetail — a pack is one row', () => {
     vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
     vi.mocked(client.getTorrents).mockResolvedValue([])
 
-    // Escopado às linhas de episódio, não ao documento inteiro: o ConfirmDialog de "Rebaixar"
-    // de episódio avulso fica sempre montado (fechado, mas presente no DOM por acessibilidade —
-    // ver o comentário em ConfirmDialog.svelte), então seu texto estático "Redownload"/"Rebaixar"
-    // apareceria mesmo numa tela sem nenhuma ação de rebaixar oferecida.
+    // Scoped to episode rows, not the whole document: the standalone-episode "Redownload"
+    // ConfirmDialog stays always mounted (closed, but present in the DOM for accessibility —
+    // see the comment in ConfirmDialog.svelte), so its static "Redownload"/"Rebaixar" text
+    // would show even on a screen with no redownload action offered.
     const { container } = render(AnimeDetail, { props: { params: { id: '42' } } })
     await tick(); await tick()
 
@@ -96,11 +96,11 @@ describe('AnimeDetail — a pack is one row', () => {
     }
   })
 
-  it('the pack row does not offer "Substituir" as its principal action', async () => {
-    // Finding 1 (review, round 1): "Substituir" na linha de pack chamava replaceAnimeWithMagnet,
-    // que apaga TODOS os torrents do anime (endpoint_episode_actions.go) — com packs sucessivos
-    // (001-100 + 101-200), clicar "Substituir" no primeiro destruiria o segundo em silêncio. A
-    // linha de pack não deve renderizar nenhum botão principal (só "Excluir", no menu ⋯).
+  it('the pack row does not offer "Replace" as its principal action', async () => {
+    // Finding 1 (review, round 1): "Replace" on a pack row called replaceAnimeWithMagnet,
+    // which deletes ALL of the anime's torrents (endpoint_episode_actions.go) — with successive
+    // packs (001-100 + 101-200), clicking "Replace" on the first would silently destroy the
+    // second. The pack row must not render any principal button (only "Delete", in the ⋯ menu).
     const episodes = [1, 2].map(n => ({
       episode_number: n, airing_at: 0, time_until_airing: 0,
       is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'pack',
@@ -152,10 +152,10 @@ describe('AnimeDetail — a pack is one row', () => {
     await fireEvent.click(deleteItem)
     await tick()
 
-    // ConfirmDialog roda sobre o `ui/Modal`, que só monta o conteúdo quando está aberto
-    // (`{#if open}`), então existe no máximo UM [role=dialog] na árvore. A asserção continua
-    // escopada nele — e não no documento — para não casar com a "stop tracking" (untrackOpen)
-    // se um dia ela também estiver aberta.
+    // ConfirmDialog runs on `ui/Modal`, which only mounts content when it is open
+    // (`{#if open}`), so there is at most ONE [role=dialog] in the tree. The assertion stays
+    // scoped to it — not the document — so it doesn't match "stop tracking" (untrackOpen)
+    // if that is ever also open.
     const openDialog = container.querySelector('[role="dialog"]') as HTMLElement
     expect(openDialog).toBeTruthy()
     expect(within(openDialog).queryByText(/deixar de rastrear|stop tracking/i)).toBeNull()
@@ -170,8 +170,8 @@ describe('AnimeDetail — a pack is one row', () => {
 })
 
 describe('AnimeDetail — the pack row shows the pack\'s real range', () => {
-  // O bug: com 5 episódios já assistidos, o daemon só registra 6..11 do pack 01-11, e a linha
-  // era rotulada pelo min/max dos registros — "Episódios 6–11" para um pack que tem 1 a 11.
+  // The bug: with 5 episodes already watched, the daemon only records 6..11 of pack 01-11,
+  // and the row was labelled by the records' min/max — "Episodes 6–11" for a pack that has 1 to 11.
   it('labels the row with batch_start/batch_end, not the saved min/max', async () => {
     const episodes = [6, 7, 8, 9, 10, 11].map(n => ({
       episode_number: n, airing_at: 0, time_until_airing: 0,
@@ -191,8 +191,8 @@ describe('AnimeDetail — the pack row shows the pack\'s real range', () => {
     expect(queryAllByText(/6\s*[–-]\s*11/).length).toBe(0)
   })
 
-  // Pack sem faixa conhecida (nome sem "01-11"): o backend manda os campos zerados/ausentes e o
-  // min/max dos registros continua sendo o melhor palpite.
+  // Pack with no known range (name without "01-11"): the backend sends the fields as zero/absent
+  // and the records' min/max remains the best guess.
   it('falls back to the saved min/max when the range is unknown', async () => {
     const episodes = [3, 4, 5].map(n => ({
       episode_number: n, airing_at: 0, time_until_airing: 0,
@@ -212,10 +212,10 @@ describe('AnimeDetail — the pack row shows the pack\'s real range', () => {
 })
 
 describe('AnimeDetail — episode rows are labelled for the user, not for the daemon', () => {
-  // A linha usa sempre o título localizado. Ela já mostrou o `episode_name` do registro salvo —
-  // que é o rótulo de log do download ("Anime - Episode 7"), nunca um título de episódio —, e o
-  // resultado era "Episódio 7" virar rótulo interno assim que o download começava. O campo saiu
-  // da API; o que este teste tranca é o rótulo da linha.
+  // The row always uses the localized title. It used to show the saved record's `episode_name`
+  // — which is the download log label ("Anime - Episode 7"), never an episode title — and the
+  // result was "Episode 7" turning into an internal label as soon as the download started. The
+  // field left the API; what this test locks is the row label.
   it('shows the localized episode title even for an episode already downloading', async () => {
     const episodes = [
       { episode_number: 1, airing_at: 0, time_until_airing: 0, is_aired: true, is_watched: false, is_downloaded: false },
@@ -233,15 +233,16 @@ describe('AnimeDetail — episode rows are labelled for the user, not for the da
     const { getAllByText } = render(AnimeDetail, { props: { params: { id: '42' } } })
     await tick(); await tick()
 
-    // Locale dos testes é en: "Episode 2", e a asserção é de texto EXATO.
+    // Test locale is en: "Episode 2", and the assertion is EXACT text.
     expect(getAllByText('Episode 2').length).toBeGreaterThan(0)
   })
 })
 
 describe('AnimeDetail — a pack row swallows the episodes inside its range', () => {
-  // Os episódios assistidos não têm registro salvo (o daemon nunca os baixa), mas estão DENTRO do
-  // pack: o torrent traz os arquivos e o Organize hardlinka o diretório inteiro na biblioteca.
-  // Mostrá-los como linhas soltas com "Baixar" oferecia um segundo torrent do que já está vindo.
+  // Watched episodes have no saved record (the daemon never downloads them), but they ARE
+  // INSIDE the pack: the torrent brings the files and Organize hardlinks the whole directory
+  // into the library. Showing them as loose rows with "Download" offered a second torrent of
+  // what is already coming.
   it('folds watched episodes inside the range into the pack row', async () => {
     const watched = [1, 2, 3, 4, 5].map(n => ({
       episode_number: n, airing_at: 0, time_until_airing: 0,
@@ -263,13 +264,13 @@ describe('AnimeDetail — a pack row swallows the episodes inside its range', ()
     const { container, getAllByText } = render(AnimeDetail, { props: { params: { id: '42' } } })
     await tick(); await tick()
 
-    // Desktop e mobile renderizam a mesma definição: 1 linha por vista, e só ela.
+    // Desktop and mobile render the same definition: 1 row per view, and only that.
     expect(container.querySelectorAll('[data-episode-row]').length).toBe(1 * 2)
     expect(getAllByText(/1\s*[–-]\s*11/).length).toBeGreaterThan(0)
   })
 
-  // Episódio ainda não lançado dentro da faixa NÃO é engolido: o pack que está no disco não pode
-  // conter o que não foi ao ar, e a linha "Em breve" é o que diz quando ele chega.
+  // An episode not yet released inside the range is NOT swallowed: the pack on disk cannot
+  // contain what hasn't aired, and the "Upcoming" row is what says when it arrives.
   it('keeps an unaired episode inside the range as its own row', async () => {
     const packed = [1, 2].map(n => ({
       episode_number: n, airing_at: 0, time_until_airing: 0,
@@ -291,12 +292,12 @@ describe('AnimeDetail — a pack row swallows the episodes inside its range', ()
     const { container } = render(AnimeDetail, { props: { params: { id: '42' } } })
     await tick(); await tick()
 
-    // 1 linha de pack + os 2 não lançados, nas duas vistas.
+    // 1 pack row + the 2 unreleased, in both views.
     expect(container.querySelectorAll('[data-episode-row]').length).toBe(3 * 2)
   })
 
-  // Episódio dentro da faixa com torrent PRÓPRIO (baixado avulso antes do pack) mantém a linha
-  // dele: ele é outro torrent, com progresso e ações próprias.
+  // An episode inside the range with its OWN torrent (downloaded standalone before the pack)
+  // keeps its row: it is another torrent, with its own progress and actions.
   it('keeps an episode that has its own torrent as its own row', async () => {
     const packed = [1, 2, 3].map(n => ({
       episode_number: n, airing_at: 0, time_until_airing: 0,

@@ -1,17 +1,17 @@
 import { writable } from 'svelte/store'
 
 /**
- * O card de primeiros passos: a dispensa e os passos que o usuário marcou como feitos. Mesmo
- * molde de `theme.ts` e `locale.ts`: `localStorage` com a guarda `isBrowser`.
+ * The first-steps card: dismissal and the steps the user marked as done. Same shape as
+ * `theme.ts` and `locale.ts`: `localStorage` with the `isBrowser` guard.
  *
- * É por NAVEGADOR de propósito, e não campos no `config.json` — ver decisions.md. Um campo de
- * config seguiria o usuário, mas poria preferência de UI num schema que o daemon lê e valeria
- * para todos os dispositivos de uma vez.
+ * Per BROWSER on purpose, not fields in `config.json` — see decisions.md. A config field
+ * would follow the user, but would put a UI preference into a schema the daemon reads and
+ * would apply to every device at once.
  */
 const DISMISSED_KEY = 'onboarding-dismissed'
 const DONE_KEY = 'onboarding-done'
 
-/** A ordem é a numeração do card. */
+/** The order is the numbering on the card. */
 export const ONBOARDING_STEP_IDS = ['library', 'source', 'check'] as const
 export type OnboardingStepId = (typeof ONBOARDING_STEP_IDS)[number]
 
@@ -35,8 +35,8 @@ function readDone(): OnboardingStepId[] {
   if (!isBrowser) return []
   try {
     const parsed = JSON.parse(localStorage.getItem(DONE_KEY) ?? '[]')
-    // Storage é editável à mão e sobrevive a versões: filtrar pelos ids conhecidos evita que
-    // lixo ali dentro conte como passo feito (e faça o card sumir sozinho).
+    // Storage is hand-editable and survives versions: filtering by known ids keeps junk in
+    // there from counting as a completed step (and making the card vanish on its own).
     return Array.isArray(parsed) ? parsed.filter((id) => ONBOARDING_STEP_IDS.includes(id)) : []
   } catch {
     return []
@@ -44,9 +44,9 @@ function readDone(): OnboardingStepId[] {
 }
 
 /**
- * Marcado à MÃO, não derivado do estado do daemon: os passos 1 e 3 já nasciam verdes numa
- * instalação nova (a pasta tem default e o passe roda sozinho), o que fazia o tutorial parecer
- * meio pronto antes de o usuário ler qualquer coisa.
+ * Marked by HAND, not derived from daemon state: steps 1 and 3 already started green on a
+ * fresh install (the folder has a default and the pass runs on its own), which made the
+ * tutorial look half-done before the user had read anything.
  */
 function createOnboardingDone() {
   const { subscribe, update } = writable<OnboardingStepId[]>(readDone())

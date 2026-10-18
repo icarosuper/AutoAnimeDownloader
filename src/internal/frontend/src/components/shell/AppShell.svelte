@@ -1,16 +1,16 @@
 <script lang="ts">
-  // AppShell — grid rail + conteúdo (spec §5, Fase 1 do redesign de UI). Decide NavRail
-  // (desktop) vs NavTabBar (mobile) no breakpoint 768px e hospeda <Toasts />. Substitui
-  // components/Layout.svelte, que escrevia os seis links de navegação duas vezes (bloco
-  // desktop + bloco mobile) — a lista agora vive uma única vez em lib/navItems.ts.
+  // AppShell — rail + content grid (spec §5, Phase 1 of the UI redesign). Picks NavRail
+  // (desktop) vs NavTabBar (mobile) at the 768px breakpoint and hosts <Toasts />. Replaces
+  // components/Layout.svelte, which wrote the six nav links twice (desktop block + mobile
+  // block) — the list now lives once in lib/navItems.ts.
   //
-  // A escolha rail-vs-tab-bar é feita em JS (matchMedia), não com um par de blocos
-  // `hidden md:flex` / `md:hidden` sempre presentes no DOM: NavRail e NavTabBar cada um monta
-  // seu próprio MoreMenu (que hospeda o <select id="theme-select-mobile"> no mobile, e o rail
-  // tem seu próprio <select id="theme-select"> fixo no rodapé) — com os dois blocos sempre no
-  // DOM, ambos existiriam ao mesmo tempo (só escondidos via CSS), o que duplicaria esses ids e
-  // deixaria dois elementos interativos idênticos para leitores de tela / testes de role. Com
-  // a troca em JS, só um dos dois é montado por vez.
+  // The rail-vs-tab-bar choice is made in JS (matchMedia), not with a pair of
+  // `hidden md:flex` / `md:hidden` blocks always present in the DOM: NavRail and NavTabBar
+  // each mount their own MoreMenu (which hosts <select id="theme-select-mobile"> on mobile,
+  // and the rail has its own <select id="theme-select"> fixed in the footer) — with both
+  // blocks always in the DOM, both would exist at once (only hidden via CSS), which would
+  // duplicate those ids and leave two identical interactive elements for screen readers /
+  // role tests. With the JS swap, only one of the two is mounted at a time.
   import { onDestroy, onMount } from 'svelte'
   import { location } from 'svelte-spa-router'
   import SystemBanner from './SystemBanner.svelte'
@@ -18,7 +18,7 @@
   import NavRail from './NavRail.svelte'
   import NavTabBar from './NavTabBar.svelte'
 
-  const DESKTOP_QUERY = '(min-width: 768px)' // = Tailwind `md:`, conforme pedido pelo spec
+  const DESKTOP_QUERY = '(min-width: 768px)' // = Tailwind `md:`, as the spec asks
   const isBrowser = typeof window !== 'undefined'
   const desktopMql = isBrowser ? window.matchMedia(DESKTOP_QUERY) : null
 
@@ -45,8 +45,8 @@
   {/if}
 
   <div class="flex min-w-0 flex-1 flex-col">
-    <!-- Banner de sistema: acima do conteúdo e fora do <main>, porque ele fala sobre a página
-         inteira (o daemon caiu, a AniList caiu), não sobre a rota atual. -->
+    <!-- System banner: above the content and outside <main>, because it talks about the
+         whole page (the daemon is down, AniList is down), not about the current route. -->
     <SystemBanner />
 
     <!-- Page Content — no {#key $locale} here; each route handles its own reactivity -->

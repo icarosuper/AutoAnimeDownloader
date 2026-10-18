@@ -9,15 +9,15 @@ import (
 
 const defaultAPIPort = "8091"
 
-// WebUIURL monta a URL da Web UI a partir do que o processo chama de "porta", que na pratica e
-// o Addr do http.Server: ":8091", com dois-pontos na frente. Interpolar esse valor direto num
-// "http://localhost:%s" produz "http://localhost::8091" — host invalido, e o navegador abre
-// numa pagina de erro em vez do app.
+// WebUIURL builds the Web UI URL from what the process calls a "port", which in practice is
+// the http.Server Addr: ":8091", with a leading colon. Interpolating that value straight into
+// "http://localhost:%s" produces "http://localhost::8091" — invalid host, and the browser
+// opens an error page instead of the app.
 //
-// Existe porque essa conversao ja estava escrita em tres lugares (o passe de verificacao, o
-// tray e o boot de primeira execucao) e o mais novo esqueceu do TrimPrefix. Uma funcao so.
+// It exists because that conversion was already written in three places (the verification
+// pass, the tray and the first-run boot) and the newest one forgot TrimPrefix. One function.
 //
-// route entra como veio ("/#/status", "/api/v1/check", "" para a raiz).
+// route comes in as-is ("/#/status", "/api/v1/check", "" for the root).
 func WebUIURL(port, route string) string {
 	port = strings.TrimPrefix(port, ":")
 	if port == "" {
@@ -26,14 +26,14 @@ func WebUIURL(port, route string) string {
 	return fmt.Sprintf("http://localhost:%s%s", port, route)
 }
 
-// WaitForListener espera a porta aceitar conexao, ate timeout.
+// WaitForListener waits for the port to accept a connection, until timeout.
 //
-// O servidor da API sobe numa goroutine e o log "API server started successfully" sai antes de
-// o socket estar ligado. Quem abre o navegador logo depois disputa uma corrida com o
-// ListenAndServe: perder da ERR_CONNECTION_REFUSED, que para o usuario e o mesmo "abriu sem o
-// app" de uma URL quebrada.
+// The API server starts in a goroutine and the "API server started successfully" log fires
+// before the socket is bound. Whoever opens the browser right after races ListenAndServe:
+// losing it is ERR_CONNECTION_REFUSED, which to the user is the same "opened without the
+// app" as a broken URL.
 func WaitForListener(addr string, timeout time.Duration) error {
-	// O Addr do http.Server costuma vir sem host (":8091"); net.Dial precisa de um.
+	// The http.Server Addr usually comes without a host (":8091"); net.Dial needs one.
 	if strings.HasPrefix(addr, ":") {
 		addr = "127.0.0.1" + addr
 	}

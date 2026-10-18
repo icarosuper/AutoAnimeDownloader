@@ -174,26 +174,27 @@ func TestHandleTorrentFailure_NoSavedEpisode(t *testing.T) {
 	}
 }
 
-// Falha com pecas ja verificadas guarda os bytes: o re-add do proximo passe usa o mesmo id e a
-// rain retoma de onde parou, em vez de rebaixar um pack inteiro por um erro transitorio.
+// A failure with pieces already verified keeps the bytes: the next pass's re-add uses the same
+// id and rain resumes where it left off, instead of re-downloading a whole pack for a transient
+// error.
 func TestHandleTorrentFailure_KeepsPartialData(t *testing.T) {
 	const withProgress = "cccccccccccccccccccccccccccccccccccccccc"
 	const untouched = "dddddddddddddddddddddddddddddddddddddddd"
 
 	fm := &lifecycleFM{configs: &files.Config{}}
 	backend := torrents.NewFakeBackend()
-	backend.AddPaused(withProgress, "pack a 90%", 900, 1000, false)
-	backend.AddPaused(untouched, "pack sem nada", 0, 1000, false)
+	backend.AddPaused(withProgress, "pack at 90%", 900, 1000, false)
+	backend.AddPaused(untouched, "pack with nothing", 0, 1000, false)
 
 	HandleTorrentFailure(withProgress, errors.New("boom"), backend, fm)
 	HandleTorrentFailure(untouched, errors.New("boom"), backend, fm)
 
 	if !backend.RemovedKeepData[withProgress] {
-		t.Error("torrent com pecas verificadas deve ser removido com keepData=true")
+		t.Error("a torrent with verified pieces must be removed with keepData=true")
 	}
-	// Zero peca: guardar a pasta so deixaria lixo se a retentativa cair noutro infohash.
+	// Zero pieces: keeping the folder would only leave junk if the retry lands on another infohash.
 	if backend.RemovedKeepData[untouched] {
-		t.Error("torrent sem nenhuma peca deve ser removido com keepData=false")
+		t.Error("a torrent with no pieces must be removed with keepData=false")
 	}
 }
 

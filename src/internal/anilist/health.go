@@ -9,38 +9,39 @@ import (
 	"time"
 )
 
-// Estados de saude da AniList. Sao os codigos que chegam ao frontend, que monta a frase — a
-// mesma fronteira que lib/domain/checkIssue.ts documenta: o backend manda CODIGO, nunca texto
-// pronto, senao o daemon precisaria saber o locale do navegador.
+// AniList health states. These are the codes the frontend receives and turns into a sentence —
+// the same boundary lib/domain/checkIssue.ts documents: the backend sends a CODE, never ready-made
+// text, otherwise the daemon would need to know the browser's locale.
 const (
 	HealthOK          = "ok"
-	HealthRateLimited = "rate_limited" // 429: timeout de 1 minuto, com Retry-After
-	HealthOutage      = "outage"       // 403 (API desligada / IP bloqueado) ou 5xx
-	HealthAppBug      = "app_bug"      // 400: a query nao bate mais com o schema
+	HealthRateLimited = "rate_limited" // 429: 1-minute timeout, with Retry-After
+	HealthOutage      = "outage"       // 403 (API off / IP blocked) or 5xx
+	HealthAppBug      = "app_bug"      // 400: the query no longer matches the schema
 )
 
-// Health e o ultimo estado conhecido da AniList. Vive no pacote (e nao em daemon.State) porque
-// TODA chamada passa por sendAnilistRequest: o passe do daemon e o poll de /animes gravam aqui
-// sem que nenhum chamador precise propagar erro. Ver decisions.md #65.
+// Health is the last known AniList state. It lives in the package (not in daemon.State) because
+// EVERY call goes through sendAnilistRequest: the daemon pass and the /animes poll write here
+// without any caller needing to propagate an error. See decisions.md #65.
 type Health struct {
 	State string `json:"state" example:"ok"`
-	// Message e a mensagem CRUA da AniList. Um 403 de IP bloqueado traz o motivo escrito para
-	// ser lido por humano; e a unica informacao que o frontend nao tem como reconstruir.
+	// Message is the RAW AniList message. A 403 from a blocked IP brings the reason written for
+	// a human to read; it's the only information the frontend cannot reconstruct.
 	Message string `json:"message,omitempty"`
-	// RetryAt vem do Retry-After de um 429. Zero quando nao se aplica: so o rate limit informa
-	// quanto falta, e e o que permite mostrar contagem regressiva em vez de "tente mais tarde".
+	// RetryAt comes from a 429's Retry-After. Zero when it doesn't apply: only the rate limit
+	// says how long is left, and that's what lets the banner show a countdown instead of "try
+	// again later".
 	RetryAt time.Time `json:"retry_at,omitempty"`
 	Since   time.Time `json:"since,omitempty"`
-	// CacheSavedAt e a data do snapshot em disco (persist.go), preenchida na leitura e nao na
-	// gravacao do estado: nao e um fato sobre a AniList, e o que responde "de quando e o que
-	// estou vendo?" quando ela esta fora do ar. Zero quando nunca houve snapshot.
+	// CacheSavedAt is the date of the on-disk snapshot (persist.go), filled on read and not on
+	// writing the state: it isn't a fact about AniList, it's what answers "how old is what I'm
+	// looking at?" when AniList is down. Zero when there has never been a snapshot.
 	CacheSavedAt time.Time `json:"cache_saved_at,omitempty"`
 }
 
 var health atomic.Pointer[Health]
 
-// CurrentHealth devolve o estado atual. Nunca nil: antes da primeira chamada o estado e "ok",
-// porque "ainda nao perguntamos" nao e motivo para alarmar ninguem.
+// CurrentHealth returns the current state. Never nil: before the first call the state is "ok",
+// because "we haven't asked yet" is no reason to alarm anyone.
 func CurrentHealth() Health {
 	current := Health{State: HealthOK}
 	if h := health.Load(); h != nil {
@@ -50,9 +51,9 @@ func CurrentHealth() Health {
 	return current
 }
 
-// setHealth grava um estado degradado. Preserva o Since do estado anterior quando o tipo de
-// falha nao mudou: o banner mostra ha quanto tempo a AniList esta fora, nao ha quanto tempo foi
-// a ultima tentativa.
+// setHealth records a degraded state. Preserves the previous state's Since when the failure
+// type hasn't changed: the banner shows how long AniList has been down, not how long ago the
+// last attempt was.
 func setHealth(state, message string, retryAt time.Time) {
 	now := time.Now()
 	since := now
@@ -62,17 +63,18 @@ func setHealth(state, message string, retryAt time.Time) {
 	health.Store(&Health{State: state, Message: message, RetryAt: retryAt, Since: since})
 }
 
-// clearHealth marca a AniList como sa. Chamado em toda resposta util — o banner some no primeiro
-// 200 limpo, nunca por timer: o estado ou acabou ou nao acabou (ver decisions.md #66).
+// clearHealth marks AniList as healthy. Called on every useful response — the banner goes away
+// on the first clean 200, never on a timer: the state either ended or it didn't (see
+// decisions.md #66).
 func clearHealth() {
 	if h := health.Load(); h == nil || h.State != HealthOK {
 		health.Store(&Health{State: HealthOK})
 	}
 }
 
-// graphQLErrors e o envelope de erro da AniList. A doc oficial e explicita: um 200 pode carregar
-// erro aqui (query invalida, campo suprimido). Sem ler este campo, esse caso vira resposta vazia
-// sem diagnostico — ver decisions.md #65.
+// graphQLErrors is AniList's error envelope. The official docs are explicit: a 200 can carry
+// an error here (invalid query, suppressed field). Without reading this field, that case
+// becomes an empty response with no diagnosis — see decisions.md #65.
 type graphQLErrors struct {
 	Errors []struct {
 		Message string `json:"message"`
@@ -80,8 +82,8 @@ type graphQLErrors struct {
 	} `json:"errors"`
 }
 
-// firstError extrai a primeira entrada de errors do corpo. Devolve status 0 quando nao ha erro
-// nenhum, o que inclui o caso comum de o corpo nem ser um envelope GraphQL valido.
+// firstError extracts the first errors entry from the body. Returns status 0 when there is no
+// error at all, which includes the common case of the body not even being a valid GraphQL envelope.
 func firstError(body []byte) (status int, message string) {
 	var env graphQLErrors
 	if err := json.Unmarshal(body, &env); err != nil || len(env.Errors) == 0 {
@@ -91,9 +93,9 @@ func firstError(body []byte) (status int, message string) {
 	return e.Status, e.Message
 }
 
-// classify traduz um codigo em estado de saude. O codigo vem de errors[].status quando existe e
-// do HTTP quando nao — os dois caminhos convergem aqui de proposito, porque a AniList usa a
-// mesma numeracao nos dois lugares.
+// classify turns a code into a health state. The code comes from errors[].status when it exists
+// and from HTTP when it doesn't — both paths converge here on purpose, because AniList uses the
+// same numbering in both places.
 func classify(status int) string {
 	switch {
 	case status == 429:
@@ -103,18 +105,20 @@ func classify(status int) string {
 	case status == 400:
 		return HealthAppBug
 	default:
-		// 401/405/418… nao estao documentados para esta API. Tratar como outage e a leitura
-		// segura: manda esperar em vez de mandar reportar um bug que pode nao ser nosso.
+		// 401/405/418… aren't documented for this API. Treating them as outage is the safe
+		// reading: it tells the user to wait instead of telling them to report a bug that
+		// might not be ours.
 		return HealthOutage
 	}
 }
 
-// retryAfter le o cabecalho Retry-After de um 429. A AniList manda segundos (nunca data HTTP).
+// retryAfter reads the Retry-After header of a 429. AniList sends seconds (never an HTTP date).
 //
-// NAO confiar em X-RateLimit-Reset: ele aparece anunciado em Access-Control-Expose-Headers, mas
-// nao veio em nenhuma resposta 200 observada (medido em 2026-08-28). Se ele existe, e so no 429 —
-// nao verificado, porque provocar um 429 bloqueia o IP por ~1min e o daemon compartilha esse IP.
-// X-RateLimit-Limit e X-RateLimit-Remaining, esses sim, vem em TODA resposta, inclusive 400 e 404.
+// Do NOT trust X-RateLimit-Reset: it is advertised in Access-Control-Expose-Headers, but it
+// didn't come in any observed 200 response (measured 2026-08-28). If it exists, it's only on
+// 429 — unverified, because triggering a 429 blocks the IP for ~1min and the daemon shares
+// that IP. X-RateLimit-Limit and X-RateLimit-Remaining, those do come on EVERY response,
+// including 400 and 404.
 func retryAfter(headerValue string) time.Time {
 	secs, err := strconv.Atoi(headerValue)
 	if err != nil || secs <= 0 {
@@ -123,46 +127,46 @@ func retryAfter(headerValue string) time.Time {
 	return time.Now().Add(time.Duration(secs) * time.Second)
 }
 
-// Priority declara o quanto uma chamada a AniList pode ser sacrificada quando o orcamento de
-// requisicoes esta no fim. NAO ha valor padrao: o parametro e obrigatorio em toda chamada, e
-// e por isso que ele existe como parametro em vez de wrapper — uma query nova nao consegue
-// compilar sem alguem decidir a criticidade dela. Ver decisions.md #72.
+// Priority declares how much an AniList call can be sacrificed when the request budget is
+// running out. There is NO default: the parameter is required on every call, and that's why
+// it exists as a parameter instead of a wrapper — a new query can't compile without someone
+// deciding its criticality. See decisions.md #72.
 type Priority int
 
 const (
-	// PriorityCritical nunca e recusada pelo gate. E o passe do daemon e toda acao que um
-	// usuario disparou e esta esperando: recusar aqui e episodio nao baixado ou botao que nao
-	// funciona.
+	// PriorityCritical is never refused by the gate. It's the daemon pass and every action a
+	// user triggered and is waiting on: refusing here is an episode not downloaded or a
+	// button that doesn't work.
 	PriorityCritical Priority = iota
-	// PriorityDisposable e recusada quando o orcamento cai abaixo do piso. E o trafego que se
-	// repete sozinho — poll do frontend, busca por tecla digitada — e que tem para onde cair:
-	// cache vencido, o proximo poll, ou um erro visivel a quem digitou.
+	// PriorityDisposable is refused when the budget falls below the floor. It's the traffic
+	// that repeats on its own — frontend poll, search-as-you-type — and that has somewhere
+	// to fall back: expired cache, the next poll, or an error visible to whoever typed.
 	PriorityDisposable
 )
 
-// ErrBudgetLow e a recusa do gate. Nao e falha da AniList: nenhuma requisicao chegou a sair, e
-// a saude do pacote continua como estava.
+// ErrBudgetLow is the gate's refusal. It is not an AniList failure: no request even went out,
+// and the package's health stays as it was.
 var ErrBudgetLow = errors.New("anilist: request budget is low, disposable call refused")
 
-// ErrFromCache acompanha um valor que VEIO JUNTO: a AniList falhou e a resposta saiu do cache
-// local (possivelmente do snapshot em disco, de dias atras). Nao e "deu errado", e "deu certo
-// com dado de outra epoca".
+// ErrFromCache accompanies a value that CAME WITH IT: AniList failed and the response came
+// from the local cache (possibly from the on-disk snapshot, days old). It isn't "it went
+// wrong", it's "it went right with data from another time".
 //
-// Vai como erro de proposito. Todo chamador que nao conhece o sentinela ve err != nil e se
-// comporta como se comportava antes do cache existir — que e o comportamento seguro. So quem
-// checa errors.Is opta por usar o valor, e a escolha fica visivel no call site em vez de
-// escondida numa flag que se esquece de ler.
+// It goes as an error on purpose. Every caller that doesn't know the sentinel sees err != nil
+// and behaves as it did before the cache existed — which is the safe behavior. Only whoever
+// checks errors.Is opts into using the value, and the choice stays visible at the call site
+// instead of hidden in a flag that gets forgotten.
 var ErrFromCache = errors.New("anilist: served from the local cache")
 
 const (
-	// budgetFloor e quantas requisicoes o gate reserva para o trafego critico. O limite medido
-	// e 30/min por IP (decisions.md #72) e um passe do daemon custa alguns requests; deixar um
-	// terco do balde de lado e o suficiente para ele nunca esbarrar no poll do frontend.
+	// budgetFloor is how many requests the gate reserves for critical traffic. The measured
+	// limit is 30/min per IP (decisions.md #72) and a daemon pass costs a few requests;
+	// leaving a third of the bucket aside is enough for it to never bump into the frontend poll.
 	budgetFloor = 10
-	// budgetValidity e a validade de uma leitura, e e a SAIDA OBRIGATORIA do gate: o balde da
-	// AniList reseta inteiro em <= 60s e nada nos avisa disso. Sem a validade, um orcamento
-	// baixo recusaria todo mundo, ninguem emitiria requisicao, nenhuma leitura nova chegaria e
-	// o gate ficaria travado para sempre.
+	// budgetValidity is how long a reading lasts, and it's the gate's REQUIRED EXIT: AniList's
+	// bucket resets entirely in <= 60s and nothing tells us. Without the validity, a low
+	// budget would refuse everyone, nobody would emit a request, no new reading would arrive
+	// and the gate would stay stuck forever.
 	budgetValidity = 60 * time.Second
 )
 
@@ -173,11 +177,11 @@ type budgetReading struct {
 
 var budget atomic.Pointer[budgetReading]
 
-// recordBudget guarda o X-RateLimit-Remaining de uma resposta. Chamado em TODA resposta,
-// inclusive erro: um 404 e uma query invalida consomem cota igual a um 200 (decisions.md #72),
-// entao um contador que so olhasse sucesso ficaria otimista exatamente quando as coisas ja
-// estao indo mal. O header e autoritativo porque ja soma os outros consumidores do mesmo IP —
-// nenhum contador nosso enxerga isso.
+// recordBudget stores X-RateLimit-Remaining from a response. Called on EVERY response,
+// including errors: a 404 and an invalid query consume quota the same as a 200
+// (decisions.md #72), so a counter that only looked at success would be optimistic exactly
+// when things are already going badly. The header is authoritative because it already sums
+// the other consumers of the same IP — none of our counters can see that.
 func recordBudget(header http.Header) {
 	remaining, err := strconv.Atoi(header.Get("X-RateLimit-Remaining"))
 	if err != nil {
@@ -186,9 +190,9 @@ func recordBudget(header http.Header) {
 	budget.Store(&budgetReading{remaining: remaining, at: time.Now()})
 }
 
-// budgetAllows decide se uma chamada pode sair agora. Nunca bloqueia esperando: o poll do
-// frontend roda dentro de um handler HTTP, e pendurar a goroutine ate o balde encher penduraria
-// a tela junto.
+// budgetAllows decides whether a call can go out now. Never blocks waiting: the frontend poll
+// runs inside an HTTP handler, and hanging the goroutine until the bucket fills would hang
+// the screen with it.
 func budgetAllows(priority Priority) bool {
 	if priority == PriorityCritical {
 		return true

@@ -131,8 +131,8 @@ func countWouldSearch(summary *DebugSummary) int {
 	return n
 }
 
-// A agenda da AniList e clipada (One Piece: pagina 1 vai do 1123 ao 1147), e a producao enumera
-// a partir do progresso+1. O debug tem que fazer o mesmo, senao reporta ter buscado o 1123.
+// AniList's schedule is clipped (One Piece: page 1 goes from 1123 to 1147), and production
+// enumerates from progress+1. Debug has to do the same, or it reports having searched 1123.
 func TestRunAnimeDebug_ClippedSchedule_StartsAtEpisodeOne(t *testing.T) {
 	summary := runDebugWithMocks(t, debugAnilistJSON("RELEASING", 1147, 1123, 1147),
 		&files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}})
@@ -148,22 +148,23 @@ func TestRunAnimeDebug_ClippedSchedule_StartsAtEpisodeOne(t *testing.T) {
 	}
 }
 
-// Sem pack no resultado, o teto por anime vale no debug igual à produção.
+// With no pack in the result, the per-anime ceiling applies in debug the same as in production.
 func TestRunAnimeDebug_PerAnimeLimitAppliesWithoutPack(t *testing.T) {
 	summary := runDebugWithMocks(t, debugAnilistJSON("FINISHED", 39, 0, 0),
 		&files.Config{MaxEpisodesPerAnime: 12, EpisodeRetryLimit: 3, AnilistUsernames: []string{"user"}})
 
 	if got := countWouldSearch(summary); got != 12 {
-		t.Errorf("esperava 12 episódios selecionados, obteve %d", got)
+		t.Errorf("want 12 selected episodes, got %d", got)
 	}
 }
 
-// Numa serie longa a busca multipla nao leva numero de episodio na query e volta vazia; quem
-// acha o episodio e searchSingleEpisode (com zero-padding, decisions.md #56). Sem esse fallback
-// o debug reportava "0 magnets" por nao ter buscado — e nao por o Nyaa nao ter.
+// In a long series the multi search carries no episode number in the query and comes back
+// empty; what finds the episode is searchSingleEpisode (with zero-padding, decisions.md #56).
+// Without that fallback debug reported "0 magnets" because it hadn't searched — not because
+// Nyaa didn't have them.
 func TestRunAnimeDebug_FallsBackToSingleEpisodeSearch(t *testing.T) {
-	// So a query que carrega o numero do episodio devolve linha; a busca multipla (titulo puro)
-	// volta vazia, como no One Piece real.
+	// Only the query that carries the episode number returns a row; the multi search (title
+	// only) comes back empty, as in real One Piece.
 	epInQuery := regexp.MustCompile(`q=my\+anime\+0*(\d+)`)
 	restoreNyaa := nyaa.MockNyaaHttpGet(func(url string) (*http.Response, error) {
 		body := `<html><body><table class="torrent-list"><tbody></tbody></table></body></html>`
@@ -273,8 +274,8 @@ func TestWriteDebugSummary(t *testing.T) {
 	}
 }
 
-// standaloneDebugMediaJSON: resposta de GetMediaByID para um avulso de 5 episodios, todos no ar
-// — o mesmo shape que appendStandaloneAnimes recebe em producao.
+// standaloneDebugMediaJSON: GetMediaByID response for a 5-episode standalone, all aired —
+// the same shape appendStandaloneAnimes receives in production.
 const standaloneDebugMediaJSON = `{"data": {"Media": {
 	"id": 21, "format": "TV", "status": "RELEASING", "episodes": 5,
 	"title": {"english": "My Anime", "romaji": "My Anime"},
@@ -289,11 +290,12 @@ const standaloneDebugMediaJSON = `{"data": {"Media": {
 	]}
 }}}`
 
-// TestRunAnimeDebug_StandaloneUsesSavedProgress: RunAnimeDebug reproduz o pipeline real (ver
-// doc-comment da funcao), e o pipeline real (appendStandaloneAnimes) injeta o progresso salvo no
-// MediaList sintetico do avulso. Sem a mesma injecao em resolveAnimeDetails, o debug de um avulso
-// sem conta que o acompanhe (cai no fallback GetMediaByID) reportava sempre a partir do episodio
-// 1, mesmo com progresso gravado — o proprio pipeline que a ferramenta existe para espelhar.
+// TestRunAnimeDebug_StandaloneUsesSavedProgress: RunAnimeDebug reproduces the real pipeline
+// (see the function's doc-comment), and the real pipeline (appendStandaloneAnimes) injects
+// the saved progress into the standalone's synthetic MediaList. Without the same injection in
+// resolveAnimeDetails, debug of a standalone with no account tracking it (falls to the
+// GetMediaByID fallback) always reported from episode 1, even with saved progress — the very
+// pipeline the tool exists to mirror.
 func TestRunAnimeDebug_StandaloneUsesSavedProgress(t *testing.T) {
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, standaloneDebugMediaJSON)()
 	defer mockEmptyNyaa()()
@@ -306,9 +308,9 @@ func TestRunAnimeDebug_StandaloneUsesSavedProgress(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 	if len(summary.Episodes) != 2 {
-		t.Fatalf("progresso 3 de 5 episodios: esperava 2 no resumo (4 e 5), veio %d: %+v", len(summary.Episodes), summary.Episodes)
+		t.Fatalf("progress 3 of 5 episodes: want 2 in the summary (4 and 5), got %d: %+v", len(summary.Episodes), summary.Episodes)
 	}
 	if summary.Episodes[0].Episode != 4 {
-		t.Errorf("esperava comecar no episodio 4, veio %d", summary.Episodes[0].Episode)
+		t.Errorf("want to start at episode 4, got %d", summary.Episodes[0].Episode)
 	}
 }

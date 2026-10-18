@@ -2,12 +2,12 @@ import type { BackendState } from '../stores/backendHealth.js'
 import type { AnilistHealth } from '../api/client.js'
 
 /**
- * O banner é ÚNICO e tem precedência — nunca uma pilha. Com o daemon fora do ar, o estado da
- * AniList na tela é a última leitura bem-sucedida, ou seja, informação datada; mostrá-la ao lado
- * de "daemon não responde" é ruído contraditório. Ver decisions.md #66.
+ * The banner is UNIQUE and has precedence — never a stack. With the daemon down, the AniList
+ * state on screen is the last successful read, i.e. stale information; showing it next to
+ * "daemon not responding" is contradictory noise. See decisions.md #66.
  *
- * A ordem vai do mais a montante para o mais a jusante: nada abaixo do backend é observável sem
- * o backend.
+ * Order goes from most upstream to most downstream: nothing below the backend is observable
+ * without the backend.
  */
 export type BannerKind =
   | 'backend_unreachable'
@@ -18,17 +18,18 @@ export type BannerKind =
 
 export interface SystemBanner {
   kind: BannerKind
-  /** Mensagem crua da AniList, quando houver. Um 403 de IP bloqueado explica o motivo por
-   *  escrito, e é a única informação que o frontend não tem como reconstruir sozinho. */
+  /** Raw AniList message, when present. A 403 for a blocked IP explains the reason in
+   *  writing, and it's the only information the frontend cannot reconstruct on its own. */
   detail?: string
-  /** Instante em que o rate limit expira, para a contagem regressiva. */
+  /** Instant at which the rate limit expires, for the countdown. */
   retryAt?: Date
-  /** Data do cache local que está sendo servido no lugar da AniList. Só vem nos estados
-   *  degradados: com a AniList no ar o snapshot existe mas não é ele que está na tela. */
+  /** Date of the local cache being served in place of AniList. Only present in degraded
+   *  states: with AniList up the snapshot exists but it is not what is on screen. */
   cachedAt?: Date
-  /** Botão de reportar SÓ em bug nosso: 5xx do backend, e 400 da AniList (o schema mudou e
-   *  nenhuma espera resolve). Reportar rate limit ou outage gera issue que se fecha com "é a
-   *  AniList", e treina o usuário a ignorar o botão justamente quando ele importa. */
+  /** Report button ONLY for our own bugs: backend 5xx, and AniList 400 (the schema changed
+   *  and no amount of waiting will fix it). Reporting a rate limit or outage produces an
+   *  issue that closes with "it's AniList", and trains the user to ignore the button
+   *  exactly when it matters. */
   reportable: boolean
 }
 
@@ -57,7 +58,7 @@ export function pickBanner(
   }
 }
 
-/** Segundos restantes até `retryAt`, nunca negativo. Fora do componente para ser testável. */
+/** Seconds remaining until `retryAt`, never negative. Outside the component so it is testable. */
 export function secondsUntil(retryAt: Date | undefined, now: number): number {
   if (!retryAt) return 0
   return Math.max(0, Math.ceil((retryAt.getTime() - now) / 1000))

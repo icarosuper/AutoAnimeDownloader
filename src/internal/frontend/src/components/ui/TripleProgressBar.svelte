@@ -3,18 +3,18 @@
   // overlaid): watched (--ok), downloaded (--accent), released (--warn), scaled against
   // `total`. Each segment's width is the DELTA from the previous one.
   //
-  // As props sao CUMULATIVAS (watched <= downloaded <= released <= total) e NAO sao os campos
-  // crus de `AnimeInfo`: `downloaded` precisa vir de `breakdown()` (lib/utils/status.ts), que
-  // o deriva de `episodes_pending`. Passar `episodes_downloaded` aqui pinta de amarelo
-  // episodio ja baixado e visto, porque aquele campo cai quando o daemon poda assistidos —
-  // decisions.md #88.
+  // The props are CUMULATIVE (watched <= downloaded <= released <= total) and are NOT the raw
+  // `AnimeInfo` fields: `downloaded` must come from `breakdown()` (lib/utils/status.ts), which
+  // derives it from `episodes_pending`. Passing `episodes_downloaded` here paints already
+  // downloaded-and-watched episodes yellow, because that field drops when the daemon prunes
+  // watched ones — decisions.md #88.
   //
-  // A legenda mora AQUI, e nao numa prop `legend: string` como antes, porque cada termo dela e
-  // colorido com a cor do seu segmento — e uma string pronta nao tem onde pendurar o <span>.
-  // Os quatro termos sao os DELTAS (o que cada faixa de cor mede), nao os cumulativos: a
-  // legenda antiga dizia "5 vistos · 5 baixados" enquanto o roxo tinha largura zero, e era
-  // impossivel casar palavra com cor. Aqui os mesmos quatro numeros alimentam largura e texto,
-  // entao eles nao tem como divergir de novo.
+  // The legend lives HERE, not in a `legend: string` prop like before, because each of its
+  // terms is colored with its segment's color — and a ready-made string has nowhere to hang
+  // the <span>. The four terms are the DELTAS (what each color band measures), not the
+  // cumulatives: the old legend said "5 watched · 5 downloaded" while purple had zero width,
+  // and it was impossible to match word to color. Here the same four numbers feed width and
+  // text, so they can't diverge again.
   import * as m from "../../lib/i18n/messages.js"
   import { locale } from "../../lib/stores/locale.js"
 
@@ -22,10 +22,10 @@
   export let downloaded: number
   export let released: number
   export let total: number
-  // Por anime, termo zerado e ruido: a maioria das linhas tem pelo menos um, e a legenda de
-  // quatro termos e larga o bastante para quebrar em duas linhas na coluna de progresso. No
-  // resumo da biblioteca e o contrario — la os quatro numeros sao o conteudo do card, e um
-  // termo sumindo faria a soma parar de fechar com o total. Por isso o default omite.
+  // Per anime, a zero term is noise: most rows have at least one, and a four-term legend is
+  // wide enough to wrap onto two lines in the progress column. In the library summary it's
+  // the opposite — there the four numbers ARE the card's content, and a term vanishing would
+  // make the sum stop adding up to the total. That's why the default omits.
   export let keepZeros = false
 
   $: toWatch = Math.max(0, downloaded - watched)
@@ -37,7 +37,7 @@
     return Math.max(0, Math.min(100, (n / total) * 100))
   }
 
-  // `text-subtle` do <p> ja cobre "nao lancados" — a faixa dele e o proprio track, sem cor.
+  // The <p>'s `text-subtle` already covers "unreleased" — its band is the track itself, with no color.
   $: allTerms = $locale
     ? [
         { n: watched, cls: "text-ok", text: m.progress_legend_watched({ count: watched }) },
@@ -47,9 +47,10 @@
       ]
     : []
   $: kept = keepZeros ? allTerms : allTerms.filter((t) => t.n > 0)
-  // Anime sem episodio lancado zera os quatro termos, e a legenda inteira sumiria — <p> vazio
-  // encolhe a linha e faz a altura oscilar, justo o que a coluna de progresso nao pode ter.
-  // Nesse caso sobra "0 vistos", que e verdade e ocupa a linha.
+  // An anime with no released episode zeros all four terms, and the whole legend would
+  // vanish — an empty <p> shrinks the row and makes the height oscillate, exactly what the
+  // progress column cannot have. In that case "0 watched" remains, which is true and fills
+  // the row.
   $: terms = kept.length > 0 ? kept : allTerms.slice(0, 1)
 </script>
 

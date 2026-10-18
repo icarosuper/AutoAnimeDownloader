@@ -10,22 +10,22 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// mediaByIDCache guarda as leituras por media id de animes avulsos, e e compartilhado por
-// GetMediaByID e GetMediaByIDs — chaveado POR ID, nunca por lote, senao um avulso novo
-// invalidaria a leitura de todos os outros.
+// mediaByIDCache stores the per-media-id reads of standalone animes, and is shared by
+// GetMediaByID and GetMediaByIDs — keyed BY ID, never by batch, otherwise a new standalone
+// would invalidate the read of every other one.
 //
-// O caminho que ele protege e o de GET /api/v1/animes, que sofre poll de 30s por aba aberta e
-// le a lista inteira de avulsos a cada vez. Desde o lote (decisions.md #65 e #72) isso e UMA
-// query por 50 ids, e nao mais uma por avulso; o cache continua valendo porque com ele o poll
-// so vai a rede quando algum id vence — o mesmo motivo pelo qual frontendListCache existe
-// (decisions.md #57).
+// The path it protects is GET /api/v1/animes, which is polled every 30s per open tab and
+// reads the whole standalone list each time. Since the batch (decisions.md #65 and #72)
+// that's ONE query per 50 ids, not one per standalone; the cache still pays off because
+// with it the poll only goes to the network when some id expires — the same reason
+// frontendListCache exists (decisions.md #57).
 var mediaByIDCache = newTTLCache[*MediaList]()
 
 const mediaByIDTTL = 60 * time.Second
 
-// MediaSearchResult e uma linha da barra de busca da tela de adicionar anime. E deliberadamente
-// mais pobre que Media: a busca traz 20 resultados e nenhum deles precisa de synonyms,
-// relations ou airingSchedule — quem adiciona o anime busca esses campos com GetMediaByID.
+// MediaSearchResult is a row of the search bar on the add-anime screen. It is deliberately
+// poorer than Media: the search brings 20 results and none of them need synonyms,
+// relations or airingSchedule — whoever adds the anime fetches those fields with GetMediaByID.
 type MediaSearchResult struct {
 	Id         int         `json:"id"`
 	Title      Title       `json:"title"`
@@ -36,23 +36,24 @@ type MediaSearchResult struct {
 	CoverImage CoverImage  `json:"coverImage"`
 }
 
-// searchCache guarda o resultado por termo. Passou a valer quando a tela deixou de buscar a
-// cada tecla (decisions.md #50 (f)): com submit, as chaves sao termos inteiros que se repetem —
-// o mesmo usuario refazendo a busca, o toggle de nao lancados indo e voltando, outra aba
-// buscando o mesmo anime. A chave e minuscula porque a busca da AniList e case-insensitive,
-// entao "One Piece" e "one piece" devolvem a mesma coisa e nao ha por que gastar dois requests.
+// searchCache stores the result by term. It started paying off when the screen stopped
+// searching on every keystroke (decisions.md #50 (f)): with submit, the keys are whole
+// terms that repeat — the same user redoing the search, the unreleased toggle going back
+// and forth, another tab searching the same anime. The key is lowercase because AniList's
+// search is case-insensitive, so "One Piece" and "one piece" return the same thing and
+// there's no reason to spend two requests.
 //
-// O cache fica em SearchMedia, e NAO na resposta do endpoint, porque block_reason e recalculado
-// pelo standaloneGuard a cada resposta: cacheado junto, um anime adicionado agora continuaria
-// aparecendo com o botao "Adicionar" ate o TTL vencer.
+// The cache lives in SearchMedia, NOT in the endpoint response, because block_reason is
+// recomputed by standaloneGuard on every response: cached together, an anime added now
+// would keep showing with the "Add" button until the TTL expired.
 var searchCache = newTTLCache[[]MediaSearchResult]()
 
 const (
 	searchTTL = 10 * time.Minute
-	// ponytail: teto por descarte total, nao por LRU. Este e o unico cache com chave de texto
-	// livre — nada impede alguem de digitar mil termos diferentes, e entrada vencida nunca sai
-	// do mapa. Mil resultados de busca sao poucos MB; se um dia isso incomodar, uma fila de
-	// insercao com descarte do mais antigo troca o flush por eviction de verdade.
+	// ponytail: cap by total flush, not LRU. This is the only cache with a free-text key —
+	// nothing stops someone from typing a thousand different terms, and an expired entry
+	// never leaves the map. A thousand search results are a few MB; if that ever bothers,
+	// an insertion queue that drops the oldest swaps the flush for real eviction.
 	searchCacheMaxEntries = 1000
 )
 
@@ -60,21 +61,21 @@ func searchCacheKey(term string, includeUnreleased bool) string {
 	return strings.ToLower(term) + "|" + strconv.FormatBool(includeUnreleased)
 }
 
-// SearchMedia busca animes na AniList por termo, com cache de searchTTL.
+// SearchMedia searches AniList animes by term, with a searchTTL cache.
 //
-// includeUnreleased=false (o padrao da tela) esconde os NOT_YET_RELEASED. O filtro e
-// SERVER-SIDE de proposito: perPage e 20, e filtrar depois de receber devolveria buscas com 4
-// resultados uteis em temporada de anuncios. So NOT_YET_RELEASED sai — CANCELLED e HIATUS ficam,
-// porque um anime interrompido no meio da exibicao tem episodios baixaveis.
+// includeUnreleased=false (the screen default) hides NOT_YET_RELEASED. The filter is
+// SERVER-SIDE on purpose: perPage is 20, and filtering after receiving would return searches
+// with 4 useful results in an announcement season. Only NOT_YET_RELEASED is dropped —
+// CANCELLED and HIATUS stay, because an anime interrupted mid-airing has downloadable episodes.
 func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, error) {
 	key := searchCacheKey(term, includeUnreleased)
 	if cached, ok := searchCache.get(key); ok {
 		return slices.Clone(cached), nil
 	}
 
-	// Concatenacao, e nao uma variavel GraphQL com valor nulo: a AniList ignora argumentos nulos
-	// hoje, mas depender disso faria o filtro morrer em silencio se a semantica mudasse. Aqui,
-	// quando includeUnreleased e true, o argumento nao existe na query.
+	// Concatenation, not a GraphQL variable with a null value: AniList ignores null arguments
+	// today, but depending on that would make the filter die silently if the semantics changed.
+	// Here, when includeUnreleased is true, the argument does not exist in the query.
 	statusFilter := ", status_not: NOT_YET_RELEASED"
 	if includeUnreleased {
 		statusFilter = ""
@@ -112,9 +113,9 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 
 	resp, err := sendAnilistRequest[response](query, RequestVariables{"q": term}, PriorityDisposable)
 	if err != nil {
-		// Recusado pelo gate de orcamento: o catalogo da AniList nao muda em dez minutos, entao
-		// servir o resultado vencido deixa a tela funcionando e devolve o balde para o passe do
-		// daemon, que e o unico que nao pode ser adiado. Ver decisions.md #72.
+		// Refused by the budget gate: AniList's catalog doesn't change in ten minutes, so
+		// serving the expired result keeps the screen working and gives the bucket back to
+		// the daemon pass, which is the only one that can't be postponed. See decisions.md #72.
 		if errors.Is(err, ErrBudgetLow) {
 			if stale, ok := searchCache.getStale(key); ok {
 				return slices.Clone(stale), nil
@@ -127,15 +128,15 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 		searchCache.clear()
 	}
 	searchCache.set(key, resp.Data.Page.Media, searchTTL)
-	// Copia: a fatia guardada e compartilhada por todos os requests que acertarem esta chave, e
-	// quem chama nao pode reordenar nem cortar a memoria do cache.
+	// Copy: the stored slice is shared by every request that hits this key, and the caller
+	// must not reorder or cut the cache's memory.
 	return slices.Clone(resp.Data.Page.Media), nil
 }
 
-// mediaByIDFields sao os campos que GetMediaByID e GetMediaByIDs pedem — os MESMOS de
-// getMediaListEntry (inclusive synonyms, relations e o id de cada no do airingSchedule): a busca
-// por anime e searchNyaaForSingleEpisode dependem de synonyms e relations (offset de temporada
-// dividida via PREQUEL), e todo o resto do app chaveia episodio pelo id do no.
+// mediaByIDFields are the fields GetMediaByID and GetMediaByIDs ask for — the SAME as
+// getMediaListEntry (including synonyms, relations and the id of each airingSchedule node):
+// anime search and searchNyaaForSingleEpisode depend on synonyms and relations (split-season
+// offset via PREQUEL), and the rest of the app keys episodes by the node id.
 const mediaByIDFields = `
 	id
 	episodes
@@ -180,18 +181,18 @@ const mediaByIDFields = `
 	}
 `
 
-// GetMediaByID le um anime pelo media id SEM passar por lista de conta nenhuma — o primitivo
-// que faltava para um anime avulso existir para o app (GetAnimeInfo devolve nil quando nenhuma
-// conta o acompanha).
+// GetMediaByID reads an anime by media id WITHOUT going through any account list — the
+// primitive that was missing for a standalone anime to exist for the app (GetAnimeInfo
+// returns nil when no account tracks it).
 //
-// Devolve um MediaList SINTETICO: so Media preenchido, Progress 0, Status "" e Id 0. Os zeros
-// sao parte do contrato — DedupeByMedia mantem o MENOR progresso, entao um Progress inventado
-// aqui venceria a entrada real e o daemon rebaixaria episodios ja assistidos.
+// Returns a SYNTHETIC MediaList: only Media filled, Progress 0, Status "" and Id 0. The
+// zeros are part of the contract — DedupeByMedia keeps the LOWEST progress, so a Progress
+// invented here would beat the real entry and the daemon would lower already-watched episodes.
 //
-// O MediaList SINTETICO e o mesmo contrato de GetMediaByIDs, que e quem serve a lista inteira
-// de avulsos; este aqui fica para o lookup de um id so.
+// The SYNTHETIC MediaList is the same contract as GetMediaByIDs, which is who serves the
+// whole standalone list; this one stays for the lookup of a single id.
 //
-// (nil, nil) quando a AniList nao conhece o id.
+// (nil, nil) when AniList doesn't know the id.
 func GetMediaByID(mediaID int, priority Priority) (*MediaList, error) {
 	key := strconv.Itoa(mediaID)
 	if cached, ok := mediaByIDCache.get(key); ok {
@@ -235,23 +236,23 @@ func GetMediaByID(mediaID int, priority Priority) (*MediaList, error) {
 	return copyMediaList(ml), nil
 }
 
-// GetMediaByIDs le varios animes por media id numa unica query. Substitui o loop de
-// GetMediaByID nos dois lugares que percorrem a lista de avulsos inteira — o consumidor
-// dominante do orcamento da AniList (decisions.md #65), que gastava 1 request por avulso a cada
-// passe do daemon e a cada poll de 30s do frontend.
+// GetMediaByIDs reads several animes by media id in a single query. It replaces the
+// GetMediaByID loop in the two places that walk the whole standalone list — the dominant
+// AniList budget consumer (decisions.md #65), which spent 1 request per standalone on every
+// daemon pass and every 30s frontend poll.
 //
-// Devolve um mapa id -> MediaList, com tres desfechos distintos por id:
+// Returns a map id -> MediaList, with three distinct outcomes per id:
 //
-//   - entrada com valor: o anime veio (do cache ou da rede);
-//   - entrada com nil: a AniList NAO conhece esse id. id_in omite silenciosamente o media
-//     apagado, entao "nao voltou" e a unica forma de descobrir isso — e equivale ao (nil, nil)
-//     de GetMediaByID;
-//   - id ausente do mapa: nao deu para buscar (rede, 429). So esse caso vem com erro.
+//   - entry with a value: the anime came (from cache or network);
+//   - entry with nil: AniList does NOT know this id. id_in silently omits the deleted
+//     media, so "didn't come back" is the only way to discover that — and it matches the
+//     (nil, nil) of GetMediaByID;
+//   - id absent from the map: couldn't fetch (network, 429). Only this case comes with an error.
 //
-// O erro devolvido NAO invalida o mapa: as paginas que passaram antes dele ja estao la.
+// The returned error does NOT invalidate the map: pages that passed before it are already there.
 func GetMediaByIDs(ids []int, priority Priority) (map[int]*MediaList, error) {
-	// O cache continua por id, e nao por lote: chaveado pelo lote, um avulso novo invalidaria
-	// a leitura de todos os outros.
+	// The cache stays per id, not per batch: keyed by the batch, a new standalone would
+	// invalidate the read of every other one.
 	found := make(map[int]*MediaList, len(ids))
 	seen := make(map[int]bool, len(ids))
 	missing := make([]int, 0, len(ids))
@@ -288,10 +289,10 @@ func GetMediaByIDs(ids []int, priority Priority) (map[int]*MediaList, error) {
 
 		resp, err := sendAnilistRequest[response](query, RequestVariables{"ids": chunk}, priority)
 		if err != nil {
-			// O que der para servir do cache local serve: sem isso os avulsos desaparecem da
-			// lista da tela enquanto a AniList estiver fora, que e metade do "a lista nao
-			// encolher". Os ids sem entrada guardada seguem ausentes do mapa, que e o contrato
-			// documentado acima para "nao deu para buscar".
+			// Whatever the local cache can serve, serve: without this the standalones
+			// disappear from the screen's list while AniList is down, which is half of
+			// "the list doesn't shrink". Ids with no stored entry stay absent from the
+			// map, which is the contract documented above for "couldn't fetch".
 			fromCache := false
 			for _, id := range missing[start:] {
 				if stale, ok := staleMedia(strconv.Itoa(id)); ok {
@@ -324,9 +325,9 @@ func GetMediaByIDs(ids []int, priority Priority) (map[int]*MediaList, error) {
 	return found, nil
 }
 
-// copyMediaList devolve uma copia rasa da entrada guardada no cache. Mesma razao de
-// mediaListResponse: quem chama sobrescreve campos da entrada (CustomLists, Progress), e
-// entregar o ponteiro guardado deixaria dois requests concorrentes escrevendo na mesma memoria.
+// copyMediaList returns a shallow copy of the entry stored in the cache. Same reason as
+// mediaListResponse: the caller overwrites fields of the entry (CustomLists, Progress), and
+// handing out the stored pointer would leave two concurrent requests writing the same memory.
 func copyMediaList(ml *MediaList) *MediaList {
 	if ml == nil {
 		return nil

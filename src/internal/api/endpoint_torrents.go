@@ -205,10 +205,10 @@ func handleTorrentFiles(server *Server) http.HandlerFunc {
 				Path:           f.Path,
 				Size:           f.Size,
 				BytesCompleted: f.BytesCompleted,
-				// path.Base, não o caminho inteiro: a PASTA do pack costuma carregar a faixa
-				// ("… - 00 ~ 12 [1080p]/…"), e a cascata de regexes lida sobre ela devolve o
-				// número errado ou nada. Medido no pack do Erai-raws de Mushoku Tensei II: o
-				// caminho completo dá nil em TODO arquivo, o nome do arquivo dá o episódio certo.
+				// path.Base, not the full path: the pack FOLDER often carries the range
+				// ("… - 00 ~ 12 [1080p]/…"), and running the regex cascade on it returns the
+				// wrong number or nothing. Measured on the Erai-raws pack of Mushoku Tensei II:
+				// the full path yields nil on EVERY file, the file name yields the right episode.
 				Episode: nyaa.ExtractEpisodeNumber(path.Base(f.Path)),
 				Codec:   videoCodecOf(info.DataDir, f),
 			})

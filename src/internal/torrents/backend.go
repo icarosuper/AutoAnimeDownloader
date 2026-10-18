@@ -58,15 +58,15 @@ type TorrentInfo struct {
 	QueuePosition int
 }
 
-// FileInfo é um arquivo dentro de um torrent.
+// FileInfo is a file inside a torrent.
 type FileInfo struct {
-	// Path é o caminho relativo CRU, como está no metadata — é o que o usuário lê para saber
-	// fansub, resolução e codec. Nunca traduzido para "Ep NN": o nome cru é o dado procurado.
+	// Path is the RAW relative path as it is in the metadata — what the user reads to learn
+	// fansub, resolution and codec. Never translated to "Ep NN": the raw name is the data wanted.
 	Path string
 	Size int64
-	// BytesCompleted é nil quando o progresso por arquivo é desconhecido: com o torrent parado
-	// a rain libera as pieces e FileStats() falha, enquanto Files() continua respondendo. nil é
-	// "não sei", que a UI mostra como "—"; 0 seria a mentira "nada baixado".
+	// BytesCompleted is nil when per-file progress is unknown: with the torrent stopped
+	// rain frees the pieces and FileStats() fails, while Files() still answers. nil is
+	// "I don't know", which the UI shows as "—"; 0 would be the lie "nothing downloaded".
 	BytesCompleted *int64
 }
 
@@ -102,8 +102,8 @@ type TorrentBackend interface {
 	List() []TorrentInfo
 	// Get returns the torrent with the given info hash, if present.
 	Get(hash string) (TorrentInfo, bool)
-	// Files lista os arquivos do torrent. Slice vazio (sem erro) quando o metadata ainda não
-	// chegou — um magnet recém-adicionado não tem lista, e isso é estado normal, não falha.
+	// Files lists the torrent's files. Empty slice (no error) when the metadata has not
+	// arrived yet — a freshly added magnet has no list, and that is a normal state, not a failure.
 	Files(hash string) ([]FileInfo, error)
 	// Remove deletes a torrent. With keepData=false the seeding copy on disk is also removed.
 	Remove(hash string, keepData bool) error

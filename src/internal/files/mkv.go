@@ -8,29 +8,29 @@ import (
 	"strings"
 )
 
-// errBadEBML marca um byte de largura variável inválido. Nunca vaza para fora do pacote: todo
-// caminho de erro daqui vira "" em VideoCodec.
+// errBadEBML marks an invalid variable-length integer byte. Never leaks out of the package: every
+// error path here becomes "" in VideoCodec.
 var errBadEBML = errors.New("invalid EBML variable-length integer")
 
-// Leitura do codec de vídeo direto do arquivo, e não do nome dele.
+// Video codec read from the file itself, not from its name.
 //
-// Por que existe: `nyaa.ExtractCodec` lê o codec do NOME do release, e boa parte dos uploads
-// simplesmente não escreve — o Erai-raws não escreve, muito BD rip não escreve. O único lugar
-// onde o codec sempre está é o cabeçalho do próprio arquivo, declarado por quem encodou.
+// Why this exists: `nyaa.ExtractCodec` reads the codec from the release NAME, and a lot of uploads
+// simply don't write it — Erai-raws doesn't, many BD rips don't. The only place the codec is
+// always present is the file's own header, declared by whoever encoded it.
 //
-// Matroska (`.mkv`) é um documento EBML (RFC 8794): uma árvore de elementos `ID + tamanho +
-// conteúdo`, com tamanhos de largura variável — um XML binário. O CodecID vive num caminho
-// fixo e CURTO, antes dos Clusters (o vídeo em si):
+// Matroska (`.mkv`) is an EBML document (RFC 8794): a tree of `ID + size + content` elements
+// with variable-width sizes — binary XML. CodecID lives on a fixed, SHORT path, before the
+// Clusters (the video itself):
 //
-//	Segment → Tracks → TrackEntry → { TrackType (1 = vídeo), CodecID }
+//	Segment → Tracks → TrackEntry → { TrackType (1 = video), CodecID }
 //
-// Por isso a leitura custa alguns KB e alguns seeks, não o arquivo inteiro.
+// That's why the read costs a few KB and a few seeks, not the whole file.
 //
-// Só Matroska: MP4 tem estrutura análoga (boxes) mas exigiria um segundo parser, e em anime é
-// praticamente tudo mkv — quem não for casa em `""`, que a UI mostra como nada.
+// Matroska only: MP4 has an analogous structure (boxes) but would need a second parser, and
+// anime is almost all mkv — anything else falls through to `""`, which the UI shows as nothing.
 
-// IDs dos elementos EBML/Matroska, escritos COM os bits de marcação de tamanho, que é como a
-// especificação da Matroska os tabela.
+// EBML/Matroska element IDs, written WITH the size-marker bits, which is how the Matroska
+// spec tables them.
 const (
 	idEBMLHeader = 0x1A45DFA3
 	idSegment    = 0x18538067
@@ -41,15 +41,16 @@ const (
 	idCodecID    = 0x86
 
 	trackTypeVideo = 1
-	// sizeUnknown é o tamanho "desconhecido" do EBML (todos os bits de valor em 1). Um Segment
-	// escrito ao vivo usa isso; descer nele é válido, pular não.
+	// sizeUnknown is EBML's "unknown" size (all value bits set). A Segment written live
+	// uses this; descending into it is valid, skipping it is not.
 	sizeUnknown = ^uint64(0)
 )
 
-// mkvCodecLabels traduz os CodecID da Matroska para o MESMO vocabulário que
-// `nyaa.ExtractCodec` usa no resto do app ("HEVC", "H.264", "AV1"), senão a tela de prioridades
-// e este painel falariam de codec com nomes diferentes. O que não estiver no mapa sai como o
-// CodecID sem o prefixo `V_` — feio, mas honesto: melhor do que chutar um rótulo bonito errado.
+// mkvCodecLabels maps Matroska CodecIDs to the SAME vocabulary `nyaa.ExtractCodec` uses
+// elsewhere ("HEVC", "H.264", "AV1"), otherwise the priorities screen and this panel
+// would talk about codecs with different names. Anything not in the map comes out as the
+// CodecID without the `V_` prefix — ugly, but honest: better than guessing a pretty wrong
+// label.
 var mkvCodecLabels = map[string]string{
 	"V_MPEGH/ISO/HEVC": "HEVC",
 	"V_MPEG4/ISO/AVC":  "H.264",
@@ -60,10 +61,10 @@ var mkvCodecLabels = map[string]string{
 	"V_MPEG2":          "MPEG-2",
 }
 
-// VideoCodec devolve o codec da primeira trilha de vídeo de um `.mkv`, no vocabulário de
-// `nyaa.ExtractCodec`. Devolve "" — nunca erro — para qualquer coisa que não dê para responder:
-// arquivo que não abre, que não é Matroska, que ainda não tem o cabeçalho no disco, ou EBML que
-// não bate. É dado de exibição: não saber é um estado normal, não uma falha.
+// VideoCodec returns the codec of the first video track of a `.mkv`, in `nyaa.ExtractCodec`
+// vocabulary. Returns "" — never an error — for anything that cannot be answered: file that
+// won't open, isn't Matroska, doesn't have the header on disk yet, or EBML that doesn't match.
+// Display data: not knowing is a normal state, not a failure.
 func VideoCodec(path string) string {
 	if !strings.EqualFold(filepath.Ext(path), ".mkv") {
 		return ""
@@ -74,8 +75,8 @@ func VideoCodec(path string) string {
 	}
 	defer f.Close()
 
-	// O cabeçalho EBML só diz "isto é EBML, versão X, DocType matroska" — serve de assinatura
-	// e é pulado inteiro; o que interessa está no Segment.
+	// The EBML header only says "this is EBML, version X, DocType matroska" — it is a
+	// signature and is skipped whole; what matters is in the Segment.
 	id, size, err := readElementHeader(f)
 	if err != nil || id != idEBMLHeader || size == sizeUnknown {
 		return ""
@@ -91,13 +92,13 @@ func VideoCodec(path string) string {
 	if !ok {
 		return ""
 	}
-	// LimitReader pelo tamanho declarado de Tracks: sem ele a varredura passaria do fim de
-	// Tracks e sairia lendo Cluster como se fosse TrackEntry.
+	// LimitReader by the declared Tracks size: without it the scan would walk past the end of
+	// Tracks and start reading Cluster as if it were a TrackEntry.
 	return videoCodecFromTracks(io.LimitReader(f, int64(tracksSize)))
 }
 
-// seekToChild pula elementos irmãos até achar `want`, deixando o arquivo posicionado no
-// CONTEÚDO dele. Para em Cluster: o vídeo começou e Tracks não vem depois disso.
+// seekToChild skips sibling elements until it finds `want`, leaving the file positioned at
+// its CONTENT. Stops at Cluster: the video has started and Tracks does not come after that.
 func seekToChild(f *os.File, want uint32) (uint64, bool) {
 	for {
 		id, size, err := readElementHeader(f)
@@ -108,9 +109,9 @@ func seekToChild(f *os.File, want uint32) (uint64, bool) {
 			return size, size != sizeUnknown
 		}
 		if id == idCluster || size == sizeUnknown {
-			// Cluster é o vídeo em si: Tracks vem antes, então passar daqui é desistir.
-			// Tamanho desconhecido em algo que não é o alvo não dá para pular sem parsear o
-			// conteúdo inteiro, e não vale — "não sei" também é uma resposta.
+			// Cluster is the video itself: Tracks comes before, so going past here is giving up.
+			// Unknown size on something that isn't the target cannot be skipped without parsing
+			// the whole content, and it isn't worth it — "I don't know" is also an answer.
 			return 0, false
 		}
 		if _, err := f.Seek(int64(size), io.SeekCurrent); err != nil {
@@ -119,9 +120,10 @@ func seekToChild(f *os.File, want uint32) (uint64, bool) {
 	}
 }
 
-// videoCodecFromTracks varre os TrackEntry e devolve o CodecID do primeiro que se declara
-// vídeo. Um mkv de anime tem vídeo, áudio e várias legendas — pegar o primeiro TrackEntry sem
-// olhar o TrackType devolveria o codec de áudio em arquivo com a ordem trocada.
+// videoCodecFromTracks walks TrackEntry elements and returns the CodecID of the first one
+// that declares itself video. An anime mkv has video, audio and several subtitles — taking
+// the first TrackEntry without looking at TrackType would return the audio codec on a file
+// with swapped order.
 func videoCodecFromTracks(r io.Reader) string {
 	for {
 		id, size, err := readElementHeader(r)
@@ -137,8 +139,8 @@ func videoCodecFromTracks(r io.Reader) string {
 
 		entry := io.LimitReader(r, int64(size))
 		codec, isVideo := parseTrackEntry(entry)
-		// Drena o resto da entry para o próximo irmão começar no lugar certo, mesmo quando
-		// parseTrackEntry parou cedo.
+		// Drain the rest of the entry so the next sibling starts in the right place, even when
+		// parseTrackEntry stopped early.
 		if _, err := io.Copy(io.Discard, entry); err != nil {
 			return ""
 		}
@@ -151,7 +153,7 @@ func videoCodecFromTracks(r io.Reader) string {
 	}
 }
 
-// parseTrackEntry lê TrackType e CodecID de dentro de UM TrackEntry.
+// parseTrackEntry reads TrackType and CodecID from inside ONE TrackEntry.
 func parseTrackEntry(r io.Reader) (codec string, isVideo bool) {
 	for {
 		id, size, err := readElementHeader(r)
@@ -170,7 +172,7 @@ func parseTrackEntry(r io.Reader) (codec string, isVideo bool) {
 			if _, err := io.ReadFull(r, b); err != nil {
 				return codec, isVideo
 			}
-			// CodecID é string ASCII, mas a especificação permite padding com NUL à direita.
+			// CodecID is an ASCII string, but the spec allows NUL padding on the right.
 			codec = strings.TrimRight(string(b), "\x00")
 		default:
 			if _, err := io.CopyN(io.Discard, r, int64(size)); err != nil {
@@ -180,7 +182,7 @@ func parseTrackEntry(r io.Reader) (codec string, isVideo bool) {
 	}
 }
 
-// readElementHeader lê o par (ID, tamanho) que abre todo elemento EBML.
+// readElementHeader reads the (ID, size) pair that opens every EBML element.
 func readElementHeader(r io.Reader) (uint32, uint64, error) {
 	id, err := readID(r)
 	if err != nil {
@@ -193,8 +195,8 @@ func readElementHeader(r io.Reader) (uint32, uint64, error) {
 	return id, size, nil
 }
 
-// vintLen devolve o comprimento em bytes de um inteiro de largura variável do EBML, lido da
-// posição do primeiro bit 1 do primeiro byte. 0 significa byte inválido (0x00).
+// vintLen returns the byte length of an EBML variable-width integer, read from the
+// position of the first 1-bit of the first byte. 0 means an invalid byte (0x00).
 func vintLen(b byte) int {
 	for i := 0; i < 8; i++ {
 		if b&(0x80>>i) != 0 {
@@ -204,8 +206,8 @@ func vintLen(b byte) int {
 	return 0
 }
 
-// readID lê um ID de elemento (1 a 4 bytes), devolvido COM os bits de marcação — é assim que
-// a especificação da Matroska tabela os IDs, e é o que as constantes acima esperam.
+// readID reads an element ID (1 to 4 bytes), returned WITH the marker bits — that's how
+// the Matroska spec tables the IDs, and that's what the constants above expect.
 func readID(r io.Reader) (uint32, error) {
 	var b [4]byte
 	if _, err := io.ReadFull(r, b[:1]); err != nil {
@@ -227,7 +229,7 @@ func readID(r io.Reader) (uint32, error) {
 	return id, nil
 }
 
-// readSize lê o tamanho de um elemento (1 a 8 bytes), já SEM o bit de marcação.
+// readSize reads an element size (1 to 8 bytes), already WITHOUT the marker bit.
 func readSize(r io.Reader) (uint64, error) {
 	var b [8]byte
 	if _, err := io.ReadFull(r, b[:1]); err != nil {
@@ -246,14 +248,14 @@ func readSize(r io.Reader) (uint64, error) {
 	for i := 1; i < n; i++ {
 		value = value<<8 | uint64(b[i])
 	}
-	// Todos os bits de valor em 1 = tamanho desconhecido.
+	// All value bits set = unknown size.
 	if value == (uint64(1)<<(7*n))-1 {
 		return sizeUnknown, nil
 	}
 	return value, nil
 }
 
-// readUint lê um inteiro EBML de `size` bytes (big-endian, sem sinal).
+// readUint reads an EBML integer of `size` bytes (big-endian, unsigned).
 func readUint(r io.Reader, size uint64) (uint64, error) {
 	if size > 8 {
 		return 0, errBadEBML

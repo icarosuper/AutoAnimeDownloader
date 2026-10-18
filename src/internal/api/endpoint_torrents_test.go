@@ -52,8 +52,8 @@ func TestHandleTorrentsRejectsNonGet(t *testing.T) {
 	}
 }
 
-// Sem save_path o SessionManager devolve nil em List(). A resposta tem que ser uma lista
-// vazia com HTTP 200 — nunca 500 e nunca "data": null.
+// Without save_path SessionManager returns nil from List(). The response has to be an empty
+// list with HTTP 200 — never 500 and never "data": null.
 func TestHandleTorrentsEmptyBackendReturnsEmptyArray(t *testing.T) {
 	server := &Server{Torrents: torrents.NewFakeBackend(), FileManager: &mockFileManager{}}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/torrents", nil)
@@ -98,8 +98,8 @@ func TestHandleTorrentsJoinsEpisodeMetadata(t *testing.T) {
 	}
 }
 
-// Um torrent batch cobre N episódios mas é UM torrent: tem que aparecer uma vez só, sem
-// número de episódio.
+// A batch torrent covers N episodes but is ONE torrent: it must appear once, with no
+// episode number.
 func TestHandleTorrentsBatchAppearsOnceWithoutEpisodeNumber(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	backend.Add(magnetA)
@@ -126,8 +126,7 @@ func TestHandleTorrentsBatchAppearsOnceWithoutEpisodeNumber(t *testing.T) {
 	}
 }
 
-// bytes_total é 0 enquanto a metadata não chega: progress tem que ser 0, não NaN nem
-// divisão por zero.
+// bytes_total is 0 until metadata arrives: progress must be 0, not NaN or a divide by zero.
 func TestHandleTorrentsProgressIsZeroWithoutMetadata(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	backend.Add(magnetA)
@@ -146,8 +145,8 @@ func TestHandleTorrentsProgressIsZeroWithoutMetadata(t *testing.T) {
 	}
 }
 
-// Uma falha ao ler downloaded_episodes não pode derrubar a tela de progresso: o join é
-// opcional, os dados do torrent não.
+// A failure reading downloaded_episodes must not take down the progress screen: the join is
+// optional, the torrent data is not.
 func TestHandleTorrentsSurvivesEpisodeLoadFailure(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	backend.Add(magnetA)
@@ -339,8 +338,8 @@ func TestHandleTorrentsPrioritizeAppliesTheOrderReceived(t *testing.T) {
 }
 
 func TestHandleTorrentsPrioritizeIgnoresUnknownAndCompletedHashes(t *testing.T) {
-	// Uma lista de 12 episodios nao pode falhar inteira porque um deles terminou de baixar
-	// entre o render e o clique.
+	// A list of 12 episodes must not fail entirely because one of them finished downloading
+	// between the render and the click.
 	server, backend := newTorrentActionServer(t)
 	backend.AddCompleted(hashB, "/fake/"+hashB)
 	unknown := "ffffffffffffffffffffffffffffffffffffffff"
@@ -577,7 +576,7 @@ func TestHandleTorrentDeleteInvalidKeepDataReturns400(t *testing.T) {
 	server, _ := newTorrentActionServer(t)
 
 	w := httptest.NewRecorder()
-	handleTorrentDelete(server)(w, deleteTorrentRequest(hashA, "keep_data=talvez"))
+	handleTorrentDelete(server)(w, deleteTorrentRequest(hashA, "keep_data=maybe"))
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected %d, got %d", http.StatusBadRequest, w.Code)
@@ -615,7 +614,7 @@ func TestHandleTorrentFilesListsPathsWithEpisodeNumbers(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("Expected 2 files, got %d", len(items))
 	}
-	// A ordem é a do metadata, não reordenada: é a ordem em que o release foi montado.
+	// The order is the metadata's, not reordered: it is the order the release was assembled in.
 	if items[0]["path"] != "[Judas] Frieren - S01E03.mkv" {
 		t.Errorf("path = %v", items[0]["path"])
 	}
@@ -630,8 +629,8 @@ func TestHandleTorrentFilesListsPathsWithEpisodeNumbers(t *testing.T) {
 	}
 }
 
-// Torrent parado: a rain libera as pieces, FileStats() falha e só sobra Files() — sem
-// progresso por arquivo. O JSON tem que dizer "não sei" (null), não "nada baixado" (0).
+// Paused torrent: rain frees the pieces, FileStats() fails and only Files() remains — no
+// per-file progress. The JSON has to say "I don't know" (null), not "nothing downloaded" (0).
 func TestHandleTorrentFilesPausedTorrentHasNullBytesCompleted(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	if _, err := backend.Add(magnetA); err != nil {
@@ -656,7 +655,7 @@ func TestHandleTorrentFilesPausedTorrentHasNullBytesCompleted(t *testing.T) {
 	}
 }
 
-// Metadata ainda não chegou: 200 com "data": [], nunca "data": null nem erro.
+// Metadata has not arrived yet: 200 with "data": [], never "data": null nor an error.
 func TestHandleTorrentFilesWithoutMetadataReturnsEmptyArray(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	if _, err := backend.Add(magnetA); err != nil {
@@ -675,9 +674,9 @@ func TestHandleTorrentFilesWithoutMetadataReturnsEmptyArray(t *testing.T) {
 	}
 }
 
-// A pasta do pack costuma carregar a faixa no nome ("… - 00 ~ 12 [1080p]/…"), que envenena a
-// cascata de regexes: o caminho completo devolve nil em todo arquivo. O número tem que sair do
-// NOME DO ARQUIVO. Caso real, pack do Erai-raws de Mushoku Tensei II.
+// The pack folder often carries the range in its name ("… - 00 ~ 12 [1080p]/…"), which poisons
+// the regex cascade: the full path returns nil on every file. The number has to come from the
+// FILE NAME. Real case, Erai-raws pack of Mushoku Tensei II.
 func TestHandleTorrentFilesEpisodeComesFromTheFileNameNotTheFolder(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	if _, err := backend.Add(magnetA); err != nil {
@@ -737,12 +736,12 @@ func TestHandleTorrentFilesRejectsEmptyHash(t *testing.T) {
 	}
 }
 
-// --- codec lido do cabeçalho do arquivo ---
+// --- codec read from the file header ---
 
-// tinyMKV monta o menor Matroska que responde "qual o codec de vídeo": cabeçalho EBML, Segment,
-// Tracks, um TrackEntry de vídeo. A montagem detalhada (trilhas fora de ordem, pulo de
-// elemento gordo, arquivo truncado) é testada em files/mkv_test.go — aqui o que se prova é o
-// LIGAMENTO: o handler junta DataDir + Path e só lê arquivo completo.
+// tinyMKV builds the smallest Matroska that answers "what is the video codec": EBML header,
+// Segment, Tracks, one video TrackEntry. The detailed construction (tracks out of order,
+// skipping a fat element, truncated file) is tested in files/mkv_test.go — what is proven
+// here is the WIRING: the handler joins DataDir + Path and only reads a complete file.
 func tinyMKV(codecID string) []byte {
 	elem := func(id []byte, payload []byte) []byte {
 		out := append([]byte{}, id...)
@@ -751,7 +750,7 @@ func tinyMKV(codecID string) []byte {
 		return append(out, payload...)
 	}
 	trackEntry := elem([]byte{0xAE}, append(
-		elem([]byte{0x83}, []byte{0x01}), // TrackType = vídeo
+		elem([]byte{0x83}, []byte{0x01}), // TrackType = video
 		elem([]byte{0x86}, []byte(codecID))...,
 	))
 	tracks := elem([]byte{0x16, 0x54, 0xAE, 0x6B}, trackEntry)
@@ -786,8 +785,9 @@ func TestHandleTorrentFilesReadsTheCodecFromTheFileHeader(t *testing.T) {
 	}
 }
 
-// O rain não baixa sequencial: um arquivo a 90% pode estar sem exatamente as primeiras peças,
-// que é onde mora o cabeçalho. Ler antes do fim devolveria lixo ou nada — nem se tenta.
+// rain does not download sequentially: a file at 90% may be missing exactly the first pieces,
+// which is where the header lives. Reading before the end would return garbage or nothing —
+// it is not even attempted.
 func TestHandleTorrentFilesSkipsTheCodecWhileTheFileIsIncomplete(t *testing.T) {
 	dir := t.TempDir()
 	content := tinyMKV("V_MPEGH/ISO/HEVC")
@@ -812,8 +812,8 @@ func TestHandleTorrentFilesSkipsTheCodecWhileTheFileIsIncomplete(t *testing.T) {
 	}
 }
 
-// Formato diferente de mkv sai sem codec: MP4 tem estrutura análoga mas exigiria um segundo
-// parser, e em anime é praticamente tudo mkv.
+// A format other than mkv comes out without a codec: MP4 has an analogous structure but would
+// need a second parser, and anime is practically all mkv.
 func TestHandleTorrentFilesSkipsTheCodecForNonMKV(t *testing.T) {
 	dir := t.TempDir()
 	content := tinyMKV("V_MPEGH/ISO/HEVC")

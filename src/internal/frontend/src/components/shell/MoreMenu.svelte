@@ -1,12 +1,12 @@
 <script lang="ts">
-  // MoreMenu — item "Mais" do NavRail (desktop) e da NavTabBar (mobile). Um componente só, com
-  // dois contextos de uso (spec §5 + ambiguidade #3 do brief da Fase 1): sempre lista
-  // Notificações/Prioridades/Logs (`moreMenuItems` de lib/navItems.ts, fonte única); no mobile
-  // também hospeda tema/idioma/WS/versão, que no desktop já ficam fixos no rodapé do NavRail
-  // (por isso `showFooterControls`).
+  // MoreMenu — "More" item of NavRail (desktop) and NavTabBar (mobile). One component, with
+  // two usage contexts (spec §5 + ambiguity #3 of the Phase 1 brief): always lists
+  // Notifications/Priorities/Logs (`moreMenuItems` from lib/navItems.ts, single source); on
+  // mobile it also hosts theme/locale/WS/version, which on desktop already sit fixed in the
+  // NavRail footer (that's why `showFooterControls`).
   //
-  // Implementação local e simples (fechamento por backdrop + Escape) porque o primitivo
-  // genérico de menu é da Fase 2 (`components/ui/ActionMenu`) — não deste escopo.
+  // Local and simple implementation (close on backdrop + Escape) because the generic menu
+  // primitive is Phase 2 (`components/ui/ActionMenu`) — not this scope.
   import { getStatus } from '../../lib/api/client.js'
   import { isNavItemActive, moreMenuItems } from '../../lib/navItems.js'
   import * as m from '../../lib/i18n/messages.js'
@@ -16,9 +16,9 @@
 
   export let open = false
   export let currentPath = ''
-  /** Classes de posicionamento do painel — cada chamador (rail vs tab bar) ancora diferente. */
+  /** Panel positioning classes — each caller (rail vs tab bar) anchors differently. */
   export let anchorClass = ''
-  /** Só true na tab bar mobile: ali o menu também hospeda tema/idioma/WS/versão. */
+  /** Only true on the mobile tab bar: there the menu also hosts theme/locale/WS/version. */
   export let showFooterControls = false
 
   let appVersion = ''
@@ -33,7 +33,7 @@
     items: moreMenuItems.map((item) => ({ ...item, label: item.label() })),
   }
 
-  // Fecha ao navegar — equivalente ao antigo `$: if (currentPath) mobileMenuOpen = false` do
+  // Close on navigate — equivalent to the old `$: if (currentPath) mobileMenuOpen = false` from
   // Layout.svelte.
   $: if (currentPath) open = false
 
@@ -51,7 +51,7 @@
         appVersion = status.version
       })
       .catch(() => {
-        // ignore — versão é best-effort, igual ao Layout.svelte antigo
+        // ignore — version is best-effort, same as the old Layout.svelte
       })
   }
 

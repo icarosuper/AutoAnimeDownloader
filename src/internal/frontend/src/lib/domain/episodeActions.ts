@@ -47,8 +47,9 @@ const WATCHED_HERE: Action = { id: 'watchedHere', labelKey: 'watchedHere', varia
 
 export interface EpisodeActionOptions {
   /**
-   * Anime avulso. "Assisti até aqui" só existe aí: em anime de lista o progresso vem da AniList
-   * e é sobrescrito a cada passe, então gravá-lo à mão salvaria um número que ninguém lê.
+   * Standalone anime. "Watched up to here" only exists there: on a list anime, progress comes
+   * from AniList and is overwritten on every pass, so writing it by hand would save a number
+   * nobody reads.
    */
   standalone?: boolean
 }
@@ -58,39 +59,39 @@ export interface EpisodeActionOptions {
  * `torrentsByEpisode.ts`, same as the pre-redesign screen did) into the five states of
  * spec §7's table. The cascade order below IS that table's row order: blocked/manually-managed
  * is checked before "downloaded" and before "has an active torrent" because a user who
- * manually took over an episode should keep seeing "Soltar" even while a torrent they added by
+ * manually took over an episode should keep seeing "Release" even while a torrent they added by
  * hand happens to be mid-download — the whole point of that state is that automation defers to
  * them until they release it back.
  */
 function classify(ep: AnimeEpisodeInfo, torrent: TorrentInfo | undefined): EpisodeActionSet {
   if (ep.is_manually_managed || ep.is_blocked) {
-    // Row: "Bloqueado ou gerenciado manualmente"
+    // Row: "Blocked or manually managed"
     return { principal: RELEASE, menu: [DOWNLOAD, DELETE] }
   }
 
   if (torrent && !torrent.completed && torrent.status === 'downloading') {
-    // Row: "Torrent ativo (baixando)"
+    // Row: "Active torrent (downloading)"
     return { principal: undefined, menu: [REPLACE, DELETE] }
   }
 
   if (ep.is_downloaded) {
-    // Row: "Baixado"
+    // Row: "Downloaded"
     return { principal: REDOWNLOAD, menu: [REPLACE, DELETE] }
   }
 
   if (ep.is_aired) {
-    // Row: "No ar e não baixado"
+    // Row: "Aired and not downloaded"
     return { principal: DOWNLOAD, menu: [REPLACE] }
   }
 
-  // Row: "Não lançou"
+  // Row: "Not yet released"
   return { principal: undefined, menu: [] }
 }
 
 /**
- * Wraps `classify` with the standalone-only "Assisti até aqui" action. Kept separate from the
+ * Wraps `classify` with the standalone-only "Watched up to here" action. Kept separate from the
  * cascade above because it isn't a state of the episode itself — it's a capability of the
- * anime (avulso vs. de lista) that applies on top of whatever state `classify` already picked.
+ * anime (standalone vs. list) that applies on top of whatever state `classify` already picked.
  */
 export function episodeActions(
   ep: AnimeEpisodeInfo,

@@ -37,7 +37,7 @@ func standaloneWriteServer(fm *mockFileManager) *Server {
 	}
 }
 
-// mockEmptyNyaa mantem os testes fora da rede: nenhum torrent encontrado.
+// mockEmptyNyaa keeps the tests off the network: no torrent found.
 func mockEmptyNyaa() func() {
 	return nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
 		return &http.Response{
@@ -61,16 +61,17 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	var resp SuccessResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("resposta invalida: %v", err)
+		t.Fatalf("invalid response: %v", err)
 	}
 	if resp.Error == nil {
-		t.Fatalf("quero um erro, veio %s", rec.Body.String())
+		t.Fatalf("want an error, got %s", rec.Body.String())
 	}
 	return resp.Error.Code
 }
 
-// TestStandaloneAdd_LibraryNotConfigured: a checagem vem primeiro porque nao depende de rede e
-// porque, sem biblioteca, o Ensure falharia com um 500 opaco no lugar da causa.
+// TestStandaloneAdd_LibraryNotConfigured: the check comes first because it does not depend on
+// the network, and because without a library Ensure would fail with an opaque 500 instead of
+// the cause.
 func TestStandaloneAdd_LibraryNotConfigured(t *testing.T) {
 	calls := 0
 	defer mockStandaloneAniListCounting(&calls, emptyListJSON, standaloneMediaJSON)()
@@ -82,20 +83,20 @@ func TestStandaloneAdd_LibraryNotConfigured(t *testing.T) {
 	rec := postStandalone(t, standaloneWriteServer(fm), 21)
 
 	if rec.Code != http.StatusConflict {
-		t.Fatalf("quero 409, veio %d", rec.Code)
+		t.Fatalf("want 409, got %d", rec.Code)
 	}
 	if got := errorCode(t, rec); got != "LIBRARY_NOT_CONFIGURED" {
-		t.Fatalf("quero LIBRARY_NOT_CONFIGURED, veio %s", got)
+		t.Fatalf("want LIBRARY_NOT_CONFIGURED, got %s", got)
 	}
 	if calls != 0 {
-		t.Fatalf("biblioteca nao configurada nao pode tocar a AniList, fez %d chamadas", calls)
+		t.Fatalf("an unconfigured library must not hit AniList, made %d calls", calls)
 	}
 	if len(fm.standaloneAnimes) != 0 {
-		t.Fatalf("nada pode ir para o arquivo, veio %v", fm.standaloneAnimes)
+		t.Fatalf("nothing may go into the file, got %v", fm.standaloneAnimes)
 	}
 }
 
-// TestStandaloneAdd_UnknownMediaIs404: GetMediaByID e tambem o que valida que o id existe.
+// TestStandaloneAdd_UnknownMediaIs404: GetMediaByID is also what validates that the id exists.
 func TestStandaloneAdd_UnknownMediaIs404(t *testing.T) {
 	defer mockStandaloneAniList(emptyListJSON, `{"data":{"Media":null}}`)()
 
@@ -103,15 +104,15 @@ func TestStandaloneAdd_UnknownMediaIs404(t *testing.T) {
 	rec := postStandalone(t, standaloneWriteServer(fm), 999999)
 
 	if rec.Code != http.StatusNotFound {
-		t.Fatalf("quero 404, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 404, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if len(fm.standaloneAnimes) != 0 {
-		t.Fatalf("id inexistente nao pode entrar no arquivo, veio %v", fm.standaloneAnimes)
+		t.Fatalf("a missing id must not enter the file, got %v", fm.standaloneAnimes)
 	}
 }
 
-// TestStandaloneAdd_BlockedNeverWritesTheFile: um bloqueio que grava antes de recusar seria
-// pior que nenhum bloqueio.
+// TestStandaloneAdd_BlockedNeverWritesTheFile: a block that writes before refusing would be
+// worse than no block.
 func TestStandaloneAdd_BlockedNeverWritesTheFile(t *testing.T) {
 	listWithAnime21 := `{"data":{"Page":{"mediaList":[{"id":1,"progress":0,"customLists":{"Blacklist":true},"media":{
 		"id": 21, "episodes": 24, "status": "RELEASING",
@@ -127,19 +128,19 @@ func TestStandaloneAdd_BlockedNeverWritesTheFile(t *testing.T) {
 		wantCode string
 	}{
 		{
-			name:     "ja avulso",
+			name:     "already standalone",
 			listJSON: emptyListJSON,
 			fm:       &mockFileManager{configs: standaloneConfig(), standaloneAnimes: []int{21}},
 			wantCode: "ALREADY_STANDALONE",
 		},
 		{
-			name:     "ja na lista processada",
+			name:     "already on the processed list",
 			listJSON: strings.Replace(listWithAnime21, `"customLists":{"Blacklist":true}`, `"customLists":{}`, 1),
 			fm:       &mockFileManager{configs: standaloneConfig()},
 			wantCode: "ALREADY_TRACKED",
 		},
 		{
-			name:     "em lista excluida",
+			name:     "on an excluded list",
 			listJSON: listWithAnime21,
 			fm: &mockFileManager{configs: func() *files.Config {
 				c := standaloneConfig()
@@ -149,7 +150,7 @@ func TestStandaloneAdd_BlockedNeverWritesTheFile(t *testing.T) {
 			wantCode: "ALREADY_BLACKLISTED",
 		},
 		{
-			name:     "ja baixado por inteiro",
+			name:     "already fully downloaded",
 			listJSON: emptyListJSON,
 			fm: &mockFileManager{
 				configs:  standaloneConfig(),
@@ -168,23 +169,23 @@ func TestStandaloneAdd_BlockedNeverWritesTheFile(t *testing.T) {
 			rec := postStandalone(t, server, 21)
 
 			if rec.Code != http.StatusConflict {
-				t.Fatalf("quero 409, veio %d: %s", rec.Code, rec.Body.String())
+				t.Fatalf("want 409, got %d: %s", rec.Code, rec.Body.String())
 			}
 			if got := errorCode(t, rec); got != tc.wantCode {
-				t.Fatalf("quero %s, veio %s", tc.wantCode, got)
+				t.Fatalf("want %s, got %s", tc.wantCode, got)
 			}
 			if len(tc.fm.standaloneAnimes) != before {
-				t.Fatalf("bloqueio nao pode gravar no arquivo: %v", tc.fm.standaloneAnimes)
+				t.Fatalf("a block must not write to the file: %v", tc.fm.standaloneAnimes)
 			}
 			if backend, ok := server.Torrents.(*torrents.FakeBackend); ok && len(backend.EnsureCalls()) != 0 {
-				t.Fatal("bloqueio nao pode chegar a DownloadStandaloneAnime")
+				t.Fatal("a block must not reach DownloadStandaloneAnime")
 			}
 		})
 	}
 }
 
-// TestStandaloneAdd_NoAiredEpisodeIsStillTracked: added == 0 e resposta normal, nao erro — um
-// anime que ainda vai estrear e adicionado e fica acompanhado.
+// TestStandaloneAdd_NoAiredEpisodeIsStillTracked: added == 0 is a normal response, not an
+// error — an anime that has not premiered yet is added and stays tracked.
 func TestStandaloneAdd_NoAiredEpisodeIsStillTracked(t *testing.T) {
 	unairedMedia := `{"data":{"Media":{
 		"id": 21, "episodes": 12, "format": "TV", "status": "NOT_YET_RELEASED",
@@ -200,7 +201,7 @@ func TestStandaloneAdd_NoAiredEpisodeIsStillTracked(t *testing.T) {
 	rec := postStandalone(t, standaloneWriteServer(fm), 21)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("quero 200, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var resp struct {
@@ -209,18 +210,18 @@ func TestStandaloneAdd_NoAiredEpisodeIsStillTracked(t *testing.T) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("resposta invalida: %v", err)
+		t.Fatalf("invalid response: %v", err)
 	}
 	if resp.Data.Added != 0 {
-		t.Fatalf("quero added 0, veio %d", resp.Data.Added)
+		t.Fatalf("want added 0, got %d", resp.Data.Added)
 	}
 	if len(fm.standaloneAnimes) != 1 || fm.standaloneAnimes[0] != 21 {
-		t.Fatalf("o anime precisa ficar acompanhado mesmo sem episodio no ar, arquivo: %v", fm.standaloneAnimes)
+		t.Fatalf("the anime must stay tracked even with no episode aired, file: %v", fm.standaloneAnimes)
 	}
 }
 
-// TestStandaloneRemove_KeepEpisodesMarksThemManuallyManaged: e o ManuallyManaged que fecha a
-// janela em que os arquivos correriam risco ao deixar de acompanhar por este endpoint.
+// TestStandaloneRemove_KeepEpisodesMarksThemManuallyManaged: ManuallyManaged is what closes the
+// window in which the files would be at risk after this endpoint stops tracking.
 func TestStandaloneRemove_KeepEpisodesMarksThemManuallyManaged(t *testing.T) {
 	fm := &mockFileManager{
 		configs:          standaloneConfig(),
@@ -238,25 +239,25 @@ func TestStandaloneRemove_KeepEpisodesMarksThemManuallyManaged(t *testing.T) {
 	handleStandaloneAnimeRemove(standaloneWriteServer(fm))(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("quero 200, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if len(fm.standaloneAnimes) != 0 {
-		t.Fatalf("o id precisa sair do arquivo, veio %v", fm.standaloneAnimes)
+		t.Fatalf("the id must leave the file, got %v", fm.standaloneAnimes)
 	}
 	if len(fm.episodes) != 3 {
-		t.Fatalf("sem delete_episodes nada pode ser apagado, veio %d episodios", len(fm.episodes))
+		t.Fatalf("without delete_episodes nothing may be deleted, got %d episodes", len(fm.episodes))
 	}
 	for _, ep := range fm.episodes {
 		if ep.AnimeID == 21 && !ep.ManuallyManaged {
-			t.Fatalf("episodio %d do avulso precisa virar ManuallyManaged", ep.EpisodeNumber)
+			t.Fatalf("standalone episode %d must become ManuallyManaged", ep.EpisodeNumber)
 		}
 		if ep.AnimeID == 99 && ep.ManuallyManaged {
-			t.Fatal("episodio de outro anime nao pode ser tocado")
+			t.Fatal("an episode of another anime must not be touched")
 		}
 	}
 }
 
-// TestStandaloneRemove_DeleteEpisodes: com delete_episodes=true os registros somem.
+// TestStandaloneRemove_DeleteEpisodes: with delete_episodes=true the records disappear.
 func TestStandaloneRemove_DeleteEpisodes(t *testing.T) {
 	fm := &mockFileManager{
 		configs:          standaloneConfig(),
@@ -273,15 +274,15 @@ func TestStandaloneRemove_DeleteEpisodes(t *testing.T) {
 	handleStandaloneAnimeRemove(standaloneWriteServer(fm))(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("quero 200, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if len(fm.episodes) != 1 || fm.episodes[0].AnimeID != 99 {
-		t.Fatalf("so os episodios do avulso podiam sair, veio %+v", fm.episodes)
+		t.Fatalf("only the standalone's episodes could leave, got %+v", fm.episodes)
 	}
 }
 
-// TestAniListSearch_FillsBlockReason e o teste que trava front e back na mesma funcao: o
-// block_reason do resultado da busca tem de ser o mesmo valor que o POST usa para o 409.
+// TestAniListSearch_FillsBlockReason is the test that pins front and back to the same function:
+// the search result's block_reason must be the same value the POST uses for the 409.
 func TestAniListSearch_FillsBlockReason(t *testing.T) {
 	searchJSON := `{"data":{"Page":{"media":[
 		{"id":21,"title":{"english":"Already Standalone","romaji":"x"},"format":"TV","status":"RELEASING","seasonYear":2016,"episodes":24,"coverImage":{"large":"a.jpg","medium":""}},
@@ -295,37 +296,37 @@ func TestAniListSearch_FillsBlockReason(t *testing.T) {
 	handleAniListSearch(standaloneWriteServer(fm))(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("quero 200, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var resp struct {
 		Data []AniListSearchResult `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("resposta invalida: %v", err)
+		t.Fatalf("invalid response: %v", err)
 	}
 	if len(resp.Data) != 2 {
-		t.Fatalf("quero 2 resultados, veio %d", len(resp.Data))
+		t.Fatalf("want 2 results, got %d", len(resp.Data))
 	}
 	if resp.Data[0].BlockReason != blockReasonStandalone {
-		t.Fatalf("quero %q, veio %q", blockReasonStandalone, resp.Data[0].BlockReason)
+		t.Fatalf("want %q, got %q", blockReasonStandalone, resp.Data[0].BlockReason)
 	}
 	if resp.Data[1].BlockReason != "" {
-		t.Fatalf("resultado adicionavel precisa vir com block_reason vazio, veio %q", resp.Data[1].BlockReason)
+		t.Fatalf("an addable result must come with empty block_reason, got %q", resp.Data[1].BlockReason)
 	}
 	if resp.Data[1].Title != "Addable" {
-		t.Fatalf("titulo sem english deve cair no romaji, veio %q", resp.Data[1].Title)
+		t.Fatalf("a title without english must fall back to romaji, got %q", resp.Data[1].Title)
 	}
 	if resp.Data[1].Cover != "b.jpg" {
-		t.Fatalf("cover deve cair no medium quando nao ha large, veio %q", resp.Data[1].Cover)
+		t.Fatalf("cover must fall back to medium when there is no large, got %q", resp.Data[1].Cover)
 	}
 	if resp.Data[0].Year != 2016 || resp.Data[0].Episodes != 24 {
-		t.Fatalf("meta do resultado mapeada errado: %+v", resp.Data[0])
+		t.Fatalf("result meta mapped wrong: %+v", resp.Data[0])
 	}
 }
 
-// TestAniListSearch_ShortTermIsEmptyList: termo curto devolve lista vazia, nao 400 — o front
-// digita letra a letra.
+// TestAniListSearch_ShortTermIsEmptyList: a short term returns an empty list, not 400 — the
+// front types letter by letter.
 func TestAniListSearch_ShortTermIsEmptyList(t *testing.T) {
 	calls := 0
 	defer mockStandaloneAniListCounting(&calls, emptyListJSON, emptyListJSON)()
@@ -337,20 +338,20 @@ func TestAniListSearch_ShortTermIsEmptyList(t *testing.T) {
 		handleAniListSearch(standaloneWriteServer(fm))(rec, req)
 
 		if rec.Code != http.StatusOK {
-			t.Fatalf("termo %q: quero 200, veio %d", term, rec.Code)
+			t.Fatalf("term %q: want 200, got %d", term, rec.Code)
 		}
 		var resp struct {
 			Data []AniListSearchResult `json:"data"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("resposta invalida: %v", err)
+			t.Fatalf("invalid response: %v", err)
 		}
 		if len(resp.Data) != 0 {
-			t.Fatalf("termo %q devia devolver lista vazia, veio %d", term, len(resp.Data))
+			t.Fatalf("term %q should return an empty list, got %d", term, len(resp.Data))
 		}
 	}
 	if calls != 0 {
-		t.Fatalf("termo curto nao pode tocar a AniList, fez %d chamadas", calls)
+		t.Fatalf("a short term must not hit AniList, made %d calls", calls)
 	}
 }
 

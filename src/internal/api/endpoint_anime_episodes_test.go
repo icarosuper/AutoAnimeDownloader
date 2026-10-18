@@ -113,9 +113,9 @@ func TestHandleAnimeEpisodes_EpisodeHash(t *testing.T) {
 	}
 }
 
-// Um anime cuja agenda a AniList já clipou (One Piece: a página 1 começa no 1123, e
-// nextAiringEpisode é a única pista do que já foi ao ar) tem de aparecer na tela com TODOS os
-// episódios — senão não existe onde clicar para baixar os que faltam. Ver decisions.md #52.
+// An anime whose schedule AniList already clipped (One Piece: page 1 starts at 1123, and
+// nextAiringEpisode is the only hint of what has already aired) must show on screen with ALL
+// episodes — otherwise there is nowhere to click to download the missing ones. See decisions.md #52.
 func TestHandleAnimeEpisodes_ListsEpisodesOutsideTheAniListWindow(t *testing.T) {
 	const body = `{"data":{"Page":{"mediaList":[{
 		"id": 1, "status": "CURRENT", "progress": 3, "customLists": {},
@@ -139,7 +139,7 @@ func TestHandleAnimeEpisodes_ListsEpisodesOutsideTheAniListWindow(t *testing.T) 
 	handleAnimeEpisodes(server)(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("quero 200, veio %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("want 200, got %d (%s)", w.Code, w.Body.String())
 	}
 
 	var response struct {
@@ -149,26 +149,26 @@ func TestHandleAnimeEpisodes_ListsEpisodesOutsideTheAniListWindow(t *testing.T) 
 		t.Fatalf("decode: %v", err)
 	}
 
-	// 1..11 no ar (nextAiringEpisode 12) + o 12 futuro, mesmo com a agenda trazendo só o 10.
+	// 1..11 aired (nextAiringEpisode 12) + the future 12, even with the schedule only bringing 10.
 	if len(response.Data.Episodes) != 12 {
-		t.Fatalf("quero 12 episódios na tela, veio %d", len(response.Data.Episodes))
+		t.Fatalf("want 12 episodes on screen, got %d", len(response.Data.Episodes))
 	}
 	for i, ep := range response.Data.Episodes {
 		if ep.EpisodeNumber != i+1 {
-			t.Fatalf("episódio %d fora de ordem: %+v", i+1, ep)
+			t.Fatalf("episode %d out of order: %+v", i+1, ep)
 		}
 	}
 	if !response.Data.Episodes[0].IsWatched || response.Data.Episodes[3].IsWatched {
-		t.Error("is_watched deve seguir o progresso (3) mesmo nos episódios sintetizados")
+		t.Error("is_watched must follow progress (3) even on synthesized episodes")
 	}
 	if response.Data.Episodes[11].IsAired {
-		t.Error("o episódio 12 ainda não foi ao ar")
+		t.Error("episode 12 has not aired yet")
 	}
 }
 
-// A faixa do pack vai para a tela pelo registro salvo, não pelo min/max dos episódios listados:
-// com 5 assistidos, um pack 01-11 só tem registro de 6..11 e o min/max mentiria. Omitida
-// (omitempty) para episódio avulso, que não tem faixa nenhuma.
+// The pack range reaches the screen from the saved record, not from min/max of listed episodes:
+// with 5 watched, a pack 01-11 only has records for 6..11 and min/max would lie. Omitted
+// (omitempty) for a standalone episode, which has no range.
 func TestHandleAnimeEpisodes_BatchRange(t *testing.T) {
 	defer mockAnimeDetail()()
 
@@ -200,22 +200,22 @@ func TestHandleAnimeEpisodes_BatchRange(t *testing.T) {
 	episodes := response.Data.(map[string]interface{})["episodes"].([]interface{})
 	ep1 := episodes[0].(map[string]interface{})
 	if ep1["batch_start"] != float64(1) || ep1["batch_end"] != float64(11) {
-		t.Errorf("esperava batch_start=1 batch_end=11, obteve %v-%v", ep1["batch_start"], ep1["batch_end"])
+		t.Errorf("want batch_start=1 batch_end=11, got %v-%v", ep1["batch_start"], ep1["batch_end"])
 	}
 
 	ep2 := episodes[1].(map[string]interface{})
 	if _, present := ep2["batch_start"]; present {
-		t.Errorf("batch_start deve ser omitido para episódio avulso, obteve %v", ep2["batch_start"])
+		t.Errorf("batch_start must be omitted for a standalone episode, got %v", ep2["batch_start"])
 	}
 }
 
-// TestHandleAnimeEpisodes_OpensFromCacheDuringOutage e o item que motivou o cache local: esta
-// tela era a unica que ficava INTEIRA inacessivel com a AniList fora do ar, apesar de tudo o que
-// ela faz alem de listar episodios (bloquear, apagar, re-baixar, marcar como manual) ja ser
-// local. Um 500 aqui escondia todas essas acoes junto.
+// TestHandleAnimeEpisodes_OpensFromCacheDuringOutage is the item that motivated the local cache:
+// this screen was the only one that became ENTIRELY unreachable with AniList down, even though
+// everything it does besides listing episodes (block, delete, re-download, mark as manual) is
+// already local. A 500 here hid all those actions with it.
 //
-// O teste vale pelas duas metades: a primeira chamada popula o cache, a segunda ja e a AniList
-// respondendo 503 — e a tela tem de abrir com os mesmos episodios.
+// The test is both halves: the first call populates the cache, the second is AniList already
+// answering 503 — and the screen must open with the same episodes.
 func TestHandleAnimeEpisodes_OpensFromCacheDuringOutage(t *testing.T) {
 	fail := false
 	restore := anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
@@ -242,13 +242,13 @@ func TestHandleAnimeEpisodes_OpensFromCacheDuringOutage(t *testing.T) {
 	}
 
 	if w := call(); w.Code != http.StatusOK {
-		t.Fatalf("a primeira chamada tinha de passar: %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("the first call had to pass: %d (%s)", w.Code, w.Body.String())
 	}
 
 	fail = true
 	w := call()
 	if w.Code != http.StatusOK {
-		t.Fatalf("com a AniList fora do ar a tela tinha de abrir do cache, veio %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("with AniList down the screen had to open from cache, got %d (%s)", w.Code, w.Body.String())
 	}
 
 	var response SuccessResponse
@@ -260,6 +260,6 @@ func TestHandleAnimeEpisodes_OpensFromCacheDuringOutage(t *testing.T) {
 		t.Fatalf("Expected data to be an object, got %T", response.Data)
 	}
 	if episodes, ok := data["episodes"].([]interface{}); !ok || len(episodes) != 2 {
-		t.Fatalf("esperava os 2 episodios do cache, veio %v", data["episodes"])
+		t.Fatalf("want the 2 cached episodes, got %v", data["episodes"])
 	}
 }

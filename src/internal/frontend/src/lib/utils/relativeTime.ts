@@ -1,12 +1,12 @@
 /**
- * `formatRelative` serve passado e futuro com a mesma conta: `Intl.RelativeTimeFormat` só olha
- * o sinal, então "há 3 horas" e "em 3 horas" saem daqui.
+ * `formatRelative` serves past and future with the same math: `Intl.RelativeTimeFormat` only
+ * looks at the sign, so "3 hours ago" and "in 3 hours" both come from here.
  *
- * `Math.trunc` (e não `round`) é o corte para zero que o "há X" da tela de status já tinha:
- * 25h continuam sendo "há 1 dia", não "há 2 dias".
+ * `Math.trunc` (not `round`) is the towards-zero cut that the status screen's "X ago" already
+ * had: 25h stays "1 day ago", not "2 days ago".
  *
- * Fica fora dos componentes por ser puro e testável sem Svelte — o `locale` entra como
- * argumento em vez de ser lido do store pelo mesmo motivo.
+ * Lives outside components because it is pure and testable without Svelte — `locale` is an
+ * argument instead of being read from the store for the same reason.
  */
 export function formatRelative(targetMs: number, nowMs: number, locale: string): string {
   const diffSeconds = Math.trunc((targetMs - nowMs) / 1000)
@@ -19,16 +19,16 @@ export function formatRelative(targetMs: number, nowMs: number, locale: string):
 }
 
 /**
- * `nextAiringIn` traduz o `next_airing_at` da API (unix em SEGUNDOS) para o texto relativo, ou
- * string vazia quando não há nada a mostrar. Duas razões para dar vazio:
+ * `nextAiringIn` turns the API's `next_airing_at` (unix in SECONDS) into relative text, or an
+ * empty string when there is nothing to show. Two reasons for empty:
  *
- * - `next_airing_at` ausente/0 — anime terminado ou em hiato entre temporadas; a AniList devolve
- *   `nextAiringEpisode: null` nos dois casos.
- * - horário já no passado — a AniList às vezes demora a publicar o episódio seguinte, e um
- *   "próximo episódio há 2 dias" seria mentira na tela.
+ * - `next_airing_at` missing/0 — finished anime or a hiatus between seasons; AniList returns
+ *   `nextAiringEpisode: null` in both cases.
+ * - time already in the past — AniList sometimes takes a while to publish the next episode,
+ *   and a "next episode 2 days ago" would be a lie on screen.
  *
- * Devolve o texto do TEMPO, não a frase inteira: quem renderiza interpola em `m.next_airing`
- * (mesma fronteira de i18n de `domain/animeState.ts`).
+ * Returns the TIME text, not the whole phrase: the renderer interpolates into `m.next_airing`
+ * (same i18n boundary as `domain/animeState.ts`).
  */
 export function nextAiringIn(
   nextAiringAt: number | undefined,

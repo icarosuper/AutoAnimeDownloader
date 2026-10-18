@@ -6,81 +6,81 @@ import type { AnilistHealth } from '../../src/lib/api/client.js'
 
 const ok: AnilistHealth = { state: 'ok' }
 
-describe('pickBanner — precedência', () => {
-  it('backend inalcançável ganha da AniList fora do ar', () => {
-    // Com o daemon fora, o estado da AniList é a última leitura bem-sucedida, ou seja,
-    // informação datada. Mostrar os dois seria ruído contraditório (decisions.md #66).
+describe('pickBanner — precedence', () => {
+  it('unreachable backend beats AniList being down', () => {
+    // With the daemon down, the AniList state is the last successful read, i.e. stale
+    // information. Showing both would be contradictory noise (decisions.md #66).
     const banner = pickBanner('unreachable', { state: 'outage' })
     expect(banner?.kind).toBe('backend_unreachable')
   })
 
-  it('erro do backend ganha do rate limit da AniList', () => {
+  it('backend error beats AniList rate limit', () => {
     expect(pickBanner('server_error', { state: 'rate_limited' })?.kind).toBe('backend_error')
   })
 
-  it('não mostra nada quando está tudo são', () => {
+  it('shows nothing when everything is healthy', () => {
     expect(pickBanner('ok', ok)).toBeNull()
   })
 
-  it('trata AniList ausente como sem informação, não como problema', () => {
-    // O status_update do WebSocket não carrega o campo; ausência não pode virar banner.
+  it('treats missing AniList as no information, not as a problem', () => {
+    // The WebSocket status_update does not carry the field; absence must not become a banner.
     expect(pickBanner('ok', undefined)).toBeNull()
   })
 })
 
-describe('pickBanner — botão de reportar', () => {
-  it('oferece reportar em bug nosso (5xx do backend e 400 da AniList)', () => {
+describe('pickBanner — report button', () => {
+  it('offers report on our own bugs (backend 5xx and AniList 400)', () => {
     expect(pickBanner('server_error', ok)?.reportable).toBe(true)
     expect(pickBanner('ok', { state: 'app_bug' })?.reportable).toBe(true)
   })
 
-  it('NÃO oferece reportar em rate limit nem em outage', () => {
-    // Reportar comportamento normal gera issue que se fecha com "é a AniList", e treina o
-    // usuário a ignorar o botão justamente quando ele importa.
+  it('does NOT offer report on rate limit or outage', () => {
+    // Reporting normal behavior produces an issue that closes with "it's AniList", and trains
+    // the user to ignore the button exactly when it matters.
     expect(pickBanner('ok', { state: 'rate_limited' })?.reportable).toBe(false)
     expect(pickBanner('ok', { state: 'outage' })?.reportable).toBe(false)
     expect(pickBanner('unreachable', ok)?.reportable).toBe(false)
   })
 })
 
-describe('pickBanner — detalhe cru da AniList', () => {
-  it('repassa a mensagem do outage (é onde vem o motivo de um IP bloqueado)', () => {
+describe('pickBanner — raw AniList detail', () => {
+  it('forwards the outage message (that is where a blocked-IP reason comes from)', () => {
     const banner = pickBanner('ok', { state: 'outage', message: 'IP blocked: too many requests' })
     expect(banner?.detail).toBe('IP blocked: too many requests')
   })
 })
 
 describe('secondsUntil', () => {
-  it('arredonda para cima os segundos restantes', () => {
+  it('rounds remaining seconds up', () => {
     const now = 1_000_000
     expect(secondsUntil(new Date(now + 29_400), now)).toBe(30)
   })
 
-  it('nunca devolve negativo depois de o prazo passar', () => {
+  it('never returns negative after the deadline has passed', () => {
     const now = 1_000_000
     expect(secondsUntil(new Date(now - 5000), now)).toBe(0)
   })
 
-  it('devolve 0 sem prazo — o banner cai na frase sem contagem', () => {
+  it('returns 0 with no deadline — the banner falls back to the phrase without a countdown', () => {
     expect(secondsUntil(undefined, Date.now())).toBe(0)
   })
 })
 
 describe('backendHealth', () => {
-  it('não acusa na primeira falha — uma só é ruído de rede', () => {
+  it('does not raise on the first failure — a single one is network noise', () => {
     backendHealth.reset()
     backendHealth.recordFailure('/status', 0)
     expect(get(backendHealth)).toBe('ok')
   })
 
-  it('acusa na segunda falha consecutiva', () => {
+  it('raises on the second consecutive failure', () => {
     backendHealth.reset()
     backendHealth.recordFailure('/status', 0)
     backendHealth.recordFailure('/status', 0)
     expect(get(backendHealth)).toBe('unreachable')
   })
 
-  it('some no primeiro sucesso, nunca por timer', () => {
+  it('vanishes on the first success, never by timer', () => {
     backendHealth.reset()
     backendHealth.recordFailure('/status', 500)
     backendHealth.recordFailure('/status', 500)
@@ -89,16 +89,16 @@ describe('backendHealth', () => {
     expect(get(backendHealth)).toBe('ok')
   })
 
-  it('ignora 4xx — 404/405/409 são respostas legítimas de um backend são', () => {
+  it('ignores 4xx — 404/405/409 are legitimate responses from a healthy backend', () => {
     backendHealth.reset()
     backendHealth.recordFailure('/animes', 409)
     backendHealth.recordFailure('/animes', 409)
     expect(get(backendHealth)).toBe('ok')
   })
 
-  it('conta por endpoint: um /last-check quebrado não é apagado pelo /status são', () => {
-    // Este é o ponto cego que o banner fecha: /last-check e /torrents usam silent:true, então
-    // um 5xx repetido neles era invisível.
+  it('counts per endpoint: a broken /last-check is not erased by a healthy /status', () => {
+    // This is the blind spot the banner closes: /last-check and /torrents use silent:true, so
+    // a repeated 5xx on them used to be invisible.
     backendHealth.reset()
     backendHealth.recordFailure('/last-check', 500)
     backendHealth.recordFailure('/last-check', 500)
@@ -106,7 +106,7 @@ describe('backendHealth', () => {
     expect(get(backendHealth)).toBe('server_error')
   })
 
-  it('inalcançável ganha de 5xx quando os dois estão acesos', () => {
+  it('unreachable beats 5xx when both are lit', () => {
     backendHealth.reset()
     backendHealth.recordFailure('/last-check', 500)
     backendHealth.recordFailure('/last-check', 500)
@@ -116,21 +116,21 @@ describe('backendHealth', () => {
   })
 })
 
-describe('cache local', () => {
-  // A data do snapshot só vale quando é ELE que está na tela. Com a AniList no ar o arquivo
-  // existe do mesmo jeito, e anunciar "mostrando o cache de ontem" enquanto se mostra dado
-  // fresco é dizer que a tela está errada quando ela está certa.
-  it('não expõe a data do cache com a AniList no ar', () => {
+describe('local cache', () => {
+  // The snapshot date only counts when IT is what is on screen. With AniList up the file
+  // exists the same way, and announcing "showing yesterday's cache" while showing fresh data
+  // is saying the screen is wrong when it is right.
+  it('does not expose the cache date with AniList up', () => {
     expect(pickBanner('ok', { state: 'ok', cache_saved_at: '2026-09-05T10:00:00Z' })).toBeNull()
   })
 
-  it('expõe a data do cache num outage', () => {
+  it('exposes the cache date on an outage', () => {
     const banner = pickBanner('ok', { state: 'outage', cache_saved_at: '2026-09-05T10:00:00Z' })
     expect(banner?.kind).toBe('anilist_outage')
     expect(banner?.cachedAt).toEqual(new Date('2026-09-05T10:00:00Z'))
   })
 
-  it('omite a data quando nunca houve snapshot', () => {
+  it('omits the date when there was never a snapshot', () => {
     expect(pickBanner('ok', { state: 'outage' })?.cachedAt).toBeUndefined()
   })
 })

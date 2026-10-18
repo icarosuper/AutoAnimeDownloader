@@ -60,8 +60,8 @@ const rows = '[data-episode-row]:visible'
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/animes', route => route.fulfill({ json: mockAnimes }))
   await page.route('**/api/v1/animes/123/episodes', route => route.fulfill({ json: mockDetail }))
-  // Sem esta rota a página bate no servidor real e o poll silencioso engole o erro: a tela
-  // funciona, mas o teste passaria por acidente.
+  // Without this route the page hits the real server and the silent poll swallows the error:
+  // the screen works, but the test would pass by accident.
   await page.route('**/api/v1/last-check', route => route.fulfill({
     json: { success: true, data: { finished_at: '0001-01-01T00:00:00Z', pass_error: '', problems: [], limits: [] }, error: null },
   }))
@@ -109,7 +109,7 @@ test('downloaded episode offers Redownload as its principal action', async ({ pa
   await expect(page.getByRole('button', { name: /^redownload$/i }).first()).toBeVisible()
 })
 
-// Fase 4's core deliverable: one action definition (episodeActions) feeding a labelled menu,
+// Phase 4's core deliverable: one action definition (episodeActions) feeding a labelled menu,
 // instead of the same five icon buttons written out twice.
 test('the row overflow menu lists the remaining actions with text labels', async ({ page }) => {
   await page.goto('/#/status/123')

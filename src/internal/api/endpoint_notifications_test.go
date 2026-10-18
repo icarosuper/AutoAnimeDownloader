@@ -65,8 +65,8 @@ func TestHandleWebhookTest_Fires(t *testing.T) {
 	}
 }
 
-// O 401 do Jellyfin com token errado tem de virar erro na tela. Antes este teste falhava: o
-// handler devolvia 200 "fired successfully" para qualquer coisa que nao fosse nome inexistente.
+// A Jellyfin 401 with a bad token has to become an error on screen. This test used to fail:
+// the handler returned 200 "fired successfully" for anything that was not a missing name.
 func TestHandleWebhookTest_ServiceRefused(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

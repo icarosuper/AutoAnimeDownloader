@@ -56,9 +56,9 @@ func TestExtractAnimeSeasonPart_SnKS3P2_FromRomaji(t *testing.T) {
 }
 
 func TestExtractAnimeSeasonPart_KaguySa2_SeasonFromSynonyms(t *testing.T) {
-	// Anilist id 112641: english = "Kaguya-sama: Love is War?" (sem season)
-	//                    romaji  = "Kaguya-sama wa Kokurasetai?..." (sem season)
-	//                    synonyms incluem "Kaguya-sama: Love is War Season 2"
+	// Anilist id 112641: english = "Kaguya-sama: Love is War?" (no season)
+	//                    romaji  = "Kaguya-sama wa Kokurasetai?..." (no season)
+	//                    synonyms include "Kaguya-sama: Love is War Season 2"
 	title := makeTitle("Kaguya-sama: Love is War?", "Kaguya-sama wa Kokurasetai?: Tensaitachi no Renai Zunousen")
 	synonyms := []string{"Kaguya-sama: Love is War Season 2"}
 	season, part := daemon.ExtractAnimeSeasonPart(title, synonyms)
@@ -79,7 +79,7 @@ func TestExtractAnimeSeasonPart_MushokuTenseiIIP2_PartFromRomaji(t *testing.T) {
 	)
 	season, part := daemon.ExtractAnimeSeasonPart(title, nil)
 
-	// English dá season=2, romaji dá part=2
+	// English gives season=2, romaji gives part=2
 	if season == nil || *season != 2 {
 		t.Errorf("expected season=2, got %v", season)
 	}
@@ -94,7 +94,7 @@ func TestExtractAnimeSeasonPart_NieRCour2_CourAsPart(t *testing.T) {
 	title := makeTitle("NieR:Automata Ver1.1a Cour 2", "NieR:Automata Ver1.1a 2nd Season")
 	season, part := daemon.ExtractAnimeSeasonPart(title, nil)
 
-	// "2nd Season" no romaji → season=2; "Cour 2" no english → part=2
+	// "2nd Season" in romaji → season=2; "Cour 2" in english → part=2
 	if season == nil || *season != 2 {
 		t.Errorf("expected season=2, got %v", season)
 	}
@@ -105,11 +105,11 @@ func TestExtractAnimeSeasonPart_NieRCour2_CourAsPart(t *testing.T) {
 
 func TestExtractAnimeSeasonPart_HatarakuS2P2_Inconsistency(t *testing.T) {
 	// Anilist id 155168: english = "The Devil is a Part-Timer! Season 2 Part 2"
-	//                    romaji  = "Hataraku Maou-sama!! 2nd Season" (sem part)
+	//                    romaji  = "Hataraku Maou-sama!! 2nd Season" (no part)
 	title := makeTitle("The Devil is a Part-Timer! Season 2 Part 2", "Hataraku Maou-sama!! 2nd Season")
 	season, part := daemon.ExtractAnimeSeasonPart(title, nil)
 
-	// English dá season=2 e part=2
+	// English gives season=2 and part=2
 	if season == nil || *season != 2 {
 		t.Errorf("expected season=2, got %v", season)
 	}
@@ -119,13 +119,13 @@ func TestExtractAnimeSeasonPart_HatarakuS2P2_Inconsistency(t *testing.T) {
 }
 
 func TestExtractAnimeSeasonPart_SnKFinalSeason_NoSeasonNumber(t *testing.T) {
-	// Anilist id 110277: "The Final Season" — sem número de season extraível
+	// Anilist id 110277: "The Final Season" — no extractable season number
 	title := makeTitle("Attack on Titan Final Season", "Shingeki no Kyojin: The Final Season")
 	synonyms := []string{"Attack on Titan Season 4", "SnK 4"}
 	season, part := daemon.ExtractAnimeSeasonPart(title, synonyms)
 
-	// synonyms têm "Season 4" mas o próprio título não tem número
-	// A implementação lê english primeiro: sem season. Romaji: sem season.
+	// synonyms have "Season 4" but the title itself has no number
+	// The implementation reads english first: no season. Romaji: no season.
 	// Synonyms: "Attack on Titan Season 4" → season=4
 	if season == nil || *season != 4 {
 		t.Errorf("expected season=4 (from synonyms), got %v", season)
@@ -138,7 +138,7 @@ func TestExtractAnimeSeasonPart_SnKFinalSeason_NoSeasonNumber(t *testing.T) {
 func TestExtractAnimeSeasonPart_RomanNumeralOnly_SeasonFromRomaji(t *testing.T) {
 	// Anilist id 194829: english = "From Old Country Bumpkin to Master Swordsman II"
 	//                    romaji  = "Katainaka no Ossan, Kensei ni Naru II"
-	// Nem english nem romaji dizem "Season 2"/"S2" — só o numeral romano "II".
+	// Neither english nor romaji say "Season 2"/"S2" — only the roman numeral "II".
 	title := makeTitle("From Old Country Bumpkin to Master Swordsman II", "Katainaka no Ossan, Kensei ni Naru II")
 	season, part := daemon.ExtractAnimeSeasonPart(title, nil)
 
@@ -151,7 +151,7 @@ func TestExtractAnimeSeasonPart_RomanNumeralOnly_SeasonFromRomaji(t *testing.T) 
 }
 
 func TestExtractAnimeSeasonPart_NoSeasonOrPart(t *testing.T) {
-	// Anime S1 simples, sem season/part no título
+	// Simple S1 anime, no season/part in the title
 	title := makeTitle("Frieren: Beyond Journey's End", "Sousou no Frieren")
 	season, part := daemon.ExtractAnimeSeasonPart(title, nil)
 
@@ -168,8 +168,8 @@ func TestExtractAnimeSeasonPart_NoSeasonOrPart(t *testing.T) {
 // ============================================
 
 func TestComputeEpisodeOffset_NonTVPrequel_ReturnsZero(t *testing.T) {
-	// Um filme de recap ou OVA chega como PREQUEL com Episodes preenchido. Somar isso jogaria
-	// a busca para um episódio que não existe, então não entra na conta.
+	// A recap movie or OVA arrives as PREQUEL with Episodes filled in. Adding that would send
+	// the search to an episode that does not exist, so it does not enter the count.
 	part2 := 2
 	for _, format := range []anilist.MediaFormat{anilist.MediaFormatMovie, anilist.MediaFormatOVA, anilist.MediaFormatONA} {
 		relations := makeRelationsFmt("PREQUEL", 4, format)
@@ -180,7 +180,7 @@ func TestComputeEpisodeOffset_NonTVPrequel_ReturnsZero(t *testing.T) {
 }
 
 func TestComputeEpisodeOffset_SnKS3P2_Returns12(t *testing.T) {
-	// Anilist id 104578: PREQUEL = SnK S3 (12 episódios)
+	// Anilist id 104578: PREQUEL = SnK S3 (12 episodes)
 	part2 := 2
 	relations := makeRelations("PREQUEL", 12)
 	offset := daemon.ComputeEpisodeOffset(relations, &part2)
@@ -190,7 +190,7 @@ func TestComputeEpisodeOffset_SnKS3P2_Returns12(t *testing.T) {
 }
 
 func TestComputeEpisodeOffset_MushokuTenseiIIP2_Returns13(t *testing.T) {
-	// Anilist id 166873: PREQUEL = MT II (13 episódios)
+	// Anilist id 166873: PREQUEL = MT II (13 episodes)
 	part2 := 2
 	relations := makeRelations("PREQUEL", 13)
 	offset := daemon.ComputeEpisodeOffset(relations, &part2)
@@ -200,7 +200,7 @@ func TestComputeEpisodeOffset_MushokuTenseiIIP2_Returns13(t *testing.T) {
 }
 
 func TestComputeEpisodeOffset_NoPartGate_ReturnsZero(t *testing.T) {
-	// Sem part >= 2, offset deve ser zero (previne Kaguya S2 receber offset errado)
+	// Without part >= 2, offset must be zero (prevents Kaguya S2 from getting a wrong offset)
 	relations := makeRelations("PREQUEL", 12)
 
 	// part=nil
@@ -215,7 +215,7 @@ func TestComputeEpisodeOffset_NoPartGate_ReturnsZero(t *testing.T) {
 }
 
 func TestComputeEpisodeOffset_NoPrequel_ReturnsZero(t *testing.T) {
-	// Relações sem PREQUEL: sem offset
+	// Relations without PREQUEL: no offset
 	part2 := 2
 	relations := makeRelations("SEQUEL", 12)
 	if got := daemon.ComputeEpisodeOffset(relations, &part2); got != 0 {
@@ -224,7 +224,7 @@ func TestComputeEpisodeOffset_NoPrequel_ReturnsZero(t *testing.T) {
 }
 
 func TestComputeEpisodeOffset_KaguySa2_NoPart_ReturnsZero(t *testing.T) {
-	// Kaguya S2 (id 112641): part=nil → zero offset (gate obrigatório)
+	// Kaguya S2 (id 112641): part=nil → zero offset (mandatory gate)
 	relations := makeRelations("PREQUEL", 12)
 	if got := daemon.ComputeEpisodeOffset(relations, nil); got != 0 {
 		t.Errorf("expected 0 for Kaguya S2 (no part), got %d", got)

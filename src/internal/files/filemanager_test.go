@@ -26,9 +26,9 @@ func newTestManager(t *testing.T) *FileManager {
 	return newTestManagerIn(t, t.TempDir())
 }
 
-// O blocked_episodes antigo era um array de ids de nó da AniList. Esses ids nao existem mais em
-// lugar nenhum, entao o arquivo legado tem de ser descartado — e nao virar erro, que travaria
-// LoadBlockedEpisodes (e com ela o passe de verificacao) para sempre.
+// The old blocked_episodes was an array of AniList node ids. Those ids no longer exist
+// anywhere, so the legacy file has to be discarded — and not become an error, which would
+// stall LoadBlockedEpisodes (and with it the verification pass) forever.
 func TestLoadBlockedEpisodes_DiscardsLegacyIntList(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "blocked"), []byte("[416348,416349]"), 0o644); err != nil {
@@ -38,28 +38,28 @@ func TestLoadBlockedEpisodes_DiscardsLegacyIntList(t *testing.T) {
 
 	blocked, err := m.LoadBlockedEpisodes()
 	if err != nil {
-		t.Fatalf("arquivo legado nao pode virar erro: %v", err)
+		t.Fatalf("legacy file must not become an error: %v", err)
 	}
 	if len(blocked) != 0 {
-		t.Fatalf("quero lista vazia, veio %v", blocked)
+		t.Fatalf("want empty list, got %v", blocked)
 	}
 
-	// E o arquivo volta a funcionar no formato novo.
+	// And the file works again in the new format.
 	key := EpisodeKey{AnimeID: 21, Episode: 1123}
 	if err := m.BlockEpisode(key); err != nil {
 		t.Fatalf("BlockEpisode: %v", err)
 	}
 	blocked, err = m.LoadBlockedEpisodes()
 	if err != nil || len(blocked) != 1 || blocked[0] != key {
-		t.Fatalf("quero [%v], veio %v (err=%v)", key, blocked, err)
+		t.Fatalf("want [%v], got %v (err=%v)", key, blocked, err)
 	}
 }
 
 func TestDeleteEmptyFolders(t *testing.T) {
-	t.Run("apaga pasta vazia da biblioteca", func(t *testing.T) {
+	t.Run("deletes an empty library folder", func(t *testing.T) {
 		completed := t.TempDir()
-		vazia := filepath.Join(completed, "Anime Vazio")
-		if err := os.MkdirAll(vazia, 0755); err != nil {
+		empty := filepath.Join(completed, "Empty Anime")
+		if err := os.MkdirAll(empty, 0755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
 
@@ -67,14 +67,14 @@ func TestDeleteEmptyFolders(t *testing.T) {
 			t.Fatalf("DeleteEmptyFolders: %v", err)
 		}
 
-		if _, err := os.Stat(vazia); err == nil {
-			t.Error("pasta vazia deveria ter sido apagada")
+		if _, err := os.Stat(empty); err == nil {
+			t.Error("empty folder should have been deleted")
 		}
 	})
 
-	// A rain aloca <download>/<id> e so depois escreve nele. Sem esta guarda a varredura
-	// da biblioteca apagaria diretorios de torrent recem-criados.
-	t.Run("nunca entra no diretorio de download", func(t *testing.T) {
+	// rain allocates <download>/<id> and only then writes into it. Without this guard the
+	// library scan would delete freshly created torrent directories.
+	t.Run("never enters the download directory", func(t *testing.T) {
 		completed := t.TempDir()
 		torrentDir := filepath.Join(completed, ".torrents", "abc123")
 		if err := os.MkdirAll(torrentDir, 0755); err != nil {
@@ -86,22 +86,22 @@ func TestDeleteEmptyFolders(t *testing.T) {
 		}
 
 		if _, err := os.Stat(torrentDir); err != nil {
-			t.Errorf("diretorio de torrent vazio nao deveria ter sido apagado: %v", err)
+			t.Errorf("empty torrent directory should not have been deleted: %v", err)
 		}
 	})
 
-	t.Run("rejeita caminho vazio", func(t *testing.T) {
+	t.Run("rejects empty path", func(t *testing.T) {
 		if err := newTestManager(t).DeleteEmptyFolders(""); err == nil {
-			t.Error("quero erro para caminho vazio, veio nil")
+			t.Error("want error for empty path, got nil")
 		}
 	})
 }
 
-// Regressao: soltar varios episodios de uma vez pela UI dispara um POST /release por
-// episodio em paralelo, e cada um faz load -> altera -> grava o arquivo de episodios.
-// Sem lock isso perde atualizacoes e chega a corromper o arquivo (dois WriteFile
-// truncando o mesmo caminho ao mesmo tempo), deixando LoadSavedEpisodes falhando para
-// sempre e derrubando /api/v1/animes com 500.
+// Regression: releasing several episodes at once from the UI fires a POST /release per
+// episode in parallel, and each one does load -> mutate -> write the episodes file.
+// Without a lock that loses updates and can even corrupt the file (two WriteFile
+// truncating the same path at the same time), leaving LoadSavedEpisodes failing
+// forever and taking /api/v1/animes down with 500.
 func TestEpisodesFileConcurrency(t *testing.T) {
 	seed := func(t *testing.T, m *FileManager, n int) {
 		t.Helper()
@@ -110,7 +110,7 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 			episodes = append(episodes, EpisodeStruct{
 				EpisodeNumber:   1 + i,
 				EpisodeHash:     fmt.Sprintf("hash%04d", i),
-				EpisodeName:     fmt.Sprintf("Anime Bem Longo Para Encher o Arquivo - Episode %d", i),
+				EpisodeName:     fmt.Sprintf("Very Long Anime Name To Fill The File - Episode %d", i),
 				AnimeID:         488911345,
 				AnimeName:       "Katainaka no Ossan, Kensei ni Naru II",
 				DownloadDate:    time.Now(),
@@ -122,7 +122,7 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 		}
 	}
 
-	t.Run("releases concorrentes nao perdem atualizacoes nem corrompem o arquivo", func(t *testing.T) {
+	t.Run("concurrent releases neither lose updates nor corrupt the file", func(t *testing.T) {
 		const n = 30
 		m := newTestManager(t)
 		seed(t, m, n)
@@ -141,22 +141,22 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 
 		got, err := m.LoadSavedEpisodes()
 		if err != nil {
-			t.Fatalf("arquivo de episodios corrompido: %v", err)
+			t.Fatalf("episodes file corrupted: %v", err)
 		}
 		if len(got) != n {
-			t.Fatalf("quero %d episodios salvos, veio %d", n, len(got))
+			t.Fatalf("want %d saved episodes, got %d", n, len(got))
 		}
 		for _, ep := range got {
 			if ep.ManuallyManaged {
-				t.Errorf("episodio %d continua manually managed: atualizacao perdida", ep.EpisodeNumber)
+				t.Errorf("episode %d is still manually managed: update lost", ep.EpisodeNumber)
 			}
 		}
 	})
 
-	// O daemon organiza torrents (UpsertEpisodes) enquanto a UI faz polling em
-	// /api/v1/animes (LoadSavedEpisodes). Um leitor nunca pode enxergar o arquivo
-	// pela metade.
-	t.Run("leitura concorrente com escrita nunca ve arquivo truncado", func(t *testing.T) {
+	// The daemon organizes torrents (UpsertEpisodes) while the UI polls
+	// /api/v1/animes (LoadSavedEpisodes). A reader must never see the file
+	// half-written.
+	t.Run("concurrent read with write never sees a truncated file", func(t *testing.T) {
 		const n = 40
 		m := newTestManager(t)
 		seed(t, m, n)
@@ -173,7 +173,7 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 					AnimeID:       488911345,
 					EpisodeNumber: 1,
 					EpisodeHash:   "hash0000",
-					EpisodeName:   fmt.Sprintf("reescrita %d", i),
+					EpisodeName:   fmt.Sprintf("rewrite %d", i),
 					DownloadDate:  time.Now(),
 				}}); err != nil {
 					t.Errorf("UpsertEpisodes: %v", err)
@@ -193,11 +193,11 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 				}
 				eps, err := m.LoadSavedEpisodes()
 				if err != nil {
-					t.Errorf("leitura pegou arquivo corrompido: %v", err)
+					t.Errorf("read got a corrupted file: %v", err)
 					return
 				}
 				if len(eps) != n {
-					t.Errorf("leitura pegou arquivo incompleto: quero %d episodios, veio %d", n, len(eps))
+					t.Errorf("read got an incomplete file: want %d episodes, got %d", n, len(eps))
 					return
 				}
 			}
@@ -206,7 +206,7 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("bloqueio e desbloqueio concorrentes nao corrompem o arquivo", func(t *testing.T) {
+	t.Run("concurrent block and unblock do not corrupt the file", func(t *testing.T) {
 		const n = 30
 		m := newTestManager(t)
 
@@ -224,10 +224,10 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 
 		blocked, err := m.LoadBlockedEpisodes()
 		if err != nil {
-			t.Fatalf("arquivo de bloqueados corrompido: %v", err)
+			t.Fatalf("blocked file corrupted: %v", err)
 		}
 		if len(blocked) != n {
-			t.Fatalf("quero %d episodios bloqueados, veio %d: atualizacao perdida", n, len(blocked))
+			t.Fatalf("want %d blocked episodes, got %d: update lost", n, len(blocked))
 		}
 	})
 }

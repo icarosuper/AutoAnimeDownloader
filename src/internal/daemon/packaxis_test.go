@@ -8,8 +8,9 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 )
 
-// entryOf monta a entrada da AniList como ela chega ao passe: o titulo (de onde sai a part) e a
-// relacao PREQUEL com a contagem de episodios dele (de onde sai a hipotese "continua pela season").
+// entryOf builds the AniList entry as it arrives at the pass: the title (where the part comes
+// from) and the PREQUEL relation with its episode count (where the "continues by season"
+// hypothesis comes from).
 func entryOf(id int, title string, prequelEpisodes int) anilist.MediaList {
 	media := anilist.Media{Id: id, Title: anilist.Title{Romaji: &title}}
 	if prequelEpisodes > 0 {
@@ -21,59 +22,59 @@ func entryOf(id int, title string, prequelEpisodes int) anilist.MediaList {
 	return anilist.MediaList{Id: id, Media: media}
 }
 
-// As QUATRO convencoes de numeracao de pack medidas em sources.md ("Granularidade e numeracao dos
-// packs"), cada uma sob a entrada real em que ela aparece. O que se cobra e a faixa CONVERTIDA
-// para a numeracao local da entrada: e ela que vai para o registro e que a posse por cobertura
-// (decisions.md #78) reconverte para o eixo absoluto.
+// The FOUR pack-numbering conventions measured in sources.md ("Pack granularity and numbering"),
+// each under the real entry it appears in. What is asserted is the range CONVERTED to the
+// entry's local numbering: that is what goes into the record and what coverage ownership
+// (decisions.md #78) reconverts to the absolute axis.
 func TestPackAxis_TheFourNumberingConventions(t *testing.T) {
 	cases := []struct {
 		name       string
 		anime      anilist.MediaList
-		offset     int // eixo absoluto da serie (decisions.md #77)
-		total      int // episodios da ENTRADA
+		offset     int // absolute series axis (decisions.md #77)
+		total      int // episodes of the ENTRY
 		pack       string
 		start, end int
 		convention string
 	}{
 		{
-			name:       "reinicia por season",
+			name:       "restarts per season",
 			anime:      entryOf(146065, "Mushoku Tensei II: Isekai Ittara Honki Dasu", 12),
 			offset:     23,
 			total:      13,
 			pack:       "[Erai-raws] Mushoku Tensei II - Isekai Ittara Honki Dasu - 00 ~ 12 [BATCH]",
 			start:      0,
 			end:        12,
-			convention: "numeracao da propria entrada, comecando em zero",
+			convention: "the entry's own numbering, starting at zero",
 		},
 		{
-			name:       "reinicia por part",
+			name:       "restarts per part",
 			anime:      entryOf(166873, "Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", 13),
 			offset:     36,
 			total:      12,
 			pack:       "[EMBER] Mushoku Tensei II (Season 2 | Part 2) 01 ~ 12 (Batch)",
 			start:      1,
 			end:        12,
-			convention: "numeracao da propria entrada",
+			convention: "the entry's own numbering",
 		},
 		{
-			name:       "continua pela season",
+			name:       "continues by season",
 			anime:      entryOf(127720, "Mushoku Tensei: Isekai Ittara Honki Dasu Part 2", 11),
 			offset:     11,
 			total:      12,
 			pack:       "[Judas] Mushoku Tensei - Isekai Ittara Honki Dasu - 01 ~ 23 [BD 1080p][Batch]",
 			start:      -10,
 			end:        12,
-			convention: "pack da season inteira: comeca 10 episodios ANTES do ep 1 desta entrada",
+			convention: "whole-season pack: starts 10 episodes BEFORE this entry's ep 1",
 		},
 		{
-			name:       "absoluta pela serie",
+			name:       "absolute by series",
 			anime:      entryOf(131681, "Shingeki no Kyojin: The Final Season Part 2", 16),
 			offset:     75,
 			total:      12,
 			pack:       "[SubsPlease] Shingeki no Kyojin - 76-87 (1080p) [Batch]",
 			start:      1,
 			end:        12,
-			convention: "numeracao absoluta da franquia",
+			convention: "absolute franchise numbering",
 		},
 	}
 
@@ -84,40 +85,41 @@ func TestPackAxis_TheFourNumberingConventions(t *testing.T) {
 
 			picked := pickBatches(newPackSet([]nyaa.TorrentResult{pack(tc.pack, 1)}, nil), axis, 1, tc.total)
 			if picked.len() != 1 {
-				t.Fatalf("%s: o pack deveria cobrir a janela pendente, obteve %d packs", tc.convention, picked.len())
+				t.Fatalf("%s: the pack should cover the pending window, got %d packs", tc.convention, picked.len())
 			}
 
 			_, info := picked.covering(axis, 1)
 			if info.StartEpisode != tc.start || info.EndEpisode != tc.end {
-				t.Fatalf("%s: esperava faixa local %d-%d, obteve %d-%d",
+				t.Fatalf("%s: want local range %d-%d, got %d-%d",
 					tc.convention, tc.start, tc.end, info.StartEpisode, info.EndEpisode)
 			}
 		})
 	}
 }
 
-// O desempate por contagem: dois packs cobrem o episodio 1 sob a MESMA entrada de 12 episodios, e
-// so o span diz qual e qual. Sem ele o delta 0 casaria os dois e o pack de season seria gravado
-// como se comecasse no episodio 1 desta entrada.
+// The count tiebreak: two packs cover episode 1 under the SAME 12-episode entry, and only the
+// span tells them apart. Without it delta 0 would match both and the season pack would be
+// recorded as if it started at episode 1 of this entry.
 func TestPackAxis_SpanDecidesBetweenLocalAndSeasonPack(t *testing.T) {
 	anime := entryOf(166873, "Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", 13)
 	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 36}}, 12)
 
 	local := nyaa.ExtractBatchInfo("[EMBER] Mushoku Tensei II (Season 2 | Part 2) 01 ~ 12 (Batch)")
 	if got, ok := axis.localRange(local, 1); !ok || got.StartEpisode != 1 || got.EndEpisode != 12 {
-		t.Fatalf("pack de 12 episodios e local: esperava 1-12, obteve %d-%d (ok=%v)", got.StartEpisode, got.EndEpisode, ok)
+		t.Fatalf("a 12-episode pack is local: want 1-12, got %d-%d (ok=%v)", got.StartEpisode, got.EndEpisode, ok)
 	}
 
 	season := nyaa.ExtractBatchInfo("[Diddy] Mushoku Tensei II - 01 ~ 25 [BD]")
 	if got, ok := axis.localRange(season, 1); !ok || got.StartEpisode != -12 || got.EndEpisode != 12 {
-		t.Fatalf("pack de 25 episodios e da season: esperava -12-12, obteve %d-%d (ok=%v)", got.StartEpisode, got.EndEpisode, ok)
+		t.Fatalf("a 25-episode pack is the season: want -12-12, got %d-%d (ok=%v)", got.StartEpisode, got.EndEpisode, ok)
 	}
 }
 
-// A faixa lida da lista de arquivos entra pelo MESMO eixo da faixa lida do nome: os grupos usam
-// as mesmas quatro convencoes nos arquivos que no titulo. Este e o caso medido do EMBER
-// "(Season 2 | Part 2) … (Batch)" — nome sem faixa, arquivos 13..24, entrada Part 2 de 12
-// episodios. Sem a conversao, 13..24 nao cobriria episodio nenhum desta entrada.
+// The range read from the file list goes through the SAME axis as the range read from the
+// name: groups use the same four conventions in the files as in the title. This is the
+// measured EMBER case "(Season 2 | Part 2) … (Batch)" — name with no range, files 13..24,
+// Part 2 entry of 12 episodes. Without the conversion, 13..24 would cover no episode of this
+// entry.
 func TestPackSet_DetailRangeGoesThroughTheAxis(t *testing.T) {
 	anime := entryOf(166873, "Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", 12)
 	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 12}}, 12)
@@ -129,36 +131,37 @@ func TestPackSet_DetailRangeGoesThroughTheAxis(t *testing.T) {
 
 	got, info := set.covering(axis, 1)
 	if got == nil {
-		t.Fatal("o pack cobre o episódio 1 desta entrada pelo eixo da season")
+		t.Fatal("the pack covers episode 1 of this entry on the season axis")
 	}
 	if info.StartEpisode != 1 || info.EndEpisode != 12 {
-		t.Fatalf("esperava a faixa convertida 1-12, obteve %d-%d", info.StartEpisode, info.EndEpisode)
+		t.Fatalf("want the converted range 1-12, got %d-%d", info.StartEpisode, info.EndEpisode)
 	}
 }
 
-// Na duvida, delta 0: sem informacao de serie nenhuma hipotese alternativa existe, e o pack e lido
-// na numeracao da entrada — o comportamento de sempre, que e o que o zero-value entrega.
+// When in doubt, delta 0: with no series information no alternative hypothesis exists, and the
+// pack is read in the entry's numbering — the always-on behavior, which is what the zero-value
+// delivers.
 func TestPackAxis_ZeroValueKeepsRelativeNumbering(t *testing.T) {
 	info := nyaa.ExtractBatchInfo("[X] Anime 01-12 [Batch]")
 	got, ok := packAxis{}.localRange(info, 1)
 	if !ok || got.StartEpisode != 1 || got.EndEpisode != 12 {
-		t.Fatalf("esperava 1-12 na numeracao relativa, obteve %d-%d (ok=%v)", got.StartEpisode, got.EndEpisode, ok)
+		t.Fatalf("want 1-12 in relative numbering, got %d-%d (ok=%v)", got.StartEpisode, got.EndEpisode, ok)
 	}
 }
 
-// Pack que nao cobre o episodio em hipotese nenhuma nao entra: a busca cai em episodio solto, e
-// nao num pack que nao tem o que se quer.
+// A pack that covers the episode under no hypothesis does not enter: the search falls through
+// to a loose episode, not to a pack that does not have what is wanted.
 func TestPackAxis_NoHypothesisCoversRejectsThePack(t *testing.T) {
 	anime := entryOf(166873, "Anime Part 2", 13)
 	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 36}}, 12)
 
 	if picked := pickBatches(newPackSet([]nyaa.TorrentResult{pack("[X] Anime 200-212 [Batch]", 1)}, nil), axis, 1, 12); picked.len() != 0 {
-		t.Fatalf("esperava nenhum pack, obteve %v", batchNames(picked))
+		t.Fatalf("want no pack, got %v", batchNames(picked))
 	}
 }
 
-// A faixa gravada e a convertida (pode comecar em zero ou abaixo), mas o nome exibido corta em 1:
-// "Anime -10-12" nao diz nada na tela de downloads.
+// The recorded range is the converted one (it may start at zero or below), but the displayed
+// name clamps at 1: "Anime -10-12" means nothing on the downloads screen.
 func TestAssignBatches_RecordsConvertedRangeAndClampsTheDisplayName(t *testing.T) {
 	anime := entryOf(127720, "Mushoku Tensei: Isekai Ittara Honki Dasu Part 2", 11)
 	axis := newPackAxis(anime, map[int]anilist.Series{127720: {Key: 1, Offset: 11}}, 12)
@@ -168,21 +171,21 @@ func TestAssignBatches_RecordsConvertedRangeAndClampsTheDisplayName(t *testing.T
 
 	covered, magnets := assignBatches("Anime", axis, episodes, newPackSet([]nyaa.TorrentResult{batch}, nil))
 	if len(covered) != 2 {
-		t.Fatalf("esperava os dois episodios cobertos, obteve %d", len(covered))
+		t.Fatalf("want both episodes covered, got %d", len(covered))
 	}
 	got := magnets[1]
 	if got.batchStart != -10 || got.batchEnd != 12 {
-		t.Fatalf("esperava faixa gravada -10-12, obteve %d-%d", got.batchStart, got.batchEnd)
+		t.Fatalf("want recorded range -10-12, got %d-%d", got.batchStart, got.batchEnd)
 	}
 	if got.overrideName != "Anime 1-12" {
-		t.Fatalf("esperava nome exibido \"Anime 1-12\", obteve %q", got.overrideName)
+		t.Fatalf("want displayed name \"Anime 1-12\", got %q", got.overrideName)
 	}
 }
 
-// A faixa convertida chega ao guard de exclusao e a posse por cobertura: o sentinela de
-// "desconhecida" e o FIM, entao um pack de season gravado sob um cour posterior (comeco negativo)
-// continua declarando os 23 episodios de conteudo que tem — que e o que impede a poda de apagar o
-// cour que ainda nao foi baixado (decisions.md #74).
+// The converted range reaches the exclusion guard and coverage ownership: the "unknown"
+// sentinel is the END, so a season pack recorded under a later cour (negative start) still
+// declares the 23 content episodes it has — which is what stops pruning from deleting the
+// cour that has not been downloaded yet (decisions.md #74).
 func TestDeclaredSpan_ConvertedRangeStartingBeforeEpisodeOne(t *testing.T) {
 	group := []files.EpisodeStruct{
 		{AnimeID: 127720, EpisodeNumber: 1, BatchStart: -10, BatchEnd: 12},
@@ -190,12 +193,12 @@ func TestDeclaredSpan_ConvertedRangeStartingBeforeEpisodeOne(t *testing.T) {
 	}
 
 	if got := declaredSpan(group); got != 23 {
-		t.Fatalf("esperava span 23 (o pack inteiro), obteve %d", got)
+		t.Fatalf("want span 23 (the whole pack), got %d", got)
 	}
 	if !hasDeclaredRange(group[0]) {
-		t.Fatal("comeco negativo e faixa declarada, nao desconhecida")
+		t.Fatal("a negative start is a declared range, not unknown")
 	}
 	if hasDeclaredRange(files.EpisodeStruct{BatchStart: 0, BatchEnd: 0}) {
-		t.Fatal("pack sem faixa no nome continua sendo desconhecida")
+		t.Fatal("a pack with no range in the name is still unknown")
 	}
 }

@@ -381,9 +381,9 @@ func TestHandleAnimes(t *testing.T) {
 		}
 	})
 
-	// Regressao do formato inverso da tempestade abaixo: mesmo com a lista OK, um request por
-	// orfao a cada poll de 30s por aba era a maior consumidora do orcamento da AniList
-	// (decisions.md #65) — e o burst limiter dela pune exatamente esse formato.
+	// Regression of the inverse shape of the storm below: even with the list OK, one request
+	// per orphan every 30s poll per tab was the biggest consumer of the AniList budget
+	// (decisions.md #65) — and its burst limiter punishes exactly that shape.
 	t.Run("Orphan refresh asks AniList once for all orphans, not once per anime", func(t *testing.T) {
 		var batchCalls int32
 		var sentIDs string
@@ -406,7 +406,7 @@ func TestHandleAnimes(t *testing.T) {
 		var episodes []files.EpisodeStruct
 		for _, id := range []int{991, 992, 993} {
 			episodes = append(episodes, files.EpisodeStruct{
-				EpisodeNumber: 1, AnimeID: id, AnimeName: "Baixado", EpisodeName: "Baixado - Episode 1",
+				EpisodeNumber: 1, AnimeID: id, AnimeName: "Downloaded", EpisodeName: "Downloaded - Episode 1",
 				DownloadDate: time.Now(),
 			})
 		}
@@ -428,11 +428,11 @@ func TestHandleAnimes(t *testing.T) {
 			t.Fatalf("expected 200, got %d", w.Code)
 		}
 		if n := atomic.LoadInt32(&batchCalls); n != 1 {
-			t.Fatalf("quero 1 request para os 3 orfaos, veio %d", n)
+			t.Fatalf("want 1 request for the 3 orphans, got %d", n)
 		}
 		for _, id := range []string{"991", "992", "993"} {
 			if !strings.Contains(sentIDs, id) {
-				t.Fatalf("o lote precisa levar todos os ids orfaos, faltou %s: %s", id, sentIDs)
+				t.Fatalf("the batch must carry every orphan id, missing %s: %s", id, sentIDs)
 			}
 		}
 
@@ -442,35 +442,35 @@ func TestHandleAnimes(t *testing.T) {
 		}
 		animes, ok := response.Data.([]interface{})
 		if !ok || len(animes) != 3 {
-			t.Fatalf("os 3 orfaos precisam continuar visiveis, veio %v", response.Data)
+			t.Fatalf("the 3 orphans must stay visible, got %v", response.Data)
 		}
 		for _, a := range animes {
 			if a.(map[string]interface{})["cover_image"] == "" {
-				t.Fatalf("orfao sem capa: o lote nao chegou nele: %v", a)
+				t.Fatalf("orphan without cover: the batch did not reach it: %v", a)
 			}
 		}
 	})
 
-	// Regressao: quando a busca da lista falha, fetchAniListEntries devolve nil e o
-	// conjunto "covered" fica vazio — o que fazia TODO anime com episodio baixado virar
-	// orfao e disparar um GetAnimeInfo individual por anime, a cada poll de /api/v1/animes.
-	// Isso multiplicava uma falha passageira da AniList em centenas de requests por minuto,
-	// levando a 429; o 429 fazia a lista falhar de novo, prendendo o daemon no ciclo.
+	// Regression: when the list fetch fails, fetchAniListEntries returns nil and the
+	// "covered" set is empty — which made EVERY anime with a downloaded episode become
+	// an orphan and fire an individual GetAnimeInfo per anime, on every /api/v1/animes poll.
+	// That multiplied a transient AniList failure into hundreds of requests per minute,
+	// leading to 429; the 429 made the list fail again, trapping the daemon in the cycle.
 	t.Run("List fetch failure does not trigger per-anime refresh storm", func(t *testing.T) {
 		var perAnimeCalls int32
 		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
 			if strings.Contains(readBody(req), "mediaId") {
 				atomic.AddInt32(&perAnimeCalls, 1)
 			}
-			// A AniList esta fora do ar / limitando: toda query falha.
+			// AniList is down / rate-limiting: every query fails.
 			return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader("rate limited"))}, nil
 		})()
 
 		var episodes []files.EpisodeStruct
 		for i := 0; i < 16; i++ {
 			episodes = append(episodes, files.EpisodeStruct{
-				EpisodeNumber: i, AnimeID: 900 + i, AnimeName: "Anime Baixado",
-				EpisodeName: "Anime Baixado - Episode 1", DownloadDate: time.Now(),
+				EpisodeNumber: i, AnimeID: 900 + i, AnimeName: "Downloaded Anime",
+				EpisodeName: "Downloaded Anime - Episode 1", DownloadDate: time.Now(),
 			})
 		}
 
@@ -488,10 +488,10 @@ func TestHandleAnimes(t *testing.T) {
 		handleAnimes(serverStorm)(w, req)
 
 		if w.Code != http.StatusOK {
-			t.Fatalf("expected 200 (dados locais continuam servindo), got %d", w.Code)
+			t.Fatalf("expected 200 (local data still serves), got %d", w.Code)
 		}
 		if n := atomic.LoadInt32(&perAnimeCalls); n != 0 {
-			t.Errorf("quero 0 requests por anime quando a lista falhou, veio %d", n)
+			t.Errorf("want 0 requests per anime when the list failed, got %d", n)
 		}
 
 		var response SuccessResponse
@@ -499,7 +499,7 @@ func TestHandleAnimes(t *testing.T) {
 			t.Fatalf("failed to decode response: %v", err)
 		}
 		if animes, ok := response.Data.([]interface{}); !ok || len(animes) != 16 {
-			t.Fatalf("animes baixados devem seguir visiveis, veio %v", response.Data)
+			t.Fatalf("downloaded animes must stay visible, got %v", response.Data)
 		}
 	})
 
@@ -580,10 +580,10 @@ func TestHandleAnimes(t *testing.T) {
 		}
 	})
 
-	// Regressao: MediaList.Id e o id da ENTRADA, que e por conta — o mesmo anime em duas
-	// contas chega com dois ids. Enquanto a identidade era esse id, a entrada da segunda conta
-	// nao batia com a que ja estava no animeMap e era inserida de novo pelo nome: o anime
-	// aparecia 2x no frontend, mesmo baixando uma so vez. Hoje a identidade e Media.Id.
+	// Regression: MediaList.Id is the ENTRY id, which is per account — the same anime in two
+	// accounts arrives with two ids. While identity was that id, the second account's entry
+	// did not match the one already in animeMap and was inserted again by name: the anime
+	// showed up twice in the frontend, even though it downloaded once. Identity is now Media.Id.
 	t.Run("Same anime in two accounts is listed once", func(t *testing.T) {
 		entry := func(id int, progress int) string {
 			return fmt.Sprintf(`{"id":%d,"status":"CURRENT","progress":%d,"customLists":{},"media":{"id":194829,"format":"TV","status":"RELEASING","episodes":12,"title":{"english":"Two Account Anime","romaji":"Two Account Anime"},"coverImage":{"large":"http://cover","medium":""},"synonyms":[],"relations":{"edges":[]},"airingSchedule":{"nodes":[]}}}`, id, progress)
@@ -593,7 +593,7 @@ func TestHandleAnimes(t *testing.T) {
 			if strings.Contains(body, "mediaId") {
 				return &http.Response{StatusCode: http.StatusInternalServerError, Body: io.NopCloser(strings.NewReader("no per-anime call expected"))}, nil
 			}
-			// Cada conta devolve a MESMA media com um id de entrada diferente.
+			// Each account returns the SAME media with a different entry id.
 			id, progress := 111, 5
 			if strings.Contains(body, "accountB") {
 				id, progress = 222, 0
@@ -603,7 +603,7 @@ func TestHandleAnimes(t *testing.T) {
 		})()
 
 		serverDup := &Server{State: state, FileManager: &mockFileManager{
-			// Episodio baixado ancorado na entrada da conta B.
+			// Downloaded episode anchored on account B's entry.
 			episodes: []files.EpisodeStruct{{
 				EpisodeNumber: 1, AnimeID: 194829, AnimeName: "Two Account Anime",
 				EpisodeName: "Two Account Anime - Episode 1", DownloadDate: time.Now(),
@@ -628,14 +628,14 @@ func TestHandleAnimes(t *testing.T) {
 			t.Fatal("expected data to be an array")
 		}
 		if len(animes) != 1 {
-			t.Fatalf("mesmo anime em 2 contas deve aparecer 1x, veio %d: %v", len(animes), response.Data)
+			t.Fatalf("the same anime in 2 accounts must appear once, got %d: %v", len(animes), response.Data)
 		}
 		animeData := animes[0].(map[string]interface{})
 		if animeData["anime_id"].(float64) != 194829 {
-			t.Errorf("a identidade e o id da MIDIA (194829), veio %v", animeData["anime_id"])
+			t.Errorf("identity is the MEDIA id (194829), got %v", animeData["anime_id"])
 		}
 		if animeData["episodes_downloaded"].(float64) != 1 {
-			t.Errorf("episodio baixado deve seguir contado, veio %v", animeData["episodes_downloaded"])
+			t.Errorf("the downloaded episode must still be counted, got %v", animeData["episodes_downloaded"])
 		}
 	})
 }
@@ -647,11 +647,11 @@ func TestCountPendingEpisodes(t *testing.T) {
 		downloaded map[int]bool
 		want       int
 	}{
-		{"assistido ate o ultimo lancado nao e atraso", AnimeInfo{EpisodesWatched: 8, EpisodesReleased: 8}, nil, 0},
-		{"so conta o que passou do progresso", AnimeInfo{EpisodesWatched: 5, EpisodesReleased: 10}, map[int]bool{6: true, 7: true}, 3},
-		{"assistido salvo em disco nao esconde o atraso", AnimeInfo{EpisodesWatched: 5, EpisodesReleased: 10}, map[int]bool{4: true, 5: true, 6: true}, 4},
-		{"buraco no meio conta", AnimeInfo{EpisodesWatched: 0, EpisodesReleased: 3}, map[int]bool{1: true, 3: true}, 1},
-		{"progresso acima do lancado nao vira negativo", AnimeInfo{EpisodesWatched: 12, EpisodesReleased: 10}, nil, 0},
+		{"watched up to the last released is not pending", AnimeInfo{EpisodesWatched: 8, EpisodesReleased: 8}, nil, 0},
+		{"only counts what is past progress", AnimeInfo{EpisodesWatched: 5, EpisodesReleased: 10}, map[int]bool{6: true, 7: true}, 3},
+		{"watched saved on disk does not hide the pending count", AnimeInfo{EpisodesWatched: 5, EpisodesReleased: 10}, map[int]bool{4: true, 5: true, 6: true}, 4},
+		{"a hole in the middle counts", AnimeInfo{EpisodesWatched: 0, EpisodesReleased: 3}, map[int]bool{1: true, 3: true}, 1},
+		{"progress above released does not go negative", AnimeInfo{EpisodesWatched: 12, EpisodesReleased: 10}, nil, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -662,10 +662,10 @@ func TestCountPendingEpisodes(t *testing.T) {
 	}
 }
 
-// TestNextAiringAt cobre o campo que alimenta o "Próximo episódio em X" do card: ele vem do
-// nextAiringEpisode da AniList, que e NIL em anime terminado e nos hiatos entre temporadas.
-// Os dois caminhos do merge (entrada nova e entrada que ja tinha episodio baixado) precisam
-// preencher o mesmo campo — foi por isso que a leitura virou um helper so.
+// TestNextAiringAt covers the field that feeds the "Next episode in X" card: it comes from
+// AniList's nextAiringEpisode, which is NIL on a finished anime and in gaps between seasons.
+// Both merge paths (new entry and an entry that already had a downloaded episode) need to
+// fill the same field — that is why the read became a helper of its own.
 func TestNextAiringAt(t *testing.T) {
 	str := func(s string) *string { return &s }
 	entry := func(id int, next *anilist.AiringNode) anilist.MediaList {
@@ -679,45 +679,45 @@ func TestNextAiringAt(t *testing.T) {
 		}
 	}
 
-	t.Run("entrada nova recebe o timestamp", func(t *testing.T) {
+	t.Run("new entry gets the timestamp", func(t *testing.T) {
 		animeMap := map[string]*AnimeInfo{}
 		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, &anilist.AiringNode{Episode: 5, AiringAt: 1740394800})}, nil)
 
 		if got := animeMap["Anime"].NextAiringAt; got != 1740394800 {
-			t.Errorf("next_airing_at = %d, esperado 1740394800", got)
+			t.Errorf("next_airing_at = %d, want 1740394800", got)
 		}
 	})
 
-	t.Run("entrada ja existente tambem e atualizada", func(t *testing.T) {
+	t.Run("existing entry is also updated", func(t *testing.T) {
 		existing := &AnimeInfo{AnimeID: 1, Name: "Anime", EpisodesDownloaded: 3}
 		animeMap := map[string]*AnimeInfo{"Anime": existing}
 		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, &anilist.AiringNode{Episode: 5, AiringAt: 1740394800})}, nil)
 
 		if existing.NextAiringAt != 1740394800 {
-			t.Errorf("next_airing_at = %d, esperado 1740394800", existing.NextAiringAt)
+			t.Errorf("next_airing_at = %d, want 1740394800", existing.NextAiringAt)
 		}
 	})
 
-	t.Run("nextAiringEpisode nil sai como zero e some do JSON", func(t *testing.T) {
+	t.Run("nil nextAiringEpisode comes out as zero and drops from JSON", func(t *testing.T) {
 		animeMap := map[string]*AnimeInfo{}
 		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, nil)}, nil)
 
 		if got := animeMap["Anime"].NextAiringAt; got != 0 {
-			t.Errorf("next_airing_at = %d, esperado 0 para anime sem episodio agendado", got)
+			t.Errorf("next_airing_at = %d, want 0 for an anime with no scheduled episode", got)
 		}
 		body, err := json.Marshal(*animeMap["Anime"])
 		if err != nil {
 			t.Fatalf("marshal: %v", err)
 		}
 		if strings.Contains(string(body), "next_airing_at") {
-			t.Errorf("omitempty deveria sumir com o campo, veio %s", body)
+			t.Errorf("omitempty should drop the field, got %s", body)
 		}
 	})
 }
 
-// TestAltNames cobre a lista que alimenta a busca da dashboard: o card mostra um titulo so
-// (ingles, quando existe), mas o usuario pode procurar pelo romaji, pelo kanji ou por um
-// sinonimo — todos precisam sair no payload, sem repetir o nome que ja esta em Name.
+// TestAltNames covers the list that feeds dashboard search: the card shows a single title
+// (English, when it exists), but the user may search by romaji, kanji or a synonym — all
+// must come out in the payload, without repeating the name already in Name.
 func TestAltNames(t *testing.T) {
 	str := func(s string) *string { return &s }
 	media := anilist.Media{
@@ -728,21 +728,21 @@ func TestAltNames(t *testing.T) {
 	got := altNames(media, "Attack on Titan")
 	want := []string{"Shingeki no Kyojin", "進撃の巨人", "AoT"}
 	if len(got) != len(want) {
-		t.Fatalf("altNames = %q, esperado %q", got, want)
+		t.Fatalf("altNames = %q, want %q", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("altNames = %q, esperado %q", got, want)
+			t.Fatalf("altNames = %q, want %q", got, want)
 		}
 	}
 
 	if got := altNames(anilist.Media{Title: anilist.Title{Romaji: str("Solo")}}, "Solo"); len(got) != 0 {
-		t.Fatalf("titulo unico nao devia virar alt_name: %q", got)
+		t.Fatalf("a unique title must not become an alt_name: %q", got)
 	}
 }
 
-// TestMergeAniListAnimesAltNames garante que os dois caminhos do merge preenchem alt_names —
-// e o de entrada existente e o que importa: anime ja baixado e o caso comum na dashboard.
+// TestMergeAniListAnimesAltNames guarantees both merge paths fill alt_names — and the existing
+// entry path is the one that matters: an already-downloaded anime is the common dashboard case.
 func TestMergeAniListAnimesAltNames(t *testing.T) {
 	str := func(s string) *string { return &s }
 	entry := anilist.MediaList{Media: anilist.Media{
@@ -755,12 +755,12 @@ func TestMergeAniListAnimesAltNames(t *testing.T) {
 	animeMap := map[string]*AnimeInfo{}
 	mergeAniListAnimes(animeMap, []anilist.MediaList{entry}, nil)
 	if len(animeMap["Anime"].AltNames) != 2 {
-		t.Errorf("entrada nova sem alt_names: %q", animeMap["Anime"].AltNames)
+		t.Errorf("new entry missing alt_names: %q", animeMap["Anime"].AltNames)
 	}
 
 	existing := &AnimeInfo{AnimeID: 1, Name: "Anime", EpisodesDownloaded: 3}
 	mergeAniListAnimes(map[string]*AnimeInfo{"Anime": existing}, []anilist.MediaList{entry}, nil)
 	if len(existing.AltNames) != 2 {
-		t.Errorf("entrada existente sem alt_names: %q", existing.AltNames)
+		t.Errorf("existing entry missing alt_names: %q", existing.AltNames)
 	}
 }

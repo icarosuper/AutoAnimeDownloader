@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// Smoke contra a AniList de verdade — a janela de agenda que ela devolve é o motivo de
-// EpisodeList existir (ver decisions.md #52), e nenhum mock prova que ela continua daquele
-// tamanho. Só roda com AAD_LIVE_ANILIST=1, para o `go test ./...` não depender de rede.
+// Smoke against the real AniList — the schedule window it returns is why EpisodeList exists
+// (see decisions.md #52), and no mock proves it is still that size. Only runs with
+// AAD_LIVE_ANILIST=1, so `go test ./...` doesn't depend on the network.
 func TestLive_EpisodeList(t *testing.T) {
 	if os.Getenv("AAD_LIVE_ANILIST") != "1" {
-		t.Skip("defina AAD_LIVE_ANILIST=1 para rodar")
+		t.Skip("set AAD_LIVE_ANILIST=1 to run")
 	}
-	// 21 = ONE PIECE (agenda clipada), 16498 = Shingeki no Kyojin e 20 = NARUTO (agenda vazia).
+	// 21 = ONE PIECE (clipped schedule), 16498 = Shingeki no Kyojin and 20 = NARUTO (empty schedule).
 	for _, id := range []int{21, 16498, 20} {
 		ml, err := GetMediaByID(id, PriorityCritical)
 		if err != nil || ml == nil {
@@ -27,13 +27,13 @@ func TestLive_EpisodeList(t *testing.T) {
 		if len(eps) > 0 {
 			first, last = eps[0].Episode, eps[len(eps)-1].Episode
 		}
-		t.Logf("media %d: agenda=%d nós, nextAiring=%d → EpisodeList=%d episódios (%d..%d)",
+		t.Logf("media %d: schedule=%d nodes, nextAiring=%d → EpisodeList=%d episodes (%d..%d)",
 			id, len(ml.Media.AiringSchedule.Nodes), next, len(eps), first, last)
 		if len(eps) == 0 {
-			t.Errorf("media %d ficou sem episódios", id)
+			t.Errorf("media %d ended up with no episodes", id)
 		}
 		if first != 1 {
-			t.Errorf("media %d deveria começar no episódio 1, começou no %d", id, first)
+			t.Errorf("media %d should start at episode 1, started at %d", id, first)
 		}
 	}
 }

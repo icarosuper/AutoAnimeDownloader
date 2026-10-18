@@ -1,9 +1,9 @@
 import * as m from '../i18n/messages.js'
 
-// Slugs emitidos pelo backend (src/internal/torrents/status.go, statusSlug()) mais 'queued',
-// que quem escreve e a fila de downloads (queue.markQueued), nao o enum da rain. Mesma lista de
-// src/lib/utils/torrentFilters.ts (KNOWN_STATUSES) — duplicada aqui só como array de valores
-// porque aquele arquivo não a exporta; não invente slugs novos além destes.
+// Slugs emitted by the backend (src/internal/torrents/status.go, statusSlug()) plus 'queued',
+// which the download queue writes itself (queue.markQueued), not the rain enum. Same list as
+// src/lib/utils/torrentFilters.ts (KNOWN_STATUSES) — duplicated here only as an array of
+// values because that file doesn't export it; don't invent slugs beyond these.
 export const STATUS_SLUGS = [
   'stopped',
   'queued',
@@ -15,7 +15,7 @@ export const STATUS_SLUGS = [
   'stopping',
 ] as const
 
-/** Rótulo traduzido de um status de torrent. Usado por Downloads.svelte e DownloadsToolbar.svelte. */
+/** Translated label for a torrent status. Used by Downloads.svelte and DownloadsToolbar.svelte. */
 export function statusLabel(status: string): string {
   switch (status) {
     case 'stopped':

@@ -22,7 +22,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#13** — GetFrontendAnimeList — separate lighter Anilist query for the API endpoint](#13-getfrontendanimelist--separate-lighter-anilist-query-for-the-api-endpoint)
 - [**#14** — nyaaSearcher — dependency injection for Nyaa search in processAnimeEpisodes](#14-nyaasearcher--dependency-injection-for-nyaa-search-in-processanimeepisodes)
 - [**#15** — atomic.Pointer[Priorities] package-level global in nyaa](#15-atomicpointerpriorities-package-level-global-in-nyaa)
-- [**#16** — anime_id é o AniList **media** ID (foi o MediaList entry ID até a migração)](#16-anime_id-é-o-anilist-media-id-foi-o-medialist-entry-id-até-a-migração)
+- [**#16** — anime_id is the AniList **media** ID (it was the MediaList entry ID until the migration)](#16-anime_id-is-the-anilist-media-id-it-was-the-medialist-entry-id-until-the-migration)
 - [**#17** — --debug-anime early-exit branch in cmd/daemon/main.go](#17---debug-anime-early-exit-branch-in-cmddaemonmaingo)
 - [**#18** — extractTitleTokens truncates the torrent name at the first episode/season marker before tokenizing](#18-extracttitletokens-truncates-the-torrent-name-at-the-first-episodeseason-marker-before-tokenizing)
 - [**#19** — Disk space is read via OS stat on CompletedAnimePath](#19-disk-space-is-read-via-os-stat-on-completedanimepath)
@@ -37,69 +37,69 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#28** — Organize replaces a library file that has the same name but different bytes](#28-organize-replaces-a-library-file-that-has-the-same-name-but-different-bytes)
 - [**#29** — Startup reconciliation keys off empty LibraryPaths, not off the hardlink missing from disk](#29-startup-reconciliation-keys-off-empty-librarypaths-not-off-the-hardlink-missing-from-disk)
 - [**#30** — Progress data comes from one Stats() per torrent, pulled only while a screen is open](#30-progress-data-comes-from-one-stats-per-torrent-pulled-only-while-a-screen-is-open)
-- [**#31** — Diretório de download derivado da biblioteca](#31-diretório-de-download-derivado-da-biblioteca)
-- [**#32** — DELETE /torrents/{hash}: default é apagar + bloquear, keep_data é binário, não há endpoint de lote](#32-delete-torrentshash-default-é-apagar--bloquear-keep_data-é-binário-não-há-endpoint-de-lote)
-- [**#33** — O inline de progresso do torrent não pode olhar is_downloaded](#33-o-inline-de-progresso-do-torrent-não-pode-olhar-is_downloaded)
-- [**#34** — Troca da pasta de download é detectada por marcador duplo, e derruba a sessão da rain](#34-troca-da-pasta-de-download-é-detectada-por-marcador-duplo-e-derruba-a-sessão-da-rain)
-- [**#35** — os.SameFile no Windows resolve o arquivo tarde, então FileInfo não é snapshot em teste](#35-ossamefile-no-windows-resolve-o-arquivo-tarde-então-fileinfo-não-é-snapshot-em-teste)
-- [**#36** — AppShell escolhe rail vs tab bar em JS (matchMedia), não com hidden md:flex/md:hidden](#36-appshell-escolhe-rail-vs-tab-bar-em-js-matchmedia-não-com-hidden-mdflexmdhidden)
-- [**#37** — Tabelas de largura fixa só a partir de lg, e min-w-0 obrigatório em item de grid que contém faixa rolável](#37-tabelas-de-largura-fixa-só-a-partir-de-lg-e-min-w-0-obrigatório-em-item-de-grid-que-contém-faixa-rolável)
-- [**#38** — Em cabeçalho flex-wrap, o item flex-1 leva min-w-[240px] — e não min-w-0](#38-em-cabeçalho-flex-wrap-o-item-flex-1-leva-min-w-240px--e-não-min-w-0)
-- [**#39** — Faixa de escolhas FINITA quebra linha (flex-wrap); faixa de conteúdo ILIMITADO rola](#39-faixa-de-escolhas-finita-quebra-linha-flex-wrap-faixa-de-conteúdo-ilimitado-rola)
-- [**#40** — O z-30 do NavRail não é redundante com o z-50 do painel do MoreMenu](#40-o-z-30-do-navrail-não-é-redundante-com-o-z-50-do-painel-do-moremenu)
-- [**#41** — A fila de downloads contém TODOS os incompletos, é persistida, e queued é o único slug que a rain não produz](#41-a-fila-de-downloads-contém-todos-os-incompletos-é-persistida-e-queued-é-o-único-slug-que-a-rain-não-produz)
-- [**#42** — Todo estado persistido do FileManager grava com temp+rename sob m.mu, e fetchAniListEntries devolve nil de propósito](#42-todo-estado-persistido-do-filemanager-grava-com-temprename-sob-mmu-e-fetchanilistentries-devolve-nil-de-propósito)
-- [**#43** — A identidade de um anime é Media.Id; status é uma pergunta POR CONTA (download = OR, deleção = AND)](#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)
-- [**#44** — O tvshow.nfo é escrito DEPOIS dos hardlinks, nunca sobrescreve, e falhar nele não falha o organize](#44-o-tvshownfo-é-escrito-depois-dos-hardlinks-nunca-sobrescreve-e-falhar-nele-não-falha-o-organize)
-- [**#45** — Uma pasta de biblioteca por ENTRADA da AniList — o marcador de season fica no nome](#45-uma-pasta-de-biblioteca-por-entrada-da-anilist--o-marcador-de-season-fica-no-nome)
-- [**#46** — GetFrontendAnimeList é cacheado por 60s — o poll de /api/v1/animes é o que estoura a AniList](#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)
-- [**#47** — Notificações são agrupadas por janela, e o body é escapado só quando o preset é JSON](#47-notificações-são-agrupadas-por-janela-e-o-body-é-escapado-só-quando-o-preset-é-json)
-- [**#48** — max_episodes_per_anime nunca limitou batch — a regra agora vive na janela de packs, não num teto de contagem](#48-max_episodes_per_anime-nunca-limitou-batch--a-regra-agora-vive-na-janela-de-packs-não-num-teto-de-contagem)
-- [**#49** — Anime avulso: "acompanhado pela lista" é o snapshot que o daemon PROCESSA, e DownloadStandaloneAnime nunca chama handleSavedEpisodes](#49-anime-avulso-acompanhado-pela-lista-é-o-snapshot-que-o-daemon-processa-e-downloadstandaloneanime-nunca-chama-handlesavedepisodes)
-- [**#50** — Busca de avulso: o filtro de não lançados é server-side e por concatenação, e o card bloqueado vira link em vez de beco sem saída](#50-busca-de-avulso-o-filtro-de-não-lançados-é-server-side-e-por-concatenação-e-o-card-bloqueado-vira-link-em-vez-de-beco-sem-saída)
-- [**#51** — Episódio aceita 4 dígitos, exceto entre colchetes](#51-episódio-aceita-4-dígitos-exceto-entre-colchetes)
-- [**#52** — A lista de episódios é sintetizada, e a chave de um episódio é (anime, número)](#52-a-lista-de-episódios-é-sintetizada-e-a-chave-de-um-episódio-é-anime-número)
-- [**#53** — Busca de episódio descarta batch e filme, e usa hasMovieMarker — não isMovie](#53-busca-de-episódio-descarta-batch-e-filme-e-usa-hasmoviemarker--não-ismovie)
-- [**#54** — Piso de seeders: seeders ilegível é descartado, tamanho ilegível passa](#54-piso-de-seeders-seeders-ilegível-é-descartado-tamanho-ilegível-passa)
-- [**#55** — health compara FAIXA de seeders, e vem antes de fansub](#55-health-compara-faixa-de-seeders-e-vem-antes-de-fansub)
-- [**#56** — Série longa busca o episódio também com zero-padding, e o gate é LastAiredEpisode](#56-série-longa-busca-o-episódio-também-com-zero-padding-e-o-gate-é-lastairedepisode)
-- [**#57** — Paginação adaptativa: sequencial, com piso de candidatos, sem orçamento por anime](#57-paginação-adaptativa-sequencial-com-piso-de-candidatos-sem-orçamento-por-anime)
-- [**#58** — RunAnimeDebug espelha processAnimeEpisodes: enumeração, resolução de pack e fallback single](#58-runanimedebug-espelha-processanimeepisodes-enumeração-resolução-de-pack-e-fallback-single)
-- [**#59** — Elegibilidade a batch deixou de ser metadado e virou filtro de resultado](#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado)
-- [**#60** — A janela de packs cobre a partir do primeiro pendente, e o corte é sempre de prefixo](#60-a-janela-de-packs-cobre-a-partir-do-primeiro-pendente-e-o-corte-é-sempre-de-prefixo)
-- [**#61** — Episódio de pack é imune à poda por limite E ao keep-set de assistidos](#61-episódio-de-pack-é-imune-à-poda-por-limite-e-ao-keep-set-de-assistidos)
-- [**#62** — Progresso de avulso mora em AnimeSettings e é injetado no MediaList sintético, não vira caminho paralelo](#62-progresso-de-avulso-mora-em-animesettings-e-é-injetado-no-medialist-sintético-não-vira-caminho-paralelo)
-- [**#63** — A dispensa do card de primeiros passos mora no localStorage, não no config.json](#63-a-dispensa-do-card-de-primeiros-passos-mora-no-localstorage-não-no-configjson)
-- [**#64** — Os passos do card de primeiros passos são marcados à mão, não derivados do estado do daemon](#64-os-passos-do-card-de-primeiros-passos-são-marcados-à-mão-não-derivados-do-estado-do-daemon)
-- [**#65** — O orçamento da AniList é gasto pelo refresh de órfãos, não pelo passe do daemon — e o campo errors de um 200 não é lido](#65-o-orçamento-da-anilist-é-gasto-pelo-refresh-de-órfãos-não-pelo-passe-do-daemon--e-o-campo-errors-de-um-200-não-é-lido)
-- [**#66** — Banner é estado degradado; toast é falha de ação — e o banner tem três fontes com precedência, não três banners](#66-banner-é-estado-degradado-toast-é-falha-de-ação--e-o-banner-tem-três-fontes-com-precedência-não-três-banners)
-- [**#67** — Passe de verificação é um por vez, e o concorrente é descartado — não enfileirado](#67-passe-de-verificação-é-um-por-vez-e-o-concorrente-é-descartado--não-enfileirado)
-- [**#68** — Numeração do pack: o offset é adivinhado dos próprios arquivos, e a colisão de basename usa o caminho relativo](#68-numeração-do-pack-o-offset-é-adivinhado-dos-próprios-arquivos-e-a-colisão-de-basename-usa-o-caminho-relativo)
-- [**#69** — codec passou a valer para episódio, e nome sem tag de codec empata em vez de perder](#69-codec-passou-a-valer-para-episódio-e-nome-sem-tag-de-codec-empata-em-vez-de-perder)
-- [**#70** — Resolução canonicaliza no extrator, e os presets de codec são reordenação no frontend](#70-resolução-canonicaliza-no-extrator-e-os-presets-de-codec-são-reordenação-no-frontend)
-- [**#71** — A AniList não tem id de franquia: a cadeia de PREQUEL é a única fonte, e busca por nome é armadilha](#71-a-anilist-não-tem-id-de-franquia-a-cadeia-de-prequel-é-a-única-fonte-e-busca-por-nome-é-armadilha)
-- [**#72** — O orçamento da AniList se mede pelos headers da resposta, não por um contador nosso](#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso)
+- [**#31** — Download directory is derived from the library](#31-download-directory-is-derived-from-the-library)
+- [**#32** — DELETE /torrents/{hash}: default is delete + block, keep_data is binary, there is no batch endpoint](#32-delete-torrentshash-default-is-delete--block-keep_data-is-binary-there-is-no-batch-endpoint)
+- [**#33** — The torrent progress inline must not look at is_downloaded](#33-the-torrent-progress-inline-must-not-look-at-is_downloaded)
+- [**#34** — A download-folder swap is detected by a dual marker, and it tears down the rain session](#34-a-download-folder-swap-is-detected-by-a-dual-marker-and-it-tears-down-the-rain-session)
+- [**#35** — os.SameFile on Windows resolves the file late, so FileInfo is not a snapshot in tests](#35-ossamefile-on-windows-resolves-the-file-late-so-fileinfo-is-not-a-snapshot-in-tests)
+- [**#36** — AppShell picks rail vs tab bar in JS (matchMedia), not with hidden md:flex/md:hidden](#36-appshell-picks-rail-vs-tab-bar-in-js-matchmedia-not-with-hidden-mdflexmdhidden)
+- [**#37** — Fixed-width tables only from lg up, and min-w-0 is required on a grid item that contains a scroll strip](#37-fixed-width-tables-only-from-lg-up-and-min-w-0-is-required-on-a-grid-item-that-contains-a-scroll-strip)
+- [**#38** — In a flex-wrap header, the flex-1 item gets min-w-[240px] — not min-w-0](#38-in-a-flex-wrap-header-the-flex-1-item-gets-min-w-240px--not-min-w-0)
+- [**#39** — A FINITE choice strip wraps (flex-wrap); an UNBOUNDED content strip scrolls](#39-a-finite-choice-strip-wraps-flex-wrap-an-unbounded-content-strip-scrolls)
+- [**#40** — NavRail's z-30 is not redundant with the MoreMenu panel's z-50](#40-navrails-z-30-is-not-redundant-with-the-moremenu-panels-z-50)
+- [**#41** — The download queue holds EVERY incomplete torrent, is persisted, and queued is the only slug rain never produces](#41-the-download-queue-holds-every-incomplete-torrent-is-persisted-and-queued-is-the-only-slug-rain-never-produces)
+- [**#42** — Every persisted FileManager state writes with temp+rename under m.mu, and fetchAniListEntries returns nil on purpose](#42-every-persisted-filemanager-state-writes-with-temprename-under-mmu-and-fetchanilistentries-returns-nil-on-purpose)
+- [**#43** — An anime's identity is Media.Id; status is a PER-ACCOUNT question (download = OR, deletion = AND)](#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)
+- [**#44** — tvshow.nfo is written AFTER the hardlinks, never overwrites, and failing it does not fail organize](#44-tvshownfo-is-written-after-the-hardlinks-never-overwrites-and-failing-it-does-not-fail-organize)
+- [**#45** — One library folder per AniList ENTRY — the season marker stays in the name](#45-one-library-folder-per-anilist-entry--the-season-marker-stays-in-the-name)
+- [**#46** — GetFrontendAnimeList is cached for 60s — the /api/v1/animes poll is what blows AniList's quota](#46-getfrontendanimelist-is-cached-for-60s--the-apiv1animes-poll-is-what-blows-anilists-quota)
+- [**#47** — Notifications are grouped by window, and the body is escaped only when the preset is JSON](#47-notifications-are-grouped-by-window-and-the-body-is-escaped-only-when-the-preset-is-json)
+- [**#48** — max_episodes_per_anime never limited batches — the rule now lives on the pack window, not a count cap](#48-max_episodes_per_anime-never-limited-batches--the-rule-now-lives-on-the-pack-window-not-a-count-cap)
+- [**#49** — Standalone anime: "tracked by the list" is the snapshot the daemon PROCESSES, and DownloadStandaloneAnime never calls handleSavedEpisodes](#49-standalone-anime-tracked-by-the-list-is-the-snapshot-the-daemon-processes-and-downloadstandaloneanime-never-calls-handlesavedepisodes)
+- [**#50** — Standalone search: the unreleased filter is server-side and by concatenation, and a blocked card becomes a link instead of a dead end](#50-standalone-search-the-unreleased-filter-is-server-side-and-by-concatenation-and-a-blocked-card-becomes-a-link-instead-of-a-dead-end)
+- [**#51** — An episode number accepts 4 digits, except inside brackets](#51-an-episode-number-accepts-4-digits-except-inside-brackets)
+- [**#52** — The episode list is synthesized, and an episode's key is (anime, number)](#52-the-episode-list-is-synthesized-and-an-episodes-key-is-anime-number)
+- [**#53** — Episode search drops batches and movies, and uses hasMovieMarker — not isMovie](#53-episode-search-drops-batches-and-movies-and-uses-hasmoviemarker--not-ismovie)
+- [**#54** — Seeders floor: unreadable seeders are discarded, unreadable size passes](#54-seeders-floor-unreadable-seeders-are-discarded-unreadable-size-passes)
+- [**#55** — health compares a seeders BAND, and it comes before fansub](#55-health-compares-a-seeders-band-and-it-comes-before-fansub)
+- [**#56** — A long series also searches the episode with zero-padding, and the gate is LastAiredEpisode](#56-a-long-series-also-searches-the-episode-with-zero-padding-and-the-gate-is-lastairedepisode)
+- [**#57** — Adaptive pagination: sequential, with a candidate floor, no per-anime budget](#57-adaptive-pagination-sequential-with-a-candidate-floor-no-per-anime-budget)
+- [**#58** — RunAnimeDebug mirrors processAnimeEpisodes: enumeration, pack resolution and single fallback](#58-runanimedebug-mirrors-processanimeepisodes-enumeration-pack-resolution-and-single-fallback)
+- [**#59** — Batch eligibility stopped being metadata and became a result filter](#59-batch-eligibility-stopped-being-metadata-and-became-a-result-filter)
+- [**#60** — The pack window covers from the first pending episode, and the cut is always a prefix](#60-the-pack-window-covers-from-the-first-pending-episode-and-the-cut-is-always-a-prefix)
+- [**#61** — A pack episode is immune to the limit prune AND to the watched keep-set](#61-a-pack-episode-is-immune-to-the-limit-prune-and-to-the-watched-keep-set)
+- [**#62** — Standalone progress lives in AnimeSettings and is injected into the synthetic MediaList, it does not become a parallel path](#62-standalone-progress-lives-in-animesettings-and-is-injected-into-the-synthetic-medialist-it-does-not-become-a-parallel-path)
+- [**#63** — Dismissing the first-steps card lives in localStorage, not in config.json](#63-dismissing-the-first-steps-card-lives-in-localstorage-not-in-configjson)
+- [**#64** — The first-steps card steps are ticked by hand, not derived from daemon state](#64-the-first-steps-card-steps-are-ticked-by-hand-not-derived-from-daemon-state)
+- [**#65** — AniList budget is spent by the orphan refresh, not by the daemon pass — and a 200's errors field is not read](#65-anilist-budget-is-spent-by-the-orphan-refresh-not-by-the-daemon-pass--and-a-200s-errors-field-is-not-read)
+- [**#66** — A banner is degraded state; a toast is an action failure — and the banner has three sources with precedence, not three banners](#66-a-banner-is-degraded-state-a-toast-is-an-action-failure--and-the-banner-has-three-sources-with-precedence-not-three-banners)
+- [**#67** — The verification pass is one at a time, and a concurrent one is dropped — not queued](#67-the-verification-pass-is-one-at-a-time-and-a-concurrent-one-is-dropped--not-queued)
+- [**#68** — Pack numbering: the offset is guessed from the files themselves, and a basename collision uses the relative path](#68-pack-numbering-the-offset-is-guessed-from-the-files-themselves-and-a-basename-collision-uses-the-relative-path)
+- [**#69** — codec now applies to episodes, and a name with no codec tag ties instead of losing](#69-codec-now-applies-to-episodes-and-a-name-with-no-codec-tag-ties-instead-of-losing)
+- [**#70** — Resolution is canonicalized in the extractor, and codec presets are a frontend reordering](#70-resolution-is-canonicalized-in-the-extractor-and-codec-presets-are-a-frontend-reordering)
+- [**#71** — AniList has no franchise id: the PREQUEL chain is the only source, and searching by name is a trap](#71-anilist-has-no-franchise-id-the-prequel-chain-is-the-only-source-and-searching-by-name-is-a-trap)
+- [**#72** — AniList budget is measured from the response headers, not from a counter of ours](#72-anilist-budget-is-measured-from-the-response-headers-not-from-a-counter-of-ours)
 - [**#73** — The frontend doesn't query AniList directly, even though it could](#73-the-frontend-doesnt-query-anilist-directly-even-though-it-could)
-- [**#74** — A unidade do guard de exclusão de pack é o conteúdo do torrent, não a lista de registros](#74-a-unidade-do-guard-de-exclusão-de-pack-é-o-conteúdo-do-torrent-não-a-lista-de-registros)
-- [**#75** — O corte no marcador e a primeira tentativa do match de titulo, nao a unica](#75-o-corte-no-marcador-e-a-primeira-tentativa-do-match-de-titulo-nao-a-unica)
-- [**#76** — searchNyaaWithVariants para na primeira variante que devolve qualquer resultado — medido, e fica assim](#76-searchnyaawithvariants-para-na-primeira-variante-que-devolve-qualquer-resultado--medido-e-fica-assim)
+- [**#74** — The pack-exclusion guard's unit is the torrent's contents, not the list of records](#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)
+- [**#75** — Truncation at the marker is the first attempt of the title match, not the only one](#75-truncation-at-the-marker-is-the-first-attempt-of-the-title-match-not-the-only-one)
+- [**#76** — searchNyaaWithVariants stops at the first variant that returns any result — measured, and it stays that way](#76-searchnyaawithvariants-stops-at-the-first-variant-that-returns-any-result--measured-and-it-stays-that-way)
 - [**#77** — The per-series absolute axis is a BFS two generations at a time, and the cut level goes back to the queue](#77-the-per-series-absolute-axis-is-a-bfs-two-generations-at-a-time-and-the-cut-level-goes-back-to-the-queue)
-- [**#78** — A unidade de posse de um torrent é a cobertura no eixo absoluto, não a chave (anime_id, episódio)](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)
-- [**#79** — A escolha de pack pergunta "cobre a janela?", não "é da part N?" — e a numeração do pack é palpite entre três hipóteses](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)
-- [**#80** — O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon](#80-o-teto-de-tamanho-de-pack-é-aplicado-duas-vezes-na-busca-do-nyaa-e-no-filtro-do-daemon)
-- [**#81** — A precedência dos códigos do relatório é cascata, não conjunto](#81-a-precedência-dos-códigos-do-relatório-é-cascata-não-conjunto)
-- [**#82** — SetLastCheckError limpa o relatório da última verificação](#82-setlastcheckerror-limpa-o-relatório-da-última-verificação)
-- [**#83** — A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento](#83-a-faixa-do-nome-do-pack-é-o-primeiro-casamento-plausível-não-o-primeiro-casamento)
+- [**#78** — A torrent's unit of ownership is coverage on the absolute axis, not the (anime_id, episode) key](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)
+- [**#79** — Pack choice asks "does it cover the window?", not "is it part N?" — and pack numbering is a guess among three hypotheses](#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)
+- [**#80** — The pack size ceiling is applied TWICE: in the Nyaa search and in the daemon filter](#80-the-pack-size-ceiling-is-applied-twice-in-the-nyaa-search-and-in-the-daemon-filter)
+- [**#81** — Report-code precedence is a cascade, not a set](#81-report-code-precedence-is-a-cascade-not-a-set)
+- [**#82** — SetLastCheckError clears the last-check report](#82-setlastcheckerror-clears-the-last-check-report)
+- [**#83** — The pack name's range is the first plausible match, not the first match](#83-the-pack-names-range-is-the-first-plausible-match-not-the-first-match)
 - [**#84** — A pack without a range in its name gets its coverage from the file list, not from assuming it covers everything](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
 - [**#85** — The frontend's AniList cost is per ACCOUNT and per ORPHAN, not per tab](#85-the-frontends-anilist-cost-is-per-account-and-per-orphan-not-per-tab)
-- [**#86** — O botão Testar responde o status do serviço, não "o preset existe"](#86-o-botão-testar-responde-o-status-do-serviço-não-o-preset-existe)
-- [**#87** — Headers do webhook viram lista de pares enquanto o formulário está aberto](#87-headers-do-webhook-viram-lista-de-pares-enquanto-o-formulário-está-aberto)
-- [**#88** — A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`](#88-a-barra-de-progresso-deriva-baixados-de-episodes_pending-e-não-de-episodes_downloaded)
-- [**#89** — Não existe spec OpenAPI: a tabela do architecture.md é a única doc de endpoint](#89-não-existe-spec-openapi-a-tabela-do-architecturemd-é-a-única-doc-de-endpoint)
-- [**#90** — Não há versionamento de `config.json`: a migração checa FORMA, num lugar só](#90-não-há-versionamento-de-configjson-a-migração-checa-forma-num-lugar-só)
-- [**#91** — Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor](#91-não-há-biblioteca-de-componentes-o-daisyui-saiu-porque-era-um-segundo-vocabulário-de-cor)
-- [**#92** — O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)
-- [**#93** — A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)
+- [**#86** — The Test button answers the service's status, not "the preset exists"](#86-the-test-button-answers-the-services-status-not-the-preset-exists)
+- [**#87** — Webhook headers become a list of pairs while the form is open](#87-webhook-headers-become-a-list-of-pairs-while-the-form-is-open)
+- [**#88** — The progress bar derives "downloaded" from `episodes_pending`, not from `episodes_downloaded`](#88-the-progress-bar-derives-downloaded-from-episodes_pending-not-from-episodes_downloaded)
+- [**#89** — There is no OpenAPI spec: the architecture.md table is the only endpoint doc](#89-there-is-no-openapi-spec-the-architecturemd-table-is-the-only-endpoint-doc)
+- [**#90** — There is no `config.json` versioning: the migration checks SHAPE, in one place](#90-there-is-no-configjson-versioning-the-migration-checks-shape-in-one-place)
+- [**#91** — There is no component library: daisyUI left because it was a second color vocabulary](#91-there-is-no-component-library-daisyui-left-because-it-was-a-second-color-vocabulary)
+- [**#92** — The on-disk AniList cache restores with TTL zero, and a value served from it comes with `ErrFromCache`](#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)
+- [**#93** — The disk guard has two triggers, and the size one still applies with `min_free_disk_percent = 0`](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_percent--0)
 - [**#94** — A stalled torrent is dropped through the failure path, and only one that is *trying* counts as stalled](#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)
 - [**#95** — MyAnimeList is a list source, not a metadata source](#95-myanimelist-is-a-list-source-not-a-metadata-source)
 - [**#96** — A first-season entry rejects later-season packs, but a sequel without a marker doesn't](#96-a-first-season-entry-rejects-later-season-packs-but-a-sequel-without-a-marker-doesnt)
@@ -212,7 +212,12 @@ Each entry is self-contained: read only the one the reference points to, not the
 
 **Why it's right:** The offset (PREQUEL episode count) is only needed for split-season Part 2 releases where the torrent site numbers episodes globally (e.g. episode 14 on Nyaa when Anilist calls it episode 1 of Part 2). Kaguya-sama Season 2, for example, also has a PREQUEL relation with 12 episodes — applying a +12 offset there would search for episode 13 when the correct episode is 1. The gate `part >= 2` restricts the offset to the specific case it was designed for, preventing all single-season animes with prior seasons from receiving a wrong offset.
 
-O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entram na conta. Um filme de recap ou uma OVA também chegam como `PREQUEL` e com `Episodes` preenchido, mas não fazem parte da numeração que os fansubs seguem — somá-los mandaria a busca para um episódio inexistente. Quando não há PREQUEL de TV, o offset é 0 e a busca cai na numeração relativa, que é o que boa parte dos grupos usa. Errar para 0 é barato; errar para um número é uma busca que não acha nada.
+The same reasoning applies to the PREQUEL **format**: only `TV`/`TV_SHORT` enter the count. A recap
+movie or an OVA also arrives as `PREQUEL` with `Episodes` filled, but they are not part of the
+numbering fansubs follow — adding them would send the search to an episode that does not exist.
+When there is no TV PREQUEL, the offset is 0 and the search falls back to relative numbering, which
+is what a large share of groups uses. Erring toward 0 is cheap; erring toward a number is a search
+that finds nothing.
 
 **Don't "fix" by:** removing the gate or applying the offset whenever a PREQUEL exists. That breaks every multi-season anime that does not use split-part numbering. Nor by accepting a PREQUEL of any format.
 
@@ -230,9 +235,17 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 **Effect when broken:** `customLists` is always `null` → `animeIsInExcludedList` never matches → blacklisted animes (e.g. in the "AutoDownloader" custom list used to block titles) are downloaded anyway and the frontend block icon is never shown.
 
-**Gate de orçamento:** quando o chamador passa `PriorityDisposable` e o gate recusa, a função serve a leitura **vencida** do cache em vez de devolver `nil` — ver #72, "O par do poll degrada junto ou não degrada".
+**Budget gate:** when the caller passes `PriorityDisposable` and the gate refuses, the function
+serves the **stale** cache read instead of returning `nil` — see #72, "The poll pair degrades
+together or not at all".
 
-**Cache:** `GetCustomListsMap` caches results keyed by `username + statuses` (`ttlCache`, ver decisions.md #46). Uma resposta com pelo menos um `CustomLists` não-nulo fica 5 minutos (`customListsTTL`); uma resposta vazia fica só 30 segundos (`customListsEmptyTTL`), porque "vazio" tanto pode ser uma conta sem custom lists quanto um campo que a AniList degradou. Antes o vazio não era cacheado de jeito nenhum, e aí uma conta sem custom lists gerava um request por poll do frontend — exatamente o amplificador que estourava o limite. A leitura do cache acontece antes da busca, então nenhuma resposta degradada chega a evictar uma entrada ainda válida.
+**Cache:** `GetCustomListsMap` caches results keyed by `username + statuses` (`ttlCache`, see
+decisions.md #46). A response with at least one non-null `CustomLists` stays 5 minutes
+(`customListsTTL`); an empty response stays only 30 seconds (`customListsEmptyTTL`), because
+"empty" can be either an account with no custom lists or a field AniList degraded. Empty used to
+not be cached at all, and then an account with no custom lists generated one request per frontend
+poll — exactly the amplifier that blew the limit. The cache read happens before the fetch, so no
+degraded response gets to evict an still-valid entry.
 
 **Overlay guard:** `if cl, ok := clMap[ml.Id]; ok && len(cl) > 0 { ml.CustomLists = cl }` — the `len(cl) > 0` guard ensures that a rate-limited nil response from `GetCustomListsMap` (which would produce an empty map entry) never silently clears data that `GetAllCurrentAnime` might have returned correctly on a lucky call.
 
@@ -301,15 +314,15 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 ---
 
-### 16. `anime_id` é o AniList **media** ID (foi o MediaList entry ID até a migração)
+### 16. `anime_id` is the AniList **media** ID (it was the MediaList entry ID until the migration)
 
-**Location:** `internal/anilist/anilist.go` (`Media.Id`, `GetAnimeInfo(mediaId, usernames)`); `internal/api/endpoint_animes.go` e `endpoint_anime_episodes.go` (campos `AnimeID`); `daemon/migration.go` (`MigrateAnimeIDsToMedia`).
+**Location:** `internal/anilist/anilist.go` (`Media.Id`, `GetAnimeInfo(mediaId, usernames)`); `internal/api/endpoint_animes.go` and `endpoint_anime_episodes.go` (`AnimeID` fields); `daemon/migration.go` (`MigrateAnimeIDsToMedia`).
 
-**What it looks like:** `anime_id` é *o* identificador de anime em todo lugar (arquivo de settings, registros de episódio, parâmetros de rota) e também serve de componente da URL `anilist.co/anime/{id}` — não existe mais um `anilist_id` separado na API.
+**What it looks like:** `anime_id` is *the* anime identifier everywhere (settings file, episode records, route parameters) and also the component of the URL `anilist.co/anime/{id}` — there is no longer a separate `anilist_id` in the API.
 
-**Why it's right:** até a migração, o valor vinha do campo `id` do tipo `MediaList` da AniList, que é o id da **entrada de lista** e portanto **por conta**. Com mais de uma conta configurada, o mesmo anime tinha dois `anime_id`, e o app tratava como dois animes. Ver a decisão #43 para o bug concreto e o desenho atual. Instalações antigas são convertidas uma única vez por `MigrateAnimeIDsToMedia`, marcada pelo campo `anime_ids_are_media_ids` do config.
+**Why it's right:** until the migration, the value came from the `id` field of AniList's `MediaList` type, which is the **list-entry** id and therefore **per account**. With more than one account configured, the same anime had two `anime_id`s, and the app treated them as two animes. See decision #43 for the concrete bug and the current design. Old installations are converted once by `MigrateAnimeIDsToMedia`, marked by the config field `anime_ids_are_media_ids`.
 
-**Don't "fix" by:** voltar a chavear qualquer coisa por `MediaList.Id` (é por conta — ver #43); rodar a migração de novo depois da marca ligada (interpretaria ids de mídia como ids de entrada).
+**Don't "fix" by:** keying anything off `MediaList.Id` again (it is per-account — see #43); running the migration again after the mark is set (it would read media ids as entry ids).
 
 ---
 
@@ -335,7 +348,7 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 **Don't "fix" by:** lowering `jaccardThreshold` instead. The two failure modes overlap: the real Kaiju Girl Caramelise match scores ~0.33 Jaccard, but the SAO-spinoff torrent that must stay rejected scores ~0.5 — no single threshold accepts one without accepting the other. The marker-truncation approach fixes the union inflation at its source instead.
 
-**Amendment (see #75):** o corte continua sendo a PRIMEIRA tentativa e vale exatamente como descrito acima, mas deixou de ser a única: quando ele falha, `titleMatchesQuery` tenta os títulos alternativos que aparecem depois do marcador. A frase "none of that belongs to the anime's core title" era falsa para os grupos que repetem o romaji no rodapé.
+**Amendment (see #75):** truncation is still the FIRST attempt and holds exactly as described above, but it is no longer the only one: when it fails, `titleMatchesQuery` tries the alternative titles that appear after the marker. The sentence "none of that belongs to the anime's core title" was false for groups that repeat the romaji in the footer.
 
 ---
 
@@ -345,7 +358,7 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 
 **What it looks like:** Reading disk space with a raw platform-specific filesystem syscall on a local path, when a portable Go library might seem cleaner.
 
-**Why it's right:** The dashboard needs both total capacity **and** free space — o card de disco mostra os dois; the syscall pair (`Statfs` / `GetDiskFreeSpaceEx`) is the direct way to get both. `handleStatus` swallows stat errors (empty/unreadable `CompletedAnimePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
+**Why it's right:** The dashboard needs both total capacity **and** free space — the disk card shows both; the syscall pair (`Statfs` / `GetDiskFreeSpaceEx`) is the direct way to get both. `handleStatus` swallows stat errors (empty/unreadable `CompletedAnimePath`) rather than surfacing them, so a bad path just hides the disk card instead of breaking `/api/v1/status`.
 
 > **Revision (embedded-client refactor):** The original rationale compared this against qBittorrent's `free_space_on_disk` API (which only reported free space, not total). That comparison is now moot — the torrent client is embedded and there is no qBittorrent API to read from. The old cross-host mount-mismatch caveat no longer applies either. The OS-stat approach stands as the only and correct source.
 
@@ -376,7 +389,7 @@ O mesmo raciocínio vale para o **formato** da PREQUEL: só `TV`/`TV_SHORT` entr
 **Why it's right:** Embedding makes the daemon a single self-contained binary — no external qBittorrent to install, run, secure, or keep reachable, and no `qbittorrent_url`/`QBITTORRENT_URL` to configure. Torrents download to `save_path` and keep **seeding** there; on completion the video files are **hardlinked** into `completed_anime_path` (the Jellyfin library). Hardlinking (not copy/move) means:
 - No wasted space — the library name and the seeded file share the same bytes.
 - Seeding is never interrupted — the seeded file is never moved or renamed (renaming would break the torrent). The Jellyfin name (`"Anime Name - E05.mkv"`, for single episodes and for batch files whose number is readable) lives only on the library hardlink.
-- The hard constraint: `save_path` and `completed_anime_path` **must be on the same filesystem/volume** (hardlinks can't cross devices). `completed_anime_path` is therefore now **required**, and the config-save endpoint validated the pair with a real hardlink probe (`Librarian.ProbePaths`), rejecting cross-device paths with HTTP 400. A probe de duas vias **não existe mais** — hoje é `Librarian.ProbePath`, de um argumento só; ver a emenda no fim desta entrada.
+- The hard constraint: `save_path` and `completed_anime_path` **must be on the same filesystem/volume** (hardlinks can't cross devices). `completed_anime_path` is therefore now **required**, and the config-save endpoint validated the pair with a real hardlink probe (`Librarian.ProbePaths`), rejecting cross-device paths with HTTP 400. A two-way probe **no longer exists** — today it is `Librarian.ProbePath`, one argument; see the amendment at the end of this entry.
 
 Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Remove`/`Ensure`/`SetCallbacks`/`Close`) so the daemon injects one uniform backend — rain-backed `SessionManager` in production, in-memory `FakeBackend` in tests (the qBittorrent mock server is gone). Resume data lives in a bbolt DB at `~/.autoAnimeDownloader/session.db`, deliberately **outside** `save_path` so it survives a `save_path` change. rain listens on a default port range (20000–30000) with no UPnP/NAT-PMP; inbound peers may need manual forwarding, but DHT+PEX work without it.
 
@@ -394,7 +407,7 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 
 **Why it's right (behavior change):** Previously only FINISHED animes were moved to `completed_anime_path`, while ongoing episodes were renamed in place inside `save_path`. Now `save_path` is purely the download/seeding working directory and `completed_anime_path` is the Jellyfin library — so *every* completed torrent gets organized into the library, uniformly, via the single idempotent `organize` job. This removes the ongoing-vs-finished special case and gives Jellyfin one consistent library path to watch.
 
-**Why it's right (batch guard):** Deletion frees space by removing both the library hardlink and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). For a **single-episode** torrent that maps cleanly to one library file, both links are removed. For a **batch** torrent shared by many episodes, the raw batch filenames can't be safely mapped back to one specific episode — removing "the file for episode 5" risks deleting the wrong file. So per-episode library removal is **skipped for batches**; the batch's library files (and the seeding torrent) are only removed once **all** of that torrent's episodes are in the delete set (`canRemoveTorrent` — que desde #74 também exige que o pack não cubra episódios sem registro). While any sibling episode survives, the batch torrent and its library links stay. The small space cost of keeping a shared batch around a bit longer is preferred over the correctness risk of deleting the wrong episode's file.
+**Why it's right (batch guard):** Deletion frees space by removing both the library hardlink and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). For a **single-episode** torrent that maps cleanly to one library file, both links are removed. For a **batch** torrent shared by many episodes, the raw batch filenames can't be safely mapped back to one specific episode — removing "the file for episode 5" risks deleting the wrong file. So per-episode library removal is **skipped for batches**; the batch's library files (and the seeding torrent) are only removed once **all** of that torrent's episodes are in the delete set (`canRemoveTorrent` — which since #74 also requires that the pack does not cover episodes with no record). While any sibling episode survives, the batch torrent and its library links stay. The small space cost of keeping a shared batch around a bit longer is preferred over the correctness risk of deleting the wrong episode's file.
 
 **Don't "fix" by:** trying to delete individual episode files out of a batch torrent's library folder (raw filenames aren't reliably episode-addressable), or removing a batch torrent while siblings still reference it (breaks the survivors' library links and stops seeding for episodes still wanted).
 
@@ -410,7 +423,7 @@ Torrent logic sits behind the `TorrentBackend` interface (`Add`/`List`/`Get`/`Re
 
 **Why it's right:** These tests are not read-only. `TestAPIEndpoints` and `TestFullDownloadFlow` both `PUT /api/v1/config`, overwriting `save_path`, `completed_anime_path`, `anilist_username`, `check_interval` and `excluded_lists` on whatever daemon answers. Gating on reachability alone meant that following `CLAUDE.md`'s "run `go test ./...` after any change" silently reconfigured the developer's own daemon: the save path became `/tmp/test`, and on distros where `/tmp` is a tmpfs the daemon then downloaded real torrents into RAM until the filesystem filled. A live daemon is not consent to reconfigure it, so the opt-in is an explicit env var. `docker-compose.test.yml` sets `DAEMON_URL=http://daemon:8091`, so Docker and CI runs are unaffected.
 
-The paths written into the config are likewise no longer hardcoded: they come from `TEST_SAVE_PATH`/`TEST_COMPLETED_PATH`, defaulting to `~/aad-test/downloads` and `~/aad-test/library`. Two constraints shaped that default — it must not be under `/tmp` (tmpfs), and both paths had to share one filesystem, because the config endpoint runs a real hardlink probe and rejected cross-volume pairs with HTTP 400. A segunda restrição morreu com o `save_path` (ver a emenda no fim desta entrada): a probe é `Librarian.ProbePath`, de um caminho só, e o que ela recusa hoje é filesystem sem hardlink. Docker overrides both to `/app/data/aad-test/*`, inside the daemon container's mounted volume; note the strings are interpreted by the **daemon** container, not the test container.
+The paths written into the config are likewise no longer hardcoded: they come from `TEST_SAVE_PATH`/`TEST_COMPLETED_PATH`, defaulting to `~/aad-test/downloads` and `~/aad-test/library`. Two constraints shaped that default — it must not be under `/tmp` (tmpfs), and both paths had to share one filesystem, because the config endpoint runs a real hardlink probe and rejected cross-volume pairs with HTTP 400. The second constraint died with `save_path` (see the amendment at the end of this entry): the probe is `Librarian.ProbePath`, one path, and what it refuses today is a filesystem without hardlinks. Docker overrides both to `/app/data/aad-test/*`, inside the daemon container's mounted volume; note the strings are interpreted by the **daemon** container, not the test container.
 
 **Don't "fix" by:** removing the `DAEMON_URL` gate so the tests "work" during `go test ./...`; hardcoding the config paths again; putting the default paths back under `/tmp`; or pointing `TEST_COMPLETED_PATH` at a filesystem without hardlinks (the probe rejects it).
 
@@ -422,7 +435,7 @@ The paths written into the config are likewise no longer hardcoded: they come fr
 
 **Location:** `internal/daemon/helpers.go` — `HandleTorrentFailure`; wired as the `onFailed` callback in `cmd/daemon/main.go`.
 
-**What it looks like:** When the embedded client stops a torrent with an error, we fire the `download_failed` webhook and then **remove the torrent from the session** (`Remove`, com os bytes preservados quando há progresso — ver a emenda no fim). Since nothing records that the hash failed, the very next verification pass finds the episode missing from the session and re-adds the same magnet. For a torrent that is genuinely dead (no seeds at all) this is an unbounded re-add loop, one attempt per `check_interval`. That looks like a bug we forgot to guard.
+**What it looks like:** When the embedded client stops a torrent with an error, we fire the `download_failed` webhook and then **remove the torrent from the session** (`Remove`, with the bytes kept when there is progress — see the amendment at the end). Since nothing records that the hash failed, the very next verification pass finds the episode missing from the session and re-adds the same magnet. For a torrent that is genuinely dead (no seeds at all) this is an unbounded re-add loop, one attempt per `check_interval`. That looks like a bug we forgot to guard.
 
 **Why it's right:** The alternative is worse. rain leaves a failed torrent in state Stopped **inside** the session and never restarts it, and the per-torrent listener goroutine exits after `NotifyStop` and is not re-armed (`torrents/session.go`). If we only logged, `episodeInTorrents` (`daemon/helpers.go`) would keep seeing the hash and the daemon would believe the episode was downloaded — forever. No retry, no organize, no notification, and the episode silently never reaches the library. Dropping the torrent converts a permanent silent failure into an automatic retry that reuses the machinery already in place (the loop re-searches Nyaa and may pick a *different*, healthier release the second time). `EpisodeRetryLimit` does not bound this, because it resets each pass.
 
@@ -430,20 +443,20 @@ The paths written into the config are likewise no longer hardcoded: they come fr
 
 **Don't "fix" by:** adding a speculative per-hash blacklist with a TTL. That is the correct fix *if* the re-add churn is ever observed to be a real problem, but it introduces new state to persist, expire, and expose in the UI (otherwise a permanently blacklisted episode becomes the new silent failure). Build it against a real report, not preemptively. Also don't go back to log-only in `onFailed`.
 
-**Emenda (2026-09-07): o re-add RETOMA, não recomeça.** A versão original passava `keepData=false`
-sempre, com a justificativa de que dado parcial de um torrent que errou não era reutilizável. É
-falso, e num pack de 90 GiB a 90% custava o download inteiro por um erro transitório. `Session.Add`
-adiciona com `AddTorrentOptions{ID: hash}` e a sessão roda com `DataDirIncludesTorrentID`, então o
-re-add cai no **mesmo** `<DataDir>/<id>`; a rain vê os arquivos existentes (`allocator.HasExisting`)
-e, sem entrada no banco de resume — o `RemoveTorrent` apagou —, roda o verificador e reconstrói o
-bitfield sozinha. Nada no app chama `Verify()`: não existe esse método na API pública da rain, e
-não precisa existir.
+**Amendment (2026-09-07): the re-add RESUMES, it does not start over.** The original version always
+passed `keepData=false`, on the grounds that partial data from a torrent that errored was not
+reusable. That is false, and on a 90 GiB pack at 90% it cost the entire download for a transient
+error. `Session.Add` adds with `AddTorrentOptions{ID: hash}` and the session runs with
+`DataDirIncludesTorrentID`, so the re-add lands in the **same** `<DataDir>/<id>`; rain sees the
+existing files (`allocator.HasExisting`) and, with no resume-db entry — `RemoveTorrent` deleted it
+— runs the verifier and rebuilds the bitfield on its own. Nothing in the app calls `Verify()`: that
+method does not exist on rain's public API, and it does not need to.
 
-O `keepData` é **condicional**, não `true` fixo: só com `PiecesHave > 0`. Zero peça verificada não
-tem o que recuperar, e a pasta guardada viraria lixo permanente quando a retentativa cair noutro
-infohash — o diretório é por id do torrent e nada varre o caminho de download. `PiecesHave` é a
-fonte de progresso que sobrevive ao `Stop` (`BytesCompleted` zera quando a rain libera as pieces), e
-a falha chega aqui já parada.
+`keepData` is **conditional**, not a fixed `true`: only with `PiecesHave > 0`. Zero verified pieces
+have nothing to recover, and the kept folder would become permanent junk when the retry lands on
+another infohash — the directory is per torrent id and nothing sweeps the download path.
+`PiecesHave` is the progress source that survives `Stop` (`BytesCompleted` zeroes when rain frees
+the pieces), and the failure arrives here already stopped.
 
 ---
 
@@ -474,7 +487,7 @@ Ordering detail: `ensureStartupSession` runs **after** `jobQueue.Start()`. Creat
 
 **Why it's right:** `isConfigComplete` only checks that the fields are non-empty, and the endpoint probe only covers configs saved **through the API after** the embedded-client upgrade. Two populations bypass it entirely: users who configured a `completed_anime_path` on a different volume back when the app *moved* files (perfectly legal then — `rename` crosses devices, `link` does not), and any deployment where `docker/entrypoint.sh` writes `config.json` straight from env vars. For them the daemon would download happily while every `JobOrganize` failed with `EXDEV`, retried 20 times over ~2.5h, and was dropped — with `LastCheckError` never set, so the WebUI showed a healthy daemon and an empty library.
 
-The probe aborts the pass instead of merely warning: downloading episodes that provably cannot be organized only fills the disk. It reuses the same probe the config endpoint calls (`Librarian.ProbePath`, ver a emenda no fim desta entrada), so the message the user sees in the UI is identical to the one `PUT /config` returns. Cost is one small file write, one link and two unlinks per `check_interval` (default 10 min) — negligible next to the Anilist and Nyaa requests in the same pass.
+The probe aborts the pass instead of merely warning: downloading episodes that provably cannot be organized only fills the disk. It reuses the same probe the config endpoint calls (`Librarian.ProbePath`, see the amendment at the end of this entry), so the message the user sees in the UI is identical to the one `PUT /config` returns. Cost is one small file write, one link and two unlinks per `check_interval` (default 10 min) — negligible next to the Anilist and Nyaa requests in the same pass.
 
 **Don't "fix" by:** removing the gate because "the endpoint already validates it" (it does not, for pre-upgrade and entrypoint-written configs), or downgrading it to a warning that lets the pass continue. Caching the result per path pair is a legitimate optimization if the I/O ever shows up in a profile — but it must be invalidated on config change, and the current cost does not justify the extra state.
 
@@ -490,7 +503,7 @@ The probe aborts the pass instead of merely warning: downloading episodes that p
 
 **Why it's right:** The three functions have genuinely different semantics and each is wrong on its own here.
 
-- (Histórico: a chave era `EpisodeID`, o id do nó de agenda da AniList; hoje é `EpisodeKey{AnimeID, Episode}` — ver #52.) `SaveEpisodesToFile` is **append-only with dedupe by key**: for an ID that already exists it drops the incoming record *entirely*. That was the original bug. On the upgrade path to the embedded client, the rain session boots empty, so `episodeInTorrents` is false for every saved episode and the loop re-downloads all of them — and every one of those updates was silently discarded. The stale record kept `EpisodeNumber: 0` (a field that did not exist before the upgrade, so it deserialises as zero for all pre-existing records) and the stale `EpisodeHash`. The first caused every episode of an anime to be organized as `Anime - E00.mkv`; the second broke `JobOrganize`'s saved-episode ↔ torrent join by hash, so the job retried 20 times over ~2.5h and gave up, forever.
+- (History: the key used to be `EpisodeID`, the AniList schedule-node id; today it is `EpisodeKey{AnimeID, Episode}` — see #52.) `SaveEpisodesToFile` is **append-only with dedupe by key**: for an ID that already exists it drops the incoming record *entirely*. That was the original bug. On the upgrade path to the embedded client, the rain session boots empty, so `episodeInTorrents` is false for every saved episode and the loop re-downloads all of them — and every one of those updates was silently discarded. The stale record kept `EpisodeNumber: 0` (a field that did not exist before the upgrade, so it deserialises as zero for all pre-existing records) and the stale `EpisodeHash`. The first caused every episode of an anime to be organized as `Anime - E00.mkv`; the second broke `JobOrganize`'s saved-episode ↔ torrent join by hash, so the job retried 20 times over ~2.5h and gave up, forever.
 - `UpsertEpisodes` **replaces the record wholesale**. That is exactly what `organizeTorrent` needs when writing `LibraryPaths` back, and it is what makes it wrong here: it would clobber `ManuallyManaged`, a user flag the automatic loop must never clear (clearing it lets the loop delete an episode the user pinned).
 
 The merge is the only place that knows which fields belong to *this* download (hash, number, `IsBatch`, names, totals, date — all taken from the new record), which belongs to the *user* (`ManuallyManaged`, OR-ed so a manual download can still set it), and which is *derived* (`LibraryPaths`, reset to nil because the old hardlinks point at the previous release — leaving it set would make `organizeTorrent` think the episode was already organized and never create the new link).
@@ -576,1028 +589,1031 @@ mid-download renders an empty progress bar for its whole paused lifetime.
 
 ---
 
-### 31. Diretório de download derivado da biblioteca
+### 31. Download directory is derived from the library
 
 **Location:** `internal/files/filemanager.go` (`Config.DownloadPath`), `internal/files/librarian.go` (`ProbePath`), `internal/daemon/migration.go`.
 
-**What it looks like:** `save_path` sumiu da configuração; o diretório de download é `<completed_anime_path>/.torrents`, calculado a cada uso.
+**What it looks like:** `save_path` disappeared from the config; the download directory is `<completed_anime_path>/.torrents`, computed on every use.
 
-**Why it's right:** a restrição de mesmo-filesystem do `#21` era uma armadilha que só aparecia como erro no save; derivando o caminho ela vira invariante. Dois campos obrigatórios sem diferença clara confundiam o usuário, para quem só a biblioteca importa. `ProbePath` continua existindo porque exFAT/FAT32/alguns SMB não têm hardlink nenhum. O `.ignore` + o prefixo com ponto mantêm o Jellyfin fora da pasta de download.
+**Why it's right:** the same-filesystem constraint from `#21` was a trap that only showed up as an error on save; deriving the path turns it into an invariant. Two required fields with no clear difference confused the user, for whom only the library matters. `ProbePath` still exists because exFAT/FAT32/some SMB have no hardlinks at all. The `.ignore` + the leading-dot prefix keep Jellyfin out of the download folder.
 
-**Don't "fix" by:** reintroduzir `save_path` como campo de config ou variável de ambiente; tirar a guarda que faz `DeleteEmptyFolders` pular `.torrents`.
+**Don't "fix" by:** reintroducing `save_path` as a config field or environment variable; removing the guard that makes `DeleteEmptyFolders` skip `.torrents`.
 
-**Amendment (2026-08-24): a migração foi REMOVIDA.** `daemon.MigrateSavePath`, o campo
-`Config.SavePath`, a zeragem dele no `PUT /config` e os seis testes de migração não existem mais.
-O que sobrou da decisão é só o caminho derivado (`Config.DownloadPath`).
+**Amendment (2026-08-24): the migration was REMOVED.** `daemon.MigrateSavePath`, the
+`Config.SavePath` field, zeroing it on `PUT /config`, and the six migration tests no longer exist.
+What remains of the decision is only the derived path (`Config.DownloadPath`).
 
-Consequência que precisa ficar explícita: uma instalação que **ainda não migrou** (um
-`config.json` com `save_path` preenchido, de uma versão anterior) perde o vínculo com os dados.
-O campo agora é desconhecido, o JSON o ignora, a rain abre o caminho derivado, acha vazio e
-**rebaixa a biblioteca inteira**. Mover `<save_path>/*` para `<completed_anime_path>/.torrents`
-antes de subir a versão nova passou a ser um passo manual, documentado no README.
+A consequence that needs to stay explicit: an installation that **has not migrated yet** (a
+`config.json` with `save_path` filled in, from an earlier version) loses the link to the data.
+The field is now unknown, JSON ignores it, rain opens the derived path, finds it empty and
+**re-downloads the entire library**. Moving `<save_path>/*` to `<completed_anime_path>/.torrents`
+before upgrading became a manual step, documented in the README.
 
-As três coisas que a migração garantia e agora ninguém garante: o rename preserva inode (seed e
-hardlinks sobrevivem), o marcador de raiz (`torrents.RootMarkerName`) viaja junto com os dados —
-sem isso o `Ensure` seguinte enxerga troca de pasta e zera os `LibraryPaths` (ver #34) — e a
-operação era idempotente com retry a cada passe. Quem reintroduzir a migração precisa dos três,
-não só do rename.
+The three things the migration guaranteed and now nobody does: the rename preserves the inode (seed
+and hardlinks survive), the root marker (`torrents.RootMarkerName`) travels with the data —
+without that the next `Ensure` sees a folder swap and zeros `LibraryPaths` (see #34) — and the
+operation was idempotent with a retry every pass. Anyone reintroducing the migration needs all
+three, not just the rename.
 
 ---
 
-### 32. `DELETE /torrents/{hash}`: default é apagar + bloquear, `keep_data` é binário, não há endpoint de lote
+### 32. `DELETE /torrents/{hash}`: default is delete + block, `keep_data` is binary, there is no batch endpoint
 
 **Location:** `internal/api/endpoint_torrents.go` (`handleTorrentDelete`, `parseBoolQueryParam`), `internal/daemon/episodes.go` (`RemoveTorrentWithEpisodes`, `RemoveTorrentOptions`, `removeEpisodesAndLinks`), `frontend/src/components/TorrentDeleteDialog.svelte`.
 
-**What it looks like:** a UI de exclusão da tela de Downloads (linha única ou seleção em massa) abre um diálogo com dois checkboxes — "apagar arquivos" e "não baixar de novo" — **ambos marcados por padrão**. Desmarcar o primeiro vira `keep_data=true` (mantém a cópia semeada **e** o hardlink da biblioteca — nunca só um dos dois). Desmarcar o segundo vira `block=false` e a UI mostra um aviso em texto amarelo em vez de impedir a combinação. Não existe `DELETE /torrents/bulk`; o cliente dispara N requisições ao endpoint por hash já existente.
+**What it looks like:** the delete UI on the Downloads screen (single row or mass selection) opens a dialog with two checkboxes — "delete files" and "don't download again" — **both checked by default**. Unchecking the first becomes `keep_data=true` (keeps the seeded copy **and** the library hardlink — never only one of the two). Unchecking the second becomes `block=false` and the UI shows a yellow text warning instead of blocking the combination. There is no `DELETE /torrents/bulk`; the client fires N requests at the existing per-hash endpoint.
 
 **Why it's right:**
 
-- **Delete + block por padrão:** é a ação que corresponde à intenção mais comum de quem clica em "excluir" — livrar-se do torrent de vez. Deixar os dois desmarcados por padrão faria o caso comum exigir dois cliques extras; deixar só "apagar" marcado por padrão recriaria silenciosamente o torrent no próximo passo do loop (ver próximo ponto).
-- **"Excluir sem bloquear" é um rebaixar-do-zero, não um cancelar:** `handleAlreadySavedEpisode` (`daemon/daemon.go`) rebaixa (redownloada) qualquer episódio cujo registro em `episodes.json` exista mas cujo hash não bata com nenhum torrent vivo na sessão — é assim que o daemon se recupera de um torrent removido por fora (crash, limpeza manual do rain). `DELETE /torrents/{hash}` com `block=false` produz exatamente esse estado: registro sobrevive (a menos que `keep_data` também tire os hardlinks), torrent não. Não há como o backend distinguir "usuário quer parar de baixar isso" de "torrent morreu e precisa recomeçar" só olhando o registro — por isso a UI avisa por texto ("sem isso, o daemon pode baixar de novo") em vez do backend proibir ou forçar a combinação. Bloquear é a única forma de expressar "não, mesmo" para esse fluxo.
-- **`keep_data` não separa biblioteca de cópia semeada:** o hardlink da biblioteca e o arquivo semeado pelo torrent são o mesmo inode (decisão 21). Apagar um e manter o outro não libera espaço nenhum — só quebra a exibição no Jellyfin ou para de semear sem ganhar disco. `removeEpisodesAndLinks` trata isso como um parâmetro binário único (`keepData`): ambos ficam ou ambos vão.
-- **Sem endpoint de lote:** o pior caso realista é dezenas de torrents selecionados, não milhares — N requisições HTTP em paralelo (`Promise.all` no frontend) resolve isso sem exigir semântica de erro parcial no backend (o que falhou? o quê retry?) nem um novo formato de payload. O custo de implementar e manter um body `{hashes: []string}` com resposta por-item não compensa para essa escala.
-- **404 do DELETE decidido só pela sessão:** igual a `pause`/`resume`/`announce` (`torrentAction`), a existência do torrent é checada só via `server.Torrents.Get(hash)`. Se o hash não está na sessão mas ainda existem registros de episódio com aquele hash (órfãos — torrent já removido por fora), a rota responde 404 e **não mexe** nesses registros; limpar um registro órfão é responsabilidade de `DELETE /animes/{id}/episodes/{episodeId}`, não desta rota. Misturar as duas responsabilidades tornaria o contrato de erro ambíguo (404 significa "torrent não existe" ou "nada para fazer"?).
+- **Delete + block by default:** that is the action that matches the most common intent of someone clicking "delete" — get rid of the torrent for good. Leaving both unchecked by default would make the common case cost two extra clicks; leaving only "delete" checked by default would silently recreate the torrent on the next loop step (see the next point).
+- **"Delete without blocking" is a re-download from scratch, not a cancel:** `handleAlreadySavedEpisode` (`daemon/daemon.go`) re-downloads any episode whose record in `episodes.json` exists but whose hash matches no live torrent in the session — that is how the daemon recovers from a torrent removed from the outside (crash, manual rain cleanup). `DELETE /torrents/{hash}` with `block=false` produces exactly that state: the record survives (unless `keep_data` also takes the hardlinks), the torrent does not. There is no way for the backend to tell "the user wants to stop downloading this" from "the torrent died and needs to start over" by looking at the record alone — that is why the UI warns in text ("without this, the daemon may download it again") instead of the backend forbidding or forcing the combination. Blocking is the only way to say "no, really" to that flow.
+- **`keep_data` does not split library from seeded copy:** the library hardlink and the file seeded by the torrent are the same inode (decision 21). Deleting one and keeping the other frees no space — it only breaks the Jellyfin display or stops seeding without gaining disk. `removeEpisodesAndLinks` treats this as a single binary parameter (`keepData`): both stay or both go.
+- **No batch endpoint:** the realistic worst case is tens of selected torrents, not thousands — N HTTP requests in parallel (`Promise.all` in the frontend) handles that without requiring partial-error semantics on the backend (what failed? what to retry?) or a new payload format. The cost of implementing and maintaining a `{hashes: []string}` body with a per-item response does not pay off at that scale.
+- **DELETE's 404 is decided by the session alone:** same as `pause`/`resume`/`announce` (`torrentAction`), torrent existence is checked only via `server.Torrents.Get(hash)`. If the hash is not in the session but episode records with that hash still exist (orphans — torrent already removed from the outside), the route answers 404 and **does not touch** those records; cleaning an orphan record is `DELETE /animes/{id}/episodes/{episodeId}`'s job, not this route's. Mixing the two responsibilities would make the error contract ambiguous (does 404 mean "torrent does not exist" or "nothing to do"?).
 
-**Fora de escopo (investigado, não esquecido):**
+**Out of scope (investigated, not forgotten):**
 
-- **Limite de downloads simultâneos:** exigiria um campo de config novo, uma fila real no daemon, e a persistência do *motivo* de um torrent estar pausado — a rain persiste o estado pausado (decisão 25), mas não o motivo, então sem esse campo extra o scheduler retomaria por engano um torrent que o usuário pausou de propósito. Vira spec própria.
-- **Prioridade por torrent:** `github.com/cenkalti/rain/v2` não tem nenhum conceito de prioridade, nem por torrent nem por arquivo — só `SpeedLimitDownload`/`SpeedLimitUpload` globais. Implementar throttling próprio em cima disso mexeria no caminho quente da lib por um ganho que não compensa. Se a fila de simultâneos acima vier a existir, a ordem da fila já é a prioridade, e um botão "baixar primeiro" que move o item para o topo da fila entrega o valor sem exigir scheduler nenhum.
+- **Concurrent-download limit:** would require a new config field, a real queue in the daemon, and persisting the *reason* a torrent is paused — rain persists the paused state (decision 25), but not the reason, so without that extra field the scheduler would resume by mistake a torrent the user paused on purpose. That becomes its own spec.
+- **Per-torrent priority:** `github.com/cenkalti/rain/v2` has no concept of priority, neither per torrent nor per file — only global `SpeedLimitDownload`/`SpeedLimitUpload`. Implementing our own throttling on top of that would touch the lib's hot path for a gain that does not pay off. If the concurrent queue above ever exists, the queue order is already the priority, and a "download first" button that moves the item to the front of the queue delivers the value without requiring a scheduler.
 
-**Don't "fix" by:** fazer o backend recusar `block=false` sozinho (a combinação é válida e intencional — só não é o padrão); tentar separar biblioteca de cópia semeada adicionando um terceiro parâmetro (mesmo inode, ver decisão 21); adicionar um endpoint de lote "porque é óbvio" sem antes confirmar que a escala realista (dezenas, não milhares) justifica a complexidade extra de erro parcial.
-
----
-
-### 33. O inline de progresso do torrent não pode olhar `is_downloaded`
-
-**Location:** `src/internal/frontend/src/routes/AnimeDetail.svelte` (inline de progresso do torrent), `src/internal/api/endpoint_anime_episodes.go` (`handleAnimeEpisodes`).
-
-**What it looks like:** a barra de progresso inline na tela do anime aparece com base só em `!torrent.completed` — nunca em `!ep.is_downloaded`.
-
-**Why it's right:** **`episode_hash != "" ⟺ is_downloaded`.** `handleAnimeEpisodes` preenche `IsDownloaded` e `EpisodeHash` no mesmo `if` (existe registro salvo para aquele episódio), e o daemon grava o registro salvo no instante em que o torrent é **adicionado**, não quando termina (`daemon/episodes.go`, `daemon/manual_download.go`). Ou seja, um episódio baixando **já** vem com `is_downloaded: true`. A condição antiga do inline (`torrent && !torrent.completed && !ep.is_downloaded`) exigia uma combinação que a API nunca emite, então a barra jamais aparecia em produção — e o smoke test não pegou porque a fixture montava justamente esse estado impossível.
-
-**Don't "fix" by:** voltar a filtrar o inline de progresso por `!ep.is_downloaded`; escrever fixture de teste com `is_downloaded: false` + `episode_hash` preenchido.
-
-**Histórico:** esta entrada nasceu com uma segunda metade — o trava do daisyUI na v4 enquanto o
-Tailwind fosse v3, o conflito de cascade layer com o preflight e o `data-tip` vs `.tooltip-content`.
-Está toda MORTA: o daisyUI foi removido em 2026-08-31 (ver #91), o `Layout.svelte` que hospedava
-aquele tooltip não existe mais, e a limpeza que a emenda antiga deixava pendente (os
-`bg-blue-600`/`bg-red-600` crus em `Status.svelte`/`AnimeDetail.svelte` e o `StatusBadge.svelte`)
-já foi feita — nenhuma dessas classes nem esse componente existem no frontend hoje.
+**Don't "fix" by:** making the backend refuse `block=false` on its own (the combination is valid and intentional — it just is not the default); trying to split library from seeded copy by adding a third parameter (same inode, see decision 21); adding a batch endpoint "because it's obvious" without first confirming that the realistic scale (tens, not thousands) justifies the extra partial-error complexity.
 
 ---
 
-### 34. Troca da pasta de download é detectada por marcador duplo, e derruba a sessão da rain
+### 33. The torrent progress inline must not look at `is_downloaded`
 
-**Location:** `internal/torrents/rootmarker.go`, `internal/torrents/sessionmanager.go` (`Ensure`, `checkRoot`, `writeRoot`), `internal/daemon/verification.go` (`clearLibraryPathsAfterRootSwap`), `internal/daemon/migration.go` (o marcador viaja junto no rename). Fixado por `TestSessionManagerDetectsRootSwap`, `TestSessionManagerRootSwapReportedOnce`, `TestSessionManagerMovedAndRepointedIsNotASwap`, `TestSessionManagerFirstRunAdoptsExistingFolder` e `TestClearLibraryPathsAfterRootSwap`.
+**Location:** `src/internal/frontend/src/routes/AnimeDetail.svelte` (torrent progress inline), `src/internal/api/endpoint_anime_episodes.go` (`handleAnimeEpisodes`).
 
-**What it looks like:** existem dois arquivos com o mesmo id aleatório — `.aad_root` **dentro** da pasta de download e `download_root.id` na pasta de config. `Ensure` compara os dois a cada passe e, quando divergem, fecha e recria a sessão da rain.
+**What it looks like:** an inline progress bar on the anime screen appears based only on `!torrent.completed` — never on `!ep.is_downloaded`.
 
-**Why it's right:** a rain segura *file descriptors* abertos. Quando o usuário move a pasta de download (ou manda pra lixeira) com o daemon rodando, os bytes continuam caindo no inode que foi embora enquanto o caminho configurado fica vazio — a UI mostra tudo semeando e **todo** `JobOrganize` falha com `no such file or directory`, queimando as 20 tentativas em silêncio. Nada no processo percebe, porque o caminho em string não mudou: só o inode por trás dele mudou.
+**Why it's right:** **`episode_hash != "" ⟺ is_downloaded`.** `handleAnimeEpisodes` fills `IsDownloaded` and `EpisodeHash` in the same `if` (a saved record exists for that episode), and the daemon writes the saved record at the moment the torrent is **added**, not when it finishes (`daemon/episodes.go`, `daemon/manual_download.go`). So an episode that is still downloading **already** arrives with `is_downloaded: true`. The old inline condition (`torrent && !torrent.completed && !ep.is_downloaded`) required a combination the API never emits, so the bar never appeared in production — and the smoke test missed it because the fixture assembled exactly that impossible state.
 
-O par de marcadores é o que torna isso detectável sem depender de inode (que não existe no Windows):
+**Don't "fix" by:** going back to filtering the progress inline on `!ep.is_downloaded`; writing a test fixture with `is_downloaded: false` + a filled `episode_hash`.
 
-- o marcador **de dentro** viaja com a pasta, então some do caminho configurado exatamente quando a pasta é movida;
-- o id **de fora** fica onde o usuário não mexe, então sobrevive para servir de referência — inclusive quando a pasta é movida com o daemon **parado**.
-
-Recriar a sessão é o conserto completo porque a rain já faz a parte difícil: em `torrent_allocation.go`, se os arquivos não existem (`al.HasMissing`), ela **descarta o bitfield do resume** e rebaixa. Não é preciso mexer no resume db nem remover torrent nenhum.
-
-**Por que o sinal é latch e não retorno do `Ensure`:** os endpoints de download manual também chamam `Ensure`. Se a flag viesse no retorno, uma chamada dessas engoliria a troca — a sessão seria recriada, mas os registros de biblioteca órfãos nunca seriam limpos, e a recuperação ficaria pela metade sem nenhum erro visível. `Ensure` marca `pendingSwap`; só `ConsumeRootSwap`, chamado no passe de verificação, limpa. Fixado por `TestSessionManagerRootSwapSurvivesAnotherEnsure`.
-
-Três propriedades que caíram de graça e são intencionais:
-
-- **Mover a pasta E repontar o config** (`completed_anime_path` para o novo lugar) **não** é troca: o marcador viajou junto, os ids batem, nada é rebaixado. É o caminho "certo" de mover a biblioteca.
-- **Primeiro boot / upgrade de uma versão sem marcador** não é troca: sem id de referência não há o que comparar, e adotar a pasta como está é a única leitura segura — a alternativa apaga os registros de uma biblioteca saudável.
-- **É edge-triggered:** `Ensure` reporta a troca uma vez e já regrava o marcador, então o passe seguinte volta ao normal.
-
-**Emenda à decisão 29:** `clearLibraryPathsAfterRootSwap` zera `LibraryPaths` — justamente o que a #29 proíbe. A proibição continua valendo para arquivo faltando: o que ela protege é a exclusão deliberada de **um** episódio da biblioteca, que um cheque por `Stat` a cada passe ressuscitaria para sempre. Uma troca de raiz é outro evento: sumiu a pasta inteira para onde os registros apontam, o daemon já está rebaixando o conteúdo dela, e a detecção dispara **uma vez por troca** — nunca vira o laço de ressurreição da #29. Sem essa limpeza a recuperação fica pela metade: os torrents rebaixam, mas os episódios organizados antes da troca ficam com `LibraryPaths` órfão e nunca voltam para a biblioteca.
-
-**Don't "fix" by:** devolver a flag no retorno do `Ensure` em vez do latch (ver acima); trocar os marcadores por comparação de inode (`syscall.Stat_t.Ino` não existe no Windows); tratar erro de leitura do marcador como "sumiu" (uma falha de permissão passaria a apagar os registros da biblioteca — por isso `readRootID` só engole `IsNotExist`); fazer a limpeza de `LibraryPaths` a cada passe em vez de só na troca (aí sim vira a violação da #29); ~~tirar o rename do marcador em `MigrateSavePath`~~ (a migração foi removida em 2026-08-24 — ver #31; se ela voltar, o rename do marcador volta a ser obrigatório pelo mesmo motivo).
+**History:** this entry was born with a second half — daisyUI pinned on v4 while Tailwind was v3,
+the cascade-layer conflict with preflight, and `data-tip` vs `.tooltip-content`. That half is all
+DEAD: daisyUI was removed on 2026-08-31 (see #91), the `Layout.svelte` that hosted that tooltip no
+longer exists, and the cleanup the old amendment left pending (the raw `bg-blue-600`/`bg-red-600` in
+`Status.svelte`/`AnimeDetail.svelte` and `StatusBadge.svelte`) is already done — none of those
+classes nor that component exist in the frontend today.
 
 ---
 
-### 35. `os.SameFile` no Windows resolve o arquivo tarde, então FileInfo não é snapshot em teste
+### 34. A download-folder swap is detected by a dual marker, and it tears down the rain session
 
-**Location:** `internal/files/librarian_test.go` (`TestOrganizeReplacesDifferentFileAtDestination`, o `staleAlias`). O uso em produção fica no ramo `os.SameFile` de `Organize` (`internal/files/librarian.go`).
+**Location:** `internal/torrents/rootmarker.go`, `internal/torrents/sessionmanager.go` (`Ensure`, `checkRoot`, `writeRoot`), `internal/daemon/verification.go` (`clearLibraryPathsAfterRootSwap`), `internal/daemon/migration.go` (the marker travels with the rename). Pinned by `TestSessionManagerDetectsRootSwap`, `TestSessionManagerRootSwapReportedOnce`, `TestSessionManagerMovedAndRepointedIsNotASwap`, `TestSessionManagerFirstRunAdoptsExistingFolder` and `TestClearLibraryPathsAfterRootSwap`.
 
-**What it looks like:** o teste cria um hardlink extra (`staleAlias`) para o arquivo velho **antes** de chamar `Organize`, e depois compara `os.Stat(staleAlias)` contra o destino — em vez de guardar um `os.Stat(dest)` antes da troca, que seria o jeito óbvio.
+**What it looks like:** there are two files with the same random id — `.aad_root` **inside** the download folder and `download_root.id` in the config folder. `Ensure` compares the two on every pass and, when they diverge, closes and recreates the rain session.
 
-**Why it's right:** no Linux `os.Stat` grava dev+inode na hora, então um `FileInfo` é um retrato do arquivo daquele instante. No Windows não: `saveInfoFromPath` (`os/types_windows.go`) guarda **só o caminho**, e `SameFile` chama `loadFileId`, que abre esse caminho de novo no momento da comparação. Um `FileInfo` tirado de `dest` antes da substituição passa a apontar para o arquivo **novo** depois dela, e `os.SameFile(staleInfo, destInfo)` vira sempre `true` — o teste falhava só no job `test-backend-windows`, com o código de produção correto. Manter um segundo nome para o arquivo velho fixa a identidade dele em qualquer plataforma, porque `Organize` substitui com `Remove(dest)` + `link(src, dest)` e o hardlink alternativo sobrevive ao `Remove`.
+**Why it's right:** rain holds open *file descriptors*. When the user moves the download folder (or sends it to the trash) with the daemon running, bytes keep landing on the inode that left while the configured path sits empty — the UI shows everything seeding and **every** `JobOrganize` fails with `no such file or directory`, burning through the 20 retries in silence. Nothing in the process notices, because the path string did not change: only the inode behind it did.
 
-No ramo de `Organize` o mesmo `os.SameFile` está correto: os dois `Stat` são feitos na hora da comparação, com os dois caminhos existindo.
+The pair of markers is what makes this detectable without depending on inode (which does not exist on Windows):
 
-**Don't "fix" by:** trocar o alias por um `os.Stat(dest)` guardado antes da troca ("é a mesma coisa e lê melhor" — não é, e só quebra no Windows); marcar o teste como `t.Skip` no Windows (era exatamente o cross-device/hardlink que esse job existe para cobrir); apagar a asserção do arquivo velho por parecer redundante com a de conteúdo (uma mutação que pula a substituição faz as duas falharem, mas a de identidade é a que distingue "relinkou" de "sobrescreveu por cima").
+- the **inside** marker travels with the folder, so it disappears from the configured path exactly when the folder is moved;
+- the **outside** id stays where the user does not touch it, so it survives as a reference — including when the folder is moved with the daemon **stopped**.
+
+Recreating the session is the complete fix because rain already does the hard part: in `torrent_allocation.go`, if the files do not exist (`al.HasMissing`), it **discards the resume bitfield** and re-downloads. There is no need to touch the resume db or remove any torrent.
+
+**Why the signal is a latch and not `Ensure`'s return:** the manual-download endpoints also call `Ensure`. If the flag came back in the return, one of those calls would swallow the swap — the session would be recreated, but the orphan library records would never be cleared, and recovery would be left half-done with no visible error. `Ensure` sets `pendingSwap`; only `ConsumeRootSwap`, called on the verification pass, clears it. Pinned by `TestSessionManagerRootSwapSurvivesAnotherEnsure`.
+
+Three properties that fell out for free and are intentional:
+
+- **Moving the folder AND re-pointing the config** (`completed_anime_path` to the new place) is **not** a swap: the marker travelled with it, the ids match, nothing is re-downloaded. That is the "right" way to move the library.
+- **First boot / upgrade from a version without a marker** is not a swap: with no reference id there is nothing to compare, and adopting the folder as-is is the only safe reading — the alternative would wipe the records of a healthy library.
+- **It is edge-triggered:** `Ensure` reports the swap once and already rewrites the marker, so the next pass is back to normal.
+
+**Amendment to decision 29:** `clearLibraryPathsAfterRootSwap` zeros `LibraryPaths` — exactly what #29 forbids. The prohibition still holds for a missing file: what it protects is the deliberate deletion of **one** episode from the library, which a `Stat` check every pass would resurrect forever. A root swap is a different event: the entire folder the records point at is gone, the daemon is already re-downloading its contents, and detection fires **once per swap** — it never becomes #29's resurrection loop. Without this cleanup recovery is half-done: the torrents re-download, but episodes organized before the swap keep an orphan `LibraryPaths` and never return to the library.
+
+**Don't "fix" by:** returning the flag from `Ensure` instead of the latch (see above); replacing the markers with inode comparison (`syscall.Stat_t.Ino` does not exist on Windows); treating a marker-read error as "it vanished" (a permission failure would start wiping library records — that is why `readRootID` only swallows `IsNotExist`); cleaning `LibraryPaths` on every pass instead of only on a swap (that really would be the #29 violation); ~~dropping the marker rename in `MigrateSavePath`~~ (the migration was removed on 2026-08-24 — see #31; if it comes back, the marker rename becomes mandatory again for the same reason).
 
 ---
 
-### 36. `AppShell` escolhe rail vs tab bar em JS (`matchMedia`), não com `hidden md:flex`/`md:hidden`
+### 35. `os.SameFile` on Windows resolves the file late, so FileInfo is not a snapshot in tests
 
-**Location:** `frontend/src/components/shell/AppShell.svelte`, `NavRail.svelte`, `NavTabBar.svelte`, `MoreMenu.svelte` (Fase 1 do redesign de UI, spec §5).
+**Location:** `internal/files/librarian_test.go` (`TestOrganizeReplacesDifferentFileAtDestination`, the `staleAlias`). Production use is the `os.SameFile` branch of `Organize` (`internal/files/librarian.go`).
 
-**What it looks like:** `AppShell` guarda um booleano `isDesktop` (inicializado sincronamente de `window.matchMedia('(min-width: 768px)')`, atualizado por um listener de `change`) e monta `{#if isDesktop}<NavRail>{:else}<NavTabBar>{/if}` — só um dos dois existe no DOM a qualquer momento. O padrão Tailwind mais comum para "rail no desktop, tab bar no mobile" seria montar os dois sempre e escondê-los por classe (`hidden md:flex` / `md:hidden`), como o `Layout.svelte` antigo fazia para seu bloco desktop/mobile.
+**What it looks like:** the test creates an extra hardlink (`staleAlias`) to the old file **before** calling `Organize`, and then compares `os.Stat(staleAlias)` against the destination — instead of keeping an `os.Stat(dest)` from before the swap, which would be the obvious way.
 
-**Why it's right:** `NavRail` e `NavTabBar` cada um monta seu próprio `MoreMenu`, que no mobile hospeda um `<select id="theme-select-mobile">` (o desktop tem o seu próprio `<select id="theme-select">`, sempre visível no rodapé do rail). Com os dois blocos sempre no DOM e só escondidos por CSS, ambos existiriam ao mesmo tempo — dois elementos com o mesmo propósito de controle, potencialmente dois ids duplicados se algum dia convergirem, e dois menus "Mais" interativos simultâneos para ferramentas que não respeitam `display:none` puramente por visibilidade (ex. `getByLabelText`/`getByRole` do Testing Library encontram elementos ocultos por CSS a menos que a query filtre por `hidden: true`, e podem falhar com "found multiple elements"). Montar só um dos dois em JS elimina a classe inteira desse problema, ao custo de um listener de `matchMedia` — inicializado de forma síncrona no `<script>` do componente (antes do primeiro render), então não há flash de layout errado.
+**Why it's right:** on Linux `os.Stat` records dev+inode immediately, so a `FileInfo` is a snapshot of the file at that instant. On Windows it is not: `saveInfoFromPath` (`os/types_windows.go`) stores **only the path**, and `SameFile` calls `loadFileId`, which opens that path again at comparison time. A `FileInfo` taken from `dest` before the replacement starts pointing at the **new** file after it, and `os.SameFile(staleInfo, destInfo)` is always `true` — the test failed only in the `test-backend-windows` job, with the production code correct. Keeping a second name for the old file pins its identity on every platform, because `Organize` replaces with `Remove(dest)` + `link(src, dest)` and the alternate hardlink survives the `Remove`.
 
-**Don't "fix" by:** voltar para `hidden md:flex`/`md:hidden` "porque é mais simples e é o padrão Tailwind" — funciona visualmente, mas reintroduz o duplo-DOM que motivou a decisão; inicializar `isDesktop` só dentro de `onMount` (mostraria o layout errado por um frame antes do primeiro paint, já que a leitura síncrona de `matchMedia` no `<script>` é o que evita isso).
+In the `Organize` branch the same `os.SameFile` is correct: both `Stat`s are done at comparison time, with both paths existing.
+
+**Don't "fix" by:** replacing the alias with an `os.Stat(dest)` saved before the swap ("it's the same thing and reads better" — it is not, and it only breaks on Windows); marking the test `t.Skip` on Windows (cross-device/hardlink is exactly what that job exists to cover); deleting the old-file assertion because it looks redundant with the content one (a mutation that skips the replacement fails both, but the identity one is what distinguishes "relinked" from "overwrote in place").
 
 ---
 
-### 37. Tabelas de largura fixa só a partir de `lg`, e `min-w-0` obrigatório em item de grid que contém faixa rolável
+### 36. `AppShell` picks rail vs tab bar in JS (`matchMedia`), not with `hidden md:flex`/`md:hidden`
 
-**Location:** `frontend/src/routes/Status.svelte` (`LIST_GRID` e o card herói), `Downloads.svelte` (`ROW_GRID`/`ROW_INDENT`), `AnimeDetail.svelte` (`EP_GRID`). Coberto por `frontend/tests/smoke/layout.spec.ts`.
+**Location:** `frontend/src/components/shell/AppShell.svelte`, `NavRail.svelte`, `NavTabBar.svelte`, `MoreMenu.svelte` (UI redesign Phase 1, spec §5).
 
-**What it looks like:** duas coisas que parecem redundantes e não são.
+**What it looks like:** `AppShell` keeps a boolean `isDesktop` (initialized synchronously from `window.matchMedia('(min-width: 768px)')`, updated by a `change` listener) and mounts `{#if isDesktop}<NavRail>{:else}<NavTabBar>{/if}` — only one of the two exists in the DOM at any moment. The more common Tailwind pattern for "rail on desktop, tab bar on mobile" would be to mount both always and hide them by class (`hidden md:flex` / `md:hidden`), as the old `Layout.svelte` did for its desktop/mobile block.
 
-1. A faixa "Downloads ativos" do card herói tem `overflow-x-auto` **e** a `<section>` em volta tem `min-w-0`. Parece cinto e suspensório — o `overflow-x-auto` sozinho deveria bastar para a faixa rolar.
-2. As três tabelas trocam para cards empilhados em `lg` (1024px), não em `md` (768px), mesmo o app inteiro usando `md` como breakpoint desktop/mobile (inclusive o `matchMedia` da decisão 36, que continua em 768px).
+**Why it's right:** `NavRail` and `NavTabBar` each mount their own `MoreMenu`, which on mobile hosts a `<select id="theme-select-mobile">` (desktop has its own `<select id="theme-select">`, always visible in the rail footer). With both blocks always in the DOM and only hidden by CSS, both would exist at once — two elements with the same control purpose, potentially two duplicated ids if they ever converged, and two interactive "More" menus at the same time for tools that do not respect `display:none` as mere visibility (e.g. Testing Library's `getByLabelText`/`getByRole` find CSS-hidden elements unless the query filters on `hidden: true`, and can fail with "found multiple elements"). Mounting only one of the two in JS eliminates that entire class of problem, at the cost of a `matchMedia` listener — initialized synchronously in the component's `<script>` (before the first render), so there is no flash of the wrong layout.
+
+**Don't "fix" by:** going back to `hidden md:flex`/`md:hidden` "because it's simpler and it's the Tailwind pattern" — it works visually, but reintroduces the dual-DOM that motivated the decision; initializing `isDesktop` only inside `onMount` (would show the wrong layout for a frame before first paint, since the synchronous `matchMedia` read in `<script>` is what prevents that).
+
+---
+
+### 37. Fixed-width tables only from `lg` up, and `min-w-0` is required on a grid item that contains a scroll strip
+
+**Location:** `frontend/src/routes/Status.svelte` (`LIST_GRID` and the hero card), `Downloads.svelte` (`ROW_GRID`/`ROW_INDENT`), `AnimeDetail.svelte` (`EP_GRID`). Covered by `frontend/tests/smoke/layout.spec.ts`.
+
+**What it looks like:** two things that look redundant and are not.
+
+1. The hero card's "Active downloads" strip has `overflow-x-auto` **and** the wrapping `<section>` has `min-w-0`. Looks like belt and suspenders — `overflow-x-auto` alone should be enough for the strip to scroll.
+2. The three tables switch to stacked cards at `lg` (1024px), not at `md` (768px), even though the whole app uses `md` as the desktop/mobile breakpoint (including decision 36's `matchMedia`, which stays at 768px).
 
 **Why it's right:**
 
-1. Item de grid tem `min-width: auto`, ou seja, seu piso é o tamanho intrínseco do conteúdo, não zero. Com muitos downloads a `<section>` era esticada até o max-content e o `overflow-x-auto` **nunca ativava**: medido num grid de 1280px, a section ia a 2494px, a faixa ficava com `clientWidth == scrollWidth` e a coluna da direita saía da tela. Com `min-w-0` a mesma section volta a 677px e a faixa rola de verdade (639px visíveis para 2456px de conteúdo). O `overflow-x-auto` descreve a intenção; o `min-w-0` é o que permite que ela aconteça.
+1. A grid item has `min-width: auto`, i.e. its floor is the content's intrinsic size, not zero. With many downloads the `<section>` was stretched to max-content and `overflow-x-auto` **never activated**: measured on a 1280px grid, the section went to 2494px, the strip had `clientWidth == scrollWidth` and the right-hand column ran off the screen. With `min-w-0` the same section is back to 677px and the strip actually scrolls (639px visible for 2456px of content). `overflow-x-auto` describes the intent; `min-w-0` is what lets it happen.
 
-2. É aritmética, não gosto: as trilhas fixas somam ~754px (Status), ~740px (Downloads) e ~710px (AnimeDetail), enquanto a largura útil em `md` é `768 − 92 (rail) − 48 (padding do main) ≈ 628px`. O corte em `md` estava errado desde sempre — a faixa 768–880px caía em rolagem horizontal — e só não incomodava porque ninguém abre o app nessa largura. `lg` é o primeiro breakpoint em que as colunas cabem. O breakpoint rail-vs-tab-bar continua em 768px de propósito: é sobre o **shell**, não sobre a largura que uma tabela exige.
+2. It is arithmetic, not taste: the fixed tracks add up to ~754px (Status), ~740px (Downloads) and ~710px (AnimeDetail), while the usable width at `md` is `768 − 92 (rail) − 48 (main padding) ≈ 628px`. The cut at `md` was always wrong — the 768–880px band fell into horizontal scroll — and only did not bother anyone because nobody opens the app at that width. `lg` is the first breakpoint where the columns fit. The rail-vs-tab-bar breakpoint stays at 768px on purpose: it is about the **shell**, not about the width a table needs.
 
-**Don't "fix" by:** tirar o `min-w-0` "porque já tem `overflow-x-auto`" (é a ordem invertida: sem `min-w-0` o overflow é decorativo); tirar o `overflow-x-auto` "porque o `min-w-0` já resolve" (aí a faixa corta o conteúdo em vez de rolar); baixar as tabelas de volta para `md` por consistência com o resto do app (refaça a conta acima antes — a largura útil em `md` não cobre nenhuma das três); acrescentar uma coluna de largura fixa sem revisar o comentário de aritmética que mora junto de cada constante de grid.
-
----
-
-### 38. Em cabeçalho `flex-wrap`, o item `flex-1` leva `min-w-[240px]` — e não `min-w-0`
-
-**Location:** `frontend/src/routes/Downloads.svelte` (bloco do título, no topo do template). Coberto por `frontend/tests/smoke/layout.spec.ts` ("subtitle is not squeezed to one word per line").
-
-**What it looks like:** o bloco de título/subtítulo é `min-w-[240px] flex-1`, contrariando o `min-w-0` que a decisão 37 exige nos itens de grid/flex do resto do app.
-
-**Why it's right:** são problemas opostos. `min-w-0` serve para item que **contém uma faixa rolável** e por isso precisa poder encolher abaixo do conteúdo. Aqui o item é vizinho de uma caixa larga (a barra de banda ↓/↑, 433px de max-content) dentro de um container `flex-wrap`, e a quebra de linha de um container flex decide pelo **tamanho principal hipotético** de cada item — que para `flex-1` (flex-basis 0%) é ~0, e `min-width` é justamente o que entra nesse cálculo. Com `min-w-0` o título contribuía ~0, a barra nunca ia para a linha de baixo e o título ficava com as sobras: medido, 7 linhas de subtítulo em 500px e 4 em 768px, uma palavra por linha. O piso de 240px empurra a barra para a próxima linha em qualquer largura em que ela não caiba.
-
-**Don't "fix" by:** trocar por `min-w-0` "para ficar igual ao resto do app" (é o bug de volta — a regra da decisão 37 vale para item que hospeda scroll, não para item vizinho de conteúdo largo); resolver com breakpoint (`flex-col sm:flex-row`) — conserta 375px e deixa a faixa dos 500–768px espremida, que é exatamente onde o sintoma era pior; assumir que `flex-wrap` sozinho já quebra a linha (ele quebra pelo tamanho hipotético, não pelo tamanho final depois de flexionar).
+**Don't "fix" by:** removing `min-w-0` "because it already has `overflow-x-auto`" (that is the inverted order: without `min-w-0` the overflow is decorative); removing `overflow-x-auto` "because `min-w-0` already solves it" (then the strip clips the content instead of scrolling); dropping the tables back to `md` for consistency with the rest of the app (redo the arithmetic above first — usable width at `md` covers none of the three); adding a fixed-width column without revising the arithmetic comment that lives next to each grid constant.
 
 ---
 
-### 39. Faixa de escolhas FINITA quebra linha (`flex-wrap`); faixa de conteúdo ILIMITADO rola
+### 38. In a `flex-wrap` header, the `flex-1` item gets `min-w-[240px]` — not `min-w-0`
 
-**Location:** `frontend/src/components/DownloadsToolbar.svelte` (pills de filtro), o `<nav>` do índice em `frontend/src/routes/Config.svelte`, e a fileira de ações do daemon no cabeçalho de `frontend/src/routes/Status.svelte`. Cobertos por `frontend/tests/smoke/layout.spec.ts` ("every downloads filter pill…", "every config group and exit link…", "status header daemon actions stay on screen").
+**Location:** `frontend/src/routes/Downloads.svelte` (title block, at the top of the template). Covered by `frontend/tests/smoke/layout.spec.ts` ("subtitle is not squeezed to one word per line").
 
-**What it looks like:** as três faixas são `flex flex-wrap`, sem `overflow-x-auto` e sem `min-w-0` — enquanto a faixa "Downloads ativos" do card herói (decisão 37) continua rolável.
+**What it looks like:** the title/subtitle block is `min-w-[240px] flex-1`, contradicting the `min-w-0` that decision 37 requires on grid/flex items in the rest of the app.
 
-A fileira do Status mostra a variante em que o sintoma não é rolagem e sim **corte**: ela era `flex shrink-0 gap-2`, sem faixa rolável nenhuma. Como item de um cabeçalho `flex-wrap`, o `shrink-0` travava sua largura no max-content de uma linha só (358px em `en`, 438px em pt-BR), então ela nunca recebia uma linha estreita em que pudesse quebrar e "Parar Daemon" saía pela direita em ≤414px no português. Tirar o `shrink-0` faz o piso passar a ser o min-content (o botão mais largo) e a quebra acontecer. Medido depois do fix: os botões mantêm 148/150/124px em toda largura — nenhum encolhe, então nenhum rótulo quebra no meio, e o `shrink-0` nos FILHOS (que a decisão pedia para as pills) não foi necessário aqui.
+**Why it's right:** they are opposite problems. `min-w-0` is for an item that **contains a scroll strip** and therefore needs to be able to shrink below its content. Here the item is a neighbour of a wide box (the ↓/↑ bandwidth bar, 433px of max-content) inside a `flex-wrap` container, and a flex container's wrap decides by each item's **hypothetical main size** — which for `flex-1` (flex-basis 0%) is ~0, and `min-width` is exactly what enters that calculation. With `min-w-0` the title contributed ~0, the bar never went to the next line and the title was left with the leftovers: measured, 7 lines of subtitle at 500px and 4 at 768px, one word per line. The 240px floor pushes the bar to the next line at any width where it does not fit.
 
-**Why it's right:** o critério é se a faixa oferece um conjunto FECHADO de escolhas ou uma lista de tamanho arbitrário. Escolha escondida atrás de arrasto é escolha que não existe: o usuário não sabe que há mais. As pills existem para responder "tem algo ali?" pela contagem, e "Semeando"/"Problemas" ficavam fora da vista em tela estreita. O índice do Config tem quatro grupos mais dois links de saída — em 390px, 358px de espaço para 644px de conteúdo, ou seja metade escondida, inclusive "Torrent search" e os dois links, que são o único caminho até Prioridades e Notificações a partir dessa tela. A faixa do herói é diferente porque a lista de downloads ativos não tem teto: nenhum layout põe N torrents na tela, e aí rolar é o degrade correto.
-
-Nenhuma das duas leva `min-w-0`: o mínimo automático do item é o min-content (a pill/rótulo mais largo), que é exatamente o piso desejado — com `min-w-0` o item voltaria a estourar em vez de quebrar.
-
-No índice do Config os divisores são `w-full`, então a quebra acontece neles: as três fileiras resultantes (grupos do dia a dia / grupo avançado / links de saída) são a arquitetura da tela, que no desktop a coluna diz implicitamente.
-
-**Revisão:** até 2026-08-11 esta decisão listava o índice do Config no lado "rolável", classificando-o como "lista longa e homogênea". Estava errado nos fatos — são seis itens, não uma lista longa, e a medição mostrou metade fora da tela. O critério acima ("finito vs. ilimitado") é o que substitui aquele.
-
-**Don't "fix" by:** devolver `shrink-0` à fileira do Status "para os botões não encolherem" (é o bug de volta — `shrink-0` no CONTAINER trava a quebra; o que protege o rótulo é `shrink-0` no filho, e aqui não é nem necessário); devolver `overflow-x-auto` a qualquer das três "por consistência com a faixa do herói" (o herói resolve outro problema — lista sem teto); tirar o `shrink-0` dos itens (passariam a encolher e o rótulo quebraria no meio, em vez de o item inteiro descer de linha); trocar o índice do Config por um `<select>` no mobile (`<option>` não estiliza, então o ponto de "falta preencher" viraria texto, e os dois links de saída deixariam de ser `<a>` — perdendo abrir-em-nova-aba, que é o motivo de serem `<a>`).
+**Don't "fix" by:** swapping to `min-w-0` "to match the rest of the app" (that is the bug back — decision 37's rule is for an item that hosts scroll, not for an item neighbouring wide content); solving it with a breakpoint (`flex-col sm:flex-row`) — that fixes 375px and leaves the 500–768px band squeezed, which is exactly where the symptom was worst; assuming `flex-wrap` alone already wraps the line (it wraps by hypothetical size, not by the final size after flexing).
 
 ---
 
-### 40. O `z-30` do `NavRail` não é redundante com o `z-50` do painel do `MoreMenu`
+### 39. A FINITE choice strip wraps (`flex-wrap`); an UNBOUNDED content strip scrolls
 
-**Location:** `frontend/src/components/shell/NavRail.svelte` (classe do `<nav>`), `MoreMenu.svelte` (painel `absolute z-50`, backdrop `fixed inset-0 z-40`). Coberto por `frontend/tests/smoke/layout.spec.ts` ("the More menu paints above the page content", "a modal still paints above the nav rail").
+**Location:** `frontend/src/components/DownloadsToolbar.svelte` (filter pills), the index `<nav>` in `frontend/src/routes/Config.svelte`, and the daemon-action row in the header of `frontend/src/routes/Status.svelte`. Covered by `frontend/tests/smoke/layout.spec.ts` ("every downloads filter pill…", "every config group and exit link…", "status header daemon actions stay on screen").
 
-**What it looks like:** o painel do menu já é `z-50`, e ainda assim o `<nav>` em volta precisa de `z-30` — parece número sobrando, e a tentação é remover um dos dois.
+**What it looks like:** the three strips are `flex flex-wrap`, with no `overflow-x-auto` and no `min-w-0` — while the hero card's "Active downloads" strip (decision 37) still scrolls.
 
-**Why it's right:** `position: sticky` cria contexto de empilhamento **sempre**, independente de z-index. Sem z-index no `<nav>`, aquele `z-50` só ordena coisas **dentro** do rail, e o rail inteiro pinta na camada z-auto da raiz, em ordem de árvore — perdendo para qualquer elemento posicionado que venha depois no DOM. Foi o que acontecia na tela de Prioridades, cujos cards usavam a classe `.card` do daisyUI (`position: relative`): os cards apareciam na frente do menu aberto. O daisyUI saiu (#91) e aqueles cards não são mais posicionados, então essa causa específica sumiu — o `z-30` fica assim mesmo: ele ordena o rail inteiro contra QUALQUER elemento posicionado que venha depois no DOM, não só contra aquele. Com `z-30` (o mesmo valor do `NavTabBar`, que é `fixed`), o rail inteiro sobe junto. O `z-40` do backdrop e o `z-50` do painel continuam necessários para ordenar o menu **contra o próprio rail**; Modal e Toasts ficam em `z-50` na raiz e por isso continuam acima dos 30 do rail.
+The Status row shows the variant where the symptom is not scroll but **clipping**: it was `flex shrink-0 gap-2`, with no scroll strip at all. As an item of a `flex-wrap` header, `shrink-0` locked its width at the max-content of a single line (358px in `en`, 438px in pt-BR), so it never received a narrow line it could wrap on and "Stop Daemon" ran off the right at ≤414px in Portuguese. Removing `shrink-0` makes the floor the min-content (the widest button) and wrapping happens. Measured after the fix: the buttons keep 148/150/124px at every width — none shrink, so no label wraps in the middle, and `shrink-0` on the CHILDREN (which the decision asked for on the pills) was not needed here.
 
-**Don't "fix" by:** subir o rail para `z-50` "para ficar igual ao painel" (empataria com Modal/Toasts e o diálogo passaria a depender de ordem de árvore); tirar o `z-30` porque "sticky já fica na frente" (ele fica na frente do conteúdo **não posicionado** — qualquer `position: relative` depois no DOM ganha dele); tirar o `z-50` do painel achando que o `z-30` do nav basta (dentro do rail o painel precisa vencer o backdrop `z-40`).
+**Why it's right:** the criterion is whether the strip offers a CLOSED set of choices or a list of arbitrary size. A choice hidden behind a swipe is a choice that does not exist: the user does not know there is more. The pills exist to answer "is there something there?" by count, and "Seeding"/"Problems" sat off-screen on a narrow display. The Config index has four groups plus two exit links — at 390px, 358px of space for 644px of content, i.e. half hidden, including "Torrent search" and the two links, which are the only path to Priorities and Notifications from that screen. The hero strip is different because the active-downloads list has no ceiling: no layout puts N torrents on screen, and then scrolling is the right degrade.
+
+Neither of the two gets `min-w-0`: the item's automatic minimum is min-content (the widest pill/label), which is exactly the desired floor — with `min-w-0` the item would overflow again instead of wrapping.
+
+In the Config index the dividers are `w-full`, so wrapping happens on them: the three resulting rows (day-to-day groups / advanced group / exit links) are the screen's architecture, which on desktop the column already says implicitly.
+
+**Revision:** until 2026-08-11 this decision listed the Config index on the "scrollable" side, classifying it as a "long homogeneous list". That was factually wrong — there are six items, not a long list, and measurement showed half off-screen. The criterion above ("finite vs. unbounded") is what replaces that.
+
+**Don't "fix" by:** putting `shrink-0` back on the Status row "so the buttons don't shrink" (that is the bug back — `shrink-0` on the CONTAINER locks wrapping; what protects the label is `shrink-0` on the child, and here it is not even needed); putting `overflow-x-auto` back on any of the three "for consistency with the hero strip" (the hero solves a different problem — a list with no ceiling); removing `shrink-0` from the items (they would shrink and the label would wrap in the middle, instead of the whole item dropping to the next line); replacing the Config index with a `<select>` on mobile (`<option>` does not style, so the "needs filling in" cue would become text, and the two exit links would stop being `<a>` — losing open-in-new-tab, which is why they are `<a>`).
 
 ---
 
-### 41. A fila de downloads contém TODOS os incompletos, é persistida, e `queued` é o único slug que a rain não produz
+### 40. NavRail's `z-30` is not redundant with the MoreMenu panel's `z-50`
+
+**Location:** `frontend/src/components/shell/NavRail.svelte` (class on the `<nav>`), `MoreMenu.svelte` (panel `absolute z-50`, backdrop `fixed inset-0 z-40`). Covered by `frontend/tests/smoke/layout.spec.ts` ("the More menu paints above the page content", "a modal still paints above the nav rail").
+
+**What it looks like:** the menu panel is already `z-50`, and yet the wrapping `<nav>` still needs `z-30` — looks like a leftover number, and the temptation is to remove one of the two.
+
+**Why it's right:** `position: sticky` creates a stacking context **always**, regardless of z-index. With no z-index on the `<nav>`, that `z-50` only orders things **inside** the rail, and the whole rail paints on the root's z-auto layer, in tree order — losing to any positioned element that comes later in the DOM. That is what happened on the Priorities screen, whose cards used daisyUI's `.card` class (`position: relative`): the cards appeared in front of the open menu. daisyUI left (#91) and those cards are no longer positioned, so that specific cause is gone — `z-30` stays anyway: it orders the whole rail against ANY positioned element that comes later in the DOM, not only against that one. With `z-30` (the same value as `NavTabBar`, which is `fixed`), the whole rail rises together. The backdrop's `z-40` and the panel's `z-50` are still needed to order the menu **against the rail itself**; Modal and Toasts sit at `z-50` on the root and therefore stay above the rail's 30.
+
+**Don't "fix" by:** raising the rail to `z-50` "to match the panel" (it would tie with Modal/Toasts and the dialog would start depending on tree order); removing `z-30` because "sticky already sits in front" (it sits in front of **unpositioned** content — any later `position: relative` in the DOM beats it); removing the panel's `z-50` thinking the nav's `z-30` is enough (inside the rail the panel needs to beat the `z-40` backdrop).
+
+---
+
+### 41. The download queue holds EVERY incomplete torrent, is persisted, and `queued` is the only slug rain never produces
 
 **Location:** `torrents/queue.go` (`queue`, `enforce`, `markQueued`, `load`/`save`), `torrents/sessionmanager.go`, `torrents/status.go` (`StatusQueued`), `files.Config.MaxConcurrentDownloads`. Frontend: `lib/utils/torrentStatus.ts`, `torrentFilters.ts` (`KNOWN_STATUSES`, `isProblemTorrent`, `prioritizeOrder`), `routes/Downloads.svelte` (`canPause`/`canResume`/`canPrioritize`).
 
-**What it looks like:** um monte de coisa que parece descuido, e é toda deliberada.
+**What it looks like:** a pile of things that look like sloppiness, and all of it is deliberate.
 
-**(a) A fila é uma lista de TUDO, não só de quem ela pausou.** `queue.order` contém todo torrent incompleto que a sessão conhece; os `limit` primeiros que não estão em `queue.paused` baixam. A versão anterior guardava só os hashes que a fila tinha pausado, e os três defeitos que isso produzia eram estruturais: priorizar com o limite cheio não privava ninguém (não havia excesso a rebaixar nem folga a promover, então o priorizado só começava quando um slot vagasse por conta própria); priorizar em lote invertia a ordem (cada `pushFront` passava na frente do anterior); e não havia posição estável para mostrar na tela. Com a fila contendo tudo, nada é inserido no meio — a posição só muda por ação do usuário — e some a pergunta "onde este hash entra". Isso apagou `insertByAddedAt`, `leastProgressed` e o desempate por progresso. `AddedAt` sobrevive por um motivo só: dar ordem inicial aos torrents que a fila ainda não conhece (passo 2 do `enforce`).
+**(a) The queue is a list of EVERYTHING, not only of what it paused.** `queue.order` holds every incomplete torrent the session knows; the first `limit` that are not in `queue.paused` download. The previous version stored only the hashes the queue had paused, and the three defects that produced were structural: prioritizing with the limit full deprived nobody (there was no excess to demote and no slack to promote, so the prioritized one only started when a slot freed on its own); batch prioritize inverted the order (each `pushFront` jumped ahead of the previous one); and there was no stable position to show on screen. With the queue holding everything, nothing is inserted in the middle — position only changes by user action — and the question "where does this hash go" disappears. That deleted `insertByAddedAt`, `leastProgressed` and the progress tie-break. `AddedAt` survives for one reason only: to give initial order to torrents the queue does not know yet (`enforce` step 2).
 
-**(b) `enforce` é reconciliação, não reação a evento — e o passo 0 é o que impede a fila de morrer em todo boot.** `SessionManager.list()` devolve `nil` enquanto não há sessão e slice vazio **não-nil** para uma sessão sem torrents. `nil` significa "não sei nada", não "não há nada": sem a guarda, o passo 1 podaria `order`/`paused` inteiros e o passo 5 gravaria o arquivo vazio por cima — em **todo** boot, porque `verification.go` chama `SetMaxActiveDownloads` (que roda `enforce`) **antes** do `Ensure`. É também o que garante que uma falha se conserta sozinha: todo passe de verificação roda `SetMaxActiveDownloads`, então um `pause` que a rain recusou ou um `stopping` que ficou no meio do caminho se resolve no ciclo seguinte, sem ticker novo nenhum.
+**(b) `enforce` is reconciliation, not event reaction — and step 0 is what stops the queue from dying on every boot.** `SessionManager.list()` returns `nil` while there is no session and a **non-nil** empty slice for a session with no torrents. `nil` means "I know nothing", not "there is nothing": without the guard, step 1 would prune `order`/`paused` wholesale and step 5 would write the empty file over the top — on **every** boot, because `verification.go` calls `SetMaxActiveDownloads` (which runs `enforce`) **before** `Ensure`. It is also what guarantees a failure fixes itself: every verification pass runs `SetMaxActiveDownloads`, so a `pause` rain refused or a `stopping` left mid-way resolves on the next cycle, with no new ticker.
 
-**(c) O passo 4 itera `order`, NUNCA a sessão.** Torrent completo não entra em `order` (seeding não ocupa slot), então varrer a sessão marcaria todo seeder como "não deveria estar ativo" e **pausaria a biblioteca inteira**. `order` é a lista dos incompletos e é exatamente o conjunto sobre o qual a fila tem autoridade; o que está fora dela a fila não toca, nem para pausar nem para retomar. Por isso `Pause`/`Resume` de um torrent completo **bypassam a fila nos dois sentidos**, delegando direto para a rain — sem o bypass, e com o passo 4 restrito a `order` (como deve ser), pausar um seeder não pararia nada. Consequência: `paused` guarda só hashes incompletos.
+**(c) Step 4 iterates `order`, NEVER the session.** A complete torrent does not enter `order` (seeding does not occupy a slot), so walking the session would mark every seeder as "should not be active" and **pause the entire library**. `order` is the list of incompletes and is exactly the set the queue has authority over; what is outside it the queue does not touch, neither to pause nor to resume. That is why `Pause`/`Resume` of a complete torrent **bypass the queue in both directions**, delegating straight to rain — without the bypass, and with step 4 restricted to `order` (as it must be), pausing a seeder would stop nothing. Consequence: `paused` holds only incomplete hashes.
 
-**(d) `stopping` não é alvo de nada.** A pausa da rain é assíncrona (`Torrent.Stop()` volta na hora, o status só chega a `stopped` até ~5s depois). Tratá-lo como parado faria o `enforce` mandar `resume` por cima de um stop em andamento; tratá-lo como rodando faria o passo 4 pausá-lo de novo. Fica de fora dos dois lados e o passe seguinte decide sobre um estado estável.
+**(d) `stopping` is a target of nothing.** rain's pause is asynchronous (`Torrent.Stop()` returns immediately, the status only reaches `stopped` up to ~5s later). Treating it as stopped would make `enforce` send `resume` over a stop in progress; treating it as running would make step 4 pause it again. It stays out of both sides and the next pass decides on a stable state.
 
-**(e) A preempção escolhe por POSIÇÃO, não por progresso.** Sai o último dos ativos em ordem de fila — um download em 95% pode ser pausado se estiver depois na fila, coisa que o `leastProgressed` antigo evitava. Aceito: posição é o eixo que o usuário controla, e a alternativa é ressuscitar a peça que (a) apagou. Nada é perdido de qualquer forma: a rain zera `Bytes.Completed` ao parar, mas o bitfield das peças sobrevive.
+**(e) Preemption picks by POSITION, not by progress.** The last of the actives in queue order leaves — a download at 95% can be paused if it sits later in the queue, which the old `leastProgressed` avoided. Accepted: position is the axis the user controls, and the alternative is resurrecting the piece (a) deleted. Nothing is lost either way: rain zeroes `Bytes.Completed` on stop, but the piece bitfield survives.
 
-**(f) `Resume` põe no FIM da fila, não inicia na hora.** Com limite de downloads simultâneos, um resume que iniciasse incondicionalmente furaria o limite em silêncio — e um limite que a UI mostra sendo violado é um limite em que ninguém confia. Quem quer "começa agora" chama `Prioritize`, que vai para a frente e preempta. Por isso a linha de um enfileirado tem **três** botões, cada um numa direção: Priorizar sobe, Play desce para o fim, Pause tira da rotação. Downloads manuais usam `daemon.addAndPrioritize` — furam a fila, não o limite.
+**(f) `Resume` puts it at the END of the queue, it does not start immediately.** With a concurrent-download limit, a resume that started unconditionally would silently punch through the limit — and a limit the UI shows being violated is a limit nobody trusts. Whoever wants "start now" calls `Prioritize`, which goes to the front and preempts. That is why a queued row has **three** buttons, each in one direction: Prioritize goes up, Play goes down to the end, Pause takes it out of rotation. Manual downloads use `daemon.addAndPrioritize` — they punch through the queue, not the limit.
 
-**(g) `queued` é slug de status, não campo booleano — e a posição sai do mesmo mapa.** É o único valor de `TorrentInfo.Status` que não sai de `statusSlug()`: para a rain um enfileirado é só mais um torrent parado. A fonte é `q.queued`, o mapa que o passo 3 acabou de calcular, **não** `order` — marcar por pertencer a `order` pintaria a tela inteira de `queued`, já que agora ela contém os ativos também. Quem está em `paused` mostra `stopped` (o que a rain reporta), e `queued` fica significando só "a fila vai chegar nele". `QueuePosition` 0 = não enfileirado, o que inclui todo pausado: ele tem posição em `order`, mas ela não prevê nada, e publicar um número que não vai acontecer é pior do que não publicar nenhum. Quando um `pause` falha, o hash **sai de `q.queued`** mantendo a posição em `order` — a tela mostra o que está acontecendo, ao custo de um buraco na numeração que dura até o próximo passe.
+**(g) `queued` is a status slug, not a boolean field — and the position comes from the same map.** It is the only `TorrentInfo.Status` value that does not come from `statusSlug()`: for rain a queued torrent is just another stopped torrent. The source is `q.queued`, the map step 3 just computed, **not** `order` — marking by belonging to `order` would paint the whole screen `queued`, since it now holds the actives too. Whoever is in `paused` shows `stopped` (what rain reports), and `queued` means only "the queue will get to it". `QueuePosition` 0 = not queued, which includes every paused one: it has a position in `order`, but that position predicts nothing, and publishing a number that will not happen is worse than publishing none. When a `pause` fails, the hash **leaves `q.queued`** keeping its position in `order` — the screen shows what is happening, at the cost of a hole in the numbering that lasts until the next pass.
 
-**(h) A fila é persistida em `queue.json`, ao lado do banco de resume.** Mesmo lugar e mesmo motivo do `download_root.id`: é estado do torrent client, não configuração do usuário, e precisa acompanhar o banco de resume. Isso mata o teto que a versão anterior marcava com `ponytail:` — a pausa manual agora sobrevive a restart. A "adoção de boot", que rodava a cada sessão criada e retomava por engano o que o usuário tinha pausado, encolheu para um **latch de uma vez só**: quando não existe `queue.json`, a leitura arma `seedPaused` e o primeiro `enforce` **com sessão** marca como `paused` os incompletos que a rain reporta parados. Não dá para semear na leitura — em `NewSessionManager` ainda não existe sessão para consultar. O preço, real e inevitável: nesse boot de upgrade os torrents que a fila antiga (só memória) pausou são indistinguíveis dos que o usuário pausou, então os dois grupos congelam e precisam de um clique em Play ou Priorizar. É a troca certa — congelar é visível na tela e custa um clique; retomar sozinho é invisível e desfaz uma decisão do usuário gastando banda. Acontece uma vez na vida da instalação, e o boot loga quantos hashes foram semeados.
+**(h) The queue is persisted in `queue.json`, next to the resume db.** Same place and same reason as `download_root.id`: it is torrent-client state, not user configuration, and it needs to follow the resume db. That kills the ceiling the previous version marked with `ponytail:` — a manual pause now survives restart. The "boot adoption", which ran on every session created and resumed by mistake what the user had paused, shrank to a **one-shot latch**: when `queue.json` does not exist, the read arms `seedPaused` and the first `enforce` **with a session** marks as `paused` the incompletes rain reports stopped. It cannot seed on the read — in `NewSessionManager` there is still no session to query. The cost, real and unavoidable: on that upgrade boot the torrents the old queue (memory only) paused are indistinguishable from the ones the user paused, so both groups freeze and need a click on Play or Prioritize. That is the right trade — freezing is visible on screen and costs a click; resuming on its own is invisible and undoes a user decision while spending bandwidth. It happens once in the life of the install, and boot logs how many hashes were seeded.
 
-**(i) O lote ignora o que o individual rejeita.** `POST /torrents/prioritize` aplica **na ordem recebida** (quem decide é o frontend, que sabe o que o usuário clicou) e ignora hash desconhecido ou já completo: uma lista de 12 episódios não pode falhar inteira porque um deles terminou de baixar entre o render e o clique. `POST /torrents/{hash}/prioritize` mantém os erros de sempre — a validação vive em `SessionManager.Prioritize(hash)`, que checa **antes** de delegar para `PrioritizeAll`. Não é o mesmo que N chamadas ao endpoint individual: aquelas se atropelariam e inverteriam o lote. A mensagem de resultado no frontend também foge do `{success} of {total}` das outras ações em lote — é **uma** requisição, então não existe sucesso parcial para contar, e o denominador nem é verificável do lado do cliente.
+**(i) The batch ignores what the individual rejects.** `POST /torrents/prioritize` applies **in the order received** (the frontend decides, it knows what the user clicked) and ignores an unknown or already-complete hash: a list of 12 episodes cannot fail entirely because one of them finished downloading between the render and the click. `POST /torrents/{hash}/prioritize` keeps the usual errors — validation lives in `SessionManager.Prioritize(hash)`, which checks **before** delegating to `PrioritizeAll`. That is not the same as N calls to the individual endpoint: those would race each other and invert the batch. The frontend result message also leaves the `{success} of {total}` of the other batch actions — it is **one** request, so there is no partial success to count, and the denominator is not even verifiable on the client.
 
-**Don't "fix" by:** iterar a sessão em vez de `order` no passo 4 (pausa **todo seeder** — ver (c)); chamar `m.Get`/`m.List` de dentro de `PrioritizeAll` (passam por `markQueued`, que pega `queue.mu`: **deadlock**, o mesmo que a linha abaixo descreve para `enforce`); fazer `enforce` ler via `SessionManager.List()` em vez de `list()` (idem — foi assim que a primeira versão travou `TestSessionManagerDetectsRootSwap`); fazer a fila chamar `Pause`/`Resume` públicos em vez de `pause`/`resume` (aí sim recursão infinita); atualizar `lastSaved` sem o `Rename` ter dado certo (uma falha transitória de disco congelaria o arquivo na versão velha para sempre, porque o "só grava quando muda" nunca mais dispararia); inverter a ordem `paused`-antes-do-`pause` em `SessionManager.Pause` (um `enforce` disparado por uma conclusão promoveria justamente o torrent que o usuário está parando); tratar `all == nil` como sessão vazia no passo 0 (apaga a fila persistida em todo boot, silenciosamente); tirar `queued` de `isProblemTorrent` (0 peers é a definição de estar enfileirado, e a pill de problemas ficaria vermelha toda vez que o limite funcionasse); deixar torrent completo contar contra o limite (seeding não custa banda de download e parar de semear é o oposto do que se quer); pôr a posição da fila dentro de `statusLabel()` (a mesma função monta o filtro de status da toolbar, onde "Na fila #7" não significa nada); reordenar ou renumerar as linhas por grupo para os números ficarem contíguos (é justamente a não-contiguidade que comunica que a fila é global).
+**Don't "fix" by:** iterating the session instead of `order` at step 4 (pauses **every seeder** — see (c)); calling `m.Get`/`m.List` from inside `PrioritizeAll` (they go through `markQueued`, which takes `queue.mu`: **deadlock**, the same the line below describes for `enforce`); making `enforce` read via `SessionManager.List()` instead of `list()` (same — that is how the first version hung `TestSessionManagerDetectsRootSwap`); making the queue call the public `Pause`/`Resume` instead of `pause`/`resume` (that really is infinite recursion); updating `lastSaved` without the `Rename` having succeeded (a transient disk failure would freeze the file on the old version forever, because "only write when it changed" would never fire again); inverting the `paused`-before-`pause` order in `SessionManager.Pause` (an `enforce` fired by a completion would promote exactly the torrent the user is stopping); treating `all == nil` as an empty session at step 0 (wipes the persisted queue on every boot, silently); taking `queued` out of `isProblemTorrent` (0 peers is the definition of being queued, and the problems pill would go red every time the limit worked); letting a complete torrent count against the limit (seeding costs no download bandwidth and stopping seeding is the opposite of what you want); putting the queue position inside `statusLabel()` (the same function builds the toolbar status filter, where "In queue #7" means nothing); reordering or renumbering the rows by group so the numbers become contiguous (the non-contiguity is exactly what communicates that the queue is global).
 
 ---
 
-### 42. Todo estado persistido do `FileManager` grava com temp+rename sob `m.mu`, e `fetchAniListEntries` devolve `nil` de propósito
+### 42. Every persisted `FileManager` state writes with temp+rename under `m.mu`, and `fetchAniListEntries` returns `nil` on purpose
 
 **Location:** `files/filemanager.go` (`writeAtomic`, `loadSavedEpisodesLocked`, `saveEpisodesLocked`, `loadBlockedEpisodesLocked`, `saveBlockedEpisodesLocked`), `files/parser.go` (`ParseEpisodes`), `api/endpoint_animes.go` (`handleAnimes`, `fetchAniListEntries`, `refreshOrphanAnimes`).
 
-**What it looks like:** dois pares de convenções que parecem cerimônia e são cicatriz de um incidente real (07/08/2026): soltar 5 episódios de uma vez pela UI matou a API por 3 minutos e depois prendeu o daemon numa tempestade de 429 na AniList.
+**What it looks like:** two pairs of conventions that look like ceremony and are the scar of a real incident (2026-08-07): releasing 5 episodes at once from the UI killed the API for 3 minutes and then trapped the daemon in a 429 storm against AniList.
 
-**(a) Os métodos públicos de episódios/bloqueados pegam `m.mu` e delegam para um `...Locked`.** Todos fazem read-modify-write do arquivo inteiro, e a UI dispara vários em paralelo — um `POST /release` por episódio, ao mesmo tempo que o daemon chama `UpsertEpisodes` ao organizar torrents. Sem o lock as atualizações se perdem (todas as goroutines leem o mesmo estado inicial e só a última escrita sobrevive) e, pior, dois `WriteFile` truncando o mesmo caminho ao mesmo tempo deixam o arquivo intercalado. Foi assim que `episodes` corrompeu: `LoadSavedEpisodes` passou a falhar, e como `/api/v1/animes` e `/api/v1/animes/{id}/episodes` tratam esse erro como fatal, **os dois passaram a devolver 500 até o restart**. `Config` e `AnimeSettings` já faziam isso certo; episódios e bloqueados eram o buraco. O mutex não é reentrante — daí os `...Locked`.
+**(a) The public episode/blocked methods take `m.mu` and delegate to a `...Locked`.** All of them do read-modify-write of the whole file, and the UI fires several in parallel — one `POST /release` per episode, at the same time the daemon calls `UpsertEpisodes` while organizing torrents. Without the lock the updates are lost (every goroutine reads the same initial state and only the last write survives) and, worse, two `WriteFile`s truncating the same path at once leave the file interleaved. That is how `episodes` corrupted: `LoadSavedEpisodes` started failing, and because `/api/v1/animes` and `/api/v1/animes/{id}/episodes` treat that error as fatal, **both started returning 500 until restart**. `Config` and `AnimeSettings` already did this right; episodes and blocked were the hole. The mutex is not reentrant — hence the `...Locked`.
 
-**(b) `writeAtomic` (temp+rename) para os quatro arquivos, não só o config.** Todo estado aqui é reescrito por inteiro a cada alteração, então `WriteFile` direto deixa uma janela em que o arquivo está pela metade — um leitor concorrente enxerga truncado, e uma queda de energia no meio (Raspberry Pi, cartão SD) deixa truncado para sempre. O `rename` é atômico no mesmo filesystem, então leitor nenhum vê estado intermediário.
+**(b) `writeAtomic` (temp+rename) for all four files, not only config.** Every state here is rewritten whole on every change, so a direct `WriteFile` leaves a window where the file is half-written — a concurrent reader sees it truncated, and a power drop in the middle (Raspberry Pi, SD card) leaves it truncated forever. `rename` is atomic on the same filesystem, so no reader sees an intermediate state.
 
-**(c) `ParseEpisodes` reportava os DOIS erros** (o formato de texto legado foi removido em #52, então hoje só existe o erro do JSONL). Para um arquivo já migrado o erro do formato antigo é ruído (ele só reclama que a linha é JSON), e reportar só ele escondia a linha JSONL realmente quebrada. A mensagem que produzia — `invalid episode ID '{"episode_id"'` — apontava para a linha 1 de um arquivo cuja linha 1 estava íntegra, e foi o que mais atrasou o diagnóstico do incidente.
+**(c) `ParseEpisodes` used to report BOTH errors** (the legacy text format was removed in #52, so today only the JSONL error exists). For an already-migrated file the old-format error is noise (it only complains that the line is JSON), and reporting only that hid the JSONL line that was actually broken. The message it produced — `invalid episode ID '{"episode_id"'` — pointed at line 1 of a file whose line 1 was intact, and that is what delayed the incident diagnosis the most.
 
-**(d) `fetchAniListEntries` devolve `nil` na falha e slice vazio (não-`nil`) no sucesso — e `handleAnimes` depende disso.** `refreshOrphanAnimes` busca na AniList os animes que ficaram fora do conjunto `covered` (hoje em lote, `GetAnimeInfoByIDs`; até 29/ago/2026, um `GetAnimeInfo` individual por anime). Quando a busca da lista falhava, `covered` ficava vazio e **todo anime com episódio baixado virava órfão**: 16 requests por poll de `/api/v1/animes`, ~10 polls por minuto, com o frontend aberto em duas abas. Isso multiplicava um 500 passageiro da AniList em ~200 requests/min contra um limite de 90 (hoje degradado para 30) — e o 429 resultante fazia a busca da lista falhar de novo, fechando o ciclo: o daemon não saía sozinho. Por isso, com qualquer conta falhando, o refresh de órfãos é **pulado inteiro**: sem a lista não dá para saber o que está coberto, e tratar "não coberto" como "precisa refresh" é justamente o amplificador. **O lote não revoga esta regra**: ele derruba o custo da rajada, mas "cobertura desconhecida" continua sendo o estado em que o refresh não tem o que decidir — e o `mediaId_in` de uma biblioteca inteira ainda é `ceil(N/50)` requisições por conta a cada poll. Os animes continuam visíveis com os dados locais — degradar campo desatualizado é barato, derrubar a AniList não.
+**(d) `fetchAniListEntries` returns `nil` on failure and an empty (non-`nil`) slice on success — and `handleAnimes` depends on that.** `refreshOrphanAnimes` fetches from AniList the animes that fell outside the `covered` set (today in a batch, `GetAnimeInfoByIDs`; until 29 Aug 2026, one individual `GetAnimeInfo` per anime). When the list fetch failed, `covered` sat empty and **every anime with a downloaded episode became an orphan**: 16 requests per `/api/v1/animes` poll, ~10 polls per minute, with the frontend open in two tabs. That multiplied a passing AniList 500 into ~200 requests/min against a limit of 90 (today degraded to 30) — and the resulting 429 made the list fetch fail again, closing the cycle: the daemon did not get out on its own. So, with any account failing, the orphan refresh is **skipped whole**: without the list there is no way to know what is covered, and treating "not covered" as "needs refresh" is exactly the amplifier. **The batch does not revoke this rule**: it drops the burst cost, but "unknown coverage" is still the state in which the refresh has nothing to decide — and a whole library's `mediaId_in` is still `ceil(N/50)` requests per account per poll. The animes stay visible with local data — degrading a stale field is cheap, knocking AniList over is not.
 
-**Don't "fix" by:** chamar o método público de dentro de um `...Locked` (deadlock — `sync.Mutex` não é reentrante); "simplificar" `writeAtomic` de volta para `WriteFile` porque "o lock já resolve" (o lock só protege este processo, não protege queda de energia no meio da escrita); fazer `fetchAniListEntries` devolver slice vazio na falha "porque nil é slice vazio em Go" (apaga a distinção entre "nenhum coberto" e "cobertura desconhecida" e ressuscita a tempestade); tratar o skip do refresh de órfãos como perda de funcionalidade e "só limitar a concorrência" (foi o que o extinto `maxConcurrentOrphanRefresh` fazia, e não ajudava — limitar paralelismo não reduz o total de requests por poll; quem reduziu foi o lote).
+**Don't "fix" by:** calling the public method from inside a `...Locked` (deadlock — `sync.Mutex` is not reentrant); "simplifying" `writeAtomic` back to `WriteFile` because "the lock already solves it" (the lock only protects this process, it does not protect a power drop mid-write); making `fetchAniListEntries` return an empty slice on failure "because nil is an empty slice in Go" (erases the distinction between "none covered" and "coverage unknown" and resurrects the storm); treating the orphan-refresh skip as a loss of functionality and "just limiting concurrency" (that is what the extinct `maxConcurrentOrphanRefresh` did, and it did not help — limiting parallelism does not reduce the total requests per poll; what reduced it was the batch).
 
 ---
 
-### 43. A identidade de um anime é `Media.Id`; status é uma pergunta POR CONTA (download = OR, deleção = AND)
+### 43. An anime's identity is `Media.Id`; status is a PER-ACCOUNT question (download = OR, deletion = AND)
 
 **Location:** `anilist/anilist.go` (`DedupeByMedia`, `GetAnimeInfo`, `GetMediaListStatus`, `GetMediaIDForEntry`), `daemon/verification.go` (`searchAnilist`, `deletableMediaIDs`, `allAccountsAgreeOnDelete`), `daemon/migration.go` (`MigrateAnimeIDsToMedia`), `api/endpoint_animes.go`.
 
-**What it looks like:** três coisas que parecem exageradas — `GetAnimeInfo` recebe a lista de usernames e faz uma requisição por conta para buscar UM anime; `DedupeByMedia` avisa no comentário que ninguém pode ler o `Status` do resultado; e `allAccountsAgreeOnDelete` dispara uma consulta extra por conta que não reportou o anime.
+**What it looks like:** three things that look overdone — `GetAnimeInfo` takes the username list and makes one request per account to fetch ONE anime; `DedupeByMedia` warns in the comment that nobody may read the result's `Status`; and `allAccountsAgreeOnDelete` fires an extra query per account that did not report the anime.
 
-**Why it's right:** `MediaList.Id` é o id da **entrada**, que é por conta — o mesmo anime em duas contas chega como duas entradas com ids diferentes e o mesmo `Media.Id`. Enquanto o `AnimeID` gravado era o id da entrada, ele apontava para **uma** das contas, e o `GET /animes` listava o anime duas vezes: uma sob a chave `id:<AnimeID>` vinda do disco e outra pelo nome, porque a entrada da outra conta não batia com nada conhecido (bug real: "From Old Country Bumpkin to Master Swordsman II", entradas 488911345 e 583631757, media 194829). Pior que a duplicata: qual entrada "vence" dependia do progresso, então o id gravado em disco **mudava** conforme o usuário assistia, e a deleção por status, as settings por anime e a tela de detalhe passavam a procurar por um id que metade dos registros não tinha.
+**Why it's right:** `MediaList.Id` is the **entry** id, which is per account — the same anime on two accounts arrives as two entries with different ids and the same `Media.Id`. While the stored `AnimeID` was the entry id, it pointed at **one** of the accounts, and `GET /animes` listed the anime twice: once under the `id:<AnimeID>` key from disk and once by name, because the other account's entry matched nothing known (real bug: "From Old Country Bumpkin to Master Swordsman II", entries 488911345 and 583631757, media 194829). Worse than the duplicate: which entry "won" depended on progress, so the id stored on disk **changed** as the user watched, and status deletion, per-anime settings and the detail screen started looking for an id that half the records did not have.
 
-Com `Media.Id` como identidade isso some por construção. O que sobra é o que a identidade única *não* resolve: cada conta tem seu próprio `status` e `progress` para a mesma mídia, e colapsar os dois numa entrada só significa escolher. As escolhas são deliberadamente assimétricas, porque os erros não custam o mesmo:
+With `Media.Id` as identity that disappears by construction. What remains is what a unique identity does *not* solve: each account has its own `status` and `progress` for the same media, and collapsing the two into one entry means choosing. The choices are deliberately asymmetric, because the errors do not cost the same:
 
-- **`progress`: o MENOR entre as contas** (`DedupeByMedia`). Um episódio só é "assistido" quando todas as contas o viram; errar para o lado alto apaga episódio que alguém ainda não assistiu.
-- **Download: OR** — basta UMA conta ter o anime em status de download. Já sai de graça da união das listas em `searchAnilist`, já que cada busca é filtrada por `status_in` no servidor.
-- **Deleção: AND** — TODAS as contas que têm o anime precisam tê-lo em algum status de deleção, e não precisa ser o mesmo (`DROPPED` numa e `COMPLETED` noutra apaga). Uma conta que **não acompanha** o anime não vota; uma que o tem em status neutro (`PLANNING`) **veta**. Distinguir esses dois casos é exatamente o que a consulta extra de `allAccountsAgreeOnDelete` compra: a busca por lista só traz os deletáveis, então "não veio na lista" é ambíguo. Ela só roda para anime **com episódio em disco** que alguma conta quer apagar — um conjunto que se esvazia sozinho, porque o anime some do disco no mesmo passe.
+- **`progress`: the LOWEST among the accounts** (`DedupeByMedia`). An episode is only "watched" when every account has seen it; erring high deletes an episode someone has not watched yet.
+- **Download: OR** — ONE account having the anime in a download status is enough. That already falls out of the union of lists in `searchAnilist`, since each fetch is filtered by `status_in` on the server.
+- **Deletion: AND** — EVERY account that has the anime must have it in some deletion status, and they need not be the same (`DROPPED` on one and `COMPLETED` on another deletes). An account that **does not track** the anime does not vote; one that has it in a neutral status (`PLANNING`) **vetoes**. Distinguishing those two cases is exactly what `allAccountsAgreeOnDelete`'s extra query buys: the list fetch only brings the deletable ones, so "it did not come back in the list" is ambiguous. It only runs for an anime **with an episode on disk** that some account wants deleted — a set that empties itself, because the anime leaves disk on the same pass.
 
-Consequência direta: **ninguém pode ler o `Status` da entrada vencedora do dedup** — ele é de uma conta arbitrária. Quem responde sobre status é `deletableMediaIDs`.
+Direct consequence: **nobody may read the `Status` of the dedup winner** — it belongs to an arbitrary account. Who answers about status is `deletableMediaIDs`.
 
-**Migração:** `MigrateAnimeIDsToMedia` resolve cada `anime_id` antigo via `GetMediaIDForEntry` e reescreve `downloaded_episodes` e `anime_settings`, marcando `anime_ids_are_media_ids` no config. Roda no boot **e** no topo do passe de verificação, e o passe **aborta** enquanto ela não tiver rodado: com os ids no formato antigo nada em disco casa com a AniList, e um passe nesse estado rebaixaria a biblioteca inteira. Só escreve depois de resolver tudo, então uma falha de rede no meio não deixa metade convertida. Entradas que já não existem na AniList (404) ficam com o id antigo e são apenas logadas — os episódios continuam em disco.
+**Migration:** `MigrateAnimeIDsToMedia` resolves each old `anime_id` via `GetMediaIDForEntry` and rewrites `downloaded_episodes` and `anime_settings`, marking `anime_ids_are_media_ids` on the config. It runs at boot **and** at the top of the verification pass, and the pass **aborts** until it has run: with ids in the old format nothing on disk matches AniList, and a pass in that state would re-download the entire library. It only writes after resolving everything, so a network failure in the middle does not leave half converted. Entries that no longer exist on AniList (404) keep the old id and are only logged — the episodes stay on disk.
 
-**Don't "fix" by:** deduplicar por nome (dois animes distintos podem compartilhar título em inglês, e o nome de um registro vindo só do `episodes.json` não vem da AniList); tirar o `media { id }` de `GetFrontendAnimeList`/`GetAllCurrentAnime` por "complexidade" (é um escalar, e sem ele a chave do dedup é `0` — todas as entradas caem no ramo "sem media id" e o bug volta inteiro, silenciosamente); ramificar em `MediaList.Status` depois do dedup (é de uma conta sorteada); trocar o veto por "qualquer conta em status de deleção apaga" (basta uma conta completar um anime para os episódios sumirem debaixo de quem ainda assiste); tratar conta com busca falhada como concordância (transformaria uma falha passageira da AniList em deleção de arquivo, que é irreversível); rodar a migração sem a marca de conclusão (na segunda vez ela leria ids de mídia como ids de entrada).
-
----
-
-### 44. O `tvshow.nfo` é escrito DEPOIS dos hardlinks, nunca sobrescreve, e falhar nele não falha o organize
-
-**Location:** `internal/files/librarian.go` (`writeShowNFO`, chamado no fim de `Organize`, e `BackfillShowNFOs`); `internal/daemon/jobs.go` (`organizeTorrent` preenche `OrganizeRequest.AnimeID`); `cmd/daemon/main.go` (chamada do backfill no boot).
-
-**What it looks like:** o nfo parece que deveria ser escrito logo depois do `MkdirAll` (é metadado da pasta, não dos arquivos), e um erro ao escrevê-lo parece um erro do `Organize`.
-
-**Why it's right:** três coisas, todas por causa de invariantes que já existiam:
-
-- **Depois dos links:** o rollback de `Organize` é `cleanupIfEmpty`, que usa `os.Remove` e só funciona em pasta **vazia**. Um nfo escrito antes de um hardlink que falha (cross-device, permissão) deixaria a pasta não-vazia e um diretório órfão na biblioteca a cada retry.
-- **Não sobrescreve:** se o usuário corrigiu o match à mão no Jellyfin (que reescreve o nfo), o próximo episódio do mesmo anime não pode desfazer isso. `Organize` roda uma vez por torrent, então isso acontece o tempo todo.
-- **Só loga em falha:** os hardlinks são o produto; devolver erro aqui faria o job repetir (backoff, e depois dropar) um trabalho que já deu certo, e o `LibraryPaths` nunca seria gravado.
-
-O `AnimeID` é o id de **mídia** da AniList (decisions.md #43) — vem de `EpisodeStruct.AnimeID` já migrado. `AnimeID == 0` (registro antigo não resolvível) simplesmente pula o nfo: o Jellyfin volta a adivinhar pelo nome, que é o comportamento anterior.
-
-**O backfill existe porque `Organize` nao re-roda:** `organizeTorrent` sai cedo quando os episodios do hash ja tem `LibraryPaths`, e `reconcileLibrary` so enfileira quem tem `LibraryPaths` vazio. Sem `BackfillShowNFOs` um anime ja terminado nunca ganharia o arquivo (um em andamento ganharia no proximo episodio). Ele roda **todo boot** e nao tem flag de "ja rodou": o "nao sobrescreve" ja o torna idempotente, e uma flag so criaria um estado a mais para dessincronizar. A pasta vem de `LibraryPaths`, nao de `sanitizeName(AnimeName)` — e o unico caminho que com certeza casa com o que existe em disco depois de renomeacoes manuais ou mudancas na sanitizacao.
-
-**Ele e gated pela migracao de ids** (`main.go`, ramo `else` de `MigrateAnimeIDsToMedia`): com os ids no formato antigo o nfo sairia com um id de ENTRADA, e como nunca e reescrito isso seria permanente. Roda no `else` de propósito — falha de migracao apenas adia o backfill para o proximo boot.
-
-**Requer no Jellyfin:** o plugin `jellyfin-plugin-anilist` como provedor de metadados; sem ele o `uniqueid type="anilist"` é ignorado.
-
-**Don't "fix" by:** mover a escrita para junto do `MkdirAll`; sobrescrever sempre "para manter sincronizado"; propagar o erro de escrita para o retorno de `Organize`; dar uma flag de config ao backfill; derivar a pasta do backfill do nome do anime; rodar o backfill antes/independente da migracao de ids.
+**Don't "fix" by:** deduplicating by name (two distinct animes can share an English title, and the name of a record that only came from `episodes.json` does not come from AniList); taking `media { id }` out of `GetFrontendAnimeList`/`GetAllCurrentAnime` for "complexity" (it is a scalar, and without it the dedup key is `0` — every entry falls into the "no media id" branch and the bug comes back whole, silently); branching on `MediaList.Status` after the dedup (it belongs to a lottery account); swapping the veto for "any account in a deletion status deletes" (one account completing an anime is enough for the episodes to vanish from under whoever is still watching); treating an account whose fetch failed as agreement (would turn a passing AniList failure into a file deletion, which is irreversible); running the migration without the completion mark (the second time it would read media ids as entry ids).
 
 ---
 
-### 45. Uma pasta de biblioteca por ENTRADA da AniList — o marcador de season fica no nome
+### 44. `tvshow.nfo` is written AFTER the hardlinks, never overwrites, and failing it does not fail organize
 
-**Location:** `internal/files/librarian.go` — `sanitizeName` (era `sanitizeFolderName` + `sanitizeFileName`, agora uma so) e o `destDir` em `Organize`; teste `TestSanitizeNameKeepsSeasonMarker`.
+**Location:** `internal/files/librarian.go` (`writeShowNFO`, called at the end of `Organize`, and `BackfillShowNFOs`); `internal/daemon/jobs.go` (`organizeTorrent` fills `OrganizeRequest.AnimeID`); `cmd/daemon/main.go` (backfill call at boot).
 
-**What it looks like:** o layout "certo" pro Jellyfin/TVDB e uma pasta por serie com `Season 03/` dentro, e ate `cd496c3` o codigo ia meio caminho nessa direcao: um `seasonPattern` apagava "Season 2"/"S2"/"2nd Season"/"Cour 2" do nome da pasta, juntando todas as seasons numa pasta so.
+**What it looks like:** the nfo looks like it should be written right after `MkdirAll` (it is folder metadata, not file metadata), and an error writing it looks like an `Organize` error.
 
-**Why it's right:** na AniList **nao existe** serie com varias seasons. Cada season e uma midia propria, com id, capa, sinopse e numeracao de episodio comecando em 1 — e os nossos dados sao exatamente assim (um `AnimeID` por season, `EpisodeNumber` reiniciando). Juntar as seasons numa pasta so obrigava o Jellyfin a escolher UMA entrada pra pasta inteira, e ele escolhia a season 1: toda season nova aparecia com a capa e os metadados da primeira (relato real: Mushoku Tensei — as entradas 108465, 127720, 146065 e 178789 caiam todas em `Mushoku Tensei Jobless Reincarnation`). O agrupamento nem era coerente: o regex comia "Season 2" mas nao "Part", entao "Season 2 Part 2" ia parar numa quinta pasta.
+**Why it's right:** three things, all because of invariants that already existed:
 
-Com o `tvshow.nfo` (decisions.md #44) isso deixaria de ser um palpite e viraria erro fixo: a primeira season a chegar na pasta gravaria o `uniqueid` dela e, como o nfo nunca e sobrescrito, prenderia a pasta naquela season para sempre.
+- **After the links:** `Organize`'s rollback is `cleanupIfEmpty`, which uses `os.Remove` and only works on an **empty** folder. An nfo written before a hardlink that fails (cross-device, permission) would leave the folder non-empty and an orphan directory in the library on every retry.
+- **Does not overwrite:** if the user corrected the match by hand in Jellyfin (which rewrites the nfo), the next episode of the same anime cannot undo that. `Organize` runs once per torrent, so this happens all the time.
+- **Only logs on failure:** the hardlinks are the product; returning an error here would make the job retry (backoff, then drop) work that already succeeded, and `LibraryPaths` would never be written.
 
-O layout de franquia com `Season NN/` tambem nao tem como funcionar aqui: o `tvshow.nfo` da franquia precisaria de um id que a AniList nao tem, e o `jellyfin-plugin-anilist` nao fornece metadado por season. Uma pasta por entrada e ao mesmo tempo o diff menor e o unico modelo que casa com o provider.
+`AnimeID` is AniList's **media** id (decisions.md #43) — it comes from an already-migrated `EpisodeStruct.AnimeID`. `AnimeID == 0` (old unresolvable record) simply skips the nfo: Jellyfin goes back to guessing by name, which is the previous behaviour.
 
-Como as duas funcoes de sanitizacao ficaram identicas depois de tirar o regex, viraram uma: `sanitizeName`.
+**The backfill exists because `Organize` does not re-run:** `organizeTorrent` exits early when the hash's episodes already have `LibraryPaths`, and `reconcileLibrary` only enqueues whoever has empty `LibraryPaths`. Without `BackfillShowNFOs` an already-finished anime would never get the file (an in-progress one would get it on the next episode). It runs **every boot** and has no "already ran" flag: "does not overwrite" already makes it idempotent, and a flag would only create one more piece of state to desync. The folder comes from `LibraryPaths`, not from `sanitizeName(AnimeName)` — the only path that is guaranteed to match what exists on disk after manual renames or sanitization changes.
 
-**Don't "fix" by:** reintroduzir o strip de season "pra agrupar a franquia"; criar subpastas `Season NN/` (a numeracao de episodio da AniList e por entrada, entao E01 da season 3 e mesmo o episodio 1 da midia dela, nao o 25 da franquia); deduplicar pastas por titulo-base.
+**It is gated by the id migration** (`main.go`, `else` branch of `MigrateAnimeIDsToMedia`): with ids in the old format the nfo would go out with an ENTRY id, and because it is never rewritten that would be permanent. It runs in the `else` on purpose — a migration failure only postpones the backfill to the next boot.
+
+**Requires in Jellyfin:** the `jellyfin-plugin-anilist` plugin as a metadata provider; without it `uniqueid type="anilist"` is ignored.
+
+**Don't "fix" by:** moving the write next to `MkdirAll`; always overwriting "to keep it in sync"; propagating the write error to `Organize`'s return; giving the backfill a config flag; deriving the backfill folder from the anime name; running the backfill before/independent of the id migration.
 
 ---
 
-### 46. `GetFrontendAnimeList` é cacheado por 60s — o poll de `/api/v1/animes` é o que estoura a AniList
+### 45. One library folder per AniList ENTRY — the season marker stays in the name
 
-**Location:** `internal/anilist/anilist.go` — `ttlCache`, `frontendListCache`, `GetFrontendAnimeList`, `frontendListResponse`, `clearCaches` (chamado por `MockAniListDo`); testes em `anilist_test.go`.
+**Location:** `internal/files/librarian.go` — `sanitizeName` (used to be `sanitizeFolderName` + `sanitizeFileName`, now one) and `destDir` in `Organize`; test `TestSanitizeNameKeepsSeasonMarker`.
 
-**What it looks like:** um cache com TTL num getter que "só lê uma lista", devolvendo uma cópia da fatia em vez da fatia guardada. Parece otimização prematura em cima de um request que leva ~1s.
+**What it looks like:** the "right" layout for Jellyfin/TVDB is one folder per series with `Season 03/` inside, and until `cd496c3` the code went halfway in that direction: a `seasonPattern` stripped "Season 2"/"S2"/"2nd Season"/"Cour 2" from the folder name, joining every season into one folder.
 
-**Why it's right:** a AniList hoje limita a **30 req/min** por IP. `Status.svelte` faz poll de `/api/v1/animes` a cada 30s **por aba aberta**, e o handler faz uma busca por conta configurada (`fetchAniListEntries` = `GetCustomListsMap` + `GetFrontendAnimeList`). Com 2 contas e 2 abas isso sozinho são ~16 req/min só de UI parada — some com um F5, com o ciclo de verificação de 10 em 10 minutos e com `GetAnimeInfo` de órfãos e o 429 é garantido. Diagnóstico real (`daemon.log`, 10/08/2026 11:09): 15 requests a `/api/v1/animes` em 2 minutos, seguidos de 429 em cascata que derrubaram junto o `searchAnilist` do daemon (`verification.go`) — ou seja, a tela aberta impedia o download automático de rodar. Com o cache, N abas custam no máximo 1 request por minuto por conta.
+**Why it's right:** on AniList a series with several seasons **does not exist**. Each season is its own media, with id, cover, synopsis and episode numbering starting at 1 — and our data is exactly like that (one `AnimeID` per season, `EpisodeNumber` restarting). Joining the seasons into one folder forced Jellyfin to pick ONE entry for the whole folder, and it picked season 1: every new season showed up with the first's cover and metadata (real report: Mushoku Tensei — entries 108465, 127720, 146065 and 178789 all landed in `Mushoku Tensei Jobless Reincarnation`). The grouping was not even coherent: the regex ate "Season 2" but not "Part", so "Season 2 Part 2" ended up in a fifth folder.
 
-O TTL de 60s é seguro porque essa lista só muda quando o usuário mexe na AniList; contagem de episódios baixados vem do `episodes.json` local e continua instantânea. A chave inclui username + statuses, então mudança de config gera chave nova (não precisa invalidação).
+With `tvshow.nfo` (decisions.md #44) that would stop being a guess and become a fixed error: the first season to arrive in the folder would write its `uniqueid` and, because the nfo is never overwritten, lock the folder to that season forever.
 
-**Cópia, não a fatia guardada:** `fetchAniListEntries` sobrescreve `ml.CustomLists` nas entradas que recebe. Devolver a fatia do cache faria dois requests concorrentes de `/api/v1/animes` escreverem na mesma memória (corrida real, pega no `-race`) e vazaria o overlay de um chamador pro próximo.
+A franchise layout with `Season NN/` cannot work here either: the franchise `tvshow.nfo` would need an id AniList does not have, and `jellyfin-plugin-anilist` does not provide per-season metadata. One folder per entry is at once the smaller diff and the only model that matches the provider.
+
+Because the two sanitization functions became identical after removing the regex, they became one: `sanitizeName`.
+
+**Don't "fix" by:** reintroducing the season strip "to group the franchise"; creating `Season NN/` subfolders (AniList episode numbering is per entry, so E01 of season 3 is that media's episode 1, not episode 25 of the franchise); deduplicating folders by base title.
+
+---
+
+### 46. `GetFrontendAnimeList` is cached for 60s — the `/api/v1/animes` poll is what blows AniList's quota
+
+**Location:** `internal/anilist/anilist.go` — `ttlCache`, `frontendListCache`, `GetFrontendAnimeList`, `frontendListResponse`, `clearCaches` (called by `MockAniListDo`); tests in `anilist_test.go`.
+
+**What it looks like:** a TTL cache on a getter that "just reads a list", returning a copy of the slice instead of the stored slice. Looks like premature optimization on a request that takes ~1s.
+
+**Why it's right:** AniList today limits to **30 req/min** per IP. `Status.svelte` polls `/api/v1/animes` every 30s **per open tab**, and the handler does one fetch per configured account (`fetchAniListEntries` = `GetCustomListsMap` + `GetFrontendAnimeList`). With 2 accounts and 2 tabs that alone is ~16 req/min of idle UI — add an F5, the 10-minute verification cycle and orphan `GetAnimeInfo` and the 429 is guaranteed. Real diagnosis (`daemon.log`, 2026-08-10 11:09): 15 requests to `/api/v1/animes` in 2 minutes, followed by cascading 429s that also took down the daemon's `searchAnilist` (`verification.go`) — i.e. the open screen stopped automatic download from running. With the cache, N tabs cost at most 1 request per minute per account.
+
+The 60s TTL is safe because this list only changes when the user edits AniList; downloaded-episode counts come from the local `episodes.json` and stay instant. The key includes username + statuses, so a config change produces a new key (no invalidation needed).
+
+**A copy, not the stored slice:** `fetchAniListEntries` overwrites `ml.CustomLists` on the entries it receives. Returning the cache slice would make two concurrent `/api/v1/animes` requests write the same memory (real race, caught by `-race`) and leak one caller's overlay into the next.
 
 **Don't "fix" by:**
-- Cachear `GetAllCurrentAnime` junto — esse é o ciclo do daemon, que roda de 10 em 10 min e **precisa** de dado fresco pra decidir download/deleção.
-- Aumentar o intervalo de poll do frontend em vez do cache — não resolve F5, múltiplas abas, nem múltiplos dispositivos na LAN.
-- Devolver a fatia do cache direto "pra economizar a cópia".
-- Cachear também o refresh de órfãos (`GetAnimeInfoByIDs`): aquele caminho já está desligado quando a lista falha (decisions.md #42d), que é quando ele amplifica — e desde que virou lote (#65) ele custa 1 requisição por conta por poll, a mesma ordem da busca de lista ao lado, que é cacheada.
+- Caching `GetAllCurrentAnime` too — that is the daemon cycle, which runs every 10 min and **needs** fresh data to decide download/deletion.
+- Increasing the frontend poll interval instead of the cache — does not solve F5, multiple tabs, or multiple devices on the LAN.
+- Returning the cache slice directly "to save the copy".
+- Caching the orphan refresh (`GetAnimeInfoByIDs`) too: that path is already off when the list fails (decisions.md #42d), which is when it amplifies — and since it became a batch (#65) it costs 1 request per account per poll, the same order as the list fetch next to it, which is cached.
 
 ---
 
-### 47. Notificações são agrupadas por janela, e o body é escapado só quando o preset é JSON
+### 47. Notifications are grouped by window, and the body is escaped only when the preset is JSON
 
-**Location:** `internal/notifications/notifications.go` — `Notify`, `Flush`, `flushEvent`, `fireBatch`, `buildBatchVars`, `jsonEscape`/`escapeVarsForJSON`/`presetIsJSON`; `NotificationsConfig.BatchWindowSeconds` em `files/filemanager.go`; `notifications.Flush()` no shutdown de `cmd/daemon/main.go`.
+**Location:** `internal/notifications/notifications.go` — `Notify`, `Flush`, `flushEvent`, `fireBatch`, `buildBatchVars`, `jsonEscape`/`escapeVarsForJSON`/`presetIsJSON`; `NotificationsConfig.BatchWindowSeconds` in `files/filemanager.go`; `notifications.Flush()` on shutdown in `cmd/daemon/main.go`.
 
-**What it looks like:** três coisas que parecem opcionais num disparador de webhook: uma fila com timer, um `Flush()` síncrono no shutdown, e escape de JSON condicionado a um header.
+**What it looks like:** three things that look optional on a webhook firer: a timer queue, a synchronous `Flush()` on shutdown, and JSON escaping conditioned on a header.
 
 **Why it's right:**
 
-**(a) A janela.** Um backfill de biblioteca dispara um `JobOrganize` por torrent, e cada um fecha com um `download_completed`. Caso real (`daemon.log`, 09/08/2026 17:49→18:22): 67 organizes, os 24 primeiros passaram e o ntfy.sh respondeu **429 nos 53 restantes** — a cota estourou e as notificações foram perdidas sem retry. Como o intervalo mediano entre organizes era de 25s, janela curta não resolve: medido no próprio log, 10s levaria 67 → 53, e 60s leva 67 → 24. Por isso o default é 60s e o campo é configurável.
+**(a) The window.** A library backfill fires one `JobOrganize` per torrent, and each one closes with a `download_completed`. Real case (`daemon.log`, 2026-08-09 17:49→18:22): 67 organizes, the first 24 went through and ntfy.sh answered **429 on the remaining 53** — the quota blew and the notifications were lost with no retry. Because the median interval between organizes was 25s, a short window does not help: measured on the same log, 10s would take 67 → 53, and 60s takes 67 → 24. That is why the default is 60s and the field is configurable.
 
-A fila é **por evento**, não global: um preset inscrito só em `download_failed` não pode receber texto de sucesso, e o filtro por evento que já existia (`slices.Contains(preset.Events, ...)`) continua valendo.
+The queue is **per event**, not global: a preset subscribed only to `download_failed` cannot receive success text, and the per-event filter that already existed (`slices.Contains(preset.Events, ...)`) still holds.
 
-**(b) `len(items) == 1` sai idêntico ao não-agrupado.** `buildVars` virou um wrapper de `buildBatchVars` com um item. É isso que faz ligar o agrupamento não mudar a aparência das notificações de quem recebe uma de cada vez — e é o que os testes `TestNotify_SingleItemBatchMatchesUnbatched` travam.
+**(b) `len(items) == 1` comes out identical to ungrouped.** `buildVars` became a wrapper of `buildBatchVars` with one item. That is what makes turning grouping on not change the look of notifications for whoever receives them one at a time — and it is what the `TestNotify_SingleItemBatchMatchesUnbatched` tests pin.
 
-**(c) `Flush()` é síncrono.** `fireBatch` normalmente dispara em goroutine, mas no shutdown isso é o mesmo que não disparar: o processo sai antes das goroutines rodarem. Daí o parâmetro `wait` e o `wg.Wait()`.
+**(c) `Flush()` is synchronous.** `fireBatch` normally fires in a goroutine, but on shutdown that is the same as not firing: the process exits before the goroutines run. Hence the `wait` parameter and `wg.Wait()`.
 
-**(d) O escape de JSON depende do `Content-Type`.** Dos 9 presets embutidos, 6 embutem `{{message}}` dentro de uma string JSON (Discord, Slack, Telegram, Gotify, Pushover, Apprise) e 1 manda o body cru (ntfy: `body: '{{message}}'`; os presets de scan Jellyfin/Plex têm body vazio, que passa direto). O `\n` do agrupamento é JSON inválido dentro de string — e escapar o body do ntfy mandaria a barra-n literal em vez da quebra de linha. Então o escape é aplicado **só no body, e só quando o preset se declara `Content-Type: application/json`**. De brinde isso conserta um bug latente que existia antes do agrupamento: anime com aspas ou barra invertida no nome já quebrava o body desses 6 presets, e o serviço respondia 400 com a notificação sumindo (o log só diz "Webhook returned error status").
+**(d) JSON escaping depends on `Content-Type`.** Of the 9 built-in presets, 6 embed `{{message}}` inside a JSON string (Discord, Slack, Telegram, Gotify, Pushover, Apprise) and 1 sends the body raw (ntfy: `body: '{{message}}'`; the Jellyfin/Plex scan presets have an empty body, which passes through). Grouping's `\n` is invalid JSON inside a string — and escaping ntfy's body would send a literal backslash-n instead of a newline. So escaping is applied **only on the body, and only when the preset declares `Content-Type: application/json`**. As a bonus that fixes a latent bug that existed before grouping: an anime with quotes or a backslash in the name already broke those 6 presets' body, and the service answered 400 with the notification vanishing (the log only says "Webhook returned error status").
 
-A URL fica fora porque escape de URL tem regras próprias, e os headers passam por um strip de `\n`/`\r`: um header com quebra de linha faz o `net/http` **recusar a request inteira**, e o preset do ntfy usa `Title: {{title}}`.
+The URL stays out because URL escaping has its own rules, and headers go through a `\n`/`\r` strip: a header with a newline makes `net/http` **refuse the whole request**, and ntfy's preset uses `Title: {{title}}`.
 
 **Don't "fix" by:**
-- Trocar a fila por evento por uma fila global "pra mandar menos mensagem ainda" — quebra o filtro `Events` do preset.
-- Mandar `{{anime_name}}`/`{{episode}}` do primeiro item quando N > 1: o template passa a mentir sobre os outros N-1.
-- Escapar sempre, ou escapar a URL/headers junto: o body de texto puro do ntfy recebe barra-n literal.
-- Tirar o `wait` do `Flush` "porque goroutine é mais rápido".
-- Adicionar retry com backoff no 429 esperando resolver o caso do log: era cota de serviço, não falha transitória. O que resolve é mandar menos mensagem.
+- Replacing the per-event queue with a global queue "to send even fewer messages" — breaks the preset's `Events` filter.
+- Sending `{{anime_name}}`/`{{episode}}` from the first item when N > 1: the template starts lying about the other N-1.
+- Always escaping, or escaping the URL/headers too: ntfy's plain-text body gets a literal backslash-n.
+- Dropping `wait` from `Flush` "because a goroutine is faster".
+- Adding retry with backoff on 429 hoping to solve the log case: it was a service quota, not a transient failure. What solves it is sending fewer messages.
 
 ---
 
-### 48. `max_episodes_per_anime` nunca limitou batch — a regra agora vive na janela de packs, não num teto de contagem
+### 48. `max_episodes_per_anime` never limited batches — the rule now lives on the pack window, not a count cap
 
-**Ver também:** [#59](#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado) — elegibilidade a pack é o resultado da busca filtrada, não um teto de contagem (`max_batch_episodes`, removido). As entradas 59-62 documentam o desenho atual.
+**See also:** [#59](#59-batch-eligibility-stopped-being-metadata-and-became-a-result-filter) — pack eligibility is the filtered search result, not a count cap (`max_batch_episodes`, removed). Entries 59-62 document the current design.
 
-**Location (histórico):** quando esta decisão foi escrita, `daemon/episodes.go` tinha `willBatchAnime` e `resolveSearchStrategy`; ambos foram removidos pela spec de batch-por-filtro. O que existe hoje: `daemon/episodes.go` — `selectEpisodes`, `effectiveMax`, `windowEnd`, `partitionSearchResults`, `pickBatches`, `packSet.covering`, `assignBatches`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
+**Location (historical):** when this decision was written, `daemon/episodes.go` had `willBatchAnime` and `resolveSearchStrategy`; both were removed by the batch-by-filter spec. What exists today: `daemon/episodes.go` — `selectEpisodes`, `effectiveMax`, `windowEnd`, `partitionSearchResults`, `pickBatches`, `packSet.covering`, `assignBatches`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
 
-**What it looks like:** um limite por anime que às vezes não se aplica, um filtro de tamanho que deixa passar tamanho zero, uma guarda de disco que só barra o `Add`, e um booleano de "disco baixo" calculado no servidor para o frontend.
+**What it looks like:** a per-anime limit that sometimes does not apply, a size filter that lets size zero through, a disk guard that only bars `Add`, and a "disk low" boolean computed on the server for the frontend.
 
 **Why it's right:**
 
-**(a) O limite se aplica só episódio a episódio.** Um batch é **um torrent**: um anime finalizado de 24 episódios com o limite em 12 baixava os 24 arquivos, o `organize` hardlinkava os 24, e `episodes.json` registrava 12 — a tela mostrava 12/24 para sempre com os 24 no disco. Limitar registros não limita bytes nem arquivos; só produz contagem mentirosa. Então, quando um pack cobre a janela pendente, o segundo `selectEpisodes` roda com o limite levantado (`len(episodes)+1`), e o limite efetivo passa a ser ilimitado para os episódios daquele pack.
+**(a) The limit applies only episode by episode.** A batch is **one torrent**: a finished 24-episode anime with the limit at 12 downloaded the 24 files, `organize` hardlinked the 24, and `episodes.json` recorded 12 — the screen showed 12/24 forever with the 24 on disk. Limiting records does not limit bytes or files; it only produces a lying count. So, when a pack covers the pending window, the second `selectEpisodes` runs with the limit lifted (`len(episodes)+1`), and the effective limit becomes unlimited for that pack's episodes.
 
-O que decide elegibilidade a pack hoje **não é mais** um teto de contagem de episódios do anime (`max_batch_episodes`, removido) — é o próprio resultado da busca filtrada: `partitionSearchResults` separa packs de episódios soltos e aplica a cada um o SEU teto de tamanho (`max_batch_torrent_size_gb`/`max_episode_torrent_size_gb`) e o piso de seeders; `pickBatches` escolhe o mínimo de packs que cobre `[primeiroPendente, primeiroPendente + max_episodes_per_anime - 1]` (ou a janela toda, com o teto desligado). Ver entrada 59 para o porquê dessa troca.
+What decides pack eligibility today is **no longer** a count cap on the anime's episodes (`max_batch_episodes`, removed) — it is the filtered search result itself: `partitionSearchResults` splits packs from loose episodes and applies to each its OWN size ceiling (`max_batch_torrent_size_gb`/`max_episode_torrent_size_gb`) and the seeders floor; `pickBatches` picks the fewest packs that cover `[firstPending, firstPending + max_episodes_per_anime - 1]` (or the whole window, with the cap off). See entry 59 for why that swap.
 
-**(b) O tampão.** Se a busca por pack não cobre a janela pendente (nenhum resultado, ou o filtro de tamanho a esvazia), a seleção original — com o limite por anime valendo — permanece: `episodesToDownload` nunca foi lançado, então não há nada a cortar de volta. A ordem do `airingSchedule` garante que sobram os mais antigos.
+**(b) The fallback.** If the pack search does not cover the pending window (no results, or the size filter empties it), the original selection — with the per-anime limit in force — remains: `episodesToDownload` was never replaced, so there is nothing to cut back. `airingSchedule` order guarantees the oldest ones are what stay.
 
-**(c) `Size == 0` passa o filtro de tamanho.** É o valor de `nyaa.parseSize` quando o Nyaa muda o formato da coluna. Descartar tamanho desconhecido trocaria "às vezes baixa um torrent grande" por "não baixa nada": um bug de parsing viraria paralisação silenciosa. O filtro roda **depois** da ordenação por prioridade e preserva a ordem, então o escolhido é o melhor **entre os que cabem**.
+**(c) `Size == 0` passes the size filter.** That is `nyaa.parseSize`'s value when Nyaa changes the column format. Discarding unknown size would swap "sometimes downloads a large torrent" for "downloads nothing": a parsing bug would become a silent stall. The filter runs **after** priority sort and preserves order, so the pick is the best **among those that fit**.
 
-**(d) A guarda de disco barra o `Add`, não o passe.** A poda de assistidos, o `deleteEpisodesByStatus` e o `organize` são justamente o que **libera** espaço; um `if disco cheio { return }` no início do passe deixaria o app travado no estado em que não consegue se desentupir. Erro de `statfs` não bloqueia — um volume que não responde (rede, permissão) não é prova de disco cheio. Quando barra, não tenta nenhum magnet e não faz retry (o magnet não é o problema) e notifica `ReasonNoDiskSpace`, que o batch de notificações agrupa.
+**(d) The disk guard bars `Add`, not the pass.** Watched pruning, `deleteEpisodesByStatus` and `organize` are exactly what **frees** space; an `if disk full { return }` at the start of the pass would leave the app stuck in the state where it cannot unclog itself. A `statfs` error does not block — a volume that does not answer (network, permission) is not proof of a full disk. When it bars, it tries no magnet and does not retry (the magnet is not the problem) and notifies `ReasonNoDiskSpace`, which the notification batch groups.
 
-**(e) O limiar de disco vive no servidor.** `GET /status` devolve `disk_low`, calculado com `min_free_disk_percent`. Um único lugar decide o que é "baixo", e o aviso da tela não pode discordar do que o daemon está fazendo.
+**(e) The disk threshold lives on the server.** `GET /status` returns `disk_low`, computed with `min_free_disk_percent`. One place decides what "low" is, and the screen warning cannot disagree with what the daemon is doing.
 
-**(f) `organizeTorrent` não renotifica um grupo parcialmente organizado.** Se parte do grupo já tem `LibraryPaths`, o torrent já pousou e o webhook já saiu: organiza (é idempotente), grava o marcador nos registros novos, não notifica. Sem isso, o primeiro passe pós-upgrade de uma biblioteca existente — onde a regra (a) cria os registros que faltavam para packs já no disco — viraria enxurrada de `download_completed` duplicado.
+**(f) `organizeTorrent` does not re-notify a partially organized group.** If part of the group already has `LibraryPaths`, the torrent already landed and the webhook already went out: it organizes (it is idempotent), writes the marker on the new records, does not notify. Without that, the first post-upgrade pass of an existing library — where rule (a) creates the missing records for packs already on disk — would become a flood of duplicate `download_completed`.
 
 **Don't "fix" by:**
-- Aplicar `max_episodes_per_anime` em batch "para o limite valer sempre": volta a contagem mentirosa.
-- Reintroduzir um teto de contagem de episódios do anime (tipo `max_batch_episodes`) para decidir elegibilidade a pack: contagem de episódios é proxy ruim de tamanho — ver decisions.md #59.
-- Descartar torrent com `Size == 0` "porque tamanho desconhecido é suspeito".
-- Consolidar a guarda de disco num `return` no topo do passe de verificação (ver (d)).
-- Mover a guarda para `torrents.Session.Add` "porque é um site só": o pacote `torrents` não conhece `files.Config`, e passar a config para lá inverte a dependência.
-- Reintroduzir um ratio hardcoded em `lib/utils/status.ts` para economizar um campo na resposta (ver (e)).
+- Applying `max_episodes_per_anime` to batches "so the limit always holds": that brings the lying count back.
+- Reintroducing an episode-count cap on the anime (like `max_batch_episodes`) to decide pack eligibility: episode count is a bad proxy for size — see decisions.md #59.
+- Discarding a torrent with `Size == 0` "because unknown size is suspicious".
+- Consolidating the disk guard into a `return` at the top of the verification pass (see (d)).
+- Moving the guard into `torrents.Session.Add` "because it's one site": the `torrents` package does not know `files.Config`, and passing config there inverts the dependency.
+- Reintroducing a hardcoded ratio in `lib/utils/status.ts` to save a field on the response (see (e)).
 
-### 59. Elegibilidade a batch deixou de ser metadado e virou filtro de resultado
+### 59. Batch eligibility stopped being metadata and became a result filter
 
 **Location:** `daemon/episodes.go` — `partitionSearchResults`, `pickBatches`, `packSet.covering`; `nyaa/nyaa.go` — `ExtractBatchInfo`, `ScrapNyaaForAnime`.
 
-**What it looks like:** nenhuma checagem de `FINISHED`, nenhuma checagem de contagem de episódios do `Media` antes de decidir se um anime "vira pack". A decisão inteira mora do lado de dentro do resultado da busca já filtrado.
+**What it looks like:** no `FINISHED` check, no check of the `Media` episode count before deciding whether an anime "becomes a pack". The whole decision lives inside the already-filtered search result.
 
-**Why it's right:** o que importa para elegibilidade a pack é o torrent que está lá — tamanho, seeders, faixa coberta — e nada disso é conhecido **antes** da busca. Um teto de contagem de episódios (como o antigo `max_batch_episodes`) é proxy ruim de tamanho: medido, 26 episódios em remux passa de 300 GB (furaria qualquer teto de contagem razoável) e 500 episódios em 480p fica em ~80 GB (um teto de contagem baixo bloquearia um pack que caberia tranquilamente). E o gate de `FINISHED` excluía exatamente quem mais depende de pack — uma série longa em `RELEASING` (One Piece, Naruto) nunca teve outro jeito de não acumular 1000+ registros episódio-a-episódio.
+**Why it's right:** what matters for pack eligibility is the torrent that is there — size, seeders, covered range — and none of that is known **before** the search. An episode-count cap (like the old `max_batch_episodes`) is a bad proxy for size: measured, 26 remux episodes go past 300 GB (would punch through any reasonable count cap) and 500 episodes in 480p sit at ~80 GB (a low count cap would block a pack that would fit comfortably). And the `FINISHED` gate excluded exactly who depends on packs the most — a long `RELEASING` series (One Piece, Naruto) never had another way not to accumulate 1000+ episode-by-episode records.
 
-Hoje quem decide é `partitionSearchResults` (separa packs de episódios soltos e aplica a CADA lista o seu próprio teto de tamanho — `max_batch_torrent_size_gb`/`max_episode_torrent_size_gb` — e o piso de seeders) seguido de `pickBatches` (escolhe o mínimo de packs, entre os que sobraram do filtro, que cobre a janela pendente).
+Today who decides is `partitionSearchResults` (splits packs from loose episodes and applies to EACH list its own size ceiling — `max_batch_torrent_size_gb`/`max_episode_torrent_size_gb` — and the seeders floor) followed by `pickBatches` (picks the fewest packs, among those that survived the filter, that cover the pending window).
 
-**Ceiling conhecido (ponytail, guarda de faixa fantasma):** `ExtractBatchInfo` guardava só o caso dominante de faixa fantasma — um marcador de resolução (`[720-1080p]`) sendo lido como episódios 720-1080 —, apostando que outras faixas fantasma (data, bitrate) cairiam em `EndEpisode == 0`, o fallback seguro. **RESOLVIDO** (ver #83): a aposta estava errada para o ano. `(2021-2022)` não cai em zero, vira a faixa 2021..2022, e um pack completo top-seeded era descartado em silêncio por não cobrir episódio nenhum.
+**Known ceiling (ponytail, phantom-range guard):** `ExtractBatchInfo` only guarded the dominant phantom-range case — a resolution marker (`[720-1080p]`) being read as episodes 720-1080 — betting that other phantom ranges (date, bitrate) would fall into `EndEpisode == 0`, the safe fallback. **RESOLVED** (see #83): the bet was wrong for the year. `(2021-2022)` does not fall to zero, it becomes the range 2021..2022, and a complete top-seeded pack was discarded in silence for covering no episode.
 
-**Ceiling conhecido (ponytail, piso de paginação):** `ScrapNyaaForAnime` fundiu pack e episódio solto numa busca só, e o piso de paginação (`enoughCandidates`, decisions.md #57) passou a contar as DUAS listas somadas. Uma página 1 com 3 packs que o filtro de tamanho descarta depois encerra a descida sem ter juntado episódio solto nenhum — antes, com duas buscas separadas, a segunda desceria por conta própria. **RESOLVIDO** (ver #80): apareceu medido, em One Piece. O teto de pack passou a ser empurrado para o pacote `nyaa` por `applyNyaaSettings` — o mesmo mecanismo de push de `SetMaxSearchPages`, e não leitura direta de `files.Config` —, e pack acima do teto sai antes de contar para o piso. O filtro de seeders continua só no daemon: o Nyaa devolve ordenado por seeders desc, então ele não trunca a descida do mesmo jeito.
+**Known ceiling (ponytail, pagination floor):** `ScrapNyaaForAnime` fused pack and loose episode into one search, and the pagination floor (`enoughCandidates`, decisions.md #57) started counting BOTH lists summed. A page 1 with 3 packs that the size filter later discards ends the descent without having gathered a single loose episode — before, with two separate searches, the second would descend on its own. **RESOLVED** (see #80): it showed up measured, on One Piece. The pack ceiling started being pushed into the `nyaa` package by `applyNyaaSettings` — the same push mechanism as `SetMaxSearchPages`, not a direct read of `files.Config` — and a pack above the ceiling leaves before counting toward the floor. The seeders filter stays only in the daemon: Nyaa returns ordered by seeders desc, so it does not truncate the descent the same way.
 
 **Don't "fix" by:**
-- Reintroduzir um teto de contagem de episódios do anime: contagem é proxy ruim de tamanho (ver acima), e o gate de `FINISHED` excluía quem mais precisa de pack.
-- Aceitar `EndEpisode == 0` como "faixa 0-0" em vez de "pack completo": um pack real cuja faixa não parseou desapareceria da seleção.
+- Reintroducing an episode-count cap on the anime: count is a bad proxy for size (see above), and the `FINISHED` gate excluded who needs packs the most.
+- Accepting `EndEpisode == 0` as "range 0-0" instead of "complete pack": a real pack whose range failed to parse would disappear from selection.
 
-### 60. A janela de packs cobre a partir do primeiro pendente, e o corte é sempre de prefixo
+### 60. The pack window covers from the first pending episode, and the cut is always a prefix
 
 **Location:** `daemon/episodes.go` — `windowEnd`, `pickBatches`, `assignBatches`.
 
-**What it looks like:** `pickBatches(packs, firstPending, windowEnd)` anda um cursor a partir do primeiro episódio pendente, e `assignBatches` para de atribuir magnet no primeiro episódio da lista que nenhum pack escolhido cobre — em vez de dar a todo mundo o magnet do primeiro pack encontrado, ou tentar episódio solto para o resto.
+**What it looks like:** `pickBatches(packs, firstPending, windowEnd)` walks a cursor from the first pending episode, and `assignBatches` stops assigning a magnet at the first episode in the list that no chosen pack covers — instead of giving everyone the magnet of the first pack found, or trying a loose episode for the rest.
 
-**Why it's right:** sem a janela ancorada no primeiro pendente, `batchResult[0]` iria para todo episódio pendente e o episódio 800 de uma série longa receberia o magnet do pack 1-100 — dado errado, não "sem magnet". Sem o truncamento de prefixo em `assignBatches`, os episódios fora da cobertura cairiam no fallback de episódio solto (`magnetsByEpisode`), que em One Piece dispararia `DownloadFailed`/`ReasonNotFound` para ~1000 episódios **por passada** — nenhum deles vai aparecer solto no Nyaa, então é notificação de erro pura, sem chance de sucesso. O corte é sempre de **prefixo** (nunca "buraco no meio") porque a agenda (`anilist.EpisodeList`) vem em ordem crescente e os packs escolhidos por `pickBatches` são contíguos a partir do cursor — não há como um pack posterior cobrir um episódio anterior sem que `packSet.covering` já o tivesse escolhido primeiro.
-
-**Don't "fix" by:**
-- Aplicar o magnet do primeiro pack achado a todo episódio pendente "porque é um episódio de qualquer forma" — episódio fora da faixa do pack simplesmente não está no `.torrent`.
-- Cair em episódio solto para o que sobra fora da janela: em série longa isso é notificação de erro garantida, não uma tentativa a mais.
-
-### 61. Episódio de pack é imune à poda por limite E ao keep-set de assistidos
-
-**Location:** `daemon/episodes.go` — `handleAlreadySavedEpisode` (guarda de deleção), `buildWatchedKeepSet` (guarda de keep-set).
-
-**What it looks like:** `handleAlreadySavedEpisode` recusa deletar um episódio salvo com `IsBatch: true` mesmo quando ele está acima do limite por anime; `buildWatchedKeepSet` nunca inclui um episódio de pack na lista de candidatos a "manter mesmo assistido".
-
-**Why it's right:** um pack é um torrent só — apagar o registro de UM dos seus episódios não libera byte nenhum, o torrent inteiro continua seedando no disco. Sem a guarda em `handleAlreadySavedEpisode`, o ciclo seguinte ao que trouxe o pack apagaria os registros acima do limite, o gate de espaço reabriria (o registro sumiu, mas o byte não), e o próximo ciclo tentaria baixar de novo — loop de baixar-e-apagar sobre um torrent que nunca saiu do disco. Sem a guarda em `buildWatchedKeepSet`: `watched_episodes_to_keep` não tem granularidade **dentro** de um pack — manter 3 dos 100 episódios de um pack não guarda 3 episódios, guarda o pack inteiro (`canRemoveTorrent` dá `false` para o grupo inteiro enquanto QUALQUER um dos 100 registros estiver fora do delete-set), então incluir episódios de pack no keep-set não muda o resultado, só confunde a contagem.
-
-O contador (`downloadedEpisodes`) continua incrementando para episódios de pack **abaixo** do limite — só a deleção acima do limite é que é ignorada. É esse incremento normal, mais a imunidade à poda, que dá o **rodízio de packs sucessivos sem nenhuma config nova**: o pack atual acumula registros além do limite (imunes), o próximo ciclo busca de novo, `pickBatches` escolhe o próximo pack ainda não coberto, e assim por diante — só freado por `max_batch_torrent_size_gb` (por torrent) e `checkDiskSpace`.
+**Why it's right:** without the window anchored on the first pending, `batchResult[0]` would go to every pending episode and episode 800 of a long series would receive the magnet of pack 1-100 — wrong data, not "no magnet". Without the prefix truncation in `assignBatches`, episodes outside coverage would fall into the loose-episode fallback (`magnetsByEpisode`), which on One Piece would fire `DownloadFailed`/`ReasonNotFound` for ~1000 episodes **per pass** — none of them will show up loose on Nyaa, so it is pure error notification, with no chance of success. The cut is always a **prefix** (never "a hole in the middle") because the schedule (`anilist.EpisodeList`) comes in increasing order and the packs `pickBatches` chooses are contiguous from the cursor — there is no way a later pack covers an earlier episode without `packSet.covering` already having picked it first.
 
 **Don't "fix" by:**
-- Deletar registros de pack acima do limite "para o limite valer sempre": o torrent continua no disco, e o próximo ciclo baixa de novo (loop de baixar-e-apagar).
-- Dar granularidade ao keep-set dentro de um pack "para respeitar `watched_episodes_to_keep` à risca": a unidade real é o torrent, não o registro — não existe "manter 3 episódios" de um arquivo só.
+- Applying the magnet of the first pack found to every pending episode "because it's an episode either way" — an episode outside the pack's range simply is not in the `.torrent`.
+- Falling back to a loose episode for what remains outside the window: on a long series that is a guaranteed error notification, not one more attempt.
 
-### 62. Progresso de avulso mora em `AnimeSettings` e é injetado no `MediaList` sintético, não vira caminho paralelo
+### 61. A pack episode is immune to the limit prune AND to the watched keep-set
 
-**Location:** `files/filemanager.go` — `AnimeSettings.Progress`; `api/endpoint_anime_settings.go` — `handleAnimeSettings` (`PUT` parcial); `daemon/standalone.go` / `api/standalone.go` — `withStandaloneProgress` (duas cópias, um por pacote, mesmo contrato); `daemon/manual_download.go` — `resolveAnimeDetails`.
+**Location:** `daemon/episodes.go` — `handleAlreadySavedEpisode` (deletion guard), `buildWatchedKeepSet` (keep-set guard).
 
-**What it looks like:** `AnimeSettings` (por anime, arquivo separado de `Config`) ganha um campo `Progress int`; toda vez que um `MediaList` sintético de avulso é montado (`appendStandaloneAnimes`, `DownloadStandaloneAnime`, `resolveAnimeDetails` quando `GetAnimeInfo` devolve `nil`), `withStandaloneProgress` sobrescreve `ml.Progress` com o valor salvo antes de o `MediaList` ser usado por qualquer coisa.
+**What it looks like:** `handleAlreadySavedEpisode` refuses to delete a saved episode with `IsBatch: true` even when it is above the per-anime limit; `buildWatchedKeepSet` never includes a pack episode in the candidates for "keep even if watched".
 
-**Why it's right:** com o dado morando no mesmo campo que uma entrada de lista real usa, `shouldSkipEpisode` (pula episódio `<= Progress`), `firstEpisodeToConsider` (começa em `Progress + 1`), `buildWatchedKeepSet` (usa `Progress` para achar quais salvos contam como assistidos) e a contagem `EpisodesWatched` da UI funcionam em avulso **sem nenhum `if isStandalone`** — é a mesma leitura de sempre, só que a fonte da verdade para avulso é `AnimeSettings` em vez da AniList. Um caminho paralelo (branch explícito em cada um desses pontos) duplicaria a lógica de "o que é assistido" em quatro lugares e um deles ia divergir cedo ou tarde.
+**Why it's right:** a pack is one torrent — deleting the record of ONE of its episodes frees no byte, the whole torrent keeps seeding on disk. Without the guard in `handleAlreadySavedEpisode`, the cycle after the one that brought the pack would delete the records above the limit, the space gate would reopen (the record vanished, the byte did not), and the next cycle would try to download again — a download-and-delete loop over a torrent that never left disk. Without the guard in `buildWatchedKeepSet`: `watched_episodes_to_keep` has no granularity **inside** a pack — keeping 3 of a pack's 100 episodes does not keep 3 episodes, it keeps the whole pack (`canRemoveTorrent` returns `false` for the entire group while ANY of the 100 records is outside the delete-set), so including pack episodes in the keep-set does not change the result, it only confuses the count.
 
-`resolveAnimeDetails` chama `withStandaloneProgress` no MESMO branch de fallback que `appendStandaloneAnimes` usa (`GetAnimeInfo` devolve `nil` → `GetMediaByID`) — sem isso, `RunAnimeDebug` (que passa por `resolveAnimeDetails`) relatava um avulso com progresso gravado como se começasse do episódio 1, divergindo do pipeline real que ele existe para espelhar (decisions.md #58). Nos `ManualDownload*` o efeito é inócuo — eles selecionam episódio por número explícito, não por `Progress` — mas a chamada é a mesma para não depender de qual caminho um chamador futuro escolhe.
-
-O `PUT /animes/{id}/settings` usa ponteiro (`*int`) e faz merge parcial: um `PUT` cujo corpo não menciona `progress` não pode zerá-lo — um `AnimeSettings{}` novo a cada `PUT` apagaria silenciosamente o progresso salvo. O ponteiro continua necessário com um campo só, porque `0` é progresso válido e indistinguível de ausente sem ele. `progress < 0` é rejeitado com 400 na validação do handler, antes do merge.
+The counter (`downloadedEpisodes`) still increments for pack episodes **below** the limit — only deletion above the limit is ignored. It is that normal increment, plus immunity to the prune, that gives the **rotation of successive packs with no new config**: the current pack accumulates records past the limit (immune), the next cycle searches again, `pickBatches` picks the next still-uncovered pack, and so on — only braked by `max_batch_torrent_size_gb` (per torrent) and `checkDiskSpace`.
 
 **Don't "fix" by:**
-- Um branch `if anime.IsStandalone` em `shouldSkipEpisode`/`firstEpisodeToConsider`/`buildWatchedKeepSet` "para deixar explícito": é exatamente a duplicação que injetar no `MediaList` evita.
-- `PUT` substituindo o `AnimeSettings` inteiro, ou trocar o `*int` por `int` "porque só sobrou um campo": as duas coisas zeram o progresso num corpo que não o mencionou.
-- Pular `withStandaloneProgress` em `resolveAnimeDetails` "porque `ManualDownload*` não usa `Progress`": `RunAnimeDebug` usa, e os dois passam pelo mesmo caminho.
+- Deleting pack records above the limit "so the limit always holds": the torrent stays on disk, and the next cycle downloads again (download-and-delete loop).
+- Giving the keep-set granularity inside a pack "to honour `watched_episodes_to_keep` to the letter": the real unit is the torrent, not the record — there is no "keep 3 episodes" of a single file.
 
-### 49. Anime avulso: "acompanhado pela lista" é o snapshot que o daemon PROCESSA, e `DownloadStandaloneAnime` nunca chama `handleSavedEpisodes`
+### 62. Standalone progress lives in `AnimeSettings` and is injected into the synthetic `MediaList`, it does not become a parallel path
 
-**Location:** `files/standalone.go`; `anilist/standalone.go` — `SearchMedia`/`GetMediaByID`; `daemon/standalone.go` — `appendStandaloneAnimes`/`DownloadStandaloneAnime`; `daemon/verification.go` — `searchAnilist`; `daemon/helpers.go` — `isConfigComplete`; `api/standalone_guard.go` — `blockReason`; `api/standalone.go` — `resolveMediaList`; `api/endpoint_config.go` — validação do `PUT`.
+**Location:** `files/filemanager.go` — `AnimeSettings.Progress`; `api/endpoint_anime_settings.go` — `handleAnimeSettings` (partial `PUT`); `daemon/standalone.go` / `api/standalone.go` — `withStandaloneProgress` (two copies, one per package, same contract); `daemon/manual_download.go` — `resolveAnimeDetails`.
 
-**What it looks like:** um arquivo `standalone_animes` com ids soltos; uma função de bloqueio que serve tanto o `POST` quanto o resultado da busca; um "baixar agora" que não faz nenhuma limpeza; e um anime avulso que nunca é apagado pela poda automática.
+**What it looks like:** `AnimeSettings` (per anime, a file separate from `Config`) gains a `Progress int` field; every time a synthetic standalone `MediaList` is built (`appendStandaloneAnimes`, `DownloadStandaloneAnime`, `resolveAnimeDetails` when `GetAnimeInfo` returns `nil`), `withStandaloneProgress` overwrites `ml.Progress` with the saved value before the `MediaList` is used by anything.
+
+**Why it's right:** with the data living in the same field a real list entry uses, `shouldSkipEpisode` (skips episode `<= Progress`), `firstEpisodeToConsider` (starts at `Progress + 1`), `buildWatchedKeepSet` (uses `Progress` to find which saved ones count as watched) and the UI's `EpisodesWatched` count work on standalone **with no `if isStandalone`** — it is the same read as always, only the source of truth for standalone is `AnimeSettings` instead of AniList. A parallel path (an explicit branch at each of those points) would duplicate the "what is watched" logic in four places and one of them would diverge sooner or later.
+
+`resolveAnimeDetails` calls `withStandaloneProgress` on the SAME fallback branch `appendStandaloneAnimes` uses (`GetAnimeInfo` returns `nil` → `GetMediaByID`) — without that, `RunAnimeDebug` (which goes through `resolveAnimeDetails`) reported a standalone with saved progress as if it started at episode 1, diverging from the real pipeline it exists to mirror (decisions.md #58). On `ManualDownload*` the effect is harmless — they select the episode by explicit number, not by `Progress` — but the call is the same so it does not depend on which path a future caller picks.
+
+`PUT /animes/{id}/settings` uses a pointer (`*int`) and does a partial merge: a `PUT` whose body does not mention `progress` cannot zero it — a fresh `AnimeSettings{}` on every `PUT` would silently wipe the saved progress. The pointer is still needed with a single field, because `0` is valid progress and indistinguishable from absent without it. `progress < 0` is rejected with 400 in the handler validation, before the merge.
+
+**Don't "fix" by:**
+- An `if anime.IsStandalone` branch in `shouldSkipEpisode`/`firstEpisodeToConsider`/`buildWatchedKeepSet` "to make it explicit": that is exactly the duplication injecting into the `MediaList` avoids.
+- A `PUT` replacing the whole `AnimeSettings`, or swapping the `*int` for `int` "because only one field is left": both zero progress on a body that did not mention it.
+- Skipping `withStandaloneProgress` in `resolveAnimeDetails` "because `ManualDownload*` does not use `Progress`": `RunAnimeDebug` does, and both go through the same path.
+
+### 49. Standalone anime: "tracked by the list" is the snapshot the daemon PROCESSES, and `DownloadStandaloneAnime` never calls `handleSavedEpisodes`
+
+**Location:** `files/standalone.go`; `anilist/standalone.go` — `SearchMedia`/`GetMediaByID`; `daemon/standalone.go` — `appendStandaloneAnimes`/`DownloadStandaloneAnime`; `daemon/verification.go` — `searchAnilist`; `daemon/helpers.go` — `isConfigComplete`; `api/standalone_guard.go` — `blockReason`; `api/standalone.go` — `resolveMediaList`; `api/endpoint_config.go` — `PUT` validation.
+
+**What it looks like:** a `standalone_animes` file with loose ids; a block function that serves both the `POST` and the search result; a "download now" that does no cleanup; and a standalone anime that is never deleted by automatic pruning.
 
 **Why it's right:**
 
-**(a) O append acontece DEPOIS do `DedupeByMedia`.** `GetMediaByID` devolve um `MediaList` **sintético**: `Progress: 0`, `Status: ""`, `Id: 0`. `DedupeByMedia` mantém o **menor** progresso, então anexar antes do dedupe faria o zero sintético vencer a entrada real e o daemon rebaixaria episódios já assistidos. É ordem, não estilo.
+**(a) The append happens AFTER `DedupeByMedia`.** `GetMediaByID` returns a **synthetic** `MediaList`: `Progress: 0`, `Status: ""`, `Id: 0`. `DedupeByMedia` keeps the **lowest** progress, so appending before the dedupe would make the synthetic zero beat the real entry and the daemon would re-download already-watched episodes. It is order, not style.
 
-**(b) "Acompanhado pela lista" = aparece no conjunto que o daemon processa,** ou seja as entradas que sobrevivem ao filtro de `download_statuses` + `DownloadMediaStatuses` — **não** "existe entrada na AniList". Um anime em `PLANNING` com `download_statuses = [CURRENT]` está numa lista e o daemon o ignora; adicioná-lo como avulso é o caso de uso mais óbvio da feature, não um erro a bloquear. A mesma definição alimenta os três consumidores (remoção automática, 409 do `POST`, `block_reason` da busca) porque duas definições diferentes produziriam um card cinza que o backend aceita, ou o inverso.
+**(b) "Tracked by the list" = it appears in the set the daemon processes,** i.e. the entries that survive the `download_statuses` + `DownloadMediaStatuses` filter — **not** "an AniList entry exists". An anime in `PLANNING` with `download_statuses = [CURRENT]` is on a list and the daemon ignores it; adding it as standalone is the feature's most obvious use case, not an error to block. The same definition feeds the three consumers (automatic removal, the `POST`'s 409, the search's `block_reason`) because two different definitions would produce a grey card the backend accepts, or the inverse.
 
-**(c) Uma função de bloqueio, dois consumidores.** `blockReason` decide o 409 e o `block_reason` de cada resultado da busca. "O front não deixa clicar" e "o back devolve erro" precisam concordar **por construção**, não por disciplina. Precedência `blacklist > standalone > tracked > downloaded`: blacklist vem primeiro porque é o único motivo em que adicionar mudaria o comportamento **para pior** — um blacklisted fora de `download_statuses` escapa do `searchAnilist`, o registro avulso sobrevive ao merge e o filtro do usuário é contornado (o `MediaList` sintético tem `CustomLists` nulo, então `animeIsInExcludedList` nunca dispara nele). `downloaded` só bloqueia com total **conhecido**: 12 registros de 24 episódios é o limite por anime, não "já baixado".
+**(c) One block function, two consumers.** `blockReason` decides the 409 and each search result's `block_reason`. "The front does not let you click" and "the back returns an error" need to agree **by construction**, not by discipline. Precedence `blacklist > standalone > tracked > downloaded`: blacklist comes first because it is the only reason where adding would change behaviour **for the worse** — a blacklisted one outside `download_statuses` escapes `searchAnilist`, the standalone record survives the merge and the user's filter is bypassed (the synthetic `MediaList` has null `CustomLists`, so `animeIsInExcludedList` never fires on it). `downloaded` only blocks with a **known** total: 12 records of 24 episodes is the per-anime limit, not "already downloaded".
 
-**(d) `DownloadStandaloneAnime` não pode chamar `handleSavedEpisodes`.** Ela chama `identifyEpisodesNotInWatching`, que compara **todos** os episódios salvos contra os `checkedEpisodes` recebidos e devolve os não cobertos para deleção. Com os episódios de um único anime na mão e `delete_watched_episodes` ligado, isso apagaria a biblioteca inteira. Pelo mesmo motivo não chama `deleteEpisodesByStatus` nem `DeleteEmptyFolders`: adicionar um anime não é ocasião para apagar nada.
+**(d) `DownloadStandaloneAnime` must not call `handleSavedEpisodes`.** It calls `identifyEpisodesNotInWatching`, which compares **all** saved episodes against the received `checkedEpisodes` and returns the uncovered ones for deletion. With only one anime's episodes in hand and `delete_watched_episodes` on, that would delete the entire library. For the same reason it does not call `deleteEpisodesByStatus` or `DeleteEmptyFolders`: adding an anime is not an occasion to delete anything.
 
-**(e) Um avulso nunca é apagado por status.** `deletableMediaIDs` só avalia candidatos que apareceram na lista de alguma conta, e um avulso não aparece em nenhuma. Ele acumula no disco até o usuário deixar de acompanhá-lo, **ou** até marcar manualmente até onde assistiu — ver decisions.md #62 sobre `AnimeSettings.Progress`, que é a exceção deliberada: sem progresso manual `delete_watched_episodes`/`watched_episodes_to_keep` nunca tinham o que podar num avulso.
+**(e) A standalone is never deleted by status.** `deletableMediaIDs` only evaluates candidates that appeared on some account's list, and a standalone appears on none. It accumulates on disk until the user stops tracking it, **or** until they mark by hand how far they have watched — see decisions.md #62 on `AnimeSettings.Progress`, which is the deliberate exception: without manual progress `delete_watched_episodes`/`watched_episodes_to_keep` never had anything to prune on a standalone.
 
-**(f) A remoção automática consome o registro, e isso pode chegar a apagar arquivo.** Um avulso que depois entra numa lista da AniList sai do arquivo no passe seguinte (a entrada real já vencia o dedupe, então o que o passe baixa não muda). Se **depois disso** o usuário tirar o anime da lista, o registro avulso já foi consumido e os episódios dele passam a cair em `identifyEpisodesNotInWatching` como os de qualquer anime tirado da lista. É a troca aceita: preservar os dois registros exigiria distinguir "avulso ativo" de "avulso dormente" no arquivo, no `AnimeInfo` e na tela, para cobrir um caminho que quem usa avulso não percorre. O `DELETE` explícito fecha a **outra** janela marcando os episódios `ManuallyManaged`.
+**(f) Automatic removal consumes the record, and that can go as far as deleting a file.** A standalone that later enters an AniList list leaves the file on the next pass (the real entry already won the dedupe, so what the pass downloads does not change). If **after that** the user takes the anime off the list, the standalone record has already been consumed and its episodes fall into `identifyEpisodesNotInWatching` like those of any anime taken off the list. That is the accepted trade: keeping both records would require distinguishing "active standalone" from "dormant standalone" in the file, in `AnimeInfo` and on the screen, to cover a path standalone users do not take. The explicit `DELETE` closes the **other** window by marking the episodes `ManuallyManaged`.
 
-**(g) Conta da AniList deixou de ser obrigatória.** `isConfigComplete`, `searchAnilist` e a validação de `PUT /config` exigiam pelo menos um `anilist_usernames`; com avulsos isso passou a ser uma exigência sem função — uma instalação que só usa avulsos nunca configura conta nenhuma, e o daemon a deixaria presa na tela de configuração para sempre. A **biblioteca** continua obrigatória nos três lugares: sem ela não há para onde baixar. `searchAnilist` sem conta não é erro — o passe ainda tem os avulsos a processar, e abortar ali faria a feature nunca rodar. A regra saiu também do `requiredChecks` do frontend: uma obrigatoriedade só na tela é uma regra que o servidor não conhece.
+**(g) An AniList account stopped being required.** `isConfigComplete`, `searchAnilist` and `PUT /config` validation required at least one `anilist_usernames`; with standalones that became a requirement with no function — an install that only uses standalones never configures any account, and the daemon would leave it stuck on the configuration screen forever. The **library** stays required in all three places: without it there is nowhere to download to. `searchAnilist` without an account is not an error — the pass still has standalones to process, and aborting there would make the feature never run. The rule also left the frontend's `requiredChecks`: a requirement only on the screen is a rule the server does not know.
 
-**(h) O conceito se chama `standalone` no código, "avulso" na UI, e nunca `manual`.** `manual` já significa outra coisa aqui — `ManuallyManaged`, `ManualDownloadEpisode` querem dizer "o usuário mexeu neste episódio à mão, o loop não deve tocar". Reaproveitar a palavra faria dois conceitos diferentes lerem igual.
+**(h) The concept is called `standalone` in the code, "avulso" in the UI, and never `manual`.** `manual` already means something else here — `ManuallyManaged`, `ManualDownloadEpisode` mean "the user touched this episode by hand, the loop must not touch it". Reusing the word would make two different concepts read the same.
 
 **Don't "fix" by:**
-- Anexar os avulsos antes do `DedupeByMedia` "porque o merge é um só" (ver (a)).
-- Trocar `tracked` por "existe entrada na AniList" para evitar depender de `fetchAniListEntries` — isso quebra o caso `PLANNING`, que é o caso de uso da feature.
-- Duplicar a regra de bloqueio no frontend para não precisar do campo `block_reason` na resposta da busca (ver (c)).
-- Devolver quatro booleanos em vez de um `block_reason`: os motivos são mutuamente exclusivos por precedência e o card precisa de um rótulo só.
-- Consolidar `DownloadStandaloneAnime` com `handleSavedEpisodes` "para reaproveitar o salvamento" (ver (d)).
-- Filtrar o avulso por `DownloadMediaStatuses` no append: quem pediu o anime a mão quer acompanhá-lo também enquanto ele é `NOT_YET_RELEASED`.
-- Reintroduzir `anilist_usernames` como campo obrigatório (em qualquer das quatro camadas) "porque o app é sobre a lista do AniList": ele deixou de ser (ver (g)).
+- Appending standalones before `DedupeByMedia` "because the merge is one" (see (a)).
+- Swapping `tracked` for "an AniList entry exists" to avoid depending on `fetchAniListEntries` — that breaks the `PLANNING` case, which is the feature's use case.
+- Duplicating the block rule in the frontend to not need the `block_reason` field on the search response (see (c)).
+- Returning four booleans instead of one `block_reason`: the reasons are mutually exclusive by precedence and the card needs one label.
+- Consolidating `DownloadStandaloneAnime` with `handleSavedEpisodes` "to reuse the save" (see (d)).
+- Filtering the standalone by `DownloadMediaStatuses` on append: whoever asked for the anime by hand wants to track it also while it is `NOT_YET_RELEASED`.
+- Reintroducing `anilist_usernames` as a required field (on any of the four layers) "because the app is about the AniList list": it stopped being (see (g)).
 
-### 50. Busca de avulso: o filtro de não lançados é server-side e por concatenação, e o card bloqueado vira link em vez de beco sem saída
+### 50. Standalone search: the unreleased filter is server-side and by concatenation, and a blocked card becomes a link instead of a dead end
 
 **Location:** `anilist/standalone.go` — `SearchMedia`; `api/endpoint_anilist_search.go`; `frontend/src/routes/AddAnime.svelte`; `frontend/src/components/ui/Button.svelte`.
 
-**What it looks like:** um `status_not: NOT_YET_RELEASED` **grudado na string** da query em vez de passado como variável GraphQL; um toggle que não sabe quantos resultados escondeu; e um `Button` que às vezes renderiza `<a>`.
+**What it looks like:** a `status_not: NOT_YET_RELEASED` **stuck onto the query string** instead of passed as a GraphQL variable; a toggle that does not know how many results it hid; and a `Button` that sometimes renders `<a>`.
 
 **Why it's right:**
 
-**(a) O filtro vive na query, não no Go.** `perPage` é 20. Filtrar depois de receber devolveria buscas com 4 resultados úteis em temporada de anúncios — o usuário leria isso como "a busca está quebrada", não como "escondi 16". O preço é que **nada sabe quantos foram escondidos**, então o toggle é cego: não existe "3 ocultos · mostrar". Foi a troca escolhida; inverter os dois é uma decisão de produto, não um bug.
+**(a) The filter lives in the query, not in Go.** `perPage` is 20. Filtering after receiving would return searches with 4 useful results in announcement season — the user would read that as "search is broken", not as "I hid 16". The cost is that **nothing knows how many were hidden**, so the toggle is blind: there is no "3 hidden · show". That was the chosen trade; inverting the two is a product decision, not a bug.
 
-**(b) Concatenação, e não uma variável GraphQL nula.** A AniList ignora argumentos com valor nulo hoje, e `status_not: $statusNot` com `$statusNot = null` funcionaria. Mas se essa semântica mudar, o filtro passa a esconder tudo ou nada **em silêncio** — o pior modo de falha para um filtro. Com a concatenação, `includeUnreleased = true` faz o argumento simplesmente não existir na query, o que é verdade em qualquer versão da API. Custa três linhas e o teste inspeciona o corpo enviado, não o resultado, justamente porque as duas implementações passariam num teste de resultado.
+**(b) Concatenation, not a null GraphQL variable.** AniList ignores arguments with a null value today, and `status_not: $statusNot` with `$statusNot = null` would work. But if that semantics changes, the filter starts hiding everything or nothing **in silence** — the worst failure mode for a filter. With concatenation, `includeUnreleased = true` makes the argument simply not exist in the query, which is true on any API version. It costs three lines and the test inspects the body sent, not the result, precisely because both implementations would pass a result test.
 
-**(c) Só `NOT_YET_RELEASED` sai.** `CANCELLED` e `HIATUS` ficam: um anime interrompido no meio da exibição tem episódios no ar e baixáveis. "Ainda não lançou" é um status só.
+**(c) Only `NOT_YET_RELEASED` leaves.** `CANCELLED` and `HIATUS` stay: an anime interrupted mid-airing has episodes out and downloadable. "Not released yet" is one status.
 
-**(d) `tracked`/`downloaded`/`standalone` viram link para `#/status/{id}`.** `anime_id` **é** o media id da AniList, então o href sai do próprio resultado da busca, sem lookup — e `AddStandaloneAnime` grava antes de responder, então o link funciona no instante seguinte ao clique em Adicionar, sem esperar ciclo do daemon. O motivo do bloqueio saiu do `tooltip` e virou uma linha do card: tooltip não existe no mobile, e a tela nasceu para a instalação sem conta, que é a que mais roda no celular. `blacklist` é a única exceção — não está no conjunto que o daemon processa, não tem página, continua apagado e desabilitado.
+**(d) `tracked`/`downloaded`/`standalone` become a link to `#/status/{id}`.** `anime_id` **is** AniList's media id, so the href comes from the search result itself, with no lookup — and `AddStandaloneAnime` writes before answering, so the link works the instant after the Add click, without waiting for a daemon cycle. The block reason left the `tooltip` and became a line on the card: tooltips do not exist on mobile, and the screen was born for the no-account install, which is the one that runs on a phone the most. `blacklist` is the only exception — it is not in the set the daemon processes, it has no page, it stays greyed and disabled.
 
-**(e) `Button` com `href` renderiza `<a>` em vez de um `on:click` que escreve `location.hash`.** Um botão que navega perde middle-click, "abrir em nova aba" e a URL na barra de status. A alternativa era copiar as classes de variante para dentro do card, o que duplicaria o estilo em cada tela que precisar disso. `disabled` é ignorado com `href` de propósito: não existe âncora desabilitada, e um link que não deve ser seguido não deve ser renderizado como link.
+**(e) A `Button` with `href` renders `<a>` instead of an `on:click` that writes `location.hash`.** A button that navigates loses middle-click, "open in new tab" and the URL in the status bar. The alternative was copying the variant classes into the card, which would duplicate the style on every screen that needs it. `disabled` is ignored with `href` on purpose: there is no disabled anchor, and a link that must not be followed must not be rendered as a link.
 
-**(f) A busca sai no submit (botão ou Enter), nunca a cada tecla.** A versão original tinha debounce de 300ms. O custo real não é o digitador rápido — esse já gastava 1 requisição por busca — é quem digita com mais de 300ms entre teclas (celular, catar-milho): a partir do 3º caractere ele gastava **uma requisição por tecla**. Como `SearchMedia` é `PriorityDisposable`, quem estourava o balde era recusado por `budgetAllows` na busca *seguinte* — o usuário via "a busca falhou" por ter digitado devagar. Com submit, uma busca = uma requisição, e o piso do orçamento nunca é atingido pela tela. O `<form>` existe para o Enter ser comportamento nativo em vez de um `on:keydown`; o `AbortController` continua porque dois submits em sequência ainda correm entre si. O toggle de não lançados só refaz a busca quando já existe resultado na tela — sem busca feita, ele apenas escolhe o parâmetro do próximo submit.
+**(f) Search fires on submit (button or Enter), never on every key.** The original version had a 300ms debounce. The real cost is not the fast typist — they already spent 1 request per search — it is whoever types with more than 300ms between keys (phone, hunt-and-peck): from the 3rd character they spent **one request per key**. Because `SearchMedia` is `PriorityDisposable`, whoever blew the bucket was refused by `budgetAllows` on the *next* search — the user saw "search failed" for having typed slowly. With submit, one search = one request, and the budget floor is never hit by the screen. The `<form>` exists so Enter is native behaviour instead of an `on:keydown`; the `AbortController` stays because two submits in a row still race each other. The unreleased toggle only redoes the search when a result is already on screen — with no search done, it only picks the parameter of the next submit.
 
-**(g) O cache de busca fica em `SearchMedia`, não na resposta do endpoint.** O `block_reason` é recalculado pelo `standaloneGuard` a cada resposta; cacheado junto com ela, um anime adicionado agora continuaria com o botão "Adicionar" no card até o TTL vencer. Cachear só a parte que vem da AniList mantém o guard fresco de graça. A chave é `strings.ToLower(termo)+includeUnreleased` — a busca da AniList é case-insensitive, então "One Piece" e "one piece" não valem dois requests. Passou a valer junto com (f): com submit as chaves são termos inteiros, que se repetem (o mesmo usuário refazendo a busca, o toggle indo e voltando, outra aba); com debounce eram prefixos que ninguém repetia. É também **o único cache com chave de texto livre** — os outros são id de anime e nome de conta, conjunto finito — e como o `ttlCache` nunca remove entrada vencida (o `getStale` depende disso), é o único que precisa de teto: passando de `searchCacheMaxEntries` o mapa é descartado inteiro. Descarte total e não LRU de propósito; o `ponytail:` no código anota o upgrade.
+**(g) The search cache lives in `SearchMedia`, not on the endpoint response.** `block_reason` is recomputed by `standaloneGuard` on every response; cached with it, an anime added just now would keep the "Add" button on the card until the TTL expired. Caching only the part that comes from AniList keeps the guard fresh for free. The key is `strings.ToLower(term)+includeUnreleased` — AniList search is case-insensitive, so "One Piece" and "one piece" are not worth two requests. It started paying off together with (f): with submit the keys are whole terms, which repeat (the same user redoing the search, the toggle going back and forth, another tab); with debounce they were prefixes nobody repeated. It is also **the only cache with a free-text key** — the others are anime id and account name, a finite set — and because `ttlCache` never removes an expired entry (`getStale` depends on that), it is the only one that needs a ceiling: past `searchCacheMaxEntries` the map is discarded whole. Whole discard and not LRU on purpose; the `ponytail:` in the code notes the upgrade.
 
 **Don't "fix" by:**
-- Mover o filtro para o Go "para poder mostrar quantos foram escondidos": isso reintroduz a busca com 4 de 20 (ver (a)).
-- Voltar a buscar no `on:input`, com ou sem debounce "porque resultado ao vivo é melhor UX": o orçamento da AniList é de 30 req/min por IP e a busca é disposable (ver (f)).
-- Subir o cache de busca para a resposta do endpoint "porque é uma camada a menos": o `block_reason` congela junto (ver (g)).
-- Cachear a busca no frontend em vez do backend: o limite da AniList é por IP, então um cache por aba não protege as outras abas nem o passe do daemon — e o gate de orçamento, que é quem o cache existe para poupar, vive no backend (ver (g)).
-- Trocar a concatenação por `status_not: $var` com valor nulo "porque variável é mais limpo" (ver (b)).
-- Estender o filtro para `CANCELLED`/`HIATUS` — esses têm episódios baixáveis (ver (c)).
-- Devolver o `block_reason` para dentro de um `tooltip` "para o card ficar mais limpo": o motivo some no mobile inteiro.
-- Fazer o card todo virar `<a>`: o botão Adicionar dentro da âncora exigiria `stopPropagation` e quebraria a navegação por teclado.
+- Moving the filter into Go "so we can show how many were hidden": that reintroduces the search with 4 of 20 (see (a)).
+- Going back to searching on `on:input`, with or without debounce "because live results are better UX": AniList's budget is 30 req/min per IP and the search is disposable (see (f)).
+- Lifting the search cache onto the endpoint response "because that's one fewer layer": `block_reason` freezes with it (see (g)).
+- Caching the search in the frontend instead of the backend: AniList's limit is per IP, so a per-tab cache does not protect the other tabs or the daemon pass — and the budget gate, which is who the cache exists to spare, lives in the backend (see (g)).
+- Swapping concatenation for `status_not: $var` with a null value "because a variable is cleaner" (see (b)).
+- Extending the filter to `CANCELLED`/`HIATUS` — those have downloadable episodes (see (c)).
+- Putting `block_reason` back inside a `tooltip` "to keep the card cleaner": the reason vanishes on all of mobile.
+- Making the whole card an `<a>`: the Add button inside the anchor would need `stopPropagation` and would break keyboard navigation.
 
-### 51. Episódio aceita 4 dígitos, exceto entre colchetes
+### 51. An episode number accepts 4 digits, except inside brackets
 
-**Location:** `nyaa/nyaa_regex.go` — `reEpisodePatterns`, `reBatchRange`, `reHasEpisode`, `reBatchPatterns`; `nyaa/nyaa.go` — `ExtractEpisodeNumber` (teto `< 10000`).
+**Location:** `nyaa/nyaa_regex.go` — `reEpisodePatterns`, `reBatchRange`, `reHasEpisode`, `reBatchPatterns`; `nyaa/nyaa.go` — `ExtractEpisodeNumber` (ceiling `< 10000`).
 
-**What it looks like:** todos os padrões de episódio usam `\d{1,4}`, menos `\[(\d{1,3})\]`.
+**What it looks like:** every episode pattern uses `\d{1,4}`, except `\[(\d{1,3})\]`.
 
-**Why it's right:** com `\d{1,3}` o One Piece (ep. 1123+) não casava em nenhum padrão, `ExtractEpisodeNumber` devolvia `nil` e **todo** resultado do Nyaa era descartado — o log mostrava 30 linhas boas e `results: 0`. `[05]` fica em 3 dígitos porque `[2025]` (ano) é muito mais comum no nome de um torrent que episódio de 4 dígitos entre colchetes, e um ano lido como episódio descarta o torrent certo.
+**Why it's right:** with `\d{1,3}` One Piece (ep. 1123+) matched no pattern, `ExtractEpisodeNumber` returned `nil` and **every** Nyaa result was discarded — the log showed 30 good lines and `results: 0`. `[05]` stays at 3 digits because `[2025]` (a year) is far more common in a torrent name than a 4-digit episode inside brackets, and a year read as an episode discards the right torrent.
 
-**Don't "fix" by:** estender `\[(\d{1,3})\]` para 4 dígitos "por consistência".
+**Don't "fix" by:** extending `\[(\d{1,3})\]` to 4 digits "for consistency".
 
-### 52. A lista de episódios é sintetizada, e a chave de um episódio é (anime, número)
+### 52. The episode list is synthesized, and an episode's key is (anime, number)
 
-**Location:** `anilist/episodes.go` — `EpisodeList`, `lastAiredEpisode`; `anilist/anilist.go` — `Media.NextAiringEpisode`; `files/filemanager.go` — `EpisodeKey`, `EpisodeStruct.Key()`, `loadBlockedEpisodesLocked`; `daemon/episodes.go` — `firstEpisodeToConsider`; `api/endpoint_episode_actions.go` e as rotas `/animes/{id}/episodes/{episodeNumber}/*`.
+**Location:** `anilist/episodes.go` — `EpisodeList`, `lastAiredEpisode`; `anilist/anilist.go` — `Media.NextAiringEpisode`; `files/filemanager.go` — `EpisodeKey`, `EpisodeStruct.Key()`, `loadBlockedEpisodesLocked`; `daemon/episodes.go` — `firstEpisodeToConsider`; `api/endpoint_episode_actions.go` and the `/animes/{id}/episodes/{episodeNumber}/*` routes.
 
-**What it looks like:** nós de `AiringNode` **fabricados** (id zero) para episódios que a AniList não devolve; `EpisodeStruct` sem `EpisodeID`; `blocked_episodes` guardando objetos; e o `{episodeId}` das rotas virando `{episodeNumber}`.
+**What it looks like:** **fabricated** `AiringNode`s (id zero) for episodes AniList does not return; `EpisodeStruct` without `EpisodeID`; `blocked_episodes` storing objects; and the routes' `{episodeId}` becoming `{episodeNumber}`.
 
 **Why it's right:**
 
-**(a) `airingSchedule` não é a lista de episódios de um anime.** A AniList mantém uma **janela** de ~500 entradas de agenda por mídia e descarta as antigas. Medido na API: `Media(21)` (One Piece) tem `pageInfo.total = 500` e a página 1 **começa no episódio 1123** — 1 a 1122 não existem na API; `Media(20)` (Naruto, 220 eps) e `Media(16498)` (Shingeki no Kyojin, 25 eps) voltam com `total = 0`, agenda **vazia**. Enquanto a lista saía dali, o daemon literalmente não tinha episódio para processar nesses animes (o log mostrava `Processing anime episodes` e nada depois), e no One Piece começava no 1123 como se os anteriores não existissem. Além disso o código nunca paginou a agenda, então mesmo dentro da janela só os 25 primeiros nós chegavam — e paginar não resolveria nada, porque as páginas seguintes só trazem episódios **mais novos**.
+**(a) `airingSchedule` is not an anime's episode list.** AniList keeps a **window** of ~500 schedule entries per media and discards the old ones. Measured on the API: `Media(21)` (One Piece) has `pageInfo.total = 500` and page 1 **starts at episode 1123** — 1 to 1122 do not exist on the API; `Media(20)` (Naruto, 220 eps) and `Media(16498)` (Shingeki no Kyojin, 25 eps) come back with `total = 0`, an **empty** schedule. While the list came from there, the daemon literally had no episode to process on those animes (the log showed `Processing anime episodes` and nothing after), and on One Piece it started at 1123 as if the earlier ones did not exist. On top of that the code never paginated the schedule, so even inside the window only the first 25 nodes arrived — and paginating would solve nothing, because later pages only bring **newer** episodes.
 
-**(b) Por isso a lista é sintetizada, e o último no ar vem de três fontes.** `lastAiredEpisode` combina o maior episódio já exibido da agenda, `nextAiringEpisode.episode - 1` e `media.episodes` — este último **somente quando `FINISHED`**: num `RELEASING` ele é a contagem PREVISTA da temporada, e usá-lo mandaria o daemon caçar episódio que ainda não foi ao ar. Nenhuma das três serve sozinha (agenda clipada/vazia, `nextAiringEpisode` nulo em anime terminado).
+**(b) That is why the list is synthesized, and the last aired comes from three sources.** `lastAiredEpisode` combines the highest already-aired episode from the schedule, `nextAiringEpisode.episode - 1` and `media.episodes` — the last **only when `FINISHED`**: on a `RELEASING` it is the season's EXPECTED count, and using it would send the daemon hunting an episode that has not aired yet. None of the three works alone (clipped/empty schedule, null `nextAiringEpisode` on a finished anime).
 
-**(c) A chave passou a ser `(AnimeID, EpisodeNumber)`, não um id sintético.** Um episódio fora da janela não tem id de nó — e inventar um (`-(mediaID*10000+ep)`) faria a identidade de um episódio depender de uma fórmula que nada valida, com colisão silenciosa como modo de falha. Número de episódio dentro de um anime é único por definição e é o que o usuário vê. `EpisodeStruct.EpisodeID` foi **removido** (não deixado como campo morto) de propósito: é o compilador que aponta cada lugar que ainda identificava episódio pelo id antigo.
+**(c) The key became `(AnimeID, EpisodeNumber)`, not a synthetic id.** An episode outside the window has no node id — and inventing one (`-(mediaID*10000+ep)`) would make an episode's identity depend on a formula nothing validates, with silent collision as the failure mode. Episode number inside an anime is unique by definition and is what the user sees. `EpisodeStruct.EpisodeID` was **removed** (not left as a dead field) on purpose: it is the compiler that points at every place that still identified an episode by the old id.
 
-**(d) `blocked_episodes` legado é descartado, não migrado.** Ele era `[416348, ...]` — ids de nó que nada mais resolve. Um parse que falha travaria `LoadBlockedEpisodes` e com ela o passe de verificação, então o arquivo antigo é lido, logado como aviso e tratado como lista vazia. O usuário refaz os bloqueios com um clique por episódio; adivinhar seria pior.
+**(d) Legacy `blocked_episodes` is discarded, not migrated.** It was `[416348, ...]` — node ids that nothing resolves anymore. A parse that fails would stall `LoadBlockedEpisodes` and with it the verification pass, so the old file is read, logged as a warning and treated as an empty list. The user remakes the blocks with one click per episode; guessing would be worse.
 
-**(e) `firstEpisodeToConsider` recua para o menor episódio salvo.** A regra é `Progress + 1` (e anime avulso tem `Progress = 0`, então começa no 1 sem precisar de flag). Mas `watched_episodes_to_keep` e a poda de assistidos só operam sobre episódios que aparecem na lista: um episódio salvo abaixo do progresso ficaria fora dela, nunca seria "checado" e cairia direto em `identifyEpisodesNotInWatching` — apagado ignorando o "quantos assistidos manter".
+**(e) `firstEpisodeToConsider` walks back to the smallest saved episode.** The rule is `Progress + 1` (and a standalone anime has `Progress = 0`, so it starts at 1 with no flag needed). But `watched_episodes_to_keep` and watched pruning only operate on episodes that appear in the list: a saved episode below progress would sit outside it, never be "checked" and fall straight into `identifyEpisodesNotInWatching` — deleted ignoring "how many watched to keep".
 
-**(f) `{episodeId}` virou `{episodeNumber}` nas rotas, e `episode_id` saiu do JSON.** As rotas já tinham a forma certa; manter o nome antigo com semântica nova seria a pior combinação possível. `AnimeInfo.latest_episode_id` virou `latest_episode_number` pelo mesmo motivo.
+**(f) `{episodeId}` became `{episodeNumber}` on the routes, and `episode_id` left the JSON.** The routes already had the right shape; keeping the old name with new semantics would be the worst possible combination. `AnimeInfo.latest_episode_id` became `latest_episode_number` for the same reason.
 
 **Don't "fix" by:**
-- Paginar `airingSchedule` "para pegar os episódios que faltam": as páginas seguintes só têm episódios mais novos (ver (a)).
-- Usar `media.episodes` como último no ar em anime `RELEASING` (ver (b)).
-- Reintroduzir um `EpisodeID` sintético "para não mexer no estado em disco" (ver (c)).
-- Tentar converter o `blocked_episodes` antigo (ver (d)).
-- Fazer a lista começar em `Progress + 1` sem o recuo (ver (e)).
+- Paginating `airingSchedule` "to get the missing episodes": later pages only have newer episodes (see (a)).
+- Using `media.episodes` as last aired on a `RELEASING` anime (see (b)).
+- Reintroducing a synthetic `EpisodeID` "to not touch on-disk state" (see (c)).
+- Trying to convert the old `blocked_episodes` (see (d)).
+- Making the list start at `Progress + 1` without the walk-back (see (e)).
 
-### 53. Busca de episódio descarta batch e filme, e usa `hasMovieMarker` — não `isMovie`
+### 53. Episode search drops batches and movies, and uses `hasMovieMarker` — not `isMovie`
 
-**Location:** `nyaa/nyaa.go` — `parseRow` de `ScrapNyaa` e de `ScrapNyaaForAnime` (na época desta decisão, `ScrapNyaaForMultipleEpisodes`, depois fundida em `ScrapNyaaForAnime`), `isMovie`, `hasMovieMarker`; `nyaa/nyaa_regex.go` — `reOvaPattern`.
+**Location:** `nyaa/nyaa.go` — `parseRow` of `ScrapNyaa` and of `ScrapNyaaForAnime` (at the time of this decision, `ScrapNyaaForMultipleEpisodes`, later fused into `ScrapNyaaForAnime`), `isMovie`, `hasMovieMarker`; `nyaa/nyaa_regex.go` — `reOvaPattern`.
 
-**What it looks like:** dois guards no começo dos dois `parseRow` de episódio (`IsBatch` e `hasMovieMarker`), e um `hasMovieMarker` que é `isMovie` **menos** o ramo final.
+**What it looks like:** two guards at the start of both episode `parseRow`s (`IsBatch` and `hasMovieMarker`), and a `hasMovieMarker` that is `isMovie` **minus** the last branch.
 
 **Why it's right:**
 
-**(a) Sem o guard de batch, um pack de 220 episódios entra como "episódio 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` casa `- 001` em `ExtractEpisodeNumber`, e a busca multi-episódio (ao contrário da single) não filtrava batch. Resultado medido, na época: 220 episódios num registro só, com `IsBatch: false`, furando o teto de batch da época (`max_batch_episodes`, removido pela spec de batch-por-filtro) **e** `max_episodes_per_anime` — e organizado como episódio único (renomeado "Naruto - E01" com `rename_files_for_jellyfin`). Descartar em vez de aceitar como batch porque a busca de pack rodava **antes** na resolução da estratégia: um batch que valesse a pena já teria sido pego lá, e o que vaza aqui é exatamente o que o teto rejeitou. O guard em si (marcar `IsBatch`/descartar packs vazados de dentro do parser de episódio) segue valendo em `ScrapNyaaForAnime` hoje.
+**(a) Without the batch guard, a 220-episode pack enters as "episode 1".** `[Erai-raws] Naruto - 001 ~ 220 [480p]` matches `- 001` in `ExtractEpisodeNumber`, and the multi-episode search (unlike the single) did not filter batches. Result measured, at the time: 220 episodes in one record, with `IsBatch: false`, punching through the then batch ceiling (`max_batch_episodes`, removed by the batch-by-filter spec) **and** `max_episodes_per_anime` — and organized as a single episode (renamed "Naruto - E01" with `rename_files_for_jellyfin`). Discard rather than accept as a batch because the pack search ran **earlier** in strategy resolution: a batch worth taking would already have been caught there, and what leaks here is exactly what the ceiling rejected. The guard itself (mark `IsBatch`/discard leaked packs from inside the episode parser) still holds in `ScrapNyaaForAnime` today.
 
-**(a2) O guard só vale se o `IsBatch` reconhecer a faixa.** O padrão de faixa exigia espaço DEPOIS do segundo número (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), então `One Piece EP 001-501` e `One Piece 001-501.mkv` passavam como "episódio 1" — o mesmo bug de (a) por outro buraco, medido ao vivo na busca do episódio 1 do One Piece (2 dos 7 candidatos eram packs de 500 episódios). O fim da faixa agora aceita espaço, fim do nome, `.` ou `[`.
+**(a2) The guard only holds if `IsBatch` recognizes the range.** The range pattern required a space AFTER the second number (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), so `One Piece EP 001-501` and `One Piece 001-501.mkv` passed as "episode 1" — the same bug as (a) through another hole, measured live on the One Piece episode 1 search (2 of the 7 candidates were 500-episode packs). The end of the range now accepts space, end of name, `.` or `[`.
 
-**(b) O ramo `!reHasEpisode && !IsBatch` de `isMovie` não pode virar guard de episódio.** `reHasEpisode` só cobre `- 05`, `episode 05` e `S01E05`; `ExtractEpisodeNumber` cobre também `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` e `" 5"`. Chamar `isMovie` inteiro rejeitaria todo release nessas formas (os testes de "Lucky Star EP015 / E015 / 15" pegam isso). Daí o split: `hasMovieMarker` (keywords + OVA/ONA + special) serve os dois lados, e `isMovie` continua sendo o `hasMovieMarker` mais o fallback "não tem marcador de episódio" que só faz sentido na busca de filme.
+**(b) `isMovie`'s `!reHasEpisode && !IsBatch` branch cannot become an episode guard.** `reHasEpisode` only covers `- 05`, `episode 05` and `S01E05`; `ExtractEpisodeNumber` also covers `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` and `" 5"`. Calling all of `isMovie` would reject every release in those forms (the "Lucky Star EP015 / E015 / 15" tests catch that). Hence the split: `hasMovieMarker` (keywords + OVA/ONA + special) serves both sides, and `isMovie` remains `hasMovieMarker` plus the "has no episode marker" fallback that only makes sense on a movie search.
 
-**(c) `reOvaPattern` precisa de `\b`.** Era `\(?(ova|ona)\)?`, sem boundary: "ona" casa dentro de **Persona**, "ova" dentro de **Nova**. Enquanto o padrão só era usado na direção permissiva (`ScrapNyaaForMovie`) isso passava; como guard de episódio viraria rejeição do anime inteiro.
+**(c) `reOvaPattern` needs `\b`.** It was `\(?(ova|ona)\)?`, with no boundary: "ona" matches inside **Persona**, "ova" inside **Nova**. While the pattern was only used in the permissive direction (`ScrapNyaaForMovie`) that passed; as an episode guard it would become rejection of the whole anime.
 
 **Don't "fix" by:**
-- Trocar `hasMovieMarker` por `isMovie` no guard de episódio "para reusar a função" (ver (b)).
-- Aceitar o batch vazado marcando `IsBatch: true` em vez de descartar (ver (a)).
-- Tirar o `\b` de `reOvaPattern` para "pegar `(OVA)` também" — `\b` já casa antes de `(` e depois de `)` (ver (c)).
+- Swapping `hasMovieMarker` for `isMovie` in the episode guard "to reuse the function" (see (b)).
+- Accepting the leaked batch by marking `IsBatch: true` instead of discarding (see (a)).
+- Taking `\b` off `reOvaPattern` to "also catch `(OVA)`" — `\b` already matches before `(` and after `)` (see (c)).
 
-### 54. Piso de seeders: seeders ilegível é descartado, tamanho ilegível passa
+### 54. Seeders floor: unreadable seeders are discarded, unreadable size passes
 
 **Location:** `daemon/search.go` — `filterBySeeders`, `filterSearchResults`, `filterBySize`; `files/filemanager.go` — `Config.MinSeeders` (default `1`); `nyaa/nyaa.go` — `ParseSeeders`.
 
-**What it looks like:** dois filtros com contrato quase idêntico e uma assimetria de propósito — `Size == 0` (parse falhou) **passa** pelo teto de tamanho, `seeders == 0` (inclusive `"-"`) **não passa** pelo piso.
+**What it looks like:** two filters with an almost identical contract and an asymmetry of purpose — `Size == 0` (parse failed) **passes** the size ceiling, `seeders == 0` (including `"-"`) **does not pass** the floor.
 
 **Why it's right:**
 
-**(a) Sem piso, torrent morto é candidato válido — e ganha quando é o único.** Medido: `[DB] Naruto Shippuuden Movie 3` com **0 peers** foi o único candidato do episódio 3 e foi baixado. O default `1` barra só isso; `0` desliga, seguindo a convenção de `max_batch_torrent_size_gb`.
+**(a) With no floor, a dead torrent is a valid candidate — and it wins when it is the only one.** Measured: `[DB] Naruto Shippuuden Movie 3` with **0 peers** was episode 3's only candidate and was downloaded. The default `1` bars only that; `0` turns it off, following the `max_batch_torrent_size_gb` convention.
 
-**(b) A assimetria com `filterBySize` é o ponto, não um descuido.** Tamanho desconhecido significa "não sei se cabe", e descartar trocaria "às vezes baixa um torrent grande" por "não baixa nada" — um bug de parsing viraria paralisação silenciosa. Seeders desconhecido é diferente: a coluna é o **único** sinal de que existe alguém semeando, e um torrent sem semeador não completa nunca. Deixar passar não é o lado conservador — é travar o episódio num torrent que não baixa.
+**(b) The asymmetry with `filterBySize` is the point, not an oversight.** Unknown size means "I don't know if it fits", and discarding would swap "sometimes downloads a large torrent" for "downloads nothing" — a parsing bug would become a silent stall. Unknown seeders is different: the column is the **only** signal that someone is seeding, and a torrent with no seeder never completes. Letting it through is not the conservative side — it is pinning the episode on a torrent that does not download.
 
-**(c) O filtro ficou no daemon, não no `parseRow` do nyaa.** O plano pedia no parse, "antes de qualquer ordenação". Como o sort é estável e os filtros preservam a ordem, o escolhido é o mesmo; e no daemon reusa o padrão do `filterBySize`, vale para todos os call sites de busca num ponto só (`filterSearchResults`) e mantém o log `"Found N results"` do nyaa mostrando o torrent morto com seus seeders — que é o que serve para diagnosticar. `nyaa.ParseSeeders` existe só para isso (mesmo padrão de `IsBatch`/`ExtractSeason`).
+**(c) The filter stayed in the daemon, not in nyaa's `parseRow`.** The plan asked for it in parse, "before any sort". Because the sort is stable and the filters preserve order, the pick is the same; and in the daemon it reuses `filterBySize`'s pattern, holds for every search call site at one point (`filterSearchResults`) and keeps nyaa's `"Found N results"` log showing the dead torrent with its seeders — which is what diagnoses. `nyaa.ParseSeeders` exists only for that (same pattern as `IsBatch`/`ExtractSeason`).
 
 **Don't "fix" by:**
-- Fazer `Size == 0` ser descartado "por simetria com os seeders" (ver (b)).
-- Subir o default para "só torrent saudável": ranking é trabalho do critério `health`, não do piso — o piso existe para o que não baixa de jeito nenhum.
+- Making `Size == 0` discarded "for symmetry with seeders" (see (b)).
+- Raising the default to "only a healthy torrent": ranking is `health`'s job, not the floor's — the floor exists for what does not download at all.
 
-### 55. `health` compara FAIXA de seeders, e vem antes de `fansub`
+### 55. `health` compares a seeders BAND, and it comes before `fansub`
 
-**Location:** `nyaa/priorities.go` — `criterionCompare["health"]`, `healthTier`, `healthTierFloors`, `DefaultPriorities().CriteriaOrder`; `nyaa/nyaa.go` — `torrentHealthScore` (só log).
+**Location:** `nyaa/priorities.go` — `criterionCompare["health"]`, `healthTier`, `healthTierFloors`, `DefaultPriorities().CriteriaOrder`; `nyaa/nyaa.go` — `torrentHealthScore` (log only).
 
-**What it looks like:** o comparador de `health` não usa `torrentHealthScore`; usa um índice de faixa (`0 / 1-4 / 5-19 / 20-99 / 100-399 / 400+`). E `health` está na 4ª posição da ordem default, não na 7ª.
+**What it looks like:** the `health` comparator does not use `torrentHealthScore`; it uses a band index (`0 / 1-4 / 5-19 / 20-99 / 100-399 / 400+`). And `health` is in 4th position of the default order, not 7th.
 
 **Why it's right:**
 
-**(a) O sort é lexicográfico, então score cru = health sozinho decide ou nunca decide.** Com o score contínuo, 1 seeder de diferença já resolve a comparação e nenhum critério depois de `health` chega a ser consultado. Comparando faixa, 400 seeders vence 12 (faixas 5 e 3), mas 150 vs 300 empata e o `fansub` decide — que é o comportamento pretendido.
+**(a) The sort is lexicographic, so a raw score = health alone decides or never decides.** With a continuous score, a 1-seeder difference already settles the comparison and no criterion after `health` is ever consulted. Comparing bands, 400 seeders beats 12 (bands 5 and 3), but 150 vs 300 ties and `fansub` decides — which is the intended behaviour.
 
-**(b) `health` na 7ª posição nunca era alcançado.** Medido no With You: os 3 candidatos eram 1080p, o `fansub` desempatou (subsplease=0, judas=2, ember=5) e `health` não foi consultado — um torrent com 12 seeders ganharia de um com 400 por ordem de fansub. A ordem nova é `uncensored, source, resolution, health, codec, fansub, audio, size`.
+**(b) `health` in 7th position was never reached.** Measured on With You: the 3 candidates were 1080p, `fansub` broke the tie (subsplease=0, judas=2, ember=5) and `health` was not consulted — a torrent with 12 seeders would beat one with 400 by fansub order. The new order is `uncensored, source, resolution, health, codec, fansub, audio, size`.
 
-**(c) Faixa fixa, não razão.** "Empata a menos que um tenha 2x o outro" parece melhor (sem efeito de borda), mas não é transitivo — 100 ~ 150 ~ 220 e 100 < 220 — e `sort.SliceStable` com comparador intransitivo devolve ordem arbitrária. O preço da faixa fixa é a borda: 399 e 400 caem em faixas diferentes. Aceito de propósito; qualquer bucketização tem borda.
+**(c) Fixed band, not a ratio.** "Tie unless one has 2x the other" looks better (no edge effect), but it is not transitive — 100 ~ 150 ~ 220 and 100 < 220 — and `sort.SliceStable` with an intransitive comparator returns arbitrary order. The cost of a fixed band is the edge: 399 and 400 fall into different bands. Accepted on purpose; any bucketing has an edge.
 
-**(d) `torrentHealthScore` ficou só no log.** Ele combina seeders com a razão seeders/leechers, informação que a faixa (só seeders) descarta. Vale como diagnóstico no `matched_torrents` (`t=` faixa, `h=` score), não como critério.
+**(d) `torrentHealthScore` stayed log-only.** It combines seeders with the seeders/leechers ratio, information the band (seeders only) discards. It is worth as a diagnosis in `matched_torrents` (`t=` band, `h=` score), not as a criterion.
 
-**Nota de entrega:** um `config.json` existente **já tem** `criteria_order` gravado e `LoadConfigs` desserializa por cima do default, então a ordem nova NÃO chega sozinha em instalação antiga. O usuário edita à mão ou clica "restaurar defaults" na página de Prioridades.
+**Rollout note:** an existing `config.json` **already has** `criteria_order` written and `LoadConfigs` unmarshals over the default, so the new order does NOT arrive on its own in an old install. The user edits by hand or clicks "restore defaults" on the Priorities page.
 
 **Don't "fix" by:**
-- Voltar o comparador para `torrentHealthScore` "porque usa mais informação" (ver (a) e (d)).
-- Trocar faixa por razão/tolerância percentual (ver (c)).
-- Migrar `criteria_order` de config existente automaticamente: reordenar silenciosamente a preferência que o usuário gravou é pior que a nota de entrega.
+- Putting the comparator back on `torrentHealthScore` "because it uses more information" (see (a) and (d)).
+- Swapping the band for a ratio/percent tolerance (see (c)).
+- Migrating an existing config's `criteria_order` automatically: silently reordering the preference the user saved is worse than the rollout note.
 
-### 56. Série longa busca o episódio também com zero-padding, e o gate é `LastAiredEpisode`
+### 56. A long series also searches the episode with zero-padding, and the gate is `LastAiredEpisode`
 
-**Location:** `nyaa/nyaa.go` — `episodeQueries`, `longSeriesEpisodes`, `ScrapNyaa`; `anilist/episodes.go` — `LastAiredEpisode`; `daemon/episodes.go` e `daemon/manual_download.go` — `seriesLength` / `totalEpisodes`.
+**Location:** `nyaa/nyaa.go` — `episodeQueries`, `longSeriesEpisodes`, `ScrapNyaa`; `anilist/episodes.go` — `LastAiredEpisode`; `daemon/episodes.go` and `daemon/manual_download.go` — `seriesLength` / `totalEpisodes`.
 
-**What it looks like:** `ScrapNyaa` faz duas buscas (`one piece 1` e `one piece 001`) num anime longo, e o "é longo?" vem de `anilist.LastAiredEpisode`, não de `Media.Episodes`.
+**What it looks like:** `ScrapNyaa` does two searches (`one piece 1` and `one piece 001`) on a long anime, and "is it long?" comes from `anilist.LastAiredEpisode`, not from `Media.Episodes`.
 
 **Why it's right:**
 
-**(a) `q=one piece 1` nunca acha o episódio 1.** A query casa tudo que contém "1" e, ordenada por seeders, as primeiras centenas de linhas são os episódios 1160-1173. Medido: 375 linhas sem o episódio 1. Grupos numeram série longa com padding (`[Judas] One Piece 001-574`, `[Erai-raws] Naruto Shippuuden - 001 ~ 079`).
+**(a) `q=one piece 1` never finds episode 1.** The query matches everything that contains "1" and, ordered by seeders, the first hundreds of rows are episodes 1160-1173. Measured: 375 rows without episode 1. Groups number a long series with padding (`[Judas] One Piece 001-574`, `[Erai-raws] Naruto Shippuuden - 001 ~ 079`).
 
-**(b) Variante ADICIONAL, não substituição.** Padding é convenção, não regra: quem numera solto (`Show 5`) continua sendo pego pela query simples. As duas listas entram no mesmo pool, deduplicado por magnet.
+**(b) ADDITIONAL variant, not a replacement.** Padding is convention, not a rule: whoever numbers loose (`Show 5`) is still caught by the simple query. Both lists enter the same pool, deduped by magnet.
 
-**(c) O gate é `LastAiredEpisode`, e isso importa.** O plano pedia `Media.Episodes > 100`, mas num RELEASING sem fim anunciado esse campo é **nil** — ou seja, seria nil exatamente no One Piece, o caso que a mudança existe para consertar. `LastAiredEpisode` já combina as três fontes (agenda, `nextAiringEpisode - 1`, e `media.episodes` só quando FINISHED) e devolve ~1173 ali. Coberto por `TestSingleEpisodeSearch_ReceivesSeriesLength`, que usa um anime no formato One Piece (RELEASING, `Media.Episodes == nil`).
+**(c) The gate is `LastAiredEpisode`, and that matters.** The plan asked for `Media.Episodes > 100`, but on a RELEASING with no announced end that field is **nil** — i.e. it would be nil exactly on One Piece, the case the change exists to fix. `LastAiredEpisode` already combines the three sources (schedule, `nextAiringEpisode - 1`, and `media.episodes` only when FINISHED) and returns ~1173 there. Covered by `TestSingleEpisodeSearch_ReceivesSeriesLength`, which uses an anime in the One Piece shape (RELEASING, `Media.Episodes == nil`).
 
-**(d) O teto de 100 e o `episode < 100`.** Cada variante custa fetches, então padding só em série longa; e episódio >= 100 já tem 3 dígitos, onde a variante seria idêntica à simples.
+**(d) The 100 ceiling and `episode < 100`.** Each variant costs fetches, so padding only on a long series; and episode >= 100 already has 3 digits, where the variant would be identical to the simple one.
 
-**(e) Erro numa variante não anula a outra.** `ScrapNyaa` só devolve erro se NENHUMA variante respondeu; se a página da query com padding falhar, a busca segue com o que a outra trouxe.
+**(e) An error on one variant does not cancel the other.** `ScrapNyaa` only returns an error if NO variant answered; if the padded query's page fails, the search continues with what the other brought.
 
 **Don't "fix" by:**
-- Trocar o gate por `Media.Episodes` "que é o total de verdade" (ver (c)).
-- Substituir a query simples pela com padding (ver (b)).
-- Sempre buscar as duas formas: dobra o tráfego no Nyaa em todo anime curto, onde padding não muda nada (ver (d)).
+- Swapping the gate for `Media.Episodes` "which is the real total" (see (c)).
+- Replacing the simple query with the padded one (see (b)).
+- Always searching both forms: doubles Nyaa traffic on every short anime, where padding changes nothing (see (d)).
 
-### 57. Paginação adaptativa: sequencial, com piso de candidatos, sem orçamento por anime
+### 57. Adaptive pagination: sequential, with a candidate floor, no per-anime budget
 
 **Location:** `nyaa/nyaa.go` — `fetchSearchPages`, `parsePagesWith`, `enoughCandidates`, `SetMaxSearchPages`/`ActiveMaxSearchPages`; `files/filemanager.go` — `Config.MaxSearchPages`, `applyNyaaSettings`.
 
-**What it looks like:** um só helper de paginação usado pelas três buscas (`ScrapNyaa`, `ScrapNyaaForAnime`, `ScrapNyaaForMovie` — na época desta decisão eram quatro, `ScrapNyaaForBatch` e `ScrapNyaaForMultipleEpisodes` depois se fundiram em `ScrapNyaaForAnime`), que desce página por página **sequencialmente** enquanto tiver menos de 3 candidatos aceitos, com teto configurável.
+**What it looks like:** one pagination helper used by the three searches (`ScrapNyaa`, `ScrapNyaaForAnime`, `ScrapNyaaForMovie` — at the time of this decision there were four, `ScrapNyaaForBatch` and `ScrapNyaaForMultipleEpisodes` later fused into `ScrapNyaaForAnime`), which descends page by page **sequentially** while it has fewer than 3 accepted candidates, with a configurable ceiling.
 
 **Why it's right:**
 
-**(a) A página 2 era buscada SEMPRE.** Nas buscas que resolvem na página 1 — a maioria — isso era um fetch jogado fora. É essa economia que paga o teto de 5 páginas sem subir o tráfego médio: um teto fixo de 5 custaria fetches em disparada por passada contra o nyaa.si, onde se espera 429/Cloudflare.
+**(a) Page 2 was fetched ALWAYS.** On searches that resolve on page 1 — most of them — that was a wasted fetch. That saving is what pays for the 5-page ceiling without raising average traffic: a fixed ceiling of 5 would cost a burst of fetches per pass against nyaa.si, where 429/Cloudflare is expected.
 
-**(b) Piso de candidatos aceitos, não de linhas.** O Nyaa devolve ordenado por seeders desc, então a partir de um punhado de candidatos a página seguinte só traz opção pior; 3 já dá escolha ao ranking. Página **vazia** também encerra: significa que a query acabou, e insistir até o teto seria fetch garantido inútil.
+**(b) Floor of accepted candidates, not of rows.** Nyaa returns ordered by seeders desc, so past a handful of candidates the next page only brings a worse option; 3 already gives the ranking a choice. An **empty** page also ends it: it means the query is over, and insisting up to the ceiling would be a guaranteed useless fetch.
 
-**(c) Sequencial, sem rajada paralela.** O plano previa 2-3 concorrentes "quando de fato precisar descer". Ficou de fora de propósito: cada página só é pedida porque a anterior não bastou (paralelizar exigiria pedir páginas que talvez não fossem necessárias, desfazendo (a)), o ganho é só de latência num caminho raro, e rajada paralela é justamente o que provoca 429/Cloudflare — o problema que o resto da decisão evita. Sem throttle no cliente, esse é o pior lugar para adicionar concorrência.
+**(c) Sequential, no parallel burst.** The plan called for 2-3 concurrent "when it actually needs to descend". Left out on purpose: each page is only asked for because the previous was not enough (parallelizing would require asking for pages that might not be needed, undoing (a)), the gain is only latency on a rare path, and a parallel burst is exactly what causes 429/Cloudflare — the problem the rest of the decision avoids. With no client throttle, this is the worst place to add concurrency.
 
-**(d) Batch e filme entraram no mesmo caminho.** Os dois liam só a página 1 com `httpGet` direto, sem passar por `fetchNyaaPage` — não paginavam e **não apareciam no log**. Agora usam o mesmo helper e ganham o log de página junto.
+**(d) Batch and movie entered the same path.** Both used to read only page 1 with a direct `httpGet`, without going through `fetchNyaaPage` — they did not paginate and **did not appear in the log**. Now they use the same helper and get the page log with it.
 
-**(e) NÃO existe orçamento de fetches por anime por passada.** O plano pedia, para que um anime insolúvel não queime o teto toda passada. Medido: o pior caso é uma busca que nunca satisfaz o piso e vai até 5 páginas, ~2,3x os fetches de hoje, e **só** em anime que não encontra nada. O orçamento exigiria estado por anime atravessando `nyaaSearcher` e as funções exportadas do nyaa — plumbing desproporcional ao risco. Se o tráfego incomodar, o caminho mais curto é baixar `max_search_pages`.
+**(e) There is NO per-anime per-pass fetch budget.** The plan asked for one, so an unsolvable anime would not burn the ceiling every pass. Measured: the worst case is a search that never meets the floor and goes to 5 pages, ~2.3x today's fetches, and **only** on an anime that finds nothing. The budget would require per-anime state crossing `nyaaSearcher` and nyaa's exported functions — plumbing out of proportion to the risk. If the traffic bothers, the shortest path is lowering `max_search_pages`.
 
 **Don't "fix" by:**
-- Buscar as páginas 1..N em paralelo "para ficar mais rápido" (ver (a) e (c)).
-- Trocar o piso por "sempre buscar o teto" (ver (a)).
-- Continuar descendo depois de uma página vazia (ver (b)).
+- Fetching pages 1..N in parallel "to make it faster" (see (a) and (c)).
+- Swapping the floor for "always fetch the ceiling" (see (a)).
+- Keeping descending after an empty page (see (b)).
 
 ---
 
-### 58. `RunAnimeDebug` espelha `processAnimeEpisodes`: enumeração, resolução de pack e fallback single
+### 58. `RunAnimeDebug` mirrors `processAnimeEpisodes`: enumeration, pack resolution and single fallback
 
-**Location:** `daemon/debug.go` — `RunAnimeDebug`; espelha `daemon/episodes.go` — `processAnimeEpisodes`.
+**Location:** `daemon/debug.go` — `RunAnimeDebug`; mirrors `daemon/episodes.go` — `processAnimeEpisodes`.
 
-**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, roda a mesma busca por anime + `partitionSearchResults`/`pickBatches` para decidir se um pack cobre a janela (e, se sim, re-roda `selectEpisodes` com o teto levantado), e cai em `searchSingleEpisode` quando nenhum episódio pendente recebeu magnet de pack/filme — três trechos duplicados do loop de produção. `willBatchAnime`/`resolveSearchStrategy` saíram: elegibilidade a pack é o resultado da busca filtrada, não metadado do AniList ([#59](#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado)).
+**What it looks like:** debug of an anime does not iterate `anime.Media.AiringSchedule.Nodes`; it builds the list with `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, runs the same per-anime search + `partitionSearchResults`/`pickBatches` to decide whether a pack covers the window (and, if so, re-runs `selectEpisodes` with the ceiling lifted), and falls into `searchSingleEpisode` when no pending episode received a pack/movie magnet — three duplicated stretches of the production loop. `willBatchAnime`/`resolveSearchStrategy` left: pack eligibility is the filtered search result, not AniList metadata ([#59](#59-batch-eligibility-stopped-being-metadata-and-became-a-result-filter)).
 
 **Why it's right:**
 
-**(a) A agenda crua descreve outro pipeline.** No One Piece a página 1 da agenda vai do 1123 ao 1147; a produção enumera 1..1147 e pega os 12 primeiros pelo teto. Iterando os nós crus, o debug reportava ter buscado "1123 a 1147" — nenhum anime de agenda clipada era medido corretamente, e é exatamente a classe que a `EpisodeList` sintética (#52) existe para cobrir.
+**(a) The raw schedule describes another pipeline.** On One Piece schedule page 1 goes from 1123 to 1147; production enumerates 1..1147 and takes the first 12 by the ceiling. Iterating the raw nodes, debug reported having searched "1123 to 1147" — no clipped-schedule anime was measured correctly, and that is exactly the class the synthetic `EpisodeList` (#52) exists to cover.
 
-**(b) A regra pack↔limite nunca era avaliada.** `pickBatches`/`assignBatches` levantam o teto por anime em `processAnimeEpisodes` quando um pack cobre a janela; sem rodar o mesmo caminho, o debug era cego justamente à regra que a feature de animes avulsos declara como pré-requisito ("um anime de 1100 episódios adicionado a dedo cai no caminho um-a-um limitado, a menos que um pack cubra a janela").
+**(b) The pack↔limit rule was never evaluated.** `pickBatches`/`assignBatches` lift the per-anime ceiling in `processAnimeEpisodes` when a pack covers the window; without running the same path, debug was blind to the very rule the standalone-anime feature declares as a prerequisite ("an 1100-episode anime added by hand falls on the limited one-by-one path, unless a pack covers the window").
 
-**(c) Sem o fallback, série longa era falso positivo garantido.** A busca múltipla não leva número de episódio na query (`q=one piece`), e as primeiras páginas ordenadas por seeders são só os episódios recentes — medido: 750 linhas cruas, nenhuma do episódio 1-12. Quem acha o episódio antigo é `searchSingleEpisode`, que carrega o zero-padding (#56). Sem ele o relatório do `debug-batch` marcava One Piece e Naruto Shippuden como "0 magnets" por **não ter buscado**, não por o Nyaa não ter.
+**(c) Without the fallback, a long series was a guaranteed false positive.** The multi search does not put an episode number in the query (`q=one piece`), and the first pages ordered by seeders are only recent episodes — measured: 750 raw rows, none of episode 1-12. Who finds the old episode is `searchSingleEpisode`, which carries the zero-padding (#56). Without it the `debug-batch` report marked One Piece and Naruto Shippuden as "0 magnets" for **not having searched**, not for Nyaa not having them.
 
-**(d) `savedEpisodes = nil` é intencional.** `firstEpisodeToConsider` só usa esse argumento para recuar o início abaixo de `Progress + 1`, e o debug já declara — no `ponytail:` e no `Warn` que emite — que trata todo episódio como não-baixado. Com `nil` resolve para `Progress + 1`, que num avulso é 1.
+**(d) `savedEpisodes = nil` is intentional.** `firstEpisodeToConsider` only uses that argument to walk the start back below `Progress + 1`, and debug already declares — in the `ponytail:` and the `Warn` it emits — that it treats every episode as not-downloaded. With `nil` it resolves to `Progress + 1`, which on a standalone is 1.
 
-**Trade-off aceito:** `summary.Episodes` passa a ter uma entrada por episódio enumerado (~1147 no One Piece, a maioria com `would_search: false`), e um FINISHED curto entra em batch, alongando a rodada. É o preço da fidelidade; o `report.md` do `debug-batch` agrega.
+**Accepted trade-off:** `summary.Episodes` now has one entry per enumerated episode (~1147 on One Piece, most with `would_search: false`), and a short FINISHED enters batch, lengthening the run. That is the cost of fidelity; `debug-batch`'s `report.md` aggregates.
 
 **Don't "fix" by:**
-- Voltar a iterar `AiringSchedule.Nodes` "porque é mais simples" — a simplicidade produz um diagnóstico de um pipeline que o daemon não executa.
-- Parar na resolução de pack "porque é a etapa que decide a estratégia" — ela é só metade da busca; a outra metade é o fallback por episódio.
-- Truncar `summary.Episodes` aos que têm `would_search: true` — a contagem "nada buscado" do relatório depende de ver os dois lados.
+- Going back to iterating `AiringSchedule.Nodes` "because it's simpler" — the simplicity produces a diagnosis of a pipeline the daemon does not run.
+- Stopping at pack resolution "because that's the step that decides the strategy" — it is only half the search; the other half is the per-episode fallback.
+- Truncating `summary.Episodes` to those with `would_search: true` — the report's "nothing searched" count depends on seeing both sides.
 
 ---
 
-### 80. O teto de tamanho de pack é aplicado DUAS vezes: na busca do Nyaa e no filtro do daemon
+### 80. The pack size ceiling is applied TWICE: in the Nyaa search and in the daemon filter
 
-**Location:** `nyaa/nyaa.go` — `maxBatchSizeBytes`, `SetMaxBatchTorrentSizeGB`, `batchTooBig`, aplicado no `parseRow` de `ScrapNyaaForAnime`; e `daemon/search.go` — `filterBySize`, via `partitionSearchResults`.
+**Location:** `nyaa/nyaa.go` — `maxBatchSizeBytes`, `SetMaxBatchTorrentSizeGB`, `batchTooBig`, applied in `ScrapNyaaForAnime`'s `parseRow`; and `daemon/search.go` — `filterBySize`, via `partitionSearchResults`.
 
-**What it looks like:** `max_batch_torrent_size_gb` já é aplicado pelo daemon em `filterBySize`, e mesmo assim o pacote `nyaa` recebe o mesmo teto por push (`applyNyaaSettings`) e descarta a linha do pack antes de acrescentá-la ao resultado. Parece filtro duplicado, e o comentário antigo do `ScrapNyaaForAnime` dizia explicitamente que empurrar filtro para dentro do `nyaa` era o que `applyNyaaSettings` evitava.
+**What it looks like:** `max_batch_torrent_size_gb` is already applied by the daemon in `filterBySize`, and yet the `nyaa` package receives the same ceiling by push (`applyNyaaSettings`) and drops the pack row before adding it to the result. Looks like a duplicated filter, and `ScrapNyaaForAnime`'s old comment said explicitly that pushing a filter into `nyaa` was what `applyNyaaSettings` avoided.
 
-**Why it's right:** os dois filtros não fazem a mesma coisa, porque rodam em momentos diferentes do algoritmo. O do daemon decide **o que baixar**. O do `nyaa` decide **até onde descer as páginas** — `fetchSearchPages` para quando `accepted()` alcança `enoughCandidates` (3), e `accepted()` conta o que a busca aceitou. Um pack que o daemon vai descartar por tamanho, mas que a busca aceitou, gasta uma das três vagas do piso e encerra a descida cedo demais.
+**Why it's right:** the two filters do not do the same thing, because they run at different moments of the algorithm. The daemon's decides **what to download**. nyaa's decides **how far to descend the pages** — `fetchSearchPages` stops when `accepted()` reaches `enoughCandidates` (3), and `accepted()` counts what the search accepted. A pack the daemon will discard for size, but that the search accepted, spends one of the three floor slots and ends the descent too early.
 
-Medido no Nyaa (agosto/2026, `?q=one+piece&s=seeders&o=desc`, que é exatamente a query montada por `ScrapNyaaForAnime`):
+Measured on Nyaa (August 2026, `?q=one+piece&s=seeders&o=desc`, which is exactly the query `ScrapNyaaForAnime` builds):
 
-| página | pack | tamanho |
+| page | pack | size |
 |---|---|---|
-| 1 | (pack completo) | 587,5 GiB |
-| 1 | `[Judas] One Piece 001-574` | 171,8 GiB |
-| 2 | `[Erai-raws] One Piece 0892~1089` | 190,3 GiB |
-| 2 | (pack completo) | 1,3 TiB |
-| 2 | `[Judas] One Piece 783-1023` | 86,2 GiB |
-| 3 | `[Judas] One Piece 575-782` | 61,0 GiB |
-| 3 | `One Piece S01E1109-E1122` | 20,0 GiB |
-| 3 | `[ToonsHub] One Piece EP1144-EP1155` | 16,6 GiB |
+| 1 | (complete pack) | 587.5 GiB |
+| 1 | `[Judas] One Piece 001-574` | 171.8 GiB |
+| 2 | `[Erai-raws] One Piece 0892~1089` | 190.3 GiB |
+| 2 | (complete pack) | 1.3 TiB |
+| 2 | `[Judas] One Piece 783-1023` | 86.2 GiB |
+| 3 | `[Judas] One Piece 575-782` | 61.0 GiB |
+| 3 | `One Piece S01E1109-E1122` | 20.0 GiB |
+| 3 | `[ToonsHub] One Piece EP1144-EP1155` | 16.6 GiB |
 
-Os três primeiros aceitos são todos gigantes, o piso fecha, e os packs de 86 / 61 / 20 / 16 GiB — que **cabem** no teto padrão de 100 — nunca são vistos. O sintoma reportado era "One Piece nunca baixa porque todos os packs achados passam do teto"; a causa não é o teto ser baixo, é a busca parar antes de achar os que cabem. Subir o teto para 200 esconderia o bug e ainda enfileiraria 171 GiB no lugar de 61 GiB.
+The first three accepted are all giants, the floor closes, and the 86 / 61 / 20 / 16 GiB packs — which **fit** the default ceiling of 100 — are never seen. The reported symptom was "One Piece never downloads because every pack found is over the ceiling"; the cause is not the ceiling being low, it is the search stopping before finding the ones that fit. Raising the ceiling to 200 would hide the bug and still queue 171 GiB in place of 61 GiB.
 
-O push da config para dentro do `nyaa` não é padrão novo: é o mesmo de `SetPriorities` e `SetMaxSearchPages` (o `nyaa` não pode importar `files` — ciclo —, então a config chega por push). O default é `0` (desligado), então o pacote usado sem push se comporta como antes.
+Pushing config into `nyaa` is not a new pattern: it is the same as `SetPriorities` and `SetMaxSearchPages` (`nyaa` cannot import `files` — cycle — so config arrives by push). The default is `0` (off), so the package used without a push behaves as before.
 
-**Trade-off aceito:** o teto de pack aparece em dois lugares e precisa continuar coerente entre eles (mesma regra de `Size == 0` passa livre). O do daemon continua sendo a autoridade — se o push não acontecer, nada vaza para download.
+**Accepted trade-off:** the pack ceiling appears in two places and needs to stay coherent between them (same `Size == 0` passes free rule). The daemon's remains the authority — if the push does not happen, nothing leaks into a download.
 
 **Don't "fix" by:**
-- Remover o filtro do `nyaa` "porque `filterBySize` já faz isso" — é justamente o que quebra a paginação.
-- Remover o filtro do `daemon` "porque agora o `nyaa` já filtra" — `filterBySize` também cobre `max_episode_torrent_size_gb` e é o que garante o resultado quando a config não foi empurrada (testes, uso direto do pacote).
-- Empurrar também `min_seeders` para o `nyaa` "por simetria" — o Nyaa já devolve ordenado por seeders desc, então o filtro de seeders não trunca a descida do mesmo jeito: os melhores vêm primeiro por construção.
-- Subir `max_batch_torrent_size_gb` como "solução" para série longa — ver acima.
+- Removing nyaa's filter "because `filterBySize` already does that" — that is exactly what breaks pagination.
+- Removing the daemon's filter "because `nyaa` already filters now" — `filterBySize` also covers `max_episode_torrent_size_gb` and is what guarantees the result when config was not pushed (tests, direct use of the package).
+- Pushing `min_seeders` into `nyaa` too "for symmetry" — Nyaa already returns ordered by seeders desc, so the seeders filter does not truncate the descent the same way: the best come first by construction.
+- Raising `max_batch_torrent_size_gb` as a "solution" for a long series — see above.
 
 ---
 
-### 81. A precedência dos códigos do relatório é cascata, não conjunto
+### 81. Report-code precedence is a cascade, not a set
 
 **Location:** `daemon/report.go` — `searchIssue`.
 
-**What it looks like:** um episódio pode satisfazer três condições ao mesmo tempo — todos os candidatos acima do teto, todos abaixo do piso de seeders, e `len(magnets) == 0`. `searchIssue` escolhe **um** código com um `switch` cuja ordem parece arbitrária, e ignora que as outras condições também são verdadeiras.
+**What it looks like:** an episode can satisfy three conditions at once — every candidate above the ceiling, every one below the seeders floor, and `len(magnets) == 0`. `searchIssue` picks **one** code with a `switch` whose order looks arbitrary, and ignores that the other conditions are also true.
 
-**Why it's right:** a ordem é a regra de negócio. Quando um filtro esvazia a lista, "nenhum torrent encontrado" **também** é verdade — e é a resposta menos acionável das três, além de mentirosa: havia oito. "Todos os candidatos tinham 8 GB e seu teto é 3 GB" diz ao usuário o que fazer (subir o teto, ou ajustar a query customizada). "Nenhum torrent encontrado" não diz nada, e manda ele procurar no Nyaa um torrent que já tinha sido achado.
+**Why it's right:** the order is the business rule. When a filter empties the list, "no torrent found" is **also** true — and it is the least actionable of the three, besides being a lie: there were eight. "Every candidate was 8 GB and your ceiling is 3 GB" tells the user what to do (raise the ceiling, or adjust the custom query). "No torrent found" says nothing, and sends them looking on Nyaa for a torrent that had already been found.
 
-Mesma disciplina da cascata de `deriveAnimeChip` (`lib/domain/animeState.ts`): a primeira condição que casa vence, e a ordem é a regra.
+Same discipline as `deriveAnimeChip`'s cascade (`lib/domain/animeState.ts`): the first condition that matches wins, and the order is the rule.
 
-**Trade-off aceito:** um episódio cortado pelos dois filtros aparece só como `all_above_size_limit`. É deliberado — o usuário resolve um de cada vez, e o de tamanho é o que ele controla diretamente.
+**Accepted trade-off:** an episode cut by both filters shows up only as `all_above_size_limit`. Deliberate — the user solves one at a time, and the size one is what they control directly.
 
 **Don't "fix" by:**
-- Devolver uma lista de códigos "porque as três condições valem" — a UI passaria a mostrar três linhas por episódio, duas delas ruído.
-- Reordenar para pôr `no_torrent_found` primeiro "porque é o caso mais comum" — comum não é o critério; acionável é.
-- Alimentar a cascata com o `packStats` de `partitionSearchResults` — o pack é decidido para o anime, não para o episódio, e o fallback por episódio é quem dá a última palavra sobre aquele episódio.
+- Returning a list of codes "because all three conditions hold" — the UI would start showing three lines per episode, two of them noise.
+- Reordering to put `no_torrent_found` first "because it's the most common case" — common is not the criterion; actionable is.
+- Feeding the cascade with `partitionSearchResults`'s `packStats` — the pack is decided for the anime, not for the episode, and the per-episode fallback is who has the last word on that episode.
 
 ---
 
-### 82. `SetLastCheckError` limpa o relatório da última verificação
+### 82. `SetLastCheckError` clears the last-check report
 
-**Location:** `daemon/state.go` — `SetLastCheckError`; `daemon/verification.go` — a ordem `SetLastCheckError(nil)` → `SetLastCheckReport(...)`.
+**Location:** `daemon/state.go` — `SetLastCheckError`; `daemon/verification.go` — the order `SetLastCheckError(nil)` → `SetLastCheckReport(...)`.
 
-**What it looks like:** um setter de erro que também apaga um campo não relacionado, e um `SetLastCheckReport` que **precisa** vir depois de um `SetLastCheckError(nil)` que já rodou três linhas antes. Parece acoplamento acidental, e a correção "óbvia" é separar as duas coisas.
+**What it looks like:** an error setter that also wipes an unrelated field, and a `SetLastCheckReport` that **must** come after a `SetLastCheckError(nil)` that already ran three lines earlier. Looks like accidental coupling, and the "obvious" fix is to split the two.
 
-**Why it's right:** as saídas antecipadas de `AnimeVerification` (config incompleta, probe de hardlink, backend não inicializado, `Ensure`, migração de ids, AniList — eram sete até a migração do `save_path` sair, ver #31) já chamam `SetLastCheckError`. Com a limpeza dentro dela, **nenhuma delas precisa de linha nova** — e nenhuma pode esquecer. E a semântica é a certa: um passe que abortou antes de olhar anime nenhum não tem relatório por anime, tem `pass_error`. Sem a limpeza, a tela mostraria os problemas do passe *anterior* lado a lado com um erro de passe novo, sugerindo que os dois vieram da mesma verificação.
+**Why it's right:** `AnimeVerification`'s early exits (incomplete config, hardlink probe, backend not initialized, `Ensure`, id migration, AniList — there were seven until the `save_path` migration left, see #31) already call `SetLastCheckError`. With the clear inside it, **none of them needs a new line** — and none can forget. And the semantics are the right ones: a pass that aborted before looking at any anime has no per-anime report, it has `pass_error`. Without the clear, the screen would show the *previous* pass's problems side by side with a new pass error, suggesting both came from the same verification.
 
-A segunda consequência é igualmente desejada: o cancelamento (`verification.go`, no `select` do `ctx.Done()`) chama `SetLastCheckError(nil)` e retorna, então **passe interrompido não deixa relatório** — ele estava incompleto, e um relatório parcial diria "só este anime teve problema" quando os outros nem chegaram a ser olhados.
+The second consequence is equally wanted: cancellation (`verification.go`, in the `ctx.Done()` `select`) calls `SetLastCheckError(nil)` and returns, so **an interrupted pass leaves no report** — it was incomplete, and a partial report would say "only this anime had a problem" when the others were not even looked at.
 
-**Trade-off aceito:** a ordem das duas chamadas no fim de `AnimeVerification` é significativa e não é óbvia lendo só aquele trecho. É por isso que existe um teste dedicado (`TestSetLastCheckReport_AfterClearingError`) travando exatamente essa ordem.
+**Accepted trade-off:** the order of the two calls at the end of `AnimeVerification` is meaningful and is not obvious reading only that stretch. That is why there is a dedicated test (`TestSetLastCheckReport_AfterClearingError`) pinning exactly that order.
 
 **Don't "fix" by:**
-- Tirar a limpeza de dentro de `SetLastCheckError` e pôr uma chamada explícita em cada saída antecipada — sete lugares para esquecer um.
-- Mover `SetLastCheckReport` para antes do `SetLastCheckError(nil)` "porque lê melhor" — o relatório é apagado no instante seguinte e a feature inteira vira silêncio.
-- Persistir o relatório em disco para "sobreviver ao restart" — `createStartFunc` chama `AnimeVerification` imediatamente ao iniciar (`loop.go`, antes do primeiro `time.After`), então ele se reconstrói em segundos; um arquivo custaria persistência, migração e a chance de mostrar um relatório de dias atrás como se fosse do último passe.
+- Taking the clear out of `SetLastCheckError` and putting an explicit call on every early exit — seven places to forget one.
+- Moving `SetLastCheckReport` before `SetLastCheckError(nil)` "because it reads better" — the report is wiped the next instant and the whole feature becomes silence.
+- Persisting the report to disk to "survive restart" — `createStartFunc` calls `AnimeVerification` immediately on start (`loop.go`, before the first `time.After`), so it rebuilds in seconds; a file would cost persistence, migration and the chance of showing a report from days ago as if it were the last pass.
 
 ---
 
-### 63. A dispensa do card de primeiros passos mora no `localStorage`, não no `config.json`
+### 63. Dismissing the first-steps card lives in `localStorage`, not in `config.json`
 
-**Location:** `src/internal/frontend/src/lib/stores/onboarding.ts`; consumido por `routes/Status.svelte` (condição de render) e `routes/Config.svelte` (o botão "Mostrar novamente").
+**Location:** `src/internal/frontend/src/lib/stores/onboarding.ts`; consumed by `routes/Status.svelte` (render condition) and `routes/Config.svelte` (the "Show again" button).
 
-**What it looks like:** uma preferência do usuário que o app inteiro respeita, guardada no navegador em vez de no arquivo que o daemon já lê e escreve. Parece uma inconsistência — todo o resto da configuração está em `config.json`, e a "correção" óbvia é criar um campo `tutorial_dismissed` lá.
+**What it looks like:** a user preference the whole app honours, stored in the browser instead of in the file the daemon already reads and writes. Looks like an inconsistency — the rest of configuration is in `config.json`, and the "obvious" fix is to create a `tutorial_dismissed` field there.
 
-**Why it's right:** não é configuração do daemon; é preferência de UI, e o daemon não tem nada a fazer com ela. Um campo em `config.json` entraria no schema que o servidor valida, no corpo do `PUT /config` e — se alguém fosse coerente — no `requiredChecks` da tela de Configurações, três lugares para um booleano que só o navegador consome. E ele valeria para **todos** os dispositivos de uma vez: quem dispensou no desktop nunca mais veria o card no celular, onde ainda não conhece o app. `localStorage` é por navegador, que é exatamente o escopo certo, e é a mesma escolha que `theme` e `locale` já fazem neste frontend.
+**Why it's right:** it is not daemon configuration; it is a UI preference, and the daemon has nothing to do with it. A field in `config.json` would enter the schema the server validates, the `PUT /config` body and — if someone were consistent — the Settings screen's `requiredChecks`, three places for a boolean only the browser consumes. And it would apply to **every** device at once: whoever dismissed it on desktop would never see the card on the phone, where they still do not know the app. `localStorage` is per browser, which is exactly the right scope, and it is the same choice `theme` and `locale` already make in this frontend.
 
-**Trade-off aceito:** trocar de navegador traz o card de volta, e limpar o storage do site também. Para um app self-hosted de um usuário só, ver de novo um card de três linhas é barato; o inverso — não conseguir vê-lo num dispositivo novo — é o caro.
+**Accepted trade-off:** switching browsers brings the card back, and clearing the site's storage does too. For a single-user self-hosted app, seeing a three-line card again is cheap; the inverse — not being able to see it on a new device — is the expensive one.
 
-Esconder o card com a biblioteca vazia deixa o app inoperante, e mesmo assim a dispensa é permanente: o passe de verificação continua abrindo `#/config?missingConfig=true` e o banner de lá continua aparecendo. É esse backstop que torna a dispensa permanente segura de oferecer.
+Hiding the card with an empty library leaves the app inoperable, and even so the dismiss is permanent: the verification pass still opens `#/config?missingConfig=true` and the banner there still appears. That backstop is what makes a permanent dismiss safe to offer.
 
 **Don't "fix" by:**
-- Criar `tutorial_dismissed` em `config.json` "para seguir o usuário" — põe preferência de UI num schema do daemon e uniformiza dispositivos que deveriam ser independentes.
-- Trocar o botão "Não mostrar mais" por um `×` "porque é o padrão de card" — num card de três itens o `×` lê como "fechar até recarregar", e o comportamento é permanente. O rótulo é a documentação do comportamento.
-- Fazer o card sumir sozinho depois de N dias/visitas — some quando o usuário marca os três, quando dispensa, ou quando a instalação já está configurada e rodando; tempo não significa nada.
+- Creating `tutorial_dismissed` in `config.json` "to follow the user" — puts a UI preference in a daemon schema and unifies devices that should be independent.
+- Swapping the "Don't show again" button for an `×` "because that's the card pattern" — on a three-item card the `×` reads as "close until reload", and the behaviour is permanent. The label is the documentation of the behaviour.
+- Making the card vanish on its own after N days/visits — it goes away when the user ticks the three, when they dismiss, or when the install is already configured and running; time means nothing.
 
 ---
 
-### 64. Os passos do card de primeiros passos são marcados à mão, não derivados do estado do daemon
+### 64. The first-steps card steps are ticked by hand, not derived from daemon state
 
-**Location:** `src/internal/frontend/src/lib/stores/onboarding.ts` (`onboardingDone`); pintado por `routes/Status.svelte`.
+**Location:** `src/internal/frontend/src/lib/stores/onboarding.ts` (`onboardingDone`); painted by `routes/Status.svelte`.
 
-**What it looks like:** o app **sabe** se a pasta está configurada e se o passe já rodou — `lib/domain/onboarding.ts` calcula exatamente isso — e mesmo assim os checkmarks do card saem de uma lista guardada no `localStorage` que o usuário preenche clicando. Parece estado duplicado, e a "correção" óbvia é derivar os três dos dados que a tela já tem.
+**What it looks like:** the app **knows** whether the folder is configured and whether the pass has already run — `lib/domain/onboarding.ts` computes exactly that — and even so the card's checkmarks come from a list stored in `localStorage` that the user fills by clicking. Looks like duplicated state, and the "obvious" fix is to derive the three from data the screen already has.
 
-**Why it's right:** foi o que a primeira versão fazia, e numa instalação nova os passos ① e ③ nasciam verdes sozinhos — a pasta da biblioteca tem default e o passe de verificação roda a cada 10 minutos sem ninguém pedir. O tutorial aparecia dois terços concluído antes de o usuário ter lido a primeira linha, o que ao mesmo tempo mente sobre o que ele fez e tira o motivo de ler o resto. Marcar é a leitura confirmada, não o estado do disco.
+**Why it's right:** that is what the first version did, and on a new install steps ① and ③ were born green on their own — the library folder has a default and the verification pass runs every 10 minutes with nobody asking. The tutorial appeared two thirds done before the user had read the first line, which at once lies about what they did and takes away the reason to read the rest. Ticking is confirmed reading, not disk state.
 
-A derivação continua existindo, mas com outro papel: `allDone(onboardingSteps(...))` é o portão de "esta instalação já está configurada e rodando, não ensine o óbvio", então quem já usa o app nunca vê o card. Dois usos, uma fonte de verdade cada.
+The derivation still exists, but with another role: `allDone(onboardingSteps(...))` is the gate of "this install is already configured and running, don't teach the obvious", so whoever already uses the app never sees the card. Two uses, one source of truth each.
 
 **Don't "fix" by:**
-- Derivar os checkmarks de novo "para não duplicar estado" — é exatamente o bug que isto conserta.
-- Marcar o passo automaticamente quando a ação dele é feita no app (configurou a pasta → marca ①) — volta ao mesmo lugar para quem já tinha a pasta configurada, e faz o card se mexer sozinho enquanto está sendo lido.
-- Trocar os números por ícones de status — a numeração é o que diz que há uma ordem; o número dobra de caixa de marcar justamente para não haver dois marcadores para um estado só.
+- Deriving the checkmarks again "to not duplicate state" — that is exactly the bug this fixes.
+- Ticking the step automatically when its action is done in the app (configured the folder → tick ①) — back to the same place for whoever already had the folder configured, and makes the card move on its own while it is being read.
+- Swapping the numbers for status icons — the numbering is what says there is an order; the number doubles as a tick box precisely so there are not two markers for one state.
 
 ---
 
-### 65. O orçamento da AniList é gasto pelo refresh de órfãos, não pelo passe do daemon — e o campo `errors` de um 200 não é lido
+### 65. AniList budget is spent by the orphan refresh, not by the daemon pass — and a 200's `errors` field is not read
 
 **Location:** `src/internal/anilist/anilist.go` (`sendAnilistRequest`, `ttlCache`); `src/internal/api/endpoint_animes.go` (`refreshOrphanAnimes`); `src/internal/daemon/verification.go` (`searchAnilist`).
 
-**Documentação oficial:** [errors](https://github.com/AniList/docs/blob/master/docs/guide/graphql/errors.md), [rate-limiting](https://github.com/AniList/docs/blob/master/docs/guide/rate-limiting.md), [considerations](https://github.com/AniList/docs/blob/master/docs/guide/considerations.md). **Os números de lá não são copiados para cá de propósito** — o limite documentado é 90/min mas hoje está degradado para 30/min, e a própria doc chama isso de temporário. Número copiado apodrece em silêncio e alguém dimensiona cache por ele seis meses depois. A doc é a fonte; aqui fica só o que é nosso.
+**Official docs:** [errors](https://github.com/AniList/docs/blob/master/docs/guide/graphql/errors.md), [rate-limiting](https://github.com/AniList/docs/blob/master/docs/guide/rate-limiting.md), [considerations](https://github.com/AniList/docs/blob/master/docs/guide/considerations.md). **The numbers from there are not copied here on purpose** — the documented limit is 90/min but today it is degraded to 30/min, and the docs themselves call that temporary. A copied number rots in silence and someone sizes a cache by it six months later. The docs are the source; here stays only what is ours.
 
-**O que parece:** o daemon é o que fala com a AniList, então o passe de verificação parece ser o consumidor do limite, e os TTLs de `ttlCache` parecem cautela genérica.
+**What it looks like:** the daemon is what talks to AniList, so the verification pass looks like the consumer of the limit, and `ttlCache`'s TTLs look like generic caution.
 
-**Por que está certo:** medindo por minuto, por conta configurada:
+**Why it's right:** measuring per minute, per configured account:
 
-| Origem | Requisições | Observação |
+| Source | Requests | Note |
 |---|---|---|
-| Passe do daemon | ~0,3/min | 3 por passe (`GetCustomListsMap` + `GetAllCurrentAnime` de download + `GetAllCurrentAnime` de delete), a cada `check_interval` (default 10 min) |
-| Poll de `/animes` | ≤1,2/min | `GetFrontendAnimeList` (TTL 60s) + `GetCustomListsMap` (TTL 5min) |
-| `refreshOrphanAnimes` | **1 por conta a cada 50 órfãos** | `GetAnimeInfoByIDs` (`mediaList(mediaId_in:)`), sem cache. Era **1 por anime órfão por conta**, com um semáforo de 5 concorrentes que limitava o paralelismo e não o total. Corrigido 29/ago/2026; o fallback de avulso na mesma função virou um `GetMediaByIDs` |
-| `appendStandaloneEntries` | **1 por lote de 50 avulsos** | `GetMediaByIDs` (`Page(media(id_in:))`), nos dois lados (`api/standalone.go` e `daemon/standalone.go`). Era `GetMediaByID` em loop: medido 28/ago/2026, com 20 avulsos eram 20 dos 30 requests do balde, gastos só para montar uma tela. Corrigido 29/ago/2026; o cache continua **por id**, então o lote e o lookup avulso se aproveitam um do outro |
+| Daemon pass | ~0.3/min | 3 per pass (`GetCustomListsMap` + download `GetAllCurrentAnime` + delete `GetAllCurrentAnime`), every `check_interval` (default 10 min) |
+| `/animes` poll | ≤1.2/min | `GetFrontendAnimeList` (TTL 60s) + `GetCustomListsMap` (TTL 5min) |
+| `refreshOrphanAnimes` | **1 per account every 50 orphans** | `GetAnimeInfoByIDs` (`mediaList(mediaId_in:)`), no cache. Used to be **1 per orphan anime per account**, with a semaphore of 5 concurrent that limited parallelism and not the total. Fixed 29 Aug 2026; the standalone fallback in the same function became a `GetMediaByIDs` |
+| `appendStandaloneEntries` | **1 per batch of 50 standalones** | `GetMediaByIDs` (`Page(media(id_in:))`), on both sides (`api/standalone.go` and `daemon/standalone.go`). Used to be `GetMediaByID` in a loop: measured 28 Aug 2026, with 20 standalones they were 20 of the bucket's 30 requests, spent just to build a screen. Fixed 29 Aug 2026; the cache stays **per id**, so the batch and the standalone lookup reuse each other |
 
-O passe do daemon é ruído. Quem estourava o limite era o refresh de órfãos: uma requisição por anime baixado que a busca filtrada não cobriu, disparada **a cada poll do frontend**. Numa biblioteca com dezenas de animes fora dos status configurados, isso era uma rajada de dezenas de requisições — e a AniList tem um *burst limiter* separado do limite por minuto, que pune exatamente esse formato. **Corrigido em 29/ago/2026 por lote**, junto com os avulsos: as duas linhas em negrito acima passaram a custar `ceil(N/50)` em vez de `N`.
+The daemon pass is noise. Who blew the limit was the orphan refresh: one request per downloaded anime the filtered fetch did not cover, fired **on every frontend poll**. In a library with tens of animes outside the configured statuses, that was a burst of tens of requests — and AniList has a *burst limiter* separate from the per-minute limit, which punishes exactly that shape. **Fixed on 29 Aug 2026 by batching**, together with the standalones: the two bold rows above started costing `ceil(N/50)` instead of `N`.
 
-**`mediaId_in` existe e é o que torna o lote possível** (introspecção + medição, 29/ago/2026). `Page.mediaList` aceita `mediaId_in: [Int]` ao lado de `userName`, devolve **no máximo uma entrada por id** (logo, 50 ids nunca passam de uma página — não há paginação a seguir), **omite** silenciosamente o id que a conta não acompanha, e custa 1 unidade como qualquer query. Duas armadilhas medidas: `userName` inexistente responde **500**, e conta privada responde **404 "Private User"** — nenhum dos dois é 400, então uma query malformada não se distingue de uma conta ruim pelo status.
+**`mediaId_in` exists and is what makes the batch possible** (introspection + measurement, 29 Aug 2026). `Page.mediaList` accepts `mediaId_in: [Int]` next to `userName`, returns **at most one entry per id** (so 50 ids never go past one page — there is no pagination to follow), silently **omits** the id the account does not track, and costs 1 unit like any query. Two measured traps: a nonexistent `userName` answers **500**, and a private account answers **404 "Private User"** — neither is 400, so a malformed query is not distinguishable from a bad account by status.
 
-É por isso que `mergeFailed` pula o refresh (`handleAnimes`, `endpoint_animes.go`) em vez de tratar "não coberto" como "precisa refresh": com a lista falhada, todo anime baixado vira órfão aparente, e a rajada resultante realimenta a falha. Os TTLs de `frontendListCache` e `customListsCache` também não são cautela genérica — são o que torna o custo do poll **independente do número de abas abertas**. Sem eles, duas abas e duas contas já eram ~16 req/min só de frontend parado.
+That is why `mergeFailed` skips the refresh (`handleAnimes`, `endpoint_animes.go`) instead of treating "not covered" as "needs refresh": with the list failed, every downloaded anime becomes an apparent orphan, and the resulting burst feeds the failure. The TTLs of `frontendListCache` and `customListsCache` are also not generic caution — they are what makes the poll cost **independent of the number of open tabs**. Without them, two tabs and two accounts were already ~16 req/min of idle frontend.
 
-**O campo `errors` de um 200 nunca é lido.** A doc é explícita: um 200 pode carregar erro no envelope. `sendAnilistRequest` desserializa direto no struct de dados e descarta `errors`, então esse caso hoje vira resposta vazia sem diagnóstico. **Isto não é a causa do `customLists` null da decisão #11** — aquele foi verificado por curl e volta 200 *sem* campo `errors`, é orçamento de complexidade. São dois problemas distintos com o mesmo sintoma aparente, e confundi-los faz procurar a correção no lugar errado.
+**A 200's `errors` field is never read.** The docs are explicit: a 200 can carry an error in the envelope. `sendAnilistRequest` deserializes straight into the data struct and discards `errors`, so that case today becomes an empty response with no diagnosis. **This is not the cause of decision #11's null `customLists`** — that was verified by curl and comes back 200 *without* an `errors` field, it is a complexity budget. They are two distinct problems with the same apparent symptom, and confusing them makes you look for the fix in the wrong place.
 
-**Taxonomia documentada** (`errors[].status` quando presente, senão o HTTP):
+**Documented taxonomy** (`errors[].status` when present, otherwise HTTP):
 
-| Código | Significado | Recuperável sozinho? |
+| Code | Meaning | Recoverable on its own? |
 |---|---|---|
-| 429 | Rate limit. Timeout de 1 min, com `Retry-After` e `X-RateLimit-Reset` | Sim |
-| 403 | API desligada por instabilidade | Só quando a AniList voltar |
-| 403 (mensagem custom) | IP bloqueado manualmente | Não |
-| 400 | Query inválida / campo inexistente → o schema mudou, é bug nosso | Não |
-| 404 | ID não existe | Não é falha — vira `ErrNotFound` |
-| 5xx | Erro interno da AniList | Sim, transitório |
+| 429 | Rate limit. 1 min timeout, with `Retry-After` and `X-RateLimit-Reset` | Yes |
+| 403 | API off for instability | Only when AniList comes back |
+| 403 (custom message) | IP blocked by hand | No |
+| 400 | Invalid query / missing field → the schema changed, it is our bug | No |
+| 404 | ID does not exist | Not a failure — becomes `ErrNotFound` |
+| 5xx | AniList internal error | Yes, transient |
 
-`errors[].validation` só existe em mutation; o app é somente-leitura e ignora.
+`errors[].validation` only exists on mutation; the app is read-only and ignores it.
 
 **Don't "fix" by:**
-- Otimizar o passe do daemon "porque ele fala com a AniList" — ele custa 0,3 req/min; o ganho é zero e o risco não.
-- Fazer `refreshOrphanAnimes` rodar mesmo com a lista falhada, "para a tela não ficar desatualizada" — é o loop de realimentação que produziu o 429 original.
-- Remover os TTLs porque "o daemon só busca a cada 10 minutos" — quem busca a cada 30 segundos é cada aba do frontend.
-- Copiar o limite atual da AniList para cá como constante — ele é temporário e muda sem aviso.
-- Estimar o consumo com um contador nosso em vez de ler `X-RateLimit-Remaining` da resposta — ver #72, que mede o balde e mostra por que erro também custa cota.
-- Voltar a um request por id onde cabe uma lista — `Page(media(id_in: [...]))` para media solta, `mediaList(userName:, mediaId_in: [...])` para entrada de lista. Uma query custa 1 unidade independente do número de ids (#72). Os dois caminhos já são lote: `GetMediaByIDs` e `GetAnimeInfoByIDs`.
+- Optimizing the daemon pass "because it talks to AniList" — it costs 0.3 req/min; the gain is zero and the risk is not.
+- Making `refreshOrphanAnimes` run even with the list failed, "so the screen doesn't go stale" — that is the feedback loop that produced the original 429.
+- Removing the TTLs because "the daemon only fetches every 10 minutes" — who fetches every 30 seconds is each frontend tab.
+- Copying AniList's current limit here as a constant — it is temporary and changes without notice.
+- Estimating consumption with a counter of ours instead of reading `X-RateLimit-Remaining` from the response — see #72, which measures the bucket and shows why an error also costs quota.
+- Going back to one request per id where a list fits — `Page(media(id_in: [...]))` for loose media, `mediaList(userName:, mediaId_in: [...])` for a list entry. One query costs 1 unit independent of the number of ids (#72). Both paths are already batched: `GetMediaByIDs` and `GetAnimeInfoByIDs`.
 
 ---
 
-### 66. Banner é estado degradado; toast é falha de ação — e o banner tem três fontes com precedência, não três banners
+### 66. A banner is degraded state; a toast is an action failure — and the banner has three sources with precedence, not three banners
 
-**Location:** política para `components/shell/AppShell.svelte` (slot único de banner) e `lib/api/client.ts` (`ApiError`, opção `silent`).
+**Location:** policy for `components/shell/AppShell.svelte` (single banner slot) and `lib/api/client.ts` (`ApiError`, `silent` option).
 
-**O que parece:** cada origem de erro quer o seu aviso, e a saída óbvia é empilhar — um banner de AniList, um de backend, o de WebSocket que já existe em `routes/Downloads.svelte`.
+**What it looks like:** each error origin wants its own notice, and the obvious way out is to stack — an AniList banner, a backend one, the WebSocket one that already exists in `routes/Downloads.svelte`.
 
-**Por que está certo:** a distinção não é a gravidade, é a **duração**:
+**Why it's right:** the distinction is not severity, it is **duration**:
 
-- **Toast** — falhou uma ação que o usuário pediu (salvar config, adicionar anime). Já existe, já funciona, some sozinho.
-- **Banner** — o estado está degradado entre polls e explica por que a tela inteira parece errada. Persiste enquanto o estado persistir e **some no primeiro sucesso**, nunca por timer.
+- **Toast** — an action the user asked for failed (save config, add anime). Already exists, already works, goes away on its own.
+- **Banner** — state is degraded between polls and explains why the whole screen looks wrong. Persists while the state persists and **goes away on the first success**, never by timer.
 
-O valor do banner não é reportar o erro: é explicar por que a lista está incompleta ou velha. Hoje `/animes` responde 200 com uma conta faltando e o usuário conclui que sumiu anime.
+The banner's value is not reporting the error: it is explaining why the list is incomplete or stale. Today `/animes` answers 200 with an account missing and the user concludes an anime vanished.
 
-As fontes são independentes, mas **empilhar é errado**: se o backend não responde, a saúde da AniList é informação velha vinda do último poll bem-sucedido, e mostrá-la ao lado de "daemon não responde" é ruído contraditório. Precedência, do mais a montante para o mais a jusante (`lib/domain/systemBanner.ts`, `pickBanner`):
+The sources are independent, but **stacking is wrong**: if the backend does not answer, AniList health is stale information from the last successful poll, and showing it next to "daemon does not respond" is contradictory noise. Precedence, from furthest upstream to furthest downstream (`lib/domain/systemBanner.ts`, `pickBanner`):
 
-1. **Backend inalcançável** (`fetch` não recebeu resposta) — nada abaixo disso é observável.
-2. **Backend respondendo 5xx** — bug nosso.
-3. **AniList indisponível** (403/5xx) — banner mudo, "tente mais tarde".
-4. **AniList em rate limit** (429) — contagem regressiva derivada do `Retry-After`, que é o único caso em que se sabe o tempo exato.
+1. **Backend unreachable** (`fetch` got no response) — nothing below that is observable.
+2. **Backend answering 5xx** — our bug.
+3. **AniList unavailable** (403/5xx) — mute banner, "try later".
+4. **AniList rate limited** (429) — countdown derived from `Retry-After`, the only case where the exact time is known.
 
-Mostra-se **um**, o de maior precedência.
+**One** is shown, the highest precedence.
 
-**O banner de WebSocket de `routes/Downloads.svelte` continua onde está.** Ele fala sobre aquela tela — o progresso ali é empurrado por WS e fica defasado sem ele —, enquanto o `SystemBanner` fala sobre o app inteiro. Consolidá-los exigiria mover a posse do `WebSocketClient` para o `AppShell` (hoje instanciado em `Status` e `Downloads`), o que é uma refatoração de outro assunto. A ausência do daemon já é coberta pelo estado `unreachable`, que vem do HTTP.
+**The WebSocket banner of `routes/Downloads.svelte` stays where it is.** It talks about that screen — progress there is pushed over WS and goes stale without it — while `SystemBanner` talks about the whole app. Consolidating them would require moving ownership of `WebSocketClient` to `AppShell` (today instantiated in `Status` and `Downloads`), which is a refactor of another subject. Absence of the daemon is already covered by the `unreachable` state, which comes from HTTP.
 
-**O botão de reportar só aparece em bug nosso** — backend 5xx, e 400 da AniList (schema mudou, nenhuma espera resolve). Um 429 ou um outage não são bug: botão de reportar ali só gera issue que se fecha com "é a AniList", e treina o usuário a ignorar o botão quando ele importa.
+**The report button only appears on our bug** — backend 5xx, and AniList 400 (schema changed, no wait resolves it). A 429 or an outage is not a bug: a report button there only generates an issue that closes with "it's AniList", and trains the user to ignore the button when it matters.
 
-**Ponto cego que isto fecha:** `getLastCheck` e `getTorrents` passam `silent: true` para não tostar a cada tick. Correto para toast — mas hoje significa que um 5xx repetido nesses endpoints é **invisível para sempre**. A saúde do backend é derivada de falhas *consecutivas* por endpoint (≥2), não de uma falha isolada, e por isso convive com `silent` sem reintroduzir o spam.
+**Blind spot this closes:** `getLastCheck` and `getTorrents` pass `silent: true` so they do not toast every tick. Correct for toast — but today it means a repeated 5xx on those endpoints is **invisible forever**. Backend health is derived from *consecutive* failures per endpoint (≥2), not from an isolated failure, and that is why it coexists with `silent` without reintroducing the spam.
 
-**O `pass_error` segue a mesma regra.** O banner de passe abortado da tela de Status mostrava `err.Error()` cru — que, com a AniList fora do ar, era o corpo JSON da resposta inteiro (`{"errors":[{"message":…,"locations":[{"line":1,"column":1}]}]}`) na cara do usuário. `CheckReport` ganhou `pass_error_code`, classificado em `daemon/passerror.go`, e a frase é montada em `lib/domain/passError.ts`. O texto cru continua em `pass_error` e é mostrado **recolhido** num `<details>`: é a única coisa colável numa issue, mas não pode ser a primeira coisa que se lê.
+**`pass_error` follows the same rule.** The aborted-pass banner on the Status screen showed raw `err.Error()` — which, with AniList down, was the entire response JSON body (`{"errors":[{"message":…,"locations":[{"line":1,"column":1}]}]}`) in the user's face. `CheckReport` gained `pass_error_code`, classified in `daemon/passerror.go`, and the phrase is built in `lib/domain/passError.ts`. The raw text stays in `pass_error` and is shown **collapsed** in a `<details>`: it is the only thing pasteable into an issue, but it cannot be the first thing you read.
 
-A causa viaja **dentro** do erro (sentinelas embrulhadas com `%w`), e não num parâmetro novo de `SetLastCheckError`: são ~15 chamadas, a maioria passando `nil` para limpar, e nenhuma delas precisou mudar. Um sítio de aborto novo que esqueça de embrulhar cai em `unknown`, que tem frase própria — degrada, não quebra.
-
-**Don't "fix" by:**
-- Empilhar os banners "porque são problemas diferentes" — com o backend fora, o estado da AniList na tela é mentira datada.
-- Fazer o banner sumir por timer — o estado ou acabou (chegou um 200) ou não acabou.
-- Pôr botão de reportar em todo banner "por simetria" — reportar rate limit é reportar comportamento normal.
-- Trocar o banner de outage por toast "porque é erro" — toast some, o outage não; a tela continua errada depois que ele sumiu.
-- Mandar frase pronta do Go em vez de código, "porque é uma string só" — o daemon não sabe o locale do navegador, e foi assim que o JSON cru chegou à tela.
-- Remover o `<details>` do texto cru "porque o usuário não entende" — quem abre issue precisa dele, e recolhido ele não atrapalha quem não precisa.
-
-### 67. Passe de verificação é um por vez, e o concorrente é descartado — não enfileirado
-
-`AnimeVerification` pega `verificationMu.TryLock()` e **volta na hora** se outro passe está rodando.
-
-O passe lê `episodes.json` **uma vez** no começo (fase 1) e só escreve no fim (fase 3, sequencial). Dois passes simultâneos — o do loop e o do `POST /check`, dois `/check`, ou um `/check` logo depois de um `UpdateInterval` — enxergam a mesma lista velha: o segundo não vê nada do que o primeiro acabou de baixar e baixa tudo **de novo**. Foi assim que um anime já coberto por um pack (`01 ~ 11`, episódios 6..11 registrados) ganhou torrents avulsos dos episódios 10 e 11, e a escrita do segundo passe sobrescreveu os registros do pack com os hashes avulsos — dois torrents dos mesmos episódios no disco e a tela mostrando o pack e os avulsos lado a lado.
-
-Descartar, e não enfileirar, é deliberado: o passe descartado leria exatamente o estado que o passe em andamento está corrigindo, e o próximo tick do loop cobre o que faltar. Enfileirar só adiaria a mesma leitura velha.
+The cause travels **inside** the error (sentinels wrapped with `%w`), not in a new `SetLastCheckError` parameter: there are ~15 call sites, most passing `nil` to clear, and none of them needed to change. A new abort site that forgets to wrap falls into `unknown`, which has its own phrase — degrades, does not break.
 
 **Don't "fix" by:**
-- Recarregar `episodes.json` no meio do passe "para ver o que o outro salvou" — a janela continua aberta entre a leitura e a escrita, e as duas escritas continuam brigando.
-- Trocar por `Lock()` (enfileirar) — vira uma fila de passes redundantes que rodam com estado velho, cada um segurando o próximo.
-- Tirar o `TryLock` porque "o `POST /check` já roda em goroutine" — a goroutine é o que cria a concorrência, não o que a resolve.
+- Stacking the banners "because they are different problems" — with the backend down, AniList state on screen is a dated lie.
+- Making the banner vanish by timer — the state either ended (a 200 arrived) or it did not.
+- Putting a report button on every banner "for symmetry" — reporting a rate limit is reporting normal behaviour.
+- Swapping the outage banner for a toast "because it's an error" — a toast goes away, the outage does not; the screen stays wrong after it vanished.
+- Sending a ready-made phrase from Go instead of a code, "because it's just one string" — the daemon does not know the browser's locale, and that is how the raw JSON reached the screen.
+- Removing the `<details>` of the raw text "because the user doesn't understand it" — whoever opens an issue needs it, and collapsed it does not get in the way of whoever does not.
 
-### 68. Numeração do pack: o offset é adivinhado dos próprios arquivos, e a colisão de basename usa o caminho relativo
+### 67. The verification pass is one at a time, and a concurrent one is dropped — not queued
 
-**Location:** `internal/files/librarian.go` — `packEpisodeOffset` e a guarda `if used[destName]` em `Organize`; `internal/daemon/jobs.go` — `OrganizeRequest.TotalEpisodes`. Testes em `librarian_test.go` (`TestOrganizeBatch*`, `TestPackEpisodeOffset`) e `orchestration_test.go` (`TestOrganizeTorrent_BatchContinuousNumbering`).
+`AnimeVerification` takes `verificationMu.TryLock()` and **returns immediately** if another pass is running.
 
-**(a) O offset sai dos arquivos, não da AniList.** Pack de season >= 2 passa pelo filtro de season (`nyaa.go`, ramo `IsBatch`) carregando o marcador no nome do torrent, mas os arquivos lá dentro podem estar numerados continuamente (13-24 para uma entrada de 12 episódios). Como cada season é uma entrada própria com numeração começando em 1 (decisão #45), esses arquivos entravam na biblioteca como `E13`..`E24` numa pasta que o Jellyfin conhece com 12 episódios.
+The pass reads `episodes.json` **once** at the start (phase 1) and only writes at the end (phase 3, sequential). Two simultaneous passes — the loop's and `POST /check`'s, two `/check`s, or a `/check` right after an `UpdateInterval` — see the same stale list: the second sees nothing of what the first just downloaded and downloads everything **again**. That is how an anime already covered by a pack (`01 ~ 11`, episodes 6..11 recorded) gained loose torrents of episodes 10 and 11, and the second pass's write overwrote the pack records with the loose hashes — two torrents of the same episodes on disk and the screen showing the pack and the loose ones side by side.
 
-A fonte *correta* do offset é a contagem de episódios do PREQUEL — o que `daemon.ComputeEpisodeOffset` já calcula na busca —, mas ela não existe no organize: o job só tem o hash e os registros de `episodes.json`. Trazê-la pediria campo novo em `EpisodeStruct` (com migração) ou uma requisição à AniList dentro do job. `packEpisodeOffset` evita as duas: usa `AnimeTotalEpisodes`, que **já** está gravado no registro, e só desloca com evidência inequívoca — **todo** arquivo numerado acima do total da entrada **e** pelo menos um arquivo por episódio. Isso é um pack completo que começa no episódio 1 da season, então `min - 1` é o offset.
+Dropping, not queueing, is deliberate: the dropped pass would read exactly the state the in-flight pass is correcting, and the next loop tick covers what is left. Queueing would only postpone the same stale read.
 
-Os dois guardas importam: sem o "todo arquivo acima do total", um extra numerado 13 num pack 01-12 deslocaria a season inteira; sem o "pelo menos um arquivo por episódio", um pack parcial (23-24 de uma season de 12) seria tratado como completo e viraria `E01`/`E02` em vez de `E11`/`E12`. Pack parcial com numeração contínua fica **como está** — errado, mas não *mais* errado, e é o caso raro.
+**Don't "fix" by:**
+- Reloading `episodes.json` in the middle of the pass "to see what the other saved" — the window stays open between the read and the write, and the two writes still fight.
+- Swapping for `Lock()` (queue) — becomes a queue of redundant passes that run with stale state, each holding the next.
+- Taking `TryLock` out because "`POST /check` already runs in a goroutine" — the goroutine is what creates the concurrency, not what solves it.
 
-**(b) A colisão de basename passou a desempatar pelo caminho relativo.** `collectVideoFiles` achata subpastas e o destino saía de `filepath.Base(rel)`. Num pack multi-season com uma subpasta por season, `Season 1/Anime - 01.mkv` e `Season 2/Anime - 01.mkv` apontavam para o mesmo destino, e o segundo caía no ramo de "bytes diferentes com o mesmo nome" (feito para redownload/replace) **removendo o hardlink do primeiro**: um episódio sumia da biblioteca e `created` gravava o mesmo caminho duas vezes. O `used` já existia, mas só protegia o nome Jellyfin. Agora ele é checado para *qualquer* destino e o desempate é o caminho relativo, que é único dentro do torrent.
+### 68. Pack numbering: the offset is guessed from the files themselves, and a basename collision uses the relative path
 
-O ramo de substituição continua intacto para o que ele foi feito: colisão entre execuções diferentes de `Organize`. O que mudou é só a colisão **dentro da mesma execução**, que nunca é uma substituição legítima.
+**Location:** `internal/files/librarian.go` — `packEpisodeOffset` and the `if used[destName]` guard in `Organize`; `internal/daemon/jobs.go` — `OrganizeRequest.TotalEpisodes`. Tests in `librarian_test.go` (`TestOrganizeBatch*`, `TestPackEpisodeOffset`) and `orchestration_test.go` (`TestOrganizeTorrent_BatchContinuousNumbering`).
 
-**Don't "fix" by:** aplicar o offset sem os dois guardas "porque pack contínuo é comum"; usar `max - total` no lugar de `min - 1` (concorda no pack completo e erra no pack parcial do começo da season); chamar a AniList de dentro do `JobOrganize` para pegar o PREQUEL; criar subpasta `Season NN/` na biblioteca para "resolver a numeração" (decisão #45); deduplicar a colisão de basename sobrescrevendo "porque o arquivo é o mesmo anime".
+**(a) The offset comes from the files, not from AniList.** A season >= 2 pack passes the season filter (`nyaa.go`, `IsBatch` branch) carrying the marker in the torrent name, but the files inside may be numbered continuously (13-24 for a 12-episode entry). Because each season is its own entry with numbering starting at 1 (decision #45), those files entered the library as `E13`..`E24` in a folder Jellyfin knows with 12 episodes.
 
-### 69. `codec` passou a valer para episódio, e nome sem tag de codec empata em vez de perder
+The *correct* source of the offset is the PREQUEL's episode count — what `daemon.ComputeEpisodeOffset` already computes at search time — but it does not exist at organize: the job only has the hash and the `episodes.json` records. Bringing it would ask for a new `EpisodeStruct` field (with a migration) or an AniList request inside the job. `packEpisodeOffset` avoids both: it uses `AnimeTotalEpisodes`, which is **already** stored on the record, and only shifts with unambiguous evidence — **every** numbered file above the entry's total **and** at least one file per episode. That is a complete pack that starts at the season's episode 1, so `min - 1` is the offset.
 
-`episodeCriteria` (`nyaa/priorities.go`) filtra `CriteriaOrder` para os critérios que fazem sentido
-num episódio, e `codec` estava **fora**: a lista `priorities.codecs` aparecia na tela de Priorities e
-no `config.json` sem afetar download de episódio nenhum — só `SortMovieResults` a lia. Como o
-default é `["hevc","av1",...]`, o codec do episódio era decidido de raspão pelo `fansub`
-(Judas/Ember são x265 10-bit; SubsPlease/Erai-raws são H264), e o usuário não tinha alavanca
-nenhuma. Quem assiste por um cliente sem decode de HEVC (navegador — Chrome e Firefox não trazem
-HEVC por licenciamento) paga isso como transcode no servidor, que além de queimar CPU **queima a
-legenda ASS no vídeo** e dessincroniza. `codec` agora está em `episodeCriteria`.
+Both guards matter: without "every file above the total", an extra numbered 13 in a 01-12 pack would shift the whole season; without "at least one file per episode", a partial pack (23-24 of a 12-episode season) would be treated as complete and become `E01`/`E02` instead of `E11`/`E12`. A partial pack with continuous numbering stays **as-is** — wrong, but not *more* wrong, and it is the rare case.
 
-**Só `source` continua fora.** Episódio semanal é WEB-DL em praticamente todo release; o critério
-nunca desempataria nada e só gastaria uma comparação.
+**(b) A basename collision started tying by relative path.** `collectVideoFiles` flattens subfolders and the destination came from `filepath.Base(rel)`. In a multi-season pack with one subfolder per season, `Season 1/Anime - 01.mkv` and `Season 2/Anime - 01.mkv` pointed at the same destination, and the second fell into the "different bytes with the same name" branch (made for redownload/replace) **removing the first's hardlink**: an episode vanished from the library and `created` wrote the same path twice. `used` already existed, but it only protected the Jellyfin name. Now it is checked for *any* destination and the tie-break is the relative path, which is unique inside the torrent.
 
-**A guarda que faz a mudança não sair pela culatra:** `priorityIndex` devolve `len(list)` para token
-desconhecido, ou seja, **o pior**. E `ExtractCodec` devolve `""` para nome sem tag de codec — que é
-exatamente o padrão do SubsPlease (`[SubsPlease] Anime - 07 (1080p) [HASH].mkv` não diz H264 em
-lugar algum). Com `codec` antes de `fansub` na ordem default, ligar o critério cru faria todo
-release sem tag perder para qualquer x265 tagueado: o **oposto** do que a lista de codecs configura.
-Por isso `codecCompare` devolve empate quando qualquer um dos dois nomes não tem tag, deixando o
-critério seguinte decidir. É a mesma regra que `sizeCompare`/`resCompare` já aplicam para dado
-ausente, e a mesma de `filterBySize` (`nyaa.go`): dado que não deu para ler não é motivo para punir
-o release.
+The replacement branch stays intact for what it was made for: a collision between different `Organize` runs. What changed is only the collision **inside the same run**, which is never a legitimate replacement.
 
-**Tokens canônicos.** `ExtractCodec` só devolve `HEVC`, `AV1`, `H.264` e `XviD` (`reCodecPatterns`
-mapeia `x265`→`HEVC` e `x264`→`H.264`). As entradas `"x265"` e `"x264"` do default de
-`priorities.codecs` portanto **nunca casam com nada** — são inertes. Configurar preferência por
-H264 exige escrever `h.264`, não `x264`.
+**Don't "fix" by:** applying the offset without the two guards "because a continuous pack is common"; using `max - total` in place of `min - 1` (agrees on a complete pack and is wrong on a partial pack from the start of the season); calling AniList from inside `JobOrganize` to get the PREQUEL; creating a `Season NN/` subfolder in the library to "solve numbering" (decision #45); deduplicating a basename collision by overwriting "because the file is the same anime".
 
-**Don't "fix" by:** tirar a guarda de `codecCompare` "porque sem tag é sem tag"; pôr `source` em
-`episodeCriteria` junto; mover `codec` para depois de `fansub` no default para contornar o problema
-do token desconhecido (esconde o mesmo bug em vez de resolvê-lo).
+### 69. `codec` now applies to episodes, and a name with no codec tag ties instead of losing
 
-### 70. Resolução canonicaliza no extrator, e os presets de codec são reordenação no frontend
+`episodeCriteria` (`nyaa/priorities.go`) filters `CriteriaOrder` to the criteria that make sense
+on an episode, and `codec` was **out**: the `priorities.codecs` list showed up on the Priorities
+screen and in `config.json` without affecting any episode download — only `SortMovieResults` read
+it. Because the default is `["hevc","av1",...]`, the episode codec was decided in passing by
+`fansub` (Judas/Ember are x265 10-bit; SubsPlease/Erai-raws are H264), and the user had no lever.
+Whoever watches through a client with no HEVC decode (a browser — Chrome and Firefox do not ship
+HEVC for licensing) pays that as a transcode on the server, which besides burning CPU **burns the
+ASS subtitle into the video** and desyncs it. `codec` is now in `episodeCriteria`.
+
+**Only `source` stays out.** A weekly episode is WEB-DL on practically every release; the criterion
+would never break a tie and would only spend a comparison.
+
+**The guard that keeps the change from backfiring:** `priorityIndex` returns `len(list)` for an
+unknown token, i.e. **the worst**. And `ExtractCodec` returns `""` for a name with no codec tag —
+which is exactly SubsPlease's pattern (`[SubsPlease] Anime - 07 (1080p) [HASH].mkv` does not say
+H264 anywhere). With `codec` before `fansub` in the default order, turning the raw criterion on
+would make every untagged release lose to any tagged x265: the **opposite** of what the codec list
+configures. That is why `codecCompare` returns a tie when either of the two names has no tag,
+leaving the next criterion to decide. It is the same rule `sizeCompare`/`resCompare` already apply
+for missing data, and the same as `filterBySize` (`nyaa.go`): data that could not be read is not a
+reason to punish the release.
+
+**Canonical tokens.** `ExtractCodec` only returns `HEVC`, `AV1`, `H.264` and `XviD`
+(`reCodecPatterns` maps `x265`→`HEVC` and `x264`→`H.264`). The `"x265"` and `"x264"` entries of
+`priorities.codecs`'s default therefore **never match anything** — they are inert. Configuring a
+preference for H264 requires writing `h.264`, not `x264`.
+
+**Don't "fix" by:** taking the `codecCompare` guard off "because no tag is no tag"; putting
+`source` in `episodeCriteria` too; moving `codec` after `fansub` in the default to work around the
+unknown-token problem (hides the same bug instead of solving it).
+
+### 70. Resolution is canonicalized in the extractor, and codec presets are a frontend reordering
 
 **Location:** `nyaa/nyaa.go` — `ExtractResolution`, `canonicalResolutions`; `nyaa/priorities.go` —
-defaults de `Resolutions`/`Codecs`/`Sources`; `frontend/src/lib/domain/priorityPresets.ts`;
+defaults of `Resolutions`/`Codecs`/`Sources`; `frontend/src/lib/domain/priorityPresets.ts`;
 `frontend/src/routes/Priorities.svelte`.
 
-**(a) A canonicalização vive em `ExtractResolution`, não na ordem da lista.** `ExtractCodec` já
-devolvia token canônico (`x265` → `HEVC`) e `ExtractResolution` devolvia a captura crua. Essa
-assimetria **era** o bug: `4k` e `2160p` são a mesma resolução e ocupavam dois índices diferentes do
-default, então qual vencia dependia só de como o grupo escreveu o nome do torrent; `1920x1080` é
-capturável pelo regex, não existia na lista, e ranqueava como o pior. Resolver isso reordenando a
-lista (pondo `4k` ao lado de `2160p`) não resolve nada: continuam sendo dois itens que o usuário
-pode separar de novo com as setas da tela, e a duplicata segue representável. Canonicalizando na
-saída do extrator ela deixa de existir, e a lista default encurta para cinco itens legíveis.
+**(a) Canonicalization lives in `ExtractResolution`, not in the list order.** `ExtractCodec` already
+returned a canonical token (`x265` → `HEVC`) and `ExtractResolution` returned the raw capture. That
+asymmetry **was** the bug: `4k` and `2160p` are the same resolution and occupied two different
+default indexes, so which one won depended only on how the group wrote the torrent name;
+`1920x1080` is capturable by the regex, did not exist in the list, and ranked as the worst. Solving
+that by reordering the list (putting `4k` next to `2160p`) solves nothing: they remain two items the
+user can split again with the screen arrows, and the duplicate stays representable. Canonicalizing
+at the extractor's output it stops existing, and the default list shortens to five readable items.
 
-**Não quebra config existente.** A lista antiga já tem `1080p`, `720p`, `480p` e `2160p` — os
-canônicos. `4k`, `uhd`, `fhd`, `hd` e `8k` viram inalcançáveis mas inofensivos, e um release 4K de
-um usuário antigo passa a casar com o `2160p` que ele já tem.
+**Does not break existing config.** The old list already has `1080p`, `720p`, `480p` and `2160p` —
+the canonicals. `4k`, `uhd`, `fhd`, `hd` and `8k` become unreachable but harmless, and a 4K release
+from an old user starts matching the `2160p` they already have.
 
-**`8k` fica fora da lista de propósito**, não por esquecimento: o padrão `\b(8K)\b` continua
-existindo, o token continua sendo devolvido cru, e por não estar na lista ranqueia como o pior —
-tratamento certo para uma resolução que não existe em anime.
+**`8k` stays off the list on purpose**, not by forgetfulness: the `\b(8K)\b` pattern still exists,
+the token is still returned raw, and by not being in the list it ranks as the worst — the right
+treatment for a resolution that does not exist in anime.
 
-**(b) Preset de codec é reordenação no frontend, não dado servido pelo backend.** Só o frontend
-consome (o CLI não menciona priorities); um endpoint existiria para servir a si mesmo — ~60 linhas
-em seis arquivos, mudança de forma da resposta e `swag init`, contra ~30 linhas num arquivo só.
+**(b) A codec preset is a frontend reordering, not data served by the backend.** Only the frontend
+consumes it (the CLI does not mention priorities); an endpoint would exist to serve itself — ~60
+lines in six files, a response-shape change and `swag init`, against ~30 lines in one file.
 
-E preset **promove** tokens que já estão na lista do usuário em vez de carimbar um array literal:
-typo vira no-op em vez de config inerte, token adicionado à mão desce em vez de sumir, e os tokens
-canônicos continuam existindo num lugar só (`reCodecPatterns`). Preset é carimbo de uma vez, não
-modo guardado: nada novo em `config.json`, nenhum estado "custom", nenhuma regra de precedência —
-depois de aplicado vira lista comum e editável, salva pelo botão que já existe.
+And a preset **promotes** tokens already in the user's list instead of stamping a literal array: a
+typo becomes a no-op instead of inert config, a token added by hand drops instead of vanishing, and
+the canonical tokens keep existing in one place (`reCodecPatterns`). A preset is a one-shot stamp,
+not a stored mode: nothing new in `config.json`, no "custom" state, no precedence rule — after
+apply it becomes an ordinary editable list, saved by the button that already exists.
 
-**Só `codecs` ganha presets.** `resolutions` tem default certo e duas setas na UI; `fansubs` é
-gosto, não eixo técnico; `sources` e `audio` não afetam episódio (marcados "só filmes" na tela);
-`criteria_order` é arma carregada (#55); `ignore_list` é aditiva, não ranking.
+**Only `codecs` gets presets.** `resolutions` has the right default and two arrows in the UI;
+`fansubs` is taste, not a technical axis; `sources` and `audio` do not affect episodes (marked
+"movies only" on the screen); `criteria_order` is a loaded gun (#55); `ignore_list` is additive, not
+ranking.
 
-**Descartado: preset "priorizar qualidade".** Para anime em exibição — que é o que
-`DownloadStatuses: [CURRENT, REPEATING]` baixa — SubsPlease e Erai-raws fazem remux do stream do
-Crunchyroll/HIDIVE, sem reencode: isso já é o teto da fonte, e qualquer arquivo maior do mesmo
-episódio é reencode (perda de geração) ou upscale. O primeiro caso já é barrado por `re-encode` no
-`ignore_list` default. Para backlog o eixo existe, mas é **fonte** (BD vs WEB), não compressão.
+**Discarded: a "prioritize quality" preset.** For airing anime — which is what
+`DownloadStatuses: [CURRENT, REPEATING]` downloads — SubsPlease and Erai-raws remux the
+Crunchyroll/HIDIVE stream, with no reencode: that is already the source ceiling, and any larger
+file of the same episode is a reencode (generation loss) or an upscale. The first case is already
+barred by `re-encode` in the default `ignore_list`. For backlog the axis exists, but it is
+**source** (BD vs WEB), not compression.
 
-**O teste que fecha a classe do bug:** `TestDefaultPriorities_TokensAreReachable`
-(`tests/unit/priorities_test.go`) exige que todo token das listas default seja algo que
-`ExtractCodec`/`ExtractResolution` consigam devolver. Foi assim que `x265`/`x264` ficaram anos como
-config inerte e invisível (#69); agora quebra o CI.
+**The test that closes the bug class:** `TestDefaultPriorities_TokensAreReachable`
+(`tests/unit/priorities_test.go`) requires every token of the default lists to be something
+`ExtractCodec`/`ExtractResolution` can return. That is how `x265`/`x264` sat for years as inert
+invisible config (#69); now it breaks CI.
 
-**Limitação conhecida, deliberada:** nenhuma mudança de default alcança instalação existente —
-`LoadConfigs` desserializa por cima de `getDefaultConfig()`. As listas se atualizam pelos botões
-"resetar" que já existem na tela; `MaxEpisodeTorrentSizeGB`, `WatchedEpisodesToKeep` e `MinSeeders`
-pedem uma edição manual, uma vez. Não há migração automática, pelo mesmo motivo de #47
-(`BatchWindowSeconds`): mudar comportamento num update sem ninguém pedir.
+**Known limitation, deliberate:** no default change reaches an existing install — `LoadConfigs`
+unmarshals over `getDefaultConfig()`. The lists update through the "reset" buttons that already
+exist on the screen; `MaxEpisodeTorrentSizeGB`, `WatchedEpisodesToKeep` and `MinSeeders` ask for a
+manual edit, once. There is no automatic migration, for the same reason as #47
+(`BatchWindowSeconds`): changing behaviour in an update with nobody asking.
 
-**(c) Na tela, tirar um token da lista virou um checkbox, não um `✕`.** Token ausente da lista já
-é tratado como o pior (`priorityIndex` devolve `len(list)`), então "remover" nunca foi remover — era
-mandar para o fim, com o efeito colateral de o item sumir da tela e não haver como trazê-lo de
-volta a não ser digitando o token exato de novo (e digitar errado dá config inerte). Agora cada
-linha tem um checkbox: desmarcado sai do array salvo e fica visível, apagado, no fim da lista.
+**(c) On the screen, taking a token off the list became a checkbox, not an `✕`.** A token absent
+from the list is already treated as the worst (`priorityIndex` returns `len(list)`), so "remove"
+was never remove — it was send to the end, with the side effect of the item vanishing from the
+screen and no way to bring it back except typing the exact token again (and typing it wrong gives
+inert config). Now each row has a checkbox: unchecked it leaves the saved array and stays visible,
+greyed, at the end of the list.
 
-O `✕` sobrou só para o que **não** está no default servido por `GET /config/priorities/defaults`:
-o que o usuário digitou e o legado inerte de um `config.json` antigo (`x265`, `4k`, `8k`) — que é
-justamente o que precisa de uma forma de sair. E `criteria_order` perdeu o campo de adicionar: é conjunto
-fechado — `sortByCriteria` pula em silêncio o critério que não está em `criterionCompare` e não há
-validação no `PUT /config` —, então texto livre ali só produzia config inerte, e com o checkbox os
-oito critérios já estão sempre na tela, marcados ou não. Não há o que adicionar.
+The `✕` is left only for what is **not** in the default served by `GET /config/priorities/defaults`:
+what the user typed and the inert legacy of an old `config.json` (`x265`, `4k`, `8k`) — which is
+exactly what needs a way out. And `criteria_order` lost the add field: it is a closed set —
+`sortByCriteria` silently skips a criterion that is not in `criterionCompare` and there is no
+validation on `PUT /config` — so free text there only produced inert config, and with the checkbox
+the eight criteria are always on the screen, ticked or not. There is nothing to add.
 
-**Don't "fix" by:** devolver a captura crua em `ExtractResolution` e "arrumar" a ordem da lista;
-repor `4k`/`uhd`/`fhd`/`hd`/`8k` no default; criar endpoint de presets; guardar o preset escolhido
-em `config.json`; escrever os defaults novos por cima de um `config.json` existente; pôr o `✕` de
-volta nos tokens canônicos "porque o checkbox é um clique a mais"; devolver o campo de adicionar a
-`criteria_order` (nem como texto livre, nem como select de um enum duplicado no frontend); validar
-`criteria_order` no backend para "poder" aceitar texto livre de novo.
+**Don't "fix" by:** returning the raw capture from `ExtractResolution` and "fixing" the list order;
+putting `4k`/`uhd`/`fhd`/`hd`/`8k` back in the default; creating a presets endpoint; storing the
+chosen preset in `config.json`; writing the new defaults over an existing `config.json`; putting
+the `✕` back on canonical tokens "because the checkbox is one more click"; putting the add field
+back on `criteria_order` (neither as free text, nor as a select of an enum duplicated in the
+frontend); validating `criteria_order` on the backend so we can "afford" to accept free text again.
 
 ---
 
-### 71. A AniList não tem id de franquia: a cadeia de `PREQUEL` é a única fonte, e busca por nome é armadilha
+### 71. AniList has no franchise id: the `PREQUEL` chain is the only source, and searching by name is a trap
 
-**Location:** `src/internal/anilist` (queries que pedem `relations`); `daemon.ComputeEpisodeOffset`
-(`daemon/helpers.go`). Complementa a #9, que trata do *gate* do offset; aqui está a **fonte** dele.
+**Location:** `src/internal/anilist` (queries that ask for `relations`); `daemon.ComputeEpisodeOffset`
+(`daemon/helpers.go`). Complements #9, which covers the offset *gate*; here is its **source**.
 
-**O que parece:** dá para identificar "a série" — a franquia inteira, atravessando cour e part — por
-algum id da AniList, ou, na falta dele, por uma busca por nome (`search: "Monogatari"`).
+**What it looks like:** you can identify "the series" — the whole franchise, across cour and part —
+by some AniList id, or, failing that, by a name search (`search: "Monogatari"`).
 
-**Por que está errado — medido por introspecção em 28/ago/2026.** O tipo `Media` tem 55 campos e
-**nenhum** de franquia:
+**Why it's wrong — measured by introspection on 28 Aug 2026.** The `Media` type has 55 fields and
+**none** of franchise:
 
 ```
 id, idMal, title, type, format, status, description, startDate, endDate, season, seasonYear,
@@ -1609,597 +1625,608 @@ externalLinks, streamingEpisodes, rankings, mediaListEntry, reviews, recommendat
 siteUrl, autoCreateForumThread, isRecommendationBlocked, isReviewBlocked, modNotes
 ```
 
-Não existe entidade "série" no schema, e `idMal` tem **a mesma granularidade** (um id por cour). A
-única aresta entre cours é `relations`. Caminhar `relationType == "PREQUEL"` filtrando
-`format ∈ {TV, TV_SHORT}` não é uma opção entre várias — é a única fonte disponível.
+There is no "series" entity in the schema, and `idMal` has **the same granularity** (one id per
+cour). The only edge between cours is `relations`. Walking `relationType == "PREQUEL"` filtering
+`format ∈ {TV, TV_SHORT}` is not one option among several — it is the only source available.
 
-**A busca por nome é o atalho que corrompe tudo.** Seria um request só, e foi medida:
+**A name search is the shortcut that corrupts everything.** It would be one request, and it was
+measured:
 
-- `search: "Monogatari"` → 28 resultados TV, quase todos de outras obras (`Ore Monogatari!!`,
+- `search: "Monogatari"` → 28 TV results, almost all other works (`Ore Monogatari!!`,
   `Shouwa Monogatari`, `Perrine Monogatari`, `Gokinjo Monogatari`).
-- `search: "Shingeki no Kyojin"` → 7 resultados, incluindo `Shingeki! Kyojin Chuugakkou` — a
-  paródia chibi de 12 episódios, que entraria em qualquer soma de episódios e deslocaria a série
-  inteira.
-- E não devolve **ordem**: a sequência teria que ser inferida dos títulos, que é exatamente o
-  problema de parsing de string que já derruba packs no `nyaa_match.go`.
+- `search: "Shingeki no Kyojin"` → 7 results, including `Shingeki! Kyojin Chuugakkou` — the
+  12-episode chibi parody, which would enter any episode sum and shift the whole series.
+- And it does not return **order**: the sequence would have to be inferred from the titles, which
+  is exactly the string-parsing problem that already takes packs down in `nyaa_match.go`.
 
-O grafo de `relations` é autoritativo; o nome não é.
+The `relations` graph is authoritative; the name is not.
 
-**Três fatos de `relations` que definem qualquer implementação:**
+**Three `relations` facts that define any implementation:**
 
-1. **`Media.relations` não aceita argumentos.** Sem filtro server-side por `relationType`, sem
-   paginação: toda query traz *todos* os edges, e filtrar é sempre trabalho do cliente.
-2. **`relations` pode ser aninhado, mas a AniList corta em 2 níveis.** Testado com profundidades de
-   1 a 8: o corpo satura em 5865 bytes a partir da profundidade 3, e no terceiro nível `relations`
-   vem presente com `edges: []`. Confirmado em Monogatari, Mushoku Tensei e Shingeki: **2 hops de
-   PREQUEL por query, sempre.**
-3. **`edges: []` no nível cortado NÃO significa raiz.** Esta é a armadilha séria: no nível em que a
-   AniList para de expandir, a resposta é indistinguível de um anime que genuinamente não tem
-   prequel. Tratar os dois como iguais para a caminhada cedo e produz um deslocamento
-   **silenciosamente errado**. Quem implementar precisa marcar quais nodes vieram em posição
-   autoritativa (níveis 0 e 1 da query) e re-buscar os do nível cortado antes de concluir qualquer
-   coisa sobre eles. O teto de 2 é comportamento observado, não documentado — o loop deve consumir
-   o que vier e enfileirar o que faltar, sem assumir profundidade nenhuma.
+1. **`Media.relations` accepts no arguments.** No server-side filter by `relationType`, no
+   pagination: every query brings *all* the edges, and filtering is always the client's job.
+2. **`relations` can be nested, but AniList cuts at 2 levels.** Tested with depths 1 to 8: the body
+   saturates at 5865 bytes from depth 3, and at the third level `relations` comes present with
+   `edges: []`. Confirmed on Monogatari, Mushoku Tensei and Shingeki: **2 PREQUEL hops per query,
+   always.**
+3. **`edges: []` at the cut level does NOT mean root.** This is the serious trap: at the level
+   where AniList stops expanding, the response is indistinguishable from an anime that genuinely
+   has no prequel. Treating the two as equal stops the walk early and produces a
+   **silently wrong** offset. Whoever implements this needs to mark which nodes arrived in an
+   authoritative position (query levels 0 and 1) and re-fetch the cut-level ones before concluding
+   anything about them. The ceiling of 2 is observed behaviour, not documented — the loop must
+   consume what comes and enqueue what is missing, without assuming any depth.
 
-**A cadeia foi validada contra a API real** (28/ago/2026), e a validação forte é o Shingeki: a
-soma acumulada dá `76..87` para o Final Season Part 2, que é **exatamente** a numeração que
-SubsPlease e Erai-raws usam nos arquivos. A cadeia reproduz a convenção real de nomeação sem
-nenhum ajuste. Monogatari (7 níveis, ordem cronológica torta) também fecha coerente.
+**The chain was validated against the real API** (28 Aug 2026), and the strong validation is
+Shingeki: the accumulated sum gives `76..87` for Final Season Part 2, which is **exactly** the
+numbering SubsPlease and Erai-raws use on the files. The chain reproduces the real naming
+convention with no adjustment. Monogatari (7 levels, crooked chronological order) also closes
+coherently.
 
-**Errar para 0 é barato; errar para um número, não.** Offset ausente cai na numeração relativa, que
-boa parte dos grupos usa. Offset errado manda a busca para um episódio que não existe. Toda dúvida
-na caminhada resolve para 0.
+**Erring to 0 is cheap; erring to a number is not.** A missing offset falls back to relative
+numbering, which a good part of the groups use. A wrong offset sends the search to an episode that
+does not exist. Every doubt in the walk resolves to 0.
 
-**Don't "fix" by:** procurar um id de franquia no schema "que deve existir em algum lugar"; usar
-`idMal` como identidade de série; substituir a caminhada por `search:` com o nome da franquia;
-tratar `edges: []` como raiz; assumir a profundidade 2 como contrato; incluir `MOVIE`/`OVA`/`ONA`
-na caminhada (ver #9).
+**Don't "fix" by:** looking for a franchise id in the schema "that must exist somewhere"; using
+`idMal` as series identity; replacing the walk with `search:` and the franchise name; treating
+`edges: []` as root; assuming depth 2 as a contract; including `MOVIE`/`OVA`/`ONA` in the walk
+(see #9).
 
 ---
 
-### 72. O orçamento da AniList se mede pelos headers da resposta, não por um contador nosso
+### 72. AniList budget is measured from the response headers, not from a counter of ours
 
 **Location:** `src/internal/anilist/anilist.go` — `sendAnilistRequest`; `health.go` — `Priority`,
-`ErrBudgetLow`, `recordBudget`, `budgetAllows`, `retryAfter`, classificação `HealthRateLimited`.
-Fixado por `budget_test.go`. Complementa a #65, que mede **quem** gasta; aqui está **como saber
-quanto sobrou**.
+`ErrBudgetLow`, `recordBudget`, `budgetAllows`, `retryAfter`, `HealthRateLimited` classification.
+Pinned by `budget_test.go`. Complements #65, which measures **who** spends; here is **how to know
+how much is left**.
 
-**O que parece:** para não tomar 429, o caminho natural é um limiter client-side
-(`golang.org/x/time/rate`) ou uma fila que segura requisição quando o consumo estimado passa do
-teto.
+**What it looks like:** to not take a 429, the natural path is a client-side limiter
+(`golang.org/x/time/rate`) or a queue that holds a request when estimated consumption passes the
+ceiling.
 
-**Por que está errado.** A AniList devolve o estado do balde em **toda** resposta, e o header é
-estritamente mais preciso que qualquer contador interno. Medido em 28/ago/2026:
+**Why it's wrong.** AniList returns the bucket state on **every** response, and the header is
+strictly more precise than any internal counter. Measured on 28 Aug 2026:
 
 ```
-media minimo             HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 29
-200 normal               HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 28
-404 (media inexistente)  HTTP 404  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 27
-query invalida           HTTP 400  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 26
-query pesada aninhada    HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 25
+minimal media           HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 29
+normal 200               HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 28
+404 (media does not exist) HTTP 404  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 27
+invalid query            HTTP 400  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 26
+heavy nested query       HTTP 200  X-RateLimit-Limit: 30  X-RateLimit-Remaining: 25
 ```
 
-Quatro consequências, todas com efeito de projeto:
+Four consequences, all with design effect:
 
-1. **Erro consome cota.** Um 404 e uma query malformada custam 1 cada. Retry cego em cima de erro
-   queima orçamento, e um contador que só contasse sucessos ficaria otimista exatamente quando as
-   coisas já estão indo mal.
-2. **Complexidade não custa nada.** A query aninhada de 33 KB decrementou 1, igual à query mínima.
-   Não há cobrança por complexidade nem por número de ids: **maximizar trabalho por request é
-   estritamente correto, não há trade-off.** É por isso que `Page(media(id_in: [...]))` (até 50 ids,
-   `perPage` máximo 50) vale sempre que houver um loop de busca por id. Aplicado em
-   `GetMediaByIDs` (avulsos, `media(id_in:)`) e `GetAnimeInfoByIDs` (refresh de órfãos,
-   `mediaList(mediaId_in:)`), ambos em 29/ago/2026.
-3. **O header é autoritativo porque enxerga os outros consumidores.** Ele já soma o passe do
-   daemon, o poll do frontend e as buscas de avulso — os três disputam o mesmo balde por IP, sem
-   coordenação. Nenhum contador interno chega perto, porque nenhum vê os erros dos outros.
-4. **O balde reseta de uma vez, não desliza.** Medido: `Remaining` foi de 24 → 20 numa rajada,
-   ficou em 19 aos 21s e voltou a **29** aos 41s. É balde fixo com reset discreto, não janela
-   deslizante com recarga gradual — na prática, **o orçamento se recupera inteiro em ≤ 60s**.
+1. **An error consumes quota.** A 404 and a malformed query cost 1 each. Blind retry on top of an
+   error burns budget, and a counter that only counted successes would be optimistic exactly when
+   things are already going badly.
+2. **Complexity costs nothing.** The 33 KB nested query decremented 1, same as the minimal query.
+   There is no charge for complexity or for number of ids: **maximizing work per request is
+   strictly correct, there is no trade-off.** That is why `Page(media(id_in: [...]))` (up to 50
+   ids, `perPage` max 50) is worth it whenever there is a fetch-by-id loop. Applied in
+   `GetMediaByIDs` (standalones, `media(id_in:)`) and `GetAnimeInfoByIDs` (orphan refresh,
+   `mediaList(mediaId_in:)`), both on 29 Aug 2026.
+3. **The header is authoritative because it sees the other consumers.** It already sums the daemon
+   pass, the frontend poll and the standalone searches — the three compete for the same bucket per
+   IP, with no coordination. No internal counter comes close, because none of them sees the
+   others' errors.
+4. **The bucket resets at once, it does not slide.** Measured: `Remaining` went 24 → 20 in a
+   burst, sat at 19 at 21s and came back to **29** at 41s. It is a fixed bucket with a discrete
+   reset, not a sliding window with gradual refill — in practice, **the budget recovers whole in
+   ≤ 60s**.
 
-**`X-RateLimit-Reset` não pode ser usado.** Ele aparece anunciado em
-`Access-Control-Expose-Headers`, mas **não está presente** em nenhuma resposta 200 observada. A
-tabela da #65 o cita porque a documentação oficial o cita; a medição não o encontrou. Um 429 não
-foi provocado de propósito (ele bloqueia o IP por ~1 min e o daemon do usuário compartilha esse IP),
-então **quais headers um 429 carrega continua não verificado** — o que se sabe é que `health.go` já
-lê `Retry-After`.
+**`X-RateLimit-Reset` cannot be used.** It shows up advertised in
+`Access-Control-Expose-Headers`, but it is **not present** on any observed 200 response. #65's
+table cites it because the official docs cite it; measurement did not find it. A 429 was not
+provoked on purpose (it blocks the IP for ~1 min and the user's daemon shares that IP), so
+**which headers a 429 carries remains unverified** — what is known is that `health.go` already
+reads `Retry-After`.
 
-**O desenho que decorre disso: reserva por prioridade, não fila.** Gravar `X-RateLimit-Remaining` e
-o instante da leitura num atômico ao lado de `health`, em toda resposta **inclusive erro**, e
-comparar com um piso antes de emitir. Bloquear e esperar é a resposta errada — o poll do frontend
-roda dentro de um handler HTTP e penduraria a tela. A resposta certa é degradar o que é barato
-degradar:
+**The design that follows: reserve by priority, not a queue.** Record `X-RateLimit-Remaining` and
+the instant of the read in an atomic next to `health`, on every response **including error**, and
+compare against a floor before emitting. Blocking and waiting is the wrong answer — the frontend
+poll runs inside an HTTP handler and would hang the screen. The right answer is to degrade what is
+cheap to degrade:
 
-| Chamador | Criticidade | Ação com orçamento baixo |
+| Caller | Criticality | Action with budget low |
 |---|---|---|
-| Passe do daemon | alta — perder o passe é episódio não baixado | sempre passa |
-| Poll do frontend (`GetFrontendAnimeList` **e** `GetCustomListsMap`) | baixa — já têm cache (60s e 5min) | recusa e serve cache velho — **as duas**, ou a degradação fica assimétrica |
-| Busca de avulso pela UI | baixa | recusa, com erro visível a quem pediu |
-| Trabalho de warm-up / prefetch | baixa — tem fallback | adia para o próximo passe |
+| Daemon pass | high — losing the pass is an episode not downloaded | always passes |
+| Frontend poll (`GetFrontendAnimeList` **and** `GetCustomListsMap`) | low — they already have cache (60s and 5min) | refuse and serve stale cache — **both**, or the degrade is asymmetric |
+| Standalone search from the UI | low | refuse, with an error visible to whoever asked |
+| Warm-up / prefetch work | low — has a fallback | postpone to the next pass |
 
-**A saída obrigatória:** se todo mundo for recusado, ninguém emite request e o processo nunca
-descobre que o balde resetou. A leitura precisa de validade — passados 60s da última observação,
-tratar o orçamento como cheio de novo. É para isso que a medição do reset serve, e é o que impede o
-gate de se auto-travar.
+**The mandatory escape hatch:** if everyone is refused, nobody emits a request and the process
+never discovers that the bucket reset. The read needs a validity — 60s after the last observation,
+treat the budget as full again. That is what the reset measurement is for, and it is what stops
+the gate from deadlocking itself.
 
-**Como ficou implementado** (29/ago/2026). `recordBudget` guarda `X-RateLimit-Remaining` e o
-instante num `atomic.Pointer`, logo depois do `httpDo` — antes de qualquer ramo de status, para o
-404 e o 400 contarem. `budgetAllows` é o gate, no topo de `sendAnilistRequest`: crítico passa
-sempre; descartável passa se a leitura estiver vencida (60s) ou se `remaining >= budgetFloor`
-(10 de 30). A recusa é `ErrBudgetLow` na hora — nunca espera.
+**How it ended up implemented** (29 Aug 2026). `recordBudget` stores `X-RateLimit-Remaining` and
+the instant in an `atomic.Pointer`, right after `httpDo` — before any status branch, so the 404
+and the 400 count. `budgetAllows` is the gate, at the top of `sendAnilistRequest`: critical always
+passes; disposable passes if the read is expired (60s) or if `remaining >= budgetFloor` (10 of
+30). The refusal is `ErrBudgetLow` immediately — it never waits.
 
-`Priority` é **parâmetro obrigatório** de `sendAnilistRequest` e sobe até as quatro funções
-públicas de chamador misto (`GetCustomListsMap`, `GetAnimeInfo`, `GetMediaByID`, `GetMediaByIDs`),
-que o daemon e o frontend chamam com criticidades opostas. As demais fixam a sua no corpo. Não há
-default implícito, e essa é a feature: uma query nova não compila sem alguém decidir. A alternativa
-descartada era um wrapper com `sendAnilistRequest` virando "prioridade normal" — diff menor, mas
-cria exatamente a classe de config inerte da #69.
+`Priority` is a **required parameter** of `sendAnilistRequest` and rises to the four mixed-caller
+public functions (`GetCustomListsMap`, `GetAnimeInfo`, `GetMediaByID`, `GetMediaByIDs`), which the
+daemon and the frontend call with opposite criticalities. The others pin theirs in the body. There
+is no implicit default, and that is the feature: a new query does not compile without someone
+deciding. The discarded alternative was a wrapper with `sendAnilistRequest` becoming "normal
+priority" — smaller diff, but it creates exactly #69's inert-config class.
 
-**A linha divisória não é "daemon vs. frontend", é "se repete sozinho vs. alguém está esperando".**
-Descartável é o tráfego recorrente com fallback: o poll de `/animes` (`GetFrontendAnimeList`,
-`GetCustomListsMap`, `GetAnimeInfoByIDs`, e o `GetMediaByIDs` de `appendStandaloneEntries` e
-`refreshStandaloneOrphans`) e a busca por tecla digitada (`SearchMedia`). Crítico é o passe do
-daemon **e** toda ação de um clique — abrir a tela de detalhe, adicionar um avulso, baixar um
-episódio à mão: são requisições raras e caras de recusar, e sacrificá-las não devolve orçamento
-nenhum. `GetFrontendAnimeList` recusado serve o cache **vencido** (`ttlCache.getStale`) em vez de
-derrubar o poll; os outros descartáveis já tratam falha parcial como dado ausente.
+**The dividing line is not "daemon vs. frontend", it is "repeats on its own vs. someone is
+waiting".** Disposable is recurring traffic with a fallback: the `/animes` poll
+(`GetFrontendAnimeList`, `GetCustomListsMap`, `GetAnimeInfoByIDs`, and the `GetMediaByIDs` of
+`appendStandaloneEntries` and `refreshStandaloneOrphans`) and the per-keystroke search
+(`SearchMedia`). Critical is the daemon pass **and** every click action — opening the detail
+screen, adding a standalone, downloading an episode by hand: they are rare requests and expensive
+to refuse, and sacrificing them returns no budget. A refused `GetFrontendAnimeList` serves the
+**expired** cache (`ttlCache.getStale`) instead of dropping the poll; the other disposables
+already treat a partial failure as missing data.
 
-**O par do poll degrada junto ou não degrada.** `fetchAniListEntries` é `GetCustomListsMap` +
-`GetFrontendAnimeList`, e recusar só um dos dois é pior que recusar os dois: a lista sai do cache
-vencido e responde **com sucesso**, o `customLists` volta `nil`, e o merge conclui que nenhum anime
-está em lista excluída. `GET /animes` mostra blacklistado como normal e o `standalone_guard` deixa
-adicionar como avulso o que deveria recusar — tudo numa resposta que parece saudável. Por isso
-`GetCustomListsMap` também serve `getStale` quando o gate recusa
-(`TestCustomListsServesStaleCacheWhenRefused`). Sobra a janela em que não há leitura vencida
-nenhuma (processo recém-subido com o balde já vazio); aí o `nil` volta e o overlay guard da #11
-mantém o que a query complexa tiver trazido. Nulificar a lista inteira nesse caso seria pior: o
-`nil` de `GetCustomListsMap` também acontece em falha de rede, e derrubaria a tela por causa da
-query barata mesmo com a cara respondendo.
+**The poll pair degrades together or not at all.** `fetchAniListEntries` is `GetCustomListsMap` +
+`GetFrontendAnimeList`, and refusing only one of the two is worse than refusing both: the list
+comes from the expired cache and answers **successfully**, `customLists` comes back `nil`, and the
+merge concludes that no anime is on an excluded list. `GET /animes` shows a blacklisted one as
+normal and `standalone_guard` lets you add as standalone what it should refuse — all in a
+response that looks healthy. That is why `GetCustomListsMap` also serves `getStale` when the gate
+refuses (`TestCustomListsServesStaleCacheWhenRefused`). What remains is the window where there is
+no expired read at all (process just up with the bucket already empty); then `nil` comes back and
+#11's overlay guard keeps what the complex query brought. Nulling the whole list in that case
+would be worse: `GetCustomListsMap`'s `nil` also happens on a network failure, and it would take
+the screen down because of the cheap query even with the face answering.
 
-Nenhum chamador de warm-up existe ainda. `GetSeriesIndex` (#77) já recebe a `Priority`, mas
-ninguém a chama em produção: o warm-up entra junto com a posse por cobertura, que é quem monta
-a semente.
+No warm-up caller exists yet. `GetSeriesIndex` (#77) already receives the `Priority`, but nobody
+calls it in production: the warm-up comes in together with ownership by coverage, which is who
+builds the seed.
 
-**Don't "fix" by:** adicionar `x/time/rate` ou qualquer token bucket client-side (adivinha em vez de
-medir, e não contabiliza os erros dos outros consumidores); contar só respostas 200; depender de
-`X-RateLimit-Reset`; bloquear a goroutine esperando o balde encher dentro de um handler HTTP;
-recusar *todos* os chamadores quando o orçamento está baixo, sem a validade de 60s; dar um default
-à `Priority` (wrapper, valor zero "seguro", ou derivar da query — `GetAllCurrentAnime` e
-`GetFrontendAnimeList` podem ser a mesma query com criticidades opostas); usar `getStale` fora do
-fallback do gate.
+**Don't "fix" by:** adding `x/time/rate` or any client-side token bucket (guesses instead of
+measuring, and does not account for the other consumers' errors); counting only 200 responses;
+depending on `X-RateLimit-Reset`; blocking the goroutine waiting for the bucket to fill inside an
+HTTP handler; refusing *every* caller when the budget is low, without the 60s validity; giving
+`Priority` a default (wrapper, a "safe" zero value, or deriving it from the query —
+`GetAllCurrentAnime` and `GetFrontendAnimeList` can be the same query with opposite
+criticalities); using `getStale` outside the gate's fallback.
 
 ---
 
 ### 73. The frontend doesn't query AniList directly, even though it could
 
-**Location:** política para `src/internal/frontend` e `src/internal/api/endpoint_animes.go` — hoje
-todo acesso à AniList passa pelo backend.
+**Location:** policy for `src/internal/frontend` and `src/internal/api/endpoint_animes.go` — today
+every AniList access goes through the backend.
 
-**O que parece:** o limite é por IP público, e o frontend é o maior consumidor (ver #65). Se ele
-falasse direto com a AniList, rodando num PC diferente do daemon o consumo cairia noutro balde.
+**What it looks like:** the limit is per public IP, and the frontend is the largest consumer (see
+#65). If it talked to AniList directly, running on a PC different from the daemon the consumption
+would fall on another bucket.
 
-**Os pré-requisitos técnicos existem** — medido em 28/ago/2026, não é o que impede:
+**The technical prerequisites exist** — measured on 28 Aug 2026, that is not what blocks it:
 
-- A AniList responde `Access-Control-Allow-Origin: *` e expõe os headers de rate limit em
-  `Access-Control-Expose-Headers`. Um browser pode consultar direto, inclusive lendo o orçamento.
-- O app **não usa token nenhum**: todas as queries são públicas, por username. Não há credencial
-  para vazar para o browser.
+- AniList answers `Access-Control-Allow-Origin: *` and exposes the rate-limit headers in
+  `Access-Control-Expose-Headers`. A browser can query directly, including reading the budget.
+- The app **uses no token**: every query is public, by username. There is no credential to leak
+  to the browser.
 
-**O furo é NAT.** O limite é por IP **público**, não por máquina. Daemon no desktop e browser no
-notebook, na mesma casa, saem pelo mesmo IP → mesmo balde, ganho zero. O alívio só existe quando o
-browser está numa rede genuinamente diferente (celular em dados móveis, acesso remoto, VPN) — o
-cenário menos comum —, e o custo é pago em todos os cenários.
+**The hole is NAT.** The limit is per **public** IP, not per machine. Daemon on the desktop and
+browser on the laptop, in the same house, leave through the same IP → same bucket, zero gain. The
+relief only exists when the browser is on a genuinely different network (phone on mobile data,
+remote access, VPN) — the least common scenario — and the cost is paid in every scenario.
 
-**O custo é duplicação silenciosa.** O frontend teria que replicar em TypeScript o `DedupeByMedia`,
-o merge de `customLists`, o `withStandaloneProgress` e a classificação de health do `health.go`.
-Lógica de Go duplicada em TS diverge sem ninguém perceber, e o daemon continuaria precisando dos
-mesmos dados para o passe: dois caminhos para o mesmo dado, não um.
+**The cost is silent duplication.** The frontend would have to replicate in TypeScript
+`DedupeByMedia`, the `customLists` merge, `withStandaloneProgress` and `health.go`'s health
+classification. Go logic duplicated in TS diverges with nobody noticing, and the daemon would
+still need the same data for the pass: two paths for the same data, not one.
 
-| | ganho | custo | funciona quando? |
+| | gain | cost | works when? |
 |---|---|---|---|
-| Frontend busca direto | move o poll para outro IP | lógica duplicada em TS | só se o browser estiver em outra rede |
-| `id_in` em lote nos avulsos | N req/min → 1 | ~10 linhas | sempre |
+| Frontend fetches directly | moves the poll to another IP | logic duplicated in TS | only if the browser is on another network |
+| Batched `id_in` on standalones | N req/min → 1 | ~10 lines | always |
 
-**Veredito: não fazer.** A ideia aponta para um problema real, mas ataca a fatia errada com o
-instrumento caro. **Reavaliar só se**, depois do `id_in` em lote e do gate por prioridade (#72), o
-rate limit voltar a apertar.
+**Verdict: don't.** The idea points at a real problem, but it attacks the wrong slice with the
+expensive instrument. **Re-evaluate only if**, after batched `id_in` and the priority gate (#72),
+the rate limit tightens again.
 
-**Don't "fix" by:** mover só "uma query pequena" para o frontend como meio-termo — o custo é a
-duplicação da lógica de merge, e ela começa na primeira query.
+**Don't "fix" by:** moving only "one small query" to the frontend as a middle ground — the cost is
+duplicating the merge logic, and it starts on the first query.
 
 ---
 
-### 74. A unidade do guard de exclusão de pack é o conteúdo do torrent, não a lista de registros
+### 74. The pack-exclusion guard's unit is the torrent's contents, not the list of records
 
 **Location:** `internal/daemon/episodes.go` (`canRemoveTorrent`, `hasUnclaimedContent`,
-`declaredSpan`, `forgettableKeys`, `handleSavedEpisodes`). Fixado por
+`declaredSpan`, `forgettableKeys`, `handleSavedEpisodes`). Pinned by
 `TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent`,
 `TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack`,
 `TestRemoveEpisodesAndLinks_RemovesPackDownloadedMidWatch`,
 `TestRemoveEpisodesAndLinks_KeepsRecordsOfHeldPack`,
 `TestRemoveEpisodesAndLinks_RemovesPackOnceEveryCourClaimsIt`,
-`TestRemoveTorrentWithEpisodes_ForcesPastTheUnclaimedGuard` e
+`TestRemoveTorrentWithEpisodes_ForcesPastTheUnclaimedGuard` and
 `TestHandleSavedEpisodes_NewEpisodesProtectSharedTorrent` (`internal/daemon/episodes_test.go`).
 
-**What it looks like:** o guard que decide se um torrent compartilhado pode sair não pergunta mais
-só "todo registro deste hash está no delete set?". Ele também compara a faixa declarada pelos
-registros (`BatchStart`/`BatchEnd`) com os episódios **reivindicados** pelas entradas do grupo, e
-recusa a remoção quando sobra conteúdo sem dono (`hasUnclaimedContent`). Três peças fazem a conta
-fechar:
+**What it looks like:** the guard that decides whether a shared torrent can leave no longer asks
+only "is every record of this hash in the delete set?". It also compares the range declared by the
+records (`BatchStart`/`BatchEnd`) with the episodes **claimed** by the group's entries, and
+refuses the removal when unclaimed content remains (`hasUnclaimedContent`). Three pieces make the
+count close:
 
-- **Quem reivindica é a entrada, pelo `AnimeTotalEpisodes` dela** — não o número de registros.
-  Registro só nasce para episódio que o daemon baixou: um pack `01-11` pego com progresso 5 tem 6
-  registros, e um episódio bloqueado encurta o grupo do mesmo jeito. Os episódios que a entrada não
-  registrou são dela igual. Registro antigo não traz o total (`0`); aí a contagem de registros
-  daquele `anime_id` é o que sobra, que é o comportamento anterior a esta correção.
-- **`declaredSpan` mede por `anime_id`, não na união** — cada entrada grava a faixa na *sua*
-  numeração local (#79), então `1..23` sob o cour 1 e `-10..12` sob o cour 2 são o mesmo pack de 23
-  episódios; unir os dois daria 34, um pack que não existe.
-- **O registro do pack que ficou no disco não é apagado** (`forgettableKeys`). Ele é o único lugar
-  onde a faixa declarada existe — sem ele nenhum cour futuro consegue adotar o pack
-  (`findCoveringPack` exige a faixa, #78) e a conta de conteúdo reivindicado nunca mais fecha.
+- **Who claims is the entry, by its `AnimeTotalEpisodes`** — not the number of records.
+  A record is only born for an episode the daemon downloaded: a pack `01-11` taken with progress 5
+  has 6 records, and a blocked episode shortens the group the same way. The episodes the entry did
+  not record are still hers. An old record does not carry the total (`0`); then the record count
+  of that `anime_id` is what is left, which is the behaviour before this fix.
+- **`declaredSpan` measures per `anime_id`, not on the union** — each entry stores the range in
+  *its* local numbering (#79), so `1..23` under cour 1 and `-10..12` under cour 2 are the same
+  23-episode pack; unioning the two would give 34, a pack that does not exist.
+- **The pack record that stayed on disk is not deleted** (`forgettableKeys`). It is the only place
+  the declared range exists — without it no future cour can adopt the pack (`findCoveringPack`
+  requires the range, #78) and the claimed-content count never closes again.
 
-`removeEpisodesAndLinks` ganhou um parâmetro `force` para a exclusão **manual** de torrent
-(`RemoveTorrentWithEpisodes`, #32): ali a unidade de exclusão é o torrent e quem decidiu foi o
-usuário — sem isso o clique devolveria sucesso sem apagar nada. O passe automático nunca usa
-`force`. Além disso, `handleSavedEpisodes` passa `savedEpisodes ∪ newEpisodes` para
-`removeEpisodesAndLinks`, não só o snapshot pré-passe.
+`removeEpisodesAndLinks` gained a `force` parameter for **manual** torrent deletion
+(`RemoveTorrentWithEpisodes`, #32): there the unit of deletion is the torrent and who decided was
+the user — without that the click would return success without deleting anything. The automatic
+pass never uses `force`. On top of that, `handleSavedEpisodes` passes `savedEpisodes ∪ newEpisodes`
+to `removeEpisodesAndLinks`, not only the pre-pass snapshot.
 
-**Why it's right:** "todo registro" não é "todo o conteúdo". Um pack de **season** baixado sob o
-cour 1 (que só tem 11 episódios na AniList) grava 11 registros mas carrega 23 episódios de arquivo
-— os 12 do cour 2 não têm registro nenhum porque ainda não foram baixados. Assistir o cour 1
-colocava os 11 registros no delete set, o guard concluía "ninguém sobrevive" e apagava do disco um
-conteúdo que o usuário nunca viu. O agravante do mesmo passe é a metade do snapshot: quando o cour
-2 vira `CURRENT` e o passe escolhe o mesmo pack para o media id novo, `Session.Add` reusa o
-infohash e os registros novos existem só em `newEpisodes` — invisíveis para o guard, que apagava o
-arquivo recém-adotado.
+**Why it's right:** "every record" is not "all the content". A **season** pack downloaded under
+cour 1 (which only has 11 episodes on AniList) writes 11 records but carries 23 episode files —
+cour 2's 12 have no record because they have not been downloaded yet. Watching cour 1 put the 11
+records in the delete set, the guard concluded "nobody survives" and wiped from disk content the
+user never saw. The aggravation of the same pass is the snapshot half: when cour 2 becomes
+`CURRENT` and the pass picks the same pack for the new media id, `Session.Add` reuses the infohash
+and the new records exist only in `newEpisodes` — invisible to the guard, which deleted the
+just-adopted file.
 
-**Por que não a contagem de registros** (foi a primeira versão desta decisão, e vazava disco): ela
-confunde "episódio de outro cour, que ninguém baixou" com "episódio desta entrada que o daemon não
-precisou registrar". Um pack `01-11` de uma entrada de 11 episódios, pego com progresso 5, tem 6
-registros; `6 < 11` marcava conteúdo sem dono **para sempre**, o torrent nunca saía do disco e os
-registros eram apagados assim mesmo — um pack órfão permanente, que é o oposto da proteção que o
-guard existe para dar. Comparar os **números** dos episódios também não serve: o mesmo hash pode
-ter registros de media ids diferentes, cada um na sua régua. O total da entrada é o único dado que
-diz quanto do pack pertence a ela sem precisar de conversão.
+**Why not the record count** (it was the first version of this decision, and it leaked disk): it
+confuses "episode of another cour, that nobody downloaded" with "episode of this entry that the
+daemon did not need to record". A pack `01-11` of an 11-episode entry, taken with progress 5, has 6
+records; `6 < 11` marked unclaimed content **forever**, the torrent never left disk and the records
+were deleted anyway — a permanent orphan pack, which is the opposite of the protection the guard
+exists to give. Comparing episode **numbers** also does not work: the same hash can have records of
+different media ids, each on its own ruler. The entry's total is the only datum that says how much
+of the pack belongs to it without needing a conversion.
 
-**Teto conhecido (`ponytail:` no código):** pack cuja faixa nem o nome nem a lista de arquivos do
-Nyaa resolveram grava `BatchEnd == 0` (desconhecida, ver `hasDeclaredRange` em #79) e continua
-indetectável — o guard cai no comportamento antigo. Depois de #84 isso é o resto de um caso raro
-(detalhe fora do ar, nome de arquivo ilegível); antes era **todo** pack sem faixa no nome.
+**Known ceiling (`ponytail:` in the code):** a pack whose range neither the name nor Nyaa's file
+list resolved stores `BatchEnd == 0` (unknown, see `hasDeclaredRange` in #79) and stays
+undetectable — the guard falls back to the old behaviour. After #84 that is the remainder of a rare
+case (detail page down, unreadable file name); before it was **every** pack with no range in the
+name.
 
-**Don't "fix" by:** derivar a faixa do min/max dos episódios salvos (é a informação que falta, não
-uma que dá para reconstruir — foi o bug que motivou `BatchStart`/`BatchEnd` existirem), nem
-recarregar `episodes.json` dentro de `removeEpisodesAndLinks` (a Fase 3 é sequencial de propósito e
-já tem os dois pedaços em memória).
+**Don't "fix" by:** deriving the range from the min/max of the saved episodes (that is the
+information that is missing, not one you can reconstruct — it was the bug that motivated
+`BatchStart`/`BatchEnd` existing), nor reloading `episodes.json` inside `removeEpisodesAndLinks`
+(Phase 3 is sequential on purpose and already has both pieces in memory).
 
 ---
 
-### 75. O corte no marcador e a primeira tentativa do match de titulo, nao a unica
+### 75. Truncation at the marker is the first attempt of the title match, not the only one
 
 **Location:** `internal/nyaa/nyaa_match.go` (`titleMatchesQuery`, `altTitleCandidates`,
-`tokensMatchQuery`, `firstMarkerIndex`). Fixado por `TestTitleMatchesQuery_AltTitleAfterMarker` e
-`TestTitleMatchesQuery_AltTitleDoesNotAcceptWrongAnime` (`src/tests/unit/nyaa_test.go`), com nomes
-reais colhidos do Nyaa.
+`tokensMatchQuery`, `firstMarkerIndex`). Pinned by `TestTitleMatchesQuery_AltTitleAfterMarker` and
+`TestTitleMatchesQuery_AltTitleDoesNotAcceptWrongAnime` (`src/tests/unit/nyaa_test.go`), with real
+names collected from Nyaa.
 
-**What it looks like:** `titleMatchesQuery` roda as duas checagens (todos os tokens da query
-presentes + Jaccard) primeiro sobre o nome cortado no marcador — igualzinho a #18 — e, so se isso
-falhar, repete sobre **cada** titulo alternativo que aparece DEPOIS do marcador, um de cada vez.
-Cada trecho entre parenteses e cada segmento separado por barra e um candidato proprio.
+**What it looks like:** `titleMatchesQuery` runs the two checks (every query token present +
+Jaccard) first on the name truncated at the marker — exactly like #18 — and, only if that fails,
+repeats over **each** alternative title that appears AFTER the marker, one at a time. Each stretch
+between parentheses and each slash-separated segment is its own candidate.
 
-**Why it's right:** a premissa de #18 ("tudo depois do marcador e ruido") quebra em uma familia
-inteira de nomes. O EMBER escreve
+**Why it's right:** #18's premise ("everything after the marker is noise") breaks on a whole family
+of names. EMBER writes
 `[EMBER] Mushoku Tensei: Jobless Reincarnation (2024) (Season 2 | Part 2) [...] (Mushoku Tensei II:
-Isekai Ittara Honki Dasu Part 2) (Batch)`: o marcador `Season 2` esta DENTRO de um grupo, e o romaji
-completo vem tres grupos adiante. Cortar deixava `[mushoku tensei jobless reincarnation]`, e a query
-em romaji era rejeitada por falta de token — os UNICOS packs de Part 2 do anime morriam antes de
-chegar ao caminho de batch. Diddy, NTRX, Fuchs e o VARYG fazem o mesmo com barra em vez de
-parenteses.
+Isekai Ittara Honki Dasu Part 2) (Batch)`: the `Season 2` marker is INSIDE a group, and the full
+romaji comes three groups later. Truncating left `[mushoku tensei jobless reincarnation]`, and the
+romaji query was rejected for a missing token — the anime's ONLY Part 2 packs died before reaching
+the batch path. Diddy, NTRX, Fuchs and VARYG do the same with a slash instead of parentheses.
 
-**Por que um candidato por trecho, e nao um saco unico de tokens.** Foi a primeira tentativa, e
-medindo ficou pior: juntar o titulo em ingles do prefixo com o romaji do rodape dilui os dois
-(Jaccard 0.78 no caso do EMBER, contra **1.00** do romaji comparado sozinho), e no `debug-batch`
-isso deixava um trecho emprestar token para o vizinho — os avulsos do Yameii de *SAO Alternative:
-Gun Gale Online* passavam a casar a query de *Sword Art Online II*. Comparado trecho a trecho, cada
-titulo e avaliado como titulo.
+**Why one candidate per stretch, not a single bag of tokens.** That was the first attempt, and
+measuring made it worse: joining the English title from the prefix with the romaji from the footer
+dilutes both (Jaccard 0.78 on the EMBER case, against **1.00** of the romaji compared alone), and
+in `debug-batch` that let a stretch lend a token to its neighbour — Yameii's loose releases of
+*SAO Alternative: Gun Gale Online* started matching the query of *Sword Art Online II*. Compared
+stretch by stretch, each title is evaluated as a title.
 
-**Por que a segunda tentativa so roda depois da primeira falhar.** E o que preserva #18 inteiro.
-O corte e o que protege query curta de afundar no Jaccard: o pack
+**Why the second attempt only runs after the first fails.** That is what preserves all of #18.
+Truncation is what protects a short query from sinking in Jaccard: the pack
 `[EMBER] Kimetsu no Yaiba (2024) (Season 4) [...] (Kimetsu no Yaiba: Hashira Geiko-hen | Demon
-Slayer: Kimetsu no Yaiba Hashira Training Arc) (Batch)` casa a query de 3 tokens no corte (1.00) e
-nunca chega aos candidatos — onde marcaria 0.5 e seria rejeitado. Ampliar os tokens para todo mundo
-trocaria um falso negativo por outro.
+Slayer: Kimetsu no Yaiba Hashira Training Arc) (Batch)` matches the 3-token query on the truncation
+(1.00) and never reaches the candidates — where it would score 0.5 and be rejected. Expanding the
+tokens for everyone would swap one false negative for another.
 
-**Medido no `make debug-batch`** (corpus de `scripts/robustness-animes.txt`, antes e depois): nenhum
-match perdido; ganhos em `108465`, onde o pack BDRip do EMBER de season 1 passou a casar e virou a
-melhor opcao (492 seeders, contra 65 do Judas que liderava). No `166873`, que motivou a
-investigacao, os tres packs de Part 2 do EMBER passaram a sobreviver ao filtro (eram zero).
+**Measured in `make debug-batch`** (corpus of `scripts/robustness-animes.txt`, before and after): no
+match lost; gains on `108465`, where EMBER's season 1 BDRip pack started matching and became the
+best option (492 seeders, against 65 of the Judas that was leading). On `166873`, which motivated
+the investigation, EMBER's three Part 2 packs started surviving the filter (they were zero).
 
-**Limitacao conhecida, PRE-EXISTENTE e nao introduzida aqui:** a query `Sword Art Online II` casa os
-avulsos de *SAO Alternative: Gun Gale Online II* (Jaccard 0.57, acima do 0.4 de query longa). Os
-releases do Erai-raws desse mesmo spinoff ja casavam antes desta mudanca, pelo caminho do corte —
-o que mudou foi so a consistencia entre releases. Consertar isso e mexer no `jaccardThreshold`, que
-e outra feature.
+**Known limitation, PRE-EXISTING and not introduced here:** the query `Sword Art Online II` matches
+the loose releases of *SAO Alternative: Gun Gale Online II* (Jaccard 0.57, above the 0.4 of a long
+query). Erai-raws releases of that same spinoff already matched before this change, through the
+truncation path — what changed was only consistency across releases. Fixing that is touching
+`jaccardThreshold`, which is another feature.
 
-**Don't "fix" by:** tokenizar o nome inteiro (traz titulo de episodio e tag de release, e afunda o
-Jaccard), nem juntar os candidatos num conjunto so (medido acima), nem criar um threshold proprio
-para a segunda tentativa (numero magico ajustado a cinco amostras).
+**Don't "fix" by:** tokenizing the whole name (brings episode title and release tag, and sinks
+Jaccard), nor joining the candidates into one set (measured above), nor creating a threshold of its
+own for the second attempt (magic number fitted to five samples).
 
 ---
 
-### 76. `searchNyaaWithVariants` para na primeira variante que devolve qualquer resultado — medido, e fica assim
+### 76. `searchNyaaWithVariants` stops at the first variant that returns any result — measured, and it stays that way
 
 **Location:** `internal/daemon/search.go` (`searchNyaaWithVariants`, `buildTitleVariants`).
 
-**What it looks like:** o laço de variantes de título só continua para a próxima quando a atual
-devolveu **nada** (`result != nil` já encerra). Uma variante que devolve 24 episódios avulsos e zero
-pack encerra a busca — a variante em inglês, que poderia trazer o pack, não roda.
+**What it looks like:** the title-variant loop only continues to the next when the current one
+returned **nothing** (`result != nil` already ends it). A variant that returns 24 loose episodes and
+zero packs ends the search — the English variant, which might bring the pack, does not run.
 
-**Why it's right:** a falha descrita acima é real no papel, e chegou a ser agendada como feature
-("F3 · Variantes de título no caminho de pack"). Foi **medida** depois de #75 e não aparece na
-prática: rodando `ScrapNyaaForAnime` + `partitionSearchResults` + `pickBatches` para **cada** variante
-dos 8 animes de `scripts/robustness-animes.txt` mais `146065` e `166873` (29/ago/2026), não há um
-único anime em que a variante 1 devolva resultado e uma variante posterior encontre pack que ela não
-encontrou. Onde existe pack no Nyaa, o romaji já o acha:
+**Why it's right:** the failure described above is real on paper, and it even got scheduled as a
+feature ("F3 · Title variants on the pack path"). It was **measured** after #75 and does not show
+up in practice: running `ScrapNyaaForAnime` + `partitionSearchResults` + `pickBatches` for **each**
+variant of the 8 animes in `scripts/robustness-animes.txt` plus `146065` and `166873` (29 Aug 2026),
+there is not a single anime where variant 1 returns a result and a later variant finds a pack it
+did not. Where a pack exists on Nyaa, romaji already finds it:
 
-| id | v1 (romaji) packs/batches | melhor variante posterior |
+| id | v1 (romaji) packs/batches | best later variant |
 |---|---|---|
-| 1735 Naruto Shippuuden | 1 / 1 | idem (pack diferente, mesma cobertura) |
-| 1 Cowboy Bebop | 9 / 1 | variante única |
-| 108465 Mushoku Tensei | 3 / 1 | idem |
-| 20594 Sword Art Online II | 4 / 1 | variante única |
-| 101922 Kimetsu no Yaiba | 3 / 2 | 14 / 1 (mais packs, cobertura pior) |
-| 166873 Mushoku Tensei II Part 2 | 3 / 1 | idem |
-| 235 Meitantei Conan | 0 / 0 | **0 / 0** em todas as quatro |
+| 1735 Naruto Shippuuden | 1 / 1 | same (different pack, same coverage) |
+| 1 Cowboy Bebop | 9 / 1 | unique variant |
+| 108465 Mushoku Tensei | 3 / 1 | same |
+| 20594 Sword Art Online II | 4 / 1 | unique variant |
+| 101922 Kimetsu no Yaiba | 3 / 2 | 14 / 1 (more packs, worse coverage) |
+| 166873 Mushoku Tensei II Part 2 | 3 / 1 | same |
+| 235 Meitantei Conan | 0 / 0 | **0 / 0** on all four |
 
-O `235` é o único anime do corpus que cai no caminho de episódio avulso, e nenhuma variante acha
-pack para ele — o Nyaa não tem pack dos primeiros episódios de Detective Conan. É ausência de
-conteúdo, não de variante.
+`235` is the only anime in the corpus that falls on the loose-episode path, and no variant finds a
+pack for it — Nyaa has no pack of Detective Conan's first episodes. It is absence of content, not
+of a variant.
 
-Depois de #75, o custo de rodar a variante seguinte deixou de ter contrapartida: seria mais uma
-rodada de busca no Nyaa **por anime, em todo passe** em que não houver pack — que é a maioria dos
-animes em exibição, porque pack de temporada corrente só aparece no fim. Combinado com a paginação
-adaptativa (#57), multiplica.
+After #75, the cost of running the next variant stopped having a counterpart: it would be one more
+Nyaa search round **per anime, on every pass** where there is no pack — which is most airing
+animes, because a current-season pack only appears at the end. Combined with adaptive pagination
+(#57), it multiplies.
 
-**Reabrir quando:** aparecer no `make debug-batch` um anime cuja variante 1 devolva resultado, zero
-pack sobreviva ao filtro, e a busca manual com a variante em inglês mostre pack que cobre a janela.
-Aí a mudança é de duas linhas: continuar o laço quando `partitionSearchResults` não devolver pack.
+**Reopen when:** `make debug-batch` shows an anime whose variant 1 returns a result, zero packs
+survive the filter, and a manual search with the English variant shows a pack that covers the
+window. Then the change is two lines: continue the loop when `partitionSearchResults` returns no
+pack.
 
-**Don't "fix" by:** rodar todas as variantes sempre e unir os resultados (paga N buscas por anime
-para o ganho medido acima, que é zero), nem inverter a ordem das variantes (`GenerateSearchTitleVariants`
-põe o romaji primeiro porque é ele que casa a maioria dos releases).
+**Don't "fix" by:** always running every variant and unioning the results (pays N searches per
+anime for the measured gain above, which is zero), nor inverting the variant order
+(`GenerateSearchTitleVariants` puts romaji first because that is what matches most releases).
 
 ---
 
 ### 77. The per-series absolute axis is a BFS two generations at a time, and the cut level goes back to the queue
 
 **Location:** `src/internal/anilist/series.go` — `Series`, `GetSeriesIndex`, `walkSeries`,
-`recordLink`, `prequelOf`, `resolveSeries`, `seriesCache`. Travado por `series_test.go`.
-Implementa o que a #71 mediu; a #9 é o *gate* do offset de uma part só.
+`recordLink`, `prequelOf`, `resolveSeries`, `seriesCache`. Pinned by `series_test.go`.
+Implements what #71 measured; #9 is the offset *gate* of a single part.
 
-**O que parece:** para saber o episódio absoluto de um cour basta ler `relations` do anime e
-somar os episódios do `PREQUEL` — que é o que `daemon.ComputeEpisodeOffset` faz.
+**What it looks like:** to know a cour's absolute episode it is enough to read the anime's
+`relations` and sum the `PREQUEL`'s episodes — which is what `daemon.ComputeEpisodeOffset` does.
 
-**Por que não basta.** `ComputeEpisodeOffset` anda **um** salto e só quando o título declara
-`Part >= 2`. Isso cobre `Shingeki no Kyojin: The Final Season Part 2` → `+16`, mas não a série:
-o absoluto real desse cour é `76..87`, que exige somar as **cinco** entradas anteriores. Como uma
-query da AniList expande no máximo 2 níveis de `relations` (#71), resolver uma cadeia de 7 níveis
-não é uma leitura — é uma caminhada.
+**Why that is not enough.** `ComputeEpisodeOffset` walks **one** hop and only when the title
+declares `Part >= 2`. That covers `Shingeki no Kyojin: The Final Season Part 2` → `+16`, but not
+the series: that cour's real absolute is `76..87`, which requires summing the **five** previous
+entries. Because an AniList query expands at most 2 levels of `relations` (#71), resolving a
+7-level chain is not a read — it is a walk.
 
-**O desenho, em três regras:**
+**The design, in three rules:**
 
-1. **Cada request anda duas gerações, não uma.** A resposta de um media traz o `relations` dele
-   (nível 0) e o do prequel dele (nível 1), ambos autoritativos. Daí saem **dois** elos gravados e
-   **três** contagens de episódio por media buscada. `Page(media(id_in: [...]))` com até 50 ids
-   custa a mesma unidade de orçamento que um id só (#72), então a largura é de graça e a única
-   dimensão que custa é a altura: `ceil(altura/2)` rodadas.
-2. **O avô volta para a fila.** O nó do nível 2 vem com id, formato e contagem confiáveis, mas seu
-   `relations` chega como `edges: []` — o corte, indistinguível de "não tem prequel" (#71).
-   Gravá-lo como raiz produz offset **silenciosamente errado**: no fixture do Shingeki, o Final
-   Season Part 2 daria `38..49` em vez de `76..87`. Por isso `recordLink` só é chamada nos níveis
-   0 e 1, e o nível 2 é reenfileirado. Só nó gravado por `recordLink` entra no cache — um nó de
-   nível 2 sabe quantos episódios tem, mas não quem vem antes dele, e meio fato não é fato.
-3. **O loop é agnóstico à profundidade.** O teto de 2 é comportamento observado, não contrato:
-   consome o que vier, enfileira o que faltar. Uma AniList que passe a expandir 3 níveis só faria
-   a caminhada terminar em menos rodadas, sem mudar uma linha.
+1. **Each request walks two generations, not one.** A media's response brings its `relations`
+   (level 0) and its prequel's (level 1), both authoritative. From that come **two** recorded
+   links and **three** episode counts per media fetched. `Page(media(id_in: [...]))` with up to 50
+   ids costs the same budget unit as a single id (#72), so width is free and the only dimension
+   that costs is height: `ceil(height/2)` rounds.
+2. **The grandfather goes back to the queue.** The level-2 node comes with a reliable id, format
+   and count, but its `relations` arrives as `edges: []` — the cut, indistinguishable from "has no
+   prequel" (#71). Recording it as root produces a **silently wrong** offset: on the Shingeki
+   fixture, Final Season Part 2 would give `38..49` instead of `76..87`. That is why `recordLink`
+   is only called on levels 0 and 1, and level 2 is re-enqueued. Only a node recorded by
+   `recordLink` enters the cache — a level-2 node knows how many episodes it has, but not who
+   comes before it, and a half-fact is not a fact.
+3. **The loop is depth-agnostic.** The ceiling of 2 is observed behaviour, not a contract: it
+   consumes what comes, enqueues what is missing. An AniList that started expanding 3 levels would
+   only make the walk finish in fewer rounds, without changing a line.
 
-**O cache é de 24h porque o dado é imutável e a caminhada é monotônica.** Só ancestrais entram, e
-ancestral de anime terminado também terminou: um `FINISHED` com contagem de episódios não ganha
-episódio nem prequel novo. Nó `RELEASING` ou sem contagem (`episodes: null`, não lançado) conta
-como 0 e **não** é persistido — congelar esse zero por 24h deslocaria a série inteira para baixo
-no dia em que a contagem aparecesse. Em memória, sem arquivo: o warm-up inteiro custa uns poucos
-requests, então persistir em disco seria invalidação e migração a troco de nada.
+**The cache is 24h because the data is immutable and the walk is monotonic.** Only ancestors
+enter, and an ancestor of a finished anime also finished: a `FINISHED` with an episode count does
+not gain an episode or a new prequel. A `RELEASING` node or one with no count (`episodes: null`,
+unreleased) counts as 0 and is **not** persisted — freezing that zero for 24h would shift the
+whole series down on the day the count appeared. In memory, no file: the whole warm-up costs a
+few requests, so persisting to disk would be invalidation and migration for nothing.
 
-**Ausente ≠ raiz, nos dois sentidos.** Id que a AniList não devolve fica **fora** do mapa (mesmo
-contrato de `GetMediaByIDs`), e ancestral desconhecido no meio da cadeia para a soma ali. As duas
-escolhas erram para o **menor** offset de propósito: offset ausente cai na numeração relativa,
-que boa parte dos grupos usa; offset errado manda a busca para um episódio que não existe (#71).
+**Absent ≠ root, in both directions.** An id AniList does not return stays **out** of the map
+(same contract as `GetMediaByIDs`), and an unknown ancestor in the middle of the chain stops the
+sum there. Both choices err toward the **smaller** offset on purpose: a missing offset falls back
+to relative numbering, which a good part of the groups use; a wrong offset sends the search to an
+episode that does not exist (#71).
 
-**As cadeias medidas viraram fixture de teste, não markdown** — Mushoku Tensei (4 níveis),
-Shingeki no Kyojin (6) e Monogatari (7). A validação forte é o Shingeki: `76..87` é exatamente a
-numeração que SubsPlease e Erai-raws usam nos arquivos. O teste semeia **só as pontas** de cada
-cadeia: semear todos os ids faria cada ancestral chegar como nível 0 e o corte nunca seria
-exercitado — verificado por mutação, a versão anterior do teste passava com o bug da regra 2.
+**The measured chains became a test fixture, not markdown** — Mushoku Tensei (4 levels),
+Shingeki no Kyojin (6) and Monogatari (7). The strong validation is Shingeki: `76..87` is exactly
+the numbering SubsPlease and Erai-raws use on the files. The test seeds **only the ends** of each
+chain: seeding every id would make each ancestor arrive as level 0 and the cut would never be
+exercised — verified by mutation, the previous version of the test passed with rule 2's bug.
 
-**Don't "fix" by:** tratar `edges: []` como raiz; assumir profundidade 2 como contrato; buscar um
-ancestral por request (a altura vira o custo, e o orçamento da AniList é 30/min); cachear nó de
-nível 2, `RELEASING` ou sem contagem; persistir o offset em disco ou no registro do episódio (ver
-a alternativa descartada na #78 — valor persistido apodrece quando a AniList corrige uma contagem,
-e o derivado se autocorrige no TTL seguinte); trocar a caminhada por `search:` com o nome da
-franquia (#71).
+**Don't "fix" by:** treating `edges: []` as root; assuming depth 2 as a contract; fetching one
+ancestor per request (height becomes the cost, and AniList's budget is 30/min); caching a level-2,
+`RELEASING` or no-count node; persisting the offset to disk or on the episode record (see the
+discarded alternative in #78 — a persisted value rots when AniList corrects a count, and the
+derived one self-corrects on the next TTL); replacing the walk with `search:` and the franchise
+name (#71).
 
-### 78. A unidade de posse de um torrent é a cobertura no eixo absoluto, não a chave `(anime_id, episódio)`
+### 78. A torrent's unit of ownership is coverage on the absolute axis, not the `(anime_id, episode)` key
 
 **Location:** `src/internal/daemon/coverage.go` — `resolveSeriesIndex`, `adoptCoveredEpisodes`,
-`findCoveringPack`, `dropAdopted`; `packDisplayName` (`episodes.go`), compartilhado com
-`assignBatches`; chamada em `processAnimeEpisodes` (`episodes.go`) e em
-`DownloadStandaloneAnime` (`standalone.go`). Travado por `coverage_test.go`. Consome a #77; é o
-outro lado da #74.
+`findCoveringPack`, `dropAdopted`; `packDisplayName` (`episodes.go`), shared with
+`assignBatches`; called in `processAnimeEpisodes` (`episodes.go`) and in
+`DownloadStandaloneAnime` (`standalone.go`). Pinned by `coverage_test.go`. Consumes #77; it is
+the other side of #74.
 
-**O problema.** A AniList quebra cour e part em **media ids separados**, cada um numerando a
-partir de 1; os packs do Nyaa são quase sempre da **season inteira**, atravessando essa fronteira.
-Com a posse expressa como `files.EpisodeKey{AnimeID, Episode}`, o pack de `1..23` baixado sob o
-cour 1 (11 episódios) é invisível para o cour 2 — que não tem registro nenhum, não sabe que o
-arquivo já está em disco, e rebaixa a season inteira do Nyaa. Caso real: Mushoku Tensei S1.
+**The problem.** AniList splits cour and part into **separate media ids**, each numbering from 1;
+Nyaa packs are almost always of the **whole season**, crossing that boundary. With ownership
+expressed as `files.EpisodeKey{AnimeID, Episode}`, the `1..23` pack downloaded under cour 1 (11
+episodes) is invisible to cour 2 — which has no record, does not know the file is already on disk,
+and re-downloads the whole season from Nyaa. Real case: Mushoku Tensei S1.
 
-**A regra:** antes de qualquer busca, um episódio pendente é adotado quando existe registro de
-pack, **em qualquer `anime_id`**, cuja faixa declarada contenha o episódio **no eixo absoluto da
-série**. `abs = Series.Offset(anime_id) + número local` (#77) — comparar `1..23` com `1..12` sem
-converter é comparar réguas diferentes.
+**The rule:** before any search, a pending episode is adopted when there is a pack record, **on
+any `anime_id`**, whose declared range contains the episode **on the series' absolute axis**.
+`abs = Series.Offset(anime_id) + local number` (#77) — comparing `1..23` with `1..12` without
+converting is comparing different rulers.
 
-**Adotar é gravar o registro apontando para o hash que já existe**, exatamente o que aconteceria
-se a busca reencontrasse o mesmo torrent (`Session.Add` reusa o infohash). Isso é o que faz o
-resto da máquina funcionar sem nenhuma exceção nova: a #74 passa a enxergar os irmãos do outro
-cour, e `organizeTorrent` hardlinka os arquivos que nunca tiveram dono — ele já trata grupo
-parcialmente organizado sem re-notificar. A faixa é **copiada como o dono a declara** (é a do nome
-do torrent) e **convertida para a numeração local de quem adota** — `findCoveringPack` devolve o
-offset do dono junto com o registro justamente para isso. Todo registro guarda a faixa na régua da
-sua própria entrada (#79) e é assim que ela é lida de volta; copiar `1..23` do cour 1 para debaixo
-do cour 2 (offset 11) faria esse registro ser lido como o absoluto `12..34`, e um cour 3 acharia
-cobertura para episódio que o pack não tem — marcado como baixado, nunca buscado, arquivo
-inexistente. Pinado por `TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour`.
+**Adopting is writing the record pointing at the hash that already exists**, exactly what would
+happen if the search found the same torrent again (`Session.Add` reuses the infohash). That is
+what makes the rest of the machine work with no new exception: #74 starts seeing the siblings of
+the other cour, and `organizeTorrent` hardlinks the files that never had an owner — it already
+treats a partially organized group without re-notifying. The range is **copied as the owner
+declares it** (it is the torrent name's) and **converted to the adopter's local numbering** —
+`findCoveringPack` returns the owner's offset with the record exactly for that. Every record
+stores the range on its own entry's ruler (#79) and that is how it is read back; copying `1..23`
+from cour 1 under cour 2 (offset 11) would make that record be read as the absolute `12..34`, and
+a cour 3 would find coverage for an episode the pack does not have — marked downloaded, never
+searched, file nonexistent. Pinned by `TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour`.
 
-**A semente do índice inclui os `anime_id` de `episodes.json`, não só os do passe.** O cour
-anterior está `COMPLETED` e por isso saiu do universo do passe — e é o offset **dele** que
-converte a faixa do pack. Sem essa semente a feature não enxergaria o pack que a motivou. Custa
-quase nada: largura é grátis (`perPage` 50, uma query = uma unidade — #72) e boa parte da semente
-extra já entraria na caminhada por ser ancestral dos animes do passe.
+**The index seed includes the `anime_id`s from `episodes.json`, not only the pass's.** The
+previous cour is `COMPLETED` and therefore left the pass's universe — and it is **its** offset
+that converts the pack's range. Without that seed the feature would not see the pack that
+motivated it. It costs almost nothing: width is free (`perPage` 50, one query = one unit — #72)
+and a good part of the extra seed would already enter the walk for being an ancestor of the
+pass's animes.
 
-**Quatro portas, todas obrigatórias** — cada uma cobre um jeito diferente de adotar errado:
+**Four gates, all mandatory** — each covers a different way of adopting wrong:
 
-| Porta | Sem ela |
+| Gate | Without it |
 |---|---|
-| Faixa declarada (`BatchStart > 0`) | pack sem faixa no nome grava `0`, e desconhecida viraria "cobre tudo" — mesmo teto da #74 |
-| Torrent ainda na sessão | registro com hash morto: episódio com dono e sem arquivo, invisível para a redescida |
-| Mesma `Series.Key` | "absoluto 12" casaria com o pack de qualquer outro anime |
-| Não é filme | `prequelOf` só segue `TV`/`TV_SHORT`, então um filme pós-season herda o offset dela e o "episódio 1" dele cai dentro da faixa do pack. Cobertura por range não distingue os dois |
+| Declared range (`BatchStart > 0`) | a pack with no range in the name stores `0`, and unknown would become "covers everything" — same ceiling as #74 |
+| Torrent still in the session | a record with a dead hash: episode with an owner and no file, invisible to the re-descent |
+| Same `Series.Key` | "absolute 12" would match any other anime's pack |
+| Not a movie | `prequelOf` only follows `TV`/`TV_SHORT`, so a post-season movie inherits its offset and its "episode 1" falls inside the pack's range. Coverage by range does not distinguish the two |
 
-**O filtro roda nos DOIS pontos de seleção.** `selectEpisodes` é pura e não sabe da adoção, então
-a segunda passada (limite levantado, caminho de pack) traria os adotados de volta e o daemon
-baixaria o que acabou de adotar.
+**The filter runs at BOTH selection points.** `selectEpisodes` is pure and does not know about
+adoption, so the second pass (limit lifted, pack path) would bring the adopted ones back and the
+daemon would download what it just adopted.
 
-**Alternativa descartada: persistir `AbsStart`/`AbsEnd` no `EpisodeStruct` na hora do download.**
-O lookup ficaria local e offline, mas todo registro anterior à feature nasceria com `0` —
-indistinguível de "desconhecido" —, ou seja, ela **não resolveria o caso que a motivou**, só
-valeria para o que fosse baixado depois; e o backfill precisaria da derivação de qualquer forma.
-Pior: valor persistido apodrece. Se a AniList corrigir uma contagem de episódios ou adicionar uma
-relação que faltava, o número gravado fica errado para sempre; o derivado se autocorrige no TTL
-seguinte. Guardar como fonte da verdade um número derivável cria uma segunda verdade que ninguém
-invalida. **Reabrir só se** o lookup aparecer como custo **medido** — e aí ele vira cache
-derivado, nunca fonte.
+**Discarded alternative: persist `AbsStart`/`AbsEnd` on `EpisodeStruct` at download time.** The
+lookup would be local and offline, but every record from before the feature would be born with `0`
+— indistinguishable from "unknown" — i.e. it **would not solve the case that motivated it**, it
+would only hold for what was downloaded after; and the backfill would need the derivation anyway.
+Worse: a persisted value rots. If AniList corrects an episode count or adds a missing relation,
+the stored number stays wrong forever; the derived one self-corrects on the next TTL. Storing as
+source of truth a derivable number creates a second truth nobody invalidates. **Reopen only if**
+the lookup shows up as a **measured** cost — and then it becomes a derived cache, never a source.
 
-**Don't "fix" by:** comparar `BatchStart`/`BatchEnd` de media ids diferentes sem converter;
-converter a faixa gravada para a numeração local do adotante (quebra `declaredSpan`); adotar com
-faixa desconhecida, com o torrent fora da sessão ou sem checar `Series.Key`; mover a adoção para
-dentro de `selectEpisodes` (ela roda duas vezes — duplicaria os registros); notificar
-`NewEpisode`/`DownloadCompleted` numa adoção (nada foi baixado, e o webhook de conclusão já saiu
-quando o pack pousou).
+**Don't "fix" by:** comparing `BatchStart`/`BatchEnd` of different media ids without converting;
+converting the stored range to the adopter's local numbering (breaks `declaredSpan`); adopting
+with an unknown range, with the torrent out of the session or without checking `Series.Key`;
+moving adoption inside `selectEpisodes` (it runs twice — would duplicate the records); notifying
+`NewEpisode`/`DownloadCompleted` on an adoption (nothing was downloaded, and the completion
+webhook already went out when the pack landed).
 
-### 79. A escolha de pack pergunta "cobre a janela?", não "é da part N?" — e a numeração do pack é palpite entre três hipóteses
+### 79. Pack choice asks "does it cover the window?", not "is it part N?" — and pack numbering is a guess among three hypotheses
 
 **Location:** `src/internal/daemon/episodes.go` — `packAxis`, `newPackAxis`, `packAxis.localRange`,
 `coveringBatch`, `pickBatches`, `assignBatches`, `hasDeclaredRange`, `declaredSpan`;
-`src/internal/nyaa/nyaa.go` — `ExtractPart`, `declaredParts` e o ramo `IsBatch` de
-`ScrapNyaaForAnime`. Travado por `packaxis_test.go` e pelas tabelas de `nyaa_test.go`. Consome a
-#77 (eixo absoluto) e é o outro lado da #78 (posse por cobertura).
+`src/internal/nyaa/nyaa.go` — `ExtractPart`, `declaredParts` and the `IsBatch` branch of
+`ScrapNyaaForAnime`. Pinned by `packaxis_test.go` and the tables of `nyaa_test.go`. Consumes #77
+(absolute axis) and is the other side of #78 (ownership by coverage).
 
-**O problema.** A AniList quebra a season em cours/parts, cada entrada numerando a partir de 1; os
-grupos lançam o pack da **season inteira** e cada um escolhe a régua que quiser (`sources.md`,
-"Granularidade e numeração dos packs": reinicia por season, reinicia por part, contínua pela
-season, absoluta pela série). Duas consequências, as duas medidas em Mushoku Tensei:
+**The problem.** AniList splits the season into cours/parts, each entry numbering from 1; groups
+release the pack of the **whole season** and each one picks whichever ruler it wants (`sources.md`,
+"Pack granularity and numbering": restarts per season, restarts per part, continuous across the
+season, absolute across the series). Two consequences, both measured on Mushoku Tensei:
 
-1. **O filtro duro de part zerava os packs de toda entrada "Part N".** Com `requestedPart != nil`,
-   pack **sem** marcador de part era descartado — e pack de season inteira normalmente não tem esse
-   marcador, embora contenha os episódios pedidos.
-2. **A faixa do nome era lida na régua errada.** `01 ~ 23` sob uma entrada de 12 episódios era
-   comparada com `1..12` como se fosse a mesma numeração.
+1. **The hard part filter zeroed the packs of every "Part N" entry.** With `requestedPart != nil`,
+   a pack **without** a part marker was discarded — and a whole-season pack normally has no such
+   marker, even though it contains the requested episodes.
+2. **The name's range was read on the wrong ruler.** `01 ~ 23` under a 12-episode entry was
+   compared with `1..12` as if it were the same numbering.
 
-**A regra:** no caminho de pack, `part` só rejeita **conflito declarado** (o pack diz "Part 1" e
-queremos a 2). Sem marcador, o pack passa e quem decide é a **cobertura da faixa**. O caminho de
-episódio mantém o filtro duro: ali o marcador é o único jeito de distinguir o "- 05" de uma part do
-"- 05" da outra.
+**The rule:** on the pack path, `part` only rejects a **declared conflict** (the pack says "Part 1"
+and we want 2). With no marker, the pack passes and who decides is **range coverage**. The episode
+path keeps the hard filter: there the marker is the only way to tell one part's "- 05" from the
+other's "- 05".
 
-**Teto conhecido — pack sem marcador de part E sem faixa no nome não é decidido por ninguém.**
-`coveringBatch` devolve esse pack sem consultar o eixo (não há número para converter) e ele vale
-como completo, então "quem decide é a cobertura" vale para o pack **com** faixa, não para esse.
-Um `[Group] Anime S4 [Batch]` que na prática é só a Part 1 passa igual ao pack da season inteira —
-antes desta decisão ele era rejeitado no scraper, e rejeitá-lo era pior: zerava os packs de toda
-entrada "Part N", que é o problema 1 acima. Aceitar é a escolha medida; o desempate que faltava
-era a **lista de arquivos da página de detalhe do Nyaa** (na época, um item do `docs/TODO.md`), que
-diz quantos arquivos o pack tem e com que numeração. **RESOLVIDO em quase todo caso (ver #84):** essa leitura
-existe (`nyaa.PackFileRange`, consumida sob demanda por `packSet.rangeOf`), e a faixa que ela
-devolve entra pelo mesmo `packAxis` da faixa do nome. Sobra o resíduo em que nem o nome nem os
-arquivos resolvem (detalhe fora do ar, nome de arquivo ilegível): aí a faixa grava zero e o pack
-ainda é usado como completo — a ambiguidade desta entrada, reduzida ao caso raro.
+**Known ceiling — a pack with no part marker AND no range in the name is decided by nobody.**
+`coveringBatch` returns that pack without consulting the axis (there is no number to convert) and
+it counts as complete, so "who decides is coverage" holds for a pack **with** a range, not for
+this one. A `[Group] Anime S4 [Batch]` that in practice is only Part 1 passes the same as the
+whole-season pack — before this decision it was rejected in the scraper, and rejecting it was
+worse: it zeroed the packs of every "Part N" entry, which is problem 1 above. Accepting is the
+measured choice; the missing tie-break was **Nyaa's detail-page file list** (at the time, an item
+in `docs/TODO.md`), which says how many files the pack has and with what numbering. **RESOLVED in
+almost every case (see #84):** that read exists (`nyaa.PackFileRange`, consumed on demand by
+`packSet.rangeOf`), and the range it returns enters through the same `packAxis` as the name's
+range. What remains is the residue where neither the name nor the files resolve (detail page down,
+unreadable file name): then the range stores zero and the pack is still used as complete — this
+entry's ambiguity, reduced to the rare case.
 
-**`packAxis` são três hipóteses e um desempate.** Como não dá para ler a convenção do nome, o
-daemon testa quanto somar ao número local para chegar à régua do grupo: **0** (relativa à entrada),
-**`ComputeEpisodeOffset`** (contínua pela season — o total do prequel imediato) e
-**`anilist.Series.Offset`** (absoluta pela série, #77). Só concorre hipótese que de fato **cobre o
-episódio pedido**; entre as que cobrem ganha a que faz o pack **terminar no último episódio da
-entrada**. Esse desempate é a "contagem de arquivos" de `sources.md` expressa pelo span do nome: um
-pack de 25 episódios sob uma entrada de 12 não pode ser local, um de 12 sob a mesma entrada não pode
-ser outra coisa. Na dúvida (nenhuma bate o fim), vale o delta 0: offset ausente cai na numeração
-relativa, que boa parte dos grupos usa, enquanto offset errado escolhe um pack que não tem o
-episódio.
+**`packAxis` is three hypotheses and a tie-break.** Because the name's convention cannot be read,
+the daemon tests how much to add to the local number to reach the group's ruler: **0** (relative
+to the entry), **`ComputeEpisodeOffset`** (continuous across the season — the immediate prequel's
+total) and **`anilist.Series.Offset`** (absolute across the series, #77). Only a hypothesis that
+actually **covers the requested episode** competes; among those that cover, the winner is the one
+that makes the pack **end on the entry's last episode**. That tie-break is `sources.md`'s "file
+count" expressed by the name's span: a 25-episode pack under a 12-episode entry cannot be local, a
+12 under the same entry cannot be anything else. In doubt (none hits the end), delta 0 holds: a
+missing offset falls back to relative numbering, which a good part of the groups use, while a
+wrong offset picks a pack that does not have the episode.
 
-**A faixa GRAVADA é a convertida, e pode começar em zero ou abaixo.** Um pack de season baixado sob
-o cour 2 começa antes do episódio 1 daquela entrada: `-12..12` é a representação correta, e é ela
-que faz `owner.Offset + BatchStart` (#78) devolver a faixa absoluta certa e `declaredSpan` (#74)
-contar os 25 episódios de conteúdo do pack. Por isso o sentinela de "faixa desconhecida" passou a
-ser o **fim** (`hasDeclaredRange`: `BatchEnd > 0`) e não mais `BatchStart <= 0` — que já mentia
-sobre `[Erai-raws] … - 00 ~ 12`. Só o **nome exibido** corta o começo em 1: "-10-12" não diz nada
-na tela, e o que interessa ali é a fatia desta entrada.
+**The STORED range is the converted one, and it can start at zero or below.** A season pack
+downloaded under cour 2 starts before that entry's episode 1: `-12..12` is the correct
+representation, and it is what makes `owner.Offset + BatchStart` (#78) return the right absolute
+range and `declaredSpan` (#74) count the pack's 25 content episodes. That is why the "unknown
+range" sentinel became the **end** (`hasDeclaredRange`: `BatchEnd > 0`) and no longer
+`BatchStart <= 0` — which already lied about `[Erai-raws] … - 00 ~ 12`. Only the **displayed name**
+cuts the start at 1: "-10-12" says nothing on screen, and what matters there is this entry's
+slice.
 
-**`ExtractPart` devolve `nil` para nome com duas parts.** "(Part 1 + Part 2)", "(Part 1+2)" e
-"(Season 4 Part 03+04)" cobrem as duas metades; devolver o primeiro número fazia o pack ser
-rejeitado justamente para a segunda. Sem número único, quem decide é a cobertura.
+**`ExtractPart` returns `nil` for a name with two parts.** "(Part 1 + Part 2)", "(Part 1+2)" and
+"(Season 4 Part 03+04)" cover both halves; returning the first number made the pack be rejected
+exactly for the second. With no unique number, who decides is coverage.
 
-**As duas seleções de "primeiro PREQUEL de TV/TV_SHORT" continuam duplicadas de propósito.**
-`anilist.prequelOf` caminha a cadeia **inteira** (hipótese "absoluta pela série");
-`daemon.ComputeEpisodeOffset` dá **um** salto e é gated por `part >= 2` (hipótese "contínua pela
-season"). São hipóteses diferentes do mesmo palpite — unificá-las apagaria a distinção que a
-heurística usa. Os `TODO(F8)` que apontavam um para o outro viraram esta nota.
+**The two "first TV/TV_SHORT PREQUEL" selections stay duplicated on purpose.**
+`anilist.prequelOf` walks the **whole** chain (hypothesis "absolute across the series");
+`daemon.ComputeEpisodeOffset` takes **one** hop and is gated by `part >= 2` (hypothesis
+"continuous across the season"). They are different hypotheses of the same guess — unifying them
+would erase the distinction the heuristic uses. The `TODO(F8)`s that pointed one at the other
+became this note.
 
-**Medição (29/ago/2026).** `make debug-batch` sobre `scripts/robustness-animes.txt`: episódios
-buscados e encontrados idênticos aos da rodada anterior nos 8 animes (só seeders variaram, dado
-vivo). Nos casos motivadores, todos com 12/12 magnets: `166873` e `127720` (Mushoku Tensei) e
-`131681` (AoT Final Season Part 2), onde o pack `[EMBER] … (Season 4 Part 03+04)` passou a
-sobreviver ao filtro.
+**Measurement (29 Aug 2026).** `make debug-batch` over `scripts/robustness-animes.txt`: episodes
+searched and found identical to the previous run on the 8 animes (only seeders varied, live data).
+On the motivating cases, all with 12/12 magnets: `166873` and `127720` (Mushoku Tensei) and
+`131681` (AoT Final Season Part 2), where the pack `[EMBER] … (Season 4 Part 03+04)` started
+surviving the filter.
 
-**Don't "fix" by:** voltar a exigir marcador de part no caminho de pack; relaxar o filtro de part
-no caminho de **episódio**; tratar começo de faixa ≤ 0 como desconhecido; converter a faixa gravada
-"para ficar positiva" (quebra #74 e #78); acrescentar hipótese de numeração sem desempate que a
-distinga das outras; unificar `prequelOf` com `ComputeEpisodeOffset`.
+**Don't "fix" by:** going back to requiring a part marker on the pack path; relaxing the part
+filter on the **episode** path; treating a range start ≤ 0 as unknown; converting the stored range
+"to make it positive" (breaks #74 and #78); adding a numbering hypothesis without a tie-break that
+distinguishes it from the others; unifying `prequelOf` with `ComputeEpisodeOffset`.
 
 ---
 
-### 83. A faixa do nome do pack é o primeiro casamento plausível, não o primeiro casamento
+### 83. The pack name's range is the first plausible match, not the first match
 
-**Location:** `nyaa/nyaa.go` — `batchRange`, chamado por `ExtractBatchInfo`; `nyaa/nyaa_regex.go` — `reBatchRange`.
+**Location:** `nyaa/nyaa.go` — `batchRange`, called by `ExtractBatchInfo`; `nyaa/nyaa_regex.go` — `reBatchRange`.
 
-**What it looks like:** um `FindAll` com `continue` em três guardas onde caberia um `FindString` com um `if`, e uma banda de números mágicos (1900..2100) no meio. Parece defesa especulativa contra casos que não acontecem.
+**What it looks like:** a `FindAll` with `continue` on three guards where a `FindString` with an `if` would fit, and a band of magic numbers (1900..2100) in the middle. Looks like speculative defence against cases that do not happen.
 
-**Why it's right:** `reBatchRange` é `(\d{1,4})\s*[-~]\s*(\d{1,4})` — ele casa **qualquer** par de números ligados por `-` ou `~`, e no nome de um release a maioria desses pares não é episódio. Os três medidos:
+**Why it's right:** `reBatchRange` is `(\d{1,4})\s*[-~]\s*(\d{1,4})` — it matches **any** pair of numbers joined by `-` or `~`, and in a release name most of those pairs are not an episode. The three measured:
 
-| Nome | Casamento | O que é |
+| Name | Match | What it is |
 |---|---|---|
-| `[Group] Anime Complete Batch [720-1080p]` | `720-1080` | resolução |
-| `[Erai-raws] Hibike! Euphonium 2 - 01 ~ 13 …` | `2 - 01` | temporada + primeiro episódio |
-| `[EMBER] Mushoku Tensei … (2021-2022) (Season 1 …)` | `2021-2022` | ano de lançamento |
+| `[Group] Anime Complete Batch [720-1080p]` | `720-1080` | resolution |
+| `[Erai-raws] Hibike! Euphonium 2 - 01 ~ 13 …` | `2 - 01` | season + first episode |
+| `[EMBER] Mushoku Tensei … (2021-2022) (Season 1 …)` | `2021-2022` | release year |
 
-O ano é o que forçou a mudança: ele **não** cai no fallback seguro. `EndEpisode == 0` significa "faixa desconhecida" e todo chamador trata como pack completo; `2021..2022` é uma faixa *declarada* que nenhuma hipótese de `packAxis` cobre, então `coveringBatch` rejeita o pack e ele some da escolha sem uma linha de log que explique. Era um pack BDRip completo, primeiro colocado por seeders, descartado por um parêntese.
+The year is what forced the change: it does **not** fall into the safe fallback. `EndEpisode == 0` means "unknown range" and every caller treats it as a complete pack; `2021..2022` is a *declared* range that no `packAxis` hypothesis covers, so `coveringBatch` rejects the pack and it vanishes from the choice without a log line that explains. It was a complete BDRip pack, first placed by seeders, discarded by a parenthesis.
 
-A banda `start >= 1900 && last <= 2100` só pega ano: nenhuma série chega ao episódio 1900, e `One Piece 1001-1100` — o caso real que forçou `\d{1,4}` em [#51](#51-episódio-aceita-4-dígitos-exceto-entre-colchetes) — passa intacto.
+The band `start >= 1900 && last <= 2100` only catches a year: no series reaches episode 1900, and `One Piece 1001-1100` — the real case that forced `\d{1,4}` in [#51](#51-an-episode-number-accepts-4-digits-except-inside-brackets) — passes intact.
 
-**`FindAll` e não `FindString`** porque um casamento reprovado não deve encerrar a busca: em `[Group] Anime (2021-2022) 01-24 [BD]` a faixa de verdade vem **depois** do ano.
+**`FindAll` and not `FindString`** because a rejected match must not end the search: in `[Group] Anime (2021-2022) 01-24 [BD]` the real range comes **after** the year.
 
-**Trade-off aceito:** `FindAll` é **não-sobreposto**, então o Hibike continua sem faixa. O casamento `2 - 01` consome o `01`, e o `01 ~ 13` seguinte nunca é visto. Fica como está de propósito: varrer com sobreposição (reiniciar um caractere depois de cada rejeição) produz sub-casamentos lixo — `2021-2022` rejeitado viraria `021-2022`, que passa na banda e grava a faixa 21..2022. Um pack sem faixa cai no caminho seguro; um pack com faixa errada mente para a posse por cobertura ([#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)).
+**Accepted trade-off:** `FindAll` is **non-overlapping**, so Hibike still has no range. The match `2 - 01` consumes the `01`, and the following `01 ~ 13` is never seen. It stays as-is on purpose: scanning with overlap (restarting one character after each rejection) produces junk sub-matches — a rejected `2021-2022` would become `021-2022`, which passes the band and stores the range 21..2022. A pack with no range falls on the safe path; a pack with a wrong range lies to ownership by coverage ([#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)).
 
 **Don't "fix" by:**
-- Trocar por um sanitizador de tokens que remove `[...]`/`(...)` antes de casar: o ano vem entre parênteses, mas `(001-100)` também — é onde metade dos grupos põe a faixa de verdade.
-- Estreitar a banda de ano para "só 19xx/20xx com diferença <= 5": a diferença entre os anos não distingue nada que a banda já não distinga, e vira mais um número mágico.
-- Varrer com sobreposição para salvar o Hibike (ver trade-off).
+- Swapping for a token sanitizer that strips `[...]`/`(...)` before matching: the year comes in parentheses, but so does `(001-100)` — that is where half the groups put the real range.
+- Narrowing the year band to "only 19xx/20xx with a difference <= 5": the difference between the years distinguishes nothing the band does not already distinguish, and it becomes one more magic number.
+- Scanning with overlap to save Hibike (see the trade-off).
 
 ---
 
@@ -2207,44 +2234,44 @@ A banda `start >= 1900 && last <= 2100` só pega ano: nenhuma série chega ao ep
 
 **Location:** `nyaa/nyaa.go` — `PackFileRange`, `TorrentResult.DetailURL`, `detailURL`, `fileListEntryName`; `daemon/episodes.go` — `packCandidate`, `packSet`, `maxPackDetailFetches`, `pickBatches`, `assignBatches`; `daemon/search.go` — `nyaaSearcher.packRange`.
 
-**What it looks like:** a escolha de pack faz uma requisição HTTP a mais, no meio de uma função que antes era pura, e a faixa de um pack passou a ser resolvida preguiçosamente por um tipo com estado (`packSet`) em vez de sair de uma chamada a `ExtractBatchInfo`.
+**What it looks like:** pack choice makes one extra HTTP request, in the middle of a function that used to be pure, and a pack's range started being resolved lazily by a stateful type (`packSet`) instead of coming from a call to `ExtractBatchInfo`.
 
-**Why it's right:** o nome do pack quase nunca traz a faixa. Medido em 29/ago/2026 nas 8 primeiras linhas de `?q=<anime>+batch&s=seeders` para três animes: **19 de 24 packs não declaram faixa nenhuma**. Isso não era o caso raro — era o caso comum, e o caminho que ele seguia gravava dado errado no `episodes.json`:
+**Why it's right:** the pack name almost never carries the range. Measured on 29 Aug 2026 on the first 8 rows of `?q=<anime>+batch&s=seeders` for three animes: **19 of 24 packs declare no range at all**. That was not the rare case — it was the common case, and the path it followed stored wrong data in `episodes.json`:
 
-`EndEpisode == 0` valia como "pack completo", `pickBatches` parava o cursor ali, `assignBatches` gravava `1..total` e **todo** episódio da janela virava um `EpisodeStruct` apontando para o hash do pack. Os que o pack não tem ficam registrados como baixados para sempre: o Librarian linka só os arquivos que existem e nada reconcilia registro com disco depois, então eles nunca voltam para a busca.
+`EndEpisode == 0` counted as "complete pack", `pickBatches` stopped the cursor there, `assignBatches` wrote `1..total` and **every** episode of the window became an `EpisodeStruct` pointing at the pack's hash. The ones the pack does not have stay recorded as downloaded forever: the Librarian links only the files that exist and nothing reconciles record with disk afterwards, so they never return to the search.
 
-O caso que forçou a mudança, medido em `nyaa.si/view/1891610`: `[EMBER] … (Season 2 | Part 2) … (Batch)` não declara faixa e traz os arquivos **13..24**. Sob a entrada Part 1 o daemon registrava 1..12 — interseção **zero** com o que o torrent contém.
+The case that forced the change, measured at `nyaa.si/view/1891610`: `[EMBER] … (Season 2 | Part 2) … (Batch)` declares no range and brings the files **13..24**. Under the Part 1 entry the daemon recorded 1..12 — intersection **zero** with what the torrent contains.
 
-A lista de arquivos da página de detalhe responde antes de baixar, e responde bem: nos 7 packs medidos, 574/574, 24/24, 23/23, 12/12 e 103/111 arquivos deram o número (os 8 que faltaram são OP/ED, que devem mesmo ficar de fora). Ela vem do próprio `.torrent`, então funciona em conteúdo antigo — ao contrário do `files[]` do AnimeTosho (ver `sources.md`).
+The detail-page file list answers before downloading, and it answers well: on the 7 packs measured, 574/574, 24/24, 23/23, 12/12 and 103/111 files gave the number (the 8 that missed are OP/ED, which should stay out). It comes from the `.torrent` itself, so it works on old content — unlike AnimeTosho's `files[]` (see `sources.md`).
 
-**A faixa dos arquivos entra pelo mesmo `packAxis` da faixa do nome**, porque os grupos usam as mesmas quatro convenções de numeração nos dois lugares (`sources.md`, "Granularidade e numeração dos packs"). No caso do EMBER: 13..24, delta 12 da hipótese "continua pela season", vira 1..12 local.
+**The files' range enters through the same `packAxis` as the name's range**, because groups use the same four numbering conventions in both places (`sources.md`, "Pack granularity and numbering"). On the EMBER case: 13..24, delta 12 of the "continuous across the season" hypothesis, becomes 1..12 local.
 
-**Por que sob demanda e com orçamento.** A página de detalhe custa ~30 KB (medido em 7 packs) contra ~125 KB de uma listagem — não é banda, é número de requisições contra o nyaa.si. `packSet.rangeOf` só busca quando a faixa é pedida para um pack sem faixa no nome, e memoriza inclusive a falha:
+**Why on demand and with a budget.** The detail page costs ~30 KB (measured on 7 packs) against ~125 KB of a listing — it is not bandwidth, it is number of requests against nyaa.si. `packSet.rangeOf` only fetches when the range is asked for a pack with no range in the name, and memos including failure:
 
-- resolver tudo de uma vez gastaria 3 requisições por anime por passe mesmo quando o primeiro pack já declara a faixa e cobre a janela — o caso mais comum;
-- sem memória da falha, `assignBatches` (que varre os packs uma vez **por episódio**) viraria uma requisição por episódio.
+- resolving everything at once would spend 3 requests per anime per pass even when the first pack already declares the range and covers the window — the most common case;
+- without a memory of failure, `assignBatches` (which walks the packs once **per episode**) would become one request per episode.
 
-`maxPackDetailFetches = 3` porque os packs vêm ordenados por qualidade e `pickBatches` raramente passa dos primeiros para fechar a janela.
+`maxPackDetailFetches = 3` because packs come ordered by quality and `pickBatches` rarely goes past the first ones to close the window.
 
-**Faixa não resolvida grava ZERO, não `1..total`.** Chegar a `assignBatches` sem faixa significa que as duas fontes falharam (detalhe fora do ar, torrent de arquivo único, nenhum nome legível). O pack ainda é usado — recusá-lo faria um Nyaa fora do ar zerar os packs de todo mundo —, mas `1..total` era um palpite que `hasDeclaredRange` lia como faixa **declarada**, e dali a posse por cobertura ([#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)) adotava, sob outro cour da série, episódio que o pack podia não ter. "Não sei" é o único registro honesto.
+**An unresolved range stores ZERO, not `1..total`.** Reaching `assignBatches` with no range means both sources failed (detail page down, single-file torrent, no readable name). The pack is still used — refusing it would make a down Nyaa zero everyone's packs — but `1..total` was a guess that `hasDeclaredRange` read as a **declared** range, and from there ownership by coverage ([#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)) adopted, under another cour of the series, an episode the pack might not have. "I don't know" is the only honest record.
 
-**Trade-off aceito:** com faixa zero o `hasUnclaimedContent` de [#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio) não tem span para comparar e o guard de deleção cai no comportamento antigo naquele grupo. É a troca certa: perder uma proteção contra deleção prematura num caso raro vale menos que espalhar uma cobertura inventada para os outros cours da série.
+**Accepted trade-off:** with a zero range [#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)'s `hasUnclaimedContent` has no span to compare and the deletion guard falls back to the old behaviour on that group. That is the right trade: losing a protection against premature deletion in a rare case is worth less than spreading an invented coverage to the series' other cours.
 
-**Teto conhecido, e MEDIDO em 30/ago/2026: fica como está.** A faixa é o `min..max` dos números lidos, então pack cujos arquivos **reiniciam** a numeração por season (S01-S04, uma pasta cada) fica com a faixa da maior season em vez do total. O desempate proposto era a contagem de arquivos por pasta, que [#79](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses) já queria. A medição (`nyaa/live_pack_measure_test.go`, 61 packs reais em 12 buscas) diz para **não** fazê-lo:
+**Known ceiling, and MEASURED on 30 Aug 2026: it stays as-is.** The range is the `min..max` of the numbers read, so a pack whose files **restart** numbering per season (S01-S04, one folder each) gets the largest season's range instead of the total. The proposed tie-break was the per-folder file count, which [#79](#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses) already wanted. The measurement (`nyaa/live_pack_measure_test.go`, 61 real packs in 12 searches) says **not** to do it:
 
-- **Frequência:** 3 de 48 packs (6%) na amostra neutra `?q=<anime>+batch&s=seeders`, 2 de 13 na amostra que mira multi-season de propósito. Os 5 casos: Vinland Saga (24/24), Jujutsu Kaisen (24/23), Steins;Gate Trix (25/24/4), EMBER SnK (25/12/12/10/16), Haikyuu Complete (25/25/10).
-- **Nenhum download é perdido.** Rodando os 5 pelo `packAxis.localRange` sob a entrada de cada season, o pack é escolhido nas 8 combinações — o delta 0 já acerta, porque um pack multi-season contém de fato os episódios de toda season que ele traz, na numeração local de cada uma.
-- **O desempate não mudaria nenhum dos 8 resultados**, e contaria pasta de extras como episódio: `Creditless Opening 1` → 1, `OAD - 01` → 1, `Movie 01` → 1 (medido; em 61 packs essas pastas nunca alargaram o `min..max` além do conteúdo principal, mas entrariam direto numa contagem por pasta).
-- **O resíduo é outro, e menor:** a faixa GRAVADA passa do total da entrada em 4 das 8 combinações — Haikyuu S3 grava 1..25 para uma entrada de 10, SnK S2 grava 1..25 para 12, SnK S3 +3, JJK S2 +1. Isso é over-claim para a posse por cobertura de [#78](#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio), e o conserto dele é clampar o fim em `totalEpisodes`, não ler pasta.
+- **Frequency:** 3 of 48 packs (6%) in the neutral sample `?q=<anime>+batch&s=seeders`, 2 of 13 in the sample that aims at multi-season on purpose. The 5 cases: Vinland Saga (24/24), Jujutsu Kaisen (24/23), Steins;Gate Trix (25/24/4), EMBER SnK (25/12/12/10/16), Haikyuu Complete (25/25/10).
+- **No download is lost.** Running the 5 through `packAxis.localRange` under each season's entry, the pack is chosen in all 8 combinations — delta 0 already hits, because a multi-season pack does contain the episodes of every season it brings, in each one's local numbering.
+- **The tie-break would change none of the 8 results**, and would count an extras folder as an episode: `Creditless Opening 1` → 1, `OAD - 01` → 1, `Movie 01` → 1 (measured; on 61 packs those folders never stretched `min..max` past the main content, but they would enter a per-folder count directly).
+- **The residue is another, and smaller:** the STORED range exceeds the entry's total in 4 of the 8 combinations — Haikyuu S3 stores 1..25 for a 10-episode entry, SnK S2 stores 1..25 for 12, SnK S3 +3, JJK S2 +1. That is over-claim for [#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)'s ownership by coverage, and the fix for it is clamping the end at `totalEpisodes`, not reading folders.
 
-**Gap medido junto, esse sim sem conserto:** `ExtractEpisodeNumber` devolve `nil` para nome de arquivo com número solto seguido de título — `My Hero Academia 39 Game Start [1080p].mkv`. Foram os 3 únicos packs da amostra em que nem o nome nem os arquivos resolveram a faixa, os três do mesmo release de MHA.
+**Gap measured together, this one with no fix:** `ExtractEpisodeNumber` returns `nil` for a file name with a loose number followed by a title — `My Hero Academia 39 Game Start [1080p].mkv`. They were the only 3 packs in the sample where neither the name nor the files resolved the range, all three of the same MHA release.
 
 **Don't "fix" by:**
-- Buscar o detalhe dentro do `parseRow` das buscas: vira uma requisição **por linha** da listagem. É por isso que `DetailURL` só é capturada ali e a leitura acontece depois do filtro e da ordenação.
-- Resolver a faixa de todos os packs de uma vez "para simplificar o `packSet`": gasta o orçamento inteiro em packs que nunca seriam escolhidos.
-- Recusar o pack cuja faixa não foi resolvida: um Nyaa fora do ar deixaria de baixar pack nenhum, trocando um registro errado por nenhum download.
-- Voltar a gravar `1..total` "porque o pack foi escolhido como completo": era exatamente o palpite que alimentava a adoção por cobertura com faixa inventada.
-- Filtrar os arquivos por extensão numa lista própria do pacote `files`: `nyaa.IsVideoFile` é a mesma lista que o Librarian usa depois de baixar, e `files` importa `nyaa` (o contrário daria ciclo).
+- Fetching the detail inside the searches' `parseRow`: it becomes one request **per listing row**. That is why `DetailURL` is only captured there and the read happens after the filter and the sort.
+- Resolving every pack's range at once "to simplify `packSet`": spends the whole budget on packs that would never be chosen.
+- Refusing a pack whose range was not resolved: a down Nyaa would download no pack at all, swapping a wrong record for no download.
+- Going back to storing `1..total` "because the pack was chosen as complete": that was exactly the guess that fed ownership-by-coverage adoption with an invented range.
+- Filtering files by extension in a list of the `files` package's own: `nyaa.IsVideoFile` is the same list the Librarian uses after download, and `files` imports `nyaa` (the other way would cycle).
 
 ---
 
@@ -2252,455 +2279,464 @@ A lista de arquivos da página de detalhe responde antes de baixar, e responde b
 
 **Location:** `api/endpoint_animes.go` — `refreshOrphanAnimes`, `refreshStandaloneOrphans`;
 `anilist/anilist.go` — `GetAnimeInfoByIDs`, `GetCustomListsMap`, `frontendListCache`,
-`customListsEmptyTTL`. Complementa a [#72](#72-o-orçamento-da-anilist-se-mede-pelos-headers-da-resposta-não-por-um-contador-nosso)
-(como saber quanto sobrou) e a [#73](#73-the-frontend-doesnt-query-anilist-directly-even-though-it-could)
-(por que não mover a busca para o browser).
+`customListsEmptyTTL`. Complements [#72](#72-anilist-budget-is-measured-from-the-response-headers-not-from-a-counter-of-ours)
+(how to know how much is left) and [#73](#73-the-frontend-doesnt-query-anilist-directly-even-though-it-could)
+(why not move the fetch to the browser).
 
-**O que parece:** cada aba aberta faz poll de `GET /animes` a cada 30s, então N abas custam N
-vezes mais orçamento — foi essa leitura que motivou a ideia de o frontend falar direto com a
-AniList (#73), e é o que o comentário do `ttlCache` descrevia antes do cache existir.
+**What it looks like:** each open tab polls `GET /animes` every 30s, so N tabs cost N times more
+budget — that was the reading that motivated the idea of the frontend talking to AniList directly
+(#73), and it is what the `ttlCache` comment described before the cache existed.
 
-**Medido em 30/ago/2026** (daemon isolado, conta real, `NYAA_URL` morto para não baixar nada, três
-fases de 5 minutos com o poll de `/animes` a 30s reproduzindo `Status.svelte`):
+**Measured on 30 Aug 2026** (isolated daemon, real account, `NYAA_URL` dead so nothing downloads,
+three 5-minute phases with the `/animes` poll at 30s reproducing `Status.svelte`):
 
-| fase | abas | órfãos | req AniList por chamada de `/animes` | req/min |
+| phase | tabs | orphans | AniList req per `/animes` call | req/min |
 |---|---|---|---|---|
 | A | 1 | 0 | 1.50 | 2.4 |
 | B | 2 | 0 | **0.94** | 3.0 |
 | D | 2 | 100 | **3.00** | 7.8 |
 
-Três consequências:
+Three consequences:
 
-1. **Aba não multiplica — o TTL absorve.** Dobrar as abas BARATEOU o custo por chamada (1.50 →
-   0.94): `frontendListTTL` (60s) e `customListsTTL` seguram, e a segunda aba quase sempre acerta
-   um cache que a primeira acabou de encher. O teto do par lista+customLists é o TTL, não o número
-   de abas.
-2. **Órfão multiplica, e por aba.** `refreshOrphanAnimes` → `GetAnimeInfoByIDs` **não tem cache
-   nenhum**: dispara `ceil(órfãos/50) × contas` requisições em TODA chamada de `/animes`. Com 100
-   órfãos o custo por chamada triplicou (0.94 → 3.00) e passou a escalar com abas. É o único
-   caminho do `/animes` fora do TTL, e é ele que decide o consumo de uma instalação com
-   biblioteca grande.
-3. **`customLists` vazio é o maior consumidor em regime normal.** Conta sem custom list nenhuma cai
-   no `customListsEmptyTTL` de 30s em vez do `customListsTTL` de 5 min — 2 das ~3 req/min das
-   fases A e B, dois terços do custo do frontend quando não há órfão.
+1. **A tab does not multiply — the TTL absorbs.** Doubling the tabs CHEAPENED the cost per call
+   (1.50 → 0.94): `frontendListTTL` (60s) and `customListsTTL` hold, and the second tab almost
+   always hits a cache the first just filled. The ceiling of the list+customLists pair is the TTL,
+   not the number of tabs.
+2. **An orphan multiplies, and per tab.** `refreshOrphanAnimes` → `GetAnimeInfoByIDs` **has no
+   cache at all**: it fires `ceil(orphans/50) × accounts` requests on EVERY `/animes` call. With
+   100 orphans the cost per call tripled (0.94 → 3.00) and started scaling with tabs. It is the
+   only `/animes` path outside the TTL, and it is what decides consumption of an install with a
+   large library.
+3. **Empty `customLists` is the largest consumer in normal regime.** An account with no custom
+   list at all falls into the 30s `customListsEmptyTTL` instead of the 5 min `customListsTTL` — 2
+   of the ~3 req/min of phases A and B, two thirds of the frontend cost when there is no orphan.
 
-**O gate nunca precisou entrar:** 0 recusas por `ErrBudgetLow` e 0 respostas 429 em 22 minutos,
-com pico de 11 req/min num balde de 30. As duas únicas falhas foram timeout de 30s da própria
-AniList — latência, não orçamento.
+**The gate never needed to enter:** 0 refusals by `ErrBudgetLow` and 0 429 responses in 22
+minutes, with a peak of 11 req/min in a bucket of 30. The only two failures were AniList's own
+30s timeout — latency, not budget.
 
-**A conta que importa:** `(1 + ceil(órfãos/50) × contas) × abas × 2/min`, mais ~2/min por conta do
-`customLists` vazio. 2 abas + 100 órfãos + 1 conta = 7.8/min (medido). 4 abas + 200 órfãos + 2
-contas ≈ 50/min, e aí o gate passa a recusar de verdade.
+**The count that matters:** `(1 + ceil(orphans/50) × accounts) × tabs × 2/min`, plus ~2/min per
+account of empty `customLists`. 2 tabs + 100 orphans + 1 account = 7.8/min (measured). 4 tabs +
+200 orphans + 2 accounts ≈ 50/min, and then the gate starts refusing for real.
 
-**Don't "fix" by:** aumentar o `frontendListTTL` achando que aba é o problema — a medição diz que
-não é. Se o orçamento voltar a apertar, o alvo é pôr TTL no `GetAnimeInfoByIDs`, que é o único
-caminho sem cache, e depois olhar o `customListsEmptyTTL`.
+**Don't "fix" by:** raising `frontendListTTL` thinking a tab is the problem — the measurement says
+it is not. If the budget tightens again, the target is putting a TTL on `GetAnimeInfoByIDs`, the
+only path with no cache, and then looking at `customListsEmptyTTL`.
 
-### 86. O botão Testar responde o status do serviço, não "o preset existe"
+### 86. The Test button answers the service's status, not "the preset exists"
 
 **Location:** `notifications/notifications.go` — `fireWebhook`, `FireTestWebhook`,
 `ErrWebhookNotFound`; `api/endpoint_notifications.go` — `handleNotificationWebhookTest`.
 
-**O que parece:** `fireWebhook` devolver `error` é inútil, porque o único caminho que dispara de
-verdade — `fireBatch`, em goroutine — ignora o retorno e já loga tudo o que dá errado. Um
-`return` bastaria.
+**What it looks like:** `fireWebhook` returning `error` is useless, because the only path that
+really fires — `fireBatch`, in a goroutine — ignores the return and already logs everything that
+goes wrong. A `return` would be enough.
 
-**Por que existe:** o `POST /notifications/webhooks/{name}/test` respondia `200 "Webhook fired
-successfully"` para qualquer preset que existisse, e o front mostrava toast de sucesso — com o
-Jellyfin devolvendo `401` de token errado, ou com a URL fora do ar. O único registro da falha
-era uma linha `warn` no `daemon.log`, que ninguém vai ler para saber se um botão de testar
-funcionou. Testar entrega é a única razão de esse endpoint existir; sem o retorno ele só
-confirmava que o nome estava escrito certo.
+**Why it exists:** `POST /notifications/webhooks/{name}/test` answered `200 "Webhook fired
+successfully"` for any preset that existed, and the front showed a success toast — with Jellyfin
+returning `401` for a wrong token, or with the URL down. The only record of the failure was a
+`warn` line in `daemon.log`, which nobody will read to know whether a Test button worked. Testing
+delivery is the only reason that endpoint exists; without the return it only confirmed that the
+name was spelled right.
 
-Daí a separação: `ErrWebhookNotFound` (sentinela, `errors.Is`) → `404`; qualquer outro erro →
-`502 WEBHOOK_FAILED`, com o status do serviço na mensagem. O disparo automático continua
-ignorando o retorno de propósito — não há para quem reportar, e o log já cobre.
+Hence the split: `ErrWebhookNotFound` (sentinel, `errors.Is`) → `404`; any other error →
+`502 WEBHOOK_FAILED`, with the service's status in the message. Automatic firing keeps ignoring
+the return on purpose — there is nobody to report to, and the log already covers it.
 
-**Don't "fix" by:** voltar `fireWebhook` para `func(...)` sem retorno porque "só o teste usa"; ou
-mapear a falha de entrega para `404`, que faria o front dizer "webhook não encontrado" para um
-token recusado.
+**Don't "fix" by:** putting `fireWebhook` back to a `func(...)` with no return because "only the
+test uses it"; or mapping a delivery failure to `404`, which would make the front say "webhook
+not found" for a refused token.
 
-### 87. Headers do webhook viram lista de pares enquanto o formulário está aberto
+### 87. Webhook headers become a list of pairs while the form is open
 
 **Location:** `frontend/src/routes/Notifications.svelte` — `headerRows`, `toRows`, `fromRows`,
-`confirmWebhook`. O formato em disco não mudou: `WebhookPreset.headers` continua
-`Record<string,string>` na API e no `config.json`.
+`confirmWebhook`. The on-disk format did not change: `WebhookPreset.headers` stays
+`Record<string,string>` in the API and in `config.json`.
 
-**O que parece:** conversão inútil. O `Record` já está na mão, dá para iterar com
-`Object.entries` e escrever direto em `newWebhook.headers` — era o que o código fazia.
+**What it looks like:** a useless conversion. The `Record` is already in hand, you can iterate
+with `Object.entries` and write straight into `newWebhook.headers` — that is what the code did.
 
-**Por que existe:** `Record` não é editável tecla a tecla. Renomear uma chave é apagar a entrada
-e criar outra, então cada letra digitada no campo *Header* reconstrói o objeto, a linha muda de
-posição na iteração e o cursor salta. Foi por isso que a versão antiga só tinha um par de campos
-"pendentes" e um botão `+`: sem lista de pares, os headers já gravados não podiam ser inputs.
+**Why it exists:** a `Record` is not editable keystroke by keystroke. Renaming a key is deleting
+the entry and creating another, so each letter typed in the *Header* field rebuilds the object,
+the row changes position in the iteration and the cursor jumps. That is why the old version only
+had a pair of "pending" fields and a `+` button: without a list of pairs, already-saved headers
+could not be inputs.
 
-O `+` era a armadilha real — quem digitava nos dois campos e clicava em **Confirmar** perdia o
-header em silêncio, e o webhook ia para o disco com o placeholder `CHANGE_API_KEY` (foi assim que
-um Jellyfin ficou tomando `401` sem ninguém entender). Com pares, todo header é input, o `+` só
-acrescenta uma linha vazia e o Confirmar grava o que estiver na tela.
+The `+` was the real trap — whoever typed in both fields and clicked **Confirm** lost the header
+in silence, and the webhook went to disk with the `CHANGE_API_KEY` placeholder (that is how a
+Jellyfin kept taking `401` with nobody understanding). With pairs, every header is an input, `+`
+only adds an empty row and Confirm writes what is on the screen.
 
-`fromRows` descarta linha de chave vazia: o `+` cria linha em branco, e desistir de preencher não
-pode virar um header `""`. Coberto por `tests/component/Notifications.headers.test.ts`.
+`fromRows` drops a row with an empty key: `+` creates a blank row, and giving up on filling it
+must not become a `""` header. Covered by `tests/component/Notifications.headers.test.ts`.
 
-**Don't "fix" by:** trocar `headerRows` por bind direto no `Record` "para tirar a conversão"; nem
-mudar o formato salvo para lista de pares, que quebraria o `config.json` de todo mundo e o
-`files.WebhookPreset` do Go sem ganho nenhum.
+**Don't "fix" by:** swapping `headerRows` for a direct bind on the `Record` "to drop the
+conversion"; nor changing the saved format to a list of pairs, which would break everyone's
+`config.json` and Go's `files.WebhookPreset` for no gain.
 
-### 88. A barra de progresso deriva "baixados" de `episodes_pending`, e não de `episodes_downloaded`
+### 88. The progress bar derives "downloaded" from `episodes_pending`, not from `episodes_downloaded`
 
-**Location:** `frontend/src/lib/utils/status.ts` — `breakdown()`, consumida pelas três
-`TripleProgressBar` da `routes/Status.svelte`. O backend que produz o número está em
+**Location:** `frontend/src/lib/utils/status.ts` — `breakdown()`, consumed by the three
+`TripleProgressBar`s of `routes/Status.svelte`. The backend that produces the number is in
 `api/endpoint_animes.go` — `countPendingEpisodes`.
 
-**O que parece:** rodeio. `AnimeInfo` tem `episodes_downloaded` bem ali, a barra quer o segmento
-"baixado", e `released - downloaded` é a subtração óbvia. Foi o que o código fazia.
+**What it looks like:** a detour. `AnimeInfo` has `episodes_downloaded` right there, the bar wants
+the "downloaded" segment, and `released - downloaded` is the obvious subtraction. That is what the
+code did.
 
-**Por que existe:** `episodes_downloaded` não é "quantos já baixei", é **quantos arquivos estão em
-disco agora** — ele sai da contagem de `LoadSavedEpisodes()`. O daemon poda episódio assistido
-(`daemon/episodes.go`, `buildWatchedKeepSet` / `watched_episodes_to_keep`, default 2), então esse
-contador **cai** conforme o usuário assiste. A subtração então joga episódio já baixado E visto
-para o segmento amarelo, que quer dizer "falta baixar".
+**Why it exists:** `episodes_downloaded` is not "how many I have already downloaded", it is **how
+many files are on disk right now** — it comes from counting `LoadSavedEpisodes()`. The daemon
+prunes a watched episode (`daemon/episodes.go`, `buildWatchedKeepSet` / `watched_episodes_to_keep`,
+default 2), so that counter **drops** as the user watches. The subtraction then throws an episode
+already downloaded AND seen into the yellow segment, which is supposed to mean "still to
+download".
 
-Sintoma medido: um anime com `5 vistos · 5 baixados · 10 lançados de 13` pintava 5/13 de amarelo
-com o chip **Em dia** ao lado, na mesma linha. Os eps 6-10 estavam em disco e os 1-5 tinham sido
-podados; não faltava nada.
+Measured symptom: an anime with `5 watched · 5 downloaded · 10 released of 13` painted 5/13 yellow
+with the **Up to date** chip next to it, on the same row. Eps 6-10 were on disk and 1-5 had been
+pruned; nothing was missing.
 
-`countPendingEpisodes` percorre **por número de episódio** (`for n := watched+1; n <= released`),
-e não `released - downloaded`, exatamente para sobreviver à poda — o comentário dele diz isso.
-`episodes_pending` é o único contador imune, e `downloaded` da barra é
-`released - pending` (com piso em `watched`).
+`countPendingEpisodes` walks **by episode number** (`for n := watched+1; n <= released`), not
+`released - downloaded`, exactly to survive the prune — its comment says so. `episodes_pending` is
+the only immune counter, and the bar's `downloaded` is `released - pending` (floored at
+`watched`).
 
-O chip "atrasado" já tinha levado essa mesma correção antes, em `lib/domain/animeState.ts` — o
-comentário lá registra que a subtração ingênua "marcava meia lista como atrasado". A barra ficou
-para trás e repetiu o bug; são os dois consumidores do mesmo número.
+The "behind" chip had already taken this same fix earlier, in `lib/domain/animeState.ts` — the
+comment there records that the naive subtraction "marked half the list as behind". The bar lagged
+and repeated the bug; they are the two consumers of the same number.
 
-**A legenda saiu junto.** Ela era uma prop `legend: string` montada na `Status.svelte` com os
-CUMULATIVOS ("5 vistos · 5 baixados · 10 lançados de 13") — impossível de casar com as cores,
-porque o roxo ali tinha largura zero enquanto o texto dizia "5 baixados". Hoje ela mora dentro da
-`TripleProgressBar`, em quatro termos que são os DELTAS, cada um colorido com a cor do seu
-segmento: `X vistos` (--ok) · `Y a assistir` (--accent) · `Z a baixar` (--warn) · `W não lançados`
-(track). Os mesmos quatro números alimentam largura e texto, então não têm como divergir de novo.
-String pronta não tem onde pendurar o `<span>` — é por isso que a prop morreu em vez de virar
-`legend: string[]`.
+**The legend left with it.** It was a `legend: string` prop built in `Status.svelte` with the
+CUMULATIVES ("5 watched · 5 downloaded · 10 released of 13") — impossible to match with the
+colours, because the purple there had zero width while the text said "5 downloaded". Today it
+lives inside `TripleProgressBar`, in four terms that are the DELTAS, each coloured with its
+segment's colour: `X watched` (--ok) · `Y to watch` (--accent) · `Z to download` (--warn) ·
+`W unreleased` (track). The same four numbers feed width and text, so they cannot diverge again.
+A ready-made string has nowhere to hang the `<span>` — that is why the prop died instead of
+becoming `legend: string[]`.
 
-**Don't "fix" by:** passar `anime.episodes_downloaded` direto para a prop `downloaded` da
-`TripleProgressBar` "porque o nome bate" — os nomes batem, a semântica não. Nem devolver a legenda
-para uma prop de string "para o componente não importar i18n". Coberto por
-`tests/unit/status.utils.test.ts` (`describe('breakdown')`) e
-`tests/component/TripleProgressBar.test.ts` (palavra ↔ cor ↔ largura).
+**Don't "fix" by:** passing `anime.episodes_downloaded` straight to `TripleProgressBar`'s
+`downloaded` prop "because the name matches" — the names match, the semantics do not. Nor putting
+the legend back on a string prop "so the component doesn't import i18n". Covered by
+`tests/unit/status.utils.test.ts` (`describe('breakdown')`) and
+`tests/component/TripleProgressBar.test.ts` (word ↔ colour ↔ width).
 
-**Termo zerado some por anime, fica na Biblioteca.** É o que a prop `keepZeros` decide, e o
-default (`false`) é o caso comum. Por anime, zero é ruído — a maioria das linhas tem pelo menos um,
-e os 290px de `LIST_GRID` foram medidos para a legenda de TRÊS termos, então quatro por extenso
-quebram em duas linhas e a altura da linha oscila. No card *Biblioteca* é o oposto: lá os quatro
-números são o conteúdo do card, e um termo sumindo faria a soma parar de fechar com o total.
+**A zeroed term vanishes per anime, stays on Library.** That is what the `keepZeros` prop decides,
+and the default (`false`) is the common case. Per anime, zero is noise — most rows have at least
+one, and `LIST_GRID`'s 290px was measured for a THREE-term legend, so four in full wrap onto two
+lines and the row height oscillates. On the *Library* card it is the opposite: there the four
+numbers are the card's content, and a term vanishing would make the sum stop closing with the
+total.
 
-Quando os quatro termos são zero (anime sem episódio lançado) sobra `0 vistos`, de propósito: um
-`<p>` vazio encolheria a linha e traria de volta exatamente a oscilação de altura que a omissão
-deveria evitar.
+When all four terms are zero (anime with no released episode) `0 watched` remains, on purpose: an
+empty `<p>` would shrink the row and bring back exactly the height oscillation the omission was
+supposed to avoid.
 
-**Cuidado com o separador:** ele é `{' · '}`, expressão e não texto literal. O Svelte apara
-whitespace no início/fim dos filhos de um elemento, e `<span> · </span>` renderiza `·` colado nas
-palavras. Coberto — os testes comparam o `textContent` inteiro do `<p>`, com espaços.
+**Watch the separator:** it is `{' · '}`, an expression and not literal text. Svelte trims
+whitespace at the start/end of an element's children, and `<span> · </span>` renders `·` glued to
+the words. Covered — the tests compare the whole `textContent` of the `<p>`, with spaces.
 
-### 89. Não existe spec OpenAPI: a tabela do `architecture.md` é a única doc de endpoint
+### 89. There is no OpenAPI spec: the `architecture.md` table is the only endpoint doc
 
-**Location:** `api/server.go` — `SetupRoutes` (não há rota `/swagger/`); `docs/agents/architecture.md`
-— seção "API". Fato negativo: **não existe** `docs/swagger/`, nem anotação `// @` em handler, nem
-`swag` no `go.mod`.
+**Location:** `api/server.go` — `SetupRoutes` (there is no `/swagger/` route); `docs/agents/architecture.md`
+— "API" section. Negative fact: **there is no** `docs/swagger/`, nor a `// @` annotation on a
+handler, nor `swag` in `go.mod`.
 
-**O que parece:** esquecimento. Todo daemon com REST tem um `/swagger/`, os handlers estão prontos
-para receber `@Summary`/`@Param`, e adicionar de volta é um `swag init`.
+**What it looks like:** forgetfulness. Every daemon with REST has a `/swagger/`, the handlers are
+ready to take `@Summary`/`@Param`, and putting it back is a `swag init`.
 
-**Por que saiu:** medido — `swaggo/http-swagger` + `swaggo/swag` custavam **11,2 MB num binário de
-34 MB (33%)**, que vai em todo release da AUR e do GitHub em três plataformas. Em troca: 343 linhas
-de anotação em 17 arquivos, 6.482 linhas geradas, ~15 deps `go-openapi` indiretas e um passo
-obrigatório de regeneração em todo commit que tocasse a API.
+**Why it left:** measured — `swaggo/http-swagger` + `swaggo/swag` cost **11.2 MB in a 34 MB binary
+(33%)**, which goes in every AUR and GitHub release on three platforms. In exchange: 343 lines of
+annotation in 17 files, 6,482 generated lines, ~15 indirect `go-openapi` deps and a mandatory
+regeneration step on every commit that touched the API.
 
-O que decidiu não foi o tamanho, foi **quem lia**: nada consumia o spec. Não há gerador de cliente
-no `package.json`, no `Makefile` nem nos scripts — o `lib/api/client.ts` é escrito à mão. O único
-leitor era o console `/swagger/` no navegador, que `curl localhost:8091/api/v1/...` substitui.
+What decided was not the size, it was **who read it**: nothing consumed the spec. There is no
+client generator in `package.json`, in the `Makefile` or in the scripts — `lib/api/client.ts` is
+written by hand. The only reader was the `/swagger/` console in the browser, which
+`curl localhost:8091/api/v1/...` replaces.
 
-`@Param`/`@Success` só repetiam tipo e código HTTP e morreram sem substituto. Mas **11 `@Description`
-carregavam invariante que não estava em lugar nenhum** — `bytes_completed` nulo em torrent pausado
-porque a rain libera o piece data; `resume` põe no FIM da fila e não é "começa agora"; `prioritize`
-rebaixa o menos-progredido e a rain preserva o bitfield; o prioritize em lote ignora hash
-desconhecido de propósito; a fronteira de deleção é o torrent, não o episódio. Essas viraram
-**doc comment normal** em cima do handler, que é melhor que a anotação: aparece em `go doc` e no
-hover do editor, e não depende de regeneração para estar certo.
+`@Param`/`@Success` only repeated type and HTTP code and died with no substitute. But **11
+`@Description`s carried an invariant that was nowhere else** — `bytes_completed` null on a paused
+torrent because rain frees the piece data; `resume` puts it at the END of the queue and is not
+"start now"; `prioritize` demotes the least-progressed and rain keeps the bitfield; batch
+prioritize ignores an unknown hash on purpose; the deletion boundary is the torrent, not the
+episode. Those became a **normal doc comment** on top of the handler, which is better than the
+annotation: it shows up in `go doc` and in the editor hover, and does not depend on regeneration
+to be right.
 
 **Don't "fix" by:**
-- Readicionar `swag` "porque o endpoint novo merece doc": a doc do endpoint novo vai na tabela do
-  `architecture.md` (passo 7 do checklist em `conventions.md`) e, quando houver invariante de
-  comportamento, num doc comment em cima do handler.
-- Gerar o spec sem servir a rota "porque é de graça": não é — volta o passo de regeneração em todo
-  commit de API e a segunda cópia do contrato para envelhecer. Se um dia precisar importar num
-  Bruno/Insomnia, gerar sob demanda e não versionar é mais barato que manter.
+- Re-adding `swag` "because the new endpoint deserves docs": the new endpoint's docs go in the
+  `architecture.md` table (step 7 of the checklist in `conventions.md`) and, when there is a
+  behaviour invariant, in a doc comment on top of the handler.
+- Generating the spec without serving the route "because it's free": it is not — it brings back
+  the regeneration step on every API commit and a second copy of the contract to go stale. If one
+  day it needs importing into a Bruno/Insomnia, generating on demand and not versioning is cheaper
+  than keeping it.
 
-### 90. Não há versionamento de `config.json`: a migração checa FORMA, num lugar só
+### 90. There is no `config.json` versioning: the migration checks SHAPE, in one place
 
-**Location:** `files/filemanager.go` — `LoadConfigs` (as duas migrações de campo legado, ~22
-linhas). Fato negativo: **não existe** campo `config_version`, chain de migração, nem trava que
-bloqueie o app com config velha. E a migração mora num lugar **só** — `api/endpoint_config.go`
-deliberadamente não a repete no `PUT`.
+**Location:** `files/filemanager.go` — `LoadConfigs` (the two legacy-field migrations, ~22
+lines). Negative fact: **there is no** `config_version` field, migration chain, or lock that
+blocks the app with an old config. And the migration lives in **one** place —
+`api/endpoint_config.go` deliberately does not repeat it on `PUT`.
 
-**O que parece:** falta de robustez. O projeto é distribuído (AUR + releases) e um `config.json`
-de uma versão antiga carregando errado é falha silenciosa. A saída natural parece ser numerar o
-formato, escrever um chain v1→v2→v3 e travar o app com um aviso grande quando a migração não der.
+**What it looks like:** a lack of robustness. The project is distributed (AUR + releases) and an
+old-version `config.json` loading wrong is a silent failure. The natural way out looks like
+numbering the format, writing a v1→v2→v3 chain and locking the app with a big warning when the
+migration does not go through.
 
-**Por que não existe:** porque o formato já resolve dois dos três casos sozinho. `LoadConfigs`
-desserializa o JSON **por cima de `getDefaultConfig()`** (`filemanager.go`), então:
+**Why it does not exist:** because the format already solves two of the three cases on its own.
+`LoadConfigs` unmarshals the JSON **over `getDefaultConfig()`** (`filemanager.go`), so:
 
-| Mudança no `Config` | Precisa migrar? |
+| Change on `Config` | Needs a migration? |
 |---|---|
-| Campo **novo** | Não — o default vale, config antigo carrega certo |
-| Campo **removido** | Não — o JSON ignora chave desconhecida |
-| Campo **renomeado** | **Sim** — único caso |
+| **New** field | No — the default holds, an old config loads right |
+| **Removed** field | No — JSON ignores an unknown key |
+| **Renamed** field | **Yes** — the only case |
 
-Um chain de versões existiria para servir só a terceira linha, que aconteceu **duas vezes** na vida
-do projeto (`anilist_username` → `anilist_usernames` e `excluded_list` → `excluded_lists`, ambas em
-abril de 2026).
+A version chain would exist to serve only the third row, which happened **twice** in the life of
+the project (`anilist_username` → `anilist_usernames` and `excluded_list` → `excluded_lists`, both
+in April 2026).
 
-E o número de versão seria **menos** confiável que a checagem que está lá. `if config.ExcludedList
-!= "" && len(config.ExcludedLists) == 0` é **derivado do dado**; um `config_version` é **metadado
-afirmando algo sobre o dado**, e o `config.json` é um arquivo que o usuário abre no editor. Ele
-edita um campo e a versão fica parada; restaura um backup e a versão vem de outro momento que a
-forma. Aí o chain roda a migração errada — com confiança, que é o que a checagem de forma não faz.
+And the version number would be **less** reliable than the check that is there. `if
+config.ExcludedList != "" && len(config.ExcludedLists) == 0` is **derived from the data**; a
+`config_version` is **metadata asserting something about the data**, and `config.json` is a file
+the user opens in an editor. They edit a field and the version sits still; they restore a backup
+and the version comes from another moment than the shape. Then the chain runs the wrong
+migration — with confidence, which is what the shape check does not do.
 
-A trava tem o problema oposto: **nenhum `config.json` que existe hoje tem campo de versão**. Ou
-"sem versão" é tratado como v1, e então a trava nunca protege do caso real, ou ela dispara em todo
-mundo na estreia. E para rename, migrar nunca é *impossível* — se dá para instruir o usuário na
-tela, dá para fazer.
+The lock has the opposite problem: **no `config.json` that exists today has a version field**.
+Either "no version" is treated as v1, and then the lock never protects the real case, or it fires
+on everyone at debut. And for a rename, migrating is never *impossible* — if you can instruct the
+user on screen, you can do it.
 
-**O precedente que fecha o assunto:** o `save_path` (#31, emenda de 24/ago/2026) foi exatamente
-esta pergunta com consequência **pior** — sem migrar, a rain acha o caminho derivado vazio e
-rebaixa a biblioteca inteira. A decisão foi remover a migração e documentar passo manual. E o que
-travava lá não era falta de campo de versão: a operação preserva inode, carrega o
-`torrents.RootMarkerName` junto e não dá para saber se o usuário já moveu a pasta na mão. Nenhum
-chain torna isso seguro.
+**The precedent that closes the subject:** `save_path` (#31, amendment of 24 Aug 2026) was exactly
+this question with a **worse** consequence — without migrating, rain finds the derived path empty
+and re-downloads the entire library. The decision was to remove the migration and document a
+manual step. And what locked there was not a missing version field: the operation preserves the
+inode, carries `torrents.RootMarkerName` with it and there is no way to know whether the user
+already moved the folder by hand. No chain makes that safe.
 
-Que é a régua geral: migração de config é ou **forma pura** (rename — 3 linhas, dispensa versão) ou
-**mudança com efeito fora do config** (mover dado em disco — versão não deixa segura). O
-framework não ajuda em nenhuma das duas.
+Which is the general ruler: a config migration is either **pure shape** (rename — 3 lines, no
+version needed) or **a change with an effect outside the config** (moving data on disk — a version
+does not make it safe). The framework helps in neither.
 
-**Quando revisitar:** se migração de config virar frequente (3+ num ano) ou se aparecer uma cujo
-mapeamento antigo→novo não seja mecânico. Hoje é 2 em ~2 anos, ambas mecânicas.
-
-**Don't "fix" by:**
-- Adicionar `config_version` + chain: ver acima; a forma já responde, e o número pode mentir.
-- Travar o app quando a config parecer velha: todo config existente hoje dispara essa trava.
-- Repetir a migração no `PUT /config` "para o cliente antigo": era o que `endpoint_config.go` fazia,
-  e o comentário estava errado — nenhuma versão do CLI mandou a chave singular (o `case
-  "anilist_username"` do switch antigo setava `AnilistUsernames`, o plural). Um corpo que ainda
-  mande a chave singular é persistido e curado no `LoadConfigs` seguinte; a cópia no handler só
-  antecipava a cura em um ciclo, ao custo de duas migrações para divergir.
-- Tirar as ~22 linhas do `LoadConfigs` "porque já faz meses": lista de contas vazia **não** é estado
-  de erro (#49 — instalação só de avulsos nunca configura conta), então um config pré-abril
-  carregaria sem contas, sem reclamar, e o daemon simplesmente não baixaria nada de lista.
-
-### 91. Não há biblioteca de componentes: o daisyUI saiu porque era um segundo vocabulário de cor
-
-**Location:** `frontend/tailwind.config.js` (`plugins: []`), `frontend/src/app.css` (base do `html`
-e o `.tooltip`), `frontend/src/components/ui/` (os primitivos), `frontend/src/lib/design/tokens.css`
-(fonte da verdade única de cor). Fato negativo: **não existe** `daisyui` no `package.json`, nem
-bloco `daisyui:` no config, nem classe `.btn`/`.card`/`.modal-*`/`.alert`/`.checkbox`/`.select` em
-tela nenhuma.
-
-**O que parece:** empobrecimento. Uma biblioteca de componentes pronta saiu e no lugar entraram
-classes Tailwind escritas à mão, o que normalmente é o caminho errado da escada.
-
-**Por que saiu:** ele não estava sendo usado como biblioteca de componentes. O uso real era
-**45 utilitárias de cor** (`text-base-content` ×27, `bg-base-100/200`, `border-base-300`,
-`bg-success/warning/error`) contra **12 classes de componente**. E as 45 duplicavam o que o projeto
-já tinha: `tokens.css` define `--bg-card`, `--text-primary`, `--ok`, `--warn`, `--danger` e faz a
-troca de tema pelo **seu próprio** `[data-theme]` — o bloco de tema do daisyUI era cópia manual em
-hex, não fonte.
-
-Três evidências de que a duplicação era real e cobrava pedágio:
-
-1. **Existiam dois testes só para vigiá-la.** Em `tests/unit/designTokens.consistency.test.ts`,
-   comparavam cada cor do `tokens.css` com a cópia hex no `tailwind.config.js`, porque o daisyUI
-   v4 compila as chaves de tema para OKLCH em build time e não consegue consumir `var(--x)`. O
-   arquivo **continua existindo** com o invariante que sobrou (os dois blocos de tema precisam
-   existir e estar preenchidos); só os dois testes de comparação foram apagados.
-2. **Os tokens do projeto foram renomeados para não colidir.** `heading`/`body` só se chamam assim
-   porque `primary`/`secondary` estavam reservados pela paleta de marca do daisyUI.
-3. **O comentário que justificava o valor de `base-300` descrevia um uso que não existia mais** —
-   20 linhas apoiadas num `grep bg-base-300` que rendia 5 resultados; no dia da remoção rendia
-   zero (os 5 usos eram `border-base-300`).
-
-O que substituiu cada coisa, sem inventar nada novo: `.modal-*` → o `ui/Modal.svelte` que já
-existia (e cujo próprio comentário dizia ter nascido para isso, com migrar o `ConfirmDialog`
-deixado para depois); `.checkbox` → `ui/Checkbox.svelte`; `.btn` → `ui/Button.svelte`;
-`.alert`/`.toast` → a mesma superfície `bg-menu` + `shadow-elevation` do `ActionMenu`, com a cor de
-status só na borda e no ícone; `.card`/`.card-body` → `flex flex-col rounded-card`. Só o
-`.tooltip` não tinha equivalente e virou ~40 linhas de CSS em `app.css`, **mantendo o contrato de
-classe e `data-tip`** para não tocar os 14 pontos de uso.
-
-**Ganhos que não eram o objetivo:** o `ConfirmDialog` passou a ter foco preso, Esc e devolução de
-foco (o `<dialog>` + `.modal-open` não tinha), e duas advertências de a11y do `svelte-check`
-sumiram junto.
-
-**Verificação:** screenshot antes/depois das 4 telas afetadas nos 2 temas. A diferença ficou entre
-**0,0002% e 0,002% dos pixels**, toda ela explicada: borda de card (`base-300` → `border-default`,
-que é o que as outras 41 bordas do app já usavam), a rampa ad-hoc `text-base-content/40|50|60`
-colapsada em `text-subtle` (o app tem 3 níveis nomeados, não 4 opacidades), e ~6px de deslocamento
-nas linhas de checkbox.
+**When to revisit:** if config migration becomes frequent (3+ in a year) or if one appears whose
+old→new mapping is not mechanical. Today it is 2 in ~2 years, both mechanical.
 
 **Don't "fix" by:**
-- Readicionar o daisyUI (ou trocar por outra lib de componentes) para "não escrever CSS": o CSS
-  escrito à mão são ~40 linhas de tooltip; o resto é reuso de `components/ui/`.
-- Reintroduzir `bg-base-*`/`text-base-content`: essas classes não existem mais, e o vocabulário é
-  `bg-card`/`bg-sunken`/`text-heading`/`text-body`/`text-subtle`.
-- Tirar `background-color`/`color` do `html` em `app.css`: o `AppShell` pinta o wrapper dele, mas
-  nada cobre a área de overscroll nem o instante antes de o shell montar. Isso vinha do
-  `base: true` do daisyUI.
-- Trocar o `.tooltip` de `app.css` por `title=""`: o nativo tem atraso de ~1s e não estiliza, e são
-  14 pontos numa tela quente.
+- Adding `config_version` + a chain: see above; shape already answers, and the number can lie.
+- Locking the app when the config looks old: every config that exists today fires that lock.
+- Repeating the migration on `PUT /config` "for the old client": that is what `endpoint_config.go`
+  used to do, and the comment was wrong — no CLI version sent the singular key (the old switch's
+  `case "anilist_username"` set `AnilistUsernames`, the plural). A body that still sends the
+  singular key is persisted and cured on the next `LoadConfigs`; the copy in the handler only
+  anticipated the cure by one cycle, at the cost of two migrations to diverge.
+- Taking the ~22 lines out of `LoadConfigs` "because it's been months": an empty account list is
+  **not** an error state (#49 — a standalones-only install never configures an account), so a
+  pre-April config would load with no accounts, without complaining, and the daemon would simply
+  download nothing from a list.
+
+### 91. There is no component library: daisyUI left because it was a second color vocabulary
+
+**Location:** `frontend/tailwind.config.js` (`plugins: []`), `frontend/src/app.css` (base of `html`
+and `.tooltip`), `frontend/src/components/ui/` (the primitives), `frontend/src/lib/design/tokens.css`
+(the single source of truth for colour). Negative fact: **there is no** `daisyui` in
+`package.json`, nor a `daisyui:` block in the config, nor a
+`.btn`/`.card`/`.modal-*`/`.alert`/`.checkbox`/`.select` class on any screen.
+
+**What it looks like:** impoverishment. A ready-made component library left and in its place came
+hand-written Tailwind classes, which is normally the wrong way up the ladder.
+
+**Why it left:** it was not being used as a component library. The real use was **45 colour
+utilities** (`text-base-content` ×27, `bg-base-100/200`, `border-base-300`,
+`bg-success/warning/error`) against **12 component classes**. And the 45 duplicated what the
+project already had: `tokens.css` defines `--bg-card`, `--text-primary`, `--ok`, `--warn`,
+`--danger` and does the theme swap through **its own** `[data-theme]` — daisyUI's theme block was
+a manual hex copy, not a source.
+
+Three pieces of evidence that the duplication was real and charged a toll:
+
+1. **There were two tests just to watch it.** In `tests/unit/designTokens.consistency.test.ts`,
+   they compared each colour of `tokens.css` with the hex copy in `tailwind.config.js`, because
+   daisyUI v4 compiles theme keys to OKLCH at build time and cannot consume `var(--x)`. The file
+   **still exists** with the invariant that remains (the two theme blocks need to exist and be
+   filled); only the two comparison tests were deleted.
+2. **The project's tokens were renamed to not collide.** `heading`/`body` are only called that
+   because `primary`/`secondary` were reserved by daisyUI's brand palette.
+3. **The comment that justified `base-300`'s value described a use that no longer existed** —
+   20 lines propped on a `grep bg-base-300` that yielded 5 results; on the day of the removal it
+   yielded zero (the 5 uses were `border-base-300`).
+
+What replaced each thing, inventing nothing new: `.modal-*` → the `ui/Modal.svelte` that already
+existed (and whose own comment said it was born for that, with migrating `ConfirmDialog` left for
+later); `.checkbox` → `ui/Checkbox.svelte`; `.btn` → `ui/Button.svelte`; `.alert`/`.toast` → the
+same `bg-menu` + `shadow-elevation` surface as `ActionMenu`, with the status colour only on the
+border and the icon; `.card`/`.card-body` → `flex flex-col rounded-card`. Only `.tooltip` had no
+equivalent and became ~40 lines of CSS in `app.css`, **keeping the class and `data-tip` contract**
+so as not to touch the 14 use sites.
+
+**Gains that were not the goal:** `ConfirmDialog` gained trapped focus, Esc and focus return (the
+`<dialog>` + `.modal-open` did not have it), and two `svelte-check` a11y warnings left with it.
+
+**Verification:** before/after screenshot of the 4 affected screens in the 2 themes. The difference
+sat between **0.0002% and 0.002% of the pixels**, all of it explained: card border (`base-300` →
+`border-default`, which is what the other 41 borders of the app already used), the ad-hoc
+`text-base-content/40|50|60` ramp collapsed into `text-subtle` (the app has 3 named levels, not 4
+opacities), and ~6px of shift on the checkbox rows.
+
+**Don't "fix" by:**
+- Re-adding daisyUI (or swapping for another component lib) to "not write CSS": the hand-written
+  CSS is ~40 lines of tooltip; the rest is reuse of `components/ui/`.
+- Reintroducing `bg-base-*`/`text-base-content`: those classes no longer exist, and the vocabulary
+  is `bg-card`/`bg-sunken`/`text-heading`/`text-body`/`text-subtle`.
+- Taking `background-color`/`color` off `html` in `app.css`: `AppShell` paints its wrapper, but
+  nothing covers the overscroll area or the instant before the shell mounts. That came from
+  daisyUI's `base: true`.
+- Swapping `app.css`'s `.tooltip` for `title=""`: the native one has a ~1s delay and does not
+  style, and they are 14 sites on a hot screen.
 
 
-### 92. O cache em disco da AniList volta com TTL zero, e o valor servido dele vem acompanhado de `ErrFromCache`
+### 92. The on-disk AniList cache restores with TTL zero, and a value served from it comes with `ErrFromCache`
 
-**Location:** `anilist/persist.go` (o snapshot inteiro), `anilist/anilist.go`
-(`ttlCache.snapshot`/`restore`, os caminhos de falha de `GetAllCurrentAnime`,
+**Location:** `anilist/persist.go` (the whole snapshot), `anilist/anilist.go`
+(`ttlCache.snapshot`/`restore`, the failure paths of `GetAllCurrentAnime`,
 `GetFrontendAnimeList`, `getMediaListEntry`, `GetCustomListsMap`), `anilist/standalone.go`
 (`GetMediaByID`/`GetMediaByIDs`), `anilist/health.go` (`ErrFromCache`, `Health.CacheSavedAt`),
-`files/filemanager.go` (`LoadAnilistCache`/`SaveAnilistCache`, arquivo `anilist_cache`).
+`files/filemanager.go` (`LoadAnilistCache`/`SaveAnilistCache`, `anilist_cache` file).
 
-Fato negativo: **não existe** modo cache, flag de "estou offline", camada de repositório nem
-segunda frente de leitura. O `ttlCache` continua sendo a única, e o disco só o faz sobreviver ao
-restart.
+Negative fact: **there is no** cache mode, "I am offline" flag, repository layer or second read
+front. `ttlCache` remains the only one, and disk only makes it survive restart.
 
-**O que parece errado, primeira parte:** um cache persistido que o `get` nunca enxerga. As
-entradas restauradas do snapshot recebem vencimento no passado (`restore(..., 0)`), então toda
-leitura de caminho feliz erra o cache e vai à rede como antes — o arquivo em disco parece
-inútil.
+**What looks wrong, part one:** a persisted cache that `get` never sees. Entries restored from the
+snapshot get an expiry in the past (`restore(..., 0)`), so every happy-path read misses the cache
+and goes to the network as before — the on-disk file looks useless.
 
-É deliberado, e é a invariante que separa "sobrevive à queda" de "passou a mostrar dado velho".
-Restaurar com TTL vivo faria toda tela servir a lista de ontem sem nem tentar a AniList, e
-economizaria requisições que ninguém pediu para economizar. O único caminho que lê o snapshot é
-o de **falha** (`getStale`), então nenhuma tela ficou mais velha do que era. A exceção é o
-`seriesCache`, restaurado com o TTL cheio: só entra nele elo de anime `FINISHED` com contagem de
-episódios, imutável por construção (ver `recordLink`) — não há o que vencer.
+It is deliberate, and it is the invariant that separates "survives a crash" from "started showing
+stale data". Restoring with a live TTL would make every screen serve yesterday's list without even
+trying AniList, and would save requests nobody asked to save. The only path that reads the snapshot
+is the **failure** one (`getStale`), so no screen got older than it was. The exception is
+`seriesCache`, restored with the full TTL: only a `FINISHED` anime link with an episode count
+enters it, immutable by construction (see `recordLink`) — there is nothing to expire.
 
-**O que parece errado, segunda parte:** funções que devolvem valor **e** erro ao mesmo tempo, e
-call sites que fazem `if err != nil && !errors.Is(err, anilist.ErrFromCache)`.
+**What looks wrong, part two:** functions that return a value **and** an error at the same time,
+and call sites that do `if err != nil && !errors.Is(err, anilist.ErrFromCache)`.
 
-`ErrFromCache` não é "deu errado", é "deu certo com dado de outra época". Vai como erro porque
-isso torna o comportamento antigo o **padrão seguro**: todo chamador que não conhece o sentinela
-vê `err != nil` e se comporta exatamente como antes do cache existir. Só quem checa `errors.Is`
-opta por usar o valor, e a escolha fica visível no call site em vez de escondida numa flag que
-alguém esquece de ler. Um booleano no retorno inverteria isso — quem ignorasse o booleano
-passaria a tratar dado de dias atrás como fresco sem escrever uma linha.
+`ErrFromCache` is not "it went wrong", it is "it went right with data from another time". It goes
+as an error because that makes the old behaviour the **safe default**: every caller that does not
+know the sentinel sees `err != nil` and behaves exactly as before the cache existed. Only whoever
+checks `errors.Is` opts into using the value, and the choice stays visible at the call site instead
+of hidden in a flag someone forgets to read. A boolean on the return would invert that — whoever
+ignored the boolean would start treating days-old data as fresh without writing a line.
 
-Dois call sites merecem atenção:
+Two call sites deserve attention:
 
-- `api/endpoint_animes.go` **recusa** o refresh de órfãos quando a lista veio do cache. A
-  cobertura é conhecida (a lista voltou inteira), mas cada anime não coberto viraria um
-  `GetAnimeInfoByIDs` condenado a falhar, a cada poll de 30s por aba — a rajada da #65, agora
-  sem nem a chance de dar certo.
-- `daemon/verification.go` **aceita** a lista do cache para a deleção por status. É decisão
-  explícita do dono do projeto, e o risco tem nome: um anime que saiu de um status de deleção
-  *depois* do snapshot (`COMPLETED` que virou `REPEATING`, e o passe baixou a temporada) volta a
-  aparecer como deletável, e o passe apaga o que ele mesmo acabou de baixar. Antes do cache isso
-  era impossível — conta sem resposta não entrava em `inDeleteStatus` e `allAccountsAgreeOnDelete`
-  recusava sozinha. Se um dia morder, a correção é uma linha: tratar `ErrFromCache` como conta
-  sem resposta ali.
+- `api/endpoint_animes.go` **refuses** the orphan refresh when the list came from cache. Coverage
+  is known (the list came back whole), but each uncovered anime would become a `GetAnimeInfoByIDs`
+  doomed to fail, on every 30s poll per tab — #65's burst, now without even a chance of succeeding.
+- `daemon/verification.go` **accepts** the cache list for status deletion. It is an explicit
+  decision of the project owner, and the risk has a name: an anime that left a deletion status
+  *after* the snapshot (`COMPLETED` that became `REPEATING`, and the pass downloaded the season)
+  shows up as deletable again, and the pass deletes what it just downloaded. Before the cache that
+  was impossible — an account with no answer did not enter `inDeleteStatus` and
+  `allAccountsAgreeOnDelete` refused on its own. If it ever bites, the fix is one line: treat
+  `ErrFromCache` as an account with no answer there.
 
-**Por que são três caches de `MediaList`, e não um** (`frontendListCache`, `passListCache`,
-`mediaEntryCache`): as três queries pedem conjuntos de campos **diferentes**. A do frontend traz
-`coverImage` e não traz `relations` nem o `status` da entrada; a do passe traz `relations` e
-`status` e não traz `coverImage`; a por media id (`mediaByIDFields`) traz tudo. Servir a tela de
-detalhe do cache do frontend deixaria o download manual sem `relations` — e ampliar a query do
-poll de 30s para cobrir isso é justamente o que a #57 e a #65 apertaram.
+**Why there are three `MediaList` caches, not one** (`frontendListCache`, `passListCache`,
+`mediaEntryCache`): the three queries ask for **different** field sets. The frontend one brings
+`coverImage` and does not bring `relations` or the entry's `status`; the pass one brings
+`relations` and `status` and does not bring `coverImage`; the per-media-id one (`mediaByIDFields`)
+brings everything. Serving the detail screen from the frontend cache would leave a manual download
+without `relations` — and widening the 30s-poll query to cover that is exactly what #57 and #65
+tightened.
 
-**`stampAiringAt`/`rebaseAiring` existem porque `timeUntilAiring` é relativo ao instante da
-busca.** Todo gate de "já foi ao ar" lê esse campo (`daemon/episodes.go`,
-`anilist/episodes.go`, `daemon/manual_download.go`), então servido cru do cache ele congela e o
-passe conclui para sempre que nada novo estreou. A gravação converte para `airingAt` absoluto
-(só onde a API não o mandou) e a leitura recalcula a contagem. É o que faz o episódio que
-faltava dez minutos quando a AniList caiu entrar na busca sozinho, **sem regra nova** — o passe
-já busca quando a contagem fica negativa.
+**`stampAiringAt`/`rebaseAiring` exist because `timeUntilAiring` is relative to the fetch
+instant.** Every "already aired" gate reads that field (`daemon/episodes.go`,
+`anilist/episodes.go`, `daemon/manual_download.go`), so served raw from cache it freezes and the
+pass concludes forever that nothing new premiered. The write converts to an absolute `airingAt`
+(only where the API did not send it) and the read recomputes the countdown. That is what makes the
+episode that was ten minutes away when AniList went down enter the search on its own, **with no
+new rule** — the pass already searches when the countdown goes negative.
 
-**Relação com a #72:** a recusa do gate de orçamento continua servindo o vencido **sem** erro. O
-dado ali tem segundos de idade e o próximo poll volta fresco; a tela não ganha nada sabendo. Só
-a falha de verdade carrega `ErrFromCache`.
+**Relation to #72:** the budget gate's refusal still serves the expired value **without** an
+error. The data there is seconds old and the next poll comes back fresh; the screen gains nothing
+from knowing. Only a real failure carries `ErrFromCache`.
 
 
-### 93. A guarda de disco tem dois gatilhos, e o de tamanho vale mesmo com `min_free_disk_percent = 0`
+### 93. The disk guard has two triggers, and the size one still applies with `min_free_disk_percent = 0`
 
-**Location:** `daemon/helpers.go` (`checkDiskSpace`), chamada em `daemon/episodes.go`
-(`attemptDownloadWithRetries`, uma vez antes do loop e uma por candidato) e em
+**Location:** `daemon/helpers.go` (`checkDiskSpace`), called in `daemon/episodes.go`
+(`attemptDownloadWithRetries`, once before the loop and once per candidate) and in
 `daemon/manual_download.go` (`addAndPrioritize`).
 
-`checkDiskSpace` recebe `torrentSizeBytes` e recusa por dois motivos diferentes:
+`checkDiskSpace` receives `torrentSizeBytes` and refuses for two different reasons:
 
-1. **o torrent não cabe** no espaço livre — roda sempre que o tamanho é conhecido, inclusive com
+1. **the torrent does not fit** in the free space — runs whenever the size is known, including with
    `min_free_disk_percent = 0`;
-2. **o volume ficaria abaixo da porcentagem** exigida depois do download — só roda com
+2. **the volume would fall below the required percentage** after the download — only runs with
    `min_free_disk_percent > 0`.
 
-**O que parece errado:** uma config documentada como "`0` = off" que não desliga a guarda inteira.
-É deliberado. A porcentagem é política do usuário ("quero 10% de folga"), e desligar política é
-direito dele. "Este torrent é maior que o disco" não é política, é aritmética: o download vai
-encher o volume e travar no meio de qualquer jeito, e deixá-lo entrar não realiza desejo nenhum.
+**What looks wrong:** a config documented as "`0` = off" that does not turn the whole guard off.
+Deliberate. The percentage is the user's policy ("I want 10% of slack"), and turning policy off is
+their right. "This torrent is bigger than the disk" is not policy, it is arithmetic: the download
+will fill the volume and stall in the middle either way, and letting it in fulfills no wish.
 
 **Amended by [#101](#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space):** the size is compared with the free space MINUS what the torrents already added still have to write, not with the free space alone.
 
-**Por que o tamanho não veio antes:** ele existia desde sempre no resultado do Nyaa
-(`nyaa.TorrentResult.Size`, o mesmo dado dos tetos `max_batch_torrent_size_gb`/
-`max_episode_torrent_size_gb`), mas se perdia no caminho — `resolvedMagnets` guardava
-`magnets []string`. Hoje guarda `candidates []nyaa.TorrentResult` justamente para o `Size`
-chegar ao `Add`. Se um dia alguém "simplificar" o campo de volta para uma lista de strings, a
-guarda volta a ser cega.
+**Why the size did not come earlier:** it always existed on the Nyaa result
+(`nyaa.TorrentResult.Size`, the same datum as the `max_batch_torrent_size_gb`/
+`max_episode_torrent_size_gb` ceilings), but it was lost on the way — `resolvedMagnets` stored
+`magnets []string`. Today it stores `candidates []nyaa.TorrentResult` exactly so `Size` reaches
+`Add`. If someone one day "simplifies" the field back to a list of strings, the guard goes blind
+again.
 
-**Tamanho 0 = desconhecido, e passa.** É o caso do magnet colado à mão: o tamanho só apareceria
-depois dos metadados, e recusar por não saber barraria download legítimo. Aí a guarda é a
-porcentagem que sempre foi — ver `ManualDownloadEpisodeWithMagnet`/`ManualDownloadAnimeWithMagnet`,
-que passam `0` de propósito.
+**Size 0 = unknown, and it passes.** That is the pasted-magnet case: the size would only appear
+after the metadata, and refusing for not knowing would bar a legitimate download. Then the guard
+is the percentage it always was — see `ManualDownloadEpisodeWithMagnet`/`ManualDownloadAnimeWithMagnet`,
+which pass `0` on purpose.
 
-**A checagem é por candidato, não uma só antes do loop.** Cada candidato tem um tamanho, e o
-segundo da lista pode caber onde o primeiro não coube — pular um não encerra a tentativa. A
-checagem sem tamanho **antes** do loop continua existindo, e é outra coisa: disco já cheio hoje
-significa que nenhum candidato serve, e tentar N vezes só encheria o log.
+**The check is per candidate, not one before the loop.** Each candidate has a size, and the second
+in the list may fit where the first did not — skipping one does not end the attempt. The
+size-less check **before** the loop still exists, and it is something else: a disk already full
+today means no candidate will do, and trying N times would only fill the log.
 
 
 ### 94. A stalled torrent is dropped through the failure path, and only one that is *trying* counts as stalled
 
 **Location:** `daemon/stalled.go` (`dropStalledTorrents`, `stalling`, `stalledTorrentTimeout`),
-chamado em `daemon/verification.go` logo depois do `backend.List()`.
+called in `daemon/verification.go` right after `backend.List()`.
 
-Fato negativo: **não existe** política de retentativa própria, blacklist, contador de tentativas
-nem config para o limiar. Um torrent a zero peers por mais de uma hora entra em
-`HandleTorrentFailure`, a mesma função que trata o torrent que a rain parou com erro — webhook
-`download_failed`, sai da sessão guardando os bytes, e o passe seguinte procura de novo
+Negative fact: **there is no** retry policy of its own, blacklist, attempt counter or config for
+the threshold. A torrent at zero peers for more than an hour enters `HandleTorrentFailure`, the
+same function that handles a torrent rain stopped with an error — `download_failed` webhook,
+leaves the session keeping the bytes, and the next pass searches again
 ([#24](#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist)).
 
-**O que parece errado, primeira parte:** derrubar em vez de pausar. Pausar parece mais gentil e
-libera o mesmo slot de `max_concurrent_downloads`. Não serve: para a fila, pausado é "pausado pelo
-usuário", não ocupa slot e **nunca sobe sozinho** (`torrents/queue.go`). O download travado viraria
-travado, silencioso e permanente — que é exatamente o estado que esta função existe para acabar.
+**What looks wrong, part one:** dropping instead of pausing. Pausing looks gentler and frees the
+same `max_concurrent_downloads` slot. It does not work: for the queue, paused is "paused by the
+user", it occupies no slot and **never rises on its own** (`torrents/queue.go`). The stalled
+download would become stalled, silent and permanent — which is exactly the state this function
+exists to end.
 
-**O que parece errado, segunda parte:** o filtro de status. Só `downloading` e
-`downloading_metadata` são candidatos. Parece descuido não cobrir `verifying`/`allocating`, mas
-zero peers nesses dois é trabalho local em andamento, não swarm morto. E os três excluídos são
-obrigatórios, não opcionais: torrent **enfileirado** está a zero peers porque nem começou
-(`queue.markQueued`), **pausado** porque o usuário mandou parar, e **completo** porque ninguém está
-puxando dele. Sem esse filtro a função derrubaria a fila inteira uma hora depois de o app subir.
+**What looks wrong, part two:** the status filter. Only `downloading` and `downloading_metadata`
+are candidates. It looks like an oversight not to cover `verifying`/`allocating`, but zero peers
+on those two is local work in progress, not a dead swarm. And the three excluded are mandatory,
+not optional: a **queued** torrent is at zero peers because it has not even started
+(`queue.markQueued`), **paused** because the user told it to stop, and **complete** because nobody
+is pulling from it. Without that filter the function would drop the entire queue an hour after
+the app came up.
 
-**Por que o relógio é de pacote e em memória:** só o passe escreve nele e nada fora do daemon
-precisa lê-lo. Um restart re-observa os stalls do zero, e isso custa no máximo um ciclo de
-`check_interval` a mais. A poda no fim de cada chamada é o que impede um carimbo de semanas atrás
-derrubar na hora um torrent que travou, voltou e travou de novo.
+**Why the clock is package-level and in memory:** only the pass writes it and nothing outside the
+daemon needs to read it. A restart re-observes stalls from zero, and that costs at most one extra
+`check_interval` cycle. The prune at the end of each call is what stops a stamp from weeks ago
+from immediately dropping a torrent that stalled, came back and stalled again.
 
-**Não confundir com `frontend/src/lib/stores/stallTracker.ts`.** Os dois medem a mesma coisa e não
-conversam: o do frontend dispara o chip "sem seeds" aos 10 minutos e morre no reload da página; o
-do daemon derruba o torrent em uma hora. Os limiares são diferentes de propósito — pintar um aviso
-e derrubar um download não merecem a mesma paciência.
+**Do not confuse with `frontend/src/lib/stores/stallTracker.ts`.** Both measure the same thing and
+do not talk: the frontend's fires the "no seeds" chip at 10 minutes and dies on a page reload; the
+daemon's drops the torrent in one hour. The thresholds are different on purpose — painting a
+warning and dropping a download do not deserve the same patience.
 
-**Don't "fix" by:** promover o limiar a config sem pedido (o custo de errar é um passe a mais, não
-um download perdido — os bytes ficam), nem transformar o drop em blacklist. A #24 continua valendo:
-se a re-adição virar churn observado, aí sim se discute estado persistido.
+**Don't "fix" by:** promoting the threshold to config with no request (the cost of being wrong is
+one extra pass, not a lost download — the bytes stay), nor turning the drop into a blacklist. #24
+still holds: if the re-add becomes observed churn, then persisted state is discussed.
 
 ### 95. MyAnimeList is a list source, not a metadata source
 
@@ -2713,7 +2749,7 @@ A MAL account only answers "which anime, in which status, with what progress". E
 mapped to an AniList `Media.Id` through `idMal_in`, and from there the entry is the same synthetic
 `MediaList` a standalone anime gets (`Id == 0`, empty `CustomLists`, Media from `GetMediaByIDs`)
 with the MAL status and progress on top. Identity stays AniList's
-([#43](#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)),
+([#43](#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)),
 so `episodes.json`, `anime_settings`, the routes and the library don't know MAL exists.
 
 **What looks wrong, part one: the list comes from `myanimelist.net/animelist/{user}/load.json`**,
@@ -2736,14 +2772,14 @@ list is fetched whole (`status=7`) and cached raw (MAL id, status, progress); on
 the requested statuses go to `GetMediaByIDs`. `mediaByIDCache` lives 60s and `/api/v1/animes` is
 polled every 30s per tab, so hydrating a ~300-entry list (mostly `COMPLETED`) would cost ~6 AniList
 queries per minute per MAL account — the burn
-[#46](#46-getfrontendanimelist-é-cacheado-por-60s--o-poll-de-apiv1animes-é-o-que-estoura-a-anilist)
+[#46](#46-getfrontendanimelist-is-cached-for-60s--the-apiv1animes-poll-is-what-blows-anilists-quota)
 and [#85](#85-the-frontends-anilist-cost-is-per-account-and-per-orphan-not-per-tab) closed. The deletion
 vote never hydrates at all: it only needs AniList id + status.
 
 **Caches:** `malListCache` (raw list, 60s) and `malIDMapCache` (MAL→AniList id, 24h, `0` = no
 counterpart, cached so an unmappable entry doesn't cost a request per pass). Both go into the disk
 snapshot: the list comes back with TTL zero like the other lists
-([#92](#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)),
+([#92](#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)),
 the mapping with its full TTL like `Series`. MAL down → stale list + `ErrFromCache`.
 
 **Don't confuse:** the `inDeleteStatus` key of a MAL account is `"mal:" + user` (`malAccountKey`),
@@ -2762,7 +2798,7 @@ empty list; or hydrating before filtering.
 `nyaa.ScrapNyaaForAnime`.
 
 With no season requested, the nyaa package accepts a pack of **any** season and lets the range
-coverage decide ([#79](#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)). That broke on Medalist: the entry is season 1, progress 2, and
+coverage decide ([#79](#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)). That broke on Medalist: the entry is season 1, progress 2, and
 `[Sylvar] Medalist Season 2 (BD Remux)` declares the files 1..9 — delta 0 matched, and episodes
 3..9 were assigned to the season 2 pack (it only didn't download because it didn't fit on disk).
 
@@ -2780,7 +2816,7 @@ pack filter strict for every unmarked entry (it zeroes the packs of every sequel
 **Location:** `daemon/episodes.go` (`packsThatFit`, called right before `pickBatches` in
 `processAnimeEpisodes`, and in `debug.go`).
 
-The disk guard ([#93](#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)) already ran per candidate in
+The disk guard ([#93](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_percent--0)) already ran per candidate in
 `attemptDownloadWithRetries`, but by then `pickBatches` had given the pack the whole window. On
 Flower and Asura the only covering pack was a 78.8 GB BD remux; it failed the guard and every
 episode was left with no candidate, while the SubsPlease episodes had 26 seeders. Now the packs the
@@ -2862,7 +2898,7 @@ memory: a restart forgets it, at the price of one full round of searches.
 
 **Don't "fix" by:** applying it to the manual download (the button would do nothing for up to a
 day — `misses` is nil there) or to `RunAnimeDebug` (a diagnostic must show every episode's search —
-the one deliberate gap in [#58](#58-runanimedebug-espelha-processanimeepisodes-enumeração-resolução-de-pack-e-fallback-single)'s mirror); or persisting it to disk.
+the one deliberate gap in [#58](#58-runanimedebug-mirrors-processanimeepisodes-enumeration-pack-resolution-and-single-fallback)'s mirror); or persisting it to disk.
 
 ### 101. The disk guard counts what the queue still has to write, not only free space
 

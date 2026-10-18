@@ -400,8 +400,8 @@ for (const locale of ['en', 'pt-BR'] as const) {
       await page.goto('/#/status')
 
       // Scoped to the header row: "+ Add anime" also exists in the list's empty state and in the
-      // mobile NavTabBar, so the accessible name alone matches three elements. "Forçar verificação"
-      // (Force check) only exists here, and serves as the anchor to reach the row.
+      // mobile NavTabBar, so the accessible name alone matches three elements. "Force check"
+      // ("Forçar verificação") only exists here, and serves as the anchor to reach the row.
       const row = page
         .getByRole('button', { name: /forçar verificação|force check/i })
         .locator('..')

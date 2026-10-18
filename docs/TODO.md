@@ -21,7 +21,7 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 > The **local anime cache** closed on 2026-09-07: AniList is served from an on-disk snapshot when it
 > goes down, with the snapshot coming back with TTL zero so no screen gets staler than it was
-> ([#92](agents/decisions.md#92-o-cache-em-disco-da-anilist-volta-com-ttl-zero-e-o-valor-servido-dele-vem-acompanhado-de-errfromcache)).
+> ([#92](agents/decisions.md#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)).
 > Covers came for free (the URL is a `Media` field, already in the snapshot) and a pass in cache
 > mode deletes, by explicit decision.
 
@@ -115,7 +115,7 @@ at 0%) or a huge pack the size ceiling rejects.
 
 > The three **download hygiene** items closed on 2026-09-07: the
 > disk guard now receives the torrent size
-> ([#93](agents/decisions.md#93-a-guarda-de-disco-tem-dois-gatilhos-e-o-de-tamanho-vale-mesmo-com-min_free_disk_percent--0)),
+> ([#93](agents/decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_percent--0)),
 > a torrent failure now keeps the bytes already downloaded (amendment to
 > [#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist))
 > and a torrent at zero peers for more than an hour is now dropped through the same failure path
@@ -131,7 +131,7 @@ at 0%) or a huge pack the size ceiling rejects.
   `Stopped`/`StopAfterDownload`/`StopAfterMetadata`, and `Files()`/`FileStats()` are read-only;
   `anacrolix/torrent` has per-file priority) and Debrid
 - **Live pass on a multi-part franchise (Attack on Titan)** — the per-series absolute axis, the
-  `packAxis` and ownership by coverage ([#77](agents/decisions.md#77-the-per-series-absolute-axis-is-a-bfs-two-generations-at-a-time-and-the-cut-level-goes-back-to-the-queue)/[#78](agents/decisions.md#78-a-unidade-de-posse-de-um-torrent-é-a-cobertura-no-eixo-absoluto-não-a-chave-anime_id-episódio)/[#79](agents/decisions.md#79-a-escolha-de-pack-pergunta-cobre-a-janela-não-é-da-part-n--e-a-numeração-do-pack-é-palpite-entre-três-hipóteses)/[#84](agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything))
+  `packAxis` and ownership by coverage ([#77](agents/decisions.md#77-the-per-series-absolute-axis-is-a-bfs-two-generations-at-a-time-and-the-cut-level-goes-back-to-the-queue)/[#78](agents/decisions.md#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)/[#79](agents/decisions.md#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)/[#84](agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything))
   were written in August and only have unit tests plus a **listing** measurement. No real
   end-to-end download has run on the S1 → Final Season Part 3 chain, which is exactly where the
   four numbering conventions from the "Granularidade" section of [sources.md](agents/sources.md)

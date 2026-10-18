@@ -11,21 +11,21 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Medicao ao vivo dos dois tetos de pack da Etapa 1 do TODO:
+// Live measurement of the two pack caps from Stage 1 of the TODO:
 //
-//  1. numeracao que REINICIA por season (teto conhecido da decisions.md #84): PackFileRange
-//     devolve min..max dos numeros lidos, entao um pack S01-S04 com uma pasta por season fica
-//     com a faixa da MAIOR season em vez do total.
-//  2. teto de pack por episodio em vez de por tamanho total (sources.md, "Pagina de detalhe",
-//     item 2): so vale se o teto atual estiver reprovando pack que o usuario quer.
+//  1. numbering that RESTARTS per season (known cap of decisions.md #84): PackFileRange
+//     returns min..max of the numbers read, so an S01-S04 pack with one folder per season
+//     gets the range of the LARGEST season instead of the total.
+//  2. pack cap by episode instead of by total size (sources.md, "Detail page",
+//     item 2): only holds if the current cap is rejecting a pack the user wants.
 //
-// So roda com AAD_LIVE_NYAA=1, para o `go test ./...` nao depender de rede.
+// Only runs with AAD_LIVE_NYAA=1, so `go test ./...` doesn't depend on the network.
 
-// folderStats sao os arquivos de video de uma pasta da lista de arquivos.
+// folderStats are the video files of one folder of the file list.
 type folderStats struct {
 	path     string
 	episodes []int
-	seasons  map[int]int // season lida do NOME DO ARQUIVO -> quantos arquivos
+	seasons  map[int]int // season read from the FILE NAME -> how many files
 	bytes    int64
 }
 
@@ -42,9 +42,9 @@ func (f folderStats) span() (int, int) {
 	return lo, hi
 }
 
-// walkFileList percorre a arvore da lista de arquivos atribuindo cada arquivo de video a pasta
-// que o contem. Mesma leitura de PackFileRange (IsVideoFile + ExtractEpisodeNumber), so que
-// agrupada por pasta em vez de achatada num min..max unico.
+// walkFileList walks the file-list tree assigning each video file to the folder that
+// contains it. Same reading as PackFileRange (IsVideoFile + ExtractEpisodeNumber), only
+// grouped by folder instead of flattened into a single min..max.
 func walkFileList(sel *goquery.Selection, path string, out *[]folderStats) {
 	cur := folderStats{path: path, seasons: map[int]int{}}
 	sel.ChildrenFiltered("li").Each(func(_ int, li *goquery.Selection) {
@@ -74,9 +74,9 @@ func walkFileList(sel *goquery.Selection, path string, out *[]folderStats) {
 	}
 }
 
-// isExtrasFolder reconhece pasta cujos arquivos NAO sao episodio mas cujo nome ainda entrega um
-// numero a ExtractEpisodeNumber (NCOP 01, PV 02...). Nao existe no codigo de producao — e
-// justamente a medicao de quanto elas sujam a faixa.
+// isExtrasFolder recognizes a folder whose files are NOT episodes but whose name still
+// yields a number to ExtractEpisodeNumber (NCOP 01, PV 02...). It doesn't exist in
+// production code — that's exactly the measurement of how much they dirty the range.
 func isExtrasFolder(path string) bool {
 	low := strings.ToLower(path)
 	for _, marker := range []string{"extra", "creditless", "/nc", "special", "/pv", "bonus", "menu"} {
@@ -94,14 +94,14 @@ type packRow struct {
 	seeders   int
 }
 
-// listPacks devolve as primeiras linhas de PACK de uma busca, na ordem de seeders — mesmo
-// protocolo da medicao da #84.
+// listPacks returns the first PACK rows of a search, in seeder order — same protocol as
+// the #84 measurement.
 func listPacks(t *testing.T, query string, limit int) []packRow {
 	t.Helper()
 	url := fmt.Sprintf("%s/?f=0&c=1_2&q=%s&s=seeders&o=desc", getNyaaBaseURL(), strings.ReplaceAll(query, " ", "+"))
 	doc, err := fetchNyaaPage(url)
 	if err != nil {
-		t.Fatalf("busca %q: %v", query, err)
+		t.Fatalf("search %q: %v", query, err)
 	}
 	var rows []packRow
 	doc.Find(".torrent-list tbody tr").EachWithBreak(func(_ int, tr *goquery.Selection) bool {
@@ -131,19 +131,19 @@ type verdict struct {
 
 func measurePack(t *testing.T, p packRow) (v verdict) {
 	t.Helper()
-	defer time.Sleep(1500 * time.Millisecond) // educacao com o nyaa.si
+	defer time.Sleep(1500 * time.Millisecond) // be polite to nyaa.si
 
 	doc, err := fetchNyaaPage(p.detailURL)
 	if err != nil {
-		t.Logf("  ! detalhe indisponivel: %v", err)
+		t.Logf("  ! detail unavailable: %v", err)
 		return verdict{unresolved: true}
 	}
 
 	var folders []folderStats
 	walkFileList(doc.Find(".torrent-file-list > ul"), "", &folders)
 
-	// Equivalente a PackFileRange sobre o mesmo documento (mesmos filtros), sem gastar uma
-	// segunda requisicao na mesma pagina.
+	// Equivalent to PackFileRange over the same document (same filters), without spending a
+	// second request on the same page.
 	fileInfo, ok := BatchInfo{}, false
 	total := 0
 	seen := map[int]int{}
@@ -171,40 +171,40 @@ func measurePack(t *testing.T, p packRow) (v verdict) {
 	nameInfo := ExtractBatchInfo(p.name)
 	t.Logf("%s", p.name)
 	t.Logf("  %s | S:%d | %s", p.detailURL, p.seeders, formatSize(p.size))
-	t.Logf("  faixa do NOME:     %d..%d", nameInfo.StartEpisode, nameInfo.EndEpisode)
+	t.Logf("  range from NAME:   %d..%d", nameInfo.StartEpisode, nameInfo.EndEpisode)
 	if ok {
 		t.Logf("  PackFileRange:     %d..%d  (span %d)", fileInfo.StartEpisode, fileInfo.EndEpisode,
 			fileInfo.EndEpisode-fileInfo.StartEpisode+1)
 	} else {
-		t.Logf("  PackFileRange:     NAO RESOLVEU")
+		t.Logf("  PackFileRange:     UNRESOLVED")
 	}
 	sort.Slice(folders, func(i, j int) bool { return folders[i].path < folders[j].path })
 	for _, f := range folders {
 		lo, hi := f.span()
-		t.Logf("    pasta %-55q %3d arqs  eps %d..%d  seasons-no-nome %v  %s",
+		t.Logf("    folder %-55q %3d files  eps %d..%d  seasons-in-name %v  %s",
 			f.path, len(f.episodes), lo, hi, f.seasons, formatSize(f.bytes))
 	}
-	t.Logf("  arquivos de video com numero: %d | numeros repetidos entre pastas: %d", total, dupes)
+	t.Logf("  video files with a number: %d | numbers repeated across folders: %d", total, dupes)
 
 	v.restarts, v.unresolved = dupes > 0, !ok
 	for _, f := range folders {
 		if isExtrasFolder(f.path) {
 			v.extras = true
-			t.Logf("  >>> PASTA DE EXTRAS CONTADA COMO EPISODIO: %q (%d arqs)", f.path, len(f.episodes))
+			t.Logf("  >>> EXTRAS FOLDER COUNTED AS EPISODE: %q (%d files)", f.path, len(f.episodes))
 		}
 	}
 	if total > 0 && p.size > 0 {
 		v.bytesPerEp = p.size / int64(total)
-		t.Logf("  TAMANHO POR EPISODIO: %s  (pack inteiro %s)", formatSize(v.bytesPerEp), formatSize(p.size))
+		t.Logf("  SIZE PER EPISODE: %s  (whole pack %s)", formatSize(v.bytesPerEp), formatSize(p.size))
 	}
 	if dupes > 0 {
-		t.Logf("  >>> NUMERACAO REINICIA: PackFileRange cobre %d numeros, o pack tem %d arquivos",
+		t.Logf("  >>> NUMBERING RESTARTS: PackFileRange covers %d numbers, the pack has %d files",
 			fileInfo.EndEpisode-fileInfo.StartEpisode+1, total)
 	}
 	return v
 }
 
-// tally acumula o resumo de uma amostra.
+// tally accumulates the summary of a sample.
 type tally struct {
 	packs, restarts, unresolved, extras int
 	perEp                               []int64
@@ -229,10 +229,10 @@ func (s *tally) add(v verdict) {
 func (s *tally) report(t *testing.T) {
 	t.Helper()
 	sort.Slice(s.perEp, func(i, j int) bool { return s.perEp[i] < s.perEp[j] })
-	t.Logf("RESUMO: %d packs | %d com numeracao que reinicia | %d sem faixa legivel | %d com pasta de extras contada",
+	t.Logf("SUMMARY: %d packs | %d with numbering that restarts | %d with no readable range | %d with extras folder counted",
 		s.packs, s.restarts, s.unresolved, s.extras)
 	if n := len(s.perEp); n > 0 {
-		t.Logf("RESUMO tamanho/episodio: min %s | mediana %s | max %s",
+		t.Logf("SUMMARY size/episode: min %s | median %s | max %s",
 			formatSize(s.perEp[0]), formatSize(s.perEp[n/2]), formatSize(s.perEp[n-1]))
 	}
 }
@@ -250,11 +250,11 @@ func runSample(t *testing.T, queries []string, perQuery int) {
 	sum.report(t)
 }
 
-// TestLive_PackNumberingRestart mede quao comum e o pack cuja numeracao reinicia por season, na
-// amostra NEUTRA: `?q=<anime>+batch&s=seeders`, mesmas 8 primeiras linhas de pack da #84.
+// TestLive_PackNumberingRestart measures how common a pack whose numbering restarts per
+// season is, in the NEUTRAL sample: `?q=<anime>+batch&s=seeders`, same first 8 pack rows as #84.
 func TestLive_PackNumberingRestart(t *testing.T) {
 	if os.Getenv("AAD_LIVE_NYAA") != "1" {
-		t.Skip("defina AAD_LIVE_NYAA=1 para rodar")
+		t.Skip("set AAD_LIVE_NYAA=1 to run")
 	}
 	queries := strings.Split(os.Getenv("AAD_LIVE_QUERIES"), "|")
 	if len(queries) == 1 && queries[0] == "" {
@@ -270,11 +270,11 @@ func TestLive_PackNumberingRestart(t *testing.T) {
 	runSample(t, queries, 8)
 }
 
-// TestLive_MultiSeasonPacks mede o caso ALVO: buscas que miram pack de varias seasons, onde o
-// teto da #84 deveria doer.
+// TestLive_MultiSeasonPacks measures the TARGET case: searches that aim at multi-season
+// packs, where the #84 cap should hurt.
 func TestLive_MultiSeasonPacks(t *testing.T) {
 	if os.Getenv("AAD_LIVE_NYAA") != "1" {
-		t.Skip("defina AAD_LIVE_NYAA=1 para rodar")
+		t.Skip("set AAD_LIVE_NYAA=1 to run")
 	}
 	runSample(t, []string{
 		"shingeki no kyojin season 1 - 3",

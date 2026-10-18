@@ -968,7 +968,7 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	englishTitle := "Sem Torrent"
+	englishTitle := "No Torrent"
 	anime := anilist.MediaList{
 		Id:       900,
 		Progress: 0,
@@ -1058,7 +1058,7 @@ func TestFirstEpisodeToConsider(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := firstEpisodeToConsider(anime(tc.progress), tc.saved); got != tc.want {
-				t.Errorf("quero %d, veio %d", tc.want, got)
+				t.Errorf("want %d, got %d", tc.want, got)
 			}
 		})
 	}
@@ -1079,7 +1079,7 @@ func TestCheckEpisode_SkipCode(t *testing.T) {
 		},
 	}
 
-	t.Run("limite por anime atingido", func(t *testing.T) {
+	t.Run("per-anime limit reached", func(t *testing.T) {
 		configs := &files.Config{MaxEpisodesPerAnime: 2}
 		downloaded := 2
 		ep := anilist.AiringNode{ID: 1, Episode: 5, TimeUntilAiring: -100}

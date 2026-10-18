@@ -56,8 +56,8 @@ test.describe('anime list', () => {
     await page.goto('/')
   })
 
-  // "4 ep behind", não 5: o segmento vem de `episodes_pending` (4 na fixture), não da
-  // subtração `episodes_released - episodes_downloaded` (8-3=5) — decisions.md #88.
+  // "4 ep behind", not 5: the segment comes from `episodes_pending` (4 in the fixture), not
+  // from the subtraction `episodes_released - episodes_downloaded` (8-3=5) — decisions.md #88.
   test('renders a derived state chip per anime', async ({ page }) => {
     await expect(page.getByText('Up to date').first()).toBeVisible()
     await expect(page.getByText('4 ep behind').first()).toBeVisible()
@@ -98,12 +98,12 @@ test.describe('anime list', () => {
 })
 
 /**
- * Primeiros passos. `setupStatusPageMocks` já entrega os três itens VERDES (pasta `/completed`,
- * `anilist_usernames: ['testuser']` e um `last_check` de 2026), então o card não aparece em
- * nenhum dos testes acima — e é isso que o segundo teste daqui trava.
+ * First steps. `setupStatusPageMocks` already delivers the three GREEN items (folder
+ * `/completed`, `anilist_usernames: ['testuser']` and a 2026 `last_check`), so the card
+ * does not appear in any of the tests above — and that is what the second test here locks.
  *
- * As rotas são re-registradas: o Playwright casa a rota registrada por ÚLTIMO, então estas
- * sobrescrevem as do `beforeEach` do topo do arquivo.
+ * Routes are re-registered: Playwright matches the LAST registered route, so these override
+ * the ones from the file-top `beforeEach`.
  */
 test.describe('onboarding card', () => {
   async function setupFreshInstall(page: Page) {
@@ -115,7 +115,7 @@ test.describe('onboarding card', () => {
         },
       }),
     )
-    // `0001-01-01T00:00:00Z` é o zero-value de time.Time do Go: daemon que nunca rodou.
+    // `0001-01-01T00:00:00Z` is Go's time.Time zero-value: a daemon that never ran.
     await page.route('**/api/v1/status', route =>
       route.fulfill({
         json: {
@@ -131,7 +131,7 @@ test.describe('onboarding card', () => {
     )
   }
 
-  test('instalação nova mostra o card com os três passos', async ({ page }) => {
+  test('a fresh install shows the card with the three steps', async ({ page }) => {
     await setupFreshInstall(page)
     await page.goto('/')
 
@@ -140,10 +140,10 @@ test.describe('onboarding card', () => {
     await expect(card.getByRole('listitem')).toHaveCount(3)
   })
 
-  // A queixa que motivou o marcar-à-mão: numa instalação nova os passos 1 e 3 nasciam verdes
-  // (a pasta tem default e o passe roda sozinho), e o tutorial parecia meio pronto antes de o
-  // usuário ler qualquer coisa.
-  test('os três passos nascem desmarcados e marcar os três esconde o card', async ({ page }) => {
+  // The complaint that motivated marking-by-hand: on a fresh install steps 1 and 3 started
+  // green (the folder has a default and the pass runs on its own), and the tutorial looked
+  // half-done before the user had read anything.
+  test('the three steps start unchecked and checking all three hides the card', async ({ page }) => {
     await setupFreshInstall(page)
     await page.goto('/')
 
@@ -151,8 +151,8 @@ test.describe('onboarding card', () => {
     await expect(boxes).toHaveCount(3)
     for (let i = 0; i < 3; i++) await expect(boxes.nth(i)).not.toBeChecked()
 
-    // `click()` e não `check()`: marcar o terceiro faz o card sumir, e o `check()` fica
-    // esperando confirmar o estado de um elemento que já saiu do DOM.
+    // `click()` and not `check()`: checking the third makes the card vanish, and `check()`
+    // sits waiting to confirm the state of an element that already left the DOM.
     for (let i = 0; i < 3; i++) await boxes.nth(i).click()
     await expect(page.getByTestId('onboarding-card')).toHaveCount(0)
 
@@ -161,7 +161,7 @@ test.describe('onboarding card', () => {
     await expect(page.getByTestId('onboarding-card')).toHaveCount(0)
   })
 
-  test('some quando pasta, fonte e primeira verificação estão prontos', async ({ page }) => {
+  test('vanishes when folder, source and first check are ready', async ({ page }) => {
     await setupStatusPageMocks(page, 'running', makeAnimesResponse())
     await page.goto('/')
 
@@ -169,7 +169,7 @@ test.describe('onboarding card', () => {
     await expect(page.getByTestId('onboarding-card')).toHaveCount(0)
   })
 
-  test('"Don\'t show again" esconde o card, e a dispensa sobrevive ao reload', async ({ page }) => {
+  test('"Don\'t show again" hides the card, and the dismissal survives a reload', async ({ page }) => {
     await setupFreshInstall(page)
     await page.goto('/')
 
@@ -181,9 +181,9 @@ test.describe('onboarding card', () => {
     await expect(page.getByTestId('onboarding-card')).toHaveCount(0)
   })
 
-  // O caminho de volta. A rota de config já está mockada pelo `setupFreshInstall`, então a
-  // tela de Configurações carrega igual.
-  test('Configurações traz o card de volta com "Show again"', async ({ page }) => {
+  // The way back. The config route is already mocked by `setupFreshInstall`, so the
+  // Settings screen loads the same.
+  test('Settings brings the card back with "Show again"', async ({ page }) => {
     await setupFreshInstall(page)
     await page.goto('/')
 
@@ -200,7 +200,7 @@ test.describe('onboarding card', () => {
     await expect(page.getByTestId('onboarding-card')).toBeVisible()
   })
 
-  test('"Show again" nasce desabilitado quando não há o que restaurar', async ({ page }) => {
+  test('"Show again" starts disabled when there is nothing to restore', async ({ page }) => {
     await setupFreshInstall(page)
     await page.goto('/#/config')
 

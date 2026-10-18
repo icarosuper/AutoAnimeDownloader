@@ -53,8 +53,8 @@
     pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json',                     method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}',                                                      events: [...ALL_EVENTS] },
     slack:    { name: 'Slack',    url: 'https://hooks.slack.com/services/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"text":"*{{title}}*\\n{{message}}"}',                                                                                                                   events: [...ALL_EVENTS] },
     apprise:  { name: 'Apprise',  url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG',                    method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","body":"{{message}}"}',                                                                                                             events: [...ALL_EVENTS] },
-    // Nao sao notificacoes: disparam um scan da biblioteca. So em download_completed e episode_deleted —
-    // nao ha o que escanear quando o episodio foi apenas detectado ou o download falhou.
+    // Not notifications: they trigger a library scan. Only on download_completed and episode_deleted —
+    // there is nothing to scan when the episode was only detected or the download failed.
     jellyfin: { name: 'Jellyfin', url: 'http://YOUR_JELLYFIN_URL/Library/Refresh',                     method: 'POST', headers: { 'X-Emby-Token': 'CHANGE_API_KEY' },                  body: '',                                                                                                                                                      events: ['download_completed', 'episode_deleted'] },
     plex:     { name: 'Plex',     url: 'http://YOUR_PLEX_URL/library/sections/CHANGE_ID/refresh?X-Plex-Token=CHANGE_TOKEN', method: 'GET', headers: {},                                 body: '',                                                                                                                                                      events: ['download_completed', 'episode_deleted'] },
   };
@@ -72,17 +72,17 @@
   let editingIndex: number | null = null;
   let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
 
-  // Os headers viram lista de pares ENQUANTO o formulario esta aberto, e so voltam a ser
-  // Record<string,string> no Confirmar. O objeto nao serve para editar: renomear uma chave em
-  // Record e apagar e recriar a entrada, e a linha pula de lugar a cada tecla. Ver
-  // decisions.md #87.
+  // Headers become a list of pairs WHILE the form is open, and only become
+  // Record<string,string> again on Confirm. The object is no good for editing: renaming a
+  // key in a Record is deleting and recreating the entry, and the row jumps place on every
+  // keystroke. See decisions.md #87.
   let headerRows: { key: string; value: string }[] = [{ key: '', value: '' }];
 
   const toRows = (headers: Record<string, string>) =>
     Object.entries(headers).map(([key, value]) => ({ key, value }));
 
-  // Linha sem nome e descartada: o + adiciona uma linha vazia, e sair sem preencher nao pode
-  // gravar um header "".
+  // A nameless row is discarded: + adds an empty row, and leaving without filling it must
+  // not save a "" header.
   const fromRows = (rows: { key: string; value: string }[]) =>
     Object.fromEntries(rows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value]));
 
@@ -266,7 +266,7 @@
                     id="webhook-name"
                     type="text"
                     bind:value={newWebhook.name}
-                    placeholder="ex: ntfy"
+                    placeholder="e.g. ntfy"
                     class="block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
                   />
                 </div>
@@ -290,7 +290,7 @@
                   id="webhook-url"
                   type="text"
                   bind:value={newWebhook.url}
-                  placeholder="https://ntfy.sh/meu-topico"
+                  placeholder="https://ntfy.sh/my-topic"
                   class="block w-full rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
                 />
               </div>

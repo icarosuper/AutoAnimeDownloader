@@ -524,8 +524,8 @@ func isFirstSeasonEntry(anime anilist.MediaList) bool {
 // packAxis are the rulers the pack may be numbered on, expressed as how much to add to the entry's
 // LOCAL number to reach the number the group used in the name.
 //
-// It exists because there isn't one convention, there are four (sources.md, "Granularidade e
-// numeracao dos packs"): the same season pack shows up as "00 ~ 12" (restarts per season), "1..12"
+// It exists because there isn't one convention, there are four (sources.md, "Pack granularity and
+// numbering"): the same season pack shows up as "00 ~ 12" (restarts per season), "1..12"
 // (restarts per part), "1..25" (continues through the whole season) or "76..87" (absolute for the
 // series). No group announces which one it adopted, so mapping is always a guess — three hypotheses
 // and a tie-break.

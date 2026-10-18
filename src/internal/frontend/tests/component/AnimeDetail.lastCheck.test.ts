@@ -38,8 +38,8 @@ function animeInfo(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
   }
 }
 
-describe('AnimeDetail — motivo da última verificação', () => {
-  it('não mostra nada quando o anime não tem problema no relatório', async () => {
+describe('AnimeDetail — last-check reason', () => {
+  it('shows nothing when the anime has no problem in the report', async () => {
     const detail: AnimeDetailResponse = {
       anime_id: 42, total_episodes: 3, progress: 0, status: 'CURRENT',
       episodes: [{ episode_number: 1, airing_at: 0, time_until_airing: 0, is_aired: true, is_watched: false, is_downloaded: false }],
@@ -49,8 +49,8 @@ describe('AnimeDetail — motivo da última verificação', () => {
     vi.mocked(client.getTorrents).mockResolvedValue([])
     vi.mocked(client.getLastCheck).mockResolvedValue({
       finished_at: '2026-08-19T12:00:00Z', pass_error: '', limits: [],
-      // Problema de OUTRO anime: não pode vazar para esta tela.
-      problems: [{ anime_id: 999, anime_name: 'Outro', episodes: [1], code: 'no_torrent_found' }],
+      // Problem of ANOTHER anime: must not leak onto this screen.
+      problems: [{ anime_id: 999, anime_name: 'Other', episodes: [1], code: 'no_torrent_found' }],
     })
 
     render(AnimeDetail, { props: { params: { id: '42' } } })
@@ -59,7 +59,7 @@ describe('AnimeDetail — motivo da última verificação', () => {
     expect(screen.queryByTestId('anime-last-check')).toBeNull()
   })
 
-  it('mostra o aviso e marca só o episódio afetado', async () => {
+  it('shows the notice and marks only the affected episode', async () => {
     const detail: AnimeDetailResponse = {
       anime_id: 42, total_episodes: 3, progress: 0, status: 'CURRENT',
       episodes: [
@@ -82,18 +82,19 @@ describe('AnimeDetail — motivo da última verificação', () => {
     expect(notice.textContent).toContain('8')
     expect(notice.textContent).toContain('3')
 
-    // A marca vive na linha do episódio 2 e NÃO na do 1. Desktop e mobile renderizam a mesma
-    // definição, então cada linha aparece duas vezes no DOM.
+    // The mark lives on episode 2's row and NOT on episode 1's. Desktop and mobile render the
+    // same definition, so each row appears twice in the DOM.
     const marks = await screen.findAllByText(/not downloaded in the last check|não baixou na última verificação/i)
     expect(marks.length).toBeGreaterThan(0)
-    // Dois episódios × (desktop + mobile) = 4 linhas, e só as do episódio 2 são marcadas.
+    // Two episodes × (desktop + mobile) = 4 rows, and only episode 2's are marked.
     const rows = Array.from(container.querySelectorAll('[data-episode-row]'))
     expect(rows.length).toBe(4)
     const marked = rows.filter((r) => /not downloaded in the last check|não baixou na última verificação/i.test(r.textContent ?? ''))
     expect(marked.length).toBe(2)
-    // A marca está na linha do episódio 2, nunca na do 1: o número vem do TÍTULO da linha,
-    // não de um "2" solto em qualquer lugar do texto dela. (Era o <span> da coluna "#", que
-    // saiu da tela — ela repetia em outra tipografia o número que o título já diz.)
+    // The mark is on episode 2's row, never on episode 1's: the number comes from the row
+    // TITLE, not from a loose "2" anywhere in its text. (It used to be the "#" column's
+    // <span>, which left the screen — it repeated in another typeface the number the title
+    // already says.)
     for (const row of marked) {
       expect(row.querySelector('p.text-heading')?.textContent?.trim()).toMatch(/^(Episode|Episódio) 2$/)
     }

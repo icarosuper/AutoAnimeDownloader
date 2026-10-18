@@ -512,7 +512,7 @@ func createValidConfigJSON(t *testing.T) []byte {
 		EpisodeRetryLimit:     5,
 		DeleteWatchedEpisodes: false,
 		ExcludedLists:         []string{},
-		AnimeIDsAreMediaIDs:   true, // estes testes nao exercitam a migracao de ids
+		AnimeIDsAreMediaIDs:   true, // these tests do not exercise the id migration
 	}
 	data, _ := json.MarshalIndent(config, "", "  ")
 	return data

@@ -106,10 +106,10 @@ func (s *Session) Get(hash string) (TorrentInfo, bool) {
 	return toInfo(t), true
 }
 
-// Files prefere FileStats() (que traz o progresso por arquivo) e cai para Files() quando o
-// torrent está parado — a rain libera t.pieces no Stop(), o que faz FileStats() falhar, mas
-// t.info sobrevive e Files() segue respondendo. Sem metadata nenhum dos dois responde, e aí a
-// lista vazia é a resposta certa: um magnet recém-adicionado ainda não sabe o que traz.
+// Files prefers FileStats() (which brings per-file progress) and falls back to Files() when
+// the torrent is stopped — rain frees t.pieces on Stop(), which makes FileStats() fail, but
+// t.info survives and Files() still answers. Without metadata neither responds, and then the
+// empty list is the right answer: a freshly added magnet does not yet know what it carries.
 func (s *Session) Files(hash string) ([]FileInfo, error) {
 	t := s.ses.GetTorrent(hash)
 	if t == nil {
@@ -247,7 +247,7 @@ func completedFromStats(st torrent.Stats) bool {
 }
 
 func toInfo(t *torrent.Torrent) TorrentInfo {
-	// Um Stats() só: é round-trip bloqueante para dentro da goroutine do torrent, não getter.
+	// One Stats() only: it is a blocking round-trip into the torrent's goroutine, not a getter.
 	st := t.Stats()
 
 	var eta *int64

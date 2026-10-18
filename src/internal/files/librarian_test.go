@@ -68,9 +68,9 @@ func TestJellyfinName(t *testing.T) {
 	}
 }
 
-// O marcador de season TEM de sobreviver: cada season e uma entrada propria na AniList, com
-// id e capa proprios. Apagar o marcador jogava Season 1/2/3 na mesma pasta e o Jellyfin
-// casava tudo com a season 1 (decisions.md #45).
+// The season marker MUST survive: each season is its own AniList entry, with its own
+// id and cover. Stripping the marker dumped Season 1/2/3 into the same folder and Jellyfin
+// matched everything to season 1 (decisions.md #45).
 func TestSanitizeNameKeepsSeasonMarker(t *testing.T) {
 	cases := map[string]string{
 		"Anime/Name:Test":                                       "AnimeNameTest",
@@ -88,7 +88,7 @@ func TestSanitizeNameKeepsSeasonMarker(t *testing.T) {
 			t.Errorf("sanitizeName(%q) = %q, want %q", in, got, want)
 		}
 		if other, dup := seen[got]; dup {
-			t.Errorf("%q e %q caem na mesma pasta %q", other, in, got)
+			t.Errorf("%q and %q land in the same folder %q", other, in, got)
 		}
 		seen[got] = in
 	}
@@ -117,28 +117,28 @@ func TestOrganizeWritesShowNFO(t *testing.T) {
 		t.Fatalf("tvshow.nfo missing: %v", err)
 	}
 	if !strings.Contains(string(data), `<uniqueid type="AniList" default="true">194829</uniqueid>`) {
-		t.Errorf("nfo sem uniqueid da anilist:\n%s", data)
+		t.Errorf("nfo without anilist uniqueid:\n%s", data)
 	}
 
-	// Nao sobrescreve um nfo existente (match ajustado a mao pelo usuario).
+	// Does not overwrite an existing nfo (match adjusted by hand by the user).
 	if err := os.WriteFile(nfo, []byte("manual"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := lib.Organize(req); err != nil {
-		t.Fatalf("Organize (2a vez): %v", err)
+		t.Fatalf("Organize (2nd time): %v", err)
 	}
 	if data, _ := os.ReadFile(nfo); string(data) != "manual" {
-		t.Errorf("nfo existente foi sobrescrito: %s", data)
+		t.Errorf("existing nfo was overwritten: %s", data)
 	}
 
-	// Sem AnimeID nao escreve nada.
-	req.AnimeName = "Outro Anime"
+	// Without AnimeID it writes nothing.
+	req.AnimeName = "Another Anime"
 	req.AnimeID = 0
 	if _, err := lib.Organize(req); err != nil {
-		t.Fatalf("Organize (sem id): %v", err)
+		t.Fatalf("Organize (no id): %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(completed, "Outro Anime", "tvshow.nfo")); err == nil {
-		t.Error("escreveu tvshow.nfo sem AnimeID")
+	if _, err := os.Stat(filepath.Join(completed, "Another Anime", "tvshow.nfo")); err == nil {
+		t.Error("wrote tvshow.nfo without AnimeID")
 	}
 }
 
@@ -151,24 +151,24 @@ func TestBackfillShowNFOs(t *testing.T) {
 	lib := NewLibrarian(NewOSFileSystem())
 	lib.BackfillShowNFOs([]EpisodeStruct{
 		{AnimeID: 194829, AnimeName: "My Anime", LibraryPaths: []string{filepath.Join(existing, "My Anime - E01.mkv")}},
-		// Segundo episodio do mesmo anime: nao pode duplicar trabalho nem falhar.
+		// Second episode of the same anime: must not duplicate work or fail.
 		{AnimeID: 194829, AnimeName: "My Anime", LibraryPaths: []string{filepath.Join(existing, "My Anime - E02.mkv")}},
-		// Pasta que sumiu do disco.
+		// Folder that vanished from disk.
 		{AnimeID: 111, AnimeName: "Deleted Anime", LibraryPaths: []string{filepath.Join(gone, "ep.mkv")}},
-		// Sem id e sem paths: ignorados.
+		// No id and no paths: ignored.
 		{AnimeID: 0, AnimeName: "No ID", LibraryPaths: []string{filepath.Join(existing, "x.mkv")}},
 		{AnimeID: 222, AnimeName: "Not Organized"},
 	})
 
 	data, err := os.ReadFile(filepath.Join(existing, "tvshow.nfo"))
 	if err != nil {
-		t.Fatalf("tvshow.nfo nao foi criado no backfill: %v", err)
+		t.Fatalf("tvshow.nfo was not created by the backfill: %v", err)
 	}
 	if !strings.Contains(string(data), ">194829<") {
-		t.Errorf("nfo com id errado:\n%s", data)
+		t.Errorf("nfo with the wrong id:\n%s", data)
 	}
 	if _, err := os.Stat(gone); err == nil {
-		t.Error("backfill criou a pasta de um anime que ja nao esta em disco")
+		t.Error("backfill created the folder of an anime that is no longer on disk")
 	}
 }
 
@@ -243,9 +243,9 @@ func TestOrganizeBatchRawNames(t *testing.T) {
 	}
 }
 
-// Com a flag ligada, os arquivos do pack ganham o MESMO nome dos baixados avulsos, na mesma
-// pasta do anime. O que nao tem numero legivel (NCOP) e o segundo arquivo que cai no mesmo
-// numero ficam com o nome cru — renomear os dois colidiria e um sobrescreveria o outro.
+// With the flag on, pack files get the SAME name as the singles, in the same
+// anime folder. Anything without a readable number (NCOP) and the second file that lands on
+// the same number keep the raw name — renaming both would collide and one would overwrite the other.
 func TestOrganizeBatchJellyfinNames(t *testing.T) {
 	tmp := t.TempDir()
 	dataDir := filepath.Join(tmp, "save", "batchid")
@@ -272,8 +272,8 @@ func TestOrganizeBatchJellyfinNames(t *testing.T) {
 	for _, name := range []string{
 		"Anime - E01.mkv",
 		"Anime - E02.mkv",
-		"[Sub] Anime - 02v2 [1080p].mkv", // colisao com E02: nome cru
-		"NCOP.mkv",                       // sem numero: nome cru
+		"[Sub] Anime - 02v2 [1080p].mkv", // collision with E02: raw name
+		"NCOP.mkv",                       // no number: raw name
 	} {
 		if _, err := os.Stat(filepath.Join(completed, "Anime", name)); err != nil {
 			t.Errorf("expected link %s: %v", name, err)
@@ -281,8 +281,8 @@ func TestOrganizeBatchJellyfinNames(t *testing.T) {
 	}
 }
 
-// Grupo que separa o nome com "_": o numero do episodio sai do arquivo igual ao de um nome com
-// espacos, senao o pack inteiro ia para a biblioteca com nome cru.
+// Group that separates the name with "_": the episode number comes out of the file the same
+// as from a name with spaces, otherwise the whole pack would go into the library with the raw name.
 func TestOrganizeBatchUnderscoreNames(t *testing.T) {
 	tmp := t.TempDir()
 	dataDir := filepath.Join(tmp, "save", "batchid")
@@ -308,7 +308,7 @@ func TestOrganizeBatchUnderscoreNames(t *testing.T) {
 	for _, name := range []string{
 		"Anime - E01.mkv",
 		"Anime - E02.mkv",
-		"[DB]Anime_-_NCED01_(10bit_BD1080p_x265).mkv", // sem numero de episodio: nome cru
+		"[DB]Anime_-_NCED01_(10bit_BD1080p_x265).mkv", // no episode number: raw name
 	} {
 		if _, err := os.Stat(filepath.Join(completed, "Anime", name)); err != nil {
 			t.Errorf("expected link %s: %v", name, err)
@@ -316,8 +316,8 @@ func TestOrganizeBatchUnderscoreNames(t *testing.T) {
 	}
 }
 
-// Pack e avulso do mesmo anime dividem UMA pasta (destDir sai de AnimeName, nunca do nome do
-// torrent) e, com a flag, o mesmo padrao de nome — entao os episodios se misturam em ordem.
+// Pack and single of the same anime share ONE folder (destDir comes from AnimeName, never from
+// the torrent name) and, with the flag, the same name pattern — so the episodes mix in order.
 func TestOrganizeBatchAndSingleShareOneFolder(t *testing.T) {
 	tmp := t.TempDir()
 	completed := filepath.Join(tmp, "completed")
@@ -583,7 +583,7 @@ func TestRemoveFromLibrary(t *testing.T) {
 }
 
 func TestProbePath(t *testing.T) {
-	t.Run("cria biblioteca, diretorio de download e .ignore", func(t *testing.T) {
+	t.Run("creates library, download directory and .ignore", func(t *testing.T) {
 		completed := filepath.Join(t.TempDir(), "library")
 		lib := NewLibrarian(NewOSFileSystem())
 
@@ -593,14 +593,14 @@ func TestProbePath(t *testing.T) {
 
 		downloadDir := filepath.Join(completed, ".torrents")
 		if _, err := os.Stat(downloadDir); err != nil {
-			t.Errorf("diretorio de download nao foi criado: %v", err)
+			t.Errorf("download directory was not created: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(downloadDir, ".ignore")); err != nil {
-			t.Errorf(".ignore nao foi criado: %v", err)
+			t.Errorf(".ignore was not created: %v", err)
 		}
 	})
 
-	t.Run("nao deixa arquivos de sonda para tras", func(t *testing.T) {
+	t.Run("does not leave probe files behind", func(t *testing.T) {
 		completed := filepath.Join(t.TempDir(), "library")
 		lib := NewLibrarian(NewOSFileSystem())
 
@@ -613,34 +613,34 @@ func TestProbePath(t *testing.T) {
 			filepath.Join(completed, ".torrents", ".aad_link_probe"),
 		} {
 			if _, err := os.Stat(p); err == nil {
-				t.Errorf("sobrou arquivo de sonda em %s", p)
+				t.Errorf("probe file left behind at %s", p)
 			}
 		}
 	})
 
-	t.Run("rejeita biblioteca vazia", func(t *testing.T) {
+	t.Run("rejects empty library", func(t *testing.T) {
 		lib := NewLibrarian(NewOSFileSystem())
 		if err := lib.ProbePath(""); err == nil {
-			t.Error("quero erro para caminho vazio, veio nil")
+			t.Error("want error for empty path, got nil")
 		}
 	})
 
-	t.Run("e idempotente", func(t *testing.T) {
+	t.Run("is idempotent", func(t *testing.T) {
 		completed := filepath.Join(t.TempDir(), "library")
 		lib := NewLibrarian(NewOSFileSystem())
 
 		if err := lib.ProbePath(completed); err != nil {
-			t.Fatalf("primeira chamada: %v", err)
+			t.Fatalf("first call: %v", err)
 		}
 		if err := lib.ProbePath(completed); err != nil {
-			t.Fatalf("segunda chamada: %v", err)
+			t.Fatalf("second call: %v", err)
 		}
 	})
 }
 
-// Pack multi-season: collectVideoFiles achata as subpastas, entao dois arquivos com o MESMO
-// basename apontariam para o mesmo destino e o segundo removeria o link do primeiro — um
-// episodio sumia da biblioteca. O caminho relativo desempata.
+// Multi-season pack: collectVideoFiles flattens the subfolders, so two files with the SAME
+// basename would point at the same destination and the second would remove the first's link —
+// an episode would vanish from the library. The relative path disambiguates.
 func TestOrganizeBatchSameBasenameInSubfoldersKeepsBothLinks(t *testing.T) {
 	tmp := t.TempDir()
 	dataDir := filepath.Join(tmp, "save", "batchid")
@@ -679,8 +679,8 @@ func TestOrganizeBatchSameBasenameInSubfoldersKeepsBothLinks(t *testing.T) {
 	}
 }
 
-// Pack de season >= 2 com numeracao continua (arquivos 13-24 para uma entrada de 12 episodios):
-// o numero do arquivo e absoluto, o da ENTRADA da AniList comeca em 1.
+// Season >= 2 pack with continuous numbering (files 13-24 for a 12-episode entry):
+// the file number is absolute, the AniList ENTRY number starts at 1.
 func TestOrganizeBatchContinuousNumberingMapsToEntryNumbers(t *testing.T) {
 	tmp := t.TempDir()
 	dataDir := filepath.Join(tmp, "save", "batchid")
@@ -706,8 +706,8 @@ func TestOrganizeBatchContinuousNumberingMapsToEntryNumbers(t *testing.T) {
 	}
 }
 
-// A traducao so vale com evidencia inequivoca. Um extra numerado acima do total (13 num pack
-// 01-12) mantem o minimo em 1: nada e deslocado.
+// The translation only holds with unequivocal evidence. An extra numbered above the total (13
+// in a 01-12 pack) keeps the minimum at 1: nothing is shifted.
 func TestOrganizeBatchExtraAboveTotalDoesNotShift(t *testing.T) {
 	tmp := t.TempDir()
 	dataDir := filepath.Join(tmp, "save", "batchid")
@@ -734,8 +734,8 @@ func TestOrganizeBatchExtraAboveTotalDoesNotShift(t *testing.T) {
 	}
 }
 
-// Pack incompleto (menos arquivos que o total da entrada) nao da para afirmar que comeca no
-// episodio 1 da season: fica como esta.
+// Incomplete pack (fewer files than the entry total) cannot be claimed to start at
+// episode 1 of the season: it stays as-is.
 func TestOrganizeBatchIncompletePackDoesNotShift(t *testing.T) {
 	tmp := t.TempDir()
 	dataDir := filepath.Join(tmp, "save", "batchid")
@@ -768,12 +768,12 @@ func TestPackEpisodeOffset(t *testing.T) {
 		total   int
 		want    int
 	}{
-		{"pack completo de season 2 com numeracao continua", []int{13, 14, 15}, 3, 12},
-		{"pack completo numerado a partir de 1", []int{1, 2, 3}, 3, 0},
-		{"extra acima do total nao desloca", []int{1, 2, 13}, 2, 0},
-		{"pack incompleto nao desloca", []int{23, 24}, 12, 0},
-		{"total desconhecido nao desloca", []int{13, 14}, 0, 0},
-		{"sem arquivos numerados", nil, 12, 0},
+		{"complete season 2 pack with continuous numbering", []int{13, 14, 15}, 3, 12},
+		{"complete pack numbered from 1", []int{1, 2, 3}, 3, 0},
+		{"extra above the total does not shift", []int{1, 2, 13}, 2, 0},
+		{"incomplete pack does not shift", []int{23, 24}, 12, 0},
+		{"unknown total does not shift", []int{13, 14}, 0, 0},
+		{"no numbered files", nil, 12, 0},
 	}
 	for _, c := range cases {
 		if got := packEpisodeOffset(c.numbers, c.total); got != c.want {

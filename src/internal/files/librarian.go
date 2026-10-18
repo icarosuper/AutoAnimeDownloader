@@ -18,8 +18,8 @@ import (
 type Librarian interface {
 	// Organize creates hardlinks for the completed video files of a torrent in the
 	// library. With RenameJellyfin it uses the Jellyfin name ("Anime - E05.mkv") — from
-	// the record for a single episode, from each file's own name for a batch (traduzido
-	// para a numeracao da entrada quando o pack numera continuamente, ver
+	// the record for a single episode, from each file's own name for a batch (translated
+	// to the entry's numbering when the pack numbers continuously, see
 	// packEpisodeOffset); a file whose number can't be read (and everything without the
 	// flag) keeps the raw name.
 	// It returns the absolute paths of the library links it created (or that already
@@ -30,12 +30,12 @@ type Librarian interface {
 	Organize(req OrganizeRequest) ([]string, error)
 	// RemoveFromLibrary deletes a single library hardlink. A missing file is not an error.
 	RemoveFromLibrary(path string) error
-	// ProbePath valida, no save da config e a cada passe de verificacao, que a biblioteca
-	// suporta hardlinks. O cheque de volume cruzado deixou de ser necessario (o diretorio
-	// de download e derivado da biblioteca, entao estao sempre no mesmo filesystem), mas
-	// existem filesystems sem hardlink nenhum: exFAT, FAT32, alguns mounts SMB/NFS. Usa a
-	// mesma funcao de link que Organize usa, entao nunca discorda dele. Tambem cria o
-	// diretorio de download e o marcador .ignore.
+	// ProbePath validates, on config save and on every verification pass, that the library
+	// supports hardlinks. The cross-volume check is no longer needed (the download
+	// directory is derived from the library, so they are always on the same filesystem), but
+	// filesystems with no hardlinks at all exist: exFAT, FAT32, some SMB/NFS mounts. Uses the
+	// same link function Organize uses, so it never disagrees with it. Also creates the
+	// download directory and the .ignore marker.
 	ProbePath(completedPath string) error
 }
 
@@ -44,8 +44,8 @@ type OrganizeRequest struct {
 	// TorrentDataDir is the on-disk root of the torrent's content (<DataDir>/<id>).
 	TorrentDataDir string
 	AnimeName      string
-	// AnimeID e o id de MIDIA da AniList; vira o <uniqueid> do tvshow.nfo para o Jellyfin
-	// casar pelo id em vez de adivinhar pelo titulo da pasta. Zero = pula o nfo.
+	// AnimeID is the AniList MEDIA id; it becomes the <uniqueid> of tvshow.nfo so Jellyfin
+	// matches by id instead of guessing from the folder title. Zero = skip the nfo.
 	AnimeID       int
 	CompletedPath string
 	// EpisodeNumber is used for the Jellyfin name; required when RenameJellyfin is set
@@ -56,8 +56,8 @@ type OrganizeRequest struct {
 	IsBatch bool
 	// RenameJellyfin enables the "Anime - E05.ext" naming.
 	RenameJellyfin bool
-	// TotalEpisodes e o total de episodios da ENTRADA da AniList. Usado so para detectar pack
-	// com numeracao continua (ver packEpisodeOffset); zero = desconhecido, nada e deslocado.
+	// TotalEpisodes is the episode total of the AniList ENTRY. Used only to detect a pack
+	// with continuous numbering (see packEpisodeOffset); zero = unknown, nothing is shifted.
 	TotalEpisodes int
 }
 
@@ -72,14 +72,14 @@ func NewLibrarian(fs FileSystem) *organizer {
 	return &organizer{fs: fs, link: fs.Link}
 }
 
-// A lista de extensoes mora no pacote nyaa: PackFileRange le a MESMA lista de arquivos do pack
-// antes de baixar, e duas listas de extensao divergiriam.
+// The extension list lives in the nyaa package: PackFileRange reads the SAME list of pack
+// files before downloading, and two extension lists would diverge.
 func isVideoFile(name string) bool {
 	return nyaa.IsVideoFile(name)
 }
 
-// sanitizeName strips filesystem-invalid characters. O marcador de season e MANTIDO: uma
-// pasta por entrada da AniList (decisions.md #45).
+// sanitizeName strips filesystem-invalid characters. The season marker is KEPT: one
+// folder per AniList entry (decisions.md #45).
 func sanitizeName(name string) string {
 	sanitized := stripInvalidChars(name)
 	sanitized = strings.TrimSpace(sanitized)
@@ -96,17 +96,17 @@ func stripInvalidChars(name string) string {
 	return sanitized
 }
 
-// packEpisodeOffset devolve quanto subtrair do numero lido no nome do arquivo para chegar ao
-// numero da ENTRADA da AniList. Pack de season >= 2 com numeracao continua (arquivos 13-24 para
-// uma entrada de 12 episodios) e o caso; qualquer outro devolve 0.
+// packEpisodeOffset returns how much to subtract from the number read in the file name to
+// reach the AniList ENTRY number. A season >= 2 pack with continuous numbering (files 13-24
+// for a 12-episode entry) is the case; anything else returns 0.
 //
-// ponytail: heuristica sobre os proprios arquivos, sem consultar a AniList no organize. So
-// dispara com evidencia inequivoca — TODO arquivo numerado acima do total da entrada E pelo
-// menos um arquivo por episodio, ou seja, pack completo que comeca no episodio 1 da season. Um
-// extra numerado 13 num pack 01-12 mantem o minimo em 1 e nao desloca nada. Pack PARCIAL com
-// numeracao continua fica como esta; se virar requisito, o caminho e persistir o offset (a
-// contagem de episodios do PREQUEL, ja calculada em daemon.ComputeEpisodeOffset) no
-// EpisodeStruct em vez de adivinhar aqui.
+// ponytail: heuristic over the files themselves, without consulting AniList during organize.
+// Only fires with unequivocal evidence — EVERY numbered file above the entry total AND at
+// least one file per episode, i.e. a complete pack that starts at episode 1 of the season. An
+// extra numbered 13 in a 01-12 pack keeps the minimum at 1 and shifts nothing. A PARTIAL pack
+// with continuous numbering stays as-is; if that becomes a requirement, the path is to persist
+// the offset (the PREQUEL episode count, already computed in daemon.ComputeEpisodeOffset) on
+// EpisodeStruct instead of guessing here.
 func packEpisodeOffset(numbers []int, totalEpisodes int) int {
 	if totalEpisodes <= 0 || len(numbers) < totalEpisodes {
 		return 0
@@ -182,20 +182,20 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		case singleJellyfin:
 			destName = jellyfinName(req.AnimeName, *req.EpisodeNumber, filepath.Ext(rel))
 		case req.IsBatch && req.RenameJellyfin:
-			// Pack: o numero sai do proprio nome do arquivo, para os episodios do pack se
-			// misturarem na pasta com os avulsos em vez de manter o nome cru do fansub.
-			// Sem numero legivel (NCOP/NCED, extra, filme) ou com colisao entre dois
-			// arquivos do mesmo pack, fica o nome cru.
+			// Pack: the number comes from the file's own name, so pack episodes mix in the
+			// folder with the singles instead of keeping the fansub's raw name.
+			// Without a readable number (NCOP/NCED, extra, movie) or on a collision between
+			// two files of the same pack, the raw name stays.
 			if n := nyaa.ExtractEpisodeNumber(destName); n != nil {
 				if jf := jellyfinName(req.AnimeName, *n-packOffset, filepath.Ext(rel)); !used[jf] {
 					destName = jf
 				}
 			}
 		}
-		// Dois arquivos do MESMO torrent com o mesmo basename (pack multi-season com uma
-		// subpasta por season, achatada por collectVideoFiles) apontariam para o mesmo dest, e o
-		// segundo cairia no ramo de "bytes diferentes" removendo o link do primeiro — um episodio
-		// sumia da biblioteca. O caminho relativo e unico dentro do torrent.
+		// Two files of the SAME torrent with the same basename (multi-season pack with one
+		// subfolder per season, flattened by collectVideoFiles) would point at the same dest, and
+		// the second would fall into the "different bytes" branch removing the first's link — an
+		// episode would vanish from the library. The relative path is unique inside the torrent.
 		if used[destName] {
 			destName = strings.ReplaceAll(rel, string(filepath.Separator), " - ")
 		}
@@ -234,7 +234,7 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		created = append(created, dest)
 	}
 
-	// Depois dos links: se falhar antes, cleanupIfEmpty nao conseguiria remover a pasta.
+	// After the links: if it failed earlier, cleanupIfEmpty would not be able to remove the folder.
 	o.writeShowNFO(destDir, req.AnimeName, req.AnimeID)
 
 	return created, nil
@@ -252,9 +252,9 @@ type nfoTVShow struct {
 	UniqueID nfoUniqueID `xml:"uniqueid"`
 }
 
-// writeShowNFO escreve o tvshow.nfo com o id da AniList para o Jellyfin (plugin AniList)
-// casar pelo id. Nao sobrescreve um nfo existente — o usuario pode ter ajustado o match a
-// mao. Falha aqui nao invalida os hardlinks, entao so loga. Retorna true se escreveu.
+// writeShowNFO writes tvshow.nfo with the AniList id so Jellyfin (AniList plugin)
+// matches by id. Does not overwrite an existing nfo — the user may have adjusted the match
+// by hand. Failure here does not invalidate the hardlinks, so it only logs. Returns true if it wrote.
 func (o *organizer) writeShowNFO(destDir, animeName string, animeID int) bool {
 	if animeID <= 0 {
 		return false
@@ -266,9 +266,9 @@ func (o *organizer) writeShowNFO(destDir, animeName string, animeID int) bool {
 
 	data, err := xml.MarshalIndent(nfoTVShow{
 		Title: animeName,
-		// "AniList" com essa capitalizacao e o valor de ProviderNames.AniList no
-		// jellyfin-plugin-anilist. O ProviderIds do Jellyfin e OrdinalIgnoreCase, entao
-		// minusculo tambem casaria — escrevemos igual ao provider para nao depender disso.
+		// "AniList" with this capitalization is the value of ProviderNames.AniList in
+		// jellyfin-plugin-anilist. Jellyfin's ProviderIds is OrdinalIgnoreCase, so
+		// lowercase would also match — we write it equal to the provider so we don't depend on that.
 		UniqueID: nfoUniqueID{Type: "AniList", Default: true, Value: strconv.Itoa(animeID)},
 	}, "", "  ")
 	if err != nil {
@@ -284,14 +284,15 @@ func (o *organizer) writeShowNFO(destDir, animeName string, animeID int) bool {
 	return true
 }
 
-// BackfillShowNFOs escreve o tvshow.nfo das pastas que ja estavam na biblioteca antes de o
-// nfo existir: Organize so roda para episodio novo (sai cedo quando LibraryPaths ja esta
-// preenchido), entao sem isso um anime que ja terminou nunca ganharia o arquivo. A pasta sai
-// de LibraryPaths, nao do nome do anime, para casar com o que foi realmente criado em disco
-// (sanitizacao, renomeacao manual). Uma pasta por anime; pasta que sumiu do disco e pulada.
+// BackfillShowNFOs writes tvshow.nfo for folders that were already in the library before the
+// nfo existed: Organize only runs for a new episode (it returns early when LibraryPaths is
+// already filled), so without this an anime that already finished would never get the file.
+// The folder comes from LibraryPaths, not from the anime name, so it matches what was actually
+// created on disk (sanitization, manual rename). One folder per anime; a folder gone from
+// disk is skipped.
 //
-// SO PODE RODAR COM OS AnimeID JA MIGRADOS para id de midia (decisions.md #43): como o nfo
-// nunca e sobrescrito, gravar um id de entrada aqui seria permanente.
+// MUST ONLY RUN WITH AnimeIDs ALREADY MIGRATED to media ids (decisions.md #43): because the
+// nfo is never overwritten, writing an entry id here would be permanent.
 func (o *organizer) BackfillShowNFOs(episodes []EpisodeStruct) {
 	seen := make(map[string]bool)
 	written := 0
@@ -305,7 +306,7 @@ func (o *organizer) BackfillShowNFOs(episodes []EpisodeStruct) {
 		}
 		seen[dir] = true
 		if _, err := o.fs.Stat(dir); err != nil {
-			continue // pasta removida da biblioteca por fora
+			continue // folder removed from the library by something else
 		}
 		if o.writeShowNFO(dir, ep.AnimeName, ep.AnimeID) {
 			written++
@@ -343,9 +344,9 @@ func (o *organizer) ProbePath(completedPath string) error {
 		return fmt.Errorf("cannot create download folder %s: %w", downloadPath, err)
 	}
 
-	// O prefixo com ponto esconde a pasta do scanner do Jellyfin no Linux; o .ignore cobre
-	// as plataformas onde o ponto nao marca oculto. As duas defesas juntas, porque a
-	// pasta de download agora vive dentro da pasta que o Jellyfin varre.
+	// The leading dot hides the folder from Jellyfin's scanner on Linux; .ignore covers
+	// platforms where a leading dot does not mark hidden. Both defenses together, because the
+	// download folder now lives inside the folder Jellyfin scans.
 	ignorePath := filepath.Join(downloadPath, ".ignore")
 	if _, err := o.fs.Stat(ignorePath); err != nil {
 		if err := o.fs.WriteFile(ignorePath, nil, 0644); err != nil {
@@ -356,7 +357,7 @@ func (o *organizer) ProbePath(completedPath string) error {
 	probeSrc := filepath.Join(downloadPath, ".aad_link_probe")
 	probeDst := filepath.Join(completedPath, ".aad_link_probe")
 
-	// Limpa sobras de uma sonda anterior.
+	// Clean leftovers from a previous probe.
 	_ = o.fs.Remove(probeSrc)
 	_ = o.fs.Remove(probeDst)
 

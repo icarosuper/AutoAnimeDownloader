@@ -9,33 +9,34 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// migrateAnimeIDsThrottle espaca as consultas da migracao. A AniList degrada para ~30
-// requisicoes por minuto sob carga e o cliente nao tem retry: uma migracao que dispara 50
-// consultas em rajada volta com 429, aborta, e retenta a rajada no passe seguinte.
+// migrateAnimeIDsThrottle spaces out the migration queries. AniList degrades to ~30
+// requests per minute under load and the client has no retry: a migration that fires 50
+// queries in a burst comes back with 429, aborts, and retries the burst on the next pass.
 var migrateAnimeIDsThrottle = 250 * time.Millisecond
 
-// MigrateAnimeIDsToMedia converte o AnimeID persistido de id de ENTRADA (MediaList, que e por
-// conta) para id de MIDIA — ver decisions.md #43. Enquanto nao rodar, os registros em disco
-// estao chaveados de um jeito que o resto do codigo ja nao entende, entao o chamador deve
-// ABORTAR o passe quando ela falhar: seguir em frente faria todo anime parecer nao-baixado e
-// o daemon rebaixaria a biblioteca inteira.
+// MigrateAnimeIDsToMedia converts the persisted AnimeID from ENTRY id (MediaList, which is per
+// account) to MEDIA id — see decisions.md #43. Until it runs, the records on disk are keyed in a
+// way the rest of the code no longer understands, so the caller must ABORT the pass when it
+// fails: going ahead would make every anime look not-downloaded and the daemon would re-download
+// the whole library.
 //
-// E idempotente pelo campo AnimeIDsAreMediaIDs do config, e so escreve depois de resolver
-// TODAS as entradas: uma falha de rede no meio nao deixa metade dos registros convertidos.
+// It is idempotent via the AnimeIDsAreMediaIDs config field, and only writes after resolving
+// EVERY entry: a mid-run network failure does not leave half the records converted.
 //
-// Entradas que ja nao existem na AniList (o usuario removeu o anime da lista) nao tem como ser
-// resolvidas; esses registros ficam com o id antigo e sao apenas logados. Os episodios
-// continuam em disco e listados — so nao voltam a casar com a AniList se o anime for readicionado.
+// Entries that no longer exist on AniList (the user removed the anime from the list) cannot be
+// resolved; those records keep the old id and are only logged. The episodes stay on disk and
+// listed — they just won't match AniList again if the anime is re-added.
 //
-// QUANDO DA PARA APAGAR ISTO: a migracao entrou na v2.1.1 (07/ago/2026). Ela so e necessaria para
-// quem atualiza de uma instalacao em v2.1.0 ou ANTERIOR — quem passou por qualquer versao de v2.1.1
-// em diante ja tem AnimeIDsAreMediaIDs ligado no config e cai no return nil da terceira linha.
-// Apagar antes de essa fronteira ser historia antiga nao degrada nada de leve: sem a conversao,
-// NADA em disco casa com a AniList, todo anime parece nao-baixado e o primeiro passe rebaixa a
-// biblioteca inteira, em silencio — para o daemon isso e indistinguivel de uma biblioteca vazia
-// legitima. O projeto e distribuido (AUR + releases), entao a pergunta nao e "o meu ja migrou".
+// WHEN THIS CAN BE DELETED: the migration landed in v2.1.1 (2026-08-07). It is only needed for
+// whoever upgrades from a v2.1.0 or EARLIER install — anyone who went through any version from
+// v2.1.1 onward already has AnimeIDsAreMediaIDs set in the config and hits the return nil on the
+// third line. Deleting it before that boundary is ancient history is not a light degradation:
+// without the conversion, NOTHING on disk matches AniList, every anime looks not-downloaded and
+// the first pass re-downloads the whole library, silently — to the daemon that is indistinguishable
+// from a legitimate empty library. The project is distributed (AUR + releases), so the question
+// is not "has mine already migrated".
 //
-// Custo de manter enquanto isso: um LoadConfigs e um if, por boot e por passe. Desprezivel.
+// Cost of keeping it until then: a LoadConfigs and an if, per boot and per pass. Negligible.
 func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 	configs, err := fm.LoadConfigs()
 	if err != nil {
@@ -71,7 +72,7 @@ func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 	for entryID := range oldIDs {
 		mediaID, err := anilist.GetMediaIDForEntry(entryID)
 		if err != nil {
-			// Nada foi escrito ainda: o passe seguinte recomeca a migracao inteira.
+			// Nothing has been written yet: the next pass restarts the whole migration.
 			return fmt.Errorf("anime id migration: failed to resolve entry %d: %w", entryID, err)
 		}
 		if mediaID == 0 {
@@ -93,8 +94,8 @@ func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 		return fmt.Errorf("anime id migration: failed to rewrite episodes: %w", err)
 	}
 
-	// As chaves antigas ficam no arquivo de settings: nao ha remocao na interface e uma entrada
-	// orfa de settings nao atrapalha nada. Copiar e o que importa.
+	// The old keys stay in the settings file: there is no removal in the interface and an orphan
+	// settings entry does not get in the way. Copying is what matters.
 	for entryID, s := range settings {
 		mediaID, ok := mediaByEntry[entryID]
 		if !ok || mediaID == entryID {

@@ -1,17 +1,17 @@
 import { test, expect } from '@playwright/test'
 
 /**
- * Fase 7 (spec §9.5). A tela de Logs não tinha smoke; ganhou um aqui porque o entregável da
- * fase é justamente "filtro, busca e follow preservados" — e os três mudaram de forma:
- * o filtro de nível virou pills com contagem (era um <select> sem contagem) e a origem passou
- * a ser uma coluna derivada do `caller` do zerolog.
+ * Phase 7 (spec §9.5). The Logs screen had no smoke; it got one here because the phase's
+ * deliverable is precisely "filter, search and follow preserved" — and all three changed
+ * shape: the level filter became pills with counts (it was a <select> with no count) and
+ * the source became a column derived from zerolog's `caller`.
  */
 
 const LINES = [
-  '{"level":"info","time":"2026-07-29T11:04:02Z","caller":"loop.go:90","message":"verificacao iniciada"}',
-  '{"level":"warn","time":"2026-07-29T11:04:03Z","caller":"nyaa.go:41","message":"nenhum torrent para Alpha","query":"Alpha 12"}',
-  '{"level":"error","time":"2026-07-29T11:04:05Z","caller":"anilist.go:210","message":"falha ao consultar a AniList"}',
-  '{"level":"debug","time":"2026-07-29T11:04:06Z","caller":"session.go:77","message":"torrent adicionado"}',
+  '{"level":"info","time":"2026-07-29T11:04:02Z","caller":"loop.go:90","message":"check started"}',
+  '{"level":"warn","time":"2026-07-29T11:04:03Z","caller":"nyaa.go:41","message":"no torrent for Alpha","query":"Alpha 12"}',
+  '{"level":"error","time":"2026-07-29T11:04:05Z","caller":"anilist.go:210","message":"failed to query AniList"}',
+  '{"level":"debug","time":"2026-07-29T11:04:06Z","caller":"session.go:77","message":"torrent added"}',
 ]
 
 test.beforeEach(async ({ page }) => {
@@ -22,9 +22,8 @@ test.beforeEach(async ({ page }) => {
 })
 
 /**
- * Uma linha por entrada de log. Ancora no papel `listitem`, não numa classe CSS: o grid de 4
- * colunas só existe a partir de `md`, então qualquer seletor de classe passaria a depender do
- * viewport do teste.
+ * One row per log entry. Anchors on the `listitem` role, not a CSS class: the 4-column grid
+ * only exists from `md`, so any class selector would start depending on the test viewport.
  */
 function rows(page: import('@playwright/test').Page) {
   return page.getByRole('listitem')
@@ -34,7 +33,7 @@ test('logs page renders one row per line with the derived source column', async 
   await page.goto('/#/logs')
 
   await expect(rows(page)).toHaveCount(4)
-  // caller loop.go -> pacote daemon -> "scheduler"; nyaa.go -> "rss"; anilist.go -> "anilist".
+  // caller loop.go -> daemon package -> "scheduler"; nyaa.go -> "rss"; anilist.go -> "anilist".
   await expect(page.getByText('scheduler', { exact: true })).toBeVisible()
   await expect(page.getByText('rss', { exact: true })).toBeVisible()
   await expect(page.getByText('anilist', { exact: true })).toBeVisible()
@@ -50,8 +49,8 @@ test('level pills carry counts and filter the body', async ({ page }) => {
   await filters.getByRole('button', { name: /^error 1$/i }).click()
 
   await expect(rows(page)).toHaveCount(1)
-  await expect(page.getByText('falha ao consultar a AniList')).toBeVisible()
-  await expect(page.getByText('verificacao iniciada')).toHaveCount(0)
+  await expect(page.getByText('failed to query AniList')).toBeVisible()
+  await expect(page.getByText('check started')).toHaveCount(0)
 })
 
 test('search filters the body and highlights the match', async ({ page }) => {
@@ -59,7 +58,7 @@ test('search filters the body and highlights the match', async ({ page }) => {
 
   await page.getByPlaceholder(/search/i).fill('torrent')
 
-  // "nenhum torrent para Alpha" e "torrent adicionado".
+  // "no torrent for Alpha" and "torrent added".
   await expect(rows(page)).toHaveCount(2)
   await expect(page.locator('mark').first()).toHaveText('torrent')
 })

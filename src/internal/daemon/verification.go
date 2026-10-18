@@ -58,7 +58,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			}
 		}()
 
-		state.SetLastCheckError(fmt.Errorf("%w: falta a pasta da biblioteca", errCauseSetup))
+		state.SetLastCheckError(fmt.Errorf("%w: library folder is missing", errCauseSetup))
 		return
 	}
 

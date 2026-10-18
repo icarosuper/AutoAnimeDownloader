@@ -8,8 +8,8 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// minSearchTermLength: abaixo disso a busca devolve lista vazia sem tocar a AniList. Uma ou
-// duas letras casam com meio catalogo e o limite da AniList e de 30 req/min.
+// minSearchTermLength: shorter terms return an empty list without hitting AniList. One or
+// two letters match half the catalog, and AniList's limit is 30 req/min.
 const minSearchTermLength = 3
 
 type AniListSearchResult struct {
@@ -18,13 +18,13 @@ type AniListSearchResult struct {
 	Format string `json:"format" example:"TV"`
 	Status string `json:"status" example:"RELEASING"`
 	Year   int    `json:"year" example:"1999"`
-	// Episodes e 0 quando a AniList nao sabe o total (o comum em anime ainda no ar).
+	// Episodes is 0 when AniList does not know the total (typical for an airing anime).
 	Episodes int    `json:"episodes" example:"24"`
 	Cover    string `json:"cover,omitempty"`
-	// BlockReason e "" quando o anime pode ser adicionado como avulso, senao um dos motivos de
-	// standalone_guard.go. E UM CAMPO, nao quatro booleanos: os motivos sao mutuamente
-	// exclusivos por precedencia e o card precisa de um rotulo so. Vem do mesmo blockReason que
-	// o POST usa para decidir o 409 — e o que faz front e back concordarem por construcao.
+	// BlockReason is "" when the anime can be added as standalone, otherwise one of the
+	// reasons from standalone_guard.go. ONE field, not four booleans: the reasons are mutually
+	// exclusive by precedence and the card needs a single label. Comes from the same
+	// blockReason the POST uses for the 409 — front and back agree by construction.
 	BlockReason string `json:"block_reason"`
 }
 
@@ -37,8 +37,8 @@ func handleAniListSearch(server *Server) http.HandlerFunc {
 
 		term := strings.TrimSpace(r.URL.Query().Get("q"))
 		if len(term) < minSearchTermLength {
-			// Lista vazia, nao 400: termo curto e estado normal de quem esta montando a busca, nao
-			// erro de cliente — o frontend ja desabilita o botao antes de chegar aqui.
+			// Empty list, not 400: a short term is the normal state of someone still typing,
+			// not a client error — the frontend already disables the button before we get here.
 			JSONSuccess(w, http.StatusOK, []AniListSearchResult{})
 			return
 		}
@@ -96,7 +96,7 @@ func handleAniListSearch(server *Server) http.HandlerFunc {
 	}
 }
 
-// resolveTitle prefere o titulo em ingles e cai no romaji, a mesma regra de computeAnimeFields.
+// resolveTitle prefers the English title and falls back to romaji, the same rule as computeAnimeFields.
 func resolveTitle(title anilist.Title) string {
 	if title.English != nil && *title.English != "" {
 		return *title.English

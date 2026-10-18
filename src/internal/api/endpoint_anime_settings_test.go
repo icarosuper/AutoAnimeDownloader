@@ -26,26 +26,26 @@ func putSettings(t *testing.T, server *Server, id int, body string) *httptest.Re
 	return rec
 }
 
-// Progress e ponteiro justamente para que um corpo SEM o campo nao seja lido como zero: um PUT
-// vazio tem de preservar o progresso salvo, nao apaga-lo.
+// Progress is a pointer so a body WITHOUT the field is not read as zero: an empty PUT
+// must keep the saved progress, not wipe it.
 func TestPutAnimeSettings_AbsentFieldKeepsTheSavedProgress(t *testing.T) {
 	server, fm := newSettingsTestServer(t)
 	fm.animeSettings = map[int]files.AnimeSettings{7: {Progress: 48}}
 
 	rec := putSettings(t, server, 7, `{}`)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("esperava 200, obteve %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if got := fm.animeSettings[7]; got.Progress != 48 {
-		t.Errorf("esperava progresso preservado, obteve %+v", got)
+		t.Errorf("want progress preserved, got %+v", got)
 	}
 
 	rec = putSettings(t, server, 7, `{"progress":52}`)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("esperava 200, obteve %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if got := fm.animeSettings[7]; got.Progress != 52 {
-		t.Errorf("esperava progresso novo, obteve %+v", got)
+		t.Errorf("want new progress, got %+v", got)
 	}
 }
 
@@ -53,6 +53,6 @@ func TestPutAnimeSettings_RejectsNegativeProgress(t *testing.T) {
 	server, _ := newSettingsTestServer(t)
 
 	if rec := putSettings(t, server, 7, `{"progress":-1}`); rec.Code != http.StatusBadRequest {
-		t.Errorf("esperava 400 para progresso negativo, obteve %d", rec.Code)
+		t.Errorf("want 400 for negative progress, got %d", rec.Code)
 	}
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
-  // NavTabBar — tab bar inferior (spec §5): Status, Adicionar anime, Downloads, Config, Mais. Só
-  // é montada no mobile (<768px); ver o comentário em AppShell.svelte sobre por que a escolha
-  // rail-vs-tab-bar é feita em JS e não com classes `md:hidden`/`hidden md:flex`.
+  // NavTabBar — bottom tab bar (spec §5): Status, Add anime, Downloads, Config, More. Only
+  // mounted on mobile (<768px); see the comment in AppShell.svelte for why the rail-vs-tab-bar
+  // choice is made in JS and not with `md:hidden`/`hidden md:flex` classes.
   import {
     isMoreMenuActive,
     isNavItemActive,
@@ -18,9 +18,9 @@
 
   let moreOpen = false
 
-  // Grupo de cima do rail (Status, Adicionar anime, Downloads) + o de baixo (Config) = as 4
-  // primeiras colunas; "Mais" é a 5a. Mesma fonte (lib/navItems.ts) que o NavRail usa — a tab
-  // bar acompanha a lista, nunca uma cópia dela.
+  // Top group of the rail (Status, Add anime, Downloads) + the bottom one (Config) = the 4
+  // first columns; "More" is the 5th. Same source (lib/navItems.ts) NavRail uses — the tab
+  // bar follows the list, never a copy of it.
   $: tabItems = $locale && [...primaryNavItems, ...secondaryNavItems].map((item) => ({
     ...item,
     label: item.label(),
@@ -28,11 +28,11 @@
 
   $: moreLabel = $locale && moreTriggerLabel()
 
-  // `min-w-0` + o `truncate` no rótulo (ver markup) impedem uma coluna de invadir a vizinha, e
-  // é isso que deixa o número de colunas ser uma consequência de `navItems.ts` em vez de um
-  // número fixo aqui: as colunas são `flex-1`, então entrar um item as aperta em vez de quebrar
-  // a linha. Com 5 colunas sobram ~72px por coluna a 375px e ~61px a 320px — rótulos como
-  // "Configurações" (~82px nesta escala) viram reticências, que é o degrade correto.
+  // `min-w-0` + the `truncate` on the label (see markup) keep a column from invading its
+  // neighbor, and that's what lets the column count be a consequence of `navItems.ts` instead
+  // of a fixed number here: columns are `flex-1`, so adding an item squeezes them instead of
+  // wrapping the row. With 5 columns ~72px remain per column at 375px and ~61px at 320px —
+  // labels like "Settings" (~82px at this scale) become ellipses, which is the correct degrade.
   function tabItemClass(active: boolean): string {
     return `flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-[5px] rounded-field px-0.5 text-[11.5px] ${
       active ? 'bg-accent-tint/16 font-bold text-nav-active' : 'font-semibold text-subtle'

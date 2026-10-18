@@ -23,14 +23,14 @@ function createStallTracker() {
   return {
     subscribe,
     /**
-     * Reconciles a torrent poll tick, mexendo SÓ nos hashes que vieram nesta lista: a 0 peers
-     * o hash mantém o carimbo antigo (ou ganha `now` se é novo), com peers ele é apagado.
-     * Hash ausente da lista fica como está — `AnimeDetail` sincroniza só os torrents de um
-     * anime, e podar por ausência zerava o relógio de stall de todos os outros (o chip do
-     * Status voltava ao zero a cada visita a um detalhe).
+     * Reconciles a torrent poll tick, touching ONLY the hashes that came in this list: at
+     * 0 peers the hash keeps its old stamp (or gets `now` if it's new); with peers it is
+     * deleted. A hash absent from the list stays as-is — `AnimeDetail` syncs only one
+     * anime's torrents, and pruning by absence zeroed every other stall clock (the Status
+     * chip reset to zero on every visit to a detail).
      *
-     * O custo é uma entrada órfã quando um torrent some de vez; ela só volta a pesar se o
-     * mesmo hash for readicionado ainda sem peers, e some no reload.
+     * The cost is an orphaned entry when a torrent disappears for good; it only matters
+     * again if the same hash is re-added still with no peers, and it goes away on reload.
      */
     sync(torrents: { hash: string; peers_total: number }[], now: number) {
       update((prev) => {

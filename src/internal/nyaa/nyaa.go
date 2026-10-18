@@ -235,7 +235,7 @@ func batchRange(torrentName string) (int, int, bool) {
 // name, so the caller converts it with the same packAxis.
 //
 // It exists because the name doesn't answer: measured on 24 packs of three anime, 19 carry no range
-// at all (sources.md, "Pagina de detalhe"). Without this call, an unknown range counts as "covers
+// at all (sources.md, "Detail page"). Without this call, an unknown range counts as "covers
 // everything" and the daemon records as downloaded episodes the pack doesn't have. The case that
 // forced it: "[EMBER] … (Season 2 | Part 2) … (Batch)" declares no range and carries files 13..24 —
 // ZERO intersection with the 1..12 the daemon recorded.
@@ -790,8 +790,8 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			}
 			// Part on the pack path: only a declared CONFLICT is rejected. A pack without a part marker
 			// isn't the wrong pack — it's the normal release format, because the pack is the whole season
-			// and it's AniList that splits the season into cours (sources.md, "Granularidade e numeracao dos
-			// packs"). Requiring the marker zeroed the packs of every "Part N" entry.
+			// and it's AniList that splits the season into cours (sources.md, "Pack granularity and
+			// numbering"). Requiring the marker zeroed the packs of every "Part N" entry.
 			//
 			// From there on, the range's coverage decides, in the daemon (packAxis). A pack that ALSO has no
 			// range in its name has no number to check: its range comes from the file list on the detail

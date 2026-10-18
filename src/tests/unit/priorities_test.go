@@ -44,8 +44,8 @@ func TestIgnoreList_FiltersConfiguredSubstrings(t *testing.T) {
 	}
 }
 
-// Com a ordem default, health vem antes de fansub — mas só decide quando os dois
-// estão em faixas diferentes de saúde.
+// With the default order, health comes before fansub — but it only decides when the two
+// are in different health tiers.
 func TestHealthTiers_BeatFansubAcrossTiers(t *testing.T) {
 	r1080 := "1080p"
 	results := []nyaa.TorrentResult{
@@ -55,13 +55,13 @@ func TestHealthTiers_BeatFansubAcrossTiers(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 	if !strings.Contains(sorted[0].Name, "Ember") {
-		t.Fatalf("faixa de saúde maior deve vencer o fansub, obteve %s", sorted[0].Name)
+		t.Fatalf("higher health tier must beat fansub, got %s", sorted[0].Name)
 	}
 }
 
 func TestHealthTiers_SameTierLetsFansubDecide(t *testing.T) {
 	r1080 := "1080p"
-	// 150 e 300 estão os dois na faixa 100-399: health empata e o fansub decide.
+	// 150 and 300 are both in the 100-399 tier: health ties and fansub decides.
 	results := []nyaa.TorrentResult{
 		{Name: "[Ember] Anime - 01 1080p", Resolution: &r1080, Seeders: "300"},
 		{Name: "[SubsPlease] Anime - 01 1080p", Resolution: &r1080, Seeders: "150"},
@@ -69,7 +69,7 @@ func TestHealthTiers_SameTierLetsFansubDecide(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 	if !strings.Contains(sorted[0].Name, "SubsPlease") {
-		t.Fatalf("dentro da mesma faixa o fansub deve decidir, obteve %s", sorted[0].Name)
+		t.Fatalf("within the same tier fansub must decide, got %s", sorted[0].Name)
 	}
 }
 
@@ -87,13 +87,13 @@ func TestDefaultCriteriaOrder_HealthBeforeFansub(t *testing.T) {
 		}
 	}
 	if !(resolution < health && health < fansub) {
-		t.Fatalf("esperava resolution < health < fansub, obteve %v", order)
+		t.Fatalf("expected resolution < health < fansub, got %v", order)
 	}
 }
 
 func TestCriteriaOrder_FansubBeforeResolution(t *testing.T) {
-	// Com ordem default, 1080p (Ember) vence 720p (SubsPlease).
-	// Com fansub antes de resolution, SubsPlease 720p vence.
+	// With the default order, 1080p (Ember) beats 720p (SubsPlease).
+	// With fansub before resolution, SubsPlease 720p wins.
 	defer nyaa.SetPriorities(nyaa.Priorities{
 		CriteriaOrder: []string{"fansub", "resolution", "health", "size"},
 		Fansubs:       []string{"subsplease", "ember"},
@@ -111,8 +111,8 @@ func TestCriteriaOrder_FansubBeforeResolution(t *testing.T) {
 	}
 }
 
-// Codec entra no sort de episódio (episodeCriteria) e vem antes de fansub na ordem
-// default, então a lista de codecs decide entre dois releases 1080p da mesma faixa de saúde.
+// Codec enters the episode sort (episodeCriteria) and comes before fansub in the default
+// order, so the codec list decides between two 1080p releases of the same health tier.
 func TestCodec_DecidesEpisodeSortBeforeFansub(t *testing.T) {
 	defer nyaa.SetPriorities(nyaa.Priorities{
 		CriteriaOrder: nyaa.DefaultPriorities().CriteriaOrder,
@@ -129,13 +129,13 @@ func TestCodec_DecidesEpisodeSortBeforeFansub(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 	if !strings.Contains(sorted[0].Name, "Ember") {
-		t.Fatalf("x264 no topo da lista de codecs deve vencer o x265, obteve %s", sorted[0].Name)
+		t.Fatalf("x264 at the top of the codec list must beat x265, got %s", sorted[0].Name)
 	}
 }
 
-// Nome sem tag de codec (padrão do SubsPlease) não pode perder por isso: priorityIndex
-// trata token desconhecido como o pior, e codec roda ANTES de fansub. Sem a guarda de
-// codecCompare o SubsPlease perderia para qualquer x265 tagueado.
+// A name without a codec tag (SubsPlease's pattern) must not lose because of that:
+// priorityIndex treats an unknown token as the worst, and codec runs BEFORE fansub. Without
+// the codecCompare guard SubsPlease would lose to any tagged x265.
 func TestCodec_UntaggedNameIsNotPenalized(t *testing.T) {
 	defer nyaa.SetPriorities(nyaa.Priorities{
 		CriteriaOrder: nyaa.DefaultPriorities().CriteriaOrder,
@@ -152,27 +152,27 @@ func TestCodec_UntaggedNameIsNotPenalized(t *testing.T) {
 
 	sorted := nyaa.SortTorrentResults(results)
 	if !strings.Contains(sorted[0].Name, "SubsPlease") {
-		t.Fatalf("release sem tag de codec deve empatar no codec e deixar o fansub decidir, obteve %s", sorted[0].Name)
+		t.Fatalf("release without a codec tag must tie on codec and let fansub decide, got %s", sorted[0].Name)
 	}
 }
 
-// O teste que torna a classe do bug do "x264" impossível: todo token das listas default
-// precisa ser algo que o extrator consiga devolver. "x265" ficou anos na lista de codecs
-// sem nunca casar com nada, porque extractCodec canonicaliza para "hevc" — config inerte,
-// invisível. Agora quebra o CI.
+// The test that makes the "x264" bug class impossible: every token in the default lists
+// must be something the extractor can return. "x265" sat in the codec list for years
+// without ever matching anything, because extractCodec canonicalizes to "hevc" — inert
+// config, invisible. Now it breaks CI.
 func TestDefaultPriorities_TokensAreReachable(t *testing.T) {
 	d := nyaa.DefaultPriorities()
 
 	for _, codec := range d.Codecs {
 		got := strings.ToLower(nyaa.ExtractCodec("[Group] Anime - 01 [" + codec + "]"))
 		if got != codec {
-			t.Errorf("codec default %q é inerte: extractCodec devolve %q", codec, got)
+			t.Errorf("default codec %q is inert: extractCodec returns %q", codec, got)
 		}
 	}
 	for _, res := range d.Resolutions {
 		got := strings.ToLower(nyaa.ExtractResolution("[Group] Anime - 01 (" + res + ")"))
 		if got != res {
-			t.Errorf("resolução default %q é inerte: extractResolution devolve %q", res, got)
+			t.Errorf("default resolution %q is inert: extractResolution returns %q", res, got)
 		}
 	}
 }

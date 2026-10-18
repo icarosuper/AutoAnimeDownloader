@@ -10,65 +10,66 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 )
 
-// queueOps e a fatia do backend que a fila precisa. Os tres metodos sao NAO-EXPORTADOS de
-// proposito: sao as delegacoes CRUAS, sem nada da fila em cima.
+// queueOps is the slice of the backend the queue needs. The three methods are UNEXPORTED on
+// purpose: they are the RAW delegations, with none of the queue layered on top.
 //
-//   - pause/resume: se fossem Pause/Resume, cada pausa decidida pela fila dispararia outro
-//     enforce e a recursao nao teria fundo.
-//   - list: se fosse List, a marcacao do status "queued" reentraria em queue.mu, que
-//     enforce ja segura — deadlock, nao recursao.
+//   - pause/resume: if they were Pause/Resume, every pause decided by the queue would fire
+//     another enforce and the recursion would have no bottom.
+//   - list: if it were List, marking the "queued" status would re-enter queue.mu, which
+//     enforce already holds — deadlock, not recursion.
 type queueOps interface {
 	list() []TorrentInfo
 	pause(hash string) error
 	resume(hash string) error
 }
 
-// queue e a lista ordenada de TODOS os torrents incompletos da sessao: os `limit` primeiros
-// que nao estao pausados baixam, o resto espera. Conter tudo (e nao so quem a fila pausou) e
-// o que faz "priorizar" preemptar de verdade e o que da uma posicao estavel para mostrar na
-// tela — nada e inserido no meio, entao a posicao so muda por acao do usuario.
+// queue is the ordered list of ALL incomplete torrents in the session: the first `limit`
+// that are not paused download, the rest wait. Holding everything (not just what the queue
+// paused) is what makes "prioritize" actually preempt and what gives a stable position to
+// show on screen — nothing is inserted in the middle, so the position only changes by user
+// action.
 //
-// Ordem de lock: queue.mu -> SessionManager.mu, NUNCA o contrario. enforce segura o
-// queue.mu enquanto chama list/pause/resume, que pegam o RLock do manager; por isso todo
-// metodo do SessionManager solta o proprio lock antes de tocar na fila.
+// Lock order: queue.mu -> SessionManager.mu, NEVER the other way. enforce holds
+// queue.mu while calling list/pause/resume, which take the manager's RLock; that's why every
+// SessionManager method drops its own lock before touching the queue.
 type queue struct {
 	mu     sync.Mutex
-	limit  int      // 0 ou negativo = ilimitado
-	order  []string // todo torrent incompleto, na ordem em que devem baixar
-	paused []string // pausados pelo usuario: nao ocupam slot, nunca sobem sozinhos.
-	// SO hashes incompletos: Pause/Resume de um torrent completo delegam direto para a rain
-	// (seeding nunca ocupou slot, entao a fila nao tem escrituracao para ele).
+	limit  int      // 0 or negative = unlimited
+	order  []string // every incomplete torrent, in the order they should download
+	paused []string // paused by the user: do not occupy a slot, never start on their own.
+	// ONLY incomplete hashes: Pause/Resume of a completed torrent delegate straight to rain
+	// (seeding never occupied a slot, so the queue has no bookkeeping for it).
 
-	// queued e o resultado do passo 3 do ultimo enforce: quem esta em order, nao esta em
-	// paused e ficou fora dos `limit` primeiros — mapeado para a POSICAO (1-based) na
-	// espera. Existe para markQueued nao ter de refazer a conta a cada List (a UI faz
-	// polling), e e o unico lugar de onde saem o slug e a posicao.
+	// queued is the result of step 3 of the last enforce: whoever is in order, is not in
+	// paused and fell outside the first `limit` — mapped to the 1-based POSITION in the
+	// waiting line. Exists so markQueued does not have to redo the count on every List (the
+	// UI polls), and is the only place the slug and the position come from.
 	queued map[string]int
 
-	path      string // <dir do banco de resume>/queue.json
-	lastSaved []byte // ultimo JSON gravado; a escrita so acontece quando o novo difere
-	// seedPaused e o latch de upgrade: armado na leitura quando nao ha queue.json,
-	// consumido pelo primeiro enforce COM sessao. Ver load.
+	path      string // <resume db dir>/queue.json
+	lastSaved []byte // last JSON written; the write only happens when the new one differs
+	// seedPaused is the upgrade latch: armed on read when there is no queue.json,
+	// consumed by the first enforce WITH a session. See load.
 	seedPaused bool
 }
 
-// queueFileName e o arquivo de estado da fila, ao lado do banco de resume da rain.
+// queueFileName is the queue state file, next to rain's resume database.
 const queueFileName = "queue.json"
 
-// queueState e o formato em disco. Fica ao lado do banco de resume da rain pelo mesmo motivo
-// do download_root.id: e estado do torrent client, nao configuracao do usuario.
+// queueState is the on-disk format. It lives next to rain's resume database for the same
+// reason as download_root.id: it is torrent-client state, not user configuration.
 type queueState struct {
 	Order  []string `json:"order"`
 	Paused []string `json:"paused"`
 }
 
-// load le queue.json. Arquivo ausente, vazio ou ilegivel = fila vazia; nunca impede o daemon
-// de subir, porque o passo 2 do enforce reconstroi a ordem por AddedAt.
+// load reads queue.json. Missing, empty or unreadable file = empty queue; never stops the
+// daemon from starting, because enforce step 2 rebuilds the order by AddedAt.
 //
-// Arquivo AUSENTE arma o latch de semeadura: sem ele, o primeiro boot depois deste deploy
-// retomaria os torrents que o usuario tinha pausado a mao (a rain os persiste como stopped,
-// e o passo 2 anexa todo incompleto). Semear aqui e impossivel — em NewSessionManager ainda
-// nao existe sessao para consultar —, entao a leitura so arma; quem consome e o enforce.
+// A MISSING file arms the seeding latch: without it, the first boot after this deploy
+// would resume torrents the user had paused by hand (rain persists them as stopped,
+// and step 2 appends every incomplete). Seeding here is impossible — in NewSessionManager
+// there is still no session to query — so the read only arms; enforce consumes it.
 func (q *queue) load(path string) {
 	q.path = path
 	data, err := os.ReadFile(path)
@@ -88,11 +89,12 @@ func (q *queue) load(path string) {
 	q.lastSaved = data
 }
 
-// save grava order/paused quando diferem do ultimo estado gravado. Chamada com q.mu segurado.
+// save writes order/paused when they differ from the last saved state. Called with q.mu held.
 //
-// lastSaved SO e atualizado depois do Rename bem-sucedido: atualiza-lo junto com a tentativa
-// transformaria uma falha transitoria (disco cheio por um minuto) em perda permanente — o
-// "so grava quando muda" nunca mais dispararia e o arquivo ficaria congelado na versao velha.
+// lastSaved is ONLY updated after a successful Rename: updating it along with the attempt
+// would turn a transient failure (disk full for a minute) into a permanent loss — the
+// "only write when it changes" would never fire again and the file would freeze on the old
+// version.
 func (q *queue) save() {
 	if q.path == "" {
 		return
@@ -101,7 +103,7 @@ func (q *queue) save() {
 	if err != nil || bytes.Equal(data, q.lastSaved) {
 		return
 	}
-	// tmp + Rename, o mesmo padrao de FileManager.saveConfigsLocked.
+	// tmp + Rename, the same pattern as FileManager.saveConfigsLocked.
 	tmp := q.path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		logger.Logger.Warn().Err(err).Str("path", q.path).Msg("Failed to persist the download queue")
@@ -115,14 +117,14 @@ func (q *queue) save() {
 	q.lastSaved = data
 }
 
-// setLimit troca o limite. O chamador roda enforce em seguida.
+// setLimit changes the limit. The caller runs enforce afterwards.
 func (q *queue) setLimit(n int) {
 	q.mu.Lock()
 	q.limit = n
 	q.mu.Unlock()
 }
 
-// drop tira um hash da fila inteira. Usado pela remocao.
+// drop takes a hash out of the whole queue. Used by removal.
 func (q *queue) drop(hash string) {
 	q.mu.Lock()
 	q.order = without(q.order, hash)
@@ -130,8 +132,8 @@ func (q *queue) drop(hash string) {
 	q.mu.Unlock()
 }
 
-// pushBack manda o hash para o FIM da fila e o tira de paused. E o que um resume do usuario
-// faz: volta para a fila, nao para o topo dela.
+// pushBack sends the hash to the END of the queue and takes it out of paused. That's what a
+// user resume does: back into the queue, not to the top of it.
 func (q *queue) pushBack(hash string) {
 	q.mu.Lock()
 	q.order = append(without(q.order, hash), hash)
@@ -139,9 +141,9 @@ func (q *queue) pushBack(hash string) {
 	q.mu.Unlock()
 }
 
-// markPaused registra a pausa manual sem mexer na posicao. Chamado ANTES do pause de verdade:
-// no intervalo entre as duas chamadas, um enforce disparado por um torrent que acabou de
-// completar promoveria justamente o torrent que o usuario esta parando.
+// markPaused records the manual pause without touching the position. Called BEFORE the real
+// pause: in the gap between the two calls, an enforce fired by a torrent that just
+// completed would promote exactly the torrent the user is stopping.
 func (q *queue) markPaused(hash string) {
 	q.mu.Lock()
 	if !contains(q.paused, hash) {
@@ -150,12 +152,13 @@ func (q *queue) markPaused(hash string) {
 	q.mu.Unlock()
 }
 
-// prioritize move para o INICIO os hashes que ja estao em order e INSERE no inicio os que
-// ainda nao estao, na ordem recebida. E "move ou insere" porque o hash pode ser incompleto e
-// ainda nao estar em order (sessao recem-criada, nenhum enforce desde entao); tratar so o
-// caso "ja esta la" faria o priorizado sumir da fila em vez de ir para a frente.
+// prioritize moves to the FRONT the hashes that are already in order and INSERTS at the
+// front the ones that are not yet, in the received order. It is "move or insert" because the
+// hash may be incomplete and still not be in order (freshly created session, no enforce since
+// then); treating only the "already there" case would make the prioritized hash vanish from
+// the queue instead of going to the front.
 //
-// Hash desconhecido ou completo entra e e podado pelo passo 1 do enforce seguinte.
+// An unknown or completed hash is inserted and then pruned by step 1 of the next enforce.
 func (q *queue) prioritize(hashes []string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -173,16 +176,16 @@ func (q *queue) prioritize(hashes []string) {
 	q.order = append(front, rest...)
 }
 
-// markQueued escreve o slug "queued" e a posicao nos torrents que estao esperando. E o unico
-// slug que nao sai de statusSlug() — a rain nao sabe que existe uma fila.
+// markQueued writes the "queued" slug and the position onto the torrents that are waiting.
+// It is the only slug that does not come from statusSlug() — rain does not know a queue exists.
 //
-// A fonte e q.queued, nao order: order contem os ativos tambem, e marcar por pertencer a ela
-// pintaria a tela inteira de "queued". Quem esta em paused mostra "stopped", que e o que a
-// rain reporta; "queued" fica significando so "a fila vai chegar nele".
+// The source is q.queued, not order: order also contains the active ones, and marking by
+// belonging to it would paint the whole screen "queued". Whoever is in paused shows
+// "stopped", which is what rain reports; "queued" only means "the queue will get to it".
 //
-// QueuePosition 0 = nao enfileirado (ativo, completo ou pausado). Um pausado tem posicao em
-// order, mas ela nao preve nada — ele nunca sobe sozinho — e publicar um numero que nao vai
-// acontecer e pior do que nao publicar nenhum.
+// QueuePosition 0 = not queued (active, completed or paused). A paused one has a position in
+// order, but it predicts nothing — it never starts on its own — and publishing a number that
+// will not happen is worse than publishing none.
 func (q *queue) markQueued(infos []TorrentInfo) []TorrentInfo {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -195,47 +198,48 @@ func (q *queue) markQueued(infos []TorrentInfo) []TorrentInfo {
 	return infos
 }
 
-// enforce e o unico ponto de decisao da fila: uma reconciliacao entre order/paused e o que a
-// sessao reporta. Nao ha argumento "protected" — priorizar ja reposiciona o hash no inicio de
-// order, entao a preempcao deixa de ser caso especial.
+// enforce is the queue's only decision point: a reconciliation between order/paused and what
+// the session reports. There is no "protected" argument — prioritize already repositions the
+// hash at the front of order, so preemption is no longer a special case.
 func (q *queue) enforce(ops queueOps) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	// 0. Sem sessao, sai na hora. list() devolve nil enquanto nao ha sessao; uma sessao sem
-	//    torrents devolve slice vazio NAO-nil. A distincao e exatamente a que importa: nil e
-	//    "nao sei nada", nao "nao ha nada". Sem esta guarda o passo 1 podaria order/paused
-	//    inteiros e o passo 5 gravaria o arquivo vazio por cima — em TODO boot, porque a
-	//    verificacao chama SetMaxActiveDownloads antes do Ensure.
+	// 0. No session, leave immediately. list() returns nil while there is no session; a
+	//    session with no torrents returns a NON-nil empty slice. That distinction is exactly
+	//    the one that matters: nil is "I know nothing", not "there is nothing". Without this
+	//    guard step 1 would prune order/paused entirely and step 5 would write the empty
+	//    file over the real one — on EVERY boot, because verification calls
+	//    SetMaxActiveDownloads before Ensure.
 	all := ops.list()
 	if all == nil {
 		return
 	}
 
-	// Ordem de adicao, sempre: ListTorrents da rain itera um map, entao a ordem da fatia e
-	// aleatoria a cada chamada. AddedAt existe por um motivo so: dar ordem inicial aos
-	// torrents que a fila ainda nao conhece.
+	// Addition order, always: rain's ListTorrents iterates a map, so the slice order is
+	// random on every call. AddedAt exists for one reason only: to give initial order to
+	// torrents the queue does not know yet.
 	sort.SliceStable(all, func(i, j int) bool { return all[i].AddedAt.Before(all[j].AddedAt) })
 
 	byHash := make(map[string]TorrentInfo, len(all))
 	for _, t := range all {
 		byHash[t.Hash] = t
 	}
-	// Torrent completo nao entra em order: seeding nao ocupa slot, e ao completar o hash sai
-	// da fila liberando um slot.
+	// A completed torrent does not enter order: seeding does not occupy a slot, and on
+	// completion the hash leaves the queue freeing a slot.
 	incomplete := func(h string) bool {
 		t, ok := byHash[h]
 		return ok && !t.Completed
 	}
 
-	// 1. Poda: sai de order/paused quem sumiu da sessao ou completou.
+	// 1. Prune: leave order/paused whoever vanished from the session or completed.
 	q.order = filter(q.order, incomplete)
 	q.paused = filter(q.paused, incomplete)
 
-	// Latch de upgrade, uma vez na vida da instalacao: sem queue.json nao ha como distinguir
-	// uma pausa manual de um torrent que a fila antiga (so memoria) tinha pausado, entao os
-	// dois grupos entram em paused. Congelar e visivel na tela e custa um clique em Play;
-	// retomar sozinho e invisivel e gasta banda desfazendo uma decisao do usuario.
+	// Upgrade latch, once in the life of the install: without queue.json there is no way to
+	// tell a manual pause from a torrent the old (memory-only) queue had paused, so both
+	// groups enter paused. Freezing is visible on screen and costs a Play click;
+	// resuming on its own is invisible and spends bandwidth undoing a user decision.
 	if q.seedPaused {
 		q.seedPaused = false
 		seeded := 0
@@ -251,17 +255,17 @@ func (q *queue) enforce(ops queueOps) {
 		}
 	}
 
-	// 2. Anexa: todo incompleto da sessao ausente de order entra no fim, por AddedAt. E o caso
-	//    de Add e o do boot com um queue.json desatualizado.
+	// 2. Append: every incomplete from the session missing from order goes to the end, by
+	//    AddedAt. That's the Add case and the boot with a stale queue.json.
 	for _, t := range all {
 		if !t.Completed && !contains(q.order, t.Hash) {
 			q.order = append(q.order, t.Hash)
 		}
 	}
 
-	// 3. Calcula o desejado: percorre order pulando paused, marcando os `limit` primeiros como
-	//    ativos e o resto como enfileirados, numerados a partir de 1 na ordem em que vao
-	//    comecar. A numeracao nao custa uma segunda passada.
+	// 3. Compute the desired set: walk order skipping paused, marking the first `limit` as
+	//    active and the rest as queued, numbered from 1 in the order they will start. The
+	//    numbering does not cost a second pass.
 	wanted := make(map[string]bool, len(q.order))
 	queued := make(map[string]int)
 	active, waiting := 0, 0
@@ -279,15 +283,15 @@ func (q *queue) enforce(ops queueOps) {
 	}
 	q.queued = queued
 
-	// 4. Aplica a diferenca iterando ORDER, nao a sessao. Varrer a sessao pausaria todo
-	//    seeder: completo nunca entra em order, logo nunca esta em `wanted`, logo "nao deveria
-	//    estar ativo". order e a lista dos incompletos e e exatamente o conjunto sobre o qual
-	//    a fila tem autoridade.
+	// 4. Apply the diff by iterating ORDER, not the session. Walking the session would pause
+	//    every seeder: a completed one never enters order, so it is never in `wanted`, so
+	//    "should not be active". order is the list of incompletes and is exactly the set
+	//    the queue has authority over.
 	//
-	//    "stopping" nao e alvo de nada: a pausa da rain e assincrona, entao trata-lo como
-	//    parado mandaria resume por cima de um stop em andamento, e trata-lo como rodando o
-	//    pausaria de novo. Fica de fora dos dois lados e o passe seguinte decide sobre um
-	//    estado estavel.
+	//    "stopping" is a target of nothing: rain's pause is asynchronous, so treating it as
+	//    stopped would send resume on top of a stop in progress, and treating it as running
+	//    would pause it again. It stays out of both sides and the next pass decides on a
+	//    stable state.
 	for _, h := range q.order {
 		t := byHash[h]
 		switch {
@@ -301,16 +305,17 @@ func (q *queue) enforce(ops queueOps) {
 		case t.Status != StatusStopped:
 			if err := ops.pause(h); err != nil {
 				logger.Logger.Warn().Err(err).Str("hash", h).Msg("Download queue: failed to pause torrent")
-				// q.queued e o DESEJADO, e a tela nao pode mostra-lo como se fosse o real: o
-				// hash continua na posicao (a fila ainda quer aquilo), mas o slug e o numero
-				// saem, senao a linha exibiria "Na fila #3" num torrent baixando a todo vapor.
-				// O buraco na numeracao dura ate o proximo passe.
+				// q.queued is the DESIRED set, and the screen must not show it as if it were
+				// real: the hash stays in position (the queue still wants that), but the slug
+				// and the number come off, otherwise the row would display "Queued #3" on a
+				// torrent downloading at full speed. The hole in the numbering lasts until
+				// the next pass.
 				delete(q.queued, h)
 			}
 		}
 	}
 
-	// 5. Salva, se mudou.
+	// 5. Save, if it changed.
 	q.save()
 }
 
@@ -327,7 +332,7 @@ func without(list []string, s string) []string {
 	return filter(list, func(v string) bool { return v != s })
 }
 
-// filter compacta a fatia no lugar. Seguro para order/paused: sao slices privados da fila.
+// filter compacts the slice in place. Safe for order/paused: they are private slices of the queue.
 func filter(list []string, keep func(string) bool) []string {
 	out := list[:0]
 	for _, v := range list {

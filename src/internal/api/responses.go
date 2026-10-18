@@ -55,8 +55,8 @@ func JSONInternalError(w http.ResponseWriter, err error) {
 	JSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 }
 
-// JSONDownloadError responde a falha de um download manual. Disco cheio vira 409 e nao 500: a
-// causa e conhecida e acionavel pelo usuario.
+// JSONDownloadError maps a manual-download failure. Full disk is 409, not 500: the cause is
+// known and the user can act on it.
 func JSONDownloadError(w http.ResponseWriter, err error, code string) {
 	if errors.Is(err, daemon.ErrInsufficientDiskSpace) {
 		JSONError(w, http.StatusConflict, "INSUFFICIENT_DISK_SPACE", err.Error())

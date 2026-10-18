@@ -10,8 +10,8 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 )
 
-// captureSearchQuery devolve o corpo da query SearchMedia enviada a AniList. As demais queries
-// (lista do usuario, customLists) respondem vazio — o guard nao e o assunto aqui.
+// captureSearchQuery returns the SearchMedia query body sent to AniList. The other queries
+// (user list, customLists) respond empty — the guard is not the subject here.
 func captureSearchQuery(sent *string) func() {
 	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
 		body, _ := io.ReadAll(req.Body)
@@ -35,8 +35,8 @@ func getSearch(t *testing.T, url string) *httptest.ResponseRecorder {
 	return rec
 }
 
-// TestHandleAniListSearch_IncludeUnreleased: o parametro precisa CHEGAR na query. Um teste que
-// so olhasse o status 200 passaria com o handler ignorando o parametro inteiro.
+// TestHandleAniListSearch_IncludeUnreleased: the parameter has to REACH the query. A test that
+// only looked at status 200 would pass with the handler ignoring the parameter entirely.
 func TestHandleAniListSearch_IncludeUnreleased(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -44,9 +44,9 @@ func TestHandleAniListSearch_IncludeUnreleased(t *testing.T) {
 		wantStatusNot  bool
 		wantStatusCode int
 	}{
-		{"ausente esconde os nao lancados", "/api/v1/anilist/search?q=one", true, http.StatusOK},
-		{"false esconde os nao lancados", "/api/v1/anilist/search?q=one&include_unreleased=false", true, http.StatusOK},
-		{"true mostra tudo", "/api/v1/anilist/search?q=one&include_unreleased=true", false, http.StatusOK},
+		{"absent hides unreleased", "/api/v1/anilist/search?q=one", true, http.StatusOK},
+		{"false hides unreleased", "/api/v1/anilist/search?q=one&include_unreleased=false", true, http.StatusOK},
+		{"true shows everything", "/api/v1/anilist/search?q=one&include_unreleased=true", false, http.StatusOK},
 	}
 
 	for _, tt := range tests {
@@ -56,41 +56,42 @@ func TestHandleAniListSearch_IncludeUnreleased(t *testing.T) {
 
 			rec := getSearch(t, tt.url)
 			if rec.Code != tt.wantStatusCode {
-				t.Fatalf("quero %d, veio %d: %s", tt.wantStatusCode, rec.Code, rec.Body.String())
+				t.Fatalf("want %d, got %d: %s", tt.wantStatusCode, rec.Code, rec.Body.String())
 			}
 			if got := strings.Contains(sent, "status_not"); got != tt.wantStatusNot {
-				t.Fatalf("status_not na query = %v, quero %v. Query: %s", got, tt.wantStatusNot, sent)
+				t.Fatalf("status_not in query = %v, want %v. Query: %s", got, tt.wantStatusNot, sent)
 			}
 		})
 	}
 }
 
-// TestHandleAniListSearch_InvalidBoolIs400: valor que nao e booleano e erro do cliente, nao um
-// silencioso "assume false" — mesmo contrato de keep_data/block em /torrents.
+// TestHandleAniListSearch_InvalidBoolIs400: a non-boolean value is a client error, not a
+// silent "assume false" — same contract as keep_data/block on /torrents.
 func TestHandleAniListSearch_InvalidBoolIs400(t *testing.T) {
 	var sent string
 	defer captureSearchQuery(&sent)()
 
-	rec := getSearch(t, "/api/v1/anilist/search?q=one&include_unreleased=talvez")
+	rec := getSearch(t, "/api/v1/anilist/search?q=one&include_unreleased=maybe")
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("quero 400, veio %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 400, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if sent != "" {
-		t.Fatal("um parametro invalido nao pode gastar uma chamada do limite de 30/min da AniList")
+		t.Fatal("an invalid parameter must not spend a call from AniList's 30/min limit")
 	}
 }
 
-// TestHandleAniListSearch_ShortTermSkipsAniList: abaixo de 3 caracteres nada sai da maquina, e um
-// parametro invalido junto tampouco vira 400 — a lista vazia vem antes de qualquer validacao.
+// TestHandleAniListSearch_ShortTermSkipsAniList: under 3 characters nothing leaves the machine,
+// and an invalid parameter alongside it is not 400 either — the empty list comes before any
+// validation.
 func TestHandleAniListSearch_ShortTermSkipsAniList(t *testing.T) {
 	var sent string
 	defer captureSearchQuery(&sent)()
 
 	rec := getSearch(t, "/api/v1/anilist/search?q=on")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("quero 200, veio %d", rec.Code)
+		t.Fatalf("want 200, got %d", rec.Code)
 	}
 	if sent != "" {
-		t.Fatalf("termo curto nao pode tocar a AniList, foi enviado: %s", sent)
+		t.Fatalf("a short term must not hit AniList, sent: %s", sent)
 	}
 }

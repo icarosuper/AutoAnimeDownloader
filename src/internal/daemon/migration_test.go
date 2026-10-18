@@ -12,8 +12,8 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 )
 
-// animeIDMigrationFM guarda episodios e settings em memoria para que o teste veja o que a
-// migracao reescreveu.
+// animeIDMigrationFM holds episodes and settings in memory so the test can see what the
+// migration rewrote.
 type animeIDMigrationFM struct {
 	mockFileManagerForEpisodes
 	configs  *files.Config
@@ -47,8 +47,8 @@ func (m *animeIDMigrationFM) SaveAnimeSettings(id int, s files.AnimeSettings) er
 	return nil
 }
 
-// mockEntryToMedia responde a query de entrada->midia com o mapa dado. Uma entrada ausente
-// vira 404, que e o que a AniList devolve para uma entrada que o usuario apagou.
+// mockEntryToMedia answers the entry->media query with the given map. A missing entry
+// becomes 404, which is what AniList returns for an entry the user deleted.
 func mockEntryToMedia(t *testing.T, byEntry map[int]int) func() {
 	t.Helper()
 	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
@@ -59,7 +59,7 @@ func mockEntryToMedia(t *testing.T, byEntry map[int]int) func() {
 		}
 		body, _ := io.ReadAll(req.Body)
 		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("corpo inesperado: %s", body)
+			t.Fatalf("unexpected body: %s", body)
 		}
 		mediaID, ok := byEntry[payload.Variables.MediaListId]
 		if !ok {
@@ -86,25 +86,25 @@ func TestMigrateAnimeIDsToMedia_RewritesEpisodesAndSettings(t *testing.T) {
 	}
 
 	if err := MigrateAnimeIDsToMedia(fm); err != nil {
-		t.Fatalf("migracao falhou: %v", err)
+		t.Fatalf("migration failed: %v", err)
 	}
 
-	// As duas entradas apontam para a MESMA midia: e exatamente o caso que duplicava o anime.
+	// Both entries point to the SAME media: that is exactly the case that used to duplicate the anime.
 	for _, ep := range fm.episodes {
 		if ep.AnimeID != 194829 {
-			t.Errorf("episodio %d deveria estar com o id da midia, veio %d", ep.EpisodeNumber, ep.AnimeID)
+			t.Errorf("episode %d should have the media id, got %d", ep.EpisodeNumber, ep.AnimeID)
 		}
 	}
 	if fm.settings[194829].Progress != 42 {
-		t.Errorf("as settings deveriam ter sido copiadas para o id da midia, veio %+v", fm.settings)
+		t.Errorf("settings should have been copied to the media id, got %+v", fm.settings)
 	}
 	if !fm.configs.AnimeIDsAreMediaIDs {
-		t.Error("a migracao deveria marcar a conclusao no config")
+		t.Error("the migration should mark completion in the config")
 	}
 }
 
-// Idempotencia: com a marca ligada nao pode haver nem consulta nem reescrita — rodar de novo
-// interpretaria os ids de MIDIA como ids de entrada e embaralharia tudo.
+// Idempotency: with the flag set there must be neither query nor rewrite — running again
+// would treat MEDIA ids as entry ids and scramble everything.
 func TestMigrateAnimeIDsToMedia_SkipsWhenAlreadyMigrated(t *testing.T) {
 	called := false
 	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
@@ -118,15 +118,15 @@ func TestMigrateAnimeIDsToMedia_SkipsWhenAlreadyMigrated(t *testing.T) {
 	}
 
 	if err := MigrateAnimeIDsToMedia(fm); err != nil {
-		t.Fatalf("migracao falhou: %v", err)
+		t.Fatalf("migration failed: %v", err)
 	}
 	if called {
-		t.Error("nao deveria consultar a AniList com a migracao ja concluida")
+		t.Error("must not query AniList when the migration is already done")
 	}
 }
 
-// Falha de rede no meio nao pode deixar metade convertida: nada e escrito e a marca fica
-// desligada, para o passe seguinte recomecar do zero.
+// A mid-run network failure must not leave half converted: nothing is written and the flag
+// stays off, so the next pass restarts from scratch.
 func TestMigrateAnimeIDsToMedia_FailureWritesNothing(t *testing.T) {
 	migrateAnimeIDsThrottle = 0
 	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
@@ -139,18 +139,18 @@ func TestMigrateAnimeIDsToMedia_FailureWritesNothing(t *testing.T) {
 	}
 
 	if err := MigrateAnimeIDsToMedia(fm); err == nil {
-		t.Fatal("esperava erro quando a AniList falha")
+		t.Fatal("want an error when AniList fails")
 	}
 	if fm.episodes[0].AnimeID != 583631757 {
-		t.Errorf("nada deveria ter sido reescrito, veio %d", fm.episodes[0].AnimeID)
+		t.Errorf("nothing should have been rewritten, got %d", fm.episodes[0].AnimeID)
 	}
 	if fm.configs.AnimeIDsAreMediaIDs {
-		t.Error("a marca de conclusao nao pode ser ligada apos uma falha")
+		t.Error("the completion flag must not be set after a failure")
 	}
 }
 
-// Entrada apagada da AniList (404) nao trava a migracao: o registro fica com o id antigo e o
-// resto converte normalmente.
+// An entry deleted from AniList (404) does not stall the migration: the record keeps the old
+// id and the rest converts normally.
 func TestMigrateAnimeIDsToMedia_UnresolvedEntryDoesNotBlock(t *testing.T) {
 	migrateAnimeIDsThrottle = 0
 	defer mockEntryToMedia(t, map[int]int{111: 500})()
@@ -159,20 +159,20 @@ func TestMigrateAnimeIDsToMedia_UnresolvedEntryDoesNotBlock(t *testing.T) {
 		configs: &files.Config{},
 		episodes: []files.EpisodeStruct{
 			{EpisodeNumber: 1, AnimeID: 111},
-			{EpisodeNumber: 2, AnimeID: 222}, // nao existe mais
+			{EpisodeNumber: 2, AnimeID: 222}, // no longer exists
 		},
 	}
 
 	if err := MigrateAnimeIDsToMedia(fm); err != nil {
-		t.Fatalf("migracao falhou: %v", err)
+		t.Fatalf("migration failed: %v", err)
 	}
 	if fm.episodes[0].AnimeID != 500 {
-		t.Errorf("entrada resolvivel deveria virar 500, veio %d", fm.episodes[0].AnimeID)
+		t.Errorf("a resolvable entry should become 500, got %d", fm.episodes[0].AnimeID)
 	}
 	if fm.episodes[1].AnimeID != 222 {
-		t.Errorf("entrada sem correspondencia deve ficar como estava, veio %d", fm.episodes[1].AnimeID)
+		t.Errorf("an unmatched entry must stay as it was, got %d", fm.episodes[1].AnimeID)
 	}
 	if !fm.configs.AnimeIDsAreMediaIDs {
-		t.Error("a migracao deveria concluir mesmo com entradas nao resolvidas")
+		t.Error("the migration should complete even with unresolved entries")
 	}
 }

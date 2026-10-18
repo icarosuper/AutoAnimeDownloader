@@ -53,7 +53,7 @@ describe('filterAnimes', () => {
     expect(result[0].name).toBe('Naruto ongoing')
   })
 
-  it('acha o anime por qualquer titulo alternativo (kanji, romaji, sinonimo)', () => {
+  it('finds the anime by any alternative title (kanji, romaji, synonym)', () => {
     const animes = [
       makeAnime({ name: 'Attack on Titan', alt_names: ['Shingeki no Kyojin', '進撃の巨人', 'AoT'] }),
       makeAnime({ name: 'Bleach' }),
@@ -64,7 +64,7 @@ describe('filterAnimes', () => {
     expect(filterAnimes(animes, 'xyz', false)).toHaveLength(0)
   })
 
-  it('ignora acento e largura de caractere no termo e no titulo', () => {
+  it('ignores accent and character width in the term and the title', () => {
     const animes = [makeAnime({ name: 'Kimi no Na wa.', alt_names: ['Ｙｏｕｒ Ｎａｍｅ．', 'Poké'] })]
     expect(filterAnimes(animes, 'your name', false)).toHaveLength(1)
     expect(filterAnimes(animes, 'poke', false)).toHaveLength(1)
@@ -73,10 +73,10 @@ describe('filterAnimes', () => {
 
   it('keeps only standalone animes when filterStandalone is true', () => {
     const animes = [
-      makeAnime({ name: 'Avulso', is_standalone: true }),
-      makeAnime({ name: 'Da lista' }),
+      makeAnime({ name: 'Standalone', is_standalone: true }),
+      makeAnime({ name: 'From the list' }),
     ]
-    expect(filterAnimes(animes, '', false, true).map(a => a.name)).toEqual(['Avulso'])
+    expect(filterAnimes(animes, '', false, true).map(a => a.name)).toEqual(['Standalone'])
     expect(filterAnimes(animes, '', false, false)).toHaveLength(2)
   })
 })
@@ -161,13 +161,13 @@ describe('formatBytes', () => {
 
 
 describe('breakdown', () => {
-  // O bug: episodes_downloaded conta arquivo em disco AGORA e cai quando o daemon poda
-  // assistidos (watched_episodes_to_keep), entao released - episodes_downloaded pintava de
-  // amarelo ("falta baixar") episodio que ja tinha sido baixado e visto.
-  it('assistido e podado do disco nao vira segmento amarelo', () => {
+  // The bug: episodes_downloaded counts files on disk NOW and drops when the daemon prunes
+  // watched ones (watched_episodes_to_keep), so released - episodes_downloaded painted yellow
+  // ("still to download") an episode that had already been downloaded and watched.
+  it('watched and pruned from disk does not become a yellow segment', () => {
     const a = makeAnime({
       episodes_watched: 5,
-      episodes_downloaded: 5, // 5 em disco, mas sao os eps 6-10; os 1-5 foram podados
+      episodes_downloaded: 5, // 5 on disk, but they are eps 6-10; 1-5 were pruned
       episodes_released: 10,
       episodes_pending: 0,
       total_episodes: 13,
@@ -175,7 +175,7 @@ describe('breakdown', () => {
     expect(breakdown(a)).toEqual({ watched: 5, downloaded: 10, released: 10, total: 13 })
   })
 
-  it('episodio realmente faltando continua no segmento amarelo', () => {
+  it('an episode actually missing stays in the yellow segment', () => {
     const a = makeAnime({
       episodes_watched: 0,
       episodes_downloaded: 5,
@@ -186,7 +186,7 @@ describe('breakdown', () => {
     expect(breakdown(a)).toEqual({ watched: 0, downloaded: 5, released: 8, total: 12 })
   })
 
-  it('sem total anunciado o denominador vira episodes_released', () => {
+  it('with no announced total the denominator becomes episodes_released', () => {
     const a = makeAnime({
       episodes_watched: 2,
       episodes_released: 4,
@@ -196,7 +196,7 @@ describe('breakdown', () => {
     expect(breakdown(a)).toEqual({ watched: 2, downloaded: 3, released: 4, total: 4 })
   })
 
-  it('progresso da AniList acima do lancado nao gera segmento negativo', () => {
+  it('AniList progress above released does not produce a negative segment', () => {
     const a = makeAnime({
       episodes_watched: 9,
       episodes_downloaded: 0,

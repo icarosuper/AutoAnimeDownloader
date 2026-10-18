@@ -7,28 +7,28 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 )
 
-// TestVivyTitleVariants testa a geração de variantes de busca para o caso do Vivy
-// que tem caracteres especiais tanto no título em inglês quanto no romaji
+// TestVivyTitleVariants tests search-variant generation for the Vivy case,
+// which has special characters in both the English title and the romaji.
 func TestVivyTitleVariants(t *testing.T) {
 	romaji := "Vivy: Fluorite Eye's Song"
 	english := "Vivy -Fluorite Eye's Song-"
 
 	variants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
-	// Deve gerar pelo menos 2 variantes (romaji limpo + romaji original)
-	// Pode gerar até 4 se english != romaji
+	// Must generate at least 2 variants (cleaned romaji + original romaji)
+	// May generate up to 4 if english != romaji
 	if len(variants) < 2 {
 		t.Errorf("Expected at least 2 variants, got %d", len(variants))
 	}
 
-	// A primeira variante deve ser o romaji limpo (sem caracteres especiais)
+	// The first variant must be the cleaned romaji (no special characters)
 	firstVariant := variants[0]
 	expectedFirst := "vivy fluorite eyes song"
 	if firstVariant != expectedFirst {
 		t.Errorf("First variant should be cleaned romaji.\nExpected: %s\nGot: %s", expectedFirst, firstVariant)
 	}
 
-	// Verifica que todas as variantes são únicas
+	// Check that every variant is unique
 	seen := make(map[string]bool)
 	for _, v := range variants {
 		if seen[v] {
@@ -37,10 +37,10 @@ func TestVivyTitleVariants(t *testing.T) {
 		seen[v] = true
 	}
 
-	// Verifica que pelo menos uma variante não tem caracteres especiais
+	// Check that at least one variant has no special characters
 	hasCleanVariant := false
 	for _, v := range variants {
-		// Verifica se não tem :, ', ou - (caracteres especiais do título original)
+		// Check it has no :, ', or - (special characters from the original title)
 		if !strings.ContainsAny(v, ":'-") {
 			hasCleanVariant = true
 			break
@@ -56,31 +56,31 @@ func TestVivyTitleVariants(t *testing.T) {
 	}
 }
 
-// TestGenerateSearchTitleVariants_Ordering testa que as variantes são geradas na ordem correta
+// TestGenerateSearchTitleVariants_Ordering tests that variants are generated in the correct order
 func TestGenerateSearchTitleVariants_Ordering(t *testing.T) {
 	romaji := "Test Anime: Special"
 	english := "Test Anime - Special"
 
 	variants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
-	// A primeira variante deve ser sempre o romaji limpo (sem : ou -)
+	// The first variant must always be the cleaned romaji (no : or -)
 	firstVariant := variants[0]
 	if strings.ContainsAny(firstVariant, ":-") {
 		t.Errorf("First variant should be cleaned romaji (no special chars), got: %s", firstVariant)
 	}
 
-	// A segunda variante deve ser o romaji original
+	// The second variant must be the original romaji
 	if variants[1] != romaji {
 		t.Errorf("Second variant should be original romaji, got: %s", variants[1])
 	}
 
-	// Como English != Romaji, deve ter pelo menos 3 variantes
-	// Mas pode ter apenas 3 se English limpo == Romaji limpo (são removidas duplicatas)
+	// Because English != Romaji, there must be at least 3 variants
+	// But there may be only 3 if cleaned English == cleaned Romaji (duplicates are removed)
 	if len(variants) >= 3 {
-		// A terceira variante deve ser o English original (ou limpo se for diferente)
+		// The third variant must be the original English (or cleaned if that is different)
 		thirdVariant := variants[2]
 		if thirdVariant != english {
-			// Se não é o English original, verifica se é uma versão limpa válida
+			// If it is not the original English, check it is a valid cleaned version
 			if strings.ContainsAny(thirdVariant, ":-") {
 				t.Errorf("Third variant should be cleaned english or english original, got: %s", thirdVariant)
 			}
@@ -88,15 +88,15 @@ func TestGenerateSearchTitleVariants_Ordering(t *testing.T) {
 	}
 }
 
-// TestGenerateSearchTitleVariants_DuplicateHandling testa que variantes duplicadas são removidas
+// TestGenerateSearchTitleVariants_DuplicateHandling tests that duplicate variants are removed
 func TestGenerateSearchTitleVariants_DuplicateHandling(t *testing.T) {
-	// Caso onde romaji == english (após limpeza podem ser iguais)
+	// Case where romaji == english (after cleaning they may be equal)
 	romaji := "Test Anime"
 	english := "Test Anime"
 
 	variants := nyaa.GenerateSearchTitleVariants(romaji, english)
 
-	// Não deve ter duplicatas
+	// Must not have duplicates
 	seen := make(map[string]bool)
 	for _, v := range variants {
 		if seen[v] {
@@ -105,7 +105,7 @@ func TestGenerateSearchTitleVariants_DuplicateHandling(t *testing.T) {
 		seen[v] = true
 	}
 
-	// Deve ter no máximo 2 variantes (romaji limpo + romaji original)
+	// Must have at most 2 variants (cleaned romaji + original romaji)
 	if len(variants) > 2 {
 		t.Errorf("Expected at most 2 variants when romaji == english, got %d", len(variants))
 	}

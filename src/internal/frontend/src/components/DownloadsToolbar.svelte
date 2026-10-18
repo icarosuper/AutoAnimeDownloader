@@ -7,12 +7,12 @@
   import Button from "./ui/Button.svelte";
   import Checkbox from "./ui/Checkbox.svelte";
 
-  // Controlado pelo pai (Downloads.svelte é quem guarda o ViewState na URL); este componente
-  // só busca busca/filtro/seleção e emite eventos — não faz fetch de dado nenhum.
+  // Controlled by the parent (Downloads.svelte is who keeps ViewState in the URL); this
+  // component only owns search/filter/selection and emits events — it fetches no data.
   //
-  // Fase 5 (spec §9.3) trocou o dropdown de status por quatro pills com contagem e passou a
-  // barra de seleção a ficar SEMPRE visível (esmaecida e desabilitada quando não há nada
-  // selecionado), em vez de aparecer e sumir empurrando a lista.
+  // Phase 5 (spec §9.3) replaced the status dropdown with four pills with counts and made
+  // the selection bar ALWAYS visible (faded and disabled when nothing is selected), instead
+  // of appearing and disappearing and shoving the list.
   export let query = "";
   export let preset: FilterPreset | null = "all";
   export let counts = { all: 0, downloading: 0, seeding: 0, problems: 0 };
@@ -46,8 +46,8 @@
     deselectAll: m.downloads_deselect_all(),
   };
 
-  // Declarado aqui, e não inline no `{#each}`, para o literal não perder o tipo da união
-  // `FilterPreset` e virar `string` no handler de clique.
+  // Declared here, not inline in `{#each}`, so the literal doesn't lose the `FilterPreset`
+  // union type and become `string` in the click handler.
   $: pills = [
     { id: "all" as FilterPreset, label: $locale && m.downloads_filter_all(), count: counts.all },
     { id: "downloading" as FilterPreset, label: $locale && m.downloads_status_downloading(), count: counts.downloading },
@@ -67,7 +67,7 @@
       class="w-full min-w-0 bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
     />
     {#if query}
-      <!-- O tooltip sai do `data-tip` do wrapper (CSS em src/app.css, que substituiu o do daisyUI). -->
+      <!-- The tooltip comes from the wrapper's `data-tip` (CSS in src/app.css, which replaced daisyUI's). -->
       <div class="tooltip tooltip-left shrink-0" data-tip={T && T.clearSearch}>
         <button
           type="button"
@@ -81,11 +81,11 @@
     {/if}
   </label>
 
-  <!-- `flex-wrap`, não `overflow-x-auto`: as quatro pills existem para responder "tem algo ali?"
-       de bate-pronto, e atrás de um scroll horizontal as últimas ("Seeding", "Problems") ficavam
-       fora da vista em tela estreita. Elas quebram para a linha de baixo quando não couberem.
-       Sem `min-w-0` aqui: o mínimo automático deste flex item é o min-content (a pill mais
-       larga), que é exatamente o piso desejado — com min-w-0 uma pill voltaria a estourar. -->
+  <!-- `flex-wrap`, not `overflow-x-auto`: the four pills exist to answer "is there something
+       there?" at a glance, and behind a horizontal scroll the last ones ("Seeding", "Problems")
+       sat out of view on a narrow screen. They wrap to the next line when they don't fit.
+       No `min-w-0` here: this flex item's automatic minimum is min-content (the widest pill),
+       which is exactly the desired floor — with min-w-0 a pill would overflow again. -->
   <div class="flex flex-wrap items-center gap-2">
     {#each pills as pill (pill.id)}
       <button

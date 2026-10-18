@@ -6,17 +6,17 @@ import (
 )
 
 func TestStandaloneAnimes(t *testing.T) {
-	t.Run("arquivo ausente devolve lista vazia, nao erro", func(t *testing.T) {
+	t.Run("missing file returns empty list, not error", func(t *testing.T) {
 		ids, err := newTestManager(t).LoadStandaloneAnimes()
 		if err != nil {
-			t.Fatalf("LoadStandaloneAnimes com arquivo ausente: %v", err)
+			t.Fatalf("LoadStandaloneAnimes with missing file: %v", err)
 		}
 		if len(ids) != 0 {
-			t.Fatalf("quero lista vazia, veio %v", ids)
+			t.Fatalf("want empty list, got %v", ids)
 		}
 	})
 
-	t.Run("Add e idempotente", func(t *testing.T) {
+	t.Run("Add is idempotent", func(t *testing.T) {
 		m := newTestManager(t)
 		for range 3 {
 			if err := m.AddStandaloneAnime(21); err != nil {
@@ -29,22 +29,22 @@ func TestStandaloneAnimes(t *testing.T) {
 			t.Fatalf("LoadStandaloneAnimes: %v", err)
 		}
 		if len(ids) != 1 || ids[0] != 21 {
-			t.Fatalf("quero [21], veio %v", ids)
+			t.Fatalf("want [21], got %v", ids)
 		}
 	})
 
-	t.Run("Remove de id ausente nao e erro", func(t *testing.T) {
+	t.Run("Remove of missing id is not an error", func(t *testing.T) {
 		m := newTestManager(t)
 		if err := m.AddStandaloneAnime(21); err != nil {
 			t.Fatalf("AddStandaloneAnime: %v", err)
 		}
 		if err := m.RemoveStandaloneAnime(999); err != nil {
-			t.Fatalf("RemoveStandaloneAnime de id ausente: %v", err)
+			t.Fatalf("RemoveStandaloneAnime of missing id: %v", err)
 		}
 
 		ids, _ := m.LoadStandaloneAnimes()
 		if len(ids) != 1 {
-			t.Fatalf("remover id ausente mexeu na lista: %v", ids)
+			t.Fatalf("removing missing id changed the list: %v", ids)
 		}
 
 		if err := m.RemoveStandaloneAnime(21); err != nil {
@@ -52,11 +52,11 @@ func TestStandaloneAnimes(t *testing.T) {
 		}
 		ids, _ = m.LoadStandaloneAnimes()
 		if len(ids) != 0 {
-			t.Fatalf("quero lista vazia depois do remove, veio %v", ids)
+			t.Fatalf("want empty list after remove, got %v", ids)
 		}
 	})
 
-	t.Run("grava array JSON, mesma convencao de blocked_episodes", func(t *testing.T) {
+	t.Run("writes a JSON array, same convention as blocked_episodes", func(t *testing.T) {
 		dir := t.TempDir()
 		path := dir + "/standalone"
 		m := NewManager(
@@ -79,7 +79,7 @@ func TestStandaloneAnimes(t *testing.T) {
 			t.Fatalf("ReadFile: %v", err)
 		}
 		if string(b) != "[21,154587]" {
-			t.Fatalf("quero [21,154587], veio %q", string(b))
+			t.Fatalf("want [21,154587], got %q", string(b))
 		}
 	})
 }

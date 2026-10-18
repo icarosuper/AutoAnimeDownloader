@@ -70,15 +70,15 @@ func TestFakeBackendActionsOnUnknownHashError(t *testing.T) {
 func TestFakeBackendRecordsEnsureCalls(t *testing.T) {
 	f := NewFakeBackend()
 
-	if _, err := f.Ensure("/velho"); err != nil {
+	if _, err := f.Ensure("/old"); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	if _, err := f.Ensure("/novo"); err != nil {
+	if _, err := f.Ensure("/new"); err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
 
 	got := f.EnsureCalls()
-	if len(got) != 2 || got[0] != "/velho" || got[1] != "/novo" {
-		t.Errorf("EnsureCalls() = %v, quero [/velho /novo]", got)
+	if len(got) != 2 || got[0] != "/old" || got[1] != "/new" {
+		t.Errorf("EnsureCalls() = %v, want [/old /new]", got)
 	}
 }

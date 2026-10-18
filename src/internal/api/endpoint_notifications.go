@@ -20,8 +20,8 @@ func handleNotificationWebhookTest(server *Server) http.HandlerFunc {
 			JSONInternalError(w, err)
 			return
 		}
-		// 502 e nao 200: o disparo que o servico recusou (token errado, URL fora do ar) precisa
-		// chegar ao toast. Um "sucesso" aqui so provava que o preset existe.
+		// 502, not 200: a fire the service refused (bad token, URL down) has to reach the
+		// toast. A "success" here only proved the preset exists.
 		if err := notifications.FireTestWebhook(cfg, name); err != nil {
 			if errors.Is(err, notifications.ErrWebhookNotFound) {
 				JSONError(w, http.StatusNotFound, "WEBHOOK_NOT_FOUND", err.Error())

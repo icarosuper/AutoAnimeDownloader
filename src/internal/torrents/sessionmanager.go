@@ -60,8 +60,8 @@ func NewSessionManager(dbPath string) *SessionManager {
 		dbPath: dbPath,
 		idPath: filepath.Join(filepath.Dir(dbPath), rootIDFileName),
 	}
-	// queue.json fica ao lado do banco de resume pelo mesmo motivo do download_root.id: e
-	// estado do torrent client, e precisa acompanhar o banco.
+	// queue.json lives next to the resume database for the same reason as download_root.id: it
+	// is torrent-client state, and it has to follow the database.
 	m.queue.load(filepath.Join(filepath.Dir(dbPath), queueFileName))
 	return m
 }
@@ -71,9 +71,9 @@ func NewSessionManager(dbPath string) *SessionManager {
 func (m *SessionManager) Ensure(savePath string) (bool, error) {
 	created, err := m.ensure(savePath)
 	if created {
-		// Troca de save_path nao zera a fila: os hashes sao os mesmos, e a poda/anexacao do
-		// enforce acerta qualquer diferenca. Fora do lock, que ensure ja soltou (ver a nota
-		// de ordem de lock no tipo).
+		// A save_path change does not wipe the queue: the hashes are the same, and enforce's
+		// prune/append fixes any difference. Outside the lock, which ensure already dropped
+		// (see the lock-order note on the type).
 		m.queue.enforce(m)
 	}
 	return created, err

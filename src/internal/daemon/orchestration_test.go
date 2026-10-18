@@ -89,9 +89,9 @@ func TestOrganizeTorrent_SingleEpisode(t *testing.T) {
 	}
 }
 
-// O pack tambem passa RenameFilesForJellyfin adiante: dois episodios no mesmo hash marcam
-// IsBatch, e cada arquivo do pack e renomeado pelo numero lido do proprio nome, na mesma pasta
-// que os avulsos usariam.
+// The pack also forwards RenameFilesForJellyfin: two episodes on the same hash mark IsBatch,
+// and each file in the pack is renamed by the number read from its own name, in the same
+// folder the loose episodes would use.
 func TestOrganizeTorrent_BatchRenamesEachFile(t *testing.T) {
 	dataDir := t.TempDir()
 	for _, name := range []string{"[Sub] My Anime - 01 [1080p].mkv", "[Sub] My Anime - 02 [1080p].mkv"} {
@@ -176,8 +176,8 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	}
 }
 
-// Deletar episodio dispara episode_deleted (e o Jellyfin reescaneia); com keepData a biblioteca
-// nao muda, entao nao dispara.
+// Deleting an episode fires episode_deleted (and Jellyfin rescans); with keepData the library
+// does not change, so it does not fire.
 func TestRemoveEpisodesAndLinks_FiresEpisodeDeletedWebhook(t *testing.T) {
 	saved := []files.EpisodeStruct{{AnimeName: "Frieren", EpisodeNumber: 3}}
 	cfg := func(url string) *files.Config {
@@ -699,8 +699,8 @@ func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
 	})
 }
 
-// O AnimeTotalEpisodes do registro chega ao Librarian: sem ele, um pack de season 2 com
-// numeracao continua entraria na biblioteca como E13/E14 numa pasta de 2 episodios.
+// The record's AnimeTotalEpisodes reaches the Librarian: without it, a season-2 pack with
+// continuous numbering would enter the library as E13/E14 in a 2-episode folder.
 func TestOrganizeTorrent_BatchContinuousNumbering(t *testing.T) {
 	dataDir := t.TempDir()
 	for _, name := range []string{"[Sub] My Anime S2 - 13 [1080p].mkv", "[Sub] My Anime S2 - 14 [1080p].mkv"} {

@@ -27,16 +27,16 @@ func TestStatusSlug(t *testing.T) {
 	}
 }
 
-// A rain pode ganhar estados novos numa atualização. Um status desconhecido tem que virar
-// "unknown", nunca string vazia — a UI usa o slug como chave de tradução.
+// rain may gain new states in an update. An unknown status has to become "unknown", never
+// an empty string — the UI uses the slug as a translation key.
 func TestStatusSlugUnknown(t *testing.T) {
 	if got := statusSlug(torrent.Status(99)); got != "unknown" {
 		t.Errorf("statusSlug(99) = %q, want %q", got, "unknown")
 	}
 }
 
-// Os slugs são contrato de API: precisam ser únicos, minúsculos e sem espaço, ao contrário
-// do Status.String() da rain, que devolve display text ("Downloading Metadata").
+// The slugs are an API contract: they must be unique, lowercase and without spaces, unlike
+// rain's Status.String(), which returns display text ("Downloading Metadata").
 func TestStatusSlugsAreDistinct(t *testing.T) {
 	seen := make(map[string]bool)
 	all := []torrent.Status{

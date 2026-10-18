@@ -5,7 +5,7 @@ export type SortDir = 'asc' | 'desc'
 /**
  * `problems` and `closed` are Fase 5 additions (spec §9.3):
  *
- * - `problems` backs the "Problemas" filter pill. It is NOT a status slug set — see
+ * - `problems` backs the "Problems" filter pill. It is NOT a status slug set — see
  *   `isProblemTorrent` for the definition — so it needs its own dimension instead of riding on
  *   `statuses`. Keeping `statuses` untouched also means old deep links (`?status=downloading`)
  *   decode exactly as they always did.
@@ -60,9 +60,9 @@ export const DEFAULT_VIEW_STATE: ViewState = {
  */
 export function isProblemTorrent(t: TorrentInfo): boolean {
   if (t.completed) return false
-  // 'queued' entra aqui junto com os parados: um torrent que a fila de downloads segurou
-  // tem 0 peers POR DEFINICAO, e sinalizar isso como problema encheria a pill de vermelho
-  // toda vez que o limite de downloads simultaneos fizesse o trabalho dele.
+  // 'queued' belongs here with the stopped ones: a torrent the download queue is holding
+  // has 0 peers BY DEFINITION, and flagging that as a problem would fill the pill with red
+  // every time the simultaneous-download limit did its job.
   if (t.status === 'stopped' || t.status === 'stopping' || t.status === 'queued') return false
   return t.peers_total === 0
 }
@@ -328,13 +328,13 @@ export function groupTorrents(list: TorrentInfo[]): TorrentGroup[] {
 }
 
 /**
- * Ordem em que os episódios de um grupo devem ser priorizados: crescente por
- * `episode_number`, com batch e episódio sem número no fim, preservando a ordem de exibição
- * entre eles. O backend aplica a lista NA ORDEM RECEBIDA, então quem decide é aqui.
+ * Order in which a group's episodes should be prioritized: ascending by `episode_number`,
+ * with batch and unnumbered episodes at the end, preserving display order among them. The
+ * backend applies the list IN THE ORDER RECEIVED, so the decision lives here.
  *
- * Nada a ver com `sortTorrents`: aquilo ordena o que a tela mostra, isto ordena o que a
- * requisição envia — o usuário pode estar ordenando por peers e ainda assim querer o
- * episódio 1 na frente da fila.
+ * Unrelated to `sortTorrents`: that sorts what the screen shows, this sorts what the
+ * request sends — the user may be sorting by peers and still want episode 1 at the front
+ * of the queue.
  */
 export function prioritizeOrder(list: TorrentInfo[]): string[] {
   const num = (t: TorrentInfo) => (t.episode_number === null || t.episode_number === undefined ? null : t.episode_number)
@@ -352,10 +352,11 @@ export function prioritizeOrder(list: TorrentInfo[]): string[] {
 }
 
 /**
- * Alvos do priorizar em lote a partir da SELEÇÃO, na ordem em que o usuário marcou as linhas —
- * o `Set` preserva ordem de inserção, e é ela que vale aqui, não a ordem de exibição (que é o
- * que `bulkTargets` daria). Hashes que já saíram da lista ou que não aceitam priorizar caem
- * fora: o backend os ignoraria de qualquer jeito, e contá-los inflaria a mensagem de resultado.
+ * Bulk-prioritize targets from the SELECTION, in the order the user marked the rows —
+ * the `Set` preserves insertion order, and that is what counts here, not display order
+ * (which is what `bulkTargets` would give). Hashes that already left the list or that
+ * don't accept prioritize are dropped: the backend would ignore them anyway, and counting
+ * them would inflate the result message.
  */
 export function selectionPrioritizeOrder(
   selected: Set<string>,

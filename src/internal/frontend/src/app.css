@@ -13,9 +13,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Fundo e cor no html: o AppShell já pinta `bg-window` no seu wrapper, mas nada cobre a área
-   atrás dele (overscroll) nem o instante antes de o shell montar. Isto vinha do `base: true`
-   do daisyUI e passou a morar aqui quando ele saiu. */
+/* Background and color on html: AppShell already paints `bg-window` on its wrapper, but
+   nothing covers the area behind it (overscroll) nor the instant before the shell mounts.
+   This used to come from daisyUI's `base: true` and moved here when daisyUI left. */
 html {
   background-color: var(--bg-window);
   color: var(--text-secondary);
@@ -29,9 +29,9 @@ html {
 }
 
 
-/* Tooltip — substitui o `.tooltip`/`data-tip` do daisyUI, que saiu. Mantido com o MESMO
-   contrato de classe e atributo (`class="tooltip tooltip-left" data-tip="..."`) para não
-   tocar os 14 pontos de uso. Só as quatro direções que o app usa existem aqui. */
+/* Tooltip — replaces daisyUI's `.tooltip`/`data-tip`, which left. Kept with the SAME
+   class and attribute contract (`class="tooltip tooltip-left" data-tip="..."`) so the
+   14 call sites don't have to change. Only the four directions the app uses exist here. */
 @layer components {
   .tooltip {
     position: relative;
@@ -42,7 +42,7 @@ html {
     content: attr(data-tip);
     position: absolute;
     z-index: 60;
-    /* padrão: acima, centralizado (mesmo default do daisyUI) */
+    /* default: above, centered (same daisyUI default) */
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
@@ -62,8 +62,8 @@ html {
     transition: opacity 0.15s ease-out;
   }
 
-  /* focus-within e não só hover: os alvos são botões, e quem navega por teclado precisa do
-     rótulo também. */
+  /* focus-within, not just hover: the targets are buttons, and keyboard users need the
+     label too. */
   .tooltip:hover::before,
   .tooltip:focus-within::before {
     opacity: 1;

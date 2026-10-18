@@ -28,11 +28,11 @@ func TestGetFrontendAnimeList_CachesWithinTTL(t *testing.T) {
 	statuses := []string{"CURRENT"}
 
 	if _, err := GetFrontendAnimeList("user", statuses); err != nil {
-		t.Fatalf("primeira busca falhou: %v", err)
+		t.Fatalf("first fetch failed: %v", err)
 	}
 	second, err := GetFrontendAnimeList("user", statuses)
 	if err != nil {
-		t.Fatalf("segunda busca falhou: %v", err)
+		t.Fatalf("second fetch failed: %v", err)
 	}
 	if calls != 1 {
 		t.Fatalf("want 1 request to AniList, got %d", calls)
@@ -43,7 +43,7 @@ func TestGetFrontendAnimeList_CachesWithinTTL(t *testing.T) {
 
 	// Another account and another status combination are different keys: they must fetch.
 	if _, err := GetFrontendAnimeList("outra", statuses); err != nil {
-		t.Fatalf("busca de outra conta falhou: %v", err)
+		t.Fatalf("fetch of another account failed: %v", err)
 	}
 	if calls != 2 {
 		t.Fatalf("want 2 requests after switching account, got %d", calls)
@@ -60,16 +60,16 @@ func TestGetFrontendAnimeList_CacheHandsOutCopies(t *testing.T) {
 	statuses := []string{"CURRENT"}
 	first, err := GetFrontendAnimeList("user", statuses)
 	if err != nil {
-		t.Fatalf("primeira busca falhou: %v", err)
+		t.Fatalf("first fetch failed: %v", err)
 	}
 	first.Data.Page.MediaList[0].CustomLists = CustomLists{"AutoDownloader": true}
 
 	second, err := GetFrontendAnimeList("user", statuses)
 	if err != nil {
-		t.Fatalf("segunda busca falhou: %v", err)
+		t.Fatalf("second fetch failed: %v", err)
 	}
 	if second.Data.Page.MediaList[0].CustomLists != nil {
-		t.Errorf("cache contaminado pelo chamador anterior: %v", second.Data.Page.MediaList[0].CustomLists)
+		t.Errorf("cache contaminated by the previous caller: %v", second.Data.Page.MediaList[0].CustomLists)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestMockAniListDo_ClearsCaches(t *testing.T) {
 	defer mockList(&secondCalls, `{"data":{"Page":{"mediaList":[]}}}`)()
 	resp, err := GetFrontendAnimeList("user", []string{"CURRENT"})
 	if err != nil {
-		t.Fatalf("busca falhou: %v", err)
+		t.Fatalf("fetch failed: %v", err)
 	}
 	if secondCalls != 1 {
 		t.Fatalf("want the new mock to be queried, requests=%d", secondCalls)

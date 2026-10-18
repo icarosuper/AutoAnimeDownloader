@@ -1,16 +1,16 @@
 package files
 
-// Animes avulsos: media ids que o usuario mandou acompanhar sem que eles estejam em nenhuma
-// lista da AniList. O arquivo e um array JSON de ids, exatamente a convencao de
-// blocked_episodes — a unica pergunta feita a ele e "este id esta aqui?", entao nao ha objeto
-// nem added_at.
+// Standalone animes: media ids the user asked to follow even though they are on no
+// AniList list. The file is a JSON array of ids, exactly the blocked_episodes
+// convention — the only question asked of it is "is this id here?", so there is no
+// object and no added_at.
 func (m *FileManager) LoadStandaloneAnimes() ([]int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.loadIntListLocked(m.standaloneAnimesPath, "standalone animes")
 }
 
-// AddStandaloneAnime e idempotente: adicionar duas vezes o mesmo id nao duplica nem falha.
+// AddStandaloneAnime is idempotent: adding the same id twice neither duplicates nor fails.
 func (m *FileManager) AddStandaloneAnime(mediaID int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -29,8 +29,8 @@ func (m *FileManager) AddStandaloneAnime(mediaID int) error {
 	return m.saveIntListLocked(m.standaloneAnimesPath, append(ids, mediaID), "standalone animes")
 }
 
-// RemoveStandaloneAnime nao trata id ausente como erro: quem chama (o DELETE e a remocao
-// automatica do passe de verificacao) so quer saber que o id nao esta mais la.
+// RemoveStandaloneAnime does not treat a missing id as an error: the caller (DELETE and the
+// automatic removal in the verification pass) only wants to know the id is no longer there.
 func (m *FileManager) RemoveStandaloneAnime(mediaID int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

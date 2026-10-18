@@ -19,8 +19,8 @@ func numbers(nodes []AiringNode) []int {
 	return out
 }
 
-// A agenda do One Piece comeca no 1123 (a AniList descarta as entradas antigas), e nextAiringEpisode
-// e a unica pista do que ja foi ao ar. Sem sintetizar, os 1122 primeiros nao existiriam.
+// One Piece's schedule starts at 1123 (AniList discards old entries), and nextAiringEpisode
+// is the only hint of what has already aired. Without synthesizing, the first 1122 wouldn't exist.
 func TestEpisodeList_FillsGapBelowTheAniListWindow(t *testing.T) {
 	next := 1174
 	ml := mediaList(MediaStatusReleasing, nil, &next,
@@ -31,75 +31,75 @@ func TestEpisodeList_FillsGapBelowTheAniListWindow(t *testing.T) {
 
 	got := EpisodeList(ml, 1)
 	if len(got) != 1174 {
-		t.Fatalf("quero 1174 episodios (1..1173 no ar + 1174 futuro), veio %d", len(got))
+		t.Fatalf("want 1174 episodes (1..1173 aired + 1174 upcoming), got %d", len(got))
 	}
 	if got[0].Episode != 1 || got[0].TimeUntilAiring >= 0 {
-		t.Errorf("episodio 1 deve ser sintetizado como ja exibido, veio %+v", got[0])
+		t.Errorf("episode 1 must be synthesized as already aired, got %+v", got[0])
 	}
 	if got[1122].Episode != 1123 || got[1122].AiringAt != 42 {
-		t.Errorf("onde a agenda existe o no REAL deve ser usado (traz airingAt), veio %+v", got[1122])
+		t.Errorf("where the schedule exists the REAL node must be used (it brings airingAt), got %+v", got[1122])
 	}
 	if last := got[1173]; last.Episode != 1174 || last.TimeUntilAiring <= 0 {
-		t.Errorf("o episodio ainda por vir deve entrar como futuro, veio %+v", last)
+		t.Errorf("the upcoming episode must enter as future, got %+v", last)
 	}
 }
 
-// Anime antigo/finalizado volta com airingSchedule VAZIO: a lista tem de sair de media.episodes,
-// senao nada dele e baixavel.
+// An old/finished anime comes back with an EMPTY airingSchedule: the list has to come from
+// media.episodes, otherwise none of it is downloadable.
 func TestEpisodeList_FinishedAnimeWithEmptySchedule(t *testing.T) {
 	total := 25
 	got := EpisodeList(mediaList(MediaStatusFinished, &total, nil), 1)
 	if len(got) != 25 {
-		t.Fatalf("quero 25 episodios, veio %d: %v", len(got), numbers(got))
+		t.Fatalf("want 25 episodes, got %d: %v", len(got), numbers(got))
 	}
 	for i, n := range got {
 		if n.Episode != i+1 || n.TimeUntilAiring > 0 {
-			t.Fatalf("episodio %d inesperado: %+v", i+1, n)
+			t.Fatalf("unexpected episode %d: %+v", i+1, n)
 		}
 	}
 }
 
-// fromEpisode e progresso+1: o que o usuario ja assistiu nao entra na lista.
+// fromEpisode is progress+1: what the user already watched doesn't enter the list.
 func TestEpisodeList_StartsAtFromEpisode(t *testing.T) {
 	total := 12
 	got := numbers(EpisodeList(mediaList(MediaStatusFinished, &total, nil), 10))
 	want := []int{10, 11, 12}
 	if len(got) != len(want) {
-		t.Fatalf("quero %v, veio %v", want, got)
+		t.Fatalf("want %v, got %v", want, got)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("quero %v, veio %v", want, got)
+			t.Fatalf("want %v, got %v", want, got)
 		}
 	}
 }
 
-// Num RELEASING media.episodes e a contagem PREVISTA da temporada: usa-la como "ultimo no ar"
-// mandaria o daemon buscar episodio que ainda nao existe. O nextAiringEpisode entra na lista, mas
-// como FUTURO (o daemon o pula, a tela o mostra).
+// On a RELEASING, media.episodes is the PREDICTED season count: using it as "last aired"
+// would send the daemon looking for an episode that doesn't exist yet. nextAiringEpisode
+// enters the list, but as FUTURE (the daemon skips it, the screen shows it).
 func TestEpisodeList_ReleasingIgnoresPredictedTotal(t *testing.T) {
 	total := 24
 	next := 6
 	got := EpisodeList(mediaList(MediaStatusReleasing, &total, &next), 1)
 	if len(got) != 6 {
-		t.Fatalf("quero 5 no ar + o proximo, veio %v", numbers(got))
+		t.Fatalf("want 5 aired + the next one, got %v", numbers(got))
 	}
 	for _, n := range got[:5] {
 		if n.TimeUntilAiring > 0 {
-			t.Fatalf("episodio %d deveria estar no ar: %+v", n.Episode, n)
+			t.Fatalf("episode %d should have aired: %+v", n.Episode, n)
 		}
 	}
 	if got[5].Episode != 6 || got[5].TimeUntilAiring <= 0 {
-		t.Fatalf("o proximo episodio deve entrar como futuro, veio %+v", got[5])
+		t.Fatalf("the next episode must enter as future, got %+v", got[5])
 	}
 }
 
-// NOT_YET_RELEASED nao tem episodio no ar: a lista traz so o que a agenda promete.
+// NOT_YET_RELEASED has no episode on air: the list brings only what the schedule promises.
 func TestEpisodeList_NotYetReleased(t *testing.T) {
 	got := EpisodeList(mediaList(MediaStatusNotYetReleased, nil, nil,
 		AiringNode{Episode: 1, TimeUntilAiring: 7200},
 	), 1)
 	if len(got) != 1 || got[0].Episode != 1 || got[0].TimeUntilAiring <= 0 {
-		t.Fatalf("quero apenas o episodio 1 futuro, veio %+v", got)
+		t.Fatalf("want only upcoming episode 1, got %+v", got)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// MockFileSystem implementa a interface FileSystem para testes
+// MockFileSystem implements the FileSystem interface for tests
 type MockFileSystem struct {
 	files       map[string][]byte
 	dirs        map[string]bool

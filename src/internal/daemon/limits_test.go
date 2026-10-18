@@ -291,7 +291,7 @@ func TestFilterBySeeders(t *testing.T) {
 func TestFilterSearchResults_DropStats(t *testing.T) {
 	const gib = int64(1024 * 1024 * 1024)
 
-	t.Run("entrada vazia", func(t *testing.T) {
+	t.Run("empty input", func(t *testing.T) {
 		got, stats := filterSearchResults(nil, 3, 1)
 		if len(got) != 0 {
 			t.Errorf("want an empty list, got %+v", got)
@@ -332,7 +332,7 @@ func TestFilterSearchResults_DropStats(t *testing.T) {
 		}
 	})
 
-	t.Run("corte pelos dois", func(t *testing.T) {
+	t.Run("cut by both", func(t *testing.T) {
 		results := []nyaa.TorrentResult{
 			{Name: "huge", Size: 8 * gib, Seeders: "50"},
 			{Name: "dead", Size: 1 * gib, Seeders: "0"},
@@ -430,7 +430,7 @@ func TestProcessAnimeEpisodes_DiskFullNotifiesNoDiskSpaceReason(t *testing.T) {
 			t.Errorf("want reason %q in the webhook, got %q", notifications.ReasonNoDiskSpace, body)
 		}
 	case <-time.After(500 * time.Millisecond):
-		t.Error("nenhum webhook de falha recebido")
+		t.Error("no failure webhook received")
 	}
 }
 

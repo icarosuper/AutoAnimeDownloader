@@ -1,8 +1,8 @@
 import '@testing-library/jest-dom'
 
-// Node >=22 define um global `localStorage` undefined (sem --localstorage-file) e o
-// ambiente jsdom do vitest não sobrescreve globais já existentes; locale.ts/theme.ts
-// usam localStorage no load do módulo
+// Node >=22 defines a global `localStorage` as undefined (without --localstorage-file) and
+// vitest's jsdom environment does not overwrite already-existing globals; locale.ts/theme.ts
+// use localStorage at module load
 if (!window.localStorage) {
   const store = new Map<string, string>()
   Object.defineProperty(window, 'localStorage', {

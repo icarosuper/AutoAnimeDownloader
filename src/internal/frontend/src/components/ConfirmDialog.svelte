@@ -1,8 +1,8 @@
 <script lang="ts">
-  // Diálogo de confirmação. Construído sobre o `ui/Modal` do projeto — que já resolve overlay,
-  // foco preso, Esc e devolução do foco — em vez do `<dialog>` + `.modal-*` do daisyUI que
-  // morava aqui. A API pública (bind:open, title, message, confirmLabel, cancelLabel, slot,
-  // on:confirm/on:cancel) é a mesma de antes, então os consumidores não mudam.
+  // Confirmation dialog. Built on the project's `ui/Modal` — which already handles overlay,
+  // focus trap, Esc and focus return — instead of daisyUI's `<dialog>` + `.modal-*` that
+  // used to live here. The public API (bind:open, title, message, confirmLabel, cancelLabel,
+  // slot, on:confirm/on:cancel) is the same as before, so consumers don't change.
   import { createEventDispatcher } from "svelte";
   import Modal from "./ui/Modal.svelte";
   import Button from "./ui/Button.svelte";
@@ -15,8 +15,8 @@
 
   const dispatch = createEventDispatcher<{ confirm: void; cancel: void }>();
 
-  // id único por instância: a tela monta mais de um ConfirmDialog ao mesmo tempo
-  // (AnimeDetail tem dois), e um id repetido faria o aria-labelledby apontar para o errado.
+  // unique id per instance: the screen mounts more than one ConfirmDialog at once
+  // (AnimeDetail has two), and a repeated id would make aria-labelledby point at the wrong one.
   const titleId = `confirm-title-${Math.random().toString(36).slice(2, 9)}`;
 
   function confirm() {
@@ -35,10 +35,11 @@
   {#if message}
     <p class="mt-3 text-copy font-normal text-body">{message}</p>
   {/if}
-  <!-- Slot opcional para composição: quem precisar de conteúdo extra entre a mensagem e os
-       botões (ex.: TorrentDeleteDialog com seus checkboxes) usa isto em vez de duplicar o
-       diálogo. O wrapper só existe quando há slot — antes ele era incondicional e dependia de
-       colapso de margem para não abrir um vão nos diálogos que passam só `message`. -->
+  <!-- Optional slot for composition: anyone who needs extra content between the message and
+       the buttons (e.g. TorrentDeleteDialog with its checkboxes) uses this instead of
+       duplicating the dialog. The wrapper only exists when there is a slot — before it was
+       unconditional and relied on margin collapse to avoid opening a gap in dialogs that
+       only pass `message`. -->
   {#if $$slots.default}
     <div class="mt-5">
       <slot />

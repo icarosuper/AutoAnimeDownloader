@@ -13,8 +13,8 @@ import (
 	"AutoAnimeDownloader/src/internal/torrents"
 )
 
-// mockAniListRouter responde a query de lista com listJSON e a query de midia por id com
-// mediaJSON — searchAnilist com avulsos faz as duas.
+// mockAniListRouter answers the list query with listJSON and the media-by-id query with
+// mediaJSON — searchAnilist with standalones does both.
 func mockAniListRouter(t *testing.T, listJSON, mediaJSON string) func() {
 	t.Helper()
 	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
@@ -34,9 +34,9 @@ func mockAniListRouter(t *testing.T, listJSON, mediaJSON string) func() {
 	})
 }
 
-// batchMediaJSON converte um fixture de GetMediaByID (Media unico) na resposta que GetMediaByIDs
-// espera (Page.media[]) — as duas queries pedem os mesmos campos, entao os testes nao precisam de
-// duas copias de cada anime. Media null vira lista vazia, que e como id_in devolve id ausente.
+// batchMediaJSON converts a GetMediaByID fixture (single Media) into the response GetMediaByIDs
+// expects (Page.media[]) — both queries ask for the same fields, so the tests don't need two
+// copies of each anime. Null Media becomes an empty list, which is how id_in returns a missing id.
 func batchMediaJSON(mediaJSON string) string {
 	var single struct {
 		Data struct {
@@ -49,7 +49,7 @@ func batchMediaJSON(mediaJSON string) string {
 	return `{"data":{"Page":{"media":[` + string(single.Data.Media) + `]}}}`
 }
 
-// mockEmptyNyaa evita que os testes batam na rede: a lista de torrents volta vazia.
+// mockEmptyNyaa keeps the tests off the network: the torrent list comes back empty.
 func mockEmptyNyaa() func() {
 	return nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
 		return &http.Response{
@@ -96,8 +96,8 @@ const mediaForAnime500 = `{"data": {"Media": {
 	"airingSchedule": {"nodes": [{"id": 900, "episode": 1, "timeUntilAiring": -100, "airingAt": 1}]}
 }}}`
 
-// TestSearchAnilist_StandaloneAppendedAfterDedupe: o avulso ausente das listas entra no
-// universo do passe, senao ele nunca e verificado de novo depois da adicao.
+// TestSearchAnilist_StandaloneAppendedAfterDedupe: a standalone missing from the lists enters
+// the pass's universe, otherwise it is never verified again after being added.
 func TestSearchAnilist_StandaloneAppended(t *testing.T) {
 	defer mockAniListRouter(t, listWithAnime100, mediaForAnime500)()
 
@@ -112,19 +112,19 @@ func TestSearchAnilist_StandaloneAppended(t *testing.T) {
 		byMedia[ml.Media.Id] = ml
 	}
 	if len(byMedia) != 2 {
-		t.Fatalf("quero 2 animes (lista + avulso), veio %d", len(byMedia))
+		t.Fatalf("want 2 animes (list + standalone), got %d", len(byMedia))
 	}
 	if byMedia[500].Media.Id != 500 {
-		t.Fatal("avulso 500 nao entrou no passe")
+		t.Fatal("standalone 500 did not enter the pass")
 	}
 	if len(fm.removedStandalone) != 0 {
-		t.Fatalf("avulso fora da lista nao pode ser removido do arquivo, removeu %v", fm.removedStandalone)
+		t.Fatalf("a standalone outside the list must not be removed from the file, removed %v", fm.removedStandalone)
 	}
 }
 
-// TestSearchAnilist_StandaloneAlsoInListDoesNotDuplicateNorResetProgress trava a ordem: o
-// append acontece DEPOIS do dedupe. Se ele viesse antes, o Progress 0 sintetico venceria
-// (DedupeByMedia mantem o menor) e o daemon rebaixaria episodios ja assistidos.
+// TestSearchAnilist_StandaloneAlsoInListDoesNotDuplicateNorResetProgress locks the order: the
+// append happens AFTER the dedupe. If it came first, the synthetic Progress 0 would win
+// (DedupeByMedia keeps the lowest) and the daemon would re-download already-watched episodes.
 func TestSearchAnilist_StandaloneAlsoInListDoesNotDuplicateNorResetProgress(t *testing.T) {
 	defer mockAniListRouter(t, listWithAnime100, mediaForAnime100)()
 
@@ -135,15 +135,15 @@ func TestSearchAnilist_StandaloneAlsoInListDoesNotDuplicateNorResetProgress(t *t
 	}
 
 	if len(resp.Data.Page.MediaList) != 1 {
-		t.Fatalf("avulso que tambem esta na lista duplicou: %d entradas", len(resp.Data.Page.MediaList))
+		t.Fatalf("a standalone that is also on the list duplicated: %d entries", len(resp.Data.Page.MediaList))
 	}
 	if got := resp.Data.Page.MediaList[0].Progress; got != 7 {
-		t.Fatalf("a entrada real precisa vencer: quero Progress 7, veio %d", got)
+		t.Fatalf("the real entry must win: want Progress 7, got %d", got)
 	}
 }
 
-// TestSearchAnilist_StandaloneAdoptedByListIsRemovedFromFile: adotado por uma lista, o
-// registro avulso deixa de ter funcao — e o arquivo para de crescer.
+// TestSearchAnilist_StandaloneAdoptedByListIsRemovedFromFile: adopted by a list, the
+// standalone record no longer has a purpose — and the file stops growing.
 func TestSearchAnilist_StandaloneAdoptedByListIsRemovedFromFile(t *testing.T) {
 	defer mockAniListRouter(t, listWithAnime100, mediaForAnime100)()
 
@@ -153,19 +153,19 @@ func TestSearchAnilist_StandaloneAdoptedByListIsRemovedFromFile(t *testing.T) {
 	}
 
 	if !containsID(fm.removedStandalone, 100) {
-		t.Fatalf("avulso adotado pela lista precisa sair do arquivo, removidos: %v", fm.removedStandalone)
+		t.Fatalf("a standalone adopted by the list must leave the file, removed: %v", fm.removedStandalone)
 	}
 	if len(fm.standaloneAnimes) != 0 {
-		t.Fatalf("arquivo de avulsos deveria estar vazio, veio %v", fm.standaloneAnimes)
+		t.Fatalf("the standalones file should be empty, got %v", fm.standaloneAnimes)
 	}
 }
 
-// TestSearchAnilist_StandaloneOutsideDownloadStatusesStays: um anime em PLANNING nao aparece
-// no conjunto que o daemon processa, entao o registro avulso continua sendo o unico motivo de
-// ele ser verificado — e o caso de uso mais obvio da feature.
+// TestSearchAnilist_StandaloneOutsideDownloadStatusesStays: an anime in PLANNING does not
+// appear in the set the daemon processes, so the standalone record remains the only reason
+// it is verified — and the most obvious use case of the feature.
 func TestSearchAnilist_StandaloneOutsideDownloadStatusesStays(t *testing.T) {
-	// A lista (filtrada por download_statuses server-side) volta vazia: o anime esta em
-	// PLANNING na AniList, mas o daemon so busca CURRENT.
+	// The list (filtered by download_statuses server-side) comes back empty: the anime is in
+	// PLANNING on AniList, but the daemon only searches CURRENT.
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, mediaForAnime500)()
 
 	fm := &mockFileManagerForEpisodes{standaloneAnimes: []int{500}}
@@ -175,16 +175,16 @@ func TestSearchAnilist_StandaloneOutsideDownloadStatusesStays(t *testing.T) {
 	}
 
 	if len(resp.Data.Page.MediaList) != 1 || resp.Data.Page.MediaList[0].Media.Id != 500 {
-		t.Fatalf("avulso fora de download_statuses precisa ser processado, veio %+v", resp.Data.Page.MediaList)
+		t.Fatalf("a standalone outside download_statuses must be processed, got %+v", resp.Data.Page.MediaList)
 	}
 	if len(fm.removedStandalone) != 0 {
-		t.Fatalf("avulso fora de download_statuses nao pode sair do arquivo, removeu %v", fm.removedStandalone)
+		t.Fatalf("a standalone outside download_statuses must not leave the file, removed %v", fm.removedStandalone)
 	}
 }
 
-// TestDownloadStandaloneAnime_DoesNotDeleteTheRestOfTheLibrary trava o motivo de
-// DownloadStandaloneAnime nao chamar handleSavedEpisodes: com delete_watched_episodes ligado e
-// os episodios de um anime so na mao, identifyEpisodesNotInWatching apagaria todo o resto.
+// TestDownloadStandaloneAnime_DoesNotDeleteTheRestOfTheLibrary locks why
+// DownloadStandaloneAnime does not call handleSavedEpisodes: with delete_watched_episodes on
+// and only one anime's episodes in hand, identifyEpisodesNotInWatching would delete the rest.
 func TestDownloadStandaloneAnime_DoesNotDeleteTheRestOfTheLibrary(t *testing.T) {
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, mediaForAnime500)()
 
@@ -193,7 +193,7 @@ func TestDownloadStandaloneAnime_DoesNotDeleteTheRestOfTheLibrary(t *testing.T) 
 	configs := standaloneTestConfig()
 	configs.DeleteWatchedEpisodes = true
 
-	// Biblioteca com 3 animes ja salvos: nenhum deles pode sumir por causa da adicao.
+	// Library with 3 animes already saved: none of them can vanish because of the add.
 	fm := &mockFileManagerForEpisodes{savedEpisodes: []files.EpisodeStruct{
 		{EpisodeNumber: 1, AnimeID: 10, EpisodeHash: "h1"},
 		{EpisodeNumber: 2, AnimeID: 20, EpisodeHash: "h2"},
@@ -206,13 +206,13 @@ func TestDownloadStandaloneAnime_DoesNotDeleteTheRestOfTheLibrary(t *testing.T) 
 	}
 
 	if len(fm.deletedEpisodeKeys) != 0 {
-		t.Fatalf("adicionar um avulso nao pode apagar episodio nenhum, apagou %v", fm.deletedEpisodeKeys)
+		t.Fatalf("adding a standalone must not delete any episode, deleted %v", fm.deletedEpisodeKeys)
 	}
 }
 
-// TestAppendStandaloneAnimes_InjectsSavedProgress: sem progresso, depois do primeiro pack o
-// avulso para para sempre — nada nunca e "assistido", a poda nunca roda e o rodizio nao tem o
-// que o mova.
+// TestAppendStandaloneAnimes_InjectsSavedProgress: without progress, after the first pack the
+// standalone stops forever — nothing is ever "watched", pruning never runs and the rotation
+// has nothing to move it.
 func TestAppendStandaloneAnimes_InjectsSavedProgress(t *testing.T) {
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, mediaForAnime500)()
 
@@ -221,35 +221,35 @@ func TestAppendStandaloneAnimes_InjectsSavedProgress(t *testing.T) {
 	merged := appendStandaloneAnimes(fm, nil, []int{500})
 
 	if len(merged) != 1 {
-		t.Fatalf("esperava 1 anime, obteve %d", len(merged))
+		t.Fatalf("want 1 anime, got %d", len(merged))
 	}
 	if merged[0].Progress != 48 {
-		t.Errorf("esperava Progress 48, obteve %d", merged[0].Progress)
+		t.Errorf("want Progress 48, got %d", merged[0].Progress)
 	}
 	if got := firstEpisodeToConsider(merged[0], nil); got != 49 {
-		t.Errorf("a lista deve comecar no 49, obteve %d", got)
+		t.Errorf("the list must start at 49, got %d", got)
 	}
 }
 
-// TestAppendStandaloneAnimes_NoSettingsMeansZeroProgress: sem AnimeSettings gravado, Progress 0
-// — comportamento de antes.
+// TestAppendStandaloneAnimes_NoSettingsMeansZeroProgress: with no AnimeSettings saved,
+// Progress 0 — the previous behavior.
 func TestAppendStandaloneAnimes_NoSettingsMeansZeroProgress(t *testing.T) {
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, mediaForAnime500)()
 
 	merged := appendStandaloneAnimes(&mockFileManagerForEpisodes{}, nil, []int{500})
 
 	if len(merged) != 1 || merged[0].Progress != 0 {
-		t.Errorf("esperava Progress 0, obteve %+v", merged)
+		t.Errorf("want Progress 0, got %+v", merged)
 	}
 }
 
-// TestDownloadStandaloneAnime_UnknownMedia: id que a AniList nao conhece nao pode virar um
-// download silencioso.
+// TestDownloadStandaloneAnime_UnknownMedia: an id AniList does not know must not become a
+// silent download.
 func TestDownloadStandaloneAnime_UnknownMedia(t *testing.T) {
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, `{"data": {"Media": null}}`)()
 
 	fm := &mockFileManagerForEpisodes{}
 	if _, err := DownloadStandaloneAnime(fm, torrents.NewFakeBackend(), standaloneTestConfig(), 999999); err == nil {
-		t.Fatal("quero erro para media id desconhecido")
+		t.Fatal("want an error for an unknown media id")
 	}
 }

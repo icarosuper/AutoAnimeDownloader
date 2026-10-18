@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// TestSearchMedia_MapsResults: a barra de busca da tela #/add depende destes campos.
+// TestSearchMedia_MapsResults: the search bar of the #/add screen depends on these fields.
 func TestSearchMedia_MapsResults(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"media":[
@@ -24,30 +24,30 @@ func TestSearchMedia_MapsResults(t *testing.T) {
 		t.Fatalf("SearchMedia: %v", err)
 	}
 	if len(results) != 2 {
-		t.Fatalf("quero 2 resultados, veio %d", len(results))
+		t.Fatalf("want 2 results, got %d", len(results))
 	}
 
 	first := results[0]
 	if first.Id != 21 || first.Format != MediaFormatTV || first.Status != MediaStatusReleasing {
-		t.Fatalf("primeiro resultado mapeado errado: %+v", first)
+		t.Fatalf("first result mapped wrong: %+v", first)
 	}
 	if first.SeasonYear != 1999 {
-		t.Fatalf("quero seasonYear 1999, veio %d", first.SeasonYear)
+		t.Fatalf("want seasonYear 1999, got %d", first.SeasonYear)
 	}
 	if first.Episodes != nil {
-		t.Fatalf("episodes null deve virar nil, veio %v", *first.Episodes)
+		t.Fatalf("null episodes should become nil, got %v", *first.Episodes)
 	}
 	if first.CoverImage.Large != "big.jpg" {
-		t.Fatalf("cover mapeada errado: %+v", first.CoverImage)
+		t.Fatalf("cover mapped wrong: %+v", first.CoverImage)
 	}
 	if results[1].Episodes == nil || *results[1].Episodes != 64 {
-		t.Fatalf("quero 64 episodios no segundo resultado, veio %v", results[1].Episodes)
+		t.Fatalf("want 64 episodes on the second result, got %v", results[1].Episodes)
 	}
 }
 
-// TestSearchMedia_UnreleasedFilterIsServerSide: o filtro precisa viajar NA QUERY. Filtrar depois
-// de receber esvaziaria a busca (perPage e 20), e um teste que so olhasse o resultado passaria
-// com as duas implementacoes — por isso este inspeciona o corpo enviado.
+// TestSearchMedia_UnreleasedFilterIsServerSide: the filter has to travel IN THE QUERY. Filtering
+// after receiving would empty the search (perPage is 20), and a test that only looked at the
+// result would pass with both implementations — that's why this one inspects the sent body.
 func TestSearchMedia_UnreleasedFilterIsServerSide(t *testing.T) {
 	var sent string
 	defer MockAniListDo(func(req *http.Request) (*http.Response, error) {
@@ -63,19 +63,19 @@ func TestSearchMedia_UnreleasedFilterIsServerSide(t *testing.T) {
 		t.Fatalf("SearchMedia: %v", err)
 	}
 	if !strings.Contains(sent, "status_not: NOT_YET_RELEASED") {
-		t.Fatalf("o padrao precisa esconder os nao lancados na query, veio: %s", sent)
+		t.Fatalf("the default needs to hide unreleased in the query, got: %s", sent)
 	}
 
 	if _, err := SearchMedia("one", true); err != nil {
 		t.Fatalf("SearchMedia: %v", err)
 	}
 	if strings.Contains(sent, "status_not") {
-		t.Fatalf("com includeUnreleased o argumento nao pode existir, veio: %s", sent)
+		t.Fatalf("with includeUnreleased the argument can't exist, got: %s", sent)
 	}
 }
 
-// TestGetMediaByID_SyntheticEntry: o MediaList devolvido nao vem de lista nenhuma, entao
-// Progress/Status/Id precisam ser os zeros — e nao lixo que o dedupe do loop leve a serio.
+// TestGetMediaByID_SyntheticEntry: the returned MediaList doesn't come from any list, so
+// Progress/Status/Id need to be zeros — not junk the loop's dedupe would take seriously.
 func TestGetMediaByID_SyntheticEntry(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Media":{
@@ -92,66 +92,67 @@ func TestGetMediaByID_SyntheticEntry(t *testing.T) {
 		t.Fatalf("GetMediaByID: %v", err)
 	}
 	if ml == nil {
-		t.Fatal("quero um MediaList, veio nil")
+		t.Fatal("want a MediaList, got nil")
 	}
 	if ml.Id != 0 || ml.Progress != 0 || ml.Status != "" {
-		t.Fatalf("entrada sintetica precisa vir zerada, veio Id=%d Progress=%d Status=%q", ml.Id, ml.Progress, ml.Status)
+		t.Fatalf("synthetic entry needs to come zeroed, got Id=%d Progress=%d Status=%q", ml.Id, ml.Progress, ml.Status)
 	}
 	if ml.Media.Id != 21 {
-		t.Fatalf("quero media id 21, veio %d", ml.Media.Id)
+		t.Fatalf("want media id 21, got %d", ml.Media.Id)
 	}
-	// A busca por anime e searchNyaaForSingleEpisode dependem destes tres.
+	// Anime search and searchNyaaForSingleEpisode depend on these three.
 	if len(ml.Media.Synonyms) != 1 {
-		t.Fatalf("synonyms perdido: %+v", ml.Media.Synonyms)
+		t.Fatalf("synonyms lost: %+v", ml.Media.Synonyms)
 	}
 	if len(ml.Media.Relations.Edges) != 1 || ml.Media.Relations.Edges[0].RelationType != "PREQUEL" {
-		t.Fatalf("relations perdido: %+v", ml.Media.Relations)
+		t.Fatalf("relations lost: %+v", ml.Media.Relations)
 	}
 	if len(ml.Media.AiringSchedule.Nodes) != 1 || ml.Media.AiringSchedule.Nodes[0].ID != 10 {
-		t.Fatalf("airingSchedule sem id: %+v", ml.Media.AiringSchedule.Nodes)
+		t.Fatalf("airingSchedule without id: %+v", ml.Media.AiringSchedule.Nodes)
 	}
 }
 
-// TestGetMediaByID_CachesWithinTTL: GET /animes tem poll de 30s por aba e passa a chamar isto
-// por anime avulso — o mesmo motivo do cache de GetFrontendAnimeList.
+// TestGetMediaByID_CachesWithinTTL: GET /animes has a 30s poll per tab and starts calling this
+// per standalone anime — the same reason GetFrontendAnimeList is cached.
 func TestGetMediaByID_CachesWithinTTL(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Media":{"id":21,"title":{"romaji":"X"}}}}`)()
 
 	if _, err := GetMediaByID(21, PriorityCritical); err != nil {
-		t.Fatalf("primeira busca: %v", err)
+		t.Fatalf("first fetch: %v", err)
 	}
 	if _, err := GetMediaByID(21, PriorityCritical); err != nil {
-		t.Fatalf("segunda busca: %v", err)
+		t.Fatalf("second fetch: %v", err)
 	}
 	if calls != 1 {
-		t.Fatalf("quero 1 request, veio %d", calls)
+		t.Fatalf("want 1 request, got %d", calls)
 	}
 
 	if _, err := GetMediaByID(22, PriorityCritical); err != nil {
-		t.Fatalf("outro id: %v", err)
+		t.Fatalf("other id: %v", err)
 	}
 	if calls != 2 {
-		t.Fatalf("id diferente e chave diferente: quero 2 requests, veio %d", calls)
+		t.Fatalf("a different id is a different key: want 2 requests, got %d", calls)
 	}
 }
 
-// TestGetMediaByID_NotFound: id que nao existe devolve (nil, nil), o que o POST traduz em 404.
+// TestGetMediaByID_NotFound: an id that doesn't exist returns (nil, nil), which the POST
+// translates into 404.
 func TestGetMediaByID_NotFound(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Media":null}}`)()
 
 	ml, err := GetMediaByID(999999, PriorityCritical)
 	if err != nil {
-		t.Fatalf("Media null nao e erro: %v", err)
+		t.Fatalf("null Media is not an error: %v", err)
 	}
 	if ml != nil {
-		t.Fatalf("quero nil, veio %+v", ml)
+		t.Fatalf("want nil, got %+v", ml)
 	}
 }
 
-// mockCapturing devolve payloads em sequencia e guarda os corpos enviados — e como os testes do
-// lote provam QUAIS ids foram pedidos, nao so quantos requests sairam.
+// mockCapturing returns payloads in sequence and stores the sent bodies — that's how the batch
+// tests prove WHICH ids were requested, not just how many requests went out.
 func mockCapturing(sent *[]string, payloads ...string) func() {
 	return MockAniListDo(func(req *http.Request) (*http.Response, error) {
 		body, _ := io.ReadAll(req.Body)
@@ -167,8 +168,8 @@ func mockCapturing(sent *[]string, payloads ...string) func() {
 	})
 }
 
-// TestGetMediaByIDs_SingleRequestForManyIDs e a razao de a funcao existir: o loop anterior
-// gastava 1 request por avulso contra o limite de 30/min da AniList (decisions.md #65).
+// TestGetMediaByIDs_SingleRequestForManyIDs is why the function exists: the previous loop
+// spent 1 request per standalone against AniList's 30/min limit (decisions.md #65).
 func TestGetMediaByIDs_SingleRequestForManyIDs(t *testing.T) {
 	var sent []string
 	defer mockCapturing(&sent, `{"data":{"Page":{"media":[
@@ -182,40 +183,41 @@ func TestGetMediaByIDs_SingleRequestForManyIDs(t *testing.T) {
 		t.Fatalf("GetMediaByIDs: %v", err)
 	}
 	if len(sent) != 1 {
-		t.Fatalf("quero 1 request para 3 ids, veio %d", len(sent))
+		t.Fatalf("want 1 request for 3 ids, got %d", len(sent))
 	}
 	if !strings.Contains(sent[0], "id_in") {
-		t.Fatalf("a query precisa buscar em lote com id_in, veio: %s", sent[0])
+		t.Fatalf("the query needs to fetch in batch with id_in, got: %s", sent[0])
 	}
 	for _, id := range []int{21, 22, 23} {
 		if medias[id] == nil || medias[id].Media.Id != id {
-			t.Fatalf("id %d nao voltou no mapa: %+v", id, medias[id])
+			t.Fatalf("id %d didn't come back in the map: %+v", id, medias[id])
 		}
 	}
 }
 
-// TestGetMediaByIDs_AbsentIDIsNilNotMissing: id_in OMITE o media apagado da AniList em vez de
-// devolver erro. Sem transformar a omissao em nil explicito, quem chama nao consegue distinguir
-// "avulso morto" de "nao deu para buscar" e o anime some da tela sem aviso.
+// TestGetMediaByIDs_AbsentIDIsNilNotMissing: id_in OMITS the deleted AniList media instead of
+// returning an error. Without turning the omission into an explicit nil, the caller can't
+// tell "dead standalone" from "couldn't fetch" and the anime vanishes from the screen with
+// no warning.
 func TestGetMediaByIDs_AbsentIDIsNilNotMissing(t *testing.T) {
 	var sent []string
 	defer mockCapturing(&sent, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"A"}}]}}}`)()
 
 	medias, err := GetMediaByIDs([]int{21, 999999}, PriorityCritical)
 	if err != nil {
-		t.Fatalf("id omitido nao e erro: %v", err)
+		t.Fatalf("an omitted id is not an error: %v", err)
 	}
 	ml, ok := medias[999999]
 	if !ok {
-		t.Fatal("o id omitido precisa estar no mapa com nil; ausente significa 'nao foi buscado'")
+		t.Fatal("the omitted id needs to be in the map as nil; absent means 'wasn't fetched'")
 	}
 	if ml != nil {
-		t.Fatalf("quero nil para o id omitido, veio %+v", ml)
+		t.Fatalf("want nil for the omitted id, got %+v", ml)
 	}
 }
 
-// TestGetMediaByIDs_CachesPerID: o cache e por id, e nao por lote — chaveado pelo lote, um avulso
-// novo invalidaria a leitura de todos os outros a cada adicao.
+// TestGetMediaByIDs_CachesPerID: the cache is per id, not per batch — keyed by the batch, a
+// new standalone would invalidate the read of every other one on each addition.
 func TestGetMediaByIDs_CachesPerID(t *testing.T) {
 	var sent []string
 	defer mockCapturing(&sent,
@@ -224,29 +226,30 @@ func TestGetMediaByIDs_CachesPerID(t *testing.T) {
 	)()
 
 	if _, err := GetMediaByIDs([]int{21, 22}, PriorityCritical); err != nil {
-		t.Fatalf("primeira busca: %v", err)
+		t.Fatalf("first fetch: %v", err)
 	}
 	if _, err := GetMediaByIDs([]int{21, 22, 23}, PriorityCritical); err != nil {
-		t.Fatalf("segunda busca: %v", err)
+		t.Fatalf("second fetch: %v", err)
 	}
 	if len(sent) != 2 {
-		t.Fatalf("quero 2 requests, veio %d", len(sent))
+		t.Fatalf("want 2 requests, got %d", len(sent))
 	}
 	if strings.Contains(sent[1], "21") || !strings.Contains(sent[1], "23") {
-		t.Fatalf("a segunda busca so pode pedir o id novo, veio: %s", sent[1])
+		t.Fatalf("the second fetch can only ask for the new id, got: %s", sent[1])
 	}
 
-	// O cache e o mesmo de GetMediaByID: quem buscou em lote nao paga de novo no lookup avulso.
+	// The cache is the same as GetMediaByID: whoever fetched in batch doesn't pay again on a
+	// standalone lookup.
 	if _, err := GetMediaByID(22, PriorityCritical); err != nil {
 		t.Fatalf("GetMediaByID: %v", err)
 	}
 	if len(sent) != 2 {
-		t.Fatalf("GetMediaByID tinha que sair do cache do lote, veio %d requests", len(sent))
+		t.Fatalf("GetMediaByID had to come from the batch cache, got %d requests", len(sent))
 	}
 }
 
-// TestGetMediaByIDs_ChunksAtPageSize: perPage maximo da AniList e 50 — pedir 60 ids numa query so
-// devolveria 50 e os outros 10 pareceriam apagados.
+// TestGetMediaByIDs_ChunksAtPageSize: AniList's max perPage is 50 — asking for 60 ids in a
+// single query would return 50 and the other 10 would look deleted.
 func TestGetMediaByIDs_ChunksAtPageSize(t *testing.T) {
 	var sent []string
 	defer mockCapturing(&sent, `{"data":{"Page":{"media":[]}}}`)()
@@ -261,16 +264,16 @@ func TestGetMediaByIDs_ChunksAtPageSize(t *testing.T) {
 		t.Fatalf("GetMediaByIDs: %v", err)
 	}
 	if len(sent) != 2 {
-		t.Fatalf("60 ids com perPage 50 sao 2 requests, veio %d", len(sent))
+		t.Fatalf("60 ids with perPage 50 are 2 requests, got %d", len(sent))
 	}
 	if len(medias) != 60 {
-		t.Fatalf("todo id pedido precisa ter desfecho no mapa, veio %d", len(medias))
+		t.Fatalf("every requested id needs an outcome in the map, got %d", len(medias))
 	}
 }
 
-// TestSearchMedia_CachesWithinTTL: a tela busca no submit, entao a mesma chave se repete —
-// usuario refazendo a busca, toggle de nao lancados indo e voltando, outra aba com o mesmo
-// termo. Case-insensitive porque a busca da AniList tambem e.
+// TestSearchMedia_CachesWithinTTL: the screen searches on submit, so the same key repeats —
+// user redoing the search, unreleased toggle going back and forth, another tab with the same
+// term. Case-insensitive because AniList's search is too.
 func TestSearchMedia_CachesWithinTTL(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"One Piece"}}]}}}`)()
@@ -281,19 +284,19 @@ func TestSearchMedia_CachesWithinTTL(t *testing.T) {
 		}
 	}
 	if calls != 1 {
-		t.Fatalf("quero 1 request para o mesmo termo em qualquer caixa, veio %d", calls)
+		t.Fatalf("want 1 request for the same term in any case, got %d", calls)
 	}
 
 	if _, err := SearchMedia("one piece", true); err != nil {
-		t.Fatalf("SearchMedia com includeUnreleased: %v", err)
+		t.Fatalf("SearchMedia with includeUnreleased: %v", err)
 	}
 	if calls != 2 {
-		t.Fatalf("includeUnreleased faz parte da chave: quero 2 requests, veio %d", calls)
+		t.Fatalf("includeUnreleased is part of the key: want 2 requests, got %d", calls)
 	}
 }
 
-// TestSearchMedia_CachedSliceIsNotShared: a fatia guardada e servida a todos os requests que
-// acertarem a chave — quem chama nao pode cortar nem reordenar a memoria do cache.
+// TestSearchMedia_CachedSliceIsNotShared: the stored slice is served to every request that
+// hits the key — the caller must not cut or reorder the cache's memory.
 func TestSearchMedia_CachedSliceIsNotShared(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"media":[
@@ -303,21 +306,21 @@ func TestSearchMedia_CachedSliceIsNotShared(t *testing.T) {
 
 	first, err := SearchMedia("one", false)
 	if err != nil {
-		t.Fatalf("primeira busca: %v", err)
+		t.Fatalf("first fetch: %v", err)
 	}
 	first[0].Id = 999
 
 	second, err := SearchMedia("one", false)
 	if err != nil {
-		t.Fatalf("segunda busca: %v", err)
+		t.Fatalf("second fetch: %v", err)
 	}
 	if second[0].Id != 21 {
-		t.Fatalf("o cache foi corrompido por quem chamou: %+v", second[0])
+		t.Fatalf("the cache was corrupted by the caller: %+v", second[0])
 	}
 }
 
-// TestSearchMedia_ServesStaleWhenRefused: recusada pelo gate de orcamento, a busca serve o
-// resultado vencido em vez de virar "a busca falhou" na tela. Ver decisions.md #72.
+// TestSearchMedia_ServesStaleWhenRefused: refused by the budget gate, the search serves the
+// expired result instead of becoming "the search failed" on the screen. See decisions.md #72.
 func TestSearchMedia_ServesStaleWhenRefused(t *testing.T) {
 	defer MockAniListDo(func(*http.Request) (*http.Response, error) {
 		return respond(200, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"One Piece"}}]}}}`,
@@ -325,41 +328,41 @@ func TestSearchMedia_ServesStaleWhenRefused(t *testing.T) {
 	})()
 
 	if _, err := SearchMedia("one piece", false); err != nil {
-		t.Fatalf("primeira busca: %v", err)
+		t.Fatalf("first fetch: %v", err)
 	}
 
-	// Vence o cache e afunda o orcamento: a proxima chamada e recusada pelo gate.
+	// Expire the cache and sink the budget: the next call is refused by the gate.
 	searchCache.set(searchCacheKey("one piece", false), []MediaSearchResult{{Id: 21}}, -time.Second)
 	budget.Store(&budgetReading{remaining: 1, at: time.Now()})
 
 	results, err := SearchMedia("one piece", false)
 	if err != nil {
-		t.Fatalf("esperava o cache vencido, veio erro: %v", err)
+		t.Fatalf("want the expired cache, got error: %v", err)
 	}
 	if len(results) != 1 || results[0].Id != 21 {
-		t.Fatalf("esperava a entrada vencida, veio %+v", results)
+		t.Fatalf("want the expired entry, got %+v", results)
 	}
 }
 
-// TestSearchMedia_FlushesWhenFull: unico cache com chave de texto livre, e entrada vencida nunca
-// sai do mapa — sem teto, o mapa so cresce enquanto o daemon roda.
+// TestSearchMedia_FlushesWhenFull: only cache with a free-text key, and an expired entry never
+// leaves the map — without a cap, the map only grows while the daemon runs.
 func TestSearchMedia_FlushesWhenFull(t *testing.T) {
 	calls := 0
 	defer mockList(&calls, `{"data":{"Page":{"media":[]}}}`)()
 
 	for i := range searchCacheMaxEntries {
-		if _, err := SearchMedia("termo"+strconv.Itoa(i), false); err != nil {
-			t.Fatalf("busca %d: %v", i, err)
+		if _, err := SearchMedia("term"+strconv.Itoa(i), false); err != nil {
+			t.Fatalf("search %d: %v", i, err)
 		}
 	}
 	if searchCache.size() != searchCacheMaxEntries {
-		t.Fatalf("quero o cache cheio com %d, veio %d", searchCacheMaxEntries, searchCache.size())
+		t.Fatalf("want the cache full at %d, got %d", searchCacheMaxEntries, searchCache.size())
 	}
 
-	if _, err := SearchMedia("estoura", false); err != nil {
-		t.Fatalf("busca que estoura o teto: %v", err)
+	if _, err := SearchMedia("overflow", false); err != nil {
+		t.Fatalf("search that overflows the cap: %v", err)
 	}
 	if searchCache.size() != 1 {
-		t.Fatalf("passado o teto o cache e descartado inteiro: quero 1, veio %d", searchCache.size())
+		t.Fatalf("past the cap the cache is discarded whole: want 1, got %d", searchCache.size())
 	}
 }

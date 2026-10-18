@@ -1,9 +1,9 @@
 <script lang="ts">
-  // AddAnime — tela de adicionar anime avulso (spec "Download de animes avulsos", §Frontend).
+  // AddAnime — screen for adding a standalone anime (spec "Standalone anime download", §Frontend).
   //
-  // Rota, e não modal: é linkável, recarregável e uma grade de capas cabe melhor no mobile que
-  // um modal. A gestão dos avulsos já existentes vive no Status, então esta tela tem um
-  // trabalho só — achar um anime e passar a acompanhá-lo.
+  // A route, not a modal: it is linkable, reloadable, and a cover grid fits better on mobile
+  // than a modal. Management of already-existing standalones lives on Status, so this screen
+  // has one job — find an anime and start tracking it.
   import { onDestroy, onMount } from "svelte";
   import { ArrowRight, ExternalLink, Search } from "@lucide/svelte";
   import {
@@ -22,22 +22,22 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
-  // A busca sai no submit (botão ou Enter), NÃO a cada tecla: o limite da AniList é de 30 req/min
-  // por IP e a busca é PriorityDisposable, então quem digita devagar queimava o balde numa
-  // requisição por tecla e via a própria busca seguinte ser recusada pelo gate de orçamento.
-  // Um submit = uma requisição. O AbortController continua porque dois submits em sequência
-  // ainda correm entre si, e a resposta velha não pode pintar por cima da nova.
+  // Search fires on submit (button or Enter), NOT on every keystroke: AniList's limit is 30
+  // req/min per IP and the search is PriorityDisposable, so anyone typing slowly burned the
+  // bucket in one request per key and saw the next search itself refused by the budget gate.
+  // One submit = one request. AbortController stays because two submits in a row still race
+  // each other, and the old response must not paint over the new one.
   const MIN_TERM = 3;
   const ANILIST_URL = "https://anilist.co/anime/";
 
   let term = "";
-  /** Desligado por padrão: quem chega aqui quer baixar algo agora, e o que não estreou não baixa. */
+  /** Off by default: anyone who lands here wants to download something now, and what hasn't premiered doesn't download. */
   let includeUnreleased = false;
   let results: AniListSearchResult[] = [];
   let searching = false;
   let searchFailed = false;
   let searched = false;
-  /** media ids em voo ou já adicionados nesta sessão — o botão do card sai do estado "Adicionar". */
+  /** media ids in flight or already added this session — the card button leaves the "Add" state. */
   let adding = new Set<number>();
   let added = new Set<number>();
   let libraryConfigured = true;
@@ -49,15 +49,15 @@
       const config = await getConfig();
       libraryConfigured = Boolean(config.completed_anime_path);
     } catch {
-      // Sem a config não dá para afirmar que a biblioteca falta; o POST recusa com
-      // LIBRARY_NOT_CONFIGURED de qualquer forma.
+      // Without the config we can't claim the library is missing; the POST refuses with
+      // LIBRARY_NOT_CONFIGURED either way.
     }
   });
 
   onDestroy(() => inFlight?.abort());
 
-  // O toggle só refaz a busca quando já existe uma na tela: ele muda o filtro de um resultado
-  // visível. Sem busca feita ainda, ele apenas escolhe o parâmetro do próximo submit.
+  // The toggle only re-runs the search when one is already on screen: it changes the filter
+  // of a visible result. With no search yet, it only picks the parameter of the next submit.
   function onToggleUnreleased(): void {
     if (searched) runSearch();
   }
@@ -93,10 +93,10 @@
     }
   }
 
-  // O front é best-effort e o backend é a autoridade: block_reason vem de um snapshot com até
-  // 60s de idade, então um card pode estar clicável para um anime que acabou de entrar na
-  // lista. O 409 traduzido abaixo é a palavra final; não há retry nem revalidação, a próxima
-  // busca já vem correta.
+  // The front is best-effort and the backend is the authority: block_reason comes from a
+  // snapshot up to 60s old, so a card can be clickable for an anime that just entered the
+  // list. The 409 translated below is the last word; there is no retry or revalidation, the
+  // next search already comes correct.
   async function add(result: AniListSearchResult): Promise<void> {
     adding = new Set(adding).add(result.id);
     try {
@@ -108,8 +108,8 @@
           label: m.add_toast_downloads_link(),
         });
       } else {
-        // Um "0 episódios adicionados" seco leria como falha no caso mais comum: anime que
-        // ainda vai estrear.
+        // A dry "0 episodes added" would read as failure in the most common case: an anime
+        // that hasn't premiered yet.
         toast.info(m.add_toast_tracked_no_episodes());
       }
     } catch (error) {
@@ -163,14 +163,14 @@
     return parts.join(" · ");
   }
 
-  // Um card só termina em botão morto quando não há para onde ir. "standalone", "tracked" e
-  // "downloaded" significam que o anime JÁ EXISTE no app — e um anime que existe tem página em
-  // #/status/{id}, porque anime_id é o próprio media id do AniList. Nesses três o botão vira o
-  // link para lá; o motivo, que antes vivia só num tooltip (invisível no mobile), passa a ser
-  // uma linha do card.
+  // A card only ends in a dead button when there is nowhere to go. "standalone", "tracked"
+  // and "downloaded" mean the anime ALREADY EXISTS in the app — and an anime that exists has
+  // a page at #/status/{id}, because anime_id is AniList's own media id. On those three the
+  // button becomes the link there; the reason, which used to live only in a tooltip
+  // (invisible on mobile), becomes a line on the card.
   //
-  // "blacklist" é a única exceção: está numa lista excluída, o daemon não o processa e não há
-  // detalhe para abrir. Só ele continua apagado e com o botão desabilitado.
+  // "blacklist" is the only exception: it's on an excluded list, the daemon doesn't process
+  // it and there is no detail to open. Only it stays dimmed with the button disabled.
   $: cards =
     $locale &&
     results.map((result) => {
@@ -206,8 +206,8 @@
     </div>
   {/if}
 
-  <!-- <form>, e não um on:keydown no input: o Enter que dispara o submit é comportamento nativo
-       do formulário, e o botão participa dele só por ser type="submit". -->
+  <!-- <form>, not an on:keydown on the input: the Enter that fires submit is native form
+       behavior, and the button takes part in it just by being type="submit". -->
   <form class="flex items-center gap-2" on:submit|preventDefault={runSearch}>
     <label
       class="flex flex-1 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-2 focus-within:border-accent"

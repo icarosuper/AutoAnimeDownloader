@@ -210,7 +210,7 @@ func TestCoverageOwnership_PackNotInSessionIsNotOwnership(t *testing.T) {
 
 	processAnimeEpisodes(
 		coverageConfigs(), torrents.NewFakeBackend(), cour2Anime(12),
-		nil, // sessao vazia
+		nil, // empty session
 		seasonPackOnDisk(),
 		map[int]anilist.Series{
 			cour1ID: {Key: cour1ID, Offset: 0},

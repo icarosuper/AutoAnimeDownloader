@@ -3,8 +3,8 @@ import { render, fireEvent, within } from '@testing-library/svelte'
 import ActionMenu from '../../src/components/ui/ActionMenu.svelte'
 
 const items = [
-  { id: 'a', label: 'Ação A' },
-  { id: 'b', label: 'Ação B', destructive: true },
+  { id: 'a', label: 'Action A' },
+  { id: 'b', label: 'Action B', destructive: true },
 ]
 
 // getBoundingClientRect is stubbed per-test where needed (the flip test); always restore it so
@@ -16,19 +16,19 @@ afterEach(() => {
 
 describe('ActionMenu', () => {
   it('is closed by default and opens the panel when the trigger is clicked', async () => {
-    const { getByRole, queryByRole } = render(ActionMenu, { props: { items, triggerLabel: 'Mais ações' } })
+    const { getByRole, queryByRole } = render(ActionMenu, { props: { items, triggerLabel: 'More actions' } })
     expect(queryByRole('menu')).not.toBeInTheDocument()
 
-    await fireEvent.click(getByRole('button', { name: 'Mais ações' }))
+    await fireEvent.click(getByRole('button', { name: 'More actions' }))
 
     expect(getByRole('menu')).toBeInTheDocument()
-    expect(getByRole('menuitem', { name: 'Ação A' })).toBeInTheDocument()
-    expect(getByRole('menuitem', { name: 'Ação B' })).toBeInTheDocument()
+    expect(getByRole('menuitem', { name: 'Action A' })).toBeInTheDocument()
+    expect(getByRole('menuitem', { name: 'Action B' })).toBeInTheDocument()
   })
 
   it('closes when Escape is pressed', async () => {
-    const { getByRole, queryByRole } = render(ActionMenu, { props: { items, triggerLabel: 'Mais ações' } })
-    await fireEvent.click(getByRole('button', { name: 'Mais ações' }))
+    const { getByRole, queryByRole } = render(ActionMenu, { props: { items, triggerLabel: 'More actions' } })
+    await fireEvent.click(getByRole('button', { name: 'More actions' }))
     expect(queryByRole('menu')).toBeInTheDocument()
 
     await fireEvent.keyDown(window, { key: 'Escape' })
@@ -37,8 +37,8 @@ describe('ActionMenu', () => {
   })
 
   it('closes on a click outside the menu', async () => {
-    const { getByRole, queryByRole } = render(ActionMenu, { props: { items, triggerLabel: 'Mais ações' } })
-    await fireEvent.click(getByRole('button', { name: 'Mais ações' }))
+    const { getByRole, queryByRole } = render(ActionMenu, { props: { items, triggerLabel: 'More actions' } })
+    await fireEvent.click(getByRole('button', { name: 'More actions' }))
     expect(queryByRole('menu')).toBeInTheDocument()
 
     await fireEvent.click(document.body)
@@ -49,12 +49,12 @@ describe('ActionMenu', () => {
   it('closes and dispatches select with the item id when an item is chosen', async () => {
     const onSelect = vi.fn()
     const { getByRole, queryByRole } = render(ActionMenu, {
-      props: { items, triggerLabel: 'Mais ações' },
+      props: { items, triggerLabel: 'More actions' },
       events: { select: onSelect },
     })
-    await fireEvent.click(getByRole('button', { name: 'Mais ações' }))
+    await fireEvent.click(getByRole('button', { name: 'More actions' }))
 
-    await fireEvent.click(getByRole('menuitem', { name: 'Ação A' }))
+    await fireEvent.click(getByRole('menuitem', { name: 'Action A' }))
 
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect((onSelect.mock.calls[0][0] as CustomEvent<string>).detail).toBe('a')
@@ -85,8 +85,8 @@ describe('ActionMenu', () => {
       return rect as DOMRect
     }
 
-    const { getByRole } = render(ActionMenu, { props: { items, triggerLabel: 'Mais ações' } })
-    await fireEvent.click(getByRole('button', { name: 'Mais ações' }))
+    const { getByRole } = render(ActionMenu, { props: { items, triggerLabel: 'More actions' } })
+    await fireEvent.click(getByRole('button', { name: 'More actions' }))
 
     expect(getByRole('menu').className).toContain('bottom-full')
   })
@@ -99,8 +99,8 @@ describe('ActionMenu', () => {
       return rect as DOMRect
     }
 
-    const { getByRole } = render(ActionMenu, { props: { items, triggerLabel: 'Mais ações' } })
-    await fireEvent.click(getByRole('button', { name: 'Mais ações' }))
+    const { getByRole } = render(ActionMenu, { props: { items, triggerLabel: 'More actions' } })
+    await fireEvent.click(getByRole('button', { name: 'More actions' }))
 
     expect(getByRole('menu').className).toContain('top-full')
   })

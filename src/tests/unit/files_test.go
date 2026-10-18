@@ -156,7 +156,7 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 		if len(cfg.DownloadMediaStatuses) != 2 || cfg.DownloadMediaStatuses[0] != "RELEASING" || cfg.DownloadMediaStatuses[1] != "FINISHED" {
 			t.Fatalf("expected default DownloadMediaStatuses [RELEASING FINISHED], got %v", cfg.DownloadMediaStatuses)
 		}
-		// Teto de episódio ausente do default era invisível: zero value válido = ilimitado.
+		// Episode size cap missing from the default was invisible: a valid zero value = unlimited.
 		if cfg.MaxEpisodeTorrentSizeGB == 0 {
 			t.Fatal("expected a default MaxEpisodeTorrentSizeGB, got 0 (unlimited)")
 		}
@@ -179,7 +179,7 @@ func TestFilesModule_CanLoadAndSaveConfigs_WithDefaults(t *testing.T) {
 }
 
 // ============================================================================
-// NOVOS TESTES COM MOCKS
+// NEW TESTS WITH MOCKS
 // ============================================================================
 
 func TestManager_LoadConfigs_WithNonExistentFile(t *testing.T) {
@@ -191,12 +191,12 @@ func TestManager_LoadConfigs_WithNonExistentFile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Deve retornar configuração padrão
+	// Must return the default config
 	if config.CheckInterval != 10 {
 		t.Errorf("expected default CheckInterval 10, got %d", config.CheckInterval)
 	}
 
-	// Deve ter salvado a configuração padrão
+	// Must have saved the default config
 	if !mockFS.FileExists("/config.json") {
 		t.Error("expected config file to be created")
 	}
@@ -204,9 +204,9 @@ func TestManager_LoadConfigs_WithNonExistentFile(t *testing.T) {
 
 func TestManager_LoadConfigs_WithExistingFile(t *testing.T) {
 	mockFS := NewMockFileSystem()
-	// save_path e qbittorrent_url sao campos REMOVIDOS: continuam na fixture de proposito,
-	// provando que um config.json escrito por versao antiga ainda carrega (JSON ignora
-	// campo desconhecido) em vez de quebrar o boot.
+	// save_path and qbittorrent_url are REMOVED fields: they stay in the fixture on purpose,
+	// proving that a config.json written by an old version still loads (JSON ignores
+	// unknown fields) instead of breaking boot.
 	configJSON := `{
 		"save_path": "/anime",
 		"anilist_username": "testuser",
@@ -289,7 +289,7 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verificar que o arquivo foi escrito
+	// Check that the file was written
 	if !mockFS.FileExists("/config.json") {
 		t.Fatal("expected config file to exist")
 	}
@@ -297,7 +297,7 @@ func TestManager_SaveConfigs_WithValidConfig(t *testing.T) {
 	content, _ := mockFS.GetFile("/config.json")
 	contentStr := string(content)
 
-	// Verificar alguns campos no JSON
+	// Check some fields in the JSON
 	if !strings.Contains(contentStr, `"completed_anime_path": "/test"`) {
 		t.Error("expected completed_anime_path in JSON")
 	}
@@ -378,7 +378,7 @@ func TestManager_SaveEpisodesToFile_WithNewEpisodes(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verificar que o arquivo foi criado
+	// Check that the file was created
 	if !mockFS.FileExists("/episodes.txt") {
 		t.Fatal("expected episodes file to exist")
 	}
@@ -393,7 +393,7 @@ func TestManager_SaveEpisodesToFile_WithEmptyList(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Não deve criar arquivo para lista vazia
+	// Must not create a file for an empty list
 	if mockFS.FileExists("/episodes.txt") {
 		t.Error("did not expect episodes file to exist for empty list")
 	}
@@ -414,7 +414,7 @@ func TestManager_DeleteEpisodesFromFile_WithValidIds(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Carregar e verificar que apenas episódios 1 e 3 permanecem
+	// Load and check that only episodes 1 and 3 remain
 	episodes, err := manager.LoadSavedEpisodes()
 	if err != nil {
 		t.Fatalf("unexpected error loading after delete: %v", err)
@@ -445,7 +445,7 @@ func TestManager_DeleteEpisodesFromFile_WithNonExistentIds(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verificar que o episódio original ainda está lá
+	// Check that the original episode is still there
 	episodes, err := manager.LoadSavedEpisodes()
 	if err != nil {
 		t.Fatalf("unexpected error loading after delete: %v", err)
@@ -469,7 +469,7 @@ func TestManager_DeleteEpisodesFromFile_WithEmptyList(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Conteúdo não deve ter mudado
+	// Content must not have changed
 	newContent, _ := mockFS.GetFile("/episodes.txt")
 	if string(newContent) != content {
 		t.Error("expected content to remain unchanged")
@@ -490,12 +490,12 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Pasta vazia deve ter sido removida
+	// Empty folder must have been removed
 	if mockFS.DirExists("/save/empty") {
 		t.Error("expected empty folder to be deleted")
 	}
 
-	// Pasta não vazia deve permanecer
+	// Non-empty folder must remain
 	if !mockFS.DirExists("/save/nonempty") {
 		t.Error("expected non-empty folder to remain")
 	}
@@ -516,7 +516,7 @@ func TestManager_DeleteEmptyFolders_WithEmptyPath(t *testing.T) {
 }
 
 // ============================================================================
-// TESTES PARA FUNÇÕES DE PARSING
+// PARSING FUNCTION TESTS
 // ============================================================================
 
 func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
@@ -539,7 +539,7 @@ func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
 		t.Fatalf("expected 3 episodes, got %d", len(episodes))
 	}
 
-	// Verificar primeiro episódio
+	// Check first episode
 	if episodes[0].EpisodeNumber != 1 {
 		t.Errorf("expected episode ID 1, got %d", episodes[0].EpisodeNumber)
 	}
@@ -550,7 +550,7 @@ func TestParseEpisodes_WithValidJSONContent(t *testing.T) {
 		t.Errorf("expected name 'Episode 1', got '%s'", episodes[0].EpisodeName)
 	}
 
-	// Verificar terceiro episódio (sem nome)
+	// Check third episode (no name)
 	if episodes[2].EpisodeNumber != 3 {
 		t.Errorf("expected episode ID 3, got %d", episodes[2].EpisodeNumber)
 	}
@@ -575,7 +575,7 @@ func TestParseEpisodes_WithValidTextContent(t *testing.T) {
 		t.Fatalf("expected 3 episodes, got %d", len(episodes))
 	}
 
-	// Verificar primeiro episódio
+	// Check first episode
 	if episodes[0].EpisodeNumber != 1 {
 		t.Errorf("expected episode ID 1, got %d", episodes[0].EpisodeNumber)
 	}

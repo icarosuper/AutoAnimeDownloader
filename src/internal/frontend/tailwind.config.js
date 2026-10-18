@@ -1,19 +1,19 @@
 
 /*
- * Cores semânticas (fase 0 do redesign de UI). Fonte da verdade: src/lib/design/tokens.css.
+ * Semantic colors (phase 0 of the UI redesign). Source of truth: src/lib/design/tokens.css.
  *
- * Cada entrada abaixo usa `rgb(var(--x-rgb) / <alpha-value>)` (não um hex fixo) para as
- * cores de acento/status, o que habilita o modificador de opacidade do Tailwind
- * (`bg-ok/12`, `border-ok-tint/28`, ...). Superfícies e texto não precisam de opacidade
- * variável, então usam `var(--x)` direto.
+ * Each entry below uses `rgb(var(--x-rgb) / <alpha-value>)` (not a fixed hex) for the
+ * accent/status colors, which enables Tailwind's opacity modifier
+ * (`bg-ok/12`, `border-ok-tint/28`, ...). Surfaces and text don't need variable opacity,
+ * so they use `var(--x)` directly.
  *
- * `heading`/`body` correspondem a --text-primary/--text-secondary do tokens.css. Os nomes
- * nasceram assim para não colidir com `primary`/`secondary` do daisyUI, que reservava essas
- * duas chaves para a paleta de marca dele. O daisyUI saiu, mas os nomes ficam: renomear hoje
- * tocaria toda tela sem mudar um pixel.
+ * `heading`/`body` correspond to --text-primary/--text-secondary from tokens.css. The names
+ * were born this way so they wouldn't collide with daisyUI's `primary`/`secondary`, which
+ * reserved those two keys for its brand palette. daisyUI is gone, but the names stay:
+ * renaming today would touch every screen without changing a pixel.
  */
 const semanticColors = {
-  // fundos
+  // backgrounds
   window: 'var(--bg-window)',
   surface: 'var(--bg-surface)',
   card: 'var(--bg-card)',
@@ -21,40 +21,40 @@ const semanticColors = {
   control: 'var(--bg-control)',
   menu: 'var(--bg-menu)',
 
-  // bordas (já são rgba() no token, não precisam de modificador de opacidade do Tailwind)
+  // borders (already rgba() in the token, don't need Tailwind's opacity modifier)
   default: 'var(--border-default)',
   divider: 'var(--border-divider)',
 
-  // texto — ver nota acima sobre o nome heading/body
+  // text — see the note above about the heading/body names
   heading: 'var(--text-primary)',
   body: 'var(--text-secondary)',
   tertiary: 'var(--text-tertiary)',
   subtle: 'var(--text-subtle)',
 
-  // acento e status — texto/borda/fill sólido
+  // accent and status — solid text/border/fill
   accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
   ok: 'rgb(var(--ok-rgb) / <alpha-value>)',
   warn: 'rgb(var(--warn-rgb) / <alpha-value>)',
   danger: 'rgb(var(--danger-rgb) / <alpha-value>)',
   neutral: 'rgb(var(--neutral-rgb) / <alpha-value>)',
 
-  // variantes para fundos/bordas tingidos (7–16% / 22–32% de opacidade — ver tokens.css)
+  // variants for tinted backgrounds/borders (7–16% / 22–32% opacity — see tokens.css)
   'accent-tint': 'rgb(var(--accent-tint-rgb) / <alpha-value>)',
   'ok-tint': 'rgb(var(--ok-tint-rgb) / <alpha-value>)',
   'warn-tint': 'rgb(var(--warn-tint-rgb) / <alpha-value>)',
   'danger-tint': 'rgb(var(--danger-tint-rgb) / <alpha-value>)',
 
-  // texto sobre acento/status sólido
+  // text on solid accent/status
   'on-accent': 'var(--on-accent)',
   'on-ok': 'var(--on-ok)',
   'on-warn': 'var(--on-warn)',
   'on-danger': 'var(--on-danger)',
 
-  // trilho de barra de progresso (§4.2)
+  // progress-bar track (§4.2)
   track: 'var(--progress-track)',
 
-  // texto do item ativo do rail/tab bar/MoreMenu (§5, Fase 1) — token porque o spec fixa um
-  // hex literal (#c5bcfa) só para o tema escuro; ver tokens.css.
+  // text of the active rail/tab bar/MoreMenu item (§5, Phase 1) — a token because the spec
+  // pins a literal hex (#c5bcfa) only for the dark theme; see tokens.css.
   'nav-active': 'var(--nav-active-text)',
 }
 
@@ -69,15 +69,15 @@ export default {
         sans: ['Manrope', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
-      // §4.2 — espaçamento: preenche os furos 18/22/26px na escala padrão do Tailwind
-      // (que já cobre 4/6/8/10/14px via as chaves 1/1.5/2/2.5/3.5).
+      // §4.2 — spacing: fills the 18/22/26px holes in Tailwind's default scale
+      // (which already covers 4/6/8/10/14px via the 1/1.5/2/2.5/3.5 keys).
       spacing: {
         4.5: '18px',
         5.5: '22px',
         6.5: '26px',
       },
-      // §4.2 — raios. Nomes próprios (não sobrescrevem md/lg/xl/2xl) para não afetar telas
-      // que ainda usam os raios padrão do Tailwind antes de serem redesenhadas.
+      // §4.2 — radii. Own names (don't override md/lg/xl/2xl) so screens that still use
+      // Tailwind's default radii before being redesigned aren't affected.
       borderRadius: {
         badge: '6px',
         control: '9px',
@@ -86,36 +86,36 @@ export default {
         modal: '18px',
         pill: '999px',
       },
-      // §4.2 — elevação (modal, menu), varia por tema via tokens.css.
+      // §4.2 — elevation (modal, menu), varies by theme via tokens.css.
       boxShadow: {
         elevation: 'var(--elevation-shadow)',
       },
-      // §4.3 — escala tipográfica. Registrada aqui como utilitário `text-*`. O spec dá faixas,
-      // não valores únicos. `line-height` não é dado pelo spec, então é deixado de fora
-      // (comportamento padrão do Tailwind) em vez de inventar um valor. `rótulo mono` também
-      // pede maiúsculo — isso é `uppercase` aplicado pelo consumidor junto com
-      // `text-mono-label`, não faz parte do tuple de font-size do Tailwind.
+      // §4.3 — type scale. Registered here as a `text-*` utility. The spec gives ranges,
+      // not unique values. `line-height` is not given by the spec, so it is left out
+      // (Tailwind's default behavior) instead of inventing a value. `mono label` also
+      // asks for uppercase — that is `uppercase` applied by the consumer together with
+      // `text-mono-label`, not part of Tailwind's font-size tuple.
       //
-      // AUMENTADA em ~1px (texto pequeno) a ~2px (números grandes) sobre os valores do spec, a
-      // pedido do usuário: no tamanho anterior a UI inteira lia como pequena demais. Toda a
-      // escala subiu junta, e não só as entradas reclamadas, para as proporções entre título /
-      // corpo / secundário continuarem as mesmas do handoff. Os poucos tamanhos escritos à mão
-      // como `text-[Npx]` nas telas subiram na mesma proporção.
+      // RAISED by ~1px (small text) to ~2px (large numbers) over the spec values, at the
+      // user's request: at the previous size the whole UI read as too small. The entire
+      // scale went up together, not just the entries that were complained about, so the
+      // proportions between title / body / secondary stay the same as the handoff. The
+      // few sizes written by hand as `text-[Npx]` on the screens went up in the same ratio.
       fontSize: {
-        // título de tela: spec 20–22px/800, -.01em
+        // screen title: spec 20–22px/800, -.01em
         'screen-title': ['24px', { letterSpacing: '-0.01em', fontWeight: '800' }],
-        // número herói: spec 46px/600, -.03em
+        // hero number: spec 46px/600, -.03em
         'hero-number': ['48px', { letterSpacing: '-0.03em', fontWeight: '600' }],
-        // número de card: spec 22–30px/650 (650 é literal do spec; não há peso 650 carregado —
-        // o navegador casa para o peso mais próximo disponível)
+        // card number: spec 22–30px/650 (650 is literal from the spec; there is no 650
+        // weight loaded — the browser matches the nearest available weight)
         'card-number': ['32px', { fontWeight: '650' }],
-        // título de card: spec 14–15px/700
+        // card title: spec 14–15px/700
         'card-title': ['16px', { fontWeight: '700' }],
-        // corpo: spec 13–13.5px/600
+        // body: spec 13–13.5px/600
         copy: ['14.5px', { fontWeight: '600' }],
-        // secundário: spec 12–12.5px/500
+        // secondary: spec 12–12.5px/500
         caption: ['13.5px', { fontWeight: '500' }],
-        // rótulo mono: spec 10.5–11px/600, letter-spacing .10–.12em, maiúsculo
+        // mono label: spec 10.5–11px/600, letter-spacing .10–.12em, uppercase
         'mono-label': ['12px', { letterSpacing: '0.12em', fontWeight: '600' }],
       },
     },

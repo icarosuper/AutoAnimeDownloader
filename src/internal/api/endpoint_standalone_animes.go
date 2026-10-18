@@ -17,14 +17,14 @@ type StandaloneAnimeRequest struct {
 }
 
 type StandaloneAnimeAddResponse struct {
-	// Added e quantos episodios entraram na fila agora. 0 e resposta normal: um anime
-	// NOT_YET_RELEASED (ou um cujo proximo episodio ainda nao foi ao ar) fica acompanhado do
-	// mesmo jeito. Quem traduz isso e o toast, nao um codigo de erro.
+	// Added is how many episodes entered the queue now. 0 is a normal response: a
+	// NOT_YET_RELEASED anime (or one whose next episode has not aired) is still tracked.
+	// The toast translates that, not an error code.
 	Added int `json:"added" example:"3"`
 }
 
-// blockReasonToErrorCode traduz o motivo de bloqueio no codigo do 409. Sao os mesmos quatro
-// motivos que a busca devolve em block_reason.
+// blockReasonToErrorCode maps the block reason to the 409 error code. Same four reasons
+// the search returns in block_reason.
 var blockReasonToErrorCode = map[string]string{
 	blockReasonBlacklist:  "ALREADY_BLACKLISTED",
 	blockReasonStandalone: "ALREADY_STANDALONE",
@@ -52,20 +52,20 @@ func handleStandaloneAnimeAdd(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Primeiro porque nao depende de rede e porque, sem biblioteca, o Ensure la embaixo
-		// falharia e o usuario receberia um 500 opaco no lugar da causa.
+		// First because it does not depend on the network, and because without a library
+		// the Ensure below would fail and the user would get an opaque 500 instead of the cause.
 		if config.DownloadPath() == "" {
 			JSONError(w, http.StatusConflict, "LIBRARY_NOT_CONFIGURED",
 				"Configure the completed anime path before adding animes")
 			return
 		}
 
-		// E tambem o que valida que o id existe e e ANIME, e de onde sai o total de episodios
-		// que blockReason precisa.
+		// Also what validates that the id exists and is ANIME, and where the episode total
+		// that blockReason needs comes from.
 		media, err := anilist.GetMediaByID(body.MediaID, anilist.PriorityCritical)
-		// Cache local serve para quem JA passou pelo app (reativar um avulso removido). Quem
-		// nunca passou nao tem entrada guardada e continua caindo no erro — e a unica tela que
-		// legitimamente exige a AniList no ar.
+		// Local cache serves whoever ALREADY went through the app (reactivating a removed
+		// standalone). Anyone who never did has no stored entry and still hits the error —
+		// this is the only screen that legitimately needs AniList up.
 		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
 			logger.Logger.Error().Err(err).Int("media_id", body.MediaID).Msg("Failed to fetch media from AniList")
 			JSONInternalError(w, err)
@@ -97,8 +97,8 @@ func handleStandaloneAnimeAdd(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Sincrono, seguindo o POST de download de episodio: e uma busca so no Nyaa e devolver o
-		// numero real de episodios enfileirados vale mais que um 202 vazio.
+		// Synchronous, matching the episode-download POST: it is a single Nyaa search, and
+		// returning the real number of queued episodes is worth more than an empty 202.
 		added, err := daemon.DownloadStandaloneAnime(server.FileManager, server.Torrents, config, body.MediaID)
 		if err != nil {
 			logger.Logger.Error().Err(err).Int("media_id", body.MediaID).Msg("Failed to download the standalone anime")
@@ -175,10 +175,9 @@ func handleStandaloneAnimeRemove(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Sem delete_episodes os arquivos ficam — e o ManuallyManaged e o que os protege. Sem o
-		// registro avulso o anime deixa de entrar no passe, entao seus episodios cairiam em
-		// identifyEpisodesNotInWatching no ciclo seguinte e sumiriam do disco sem que ninguem
-		// tivesse pedido.
+		// Without delete_episodes the files stay — and ManuallyManaged is what protects them.
+		// Without the standalone record the anime drops out of the pass, so its episodes would
+		// hit identifyEpisodesNotInWatching on the next cycle and vanish from disk unasked.
 		for i := range group {
 			group[i].ManuallyManaged = true
 		}

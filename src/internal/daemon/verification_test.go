@@ -89,13 +89,14 @@ func TestSearchAnilist_EmptyMediaStatusesAllowsNothing(t *testing.T) {
 	}
 }
 
-// --- Regra de deleção por status entre contas (decisions.md #43) ---
+// --- Status-deletion rule across accounts (decisions.md #43) ---
 //
-// Download é OR (basta uma conta querer) e deleção é AND (todas as contas que têm o anime
-// precisam querer). O que estes testes protegem é o lado AND, onde errar apaga arquivo.
+// Download is OR (one account wanting it is enough) and deletion is AND (every account that
+// has the anime must want it). What these tests protect is the AND side, where a mistake
+// deletes a file.
 
-// mockStatusByAccount responde a consulta de desempate GetMediaListStatus por usuário.
-// Um usuário ausente do mapa devolve lista vazia = "esta conta não acompanha o anime".
+// mockStatusByAccount answers the GetMediaListStatus tiebreak query per user.
+// A user missing from the map returns an empty list = "this account does not track the anime".
 func mockStatusByAccount(t *testing.T, byUser map[string]string) func() {
 	t.Helper()
 	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
@@ -106,7 +107,7 @@ func mockStatusByAccount(t *testing.T, byUser map[string]string) func() {
 		}
 		body, _ := io.ReadAll(req.Body)
 		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("corpo inesperado: %s", body)
+			t.Fatalf("unexpected body: %s", body)
 		}
 		status, tracked := byUser[payload.Variables.UserName]
 		if !tracked {
@@ -125,10 +126,10 @@ func deleteRuleConfig() *files.Config {
 }
 
 func TestDeletableMediaIDs_AllAccountsAgree(t *testing.T) {
-	// A busca por lista já trouxe o anime como deletável nas DUAS contas: ninguém precisa
-	// ser consultado, e o anime é apagado.
+	// The list search already brought the anime as deletable in BOTH accounts: nobody needs
+	// to be queried, and the anime is deleted.
 	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
-		t.Error("nao deveria consultar a AniList quando as duas listas ja concordam")
+		t.Error("must not query AniList when both lists already agree")
 		return nil, fmt.Errorf("unexpected call")
 	})()
 
@@ -138,26 +139,26 @@ func TestDeletableMediaIDs_AllAccountsAgree(t *testing.T) {
 	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if !got[500] {
-		t.Error("as duas contas querem apagar, o anime deve ser deletavel")
+		t.Error("both accounts want to delete, the anime must be deletable")
 	}
 }
 
 func TestDeletableMediaIDs_DifferentDeleteStatusesStillDeletes(t *testing.T) {
-	// DROPPED numa conta e COMPLETED na outra: statuses diferentes, ambos de deleção.
+	// DROPPED in one account and COMPLETED in the other: different statuses, both deletion.
 	defer mockStatusByAccount(t, map[string]string{"accountB": "COMPLETED"})()
 
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
-		"accountA": {500: true}, // DROPPED, veio na lista
-		"accountB": {},          // COMPLETED chega pelo desempate
+		"accountA": {500: true}, // DROPPED, came from the list
+		"accountB": {},          // COMPLETED arrives via the tiebreak
 	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if !got[500] {
-		t.Error("statuses de delecao diferentes nas duas contas ainda devem apagar")
+		t.Error("different deletion statuses in the two accounts must still delete")
 	}
 }
 
 func TestDeletableMediaIDs_NeutralStatusInOtherAccountVetoes(t *testing.T) {
-	// A conta B ainda pretende assistir: apagar aqui destruiria episódios que ela quer.
+	// Account B still intends to watch: deleting here would destroy episodes it wants.
 	defer mockStatusByAccount(t, map[string]string{"accountB": "PLANNING"})()
 
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
@@ -166,13 +167,13 @@ func TestDeletableMediaIDs_NeutralStatusInOtherAccountVetoes(t *testing.T) {
 	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if got[500] {
-		t.Error("uma conta com o anime em status neutro deve vetar a delecao")
+		t.Error("an account with the anime in a neutral status must veto the deletion")
 	}
 }
 
 func TestDeletableMediaIDs_AccountWithoutTheAnimeDoesNotVeto(t *testing.T) {
-	// A conta B nunca teve o anime na lista: não participa da votação. Sem isso, o caso
-	// comum (anime acompanhado por uma conta só) nunca mais seria apagado.
+	// Account B never had the anime on the list: it does not vote. Without this, the common
+	// case (anime tracked by a single account) would never be deleted again.
 	defer mockStatusByAccount(t, map[string]string{})()
 
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
@@ -181,15 +182,15 @@ func TestDeletableMediaIDs_AccountWithoutTheAnimeDoesNotVeto(t *testing.T) {
 	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if !got[500] {
-		t.Error("conta que nao acompanha o anime nao pode vetar a delecao")
+		t.Error("an account that does not track the anime cannot veto the deletion")
 	}
 }
 
 func TestDeletableMediaIDs_FailedAccountFetchVetoes(t *testing.T) {
-	// A busca da conta B falhou (ela nem aparece no mapa): sem a opinião dela não há
-	// unanimidade, e o passe seguinte tenta de novo. Apagar no escuro é irreversível.
+	// Account B's fetch failed (it is not even in the map): without its opinion there is no
+	// unanimity, and the next pass tries again. Deleting in the dark is irreversible.
 	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
-		t.Error("uma conta ausente do mapa e falha de busca, nao deve virar consulta")
+		t.Error("an account missing from the map is a fetch failure, it must not become a query")
 		return nil, fmt.Errorf("unexpected call")
 	})()
 
@@ -198,15 +199,15 @@ func TestDeletableMediaIDs_FailedAccountFetchVetoes(t *testing.T) {
 	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
 
 	if got[500] {
-		t.Error("com a lista de uma conta indisponivel nada pode ser apagado")
+		t.Error("with one account's list unavailable nothing can be deleted")
 	}
 }
 
 func TestDeletableMediaIDs_OnlyConsidersAnimesOnDisk(t *testing.T) {
-	// Sem episódio em disco a resposta não muda nada — e é isso que mantém as consultas de
-	// desempate raras em vez de uma por anime completado da lista inteira.
+	// With no episode on disk the answer changes nothing — and that is what keeps the
+	// tiebreak queries rare instead of one per completed anime on the whole list.
 	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
-		t.Error("anime sem episodio em disco nao deveria gerar consulta")
+		t.Error("an anime with no episode on disk should not produce a query")
 		return nil, fmt.Errorf("unexpected call")
 	})()
 
@@ -216,7 +217,7 @@ func TestDeletableMediaIDs_OnlyConsidersAnimesOnDisk(t *testing.T) {
 	}, nil)
 
 	if len(got) != 0 {
-		t.Errorf("esperava nenhum candidato sem episodios em disco, veio %v", got)
+		t.Errorf("want no candidates without episodes on disk, got %v", got)
 	}
 }
 
@@ -266,9 +267,9 @@ func reportPassConfig(t *testing.T) *files.Config {
 	}
 }
 
-// TestAnimeVerification_PublishesReport: o relatorio e publicado DEPOIS do SetLastCheckError(nil)
-// do fim do passe. Se a ordem inverter, SetLastCheckError limpa o que acabou de ser publicado e
-// o relatorio nunca aparece — que e o unico jeito de esta feature falhar silenciosamente.
+// TestAnimeVerification_PublishesReport: the report is published AFTER the SetLastCheckError(nil)
+// at the end of the pass. If the order flips, SetLastCheckError clears what was just published
+// and the report never appears — which is the only way this feature can fail silently.
 func TestAnimeVerification_PublishesReport(t *testing.T) {
 	reportPassAniList(t)
 	emptyNyaa(t)
@@ -280,32 +281,32 @@ func TestAnimeVerification_PublishesReport(t *testing.T) {
 
 	report := state.GetLastCheckReport()
 	if report.FinishedAt.IsZero() {
-		t.Fatal("o passe completo deve publicar um relatório com finished_at preenchido")
+		t.Fatal("a complete pass must publish a report with finished_at set")
 	}
 	if len(report.Problems) == 0 {
-		t.Fatalf("esperava ao menos um problema, obteve %+v", report)
+		t.Fatalf("want at least one problem, got %+v", report)
 	}
 	if report.Problems[0].Code != IssueNoTorrentFound {
-		t.Errorf("esperava %q, obteve %q", IssueNoTorrentFound, report.Problems[0].Code)
+		t.Errorf("want %q, got %q", IssueNoTorrentFound, report.Problems[0].Code)
 	}
 }
 
-// TestAnimeVerification_CancelledLeavesNoReport: passe interrompido nao deixa relatorio — ele
-// estava incompleto, e um relatorio parcial diria "so este anime teve problema" quando os outros
-// nem chegaram a ser olhados.
+// TestAnimeVerification_CancelledLeavesNoReport: an interrupted pass leaves no report — it
+// was incomplete, and a partial report would say "only this anime had a problem" when the
+// others were never even looked at.
 func TestAnimeVerification_CancelledLeavesNoReport(t *testing.T) {
 	reportPassAniList(t)
 	emptyNyaa(t)
 
 	fm := &lifecycleFM{configs: reportPassConfig(t)}
 	state := NewState()
-	// Semear o relatorio do passe ANTERIOR: sem isso o teste passaria com o State recem-criado
-	// mesmo se a limpeza inteira fosse apagada, porque um State novo ja nasce com o relatorio
-	// zerado. O que precisa ser travado e que o passe interrompido NAO deixa o relatorio velho
-	// na tela.
+	// Seed the PREVIOUS pass's report: without this the test would pass on a freshly created
+	// State even if the whole clear were deleted, because a new State is born with a zero
+	// report. What has to be locked is that the interrupted pass does NOT leave the old
+	// report on the screen.
 	state.SetLastCheckReport(CheckReport{
 		FinishedAt: time.Now(),
-		Problems:   []Issue{{AnimeID: 1, AnimeName: "Anterior", Code: IssueNoTorrentFound}},
+		Problems:   []Issue{{AnimeID: 1, AnimeName: "Previous", Code: IssueNoTorrentFound}},
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -315,12 +316,12 @@ func TestAnimeVerification_CancelledLeavesNoReport(t *testing.T) {
 
 	report := state.GetLastCheckReport()
 	if !report.FinishedAt.IsZero() || len(report.Problems) != 0 || len(report.Limits) != 0 {
-		t.Errorf("passe cancelado não deve deixar relatório, obteve %+v", report)
+		t.Errorf("a cancelled pass must not leave a report, got %+v", report)
 	}
 }
 
-// blockingFM segura o passe dentro de LoadSavedEpisodes até ser liberado, para que um segundo
-// passe seja disparado com o primeiro comprovadamente em andamento.
+// blockingFM holds the pass inside LoadSavedEpisodes until it is released, so a second pass
+// can be fired with the first proven to be in progress.
 type blockingFM struct {
 	lifecycleFM
 	blocked atomic.Bool
@@ -343,10 +344,10 @@ func (m *blockingFM) loads() int {
 	return m.loadedSavedCount
 }
 
-// Dois passes simultâneos (o do loop + o do POST /check) liam episodes.json no início e só
-// escreviam no fim: o segundo enxergava a lista ANTES dos downloads do primeiro e baixava tudo de
-// novo — foi assim que um anime já coberto por um pack ganhou torrents avulsos dos mesmos
-// episódios, sobrescrevendo os registros do pack. Passe concorrente é descartado.
+// Two simultaneous passes (the loop's + POST /check) used to read episodes.json at the start
+// and only write at the end: the second saw the list BEFORE the first's downloads and
+// downloaded everything again — that is how an anime already covered by a pack got loose
+// torrents of the same episodes, overwriting the pack's records. A concurrent pass is dropped.
 func TestAnimeVerification_SkipsWhenAnotherPassIsRunning(t *testing.T) {
 	reportPassAniList(t)
 	emptyNyaa(t)
@@ -367,22 +368,22 @@ func TestAnimeVerification_SkipsWhenAnotherPassIsRunning(t *testing.T) {
 	select {
 	case <-fm.entered:
 	case <-time.After(5 * time.Second):
-		t.Fatal("o primeiro passe não começou")
+		t.Fatal("the first pass did not start")
 	}
 	before := fm.loads()
 
 	AnimeVerification(context.Background(), fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 
 	if got := fm.loads(); got != before {
-		t.Errorf("o passe concorrente deveria ter sido descartado, mas leu os episódios salvos (%d -> %d)", before, got)
+		t.Errorf("the concurrent pass should have been dropped, but it read the saved episodes (%d -> %d)", before, got)
 	}
 
 	close(fm.release)
 	<-done
 
-	// E o passe seguinte, já com o primeiro terminado, roda normalmente.
+	// And the next pass, with the first already finished, runs normally.
 	AnimeVerification(context.Background(), fm, state, nil, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()))
 	if got := fm.loads(); got <= before {
-		t.Errorf("terminado o primeiro passe, o próximo deve rodar (leituras: %d -> %d)", before, got)
+		t.Errorf("once the first pass is done, the next one must run (reads: %d -> %d)", before, got)
 	}
 }

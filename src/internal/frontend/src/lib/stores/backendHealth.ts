@@ -1,28 +1,29 @@
 import { writable, derived } from 'svelte/store'
 
 /**
- * Saúde do NOSSO backend, derivada só das respostas que o app já faz. Não existe endpoint de
- * health check: um daemon que responde 200 em `/status` está são por definição, e um que não
- * responde não responderia a um endpoint novo também.
+ * Health of OUR backend, derived only from the responses the app already makes. There is no
+ * health-check endpoint: a daemon that returns 200 on `/status` is healthy by definition, and
+ * one that doesn't respond wouldn't respond to a new endpoint either.
  *
- * `unreachable` = a requisição nem chegou (daemon caiu, rede fora). `server_error` = chegou e
- * voltou 5xx, que é bug nosso. 4xx NÃO conta: 404, 405 e o 409 do POST de avulso são respostas
- * legítimas do backend funcionando, e tratá-las como degradação poria banner na tela toda vez
- * que o usuário tentasse adicionar um anime repetido.
+ * `unreachable` = the request never arrived (daemon down, network out). `server_error` = it
+ * arrived and came back 5xx, which is our bug. 4xx does NOT count: 404, 405 and the 409 from
+ * the standalone POST are legitimate responses from a working backend, and treating them as
+ * degradation would put a banner on screen every time the user tried to add a duplicate anime.
  */
 export type BackendState = 'ok' | 'unreachable' | 'server_error'
 
 /**
- * Falhas CONSECUTIVAS exigidas antes de acusar. Uma falha isolada num poll de 5s é ruído de
- * rede; o banner existe para estado que persiste (ver decisions.md #66). É também o que permite
- * conviver com `silent: true` sem reintroduzir o spam de toast que essa opção existe para evitar.
+ * CONSECUTIVE failures required before raising the alarm. An isolated failure on a 5s poll is
+ * network noise; the banner exists for state that persists (see decisions.md #66). It's also
+ * what lets us live with `silent: true` without reintroducing the toast spam that option exists
+ * to prevent.
  */
 const FAILURES_BEFORE_ALARM = 2
 
 /**
- * Contadores por endpoint, e não um contador global: um `/last-check` quebrado enquanto
- * `/status` responde é bug nosso e tem que aparecer. Com contador único, o sucesso de um
- * endpoint apagaria a falha do outro.
+ * Counters per endpoint, not a global counter: a broken `/last-check` while `/status` still
+ * answers is our bug and has to show. With a single counter, one endpoint's success would
+ * erase the other's failure.
  */
 const failures = new Map<string, { count: number; state: Exclude<BackendState, 'ok'> }>()
 
@@ -32,8 +33,8 @@ function recompute() {
   let next: BackendState = 'ok'
   for (const f of failures.values()) {
     if (f.count < FAILURES_BEFORE_ALARM) continue
-    // Inalcançável ganha de 5xx: com o daemon fora do ar, o 5xx que sobrou no contador é
-    // informação velha da última vez em que ele ainda respondia.
+    // Unreachable beats 5xx: with the daemon down, the 5xx left in the counter is stale
+    // information from the last time it was still answering.
     if (f.state === 'unreachable') {
       next = 'unreachable'
       break
@@ -46,16 +47,16 @@ function recompute() {
 export const backendHealth = {
   subscribe: store.subscribe,
 
-  /** Uma resposta útil zera o endpoint. O banner some no primeiro sucesso, nunca por timer. */
+  /** A useful response zeros the endpoint. The banner disappears on the first success, never on a timer. */
   recordSuccess(endpoint: string) {
     if (failures.delete(endpoint)) recompute()
   },
 
-  /** `status` 0 significa que o fetch nem chegou a receber resposta. */
+  /** `status` 0 means the fetch never even received a response. */
   recordFailure(endpoint: string, status: number) {
     if (status !== 0 && status < 500) {
-      // Resposta legítima de um backend são: não é degradação, e não deve manter aceso um
-      // alarme anterior deste endpoint.
+      // Legitimate response from a healthy backend: not degradation, and must not keep a
+      // previous alarm for this endpoint lit.
       this.recordSuccess(endpoint)
       return
     }
@@ -65,12 +66,12 @@ export const backendHealth = {
     recompute()
   },
 
-  /** Só para testes: zera o estado do módulo entre casos. */
+  /** Tests only: reset the module state between cases. */
   reset() {
     failures.clear()
     store.set('ok')
   },
 }
 
-/** Conveniência para condições de render. */
+/** Convenience for render conditions. */
 export const backendDegraded = derived(store, ($s) => $s !== 'ok')

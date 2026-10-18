@@ -1,29 +1,29 @@
 /*
- * Design tokens — Fase 0 do redesign de UI.
+ * Design tokens — Phase 0 of the UI redesign.
  *
- * Duas escalas de cor (aad-dark / aad-light), selecionadas via
- * [data-theme="aad-dark" | "aad-light"] no <html> (ver src/lib/stores/theme.ts).
- * Estes tokens alimentam:
- *   1. Os temas custom do daisyUI (tailwind.config.js `daisyui.themes`), que repintam
- *      todos os componentes daisyUI existentes (btn, badge, card, alert, progress, ...)
- *      sem reescrevê-los.
- *   2. As cores semânticas do Tailwind (tailwind.config.js `theme.extend.colors`), que as
- *      telas novas (fase 1+) consomem via classes como `bg-card`, `border-default`,
+ * Two color scales (aad-dark / aad-light), selected via
+ * [data-theme="aad-dark" | "aad-light"] on <html> (see src/lib/stores/theme.ts).
+ * These tokens feed:
+ *   1. daisyUI custom themes (tailwind.config.js `daisyui.themes`), which repaint
+ *      every existing daisyUI component (btn, badge, card, alert, progress, ...)
+ *      without rewriting them.
+ *   2. Tailwind semantic colors (tailwind.config.js `theme.extend.colors`), which
+ *      the new screens (phase 1+) consume via classes like `bg-card`, `border-default`,
  *      `text-subtle`, `text-accent`, `bg-ok/12`.
  *
- * Convenção de nomes de variável: `--<grupo>-<papel>`. Os valores em si são verbatim do
- * handoff de design (spec §4.1), exceto onde marcado "CORRIGIDO" abaixo — qualquer desvio de
- * um valor do spec está documentado no relatório da Fase 0.
+ * Variable naming convention: `--<group>-<role>`. The values themselves are verbatim
+ * from the design handoff (spec §4.1), except where marked "FIXED" below — any deviation
+ * from a spec value is documented in the Phase 0 report.
  *
- * Tokens com sufixo `-rgb` guardam o mesmo valor como tripla "R G B" (sem `rgb()`), para
- * habilitar o modificador de opacidade do Tailwind (`bg-ok/12`), que exige
- * `rgb(var(--x-rgb) / <alpha-value>)` em vez de um hex fixo.
+ * Tokens with the `-rgb` suffix store the same value as an "R G B" triple (no `rgb()`),
+ * to enable Tailwind's opacity modifier (`bg-ok/12`), which requires
+ * `rgb(var(--x-rgb) / <alpha-value>)` instead of a fixed hex.
  */
 
 [data-theme='aad-dark'] {
   color-scheme: dark;
 
-  /* Fundos */
+  /* Backgrounds */
   --bg-window: #07080b;
   --bg-surface: #0c0e13;
   --bg-card: #101218;
@@ -31,18 +31,18 @@
   --bg-control: #171a22;
   --bg-menu: #161922;
 
-  /* Bordas */
+  /* Borders */
   --border-default: rgba(255, 255, 255, 0.08);
   --border-divider: rgba(255, 255, 255, 0.045);
 
-  /* Texto */
+  /* Text */
   --text-primary: #e8eaf0;
   --text-secondary: #c3c9d6;
   --text-tertiary: #9aa1b2;
   --text-subtle: #7c8494;
 
-  /* Acento e status — usados como texto/borda/fill sólido (regra: no máximo um acento
-     sólido por tela; roxo = ação primária, verde = exclusivo de "Iniciar daemon") */
+  /* Accent and status — used as solid text/border/fill (rule: at most one solid accent
+     per screen; purple = primary action, green = exclusive to "Start daemon") */
   --accent: #8272ee;
   --ok: #4bd4a2;
   --warn: #eeb14b;
@@ -54,23 +54,23 @@
   --danger-rgb: 242 117 117;
   --neutral-rgb: 141 147 163;
 
-  /* §5 (Fase 1) — texto do item ativo do NavRail/NavTabBar/MoreMenu. Valor literal do spec
-     (#c5bcfa) só existe como token aqui; componentes referenciam --nav-active-text, nunca o
-     hex. No escuro é um lilás mais claro que --accent (contraste maior sobre o fundo do
-     acento a 16% de opacidade); no claro o par é o próprio --accent (ver tokens.css bloco
-     aad-light). */
+  /* §5 (Phase 1) — text of the active NavRail/NavTabBar/MoreMenu item. The spec's literal
+     (#c5bcfa) exists as a token only here; components reference --nav-active-text, never
+     the hex. In dark it's a lighter lilac than --accent (higher contrast over the accent
+     background at 16% opacity); in light the pair is --accent itself (see the aad-light
+     block in tokens.css). */
   --nav-active-text: #c5bcfa;
 
-  /* Texto sobre acento/status sólido. No escuro o acento já é claro, então o texto por cima
-     é escuro. */
+  /* Text on solid accent/status. In dark the accent is already light, so the text on top
+     is dark. */
   --on-accent: #12111a;
   --on-ok: #0d1b16;
   --on-warn: #1e1a10;
   --on-danger: #1e1414;
 
-  /* Fundos/bordas tingidos (7–16% / 22–32% de opacidade, aplicada pelo componente via
-     Tailwind, ex. bg-accent-tint/12, border-ok-tint/28). No escuro o tom "tingido" é o
-     próprio acento — não há uma segunda cor. */
+  /* Tinted backgrounds/borders (7–16% / 22–32% opacity, applied by the component via
+     Tailwind, e.g. bg-accent-tint/12, border-ok-tint/28). In dark the "tinted" tone is
+     the accent itself — there is no second color. */
   --accent-tint: var(--accent);
   --ok-tint: var(--ok);
   --warn-tint: var(--warn);
@@ -80,7 +80,7 @@
   --warn-tint-rgb: var(--warn-rgb);
   --danger-tint-rgb: var(--danger-rgb);
 
-  /* §4.2 — trilho de progresso e elevação variam por tema */
+  /* §4.2 — progress track and elevation vary by theme */
   --progress-track: rgba(255, 255, 255, 0.07);
   --elevation-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.95);
 }
@@ -88,7 +88,7 @@
 [data-theme='aad-light'] {
   color-scheme: light;
 
-  /* Fundos (superfícies invertem em relação ao escuro) */
+  /* Backgrounds (surfaces invert relative to dark) */
   --bg-window: #f5f6f9;
   --bg-surface: #ffffff;
   --bg-card: #ffffff;
@@ -96,23 +96,23 @@
   --bg-control: #eef0f5;
   --bg-menu: #ffffff;
 
-  /* Bordas */
+  /* Borders */
   --border-default: rgba(16, 18, 24, 0.1);
   --border-divider: rgba(16, 18, 24, 0.06);
 
-  /* Texto */
+  /* Text */
   --text-primary: #14161d;
   --text-secondary: #3d4351;
   --text-tertiary: #5c6273;
-  /* --text-subtle CORRIGIDO de #7c8494 (valor do spec) para #636a76 — ver relatório da
-     Fase 0: #7c8494 rende só 3.30–3.76:1 contra os fundos claros (--bg-sunken/--bg-control
-     é o pior caso, 3.30:1), abaixo do piso de 4.5:1 do §4.1 para texto <18px. #636a76 mantém
-     o mesmo matiz, escurecido o suficiente para 4.53–5.29:1 em todos os fundos claros. */
+  /* --text-subtle FIXED from #7c8494 (spec value) to #636a76 — see the Phase 0 report:
+     #7c8494 only yields 3.30–3.76:1 against the light backgrounds (--bg-sunken/--bg-control
+     is the worst case, 3.30:1), below the 4.5:1 floor of §4.1 for text <18px. #636a76 keeps
+     the same hue, darkened enough for 4.53–5.29:1 on every light background. */
   --text-subtle: #636a76;
 
-  /* Acento e status — no claro, --accent/--ok/--warn/--danger passam a ser a variante
-     ESCURECIDA (texto/borda/fill sólido); o hex original (mais vivo) vira o token *-tint,
-     usado só em fundos tingidos de baixa opacidade, que continuam legíveis nessa faixa. */
+  /* Accent and status — in light, --accent/--ok/--warn/--danger become the DARKENED
+     variant (solid text/border/fill); the original (livelier) hex becomes the *-tint
+     token, used only on low-opacity tinted backgrounds, which stay readable in that range. */
   --accent: #6a55d6;
   --ok: #0e7a58;
   --warn: #8a5d0b;
@@ -124,20 +124,20 @@
   --danger-rgb: 197 59 59;
   --neutral-rgb: 111 119 136;
 
-  /* §5 (Fase 1) — par claro do texto do item ativo do nav: o spec só fixa o hex escuro
-     (#c5bcfa), pedindo --accent como par claro (ver tokens.css bloco aad-dark). */
+  /* §5 (Phase 1) — light pair for the active nav item text: the spec only pins the dark
+     hex (#c5bcfa), asking for --accent as the light pair (see the aad-dark block). */
   --nav-active-text: var(--accent);
 
-  /* Texto sobre acento/status sólido. No claro o acento sólido é a variante escurecida, então
-     o texto por cima inverte para branco. */
+  /* Text on solid accent/status. In light the solid accent is the darkened variant, so
+     the text on top flips to white. */
   --on-accent: #ffffff;
   --on-ok: #ffffff;
   --on-warn: #ffffff;
   --on-danger: #ffffff;
 
-  /* Fundos/bordas tingidos usam o hex ORIGINAL (mais vivo), não a variante escurecida acima —
-     ver §4.1 do brief. Em 7–16%/22–32% de opacidade esses tons continuam legíveis mesmo sendo
-     "muito claros para texto pequeno" em opacidade 100%. */
+  /* Tinted backgrounds/borders use the ORIGINAL (livelier) hex, not the darkened variant
+     above — see §4.1 of the brief. At 7–16%/22–32% opacity these tones stay readable even
+     though they are "too light for small text" at 100% opacity. */
   --accent-tint: #8272ee;
   --ok-tint: #4bd4a2;
   --warn-tint: #eeb14b;
@@ -147,7 +147,7 @@
   --warn-tint-rgb: 238 177 75;
   --danger-tint-rgb: 242 117 117;
 
-  /* §4.2 — trilho de progresso e elevação variam por tema */
+  /* §4.2 — progress track and elevation vary by theme */
   --progress-track: rgba(16, 18, 24, 0.08);
   --elevation-shadow: 0 16px 40px -18px rgba(16, 18, 24, 0.28);
 }

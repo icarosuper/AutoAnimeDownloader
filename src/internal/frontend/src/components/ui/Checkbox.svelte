@@ -11,7 +11,7 @@
   export let id: string = `checkbox-${Math.random().toString(36).slice(2, 9)}`
   /**
    * Renders `label` for screen readers only. A per-row selection checkbox (AnimeDetail's
-   * episode table, Fase 4) still needs a distinct accessible name — "Selecionar episódio 3" —
+   * episode table, Phase 4) still needs a distinct accessible name — "Select episode 3" —
    * but printing that next to all 12 boxes would be noise. `label` stays REQUIRED either way,
    * so hiding it can never become a way to ship an unlabelled checkbox.
    */

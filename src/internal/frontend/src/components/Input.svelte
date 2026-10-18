@@ -1,13 +1,12 @@
 <script lang="ts">
-    // Input — mantido e reestilizado na Fase 6 (spec §6: os componentes existentes são
-    // reestilizados, não substituídos). A API pública não mudou; só as classes saíram dos
-    // hexes literais do Tailwind (`bg-white dark:bg-gray-700`, `focus:ring-blue-500`) para os
-    // tokens semânticos do §4.1.
+    // Input — kept and restyled in Phase 6 (spec §6: existing components are restyled, not
+    // replaced). The public API didn't change; only the classes left Tailwind's literal hexes
+    // (`bg-white dark:bg-gray-700`, `focus:ring-blue-500`) for the semantic tokens of §4.1.
     //
-    // A anatomia agora é a do campo do §9.4: rótulo 13.5px/700, controle, e uma linha de ajuda
-    // 12px em --text-subtle. O `subtitle` era renderizado como um SEGUNDO <label> apontando
-    // para o mesmo input — dois rótulos para um controle. Virou <p>, que é o que ele sempre
-    // foi semanticamente, e o input passa a referenciá-lo por aria-describedby.
+    // The anatomy is now the §9.4 field: 13.5px/700 label, control, and a 12px help line in
+    // --text-subtle. `subtitle` used to render as a SECOND <label> pointing at the same
+    // input — two labels for one control. It became a <p>, which is what it always was
+    // semantically, and the input now references it via aria-describedby.
     export let id: string = "";
     export let label: string = "";
     export let subtitle: string = "";
@@ -21,16 +20,16 @@
     export let disabled: boolean = false;
     export let error: string = "";
     /**
-     * Linha de duas colunas: rótulo e dica à esquerda, controle à direita com largura
-     * proporcional ao dado. Opt-in — `Notifications.svelte` também consome este componente e
-     * continua na linha empilhada.
+     * Two-column row: label and hint on the left, control on the right with width
+     * proportional to the data. Opt-in — `Notifications.svelte` also consumes this component
+     * and stays on the stacked row.
      *
-     * O layout sai só de colocação explícita de grid sobre a marcação que já existe. Ramificar a
-     * marcação levaria os dois ramos de <input> (que já são dois por causa da limitação do Svelte
-     * com `type` dinâmico + bind:value) para quatro.
+     * The layout comes only from explicit grid placement over the markup that already exists.
+     * Branching the markup would take the two <input> branches (already two because of
+     * Svelte's limitation with dynamic `type` + bind:value) to four.
      */
     export let inline: boolean = false;
-    /** Unidade ao lado do controle (ex. "min", "%", "GiB"). aria-hidden: já está na dica. */
+    /** Unit next to the control (e.g. "min", "%", "GiB"). aria-hidden: it's already in the hint. */
     export let suffix: string = "";
 
     $: inputClass = `${inline ? "w-full md:w-24" : "w-full"} rounded-field border bg-control px-3 py-2 text-copy text-heading outline-none transition-colors placeholder:font-normal placeholder:text-subtle focus:border-accent disabled:cursor-not-allowed disabled:opacity-50 ${error ? "border-danger" : "border-default"}`;
@@ -38,8 +37,8 @@
     $: inputId = id || `input-${Math.random().toString(36).slice(2, 11)}`;
     $: hintId = `${inputId}-hint`;
     $: errorId = `${inputId}-error`;
-    // Só descreve o que existe: um id apontando para um elemento ausente é uma referência
-    // quebrada na árvore de acessibilidade.
+    // Only describe what exists: an id pointing at a missing element is a broken
+    // reference in the accessibility tree.
     $: describedBy = [subtitle ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
 </script>
 
@@ -57,11 +56,11 @@
         </label>
     {/if}
 
-    <!-- Wrapper permanente (não só no inline): é o que hospeda o sufixo e a colocação de grid.
-         Sem `suffix` e sem `inline` ele é transparente — o input continua ocupando 100%. -->
+    <!-- Permanent wrapper (not only in inline): it hosts the suffix and the grid placement.
+         Without `suffix` and without `inline` it is transparent — the input still takes 100%. -->
     <div class="flex w-full items-center gap-2 {inline ? 'md:col-start-2 md:row-start-1 md:w-auto' : ''}">
-        <!-- `type` não pode ser passado como atributo dinâmico junto de bind:value no Svelte, daí
-             os dois ramos abaixo em vez de um <input {type} bind:value>. -->
+        <!-- `type` cannot be passed as a dynamic attribute together with bind:value in Svelte,
+             hence the two branches below instead of one <input {type} bind:value>. -->
         {#if type === "number"}
             <input
                 id={inputId}

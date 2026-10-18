@@ -3,12 +3,12 @@ import { render, fireEvent, screen } from '@testing-library/svelte'
 import ChipsInput from '../../src/components/ui/ChipsInput.svelte'
 
 /**
- * As cinco regras de teclado do spec §9.4 (Enter, vírgula, Backspace em campo vazio, ×, colar
- * lista). São a razão de o componente existir: sem elas o campo não tem como receber valor,
- * porque o botão "+" do design antigo foi removido.
+ * The five keyboard rules from spec §9.4 (Enter, comma, Backspace on an empty field, ×,
+ * paste a list). They are why the component exists: without them the field has no way to
+ * receive a value, because the old design's "+" button was removed.
  *
- * Os asserts leem o DOM renderizado (um × por chip, cada um com nome acessível "Remove <v>"),
- * não o estado interno do componente: é o mesmo que o usuário e o leitor de tela enxergam.
+ * The asserts read the rendered DOM (one × per chip, each with accessible name "Remove <v>"),
+ * not the component's internal state: that is what the user and the screen reader see.
  */
 function setup(values: string[] = []) {
   render(ChipsInput, { props: { label: 'Usernames', values } })
@@ -21,14 +21,14 @@ function chips(): string[] {
     .map((btn) => btn.getAttribute('aria-label')!.replace(/^Remove /, ''))
 }
 
-/** fireEvent.input não mexe no valor sozinho; o bind:value lê do DOM. */
+/** fireEvent.input does not change the value on its own; bind:value reads from the DOM. */
 async function type(input: HTMLInputElement, text: string) {
   input.value = text
   await fireEvent.input(input)
 }
 
 describe('ChipsInput', () => {
-  it('confirma o valor com Enter', async () => {
+  it('commits the value with Enter', async () => {
     const input = setup()
 
     await type(input, 'icaro')
@@ -38,7 +38,7 @@ describe('ChipsInput', () => {
     expect(input.value).toBe('')
   })
 
-  it('confirma o valor com vírgula', async () => {
+  it('commits the value with a comma', async () => {
     const input = setup()
 
     await type(input, 'icaro')
@@ -48,7 +48,7 @@ describe('ChipsInput', () => {
     expect(input.value).toBe('')
   })
 
-  it('remove o último chip com Backspace quando o campo está vazio', async () => {
+  it('removes the last chip with Backspace when the field is empty', async () => {
     const input = setup(['alpha', 'beta'])
 
     await fireEvent.keyDown(input, { key: 'Backspace' })
@@ -56,7 +56,7 @@ describe('ChipsInput', () => {
     expect(chips()).toEqual(['alpha'])
   })
 
-  it('NÃO remove chip com Backspace enquanto há texto digitado', async () => {
+  it('does NOT remove a chip with Backspace while there is typed text', async () => {
     const input = setup(['alpha'])
 
     await type(input, 'xy')
@@ -65,7 +65,7 @@ describe('ChipsInput', () => {
     expect(chips()).toEqual(['alpha'])
   })
 
-  it('remove o chip pelo ×', async () => {
+  it('removes the chip via ×', async () => {
     setup(['alpha', 'beta'])
 
     await fireEvent.click(screen.getByRole('button', { name: 'Remove alpha' }))
@@ -73,7 +73,7 @@ describe('ChipsInput', () => {
     expect(chips()).toEqual(['beta'])
   })
 
-  it('cria vários chips ao colar uma lista separada por vírgulas', async () => {
+  it('creates several chips when pasting a comma-separated list', async () => {
     const input = setup()
 
     await fireEvent.paste(input, {
@@ -84,7 +84,7 @@ describe('ChipsInput', () => {
     expect(input.value).toBe('')
   })
 
-  it('não duplica um valor que já existe', async () => {
+  it('does not duplicate a value that already exists', async () => {
     const input = setup(['alpha'])
 
     await type(input, 'alpha')
@@ -93,7 +93,7 @@ describe('ChipsInput', () => {
     expect(chips()).toEqual(['alpha'])
   })
 
-  it('ignora entrada vazia ou só com espaços', async () => {
+  it('ignores empty or whitespace-only input', async () => {
     const input = setup()
 
     await type(input, '   ')
@@ -102,7 +102,7 @@ describe('ChipsInput', () => {
     expect(chips()).toEqual([])
   })
 
-  it('confirma o que estava digitado ao sair do campo (não perde o texto no Salvar)', async () => {
+  it('commits what was typed on leaving the field (does not lose the text on Save)', async () => {
     const input = setup()
 
     await type(input, 'icaro')

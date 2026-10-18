@@ -449,7 +449,7 @@ func TestInitDebug_WritesJSONLToGivenPath(t *testing.T) {
 	Logger = originalLogger
 }
 
-// testLoggerError é um tipo de erro simples para testes
+// testLoggerError is a simple error type for tests
 type testLoggerError struct {
 	msg string
 }

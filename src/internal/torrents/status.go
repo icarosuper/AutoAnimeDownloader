@@ -2,25 +2,25 @@ package torrents
 
 import "github.com/cenkalti/rain/v2/torrent"
 
-// Slugs de status que o resto do código precisa comparar por nome. StatusQueued é o único
-// que NÃO sai do enum da rain: quem o escreve é a fila (queue.markQueued), porque para a
-// rain um torrent enfileirado é apenas mais um torrent parado.
+// Status slugs the rest of the code needs to compare by name. StatusQueued is the only
+// one that does NOT come from rain's enum: the queue writes it (queue.markQueued), because
+// to rain a queued torrent is just another stopped torrent.
 const (
 	StatusStopped  = "stopped"
 	StatusStopping = "stopping"
 	StatusQueued   = "queued"
-	// StatusDownloading e StatusDownloadingMetadata sao os dois estados em que o torrent esta
-	// de fato tentando falar com o swarm — e portanto os unicos em que "zero peers" e sintoma
-	// de problema, e nao so de nao ter comecado (ver daemon.dropStalledTorrents).
+	// StatusDownloading and StatusDownloadingMetadata are the two states in which the torrent is
+	// actually trying to talk to the swarm — and therefore the only ones in which "zero peers" is a
+	// symptom of trouble, not just of not having started (see daemon.dropStalledTorrents).
 	StatusDownloading         = "downloading"
 	StatusDownloadingMetadata = "downloading_metadata"
 )
 
-// statusSlug converte o enum de status da rain num slug estável de API.
+// statusSlug converts rain's status enum into a stable API slug.
 //
-// A rain expõe Status.String(), mas ele devolve display text com espaço
-// ("Downloading Metadata") e pode ser reescrito em qualquer upgrade da lib. O slug daqui é
-// contrato com a WebUI (chave de tradução), então é mapeado à mão de propósito.
+// rain exposes Status.String(), but it returns display text with a space
+// ("Downloading Metadata") and may be rewritten on any lib upgrade. The slug here is
+// a contract with the WebUI (translation key), so it is mapped by hand on purpose.
 func statusSlug(s torrent.Status) string {
 	switch s {
 	case torrent.Stopped:

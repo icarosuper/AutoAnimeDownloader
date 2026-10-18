@@ -386,10 +386,11 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 		return false // retry; hardlinks already exist so Organize will no-op next time
 	}
 
-	// Se PARTE do grupo ja tinha LibraryPaths, o torrent ja pousou e o webhook ja saiu: organiza
-	// (e idempotente), grava o marcador nos registros novos, mas nao notifica de novo. Sem isso,
-	// registros criados depois para um torrent ja organizado — como os que a regra de batch cria
-	// no primeiro passe pos-upgrade de uma biblioteca existente — duplicariam a notificacao.
+	// If PART of the group already had LibraryPaths, the torrent already landed and the webhook
+	// already fired: organize (it is idempotent), write the marker on the new records, but do
+	// not notify again. Without this, records created later for an already-organized torrent —
+	// like the ones the batch rule creates on the first post-upgrade pass of an existing
+	// library — would duplicate the notification.
 	if partiallyOrganized {
 		logger.Logger.Debug().Str("hash", hash).Msg("Organize: group was already partially organized, skipping the completion webhook")
 	} else {

@@ -61,17 +61,17 @@ Look for:
 - **`ErrSessionNotReady`** — `completed_anime_path` is empty/unset, so the download path (`Config.DownloadPath()`, derived from it) is empty and no torrent session exists yet. Complete the config.
 - **Magnet parse failure** — a malformed magnet (`parseInfoHash` couldn't extract the info hash).
 
-**Nenhum log de busca para o anime inteiro** → antes de acusar a busca, procure:
+**No search log for the whole anime** → before blaming the search, look for:
 
 ```json
 {"level":"info","anime":"...","episode":N,"absolute_episode":M,"owner_anime_id":X,"message":"Adopting episode already covered by a downloaded pack"}
 ```
 
-Isso é a **posse por cobertura** (decisions.md #78): o episódio já está dentro de um pack em
-disco, baixado sob outra entrada da AniList (o cour anterior, tipicamente), então ele nunca chega
-ao Nyaa — e isso é o comportamento correto, não uma falha. O registro novo aponta para o hash que
-já existe. Se o arquivo de fato não estiver lá, o problema é da faixa declarada (`BatchStart`/
-`BatchEnd`, lida do nome do torrent), não da busca.
+That is **ownership by coverage** (decisions.md #78): the episode is already inside a pack on
+disk, downloaded under another AniList entry (typically the previous cour), so it never reaches
+Nyaa — and that is the correct behavior, not a failure. The new record points at the hash that
+already exists. If the file is actually not there, the problem is the declared range (`BatchStart`/
+`BatchEnd`, read from the torrent name), not the search.
 
 **An episode reported as not found, with no per-episode Nyaa search in this pass** → look for:
 
@@ -180,7 +180,7 @@ For single-episode searches, a torrent is only kept if its extracted episode num
 If `ExtractAnimeSeasonPart` returns a season or part, results are filtered to match. Check if the season/part extracted from the title is correct. A wrong extraction causes all results to be dropped. Watch for sequels titled with only a roman numeral (e.g. "... II") — `ExtractSeason` (`nyaa.go`) has a roman-numeral fallback (`reRomanSeason` in `nyaa_regex.go`, decision 20) precisely because fansub releases for these often carry no other season marker; if a new roman-numeral case still fails, check whether the numeral is spelled differently in the torrent name than in the AniList title.
 
 **6d. Batch detection** (`reBatchPatterns`):
-Single-episode searches drop batch torrents. If Nyaa only has a pack available, the single-episode search will return nothing (correct behavior — the pack search/selection path, run earlier over the same anime search, should have caught it first; see [decisions.md #59-61](decisions.md#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado)).
+Single-episode searches drop batch torrents. If Nyaa only has a pack available, the single-episode search will return nothing (correct behavior — the pack search/selection path, run earlier over the same anime search, should have caught it first; see [decisions.md #59-61](decisions.md#59-batch-eligibility-stopped-being-metadata-and-became-a-result-filter)).
 
 **6e. Title match / Jaccard filtering** (`titleMatchesQuery` in `nyaa_match.go`):
 This check runs before episode/season/batch filters and rejects torrents in two ways:
@@ -197,62 +197,62 @@ torrent tokens = extractTitleTokens("<torrent name from Nyaa>")
 jaccard        = |intersection| / |union|
 ```
 
-Se der abaixo do threshold, confira também a segunda tentativa antes de mexer no allowlist: o match
-repete as duas checagens sobre cada `altTitleCandidates(<tail depois do marcador>)` (decisions.md
-#75), então o nome pode passar por um título alternativo mesmo com o corte reprovando.
+If it falls below the threshold, also check the second attempt before touching the allowlist: the
+match repeats both checks on each `altTitleCandidates(<tail after the marker>)` (decisions.md
+#75), so the name can pass via an alternative title even when the truncation fails.
 
 If Jaccard < 0.8, add the offending torrent-side tokens to `titleTechnicalTokens` in `nyaa_match.go` (streaming service tags like `nf`/`amzn`/`cr`, codec fragments like `eac3`/`ddp2`, subtitle markers like `multisub`/`multi`/`subs`, etc.).
 
-**6f. Nenhum pack sobrevive — o anime baixa episódio a episódio mesmo com pack no Nyaa**
+**6f. No pack survives — the anime downloads episode by episode even with a pack on Nyaa**
 
-Sintoma-âncora no log: existem linhas `Attempting to download episode` para todos os episódios, e
-**não existe** a linha `Using batch torrents to cover the pending window` (`daemon/episodes.go`).
-Isso quer dizer que a busca voltou com resultados, mas nenhum pack chegou ao `pickBatches` — o
-problema é filtro, não ausência de pack. Confirme na mesma busca: `Found anime torrents on Nyaa`
-com `results: N` e todos os nomes sendo episódio avulso.
+Anchor symptom in the log: there are `Attempting to download episode` lines for every episode, and
+there is **no** `Using batch torrents to cover the pending window` line (`daemon/episodes.go`).
+That means the search came back with results, but no pack reached `pickBatches` — the problem is
+filtering, not a missing pack. Confirm on the same search: `Found anime torrents on Nyaa` with
+`results: N` and every name a single episode.
 
-Receita para achar **qual** filtro matou cada pack (foi o que fechou o caso do Mushoku Tensei II
-Part 2, `166873`):
+Recipe to find **which** filter killed each pack (this is what closed the Mushoku Tensei II
+Part 2 case, `166873`):
 
-1. Extraia os nomes crus da busca: as linhas `Raw Nyaa row` do passe em
-   `~/.autoAnimeDownloader/daemon.log` (ou do `debug.jsonl` do Step 0).
-2. Rode, para **cada** nome de pack, as funções do pacote `nyaa` que decidem o descarte —
-   `IsBatch`, `ExtractSeason`, `ExtractPart` e `titleMatchesQuery` — com a query que o daemon usou
-   de verdade (a variante, não o título da AniList).
-3. Monte a tabela `torrent × batch × part × match`. A coluna que der `false` é o filtro culpado, e
-   cada linha pode morrer por um motivo diferente.
+1. Extract the raw names from the search: the pass's `Raw Nyaa row` lines in
+   `~/.autoAnimeDownloader/daemon.log` (or from Step 0's `debug.jsonl`).
+2. Run, for **each** pack name, the `nyaa` package functions that decide the drop —
+   `IsBatch`, `ExtractSeason`, `ExtractPart` and `titleMatchesQuery` — with the query the daemon
+   actually used (the variant, not the AniList title).
+3. Build the table `torrent × batch × part × match`. The column that is `false` is the guilty
+   filter, and each row can die for a different reason.
 
-Os três culpados já vistos, todos na mesma investigação:
+The three culprits already seen, all in the same investigation:
 
-- ~~**`titleMatchesQuery` falso porque `truncateAtFirstMarker` comeu o título alternativo.**~~
-  **CORRIGIDO** (decisions.md #75): quando o corte no marcador falha, `titleMatchesQuery` tenta cada
-  título alternativo que vem depois dele (grupos entre parênteses, segmentos separados por barra).
-  Se você ainda vir um pack morrer neste filtro, verifique se o título alternativo está num formato
-  que `altTitleCandidates` não enxerga — colchetes e texto solto ficam de fora de propósito.
-- ~~**Filtro duro de part matando pack de season inteira.**~~ **CORRIGIDO** (decisions.md #79): no
-  caminho de pack, `part` só rejeita **conflito declarado** — pack sem marcador passa, porque pack
-  de season inteira normalmente não tem esse marcador embora contenha os episódios pedidos. Ver
-  `sources.md`, "Granularidade e numeração dos packs".
-- ~~**`ExtractPart` lendo `Part 1 + Part 2` como `1`.**~~ **CORRIGIDO** (decisions.md #79): nome que
-  declara duas parts devolve `nil`, e quem decide passa a ser a cobertura da faixa.
-- **A faixa do pack não bate com a numeração da entrada.** O pack existe, sobreviveu aos filtros, e
-  `pickBatches` ainda não o escolhe: o nome dele está em outra régua (season contínua, absoluta pela
-  série). Rode `newPackAxis`/`localRange` (`daemon/episodes.go`) com o total de episódios da entrada
-  e veja se alguma hipótese cobre — se nenhuma cobre, é a heurística que precisa de mais uma, e o
-  desempate é a contagem de arquivos do pack.
+- ~~**`titleMatchesQuery` false because `truncateAtFirstMarker` ate the alternative title.**~~
+  **FIXED** (decisions.md #75): when the cut at the marker fails, `titleMatchesQuery` tries each
+  alternative title that comes after it (parenthesized groups, slash-separated segments).
+  If you still see a pack die on this filter, check whether the alternative title is in a format
+  `altTitleCandidates` does not see — brackets and loose text stay out on purpose.
+- ~~**Hard part filter killing a whole-season pack.**~~ **FIXED** (decisions.md #79): on the
+  pack path, `part` only rejects a **declared conflict** — a pack with no marker passes, because a
+  whole-season pack usually has no such marker even though it contains the requested episodes. See
+  `sources.md`, "Pack granularity and numbering".
+- ~~**`ExtractPart` reading `Part 1 + Part 2` as `1`.**~~ **FIXED** (decisions.md #79): a name that
+  declares two parts returns `nil`, and what decides becomes the range coverage.
+- **The pack's range does not match the entry's numbering.** The pack exists, survived the filters,
+  and `pickBatches` still does not pick it: its name is on another ruler (continuous season,
+  absolute across the series). Run `newPackAxis`/`localRange` (`daemon/episodes.go`) with the
+  entry's episode total and see whether any hypothesis covers — if none covers, it is the heuristic
+  that needs another one, and the tie-break is the pack's file count.
 
-**Comparação que fecha o diagnóstico rápido:** rode o mesmo passo na entrada **irmã** sem "Part" no
-título (a Part 1 da mesma season). Se ela acha pack e a Part 2 não, ainda há um filtro dependente de
-part no caminho — ele não roda na irmã.
+**The comparison that closes a fast diagnosis:** run the same step on the **sibling** entry with no
+"Part" in the title (Part 1 of the same season). If it finds a pack and Part 2 does not, there is
+still a part-dependent filter on the path — it does not run on the sibling.
 
-Verifique também se a variante de título certa chegou a ser tentada: `searchNyaaWithVariants`
-(`daemon/search.go`) **para na primeira variante que devolve qualquer resultado**, e
-`GenerateSearchTitleVariants` põe o romaji primeiro. Se o romaji trouxe 24 episódios avulsos, a
-variante em inglês — que poderia casar com os packs — nunca rodou.
+Also check whether the right title variant was even tried: `searchNyaaWithVariants`
+(`daemon/search.go`) **stops at the first variant that returns any result**, and
+`GenerateSearchTitleVariants` puts romaji first. If romaji brought 24 single episodes, the
+English variant — which might have matched the packs — never ran.
 
-> Este suspeito foi **medido e descartado** no corpus (decisions.md #76): depois de #75 não há anime
-> em que uma variante posterior ache pack que o romaji não achou. Confirme antes de mexer no laço —
-> se você tem um caso real, ele é a evidência que reabre a decisão.
+> This suspect was **measured and discarded** on the corpus (decisions.md #76): after #75 there is
+> no anime where a later variant finds a pack that romaji did not. Confirm before touching the
+> loop — if you have a real case, that is the evidence that reopens the decision.
 
 ---
 

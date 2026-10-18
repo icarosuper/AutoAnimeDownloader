@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// mockNotifier é um mock da interface StateNotifier para testes
+// mockNotifier is a mock of the StateNotifier interface for tests
 type mockNotifier struct {
 	mu              sync.Mutex
 	notifications   []notificationCall
@@ -346,7 +346,7 @@ func TestState_NotificationContent(t *testing.T) {
 	}
 }
 
-// testError é um tipo de erro simples para testes
+// testError is a simple error type for tests
 type testError struct {
 	msg string
 }

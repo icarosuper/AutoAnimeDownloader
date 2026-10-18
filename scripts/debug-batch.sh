@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Roda o --debug-anime sobre a lista curada de scripts/robustness-animes.txt e escreve um
-# report.md triado em .debug_batch/. Usa rede ao vivo (AniList + Nyaa) e leva minutos.
+# Runs --debug-anime over the curated list in scripts/robustness-animes.txt and writes a
+# triaged report.md under .debug_batch/. Uses live network (AniList + Nyaa) and takes minutes.
 #
-# Nao e suite: nao tem pass/fail. O resultado e um relatorio para leitura humana ou de agente.
+# Not a suite: no pass/fail. The result is a report for a human or an agent to read.
 #
-# --report-only regera o report.md a partir do .debug_batch/ que ja esta em disco, sem rede: e para
-# ajustar a triagem sem pagar outra rodada contra o Nyaa.
+# --report-only rebuilds report.md from the .debug_batch/ already on disk, with no network: it is
+# for adjusting the triage without paying another round against Nyaa.
 set -uo pipefail
 
 REPORT_ONLY=0
@@ -17,9 +17,9 @@ OUT="$ROOT/.debug_batch"
 BIN="$ROOT/build/aad-debug"
 CONFIG="$HOME/.autoAnimeDownloader/config.json"
 
-# Abaixo disso o melhor torrent encontrado no Nyaa e considerado fraco, e o anime entra na lista
-# de candidatos a uma fonte alternativa. Bar baixa de proposito: e uma lista para investigar a mao,
-# nao um gate.
+# Below this, the best torrent found on Nyaa is treated as weak, and the anime goes on the list
+# of candidates for an alternative source. The bar is low on purpose: it is a list to investigate
+# by hand, not a gate.
 WEAK_SEEDERS=${WEAK_SEEDERS:-10}
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
@@ -45,8 +45,8 @@ for id in "${ids[@]}"; do
 	[ "$REPORT_ONLY" -eq 1 ] && continue
 	i=$((i + 1))
 	echo "[$i/${#ids[@]}] debugging anime $id..."
-	# CWD dentro de $OUT (recem-apagado): NextDebugDir nao acha nada e o N e sempre 1, entao o
-	# caminho e previsivel sem parsear log nenhum.
+	# CWD inside $OUT (just wiped): NextDebugDir finds nothing and N is always 1, so the
+	# path is predictable without parsing any log.
 	(cd "$OUT" && "$BIN" --debug-anime "$id")
 	exit_code[$id]=$?
 	sleep 2
@@ -59,10 +59,10 @@ report="$OUT/report.md"
 	if [ -f "$CONFIG" ]; then
 		jq -r '"config: max_episodes_per_anime=\(.max_episodes_per_anime), max_batch_episodes=\(.max_batch_episodes), min_seeders=\(.min_seeders), max_episode_torrent_size_gb=\(.max_episode_torrent_size_gb)"' "$CONFIG"
 	else
-		echo "config: $CONFIG nao encontrado"
+		echo "config: $CONFIG not found"
 	fi
 	echo
-	echo "| id | anime | buscados | com magnet | sem magnet | melhor seeders |"
+	echo "| id | anime | searched | with magnet | without magnet | best seeders |"
 	echo "|---|---|---|---|---|---|"
 } > "$report"
 
@@ -81,12 +81,13 @@ for id in "${ids[@]}"; do
 	fi
 
 	if [ ! -f "$summary" ]; then
-		echo "| $id | (sem summary.json) | - | - | - | - |" >> "$report"
+		echo "| $id | (no summary.json) | - | - | - | - |" >> "$report"
 		continue
 	fi
 
-	# Melhor seeders entre os torrents que passaram o filtro (o log matched_torrents ja traz
-	# "S:<seeders>/L:<leechers>"). Sinal de "o Nyaa tem, mas presta?" sem tocar no Go.
+	# Best seeders among torrents that passed the filter (the matched_torrents log already
+	# carries "S:<seeders>/L:<leechers>"). Signal of "Nyaa has it, but is it any good?" without
+	# touching Go.
 	rows=$(jq -r 'select(.matched_torrents) | .matched_torrents[]' "$dir/debug.jsonl" 2>/dev/null)
 	found=$(printf '%s' "$rows" | grep -c 'S:' || true)
 	best=$(printf '%s' "$rows" | grep -oE 'S:[0-9]+' | grep -oE '[0-9]+' | sort -rn | head -1)
@@ -105,28 +106,28 @@ for id in "${ids[@]}"; do
 		nothing+="- $id ${name//_/ } → $rel"$'\n'
 	elif [ "$with" -eq 0 ]; then
 		suspects+="- $id ${name//_/ } — eps $eps → $rel"$'\n'
-		# "Achou e morreu no piso de seeders" e "o Nyaa nao tem" pedem fontes diferentes: a
-		# primeira e o mesmo release sem quem semeie, a segunda e conteudo ausente.
+		# "Found it and died on the seeders floor" and "Nyaa does not have it" ask for different
+		# sources: the first is the same release with nobody seeding, the second is missing content.
 		if [ "$found" -gt 0 ]; then
-			weak+="- $id ${name//_/ } — $found torrents encontrados, melhor com $best seeders (mortos, barrados por min_seeders)"$'\n'
+			weak+="- $id ${name//_/ } — $found torrents found, best with $best seeders (dead, barred by min_seeders)"$'\n'
 		else
-			weak+="- $id ${name//_/ } — nenhum torrent encontrado no Nyaa"$'\n'
+			weak+="- $id ${name//_/ } — no torrent found on Nyaa"$'\n'
 		fi
 	elif [ "$best" -lt "$WEAK_SEEDERS" ]; then
-		weak+="- $id ${name//_/ } — melhor torrent com $best seeders"$'\n'
+		weak+="- $id ${name//_/ } — best torrent with $best seeders"$'\n'
 	fi
 done
 
 {
 	echo
-	echo "## SUSPEITOS (would_search, 0 magnets)"
-	echo "${suspects:-- nenhum}"
-	echo "## NADA BUSCADO (nenhum episódio selecionado)"
-	echo "${nothing:-- nenhum}"
-	echo "## ERROS (saída ≠ 0)"
-	echo "${errors:-- nenhum}"
-	echo "## SEM FONTE BOA NO NYAA (candidatos a outra fonte, < $WEAK_SEEDERS seeders ou nada)"
-	echo "${weak:-- nenhum}"
+	echo "## SUSPECTS (would_search, 0 magnets)"
+	echo "${suspects:-- none}"
+	echo "## NOTHING SEARCHED (no episode selected)"
+	echo "${nothing:-- none}"
+	echo "## ERRORS (exit ≠ 0)"
+	echo "${errors:-- none}"
+	echo "## NO GOOD SOURCE ON NYAA (candidates for another source, < $WEAK_SEEDERS seeders or nothing)"
+	echo "${weak:-- none}"
 } >> "$report"
 
 echo

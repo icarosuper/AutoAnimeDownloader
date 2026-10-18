@@ -16,7 +16,7 @@ const updateConfig = vi.mocked(client.updateConfig)
 const config = (webhooks: WebhookPreset[] = []) =>
   ({ notifications: { webhooks, batch_window_seconds: 0 } }) as Config
 
-/** Botões e labels mudam com o locale do jsdom; os placeholders são literais no markup. */
+/** Buttons and labels change with the jsdom locale; placeholders are literals in the markup. */
 const btn = (re: RegExp) => screen.getByRole('button', { name: re })
 const ADD = /Adicionar webhook|Add webhook/
 const CONFIRM = /Confirmar|Confirm/
@@ -35,31 +35,32 @@ async function savedWebhooks(): Promise<WebhookPreset[]> {
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('Notifications — editor de headers', () => {
-  // A regressão que motivou a mudança: digitar nos dois campos e clicar em Confirmar perdia o
-  // header em silêncio, porque só o botão "+" o passava para o modelo. Ver decisions.md #87.
-  it('grava o header digitado sem passar pelo botão +', async () => {
+describe('Notifications — header editor', () => {
+  // The regression that motivated the change: typing in both fields and clicking Confirm
+  // silently dropped the header, because only the "+" button passed it into the model.
+  // See decisions.md #87.
+  it('saves the typed header without going through the + button', async () => {
     await renderWith()
     await fireEvent.click(btn(ADD))
 
-    await fireEvent.input(screen.getByPlaceholderText('ex: ntfy'), { target: { value: 'Jellyfin' } })
+    await fireEvent.input(screen.getByPlaceholderText('e.g. ntfy'), { target: { value: 'Jellyfin' } })
     await fireEvent.input(screen.getByPlaceholderText(/^https:\/\/ntfy/), {
       target: { value: 'http://localhost:8096/Library/Refresh' },
     })
     await fireEvent.input(screen.getByPlaceholderText('Header'), { target: { value: 'X-Emby-Token' } })
-    await fireEvent.input(screen.getByPlaceholderText('Value'), { target: { value: 'chave-real' } })
+    await fireEvent.input(screen.getByPlaceholderText('Value'), { target: { value: 'real-key' } })
 
     await fireEvent.click(btn(CONFIRM))
     await fireEvent.click(btn(SAVE))
 
-    expect((await savedWebhooks())[0].headers).toEqual({ 'X-Emby-Token': 'chave-real' })
+    expect((await savedWebhooks())[0].headers).toEqual({ 'X-Emby-Token': 'real-key' })
   })
 
-  it('descarta a linha em branco em vez de gravar um header sem nome', async () => {
+  it('discards the blank row instead of saving a nameless header', async () => {
     await renderWith()
     await fireEvent.click(btn(ADD))
 
-    await fireEvent.input(screen.getByPlaceholderText('ex: ntfy'), { target: { value: 'Plex' } })
+    await fireEvent.input(screen.getByPlaceholderText('e.g. ntfy'), { target: { value: 'Plex' } })
     await fireEvent.input(screen.getByPlaceholderText(/^https:\/\/ntfy/), { target: { value: 'http://x/y' } })
 
     await fireEvent.click(btn(CONFIRM))
@@ -68,13 +69,13 @@ describe('Notifications — editor de headers', () => {
     expect((await savedWebhooks())[0].headers).toEqual({})
   })
 
-  it('abre o header já salvo dentro de um input, editável', async () => {
+  it('opens an already-saved header inside an editable input', async () => {
     await renderWith([
       {
         name: 'Jellyfin',
         url: 'http://localhost:8096/Library/Refresh',
         method: 'POST',
-        headers: { 'X-Emby-Token': 'chave-velha' },
+        headers: { 'X-Emby-Token': 'old-key' },
         body: '',
         events: ['download_completed'],
       },
@@ -82,12 +83,12 @@ describe('Notifications — editor de headers', () => {
     await fireEvent.click(btn(/Editar|Edit/))
 
     const value = screen.getByPlaceholderText('Value') as HTMLInputElement
-    expect(value.value).toBe('chave-velha')
+    expect(value.value).toBe('old-key')
 
-    await fireEvent.input(value, { target: { value: 'chave-nova' } })
+    await fireEvent.input(value, { target: { value: 'new-key' } })
     await fireEvent.click(btn(CONFIRM))
     await fireEvent.click(btn(SAVE))
 
-    expect((await savedWebhooks())[0].headers).toEqual({ 'X-Emby-Token': 'chave-nova' })
+    expect((await savedWebhooks())[0].headers).toEqual({ 'X-Emby-Token': 'new-key' })
   })
 })

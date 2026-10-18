@@ -1,8 +1,8 @@
 <script lang="ts">
-  // NavRail — rail vertical de 92px (o spec §5 pede 74px; alargado junto com o aumento geral da
-  // escala tipográfica — ver a nota em `navItemClass`). Só é montado no desktop (>=768px); AppShell
-  // decide isso em JS (matchMedia), não via classes `hidden md:flex`, para nunca ter o
-  // NavTabBar/MoreMenu mobile coexistindo no DOM (evitaria ids duplicados, ex. #theme-select).
+  // NavRail — 92px vertical rail (spec §5 asks for 74px; widened together with the general
+  // type-scale increase — see the note on `navItemClass`). Only mounted on desktop (>=768px);
+  // AppShell decides that in JS (matchMedia), not via `hidden md:flex` classes, so the mobile
+  // NavTabBar/MoreMenu never coexist in the DOM (would duplicate ids, e.g. #theme-select).
   import { onMount } from 'svelte'
   import { getStatus } from '../../lib/api/client.js'
   import {
@@ -42,7 +42,7 @@
       const status = await getStatus()
       appVersion = status.version
     } catch {
-      // ignore — versão é best-effort, igual ao Layout.svelte antigo
+      // ignore — version is best-effort, same as the old Layout.svelte
     }
   })
 
@@ -58,9 +58,9 @@
     locale.set($locale === 'en' ? 'pt-BR' : 'en')
   }
 
-  // A largura (82px, dentro de um rail de 92px) é ditada pelo rótulo mais longo: "Configurações"
-  // em Manrope 700/10.5px mede 75px. No tamanho anterior (9.5px num item de 56px) esse rótulo já
-  // vazava para fora do rail; aumentar a fonte sem alargar o item pioraria o vazamento.
+  // The width (82px, inside a 92px rail) is dictated by the longest label: "Settings" in
+  // Manrope 700/10.5px measures 75px. At the previous size (9.5px in a 56px item) that label
+  // already leaked out of the rail; raising the font without widening the item would worsen the leak.
   function navItemClass(active: boolean): string {
     return `flex h-[48px] w-[82px] flex-col items-center justify-center gap-[5px] rounded-field text-[10.5px] transition-colors ${
       active ? 'bg-accent-tint/16 font-bold text-nav-active' : 'font-semibold text-subtle hover:text-body'
@@ -68,17 +68,18 @@
   }
 </script>
 
-<!-- `sticky top-0` + `h-screen`: o rail tem a altura da viewport, mas sem posicionamento ele
-     era só um item de flex no fluxo normal — em página mais alta que a tela ele rolava junto e
-     sumia. Sticky (e não `fixed`) porque o rail é o primeiro item do flex row do AppShell: ele
-     precisa continuar ocupando os 92px de largura no fluxo, senão o conteúdo passaria por baixo.
+<!-- `sticky top-0` + `h-screen`: the rail is viewport-tall, but without positioning it was
+     just a flex item in normal flow — on a page taller than the screen it scrolled away and
+     vanished. Sticky (not `fixed`) because the rail is the first item of AppShell's flex
+     row: it has to keep occupying the 92px of width in flow, otherwise content would pass
+     underneath.
 
-     `z-30` (o mesmo do NavTabBar) NÃO é decorativo: `position: sticky` cria contexto de
-     empilhamento sempre, então o `z-50` do painel do MoreMenu só ordena coisas DENTRO do rail.
-     Sem z-index aqui, o rail inteiro pinta na camada z-auto da raiz em ordem de árvore e perde
-     para qualquer elemento posicionado que venha depois no DOM — era o caso do `.card` do
-     daisyUI (`position: relative`) na tela de Prioridades, que aparecia na frente do menu.
-     Modal/Toasts/ActionMenu ficam em z-50 na raiz, ou seja, continuam acima do rail. -->
+     `z-30` (the same as NavTabBar) is NOT decorative: `position: sticky` always creates a
+     stacking context, so the MoreMenu panel's `z-50` only orders things INSIDE the rail.
+     Without a z-index here, the whole rail paints on the root's z-auto layer in tree order
+     and loses to any positioned element that comes later in the DOM — that was daisyUI's
+     `.card` (`position: relative`) on the Priorities screen, which appeared in front of the
+     menu. Modal/Toasts/ActionMenu sit at z-50 on the root, so they stay above the rail. -->
 <nav
   class="sticky top-0 z-30 flex h-screen w-[92px] shrink-0 flex-col border-r border-default bg-sunken"
   aria-label="Main"
@@ -136,7 +137,7 @@
   </div>
 
   <div class="mt-auto flex flex-col items-center gap-2 pb-4">
-    <!-- o tooltip sai do `data-tip` do wrapper (CSS em src/app.css, que substituiu o do daisyUI)
+    <!-- the tooltip comes from the wrapper's `data-tip` (CSS in src/app.css, which replaced daisyUI's)
          API and would render as always-visible inline text here. -->
     <div class="tooltip tooltip-right" data-tip={wsTooltip}>
       <span

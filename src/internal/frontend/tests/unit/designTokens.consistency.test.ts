@@ -3,16 +3,16 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 /**
- * `src/lib/design/tokens.css` é a fonte da verdade ÚNICA das cores, desde que o daisyUI saiu.
+ * `src/lib/design/tokens.css` is the SINGLE source of truth for colors, since daisyUI left.
  *
- * Este arquivo já teve mais dois testes, que comparavam cada cor daqui com a cópia em hex que
- * o tema do daisyUI mantinha em `tailwind.config.js` — ele compilava as chaves de tema para
- * OKLCH em build time e não conseguia consumir `var(--x)`, então cada cor existia duas vezes e
- * podia divergir. Com o daisyUI removido não há segunda cópia, e os dois testes foram apagados
- * junto com o risco que vigiavam.
+ * This file used to have two more tests, which compared each color here with the hex copy that
+ * daisyUI's theme kept in `tailwind.config.js` — it compiled theme keys to OKLCH at build time
+ * and couldn't consume `var(--x)`, so each color existed twice and could diverge. With daisyUI
+ * removed there is no second copy, and the two tests were deleted along with the risk they
+ * watched.
  *
- * O que sobra é o invariante que continua valendo: os dois blocos de tema precisam existir e
- * estar preenchidos. Sem um deles, um tema inteiro cai silenciosamente para os valores do outro.
+ * What remains is the invariant that still holds: both theme blocks need to exist and be
+ * filled. Without one of them, a whole theme silently falls back to the other's values.
  */
 
 const TOKENS_CSS_PATH = path.resolve(__dirname, '../../src/lib/design/tokens.css')
@@ -44,14 +44,14 @@ describe('tokens.css', () => {
     'aad-light': parseThemeBlock(css, 'aad-light'),
   }
 
-  it('define os dois blocos de tema, com tokens dentro', () => {
+  it('defines both theme blocks, with tokens inside', () => {
     expect(Object.keys(tokenThemes['aad-dark']).length).toBeGreaterThan(10)
     expect(Object.keys(tokenThemes['aad-light']).length).toBeGreaterThan(10)
   })
 
-  // Um token que existe num tema e falta no outro não quebra o build: a tela só herda o valor
-  // do :root e destoa em silêncio no tema incompleto.
-  it('define exatamente as mesmas chaves nos dois temas', () => {
+  // A token that exists in one theme and is missing from the other doesn't break the build:
+  // the screen just inherits the :root value and silently mismatches on the incomplete theme.
+  it('defines exactly the same keys in both themes', () => {
     const dark = Object.keys(tokenThemes['aad-dark']).sort()
     const light = Object.keys(tokenThemes['aad-light']).sort()
     expect(light).toEqual(dark)

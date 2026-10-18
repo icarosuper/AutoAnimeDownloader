@@ -23,8 +23,8 @@ vi.mock('../../src/lib/api/client.js', () => ({
   getLastCheck: vi.fn(),
 }))
 
-// O relatório da última verificação é buscado no mesmo tick do poll de torrents; um relatório
-// vazio é o default de todos os testes que não são sobre ele.
+// The last-check report is fetched on the same tick as the torrent poll; an empty report
+// is the default of every test that is not about it.
 beforeEach(() => {
   vi.mocked(client.getLastCheck).mockResolvedValue({
     finished_at: '0001-01-01T00:00:00Z', pass_error: '', problems: [], limits: [],
@@ -45,8 +45,8 @@ function detailWith(animeId: number, episodeHash: string | undefined): AnimeDeta
         time_until_airing: 0,
         is_aired: true,
         is_watched: false,
-        // O daemon grava o registro salvo (origem de is_downloaded E de episode_hash) já ao
-        // adicionar o torrent, então ter hash implica is_downloaded: true mesmo em voo.
+        // The daemon writes the saved record (source of is_downloaded AND of episode_hash)
+        // already when adding the torrent, so having a hash implies is_downloaded: true even in flight.
         is_downloaded: episodeHash !== undefined,
         episode_hash: episodeHash,
       },

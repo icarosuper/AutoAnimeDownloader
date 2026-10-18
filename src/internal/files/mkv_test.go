@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// --- construção de um .mkv mínimo, para o teste não depender de arquivo binário no repo ---
+// --- build a minimal .mkv so the test does not depend on a binary file in the repo ---
 
-// ebmlID escreve um ID já com os bits de marcação (as constantes do mkv.go usam essa forma).
+// ebmlID writes an ID already with the marker bits (the constants in mkv.go use that form).
 func ebmlID(id uint32) []byte {
 	switch {
 	case id <= 0xFF:
@@ -23,8 +23,8 @@ func ebmlID(id uint32) []byte {
 	}
 }
 
-// ebmlSize escreve um tamanho em 4 bytes (marcador 0b0001xxxx). Largura fixa de propósito: o
-// que este teste exercita é a navegação, não o empacotamento mais compacto possível.
+// ebmlSize writes a size in 4 bytes (marker 0b0001xxxx). Fixed width on purpose: what this
+// test exercises is navigation, not the most compact packing possible.
 func ebmlSize(n uint64) []byte {
 	return []byte{0x10 | byte(n>>24), byte(n >> 16), byte(n >> 8), byte(n)}
 }
@@ -35,18 +35,18 @@ func elem(id uint32, payload []byte) []byte {
 	return append(out, payload...)
 }
 
-// buildMKV monta um Matroska com um cabeçalho EBML, um elemento gordo antes de Tracks (para o
-// pulo por tamanho ser realmente exercitado) e as trilhas na ordem pedida.
+// buildMKV assembles a Matroska with an EBML header, a fat element before Tracks (so the
+// skip-by-size is actually exercised) and the tracks in the requested order.
 func buildMKV(tracks ...[]byte) []byte {
 	var segment []byte
-	// Um "SeekHead" de 100 KB que o parser tem que pular pelo tamanho declarado, sem lê-lo.
+	// A 100 KB "SeekHead" the parser has to skip by declared size, without reading it.
 	segment = append(segment, elem(0x114D9B74, bytes.Repeat([]byte{0xAA}, 100*1024))...)
 	var trackList []byte
 	for _, t := range tracks {
 		trackList = append(trackList, t...)
 	}
 	segment = append(segment, elem(idTracks, trackList)...)
-	// Cluster depois de Tracks, como num arquivo real.
+	// Cluster after Tracks, as in a real file.
 	segment = append(segment, elem(idCluster, bytes.Repeat([]byte{0xBB}, 4096))...)
 
 	var out []byte
@@ -58,7 +58,7 @@ func track(trackType byte, codecID string) []byte {
 	var body []byte
 	body = append(body, elem(idTrackType, []byte{trackType})...)
 	body = append(body, elem(idCodecID, []byte(codecID))...)
-	// Um elemento desconhecido no meio da entry: o parser tem que pulá-lo, não engasgar.
+	// An unknown element in the middle of the entry: the parser has to skip it, not choke.
 	body = append(body, elem(0xD7, []byte{0x01})...)
 	return elem(idTrackEntry, body)
 }
@@ -80,7 +80,7 @@ func TestVideoCodecReadsTheCodecIDFromTheHeader(t *testing.T) {
 		{"V_MPEGH/ISO/HEVC", "HEVC"},
 		{"V_MPEG4/ISO/AVC", "H.264"},
 		{"V_AV1", "AV1"},
-		// Fora do mapa: sai o CodecID sem o prefixo, não um rótulo bonito chutado.
+		// Off the map: the CodecID comes out without the prefix, not a guessed pretty label.
 		{"V_QUICKTIME", "QUICKTIME"},
 	}
 	for _, tc := range cases {
@@ -91,8 +91,8 @@ func TestVideoCodecReadsTheCodecIDFromTheHeader(t *testing.T) {
 	}
 }
 
-// Um mkv de anime tem vídeo, áudio e várias legendas. Pegar o primeiro TrackEntry sem olhar o
-// TrackType devolveria FLAC como se fosse o codec de vídeo.
+// An anime mkv has video, audio and several subtitles. Taking the first TrackEntry without
+// looking at TrackType would return FLAC as if it were the video codec.
 func TestVideoCodecSkipsNonVideoTracks(t *testing.T) {
 	path := writeTemp(t, "ep.mkv", buildMKV(
 		track(2, "A_FLAC"),
@@ -104,8 +104,8 @@ func TestVideoCodecSkipsNonVideoTracks(t *testing.T) {
 	}
 }
 
-// Todo caminho de "não dá para responder" devolve "" — nunca erro, nunca pânico. É dado de
-// exibição: não saber é estado normal.
+// Every "cannot answer" path returns "" — never an error, never a panic. Display data:
+// not knowing is a normal state.
 func TestVideoCodecUnknownCasesReturnEmpty(t *testing.T) {
 	mkv := buildMKV(track(1, "V_AV1"))
 
@@ -113,14 +113,14 @@ func TestVideoCodecUnknownCasesReturnEmpty(t *testing.T) {
 		name string
 		path string
 	}{
-		{"extensão diferente de mkv", writeTemp(t, "ep.mp4", mkv)},
-		{"arquivo inexistente", filepath.Join(t.TempDir(), "sumiu.mkv")},
-		{"arquivo vazio", writeTemp(t, "vazio.mkv", nil)},
-		{"não é EBML", writeTemp(t, "lixo.mkv", bytes.Repeat([]byte{0x00}, 512))},
-		// Cabeçalho ainda não baixado: o rain não baixa sequencial, então um arquivo em voo
-		// pode ser um buraco de zeros com a assinatura ausente.
-		{"truncado antes de Tracks", writeTemp(t, "parcial.mkv", mkv[:64])},
-		{"só áudio", writeTemp(t, "audio.mkv", buildMKV(track(2, "A_FLAC")))},
+		{"extension other than mkv", writeTemp(t, "ep.mp4", mkv)},
+		{"missing file", filepath.Join(t.TempDir(), "missing.mkv")},
+		{"empty file", writeTemp(t, "empty.mkv", nil)},
+		{"not EBML", writeTemp(t, "junk.mkv", bytes.Repeat([]byte{0x00}, 512))},
+		// Header not downloaded yet: rain does not download sequentially, so an in-flight
+		// file can be a hole of zeros with the signature missing.
+		{"truncated before Tracks", writeTemp(t, "partial.mkv", mkv[:64])},
+		{"audio only", writeTemp(t, "audio.mkv", buildMKV(track(2, "A_FLAC")))},
 	}
 	for _, tc := range cases {
 		if got := VideoCodec(tc.path); got != "" {

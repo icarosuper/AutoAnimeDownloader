@@ -43,8 +43,8 @@ const emptyReport: CheckReport = {
   limits: [],
 }
 
-describe('Status — relatório da última verificação', () => {
-  it('não renderiza nada quando o passe foi limpo', async () => {
+describe('Status — last-check report', () => {
+  it('renders nothing when the pass was cleared', async () => {
     vi.mocked(client.getStatus).mockResolvedValue(statusResponse())
     vi.mocked(client.getAnimes).mockResolvedValue([])
     vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60 } as never)
@@ -58,7 +58,7 @@ describe('Status — relatório da última verificação', () => {
     expect(screen.queryByTestId('last-check-report')).toBeNull()
   })
 
-  it('lista problemas e limites quando existem', async () => {
+  it('lists problems and limits when they exist', async () => {
     vi.mocked(client.getStatus).mockResolvedValue(statusResponse())
     vi.mocked(client.getAnimes).mockResolvedValue([])
     vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60 } as never)
@@ -81,7 +81,7 @@ describe('Status — relatório da última verificação', () => {
     expect(card.textContent).toContain('35')
   })
 
-  it('mostra a mensagem do erro de passe no lugar do texto genérico', async () => {
+  it('shows the pass-error message in place of the generic text', async () => {
     vi.mocked(client.getStatus).mockResolvedValue(statusResponse({ has_error: true }))
     vi.mocked(client.getAnimes).mockResolvedValue([])
     vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60 } as never)

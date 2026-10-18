@@ -5,16 +5,16 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
-  // Serve tanto para exclusão de 1 torrent (usa `name`) quanto em lote (usa `count`).
+  // Serves both single-torrent deletion (uses `name`) and bulk (uses `count`).
   export let open = false;
   export let count = 1;
   export let name = "";
-  /** "anime" quando a exclusão cobre o grupo inteiro — troca o texto do 2º check. */
+  /** "anime" when the deletion covers the whole group — swaps the 2nd check's text. */
   export let scope: "episode" | "anime" = "episode";
-  /** Anime avulso: em vez de bloquear episódios, o check deixa de acompanhá-lo. */
+  /** Standalone anime: instead of blocking episodes, the check stops tracking it. */
   export let standalone = false;
 
-  // Ambos marcados por default: apaga os arquivos e bloqueia o redownload do episódio.
+  // Both checked by default: deletes the files and blocks redownload of the episode.
   let deleteFiles = true;
   let blockRedownload = true;
 
@@ -23,7 +23,7 @@
     cancel: void;
   }>();
 
-  // Reseta os checkboxes toda vez que o diálogo abre, para não herdar o estado de uma exclusão anterior.
+  // Reset the checkboxes every time the dialog opens, so it doesn't inherit state from a previous deletion.
   $: if (open) {
     deleteFiles = true;
     blockRedownload = true;

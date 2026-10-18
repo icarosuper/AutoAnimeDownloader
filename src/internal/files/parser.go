@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-// ParseEpisodes le o arquivo de episodios em JSONL (um objeto JSON por linha).
+// ParseEpisodes reads the episodes file in JSONL (one JSON object per line).
 //
-// O formato de texto legado (`id:hash:name`) foi REMOVIDO junto com EpisodeStruct.EpisodeID: ele
-// nao carregava anime id nem numero de episodio, que sao exatamente a chave de um episodio hoje
-// (ver decisions.md #52). Um registro desses nao tem como ser identificado, entao suportar o
-// formato so serviria para produzir chaves (0,0) colidindo entre si.
+// The legacy text format (`id:hash:name`) was REMOVED along with EpisodeStruct.EpisodeID: it
+// did not load anime id or episode number, which are exactly the key of an episode today
+// (see decisions.md #52). A record like that cannot be identified, so supporting the
+// format would only produce colliding (0,0) keys.
 func ParseEpisodes(content string) ([]EpisodeStruct, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {

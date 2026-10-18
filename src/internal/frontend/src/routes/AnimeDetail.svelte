@@ -1,12 +1,12 @@
 <script lang="ts">
-  // AnimeDetail — spec §9.2 (Fase 4). A tela de maior ganho do redesenho: a versão anterior
-  // tinha 971 linhas em boa parte porque a lista de ações estava escrita DUAS VEZES (tabela
-  // desktop + cards mobile), com os mesmos cinco botões só-ícone cujo `title` era a única
-  // pista textual e que trocavam de posição entre linhas conforme apareciam e sumiam.
+  // AnimeDetail — spec §9.2 (Phase 4). The highest-gain screen of the redesign: the previous
+  // version was 971 lines largely because the action list was written TWICE (desktop table +
+  // mobile cards), with the same five icon-only buttons whose `title` was the only textual
+  // cue and which swapped position between rows as they appeared and disappeared.
   //
-  // Agora existe UMA definição de ações — `episodeActions()` (lib/domain/), dado puro — que
-  // desktop e mobile renderizam pelo mesmo `ActionMenu`. A ação principal tem texto e fica
-  // sempre na mesma coluna; o resto vive no `⋯`, também rotulado.
+  // Now there is ONE action definition — `episodeActions()` (lib/domain/), pure data — that
+  // desktop and mobile render through the same `ActionMenu`. The principal action has text
+  // and stays in the same column; the rest lives in the `⋯`, also labelled.
   import { onDestroy } from "svelte";
   import { ChevronDown, ChevronRight } from "@lucide/svelte";
   import {
@@ -77,10 +77,10 @@
   let bulkLoading = false;
   let confirmBulkOpen = false;
 
-  // Deixar de acompanhar (só para avulsos). Mora no header do AnimeDetail porque é onde o
-  // usuário já está depois de clicar no anime na lista do Status, e o header já é o lugar das
-  // ações de anime — pôr isso na linha do Status custaria uma coluna de ActionMenu que a lista
-  // não tem hoje.
+  // Stop tracking (standalone only). Lives in the AnimeDetail header because that's where
+  // the user already is after clicking the anime in the Status list, and the header is
+  // already the place for anime actions — putting this on the Status row would cost an
+  // ActionMenu column the list doesn't have today.
   let untrackOpen = false;
   let untrackDeleteFiles = false;
   let untrackLoading = false;
@@ -93,12 +93,12 @@
   let replaceAnimeMagnet = "";
   let replaceLoading = false;
 
-  // Custom search query state. O handoff esqueceu deste campo; o spec §9.2 pede que ele volte
-  // num bloco recolhível logo abaixo do cabeçalho — recolhido por padrão porque é ajuste fino,
-  // não o que se vem fazer nesta tela.
+  // Custom search query state. The handoff forgot this field; spec §9.2 asks for it to come
+  // back in a collapsible block right under the header — collapsed by default because it is
+  // a fine-tuning, not what you come to this screen to do.
 
-  // Progresso manual do avulso. Prefill de `anime.episodes_watched`, que já traz o valor salvo
-  // (o backend injeta AnimeSettings.progress no MediaList sintético).
+  // Manual progress of the standalone. Prefill from `anime.episodes_watched`, which already
+  // carries the saved value (the backend injects AnimeSettings.progress into the synthetic MediaList).
   let progressInput = 0;
   let progressSaving = false;
   $: progressInput = anime?.episodes_watched ?? 0;
@@ -120,37 +120,37 @@
   // this is accessory data (mirrors the best-effort join the backend already does in
   // handleTorrents), so the page must never break because of it.
   let torrents: TorrentInfo[] = [];
-  // Só as entradas deste anime. Mesma chamada do Status, filtrada por anime_id: um endpoint com
-  // dois consumidores em vez da mesma informação espalhada por três formas que precisariam
-  // concordar entre si.
+  // Only this anime's entries. Same call as Status, filtered by anime_id: one endpoint with
+  // two consumers instead of the same information spread across three shapes that would need
+  // to agree with each other.
   let animeIssues: Issue[] = [];
-  // Só problema marca episódio: limite não tem "episódios afetados" (o daemon parou de
-  // considerar episódios ao atingir a conta).
+  // Only a problem marks an episode: a limit has no "affected episodes" (the daemon stopped
+  // considering episodes once it hit the count).
   $: issueByEpisode = new Map<number, Issue>(
     animeIssues.flatMap((i) => (i.episodes ?? []).map((n) => [n, i] as [number, Issue])),
   );
   let torrentPollTimer: ReturnType<typeof setTimeout> | null = null;
   let torrentPollStarted = false;
   let torrentPollAnimeId: number | null = null;
-  // Carimbo do último poll bem-sucedido. `deriveAnimeChip` só usa `now` para o limiar de "sem
-  // seeds"; atualizar por tick de relógio faria a tela inteira recalcular de segundo em
-  // segundo sem que nenhum dado tivesse mudado.
+  // Stamp of the last successful poll. `deriveAnimeChip` only uses `now` for the "no seeds"
+  // threshold; updating on a clock tick would make the whole screen recalculate every second
+  // without any data having changed.
   let lastPollAt = Date.now();
 
-  // Contagem regressiva do próximo episódio. Ancorada em `lastPollAt` pela mesma razão do
-  // comentário acima — o texto é em horas/dias, nada aqui justifica um tick de segundo.
+  // Countdown to the next episode. Anchored on `lastPollAt` for the same reason as the
+  // comment above — the text is in hours/days, nothing here justifies a one-second tick.
   $: nextAiringWhen = $locale ? nextAiringIn(anime?.next_airing_at, lastPollAt, $locale) : "";
 
   $: allEpisodes = detail?.episodes ?? [];
   $: torrentsByEpisode = indexTorrentsByEpisode(torrents, allEpisodes);
 
-  // ATENÇÃO ao mexer no inline de progresso lá embaixo: um episódio só ganha `episode_hash`
-  // quando o daemon grava o registro salvo — e ele grava no momento em que o torrent é
-  // *adicionado*, não quando termina (daemon/episodes.go, daemon/manual_download.go). Como
-  // endpoint_anime_episodes.go preenche `is_downloaded` e `episode_hash` no mesmo `if`, vale
-  // `episode_hash != "" ⟺ is_downloaded`. Logo a condição do inline não pode exigir
-  // `!ep.is_downloaded`: essa combinação nunca ocorre na prática e a barra nunca aparecia.
-  // Quem decide é só o torrent ainda estar em voo (`!torrent.completed`).
+  // CAUTION when touching the progress inline below: an episode only gets `episode_hash`
+  // when the daemon writes the saved record — and it writes at the moment the torrent is
+  // *added*, not when it finishes (daemon/episodes.go, daemon/manual_download.go). Since
+  // endpoint_anime_episodes.go fills `is_downloaded` and `episode_hash` in the same `if`,
+  // `episode_hash != "" ⟺ is_downloaded` holds. So the inline condition cannot require
+  // `!ep.is_downloaded`: that combination never occurs in practice and the bar never showed.
+  // What decides is only that the torrent is still in flight (`!torrent.completed`).
   $: allSelected = allEpisodes.length > 0 && allEpisodes.every(ep => selectedEpisodes.has(ep.episode_number));
   $: someSelected = selectedEpisodes.size > 0 && !allSelected;
 
@@ -159,7 +159,7 @@
   $: canBulkDelete = selectedList.some(ep => ep.is_downloaded);
   $: canBulkRelease = selectedList.some(ep => ep.is_manually_managed || ep.is_blocked);
 
-  // Chip do anime no cabeçalho — mesma cascata da lista de Status, mesmo componente.
+  // Anime chip in the header — same cascade as the Status list, same component.
   $: animeChip = anime ? deriveAnimeChip(anime, torrents, lastPollAt, $stallTracker) : null;
 
   function toggleSelectAll() {
@@ -211,10 +211,10 @@
   }
 
   /**
-   * Estado de UM episódio, para o `Chip` da coluna "Estado". Um torrent em voo vence tudo —
-   * é a informação mais volátil e a única que o usuário está acompanhando ativamente — e o
-   * rótulo vem de `statusLabel`, que já traduz os slugs crus do rain (spec §7: estados nunca
-   * aparecem como identificador).
+   * State of ONE episode, for the `Chip` of the "State" column. An in-flight torrent wins
+   * everything — it's the most volatile information and the only one the user is actively
+   * watching — and the label comes from `statusLabel`, which already translates rain's raw
+   * slugs (spec §7: states never appear as identifiers).
    */
   function episodeChip(ep: AnimeEpisodeInfo, torrent: TorrentInfo | undefined) {
     if (torrent && !torrent.completed) {
@@ -227,19 +227,19 @@
     return { variant: "neutral" as const, label: m.detail_badge_upcoming() };
   }
 
-  /** Nota secundária sob o título: flags do episódio, na forma de frase, não de ícone mudo. */
+  /** Secondary note under the title: episode flags, as a phrase, not a mute icon. */
   function episodeNotes(ep: AnimeEpisodeInfo, issue: Issue | undefined): string {
     const notes: string[] = [];
     if (ep.is_watched) notes.push(m.detail_badge_watched());
     if (ep.is_manually_managed) notes.push(m.detail_flag_no_delete_short());
     if (ep.is_blocked) notes.push(m.detail_flag_no_download_short());
-    // A marca do relatório vai na mesma linha das outras notas: é uma frase curta, não um
-    // estado ao vivo — deriveAnimeChip fica fora disto de propósito (ver decisions.md).
+    // The report mark goes on the same line as the other notes: it's a short phrase, not a
+    // live state — deriveAnimeChip stays out of this on purpose (see decisions.md).
     if (issue) notes.push(m.detail_lastcheck_episode_note());
     return notes.join(" · ");
   }
 
-  /** Metadado da linha: o dado mais informativo para o estado atual do episódio. */
+  /** Row metadata: the most informative datum for the episode's current state. */
   function episodeMeta(ep: AnimeEpisodeInfo, torrent: TorrentInfo | undefined): string {
     if (torrent && !torrent.completed) {
       return `${formatPercent(torrent.progress, fmtLocale)} · ↓ ${formatSpeed(torrent.download_speed, fmtLocale)} · ${formatEta(torrent.eta_seconds, fmtLocale)}`;
@@ -249,8 +249,8 @@
     return "—";
   }
 
-  // `episodeActions` devolve `labelKey`, um identificador — nunca texto. Esta é a única
-  // tradução dele na tela, compartilhada pela ação principal e pelos itens do `⋯`.
+  // `episodeActions` returns `labelKey`, an identifier — never text. This is its only
+  // translation on the screen, shared by the principal action and the `⋯` items.
   const ACTION_LABEL: Record<string, () => string> = {
     download: m.detail_btn_download,
     redownload: m.detail_btn_redownload,
@@ -269,9 +269,9 @@
   }
 
   /**
-   * Único ponto de despacho das cinco ações. `delete` e `redownload` continuam passando pelos
-   * diálogos de confirmação que já existiam — spec §7 é explícito: exclusão nunca é um clique
-   * só, e `episodeActions` marca as duas como `destructive` justamente para sinalizar isso.
+   * Single dispatch point for the five actions. `delete` and `redownload` still go through
+   * the confirmation dialogs that already existed — spec §7 is explicit: deletion is never
+   * a single click, and `episodeActions` marks both as `destructive` precisely to signal that.
    */
   function runAction(id: EpisodeActionId, ep: AnimeEpisodeInfo) {
     switch (id) {
@@ -284,38 +284,41 @@
     }
   }
 
-  // Uma passada monta tudo que cada linha precisa, para desktop e mobile lerem a MESMA
-  // estrutura — é isso que impede as duas cópias de divergirem de novo.
+  // One pass builds everything each row needs, so desktop and mobile read the SAME
+  // structure — that's what keeps the two copies from diverging again.
   //
-  // Um pack é UMA linha. A regra de detecção é a mesma que o backend já usa em
-  // buildTorrentResponse: mais de um episódio no mesmo info hash é batch, diga o que disser a
-  // flag. Excluir um episódio de dentro de um pack não libera byte nenhum (o hardlink da
-  // biblioteca e a cópia de seed são o mesmo inode) e "Rebaixar" buscaria episódio solto, que
-  // numa série longa não existe — então a linha de grupo oferece só o que é verdade para um pack.
+  // A pack is ONE row. The detection rule is the same the backend already uses in
+  // buildTorrentResponse: more than one episode on the same info hash is a batch, whatever
+  // the flag says. Deleting an episode from inside a pack frees no bytes (the library
+  // hardlink and the seed copy are the same inode) and "Redownload" would look for a single
+  // episode, which doesn't exist in a long series — so the group row only offers what is
+  // true for a pack.
   //
-  // Nem "Substituir": esse botão chama replaceAnimeWithMagnet, que apaga TODOS os torrents do
-  // anime (endpoint_episode_actions.go), não só os do pack clicado — com packs sucessivos
-  // (001-100 + 101-200), "Substituir" no primeiro destruiria o segundo em silêncio. O mesmo
-  // argumento do comentário acima sobre "Rebaixar" vale aqui: só sobra "Excluir", que já vai por
-  // DELETE /torrents/{hash} e opera exatamente na unidade certa.
+  // Not even "Replace": that button calls replaceAnimeWithMagnet, which deletes ALL of the
+  // anime's torrents (endpoint_episode_actions.go), not just the clicked pack's — with
+  // successive packs (001-100 + 101-200), "Replace" on the first would silently destroy the
+  // second. The same argument as the comment above about "Redownload" applies here: only
+  // "Delete" remains, which already goes through DELETE /torrents/{hash} and operates on
+  // exactly the right unit.
   //
-  // ponytail: buildRows é O(n²) (o .filter() por pack dentro do loop principal) — irrelevante
-  // para o tamanho real de um anime, mas se esta tela um dia listar milhares de episódios em
-  // dezenas de packs, trocar por um Map<hash, AnimeEpisodeInfo[]> montado em uma passada resolve.
+  // ponytail: buildRows is O(n²) (the .filter() per pack inside the main loop) — irrelevant
+  // for the real size of an anime, but if this screen one day lists thousands of episodes
+  // across dozens of packs, swapping in a Map<hash, AnimeEpisodeInfo[]> built in one pass
+  // would fix it.
   function buildRows(episodes: AnimeEpisodeInfo[], byEpisode: Map<number, TorrentInfo>) {
     const counts = new Map<string, number>();
     for (const ep of episodes) {
       if (ep.episode_hash) counts.set(ep.episode_hash, (counts.get(ep.episode_hash) ?? 0) + 1);
     }
 
-    // Um pack por hash, com a faixa que ele de fato cobre. A faixa vem do registro (lida do nome
-    // do torrent no download), e não do min/max dos episódios salvos: os já assistidos nunca viram
-    // registro, então o min/max encolhe o pack — um 01-11 baixado com 5 assistidos virava "6–11".
-    // Sem faixa salva (registro antigo) o min/max continua sendo o melhor palpite.
+    // One pack per hash, with the range it actually covers. The range comes from the record
+    // (read from the torrent name at download), not from min/max of the saved episodes: already
+    // watched ones never got a record, so min/max shrinks the pack — a downloaded 01-11 with
+    // 5 watched became "6–11". With no saved range (old record) min/max remains the best guess.
     //
-    // O início é preso em 1: um pack de season baixado sob um cour posterior é gravado com início
-    // ≤ 0 na numeração local desta entrada (é o que a posse por cobertura precisa), e "-10–12" não
-    // diz nada na tela — o que interessa aqui é a fatia deste anime.
+    // The start is clamped to 1: a season pack downloaded under a later cour is stored with
+    // start ≤ 0 in this entry's local numbering (that's what coverage ownership needs), and
+    // "-10–12" says nothing on screen — what matters here is this anime's slice.
     const packs = new Map<string, { first: number; last: number }>();
     for (const ep of episodes) {
       const hash = ep.episode_hash;
@@ -327,11 +330,11 @@
       });
     }
 
-    // O pack engole os episódios de dentro da faixa que não têm torrent próprio — tipicamente os
-    // já assistidos, que nunca viraram registro. Eles ESTÃO no pack: o torrent traz os arquivos e
-    // o Organize hardlinka o diretório inteiro na biblioteca, então uma linha "Baixar" para eles
-    // oferecia um segundo torrent do que já está vindo. Não lançado não é engolido — o pack que
-    // está no disco não pode conter o que não foi ao ar.
+    // The pack swallows episodes inside the range that don't have their own torrent —
+    // typically the already-watched ones, which never became a record. They ARE in the pack:
+    // the torrent brings the files and Organize hardlinks the whole directory into the
+    // library, so a "Download" row for them offered a second torrent of what is already
+    // coming. Unreleased is not swallowed — the pack on disk cannot contain what hasn't aired.
     const coveringPack = (ep: AnimeEpisodeInfo) => {
       if (ep.episode_hash) return ep.episode_hash;
       if (!ep.is_aired) return undefined;
@@ -385,9 +388,9 @@
         meta: episodeMeta(ep, torrent),
         principal: actions.principal,
         menu: menuItems(actions.menu),
-        // Sempre o título localizado. Não existe título de episódio em lugar nenhum: o AniList
-        // não o expõe por episódio, e o `episode_name` do registro salvo é o rótulo de log do
-        // download ("Anime - Episode 7"), que a API não devolve mais.
+        // Always the localized title. There is no episode title anywhere: AniList doesn't
+        // expose it per episode, and the saved record's `episode_name` is the download log
+        // label ("Anime - Episode 7"), which the API no longer returns.
         title: m.detail_ep_title({ number: ep.episode_number }),
         label: String(ep.episode_number),
       });
@@ -398,16 +401,18 @@
 
   $: rows = $locale && issueByEpisode && buildRows(allEpisodes, torrentsByEpisode);
 
-  // Ação da linha de grupo: só "Excluir", pelo DELETE /torrents/{hash}, que já remove o torrent e
-  // TODOS os registros do grupo como unidade. Nem "Rebaixar" (seria alias de Excluir, já que o
-  // loop rebusca no ciclo seguinte assim que o espaço volta) nem "Substituir" (destruiria packs
-  // irmãos em silêncio — ver o comentário grande em buildRows) fazem sentido aqui, então não há
-  // ramificação por id: o único item do menu de pack já é "delete".
+  // Group-row action: only "Delete", via DELETE /torrents/{hash}, which already removes the
+  // torrent and ALL of the group's records as a unit. Neither "Redownload" (would be an alias
+  // of Delete, since the loop re-searches on the next cycle as soon as space comes back) nor
+  // "Replace" (would silently destroy sibling packs — see the long comment in buildRows)
+  // make sense here, so there is no branching by id: the only pack-menu item is already
+  // "delete".
   //
-  // ponytail: essa ação fica inline aqui, e não em lib/domain/episodeActions.ts, porque hoje só
-  // existe UMA linha de pack em UMA tela, e ela é uma constante fixa (não uma classificação de
-  // estado como o classify() de episodeActions.ts). Se uma segunda tela precisar da mesma decisão
-  // de pack, aí sim vale extrair um packActionSet() exportado de episodeActions.ts.
+  // ponytail: this action stays inline here, not in lib/domain/episodeActions.ts, because
+  // today there is only ONE pack row on ONE screen, and it is a fixed constant (not a state
+  // classification like episodeActions.ts's classify()). If a second screen needs the same
+  // pack decision, then extracting an exported packActionSet() from episodeActions.ts is
+  // worth it.
   let packDeleteOpen = false;
   let pendingPackHash = "";
   let pendingPackLabel = "";
@@ -631,16 +636,16 @@
   // torrent, 15s otherwise. Re-scheduled (not a bare setInterval) so the delay can change
   // between ticks without ever running two timers at once.
   async function pollTorrents() {
-    // allSettled pelo mesmo motivo do Status: uma falha do relatório não pode derrubar o poll
-    // de torrents (nem o reagendamento dele).
+    // allSettled for the same reason as Status: a report failure must not take down the
+    // torrent poll (nor its reschedule).
     const [torrentsResult, reportResult] = await Promise.allSettled([
       getTorrents(),
       getLastCheck(),
     ]);
 
-    // O finally continua sendo o que garante o reagendamento: allSettled nunca rejeita, mas
-    // stallTracker.sync pode lançar, e sem o finally o poll pararia de vez em vez de se
-    // recuperar no tick seguinte.
+    // The finally is still what guarantees reschedule: allSettled never rejects, but
+    // stallTracker.sync can throw, and without the finally the poll would stop for good
+    // instead of recovering on the next tick.
     try {
       if (torrentsResult.status === "fulfilled") {
         torrents = torrentsResult.value;
@@ -656,16 +661,16 @@
         animeIssues = [...report.problems, ...report.limits].filter((i) => i.anime_id === animeId);
       }
     } finally {
-      // Só os painéis ABERTOS refazem a lista de arquivos, e no mesmo tick deste poll.
+      // Only OPEN panels refetch the file list, and on the same tick as this poll.
       filesTick += 1;
       scheduleNextTorrentPoll();
     }
   }
 
-  // Painel de arquivos da linha de pack. Ela é a única linha COM LACUNA: episódio com torrent
-  // próprio já mostra progresso individual (episodeMeta), e os episódios de dentro de um pack
-  // são engolidos numa linha só de propósito — não há linha por episódio ali para receber barra
-  // sem expandir. Estado local, efêmero, fora da URL.
+  // File panel of the pack row. It is the only row WITH A GAP: an episode with its own
+  // torrent already shows individual progress (episodeMeta), and episodes inside a pack are
+  // swallowed into one row on purpose — there is no per-episode row there to receive a bar
+  // without expanding. Local, ephemeral state, outside the URL.
   let openPackFiles = new Set<string>();
   let filesTick = 0;
 
@@ -718,20 +723,20 @@
     if (torrentPollTimer) clearTimeout(torrentPollTimer);
   });
 
-  // Grid compartilhado pelo cabeçalho e pelas linhas (desktop), definido uma vez para que não
-  // possam sair de alinhamento.
+  // Grid shared by the header and the rows (desktop), defined once so they can't fall out
+  // of alignment.
   //
-  // A coluna de ações tem largura FIXA, não `auto`: cada linha é um grid independente, então
-  // uma trilha `auto` mediria o conteúdo daquela linha só — e como as linhas têm ações
-  // diferentes (principal + ⋯ / só ⋯ / nenhuma), o `1fr` sobrava diferente em cada uma e as
-  // colunas ficavam desalinhadas entre si. Com todas as trilhas determinísticas, o `1fr`
-  // resolve igual em toda linha. 200px comporta o rótulo mais longo ("Release episode" /
-  // "Soltar episódio") mais o botão de 32px do menu.
+  // The actions column has a FIXED width, not `auto`: each row is an independent grid, so
+  // an `auto` track would measure that row's content only — and since rows have different
+  // actions (principal + ⋯ / only ⋯ / none), the leftover `1fr` differed on each one and
+  // the columns misaligned with each other. With every track deterministic, `1fr` resolves
+  // the same on every row. 200px fits the longest label ("Release episode" /
+  // "Soltar episódio") plus the 32px menu button.
   //
-  // A tabela só existe a partir de `lg` (1024px): as trilhas fixas + gaps somam ~710px e em
-  // `md` (768px) sobram ~628px depois do rail e do padding do main, o que jogava a página
-  // inteira em rolagem horizontal. Mesmo critério da lista de animes (Status.svelte, LIST_GRID)
-  // e das linhas de torrent (Downloads.svelte, ROW_GRID).
+  // The table only exists from `lg` (1024px): the fixed tracks + gaps add up to ~710px and
+  // at `md` (768px) ~628px remain after the rail and the main padding, which threw the
+  // whole page into horizontal scroll. Same criterion as the anime list (Status.svelte,
+  // LIST_GRID) and the torrent rows (Downloads.svelte, ROW_GRID).
   async function confirmUntrack(): Promise<void> {
     if (!anime) return;
     untrackLoading = true;
@@ -769,11 +774,11 @@
   on:confirm={confirmRedownload}
 />
 
-<!-- scope="episode" (não "anime"): DELETE /torrents/{hash} só bloqueia os episódios que
-     compartilham ESTE hash (RemoveTorrentWithEpisodes, daemon/episodes.go) — packs irmãos do
-     mesmo anime continuam vivos. "anime" prometeria um alcance maior do que a operação cobre, e
-     `standalone` fica de fora porque em scope="episode" o diálogo a ignora (checkbox de
-     bloquear/rebaixar episódio, não de destrackear anime). -->
+<!-- scope="episode" (not "anime"): DELETE /torrents/{hash} only blocks the episodes that
+     share THIS hash (RemoveTorrentWithEpisodes, daemon/episodes.go) — sibling packs of the
+     same anime stay alive. "anime" would promise a wider reach than the operation covers, and
+     `standalone` is left out because at scope="episode" the dialog ignores it (checkbox to
+     block/redownload an episode, not to untrack an anime). -->
 <TorrentDeleteDialog
   bind:open={packDeleteOpen}
   name={pendingPackLabel}
@@ -791,8 +796,8 @@
   on:confirm={confirmBulkDelete}
 />
 
-<!-- ConfirmDialog + um Checkbox no slot. O TorrentDeleteDialog não serve aqui: ele é
-     específico de keepData/block, que são perguntas de torrent, não de anime. -->
+<!-- ConfirmDialog + a Checkbox in the slot. TorrentDeleteDialog doesn't belong here: it is
+     specific to keepData/block, which are torrent questions, not anime ones. -->
 <ConfirmDialog
   bind:open={untrackOpen}
   title={m.detail_untrack_title()}
@@ -804,8 +809,8 @@
   <Checkbox bind:checked={untrackDeleteFiles} label={m.detail_untrack_delete_files()} />
 </ConfirmDialog>
 
-<!-- Os dois diálogos de magnet agora usam o primitivo Modal (foco preso, Esc, clique fora),
-     no lugar das duas overlays feitas à mão que não prendiam foco nem fechavam com Esc. -->
+<!-- Both magnet dialogs now use the Modal primitive (focus trap, Esc, click outside),
+     instead of the two hand-rolled overlays that didn't trap focus or close on Esc. -->
 <Modal open={replaceEpOpen} labelledBy="replace-ep-title" on:close={() => (replaceEpOpen = false)}>
   <h3 id="replace-ep-title" class="text-card-title text-heading">
     {m.detail_replace_ep_title({ number: pendingReplaceEp?.episode_number ?? "" })}
@@ -845,7 +850,7 @@
 </Modal>
 
 <div class="space-y-4.5">
-  <!-- Cabeçalho -->
+  <!-- Header -->
   <div>
     <nav class="flex items-center gap-1 text-caption text-subtle" aria-label={m.detail_back()}>
       <a href="#/status" class="hover:text-body">{$locale && m.nav_status()}</a>
@@ -858,10 +863,10 @@
         <Cover src={detail?.cover_image} alt={anime?.name ?? ""} radiusClass="rounded-card" />
       </div>
 
-      <!-- `min-w-[200px]`, não `min-w-0`: com `flex-wrap`, uma coluna que pode encolher até
-           zero nunca empurra o botão para a linha de baixo — no mobile o título espremia em
-           três linhas e o "Replace Anime with Magnet" ficava por cima dele. Com um piso de
-           largura, o botão quebra para a própria linha quando não cabe. -->
+      <!-- `min-w-[200px]`, not `min-w-0`: with `flex-wrap`, a column that can shrink to zero
+           never pushes the button onto the next line — on mobile the title squeezed into
+           three lines and "Replace Anime with Magnet" sat on top of it. With a width floor,
+           the button wraps onto its own line when it doesn't fit. -->
       <div class="min-w-[200px] flex-1">
         <h1 class="text-[24px] font-bold leading-tight text-heading">
           {#if anime && detail?.anime_id}
@@ -899,8 +904,9 @@
             {/if}
           </p>
 
-          <!-- Avulso não tem progresso na AniList: é aqui que ele mora, e é o progresso que move
-               o rodízio de packs (sem ele, depois do primeiro pack o anime para para sempre). -->
+          <!-- A standalone has no AniList progress: this is where it lives, and it's the
+               progress that moves the pack rotation (without it, after the first pack the
+               anime stops forever). -->
           {#if anime.is_standalone}
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <label for="standalone-progress" class="text-copy text-body">
@@ -944,9 +950,9 @@
     </div>
   {:else}
     <section class="rounded-card border border-default bg-card">
-      <!-- Barra de seleção múltipla. Só as três ações em lote que EXISTEM hoje: Baixar,
-           Soltar, Excluir. "Rebaixar" em lote não é adicionado — seria funcionalidade nova
-           (spec §9.2), não redesenho. -->
+      <!-- Multi-select bar. Only the three bulk actions that EXIST today: Download, Release,
+           Delete. Bulk "Redownload" is not added — that would be new functionality
+           (spec §9.2), not a redesign. -->
       {#if selectedEpisodes.size > 0}
         <div class="flex flex-wrap items-center gap-2 border-b border-accent bg-accent-tint/[.09] px-4 py-2.5">
           <span class="mr-auto text-copy text-accent">
@@ -1002,10 +1008,9 @@
           />
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_episode()}</span>
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_state()}</span>
-          <!-- "Detalhes", não "Data de download": esta coluna mostra o dado mais informativo
-               para o estado da linha (progresso em voo / data de download / falta X para
-               estrear), então um cabeçalho que nomeasse só um dos três estaria errado nos
-               outros dois. -->
+          <!-- "Details", not "Download date": this column shows the most informative datum
+               for the row's state (in-flight progress / download date / X until premiere),
+               so a header that named only one of the three would be wrong on the other two. -->
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_info()}</span>
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_actions()}</span>
         </div>
@@ -1030,10 +1035,10 @@
 
             <div class="min-w-0">
               {#if row.kind === "batch" && row.hash}
-                <!-- Só a linha de pack ganha seta: o painel é a primeira vez que a tela mostra o
-                     que o pack REALMENTE contém (a faixa exibida vem do NOME do torrent). Ela
-                     mora no título porque não existe mais coluna "#": o número e o título diziam
-                     a mesma coisa em duas tipografias. -->
+                <!-- Only the pack row gets an arrow: the panel is the first time the screen
+                     shows what the pack REALLY contains (the displayed range comes from the
+                     torrent NAME). It lives on the title because there is no "#" column
+                     anymore: the number and the title said the same thing in two typefaces. -->
                 <button
                   type="button"
                   class="flex w-full items-center gap-1.5 text-left"
@@ -1059,8 +1064,8 @@
 
             <div class="min-w-0">
               <Chip variant={row.chip.variant}>{row.chip.label}</Chip>
-              <!-- Barra fina só enquanto o torrent está em voo. A condição é APENAS
-                   `!torrent.completed` — ver o comentário grande no topo do script sobre
+              <!-- Thin bar only while the torrent is in flight. The condition is ONLY
+                   `!torrent.completed` — see the long comment at the top of the script about
                    `episode_hash != "" ⟺ is_downloaded`. -->
               {#if row.inFlight && row.torrent}
                 <div class="mt-1.5">
@@ -1075,8 +1080,8 @@
 
             <span class="truncate font-mono text-[12px] text-subtle" title={row.meta}>{row.meta}</span>
 
-            <!-- Coluna de ações: a principal SEMPRE na mesma posição, com texto; o resto no ⋯,
-                 também rotulado. Desktop e mobile leem esta mesma definição. -->
+            <!-- Actions column: the principal ALWAYS in the same position, with text; the rest
+                 in the ⋯, also labelled. Desktop and mobile read this same definition. -->
             <div class="flex items-center justify-end gap-1.5">
               {#if row.principal}
                 <Button
@@ -1108,7 +1113,7 @@
         {/each}
       </div>
 
-      <!-- Mobile: mesma definição de linha, empilhada -->
+      <!-- Mobile: same row definition, stacked -->
       <div class="divide-y divide-divider lg:hidden">
         {#each rows || [] as row (row.key)}
           {@const isLoading = !!actionLoading[row.ep.episode_number]}
@@ -1126,8 +1131,8 @@
                 <span></span>
               {/if}
               {#if row.kind === "batch" && row.hash}
-                <!-- Mesma decisão do desktop: a seta mora no título, e não numa coluna "#"
-                     que repetiria o número que o título já diz. -->
+                <!-- Same decision as desktop: the arrow lives on the title, not in a "#"
+                     column that would repeat the number the title already says. -->
                 <button
                   type="button"
                   class="flex min-w-0 flex-1 items-center gap-1.5 text-left"

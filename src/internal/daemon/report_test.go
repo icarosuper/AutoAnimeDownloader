@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// TestAggregateIssues: um Issue por par (anime, codigo). Dois episodios do mesmo anime com o
-// mesmo codigo viram UMA entrada com dois numeros; codigos diferentes viram duas.
+// TestAggregateIssues: one Issue per (anime, code) pair. Two episodes of the same anime with
+// the same code become ONE entry with two numbers; different codes become two.
 func TestAggregateIssues(t *testing.T) {
 	raw := []Issue{
 		{AnimeID: 2, AnimeName: "Bleach", Episodes: []int{12}, Code: IssueAllAboveSizeLimit, Candidates: 8, LimitGB: 3},
@@ -22,19 +22,19 @@ func TestAggregateIssues(t *testing.T) {
 	problems, limits := aggregateIssues(raw)
 
 	if len(limits) != 1 {
-		t.Fatalf("esperava 1 limite, obteve %d (%+v)", len(limits), limits)
+		t.Fatalf("want 1 limit, got %d (%+v)", len(limits), limits)
 	}
 	if limits[0].Code != IssueMaxEpisodesPerAnime || limits[0].Downloaded != 12 || limits[0].Pending != 35 {
-		t.Errorf("limite errado: %+v", limits[0])
+		t.Errorf("wrong limit: %+v", limits[0])
 	}
-	// Limite nao carrega numeros de episodio: o daemon parou de CONSIDERAR episodios ao atingir
-	// a conta, entao nao existe "os episodios afetados".
+	// A limit does not carry episode numbers: the daemon stopped CONSIDERING episodes when it
+	// hit the count, so there are no "affected episodes".
 	if len(limits[0].Episodes) != 0 {
-		t.Errorf("limite não deve trazer Episodes, obteve %+v", limits[0].Episodes)
+		t.Errorf("a limit must not carry Episodes, got %+v", limits[0].Episodes)
 	}
 
 	if len(problems) != 2 {
-		t.Fatalf("esperava 2 problemas, obteve %d (%+v)", len(problems), problems)
+		t.Fatalf("want 2 problems, got %d (%+v)", len(problems), problems)
 	}
 	byCode := map[string]Issue{}
 	for _, p := range problems {
@@ -42,20 +42,20 @@ func TestAggregateIssues(t *testing.T) {
 	}
 	size, ok := byCode[IssueAllAboveSizeLimit]
 	if !ok {
-		t.Fatalf("faltou o problema de tamanho em %+v", problems)
+		t.Fatalf("missing the size problem in %+v", problems)
 	}
 	if !reflect.DeepEqual(size.Episodes, []int{12, 13}) {
-		t.Errorf("esperava episódios [12 13], obteve %+v", size.Episodes)
+		t.Errorf("want episodes [12 13], got %+v", size.Episodes)
 	}
 	if size.Candidates != 8 || size.LimitGB != 3 {
-		t.Errorf("detalhe do primeiro episódio deve vencer, obteve %+v", size)
+		t.Errorf("the first episode's detail must win, got %+v", size)
 	}
 	if _, ok := byCode[IssueNoTorrentFound]; !ok {
-		t.Errorf("faltou o problema de torrent não encontrado em %+v", problems)
+		t.Errorf("missing the no-torrent-found problem in %+v", problems)
 	}
 }
 
-// TestAggregateIssues_SortedByAnimeName: ordem estavel e previsivel, sem ranking de severidade.
+// TestAggregateIssues_SortedByAnimeName: stable, predictable order, no severity ranking.
 func TestAggregateIssues_SortedByAnimeName(t *testing.T) {
 	raw := []Issue{
 		{AnimeID: 3, AnimeName: "Zeta", Episodes: []int{1}, Code: IssueNoTorrentFound},
@@ -66,7 +66,7 @@ func TestAggregateIssues_SortedByAnimeName(t *testing.T) {
 	want := []string{"Alpha", "Mu", "Zeta"}
 	for i, name := range want {
 		if problems[i].AnimeName != name {
-			t.Errorf("posição %d: esperava %q, obteve %q", i, name, problems[i].AnimeName)
+			t.Errorf("position %d: want %q, got %q", i, name, problems[i].AnimeName)
 		}
 	}
 }
@@ -74,13 +74,13 @@ func TestAggregateIssues_SortedByAnimeName(t *testing.T) {
 func TestAggregateIssues_Empty(t *testing.T) {
 	problems, limits := aggregateIssues(nil)
 	if problems != nil || limits != nil {
-		t.Errorf("passe limpo deve produzir nil/nil, obteve %+v / %+v", problems, limits)
+		t.Errorf("a clean pass must produce nil/nil, got %+v / %+v", problems, limits)
 	}
 }
 
-// TestSetLastCheckError_ClearsReport: um passe que abortou antes de olhar anime nenhum nao tem
-// relatorio por anime — tem pass_error. Sem a limpeza, a tela mostraria os problemas do passe
-// ANTERIOR lado a lado com um erro de passe novo.
+// TestSetLastCheckError_ClearsReport: a pass that aborted before looking at any anime has no
+// per-anime report — it has pass_error. Without the clear, the screen would show the PREVIOUS
+// pass's problems side by side with a new pass error.
 func TestSetLastCheckError_ClearsReport(t *testing.T) {
 	s := NewState()
 	s.SetLastCheckReport(CheckReport{
@@ -88,19 +88,19 @@ func TestSetLastCheckError_ClearsReport(t *testing.T) {
 		Problems:   []Issue{{AnimeID: 1, AnimeName: "Aria", Code: IssueNoTorrentFound}},
 	})
 	if len(s.GetLastCheckReport().Problems) != 1 {
-		t.Fatal("o relatório deveria estar guardado antes do erro")
+		t.Fatal("the report should have been stored before the error")
 	}
 
-	s.SetLastCheckError(errors.New("anilist caiu"))
+	s.SetLastCheckError(errors.New("anilist is down"))
 
 	got := s.GetLastCheckReport()
 	if len(got.Problems) != 0 || len(got.Limits) != 0 || !got.FinishedAt.IsZero() {
-		t.Errorf("SetLastCheckError deve limpar o relatório, obteve %+v", got)
+		t.Errorf("SetLastCheckError must clear the report, got %+v", got)
 	}
 }
 
-// TestSetLastCheckReport_AfterClearingError: SetLastCheckError(nil) tambem limpa, entao o
-// SetLastCheckReport do fim do passe TEM de vir depois dele — e sobreviver.
+// TestSetLastCheckReport_AfterClearingError: SetLastCheckError(nil) also clears, so the
+// SetLastCheckReport at the end of the pass MUST come after it — and survive.
 func TestSetLastCheckReport_AfterClearingError(t *testing.T) {
 	s := NewState()
 	s.SetLastCheckError(nil)
@@ -109,54 +109,54 @@ func TestSetLastCheckReport_AfterClearingError(t *testing.T) {
 		Limits:     []Issue{{AnimeID: 1, AnimeName: "Aria", Code: IssueMaxEpisodesPerAnime, Downloaded: 12, Pending: 35}},
 	})
 	if len(s.GetLastCheckReport().Limits) != 1 {
-		t.Error("o relatório publicado depois de SetLastCheckError(nil) deve sobreviver")
+		t.Error("the report published after SetLastCheckError(nil) must survive")
 	}
 }
 
-// TestSearchIssue_PrecedenciaEmCascata: os tres primeiros problemas se sobrepoem — quando um
-// filtro esvazia a lista, "nenhum torrent encontrado" tambem e verdade. O especifico TEM de
-// ganhar do generico: "todos os candidatos tinham 8 GB e seu teto e 3 GB" e acionavel; "nenhum
-// torrent encontrado" nao e, e ainda por cima e mentiroso — havia oito.
-func TestSearchIssue_PrecedenciaEmCascata(t *testing.T) {
+// TestSearchIssue_CascadePrecedence: the first three problems overlap — when a filter empties
+// the list, "no torrent found" is also true. The specific MUST beat the generic: "every
+// candidate was 8 GB and your ceiling is 3 GB" is actionable; "no torrent found" is not, and
+// on top of that it is a lie — there were eight.
+func TestSearchIssue_CascadePrecedence(t *testing.T) {
 	configs := &files.Config{MaxEpisodeTorrentSizeGB: 3, MinSeeders: 5}
 
-	t.Run("cortado por tamanho vence o genérico", func(t *testing.T) {
+	t.Run("cut by size beats the generic", func(t *testing.T) {
 		got := searchIssue(1, "Bleach", 12, dropStats{Input: 8, BySize: 8}, configs)
 		if got.Code != IssueAllAboveSizeLimit {
-			t.Fatalf("esperava %q, obteve %q", IssueAllAboveSizeLimit, got.Code)
+			t.Fatalf("want %q, got %q", IssueAllAboveSizeLimit, got.Code)
 		}
 		if got.Candidates != 8 || got.LimitGB != 3 {
-			t.Errorf("detalhes errados: %+v", got)
+			t.Errorf("wrong details: %+v", got)
 		}
 		if len(got.Episodes) != 1 || got.Episodes[0] != 12 {
-			t.Errorf("esperava episódio [12], obteve %+v", got.Episodes)
+			t.Errorf("want episode [12], got %+v", got.Episodes)
 		}
 	})
 
-	t.Run("tamanho vence seeders quando os dois cortaram", func(t *testing.T) {
+	t.Run("size beats seeders when both cut", func(t *testing.T) {
 		got := searchIssue(1, "Bleach", 12, dropStats{Input: 8, BySize: 5, BySeeders: 3}, configs)
 		if got.Code != IssueAllAboveSizeLimit {
-			t.Errorf("esperava %q, obteve %q", IssueAllAboveSizeLimit, got.Code)
+			t.Errorf("want %q, got %q", IssueAllAboveSizeLimit, got.Code)
 		}
 	})
 
-	t.Run("cortado só por seeders", func(t *testing.T) {
+	t.Run("cut only by seeders", func(t *testing.T) {
 		got := searchIssue(1, "Bleach", 12, dropStats{Input: 4, BySeeders: 4}, configs)
 		if got.Code != IssueNoSeeders {
-			t.Fatalf("esperava %q, obteve %q", IssueNoSeeders, got.Code)
+			t.Fatalf("want %q, got %q", IssueNoSeeders, got.Code)
 		}
 		if got.Candidates != 4 || got.MinSeeders != 5 {
-			t.Errorf("detalhes errados: %+v", got)
+			t.Errorf("wrong details: %+v", got)
 		}
 	})
 
-	t.Run("busca realmente vazia", func(t *testing.T) {
+	t.Run("search really empty", func(t *testing.T) {
 		got := searchIssue(1, "Bleach", 12, dropStats{}, configs)
 		if got.Code != IssueNoTorrentFound {
-			t.Errorf("esperava %q, obteve %q", IssueNoTorrentFound, got.Code)
+			t.Errorf("want %q, got %q", IssueNoTorrentFound, got.Code)
 		}
 		if got.Candidates != 0 || got.LimitGB != 0 || got.MinSeeders != 0 {
-			t.Errorf("no_torrent_found não tem detalhe, obteve %+v", got)
+			t.Errorf("no_torrent_found has no detail, got %+v", got)
 		}
 	})
 }

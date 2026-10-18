@@ -6,53 +6,54 @@ import (
 	"sync/atomic"
 )
 
-// Priorities define as listas ordenadas que governam o ranking e o filtro
-// de torrents. Índice na lista = prioridade (menor = melhor). Item ausente
-// da lista é tratado como pior (vai para o fim).
+// Priorities defines the ordered lists that govern torrent ranking and filtering.
+// Index in the list = priority (lower = better). An item missing from the list
+// is treated as worst (goes to the end).
 type Priorities struct {
-	// CriteriaOrder é a ordem em que os critérios de sort são aplicados.
-	// Valores válidos: uncensored, source, resolution, codec, fansub, audio, health, size.
+	// CriteriaOrder is the order in which sort criteria are applied.
+	// Valid values: uncensored, source, resolution, codec, fansub, audio, health, size.
 	CriteriaOrder []string `json:"criteria_order"`
 	Fansubs       []string `json:"fansubs"`
 	Resolutions   []string `json:"resolutions"`
 	Sources       []string `json:"sources"`
 	Codecs        []string `json:"codecs"`
 	Audio         []string `json:"audio"`
-	// IgnoreList: substrings (case-insensitive) que descartam o release de vez.
+	// IgnoreList: substrings (case-insensitive) that discard the release outright.
 	IgnoreList []string `json:"ignore_list"`
 }
 
-// DefaultPriorities reproduz fielmente os maps/regex hardcoded originais.
-// Tudo em minúsculas (o lookup compara contra tokens minúsculos).
+// DefaultPriorities faithfully reproduces the original hardcoded maps/regexes.
+// All lowercase (the lookup compares against lowercase tokens).
 func DefaultPriorities() Priorities {
 	return Priorities{
-		// health vem antes de fansub: era o 7º de 8 num sort lexicográfico e nunca era
-		// alcançado (resolução/fansub decidiam antes), então um torrent com 12 seeders
-		// ganhava de um com 400 por ser de um fansub melhor colocado.
+		// health comes before fansub: it was 7th of 8 in a lexicographic sort and was never
+		// reached (resolution/fansub decided first), so a torrent with 12 seeders beat one
+		// with 400 for being from a better-placed fansub.
 		CriteriaOrder: []string{"uncensored", "source", "resolution", "health", "codec", "fansub", "audio", "size"},
 		Fansubs: []string{
 			"subsplease", "erai-raws", "judas", "toonshub", "asw",
 			"ember", "hd-zone", "kamig", "remix", "aniverse", "dub", "raw",
 		},
-		// Só os tokens canônicos que ExtractResolution consegue devolver: "4k"/"uhd" viram
-		// "2160p", "fhd" vira "1080p", "hd" vira "720p". 4K abaixo de 720p é deliberado —
-		// anime em 4K é quase sempre upscale de um master 1080p.
+		// Only the canonical tokens ExtractResolution can return: "4k"/"uhd" become
+		// "2160p", "fhd" becomes "1080p", "hd" becomes "720p". 4K below 720p is deliberate —
+		// 4K anime is almost always an upscale of a 1080p master.
 		Resolutions: []string{"1080p", "720p", "1440p", "2160p", "480p"},
-		// BDRemux é o bitstream intocado do disco; BDRip é reencode.
+		// BDRemux is the untouched bitstream from the disc; BDRip is a reencode.
 		Sources: []string{"bdremux", "bd", "bdrip", "web-dl", "webrip", "tv", "dvd", "hdtv"},
-		// H.264 primeiro: toca direto em qualquer player, sem transcode no servidor (que
-		// queima a legenda no vídeo e a dessincroniza). Quem prefere arquivo menor troca
-		// pelo preset na tela de prioridades. "x265"/"x264" não entram porque ExtractCodec
-		// já canonicaliza para "hevc"/"h.264" — seriam tokens inertes.
+		// H.264 first: plays directly on any player, no server-side transcode (which burns
+		// the subtitle into the video and desyncs it). Whoever prefers a smaller file
+		// switches via the preset on the priorities screen. "x265"/"x264" don't go in
+		// because ExtractCodec already canonicalizes them to "hevc"/"h.264" — they would
+		// be inert tokens.
 		Codecs:     []string{"h.264", "hevc", "av1", "xvid"},
 		Audio:      []string{"flac", "dts-hd", "truehd", "ddp", "aac", "ac3", "mp3"},
 		IgnoreList: []string{"[dub]", "[raw]", "[hardcoded]", "[hc]", "re-encode"},
 	}
 }
 
-// active guarda as prioridades em uso. Inicializado com os defaults no package
-// init para que as funções de sort funcionem mesmo sem SetPriorities (ex: testes
-// que chamam SortTorrentResults direto).
+// active holds the priorities in use. Initialized with the defaults in package
+// init so the sort functions work even without SetPriorities (e.g. tests that
+// call SortTorrentResults directly).
 var active atomic.Pointer[Priorities]
 
 func init() {
@@ -60,19 +61,19 @@ func init() {
 	active.Store(&d)
 }
 
-// ActivePriorities retorna as prioridades em uso (nunca nil).
+// ActivePriorities returns the priorities in use (never nil).
 func ActivePriorities() Priorities { return *active.Load() }
 
-// SetPriorities aplica novas prioridades e retorna uma função que restaura o
-// valor anterior (padrão de MockNyaaHttpGet — evita vazar estado global em testes).
+// SetPriorities applies new priorities and returns a function that restores the
+// previous value (same pattern as MockNyaaHttpGet — avoids leaking global state in tests).
 func SetPriorities(p Priorities) (restore func()) {
 	prev := active.Load()
 	active.Store(&p)
 	return func() { active.Store(prev) }
 }
 
-// priorityIndex retorna o índice de token (minúsculo) em list, ou len(list)
-// (pior) se ausente. token é comparado em minúsculas.
+// priorityIndex returns the index of token (lowercase) in list, or len(list)
+// (worst) if missing. token is compared in lowercase.
 func priorityIndex(list []string, token string) int {
 	t := strings.ToLower(token)
 	for i, v := range list {
@@ -83,8 +84,8 @@ func priorityIndex(list []string, token string) int {
 	return len(list)
 }
 
-// ShouldIgnore reporta se o release deve ser descartado por casar com algum
-// item (substring, case-insensitive) da IgnoreList ativa.
+// ShouldIgnore reports whether the release should be discarded for matching some
+// item (substring, case-insensitive) of the active IgnoreList.
 func ShouldIgnore(torrentName string) bool {
 	nameLower := strings.ToLower(torrentName)
 	for _, pat := range ActivePriorities().IgnoreList {
@@ -95,7 +96,7 @@ func ShouldIgnore(torrentName string) bool {
 	return false
 }
 
-// criterionCompare mapeia nome do critério → comparador (a melhor que b ⇒ <0).
+// criterionCompare maps criterion name → comparator (a better than b ⇒ <0).
 var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"uncensored": func(a, b TorrentResult) int { return boolBetter(isUncensored(a.Name), isUncensored(b.Name)) },
 	"resolution": func(a, b TorrentResult) int { return resCompare(a, b) },
@@ -107,24 +108,24 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"audio": func(a, b TorrentResult) int {
 		return audioPriority(extractAudio(a.Name)) - audioPriority(extractAudio(b.Name))
 	},
-	"health": func(a, b TorrentResult) int { return healthTier(b) - healthTier(a) }, // faixa maior é melhor
+	"health": func(a, b TorrentResult) int { return healthTier(b) - healthTier(a) }, // higher tier is better
 	"size":   func(a, b TorrentResult) int { return sizeCompare(a, b) },
 }
 
-// healthTierFloors são os pisos das faixas de saúde: seeders 0 / 1-4 / 5-19 / 20-99 /
-// 100-399 / 400+ ⇒ faixa 0..5. Cada faixa é ~4-5x a anterior.
+// healthTierFloors are the floors of the health tiers: seeders 0 / 1-4 / 5-19 / 20-99 /
+// 100-399 / 400+ ⇒ tier 0..5. Each tier is ~4-5x the previous.
 var healthTierFloors = []int{1, 5, 20, 100, 400}
 
-// healthTier devolve a faixa de saúde do torrent (maior = mais saudável).
+// healthTier returns the torrent's health tier (higher = healthier).
 //
-// O critério compara FAIXA, não o score cru, porque o sort é lexicográfico: com o score cru
-// qualquer diferença de 1 seeder já decidia e nenhum critério depois de health era consultado.
-// Comparar faixa faz 400 seeders vencer 12 e faz 150 vs 300 empatar, deixando o critério
-// seguinte (fansub) decidir — que é o comportamento pretendido.
+// The criterion compares TIER, not the raw score, because the sort is lexicographic: with
+// the raw score any 1-seeder difference already decided and no criterion after health was
+// consulted. Comparing tier makes 400 seeders beat 12 and makes 150 vs 300 tie, leaving the
+// next criterion (fansub) to decide — which is the intended behavior.
 //
-// Faixa fixa em vez de razão (ex: "empata a menos que um tenha 2x o outro") de propósito:
-// razão não é transitiva (100 ~ 150 ~ 220, mas 100 < 220) e sort.SliceStable com comparador
-// intransitivo devolve ordem arbitrária.
+// A fixed tier instead of a ratio (e.g. "tie unless one has 2x the other") on purpose:
+// ratio is not transitive (100 ~ 150 ~ 220, but 100 < 220) and sort.SliceStable with an
+// intransitive comparator returns an arbitrary order.
 func healthTier(r TorrentResult) int {
 	seeders := ParseSeeders(r.Seeders)
 	tier := 0
@@ -146,12 +147,13 @@ func boolBetter(a, b bool) int {
 	return 1
 }
 
-// codecCompare desempata por codec, mas só quando os DOIS nomes trazem uma tag de codec.
-// Nome sem tag ("[SubsPlease] Anime - 07 (1080p) [HASH].mkv" não diz H.264 em lugar nenhum)
-// devolve empate em vez de ir para o fim: priorityIndex trata token desconhecido como o pior,
-// e sem essa guarda todo release sem tag perderia para qualquer x265 tagueado — justamente o
-// contrário do que a lista de codecs configura. Mesma regra do tamanho ilegível em
-// filterBySize: dado que não deu para ler não é motivo para punir o release.
+// codecCompare breaks ties by codec, but only when BOTH names carry a codec tag.
+// A name without a tag ("[SubsPlease] Anime - 07 (1080p) [HASH].mkv" doesn't say H.264
+// anywhere) returns a tie instead of going to the end: priorityIndex treats an unknown
+// token as worst, and without this guard every untagged release would lose to any tagged
+// x265 — exactly the opposite of what the codec list configures. Same rule as an
+// unreadable size in filterBySize: data that couldn't be read is no reason to punish
+// the release.
 func codecCompare(a, b TorrentResult) int {
 	ca, cb := ExtractCodec(a.Name), ExtractCodec(b.Name)
 	if ca == "" || cb == "" {
@@ -160,8 +162,8 @@ func codecCompare(a, b TorrentResult) int {
 	return codecPriority(ca) - codecPriority(cb)
 }
 
-// resCompare reproduz a lógica atual: ambos com resolução → por índice;
-// quem tem resolução vence quem é nil; ambos nil → empate.
+// resCompare reproduces the current logic: both with a resolution → by index;
+// whoever has a resolution beats whoever is nil; both nil → tie.
 func resCompare(a, b TorrentResult) int {
 	switch {
 	case a.Resolution != nil && b.Resolution != nil:
@@ -175,8 +177,8 @@ func resCompare(a, b TorrentResult) int {
 	}
 }
 
-// sizeCompare reproduz a regra atual: menor é melhor, mas só desempata quando
-// as resoluções são iguais (ambas não-nil e iguais); caso contrário empate.
+// sizeCompare reproduces the current rule: smaller is better, but only breaks ties when
+// the resolutions are equal (both non-nil and equal); otherwise a tie.
 func sizeCompare(a, b TorrentResult) int {
 	if a.Resolution != nil && b.Resolution != nil && *a.Resolution == *b.Resolution {
 		switch {
@@ -189,8 +191,8 @@ func sizeCompare(a, b TorrentResult) int {
 	return 0
 }
 
-// sortByCriteria ordena results aplicando os critérios de criteria na ordem dada,
-// pulando os que não estiverem no registry.
+// sortByCriteria sorts results applying the criteria in criteria in the given order,
+// skipping those not in the registry.
 func sortByCriteria(results []TorrentResult, criteria []string) []TorrentResult {
 	sorted := make([]TorrentResult, len(results))
 	copy(sorted, results)

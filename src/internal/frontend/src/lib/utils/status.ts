@@ -4,8 +4,8 @@ export type SortKey = 'name' | 'episodes_watched' | 'last_download_date'
 export type SortDir = 'asc' | 'desc'
 
 /**
- * NFKD + remocao de diacriticos: faz "Kimi no Na wa" casar com "kimi no na wa" e katakana de
- * largura completa casar com o normal. Kanji passa intacto.
+ * NFKD + stripping diacritics: makes "Kimi no Na wa" match "kimi no na wa" and full-width
+ * katakana match the normal form. Kanji passes through intact.
  */
 const normalizeName = (s: string) => s.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
@@ -17,8 +17,8 @@ export function filterAnimes(
 ): AnimeInfo[] {
   const term = normalizeName(search.trim())
   return animes.filter(a => {
-    // Busca por QUALQUER titulo do anime — o usuario pode conhecer so o romaji, o kanji ou um
-    // sinonimo, enquanto o card mostra o ingles.
+    // Search by ANY of the anime's titles — the user may only know the romaji, the kanji or a
+    // synonym, while the card shows English.
     if (term && ![a.name, ...(a.alt_names ?? [])].some(n => normalizeName(n).includes(term))) return false
     if (filterUnwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false
     if (filterStandalone && !a.is_standalone) return false
@@ -70,9 +70,9 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / GIB).toFixed(1)} GB`
 }
 
-// O limiar de "disco baixo" vive no servidor (StatusResponse.disk_low, calculado com
-// min_free_disk_percent): um cálculo duplicado aqui acabaria discordando do que o daemon está
-// fazendo. Não reintroduzir o ratio para economizar um campo na resposta.
+// The "low disk" threshold lives on the server (StatusResponse.disk_low, computed with
+// min_free_disk_percent): a duplicated calculation here would end up disagreeing with what
+// the daemon is doing. Don't reintroduce the ratio to save a field on the response.
 
 export type ProgressBreakdown = {
   watched: number
@@ -82,21 +82,21 @@ export type ProgressBreakdown = {
 }
 
 /**
- * Normaliza os contadores de um anime para o que a TripleProgressBar espera:
- * watched <= downloaded <= released <= total, todos dentro do mesmo denominador.
+ * Normalizes an anime's counters to what TripleProgressBar expects:
+ * watched <= downloaded <= released <= total, all inside the same denominator.
  *
- * O clamp em cascata não é cosmético. `total_episodes` vem da AniList e é 0 enquanto o anime
- * está em exibição sem contagem anunciada — nesse caso o denominador passa a ser
- * `episodes_released`. E os contadores podem se cruzar na prática: o daemon marca um episódio
- * como assistido a partir do progresso da AniList, que o usuário atualiza sozinho, então
- * `episodes_watched` pode passar `episodes_released` sem que nada esteja errado. Sem o
- * `Math.max` encadeado a barra renderizaria um segmento de largura negativa.
+ * The cascade clamp is not cosmetic. `total_episodes` comes from AniList and is 0 while the
+ * anime is airing with no announced count — in that case the denominator becomes
+ * `episodes_released`. And the counters can cross in practice: the daemon marks an episode
+ * as watched from AniList progress, which the user updates on their own, so
+ * `episodes_watched` can pass `episodes_released` without anything being wrong. Without the
+ * chained `Math.max` the bar would render a negative-width segment.
  *
- * `downloaded` NÃO sai de `episodes_downloaded`: aquele campo conta arquivo em disco AGORA e
- * cai quando o daemon poda episódio assistido (`watched_episodes_to_keep`), o que jogava para
- * o segmento amarelo ("falta baixar") episódio que já tinha sido baixado e visto. Só
- * `episodes_pending` sobrevive à poda, porque o backend o percorre por número de episódio —
- * é a mesma correção que animeState.ts já aplicou ao chip "atrasado".
+ * `downloaded` does NOT come from `episodes_downloaded`: that field counts files on disk NOW
+ * and drops when the daemon prunes a watched episode (`watched_episodes_to_keep`), which
+ * pushed already-downloaded-and-watched episodes into the yellow segment ("still to
+ * download"). Only `episodes_pending` survives pruning, because the backend walks it by
+ * episode number — the same fix animeState.ts already applied to the "behind" chip.
  */
 export function breakdown(a: AnimeInfo): ProgressBreakdown {
   const total = a.total_episodes > 0 ? a.total_episodes : a.episodes_released

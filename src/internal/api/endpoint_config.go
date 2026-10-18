@@ -42,20 +42,20 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// A migracao de anilist_username -> anilist_usernames NAO e repetida aqui: quem migra e
-		// LoadConfigs, uma vez, e gravando (decisions.md #90). Um corpo que ainda mande a chave
-		// singular e persistido e curado na leitura seguinte.
+		// The anilist_username -> anilist_usernames migration is NOT repeated here: LoadConfigs
+		// migrates once, on write (decisions.md #90). A body that still sends the singular
+		// key is persisted and cured on the next read.
 
-		// anilist_usernames NAO e validado: uma instalacao que so usa animes avulsos nunca
-		// configura conta nenhuma (decisions.md #49).
+		// anilist_usernames is NOT validated: an install that only uses standalone animes
+		// never configures an account (decisions.md #49).
 
 		if config.CompletedAnimePath == "" {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Completed anime path is required")
 			return
 		}
 
-		// A biblioteca e montada com hardlinks; nem todo filesystem suporta. Verifica no
-		// momento do save, com a mesma funcao que o runtime usa.
+		// The library is built with hardlinks; not every filesystem supports them. Probe at
+		// save time, with the same function the runtime uses.
 		if server.Librarian != nil {
 			if err := server.Librarian.ProbePath(config.CompletedAnimePath); err != nil {
 				JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
@@ -68,7 +68,7 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// max_episodes_per_anime aceita 0 = sem teto, alinhado com os outros tetos do projeto
+		// max_episodes_per_anime accepts 0 = no cap, aligned with the project's other caps
 		// (max_batch_torrent_size_gb, min_seeders, watched_episodes_to_keep).
 		if config.MaxEpisodesPerAnime < 0 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Max episodes per anime must be non-negative")
@@ -105,7 +105,7 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// 100 bloquearia todo download para sempre.
+		// 100 would block every download forever.
 		if config.MinFreeDiskPercent < 0 || config.MinFreeDiskPercent > 99 {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Min free disk percent must be between 0 and 99")
 			return
@@ -122,9 +122,9 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// Aplica o limite na hora: sem isso, baixar o numero de downloads simultaneos so
-		// valeria no proximo passe de verificacao (10 min por padrao), o que le como o
-		// campo nao ter funcionado.
+		// Apply the limit immediately: without this, lowering concurrent downloads would
+		// only take effect on the next check pass (10 min by default), which reads as
+		// the field not working.
 		if server.Torrents != nil {
 			server.Torrents.SetMaxActiveDownloads(config.MaxConcurrentDownloads)
 		}

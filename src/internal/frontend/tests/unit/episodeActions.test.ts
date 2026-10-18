@@ -39,7 +39,7 @@ function makeTorrent(overrides: Partial<TorrentInfo> = {}): TorrentInfo {
 }
 
 describe('episodeActions', () => {
-  // Row 1: "Torrent ativo (baixando)" -> sem principal, menu: replace + delete(destructive)
+  // Row 1: "Active torrent (downloading)" -> no principal, menu: replace + delete(destructive)
   it('an actively-downloading torrent has no principal action and offers replace/delete in the menu', () => {
     const ep = makeEpisode({ is_aired: true, is_downloaded: false })
     const torrent = makeTorrent({ status: 'downloading' })
@@ -49,15 +49,15 @@ describe('episodeActions', () => {
     expect(result.menu.find((a) => a.id === 'delete')?.destructive).toBe(true)
   })
 
-  // Row 2: "No ar e não baixado" -> principal: Baixar (solid), menu: replace
-  it('an aired, not-yet-downloaded episode has Baixar as the principal action (solid) and replace in the menu', () => {
+  // Row 2: "Aired and not downloaded" -> principal: Download (solid), menu: replace
+  it('an aired, not-yet-downloaded episode has Download as the principal action (solid) and replace in the menu', () => {
     const ep = makeEpisode({ is_aired: true, is_downloaded: false })
     const result = episodeActions(ep, undefined)
     expect(result.principal).toEqual({ id: 'download', labelKey: 'download', variant: 'solid' })
     expect(result.menu.map((a) => a.id)).toEqual(['replace'])
   })
 
-  // Row 3: "Baixado" -> principal: Rebaixar/redownload (ghost, destructive), menu: replace + delete(destructive)
+  // Row 3: "Downloaded" -> principal: Redownload (ghost, destructive), menu: replace + delete(destructive)
   it('a downloaded episode has redownload as the principal action (ghost, destructive) and replace/delete in the menu', () => {
     const ep = makeEpisode({ is_aired: true, is_downloaded: true })
     const result = episodeActions(ep, undefined)
@@ -66,7 +66,7 @@ describe('episodeActions', () => {
     expect(result.menu.find((a) => a.id === 'delete')?.destructive).toBe(true)
   })
 
-  // Row 4: "Bloqueado ou gerenciado manualmente" -> principal: Soltar (ghost), menu: download + delete(destructive)
+  // Row 4: "Blocked or manually managed" -> principal: Release (ghost), menu: download + delete(destructive)
   it('a blocked episode has release as the principal action (ghost) and download/delete in the menu', () => {
     const ep = makeEpisode({ is_aired: true, is_downloaded: false, is_blocked: true })
     const result = episodeActions(ep, undefined)
@@ -82,7 +82,7 @@ describe('episodeActions', () => {
     expect(result.menu.map((a) => a.id)).toEqual(['download', 'delete'])
   })
 
-  // Row 5: "Não lançou" -> nada
+  // Row 5: "Not yet released" -> nothing
   it('an episode that has not aired yet has no principal action and an empty menu', () => {
     const ep = makeEpisode({ is_aired: false, is_downloaded: false })
     const result = episodeActions(ep, undefined)

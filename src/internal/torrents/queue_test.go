@@ -91,8 +91,8 @@ func stopped(hash string) TorrentInfo {
 	return TorrentInfo{Hash: hash, Status: StatusStopped, PiecesTotal: 10}
 }
 
-// withAddOrder carimba AddedAt crescente na ordem dos argumentos. AddedAt e a chave de
-// ordenacao da fila, e um TorrentInfo zerado empata com todos os outros.
+// withAddOrder stamps increasing AddedAt in argument order. AddedAt is the queue's
+// sort key, and a zero TorrentInfo ties with every other.
 func withAddOrder(infos ...TorrentInfo) []TorrentInfo {
 	base := time.Now()
 	for i := range infos {
@@ -148,8 +148,8 @@ func TestQueueCapsActiveDownloads(t *testing.T) {
 }
 
 func TestQueueKeepsEpisodeOrderWhenTorrentsArriveOneByOne(t *testing.T) {
-	// Como acontece de verdade: SessionManager.Add roda enforce a cada episodio. Dois animes
-	// seguidos, 5 episodios cada — a fila tem de sair em ordem de adicao, nao invertida.
+	// As it happens for real: SessionManager.Add runs enforce on every episode. Two animes
+	// in a row, 5 episodes each — the queue has to come out in addition order, not reversed.
 	base := time.Now()
 	f := &queueFake{}
 	q := newQueue(2)
@@ -174,7 +174,7 @@ func TestQueueKeepsEpisodeOrderWhenTorrentsArriveOneByOne(t *testing.T) {
 }
 
 func TestQueuePrioritizePreempts(t *testing.T) {
-	// O bug que esta spec existe para matar: com o limite cheio, priorizar nao fazia nada.
+	// The bug this spec exists to kill: with the limit full, prioritize did nothing.
 	f := &queueFake{torrents: withAddOrder(
 		downloading("a", 5, 10),
 		downloading("b", 5, 10),
@@ -189,7 +189,7 @@ func TestQueuePrioritizePreempts(t *testing.T) {
 	if f.statuses()["c"] != "downloading" {
 		t.Fatalf("the prioritized torrent must start immediately, got %v", f.statuses())
 	}
-	// Sai o ULTIMO dos ativos em ordem de fila, nao o menos adiantado.
+	// The LAST of the active ones in queue order leaves, not the least progressed.
 	if f.statuses()["b"] != StatusStopped {
 		t.Fatalf("expected b (last in queue order) to be demoted, got %v", f.statuses())
 	}
@@ -210,7 +210,7 @@ func TestQueuePrioritizeBatchLargerThanTheLimit(t *testing.T) {
 	q.prioritize([]string{"e1", "e2", "e3"})
 	q.enforce(f)
 
-	// Os `limit` primeiros iniciam, o excedente fica no TOPO da fila, em ordem.
+	// The first `limit` start, the excess stays at the TOP of the queue, in order.
 	if got := f.hashesWithStatus("downloading"); len(got) != 2 || got[0] != "e1" || got[1] != "e2" {
 		t.Fatalf("expected e1 and e2 downloading, got %v", got)
 	}
@@ -221,8 +221,8 @@ func TestQueuePrioritizeBatchLargerThanTheLimit(t *testing.T) {
 }
 
 func TestQueuePrioritizeRespectsTheOrderReceived(t *testing.T) {
-	// A ordem recebida manda, nao AddedAt: quem decide e o frontend, que sabe o que o usuario
-	// clicou. Aqui os hashes chegam em ordem inversa a de adicao.
+	// The received order wins, not AddedAt: the frontend decides, it knows what the user
+	// clicked. Here the hashes arrive in reverse addition order.
 	f := &queueFake{torrents: withAddOrder(stopped("e1"), stopped("e2"), stopped("e3"))}
 	q := newQueue(0)
 
@@ -233,8 +233,8 @@ func TestQueuePrioritizeRespectsTheOrderReceived(t *testing.T) {
 }
 
 func TestQueuePrioritizeInsertsAHashMissingFromOrder(t *testing.T) {
-	// Sessao recem-criada, nenhum enforce ainda: o hash e incompleto e nao esta em order.
-	// Tratar so o caso "ja esta la" faria o priorizado sumir da fila.
+	// Freshly created session, no enforce yet: the hash is incomplete and is not in order.
+	// Treating only the "already there" case would make the prioritized hash vanish from the queue.
 	f := &queueFake{torrents: withAddOrder(downloading("a", 5, 10), stopped("new"))}
 	q := newQueue(1)
 
@@ -261,17 +261,17 @@ func TestQueueManualPauseSurvivesEnforceAndFreesASlot(t *testing.T) {
 	if f.statuses()["a"] != StatusStopped {
 		t.Fatalf("a manual pause must not be undone by enforce: %v", f.statuses())
 	}
-	// O pausado nao ocupa slot, entao o proximo da ordem sobe.
+	// The paused one does not occupy a slot, so the next in order is promoted.
 	if f.statuses()["c"] != "downloading" {
 		t.Fatalf("expected c promoted into the freed slot, got %v", f.statuses())
 	}
-	// Manteve a posicao em order, mas sem numero na tela: pausado nunca sobe sozinho.
+	// Kept its place in order, but no number on screen: a paused one never starts on its own.
 	assertOrder(t, q.order, "a", "b", "c")
 	if _, ok := q.queued["a"]; ok {
 		t.Fatalf("a paused torrent must not carry a queue position, got %v", q.queued)
 	}
 
-	// Retomar manda para o FIM.
+	// Resume sends it to the END.
 	q.pushBack("a")
 	q.enforce(f)
 	assertOrder(t, q.order, "b", "c", "a")
@@ -313,8 +313,8 @@ func TestQueueEnforceIsIdempotent(t *testing.T) {
 }
 
 func TestQueueSeedingIsNeverTouched(t *testing.T) {
-	// O teste que pega a iteracao sobre a SESSAO em vez de sobre `order`: completo nunca entra
-	// em order, entao varrer a sessao pausaria todo seeder.
+	// The test that catches iterating the SESSION instead of `order`: a completed one never
+	// enters order, so walking the session would pause every seeder.
 	f := &queueFake{torrents: withAddOrder(seeding("s1"), seeding("s2"), seeding("s3"))}
 	q := newQueue(1)
 
@@ -357,8 +357,8 @@ func TestQueueStoppingIsNeitherPausedNorResumed(t *testing.T) {
 }
 
 func TestQueueWithoutASessionPrunesNothingAndSavesNothing(t *testing.T) {
-	// A regressao mais cara possivel — a fila persistida sumindo em todo boot — e a mais
-	// silenciosa, porque tudo continua "funcionando".
+	// The most expensive possible regression — the persisted queue vanishing on every boot —
+	// is also the quietest, because everything keeps "working".
 	path := filepath.Join(t.TempDir(), "queue.json")
 	q := &queue{limit: 2, order: []string{"a", "b"}, paused: []string{"a"}, path: path}
 
@@ -392,11 +392,11 @@ func TestQueueUnlimitedRunsEverythingButThePaused(t *testing.T) {
 	if got := f.hashesWithStatus(StatusStopped); len(got) != 1 || got[0] != "c" {
 		t.Fatalf("limit 0 must run everything but the manually paused, got %v stopped", got)
 	}
-	// Sem espera, ninguem tem posicao para numerar.
+	// With no waiting, nobody has a position to number.
 	if len(q.queued) != 0 {
 		t.Fatalf("expected no positions with an unlimited queue, got %v", q.queued)
 	}
-	// order continua sendo mantido, para quando o limite voltar.
+	// order is still kept, for when the limit comes back.
 	assertOrder(t, q.order, "a", "b", "c")
 }
 
@@ -424,7 +424,7 @@ func TestQueueMarkQueuedWritesSlugAndPosition(t *testing.T) {
 		{Hash: "a", Status: "downloading"},
 		{Hash: "b", Status: StatusStopped},
 		{Hash: "c", Status: StatusStopped},
-		{Hash: "d", Status: StatusStopped}, // pausado pelo usuario: fica stopped, sem posicao
+		{Hash: "d", Status: StatusStopped}, // paused by the user: stays stopped, no position
 	})
 
 	if got[0].Status != "downloading" || got[0].QueuePosition != 0 {
@@ -481,13 +481,13 @@ func TestQueueLoadCorruptedFileDoesNotPropagate(t *testing.T) {
 }
 
 func TestQueueUpgradeBootSeedsPausedInsteadOfResuming(t *testing.T) {
-	// O boot do upgrade: sem queue.json, os torrents que a rain reporta parados foram parados
-	// por alguem (o usuario ou a fila antiga, que era so memoria). Congelar e a troca certa.
+	// The upgrade boot: without queue.json, the torrents rain reports stopped were stopped
+	// by someone (the user or the old queue, which was memory-only). Freezing is the right trade.
 	path := filepath.Join(t.TempDir(), "queue.json")
 	f := &queueFake{torrents: withAddOrder(stopped("a"), stopped("b"), downloading("c", 1, 10))}
 
 	q := &queue{limit: 5}
-	q.load(path) // arquivo ausente: arma o latch
+	q.load(path) // missing file: arms the latch
 
 	q.enforce(f)
 
@@ -496,7 +496,7 @@ func TestQueueUpgradeBootSeedsPausedInsteadOfResuming(t *testing.T) {
 	}
 	assertOrder(t, q.paused, "a", "b")
 
-	// Latch de uma vez so: um Play depois disso nao e desfeito pelo passe seguinte.
+	// One-shot latch: a Play after this is not undone by the next pass.
 	q.pushBack("a")
 	q.enforce(f)
 	if f.statuses()["a"] != "downloading" {
@@ -516,7 +516,7 @@ func TestQueueSaveOnlyWhenChangedAndRetriesAfterAFailure(t *testing.T) {
 		t.Fatalf("expected the queue file to be written: %v", err)
 	}
 
-	// Nada mudou: a segunda passada nao regrava (o arquivo apagado continua apagado).
+	// Nothing changed: the second pass does not rewrite (the deleted file stays deleted).
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
@@ -524,8 +524,8 @@ func TestQueueSaveOnlyWhenChangedAndRetriesAfterAFailure(t *testing.T) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("an unchanged queue must not be rewritten")
 	}
-	// Falha de escrita nao atualiza lastSaved, entao a gravacao seguinte com o MESMO estado
-	// tenta de novo — senao uma falha transitoria congelaria o arquivo para sempre.
+	// A write failure does not update lastSaved, so the next save with the SAME state
+	// tries again — otherwise a transient failure would freeze the file forever.
 	q.path = filepath.Join(dir, "missing-dir", "queue.json")
 	f.torrents = append(f.torrents, withAddOrder(downloading("b", 1, 10))...)
 	q.enforce(f)

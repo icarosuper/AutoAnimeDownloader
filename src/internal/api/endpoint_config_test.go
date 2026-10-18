@@ -79,9 +79,9 @@ func (m *mockFileManager) SaveEpisodesToFile(episodes []files.EpisodeStruct) err
 	return nil
 }
 
-// UpsertEpisodes atualiza em lugar (casando por EpisodeID) e acrescenta o que e novo, como o
-// FileManager de verdade — um mock que simplesmente substituisse a lista faria um teste de
-// "marcar episodio" passar apagando todos os outros.
+// UpsertEpisodes updates in place (matching by EpisodeID) and appends what is new, like the
+// real FileManager — a mock that simply replaced the list would make a "mark episode" test
+// pass by wiping every other episode.
 func (m *mockFileManager) UpsertEpisodes(episodes []files.EpisodeStruct) error {
 	if m.saveEpisodesErr != nil {
 		return m.saveEpisodesErr
@@ -289,8 +289,8 @@ func TestHandleUpdateConfig(t *testing.T) {
 	})
 
 	t.Run("PUT applies max_concurrent_downloads to the backend right away", func(t *testing.T) {
-		// Sem isso, mudar o limite so valeria no proximo passe de verificacao (10 min por
-		// padrao) e o campo leria como quebrado.
+		// Without this, changing the limit would only take effect on the next check pass
+		// (10 min by default) and the field would read as broken.
 		backend := torrents.NewFakeBackend()
 		srv := &Server{State: state, FileManager: mockFM, Torrents: backend}
 
@@ -501,8 +501,8 @@ func TestHandleConfig(t *testing.T) {
 }
 
 func TestHandleUpdateConfig_NoSavePath(t *testing.T) {
-	// Nao existe save_path: o diretorio de download e derivado da biblioteca.
-	t.Run("PUT com so completed_anime_path e aceito", func(t *testing.T) {
+	// There is no save_path: the download directory is derived from the library.
+	t.Run("PUT with only completed_anime_path is accepted", func(t *testing.T) {
 		mockFM := &mockFileManager{}
 		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
 
@@ -528,8 +528,8 @@ func TestHandleUpdateConfig_NoSavePath(t *testing.T) {
 
 }
 
-// max_episodes_per_anime = 0 passa a significar "sem teto" e deve ser aceito: era o unico teto do
-// projeto que proibia zero.
+// max_episodes_per_anime = 0 now means "no cap" and must be accepted: it was the only cap in
+// the project that forbade zero.
 func TestSaveConfig_AcceptsZeroMaxEpisodesPerAnime(t *testing.T) {
 	mockFM := &mockFileManager{}
 	handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
@@ -550,15 +550,15 @@ func TestSaveConfig_AcceptsZeroMaxEpisodesPerAnime(t *testing.T) {
 	handler(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Errorf("esperava 200 para o teto desligado, obteve %d: %s", w.Code, w.Body.String())
+		t.Errorf("want 200 for the cap turned off, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
-// TestHandleUpdateConfig_NoAniListAccount: conta da AniList deixou de ser obrigatoria. Com
-// animes avulsos o app funciona inteiro sem lista nenhuma; a biblioteca continua obrigatoria,
-// porque sem ela nao ha para onde baixar.
+// TestHandleUpdateConfig_NoAniListAccount: an AniList account is no longer required. With
+// standalone animes the app works with no list at all; the library is still required,
+// because without it there is nowhere to download to.
 func TestHandleUpdateConfig_NoAniListAccount(t *testing.T) {
-	t.Run("PUT sem anilist_usernames e aceito", func(t *testing.T) {
+	t.Run("PUT without anilist_usernames is accepted", func(t *testing.T) {
 		mockFM := &mockFileManager{}
 		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
 
@@ -578,11 +578,11 @@ func TestHandleUpdateConfig_NoAniListAccount(t *testing.T) {
 		handler(w, req)
 
 		if w.Code != http.StatusOK {
-			t.Fatalf("quero 200 sem conta da AniList, veio %d: %s", w.Code, w.Body.String())
+			t.Fatalf("want 200 without an AniList account, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 
-	t.Run("PUT sem completed_anime_path continua 400", func(t *testing.T) {
+	t.Run("PUT without completed_anime_path is still 400", func(t *testing.T) {
 		mockFM := &mockFileManager{}
 		handler := handleUpdateConfig(&Server{State: daemon.NewState(), FileManager: mockFM})
 
@@ -601,7 +601,7 @@ func TestHandleUpdateConfig_NoAniListAccount(t *testing.T) {
 		handler(w, req)
 
 		if w.Code != http.StatusBadRequest {
-			t.Fatalf("quero 400 sem biblioteca, veio %d", w.Code)
+			t.Fatalf("want 400 without a library, got %d", w.Code)
 		}
 	})
 }

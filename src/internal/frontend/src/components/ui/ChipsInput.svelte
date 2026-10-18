@@ -1,43 +1,43 @@
 <script lang="ts">
-  // ChipsInput — spec §9.4 (Fase 6). O input multi-valor do artboard 1e: os chips vivem
-  // DENTRO do campo, com o cursor na mesma caixa, e não existe botão "+" — o valor entra
-  // por teclado (Enter/vírgula) ou colando uma lista.
+  // ChipsInput — spec §9.4 (Phase 6). The multi-value input from artboard 1e: chips live
+  // INSIDE the field, with the cursor in the same box, and there is no "+" button — the
+  // value comes in from the keyboard (Enter/comma) or by pasting a list.
   //
-  // As cinco regras de teclado do spec, todas cobertas por tests/component/ChipsInput.test.ts:
-  //   1. Enter confirma          2. vírgula confirma
-  //   3. Backspace com campo vazio remove o último
-  //   4. clicar no × remove      5. colar lista separada por vírgulas cria vários
+  // The five keyboard rules from the spec, all covered by tests/component/ChipsInput.test.ts:
+  //   1. Enter commits           2. comma commits
+  //   3. Backspace on an empty field removes the last
+  //   4. clicking × removes      5. pasting a comma-separated list creates several
   //
-  // O `<input>` é um irmão dos chips dentro de um flex-wrap, não um campo separado embaixo
-  // deles: é isso que faz o cursor cair "na mesma caixa" e o campo crescer conforme enche.
-  // A caixa inteira ganha o anel de foco via `focus-within`, já que o elemento realmente
-  // focado é o input interno e não a borda que o usuário enxerga.
+  // The `<input>` is a sibling of the chips inside a flex-wrap, not a separate field below
+  // them: that's what makes the cursor land "in the same box" and the field grow as it fills.
+  // The whole box gets the focus ring via `focus-within`, since the actually focused element
+  // is the inner input and not the border the user sees.
   import { X } from '@lucide/svelte'
 
   export let values: string[] = []
-  /** Rótulo visível, associado ao input real via `for`/`id` — nunca um <label> solto. */
+  /** Visible label, associated with the real input via `for`/`id` — never a loose <label>. */
   export let label: string
   export let hint = ''
   export let placeholder = ''
   export let id: string = `chips-${Math.random().toString(36).slice(2, 9)}`
   export let disabled = false
   /**
-   * Marca o campo como obrigatório: asterisco no rótulo + `aria-required` no input. Não é o
-   * atributo `required` nativo porque o obrigatório aqui é a LISTA, não o texto em digitação —
-   * com um chip já confirmado o input fica vazio, e `required` nativo reprovaria um campo que
-   * está preenchido.
+   * Marks the field as required: asterisk on the label + `aria-required` on the input. It is
+   * not the native `required` attribute because what is required here is the LIST, not the
+   * text being typed — with a chip already committed the input is empty, and native `required`
+   * would fail a field that is filled.
    */
   export let required = false
-  /** Nome acessível do × de cada chip; recebe o valor do chip como `{item}`. */
+  /** Accessible name of each chip's ×; receives the chip value as `{item}`. */
   export let removeLabel: (item: string) => string = (item) => `Remove ${item}`
 
   let draft = ''
   let inputEl: HTMLInputElement
 
   /**
-   * Uma entrada crua pode virar VÁRIOS valores (o caso do paste). Separar por vírgula aqui,
-   * e não só no handler de paste, é o que faz "a,b,c" + Enter se comportar igual a colar
-   * "a,b,c" — mesma função, um caminho só.
+   * A raw entry can become SEVERAL values (the paste case). Splitting on comma here, not
+   * only in the paste handler, is what makes "a,b,c" + Enter behave the same as pasting
+   * "a,b,c" — one function, one path.
    */
   function commit(raw: string) {
     const parts = raw
@@ -45,7 +45,7 @@
       .map((p) => p.trim())
       .filter((p) => p.length > 0)
     if (parts.length === 0) return
-    // Deduplica contra o que já existe E dentro do próprio lote colado.
+    // Deduplicate against what already exists AND within the pasted batch itself.
     const next = [...values]
     for (const part of parts) {
       if (!next.includes(part)) next.push(part)
@@ -64,14 +64,14 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' || event.key === ',') {
-      // Enter dentro de um <form> submeteria a tela inteira (Config tem um botão Salvar de
-      // verdade); a vírgula seria digitada literalmente. Os dois precisam ser interceptados.
+      // Enter inside a <form> would submit the whole screen (Config has a real Save button);
+      // the comma would be typed literally. Both need to be intercepted.
       event.preventDefault()
       commitDraft()
       return
     }
     if (event.key === 'Backspace' && draft === '' && values.length > 0) {
-      // Só remove com o campo VAZIO — com texto digitado, Backspace continua apagando letra.
+      // Only remove with the field EMPTY — with typed text, Backspace keeps deleting letters.
       event.preventDefault()
       values = values.slice(0, -1)
     }
@@ -79,7 +79,7 @@
 
   function handlePaste(event: ClipboardEvent) {
     const text = event.clipboardData?.getData('text') ?? ''
-    if (!text.includes(',')) return // colar um valor só segue o fluxo normal de digitação
+    if (!text.includes(',')) return // pasting a single value follows the normal typing flow
     event.preventDefault()
     commit(text)
   }
@@ -89,15 +89,15 @@
   <label for={id} class="text-[14.5px] font-bold text-heading">
     {label}
     {#if required}
-      <!-- Mesmo par que o Input.svelte usa: asterisco visual (aria-hidden, o leitor de tela
-           recebe a informação por `aria-required`) na cor de perigo. -->
+      <!-- Same pair Input.svelte uses: visual asterisk (aria-hidden, the screen reader
+           gets the information via `aria-required`) in the danger color. -->
       <span class="text-danger" aria-hidden="true">*</span>
     {/if}
   </label>
 
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <!-- Clicar na área vazia da caixa foca o input, como num campo de texto comum. O teclado
-       não precisa deste atalho: o input real já está na ordem de tabulação. -->
+  <!-- Clicking the empty area of the box focuses the input, like a normal text field. The
+       keyboard doesn't need this shortcut: the real input is already in the tab order. -->
   <div
     class="flex flex-wrap items-center gap-1.5 rounded-field border border-default bg-control px-2.5 py-2 focus-within:border-accent {disabled
       ? 'cursor-not-allowed opacity-50'

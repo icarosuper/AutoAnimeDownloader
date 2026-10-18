@@ -2,21 +2,22 @@ package anilist
 
 import "sort"
 
-// EpisodeList devolve os episodios de um anime a partir de fromEpisode, e e a UNICA fonte de
-// "quais episodios existem" no app.
+// EpisodeList returns the episodes of an anime from fromEpisode onward, and is the ONLY source of
+// "which episodes exist" in the app.
 //
-// Nao da para usar media.airingSchedule cru para isso: a AniList guarda uma JANELA de ~500
-// entradas de agenda por midia e descarta as antigas. No One Piece a pagina 1 comeca no episodio
-// 1123 — os 1122 anteriores nao existem na API —, e num anime antigo/finalizado (Naruto, Shingeki
-// no Kyojin) a agenda volta COMPLETAMENTE vazia. Enquanto a lista de episodios saia dai, esses
-// animes simplesmente nao tinham episodios para baixar (ver decisions.md #52).
+// Raw media.airingSchedule can't be used for this: AniList keeps a WINDOW of ~500 schedule
+// entries per media and discards the old ones. On One Piece page 1 starts at episode
+// 1123 — the previous 1122 do not exist in the API — and on an old/finished anime (Naruto,
+// Shingeki no Kyojin) the schedule comes back COMPLETELY empty. While the episode list came
+// from there, those animes simply had no episodes to download (see decisions.md #52).
 //
-// Por isso a lista e SINTETIZADA de fromEpisode ate o ultimo episodio no ar, usando o no real da
-// agenda quando ele existe (traz airingAt/timeUntilAiring de verdade) e um no fabricado quando
-// nao. Os episodios ainda por vir vem apenas da agenda, que e quem sabe a data deles.
+// That's why the list is SYNTHESIZED from fromEpisode to the last aired episode, using the real
+// schedule node when it exists (it brings a real airingAt/timeUntilAiring) and a fabricated
+// node when it doesn't. Upcoming episodes come only from the schedule, which is who knows
+// their date.
 //
-// Um no fabricado tem ID zero: depois da migracao da chave para (AnimeID, EpisodeNumber) nada
-// identifica episodio por ID de agenda, entao ele nao precisa ser unico (ver decisions.md #52).
+// A fabricated node has ID zero: after the key migration to (AnimeID, EpisodeNumber) nothing
+// identifies an episode by schedule ID, so it doesn't need to be unique (see decisions.md #52).
 func EpisodeList(ml MediaList, fromEpisode int) []AiringNode {
 	if fromEpisode < 1 {
 		fromEpisode = 1
@@ -35,15 +36,15 @@ func EpisodeList(ml MediaList, fromEpisode int) []AiringNode {
 			result = append(result, node)
 			continue
 		}
-		// timeUntilAiring negativo = ja foi ao ar, que e a unica coisa que o resto do codigo
-		// pergunta a um episodio passado. airingAt fica zerado: a AniList nao guarda mais a data.
+		// Negative timeUntilAiring = already aired, which is the only thing the rest of the
+		// code asks of a past episode. airingAt stays zero: AniList no longer keeps the date.
 		result = append(result, AiringNode{Episode: ep, TimeUntilAiring: -1})
 	}
 
-	// Os que ainda vao ao ar: a agenda, mais o nextAiringEpisode. Ele precisa entrar
-	// explicitamente porque num anime de janela clipada a pagina 1 da agenda so tem episodios
-	// PASSADOS (no One Piece ela vai do 1123 ao 1147, e o proximo e o 1174) — sem isso a tela
-	// mostraria o anime sem nenhum episodio por vir.
+	// Upcoming ones: the schedule, plus nextAiringEpisode. It has to go in explicitly because
+	// on a clipped-window anime page 1 of the schedule only has PAST episodes (on One Piece it
+	// goes from 1123 to 1147, and the next is 1174) — without this the screen would show the
+	// anime with no upcoming episode.
 	future := append([]AiringNode{}, ml.Media.AiringSchedule.Nodes...)
 	if next := ml.Media.NextAiringEpisode; next != nil {
 		future = append(future, *next)
@@ -60,13 +61,15 @@ func EpisodeList(ml MediaList, fromEpisode int) []AiringNode {
 	return result
 }
 
-// lastAiredEpisode e o maior numero de episodio que ja foi ao ar, combinando as tres fontes que a
-// AniList oferece — nenhuma delas confiavel sozinha: a agenda pode estar clipada ou vazia,
-// nextAiringEpisode e nil em anime terminado, e media.episodes so vale quando o anime terminou
-// (num RELEASING ele e a contagem PREVISTA da temporada inteira, nao o que ja passou).
-// LastAiredEpisode e a versao exportada de lastAiredEpisode. Serve como medida de "tamanho da
-// serie" fora do pacote — media.Episodes nao serve para isso: num RELEASING sem fim anunciado
-// (One Piece) ele e nil, e e exatamente a serie longa que precisa ser reconhecida como tal.
+// lastAiredEpisode is the highest episode number that has already aired, combining the three
+// sources AniList offers — none of them reliable on its own: the schedule may be clipped or
+// empty, nextAiringEpisode is nil on a finished anime, and media.episodes only holds when the
+// anime has finished (on a RELEASING it is the PREDICTED count of the whole season, not what
+// has already aired).
+// LastAiredEpisode is the exported version of lastAiredEpisode. It serves as a "series size"
+// measure outside the package — media.Episodes doesn't work for that: on a RELEASING with no
+// announced end (One Piece) it is nil, and that's exactly the long series that needs to be
+// recognized as such.
 func LastAiredEpisode(ml MediaList) int {
 	return lastAiredEpisode(ml)
 }

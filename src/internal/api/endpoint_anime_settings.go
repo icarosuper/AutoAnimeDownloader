@@ -8,8 +8,8 @@ import (
 	"strconv"
 )
 
-// Progress e PONTEIRO porque o PUT e parcial: ausente tem de ser distinguivel de zero, ou um
-// corpo sem o campo zeraria o progresso salvo.
+// Progress is a POINTER because the PUT is partial: absent must be distinguishable from
+// zero, or a body without the field would wipe the saved progress.
 type animeSettingsRequest struct {
 	Progress *int `json:"progress"`
 }

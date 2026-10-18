@@ -18,8 +18,8 @@ describe('formatSpeed', () => {
 })
 
 describe('formatEta', () => {
-  // ETA nulo = infinito/desconhecido. A rain só preenche ETA enquanto baixa com velocidade
-  // maior que zero, então null é o caso comum, não a exceção.
+  // Null ETA = infinite/unknown. rain only fills ETA while downloading at a speed greater
+  // than zero, so null is the common case, not the exception.
   it('renders null as a dash', () => {
     expect(formatEta(null)).toBe('—')
   })

@@ -68,8 +68,8 @@ func mockAniListRecorder(called *bool) func() {
 	})
 }
 
-// TestHandleDeleteEpisode_DeleteFailureReturns500 cobre P1.3: quando a remoção do registro do
-// arquivo falha, o DELETE não pode responder 200 fingindo sucesso.
+// TestHandleDeleteEpisode_DeleteFailureReturns500 covers P1.3: when removing the file record
+// fails, DELETE must not answer 200 pretending success.
 func TestHandleDeleteEpisode_DeleteFailureReturns500(t *testing.T) {
 	fm := &mockFileManager{
 		episodes:          savedEpisodeFixture(),
@@ -81,11 +81,11 @@ func TestHandleDeleteEpisode_DeleteFailureReturns500(t *testing.T) {
 	handleDeleteEpisode(server)(w, episodeRequest(http.MethodDelete, "/api/v1/animes/7/episodes/5", ""))
 
 	if w.Code != http.StatusInternalServerError {
-		t.Errorf("esperava 500 quando DeleteEpisodesFromFile falha, obteve %d: %s", w.Code, w.Body.String())
+		t.Errorf("want 500 when DeleteEpisodesFromFile fails, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
-// TestHandleDeleteEpisode_Success garante que o caminho feliz continua 200 (sem regressão).
+// TestHandleDeleteEpisode_Success guarantees the happy path stays 200 (no regression).
 func TestHandleDeleteEpisode_Success(t *testing.T) {
 	fm := &mockFileManager{episodes: savedEpisodeFixture()}
 	server, backend := episodeActionServer(t, fm)
@@ -94,19 +94,19 @@ func TestHandleDeleteEpisode_Success(t *testing.T) {
 	handleDeleteEpisode(server)(w, episodeRequest(http.MethodDelete, "/api/v1/animes/7/episodes/5", ""))
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("esperava 200, obteve %d: %s", w.Code, w.Body.String())
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
 	if _, ok := backend.Get(testEpisodeHash); ok {
-		t.Error("o torrent (cópia semeada) deve ser removido no delete manual")
+		t.Error("the torrent (seeded copy) must be removed on a manual delete")
 	}
 	if len(fm.episodes) != 0 {
-		t.Errorf("esperava o registro removido do arquivo, obteve %+v", fm.episodes)
+		t.Errorf("want the record removed from the file, got %+v", fm.episodes)
 	}
 }
 
-// TestHandleRedownloadEpisode_RemovalFailureAborts cobre P1.3 no pior caso: se a remoção falha,
-// o handler deve responder 500 e NÃO adicionar um torrent novo (que ficaria sem rastreio,
-// já que o registro velho sobreviveu com o hash velho).
+// TestHandleRedownloadEpisode_RemovalFailureAborts covers P1.3 in the worst case: if removal
+// fails, the handler must answer 500 and NOT add a new torrent (which would have no tracking,
+// since the old record survived with the old hash).
 func TestHandleRedownloadEpisode_RemovalFailureAborts(t *testing.T) {
 	anilistCalled := false
 	defer mockAniListRecorder(&anilistCalled)()
@@ -121,21 +121,21 @@ func TestHandleRedownloadEpisode_RemovalFailureAborts(t *testing.T) {
 	handleRedownloadEpisode(server)(w, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/5/redownload", ""))
 
 	if w.Code != http.StatusInternalServerError {
-		t.Errorf("esperava 500 quando a remoção falha, obteve %d: %s", w.Code, w.Body.String())
+		t.Errorf("want 500 when removal fails, got %d: %s", w.Code, w.Body.String())
 	}
 	if anilistCalled {
-		t.Error("o handler deve abortar antes de tentar baixar de novo (AniList não deve ser consultado)")
+		t.Error("the handler must abort before trying to download again (AniList must not be consulted)")
 	}
-	// O único torrent presente é o antigo (removido best-effort ou não); nenhum novo entrou.
+	// The only torrent present is the old one (removed best-effort or not); no new one entered.
 	for _, tr := range backend.List() {
 		if tr.Hash != testEpisodeHash {
-			t.Errorf("nenhum torrent novo deve ser adicionado, obteve %s", tr.Hash)
+			t.Errorf("no new torrent must be added, got %s", tr.Hash)
 		}
 	}
 }
 
-// TestHandleReplaceEpisodeWithMagnet_RemovalFailureAborts: mesma garantia para o replace de
-// episódio com magnet do usuário.
+// TestHandleReplaceEpisodeWithMagnet_RemovalFailureAborts: the same guarantee for replacing an
+// episode with the user's magnet.
 func TestHandleReplaceEpisodeWithMagnet_RemovalFailureAborts(t *testing.T) {
 	anilistCalled := false
 	defer mockAniListRecorder(&anilistCalled)()
@@ -151,19 +151,19 @@ func TestHandleReplaceEpisodeWithMagnet_RemovalFailureAborts(t *testing.T) {
 	handleReplaceEpisodeWithMagnet(server)(w, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/5/replace", magnet))
 
 	if w.Code != http.StatusInternalServerError {
-		t.Errorf("esperava 500 quando a remoção falha, obteve %d: %s", w.Code, w.Body.String())
+		t.Errorf("want 500 when removal fails, got %d: %s", w.Code, w.Body.String())
 	}
 	if anilistCalled {
-		t.Error("o handler deve abortar antes de adicionar o magnet novo")
+		t.Error("the handler must abort before adding the new magnet")
 	}
 	for _, tr := range backend.List() {
 		if tr.Hash != testEpisodeHash {
-			t.Errorf("nenhum torrent novo deve ser adicionado, obteve %s", tr.Hash)
+			t.Errorf("no new torrent must be added, got %s", tr.Hash)
 		}
 	}
 }
 
-// TestHandleReplaceAnimeWithMagnet_RemovalFailureAborts: idem para o replace do anime inteiro.
+// TestHandleReplaceAnimeWithMagnet_RemovalFailureAborts: same guarantee for replacing the whole anime.
 func TestHandleReplaceAnimeWithMagnet_RemovalFailureAborts(t *testing.T) {
 	anilistCalled := false
 	defer mockAniListRecorder(&anilistCalled)()
@@ -182,14 +182,14 @@ func TestHandleReplaceAnimeWithMagnet_RemovalFailureAborts(t *testing.T) {
 	handleReplaceAnimeWithMagnet(server)(w, req)
 
 	if w.Code != http.StatusInternalServerError {
-		t.Errorf("esperava 500 quando a remoção falha, obteve %d: %s", w.Code, w.Body.String())
+		t.Errorf("want 500 when removal fails, got %d: %s", w.Code, w.Body.String())
 	}
 	if anilistCalled {
-		t.Error("o handler deve abortar antes de adicionar o magnet novo")
+		t.Error("the handler must abort before adding the new magnet")
 	}
 	for _, tr := range backend.List() {
 		if tr.Hash != testEpisodeHash {
-			t.Errorf("nenhum torrent novo deve ser adicionado, obteve %s", tr.Hash)
+			t.Errorf("no new torrent must be added, got %s", tr.Hash)
 		}
 	}
 }
@@ -299,7 +299,7 @@ func TestHandleDownloadEpisode_UpdatesExistingRecord(t *testing.T) {
 	handleDownloadEpisode(server)(rec, episodeRequest(http.MethodPost, "/api/v1/animes/7/episodes/5/download", ""))
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("esperava 200, obteve %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	saved, err := fm.LoadSavedEpisodes()
@@ -307,20 +307,20 @@ func TestHandleDownloadEpisode_UpdatesExistingRecord(t *testing.T) {
 		t.Fatalf("LoadSavedEpisodes: %v", err)
 	}
 	if len(saved) != 1 {
-		t.Fatalf("esperava exatamente 1 registro, obteve %d: %+v", len(saved), saved)
+		t.Fatalf("want exactly 1 record, got %d: %+v", len(saved), saved)
 	}
 	ep := saved[0]
 
 	if ep.EpisodeHash != replacementHash {
-		t.Errorf("hash deve ser atualizado para o torrent novo: esperava %s, obteve %s", replacementHash, ep.EpisodeHash)
+		t.Errorf("hash must be updated to the new torrent: want %s, got %s", replacementHash, ep.EpisodeHash)
 	}
 	if ep.LibraryPaths != nil {
-		t.Errorf("LibraryPaths deve ser zerado (arquivo novo precisa ser organizado de novo), obteve %v", ep.LibraryPaths)
+		t.Errorf("LibraryPaths must be cleared (the new file needs to be organized again), got %v", ep.LibraryPaths)
 	}
 	if !ep.ManuallyManaged {
-		t.Error("download manual deve marcar ManuallyManaged: true")
+		t.Error("manual download must set ManuallyManaged: true")
 	}
 	if ep.EpisodeNumber != 5 {
-		t.Errorf("EpisodeNumber deve continuar 5, obteve %d", ep.EpisodeNumber)
+		t.Errorf("EpisodeNumber must stay 5, got %d", ep.EpisodeNumber)
 	}
 }
