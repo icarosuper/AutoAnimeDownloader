@@ -24,8 +24,9 @@ func TestEveryLogKeyIsClassified(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		// src/tests holds test doubles and the integration harness, not daemon code.
-		if d.IsDir() && path == filepath.Join(srcRoot, "tests") {
+		// src/tests holds test doubles; src/cmd/cli is urfave (c.Bool("flag")), not zerolog.
+		// src/cmd/daemon still writes real log fields and must stay in the walk.
+		if d.IsDir() && (path == filepath.Join(srcRoot, "tests") || path == filepath.Join(srcRoot, "cmd", "cli")) {
 			return filepath.SkipDir
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {

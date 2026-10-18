@@ -48,7 +48,8 @@ apart. `AAD_LIVE_QUERIES="a batch|b batch"` replaces the neutral sample.
   library path it writes into the daemon's config comes from
   `TEST_COMPLETED_PATH` (default `~/aad-test/library`)
 - `src/tests/mocks/` — standalone mock HTTP servers (Docker images, **not** Go test imports)
-- `src/internal/api/*_test.go` — handler-level tests
+- `src/internal/api/*_test.go` — handler-level tests; `client_test.go` is the HTTP client the CLI uses
+- `src/cmd/cli/*_test.go` — CLI tests live next to `cmd/cli`
 
 ## Mock Patterns
 

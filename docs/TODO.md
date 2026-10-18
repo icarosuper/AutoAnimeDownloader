@@ -43,10 +43,11 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.6.0` — CLI parity
 
-- Bring the CLI to parity with the API / webApp — spec designed on 2026-10-18, not executed:
+- ~~Bring the CLI to parity with the API / webApp~~ — implemented 2026-10-18, waiting on the
+  `v2.6.0` stamp. Spec:
   [cli-parity](superpowers/specs/2026-10-18-cli-parity-design.md). Nested commands, `--json` as
-  the agent contract, `--yes` on destructive actions, no prompts. After this release a new API
-  endpoint ships with its CLI command in the same change.
+  the agent contract, `--yes` on destructive actions, no prompts. A new API endpoint ships with
+  its CLI command in the same change.
 
 ## `v3.0.0` — Serval
 

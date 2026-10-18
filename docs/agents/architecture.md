@@ -10,7 +10,7 @@
 
 ```
 src/cmd/daemon/      → Daemon binary entry point (embeds frontend build, starts API)
-src/cmd/cli/         → CLI binary for managing the daemon via REST API
+src/cmd/cli/         → CLI binary (same package `main`, split by resource) talking to the daemon REST API
 src/internal/
   api/               → HTTP server, REST handlers, WebSocket, middleware
   daemon/            → Verification loop: Anilist → Nyaa → embedded torrent client → track episodes
@@ -308,41 +308,56 @@ segura o `*organizer` concreto — e só roda quando `MigrateAnimeIDsToMedia` te
 junto com `EpisodeID`: sem anime id nem número de episódio, aquele registro não tem chave
 (decisions.md #52).
 
-**`filesystem.go`** — a interface `FileSystem` existe para teste (`MockFileSystem`); inclui `Link`, que
-é o que o `Librarian` usa.
+**`filesystem.go`** — the `FileSystem` interface exists for tests (`MockFileSystem`); it includes
+`Link`, which is what the `Librarian` uses.
+
+### `src/cmd/cli/` — daemon CLI
+
+Split by resource, same package `main` (`main_test.go` keeps testing unexported helpers): `main.go`
+holds the app, global flags, `start` / `stop` / `open` / `loop`; `config.go`, `status.go`,
+`animes.go`, `torrents.go`, `logs.go`, `report.go`, `notifications.go` hold the matching trees.
+There is no root `episodes` command and no `GetEpisodes` — `GET /api/v1/episodes` is gone; listing
+is `animes episodes <id>`.
+
+`report` and `report crash-ack` call `diagnostics.Build` / `ArchivePendingCrash` against
+`datadir.Path()` and never the HTTP client, so they work with the daemon dead. `--yes` is a CLI
+gate: the API has no confirmation parameter ([decisions.md #104](decisions.md#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)).
 
 ### `src/internal/api/` — HTTP
 
-Padrão de handler, envelope de resposta e checklist de endpoint novo estão em
-[conventions.md](conventions.md), não aqui.
+Handler pattern, response envelope and the new-endpoint checklist live in
+[conventions.md](conventions.md), not here.
 
-**`client.go` é o cliente HTTP _para_ a API do daemon, usado pelo binário da CLI** (`cmd/cli`) — o
-daemon não o usa. Confundir os dois leva a procurar lógica de negócio nele.
+**`client.go` is the HTTP client _for_ the daemon API, used by the CLI binary** (`cmd/cli`) — the
+daemon does not use it. Confusing the two leads to looking for business logic in it. There is no
+`GetEpisodes`.
 
-**`endpoint_animes.go`** — os dois filtros (`DownloadStatuses` server-side, `DownloadMediaStatuses`
-client-side) só barram entrada **nova**: anime que já tem episódio baixado nunca sai da listagem, não
-importa o status atual. Para esses órfãos, `refreshOrphanAnimes` recarrega capa/progresso/blacklist em
-no máximo duas queries em lote; falha só deixa os campos vindos da AniList em branco, em vez de sumir
-com o anime ou derrubar o request. `countPendingEpisodes` conta por **número de episódio**, não
-`released - downloaded`, porque assistido pode continuar salvo (`watched_episodes_to_keep`).
+**`endpoint_animes.go`** — the two filters (`DownloadStatuses` server-side, `DownloadMediaStatuses`
+client-side) only bar **new** entries: an anime that already has a downloaded episode never leaves
+the list, whatever its current status. For those orphans, `refreshOrphanAnimes` reloads
+cover/progress/blacklist in at most two batch queries; failure only blanks the AniList-sourced
+fields, instead of dropping the anime or failing the request. `countPendingEpisodes` counts by
+**episode number**, not `released - downloaded`, because a watched episode can still be saved
+(`watched_episodes_to_keep`).
 
-**`endpoint_anime_episodes.go`** — `AnimeEpisodeInfo` **não carrega nome de episódio**: a AniList não
-expõe título por episódio (`AiringNode` só tem número e horário) — decisions.md #52. `animeId` é o id
-de **media**, o mesmo do link `anilist.co/anime/{id}`; não existe um campo `anilistId` separado.
+**`endpoint_anime_episodes.go`** — `AnimeEpisodeInfo` **does not carry an episode name**: AniList
+does not expose a per-episode title (`AiringNode` only has number and time) — decisions.md #52.
+`animeId` is the **media** id, the same one as the `anilist.co/anime/{id}` link; there is no
+separate `anilistId` field.
 
-**Vocabulário — nunca chame anime avulso de "manual".** "Avulso"/standalone = acompanhado sem estar em
-lista nenhuma da AniList. "Manual" já significa outra coisa: o usuário mexeu naquele episódio à mão
-(`ManuallyManaged`, `ManualDownloadEpisode`). Os arquivos são `standalone.go`, `standalone_guard.go`,
-`endpoint_standalone_animes.go` e `endpoint_anilist_search.go`. O `standaloneGuard` é **uma regra de
-bloqueio com dois consumidores** (o `POST` e o handler de busca), para que "o front não deixa clicar" e
-"o back devolve erro" concordem por construção.
+**Vocabulary — never call a standalone anime "manual".** Standalone = tracked without being on any
+AniList list. "Manual" already means something else: the user touched that episode by hand
+(`ManuallyManaged`, `ManualDownloadEpisode`). The files are `standalone.go`, `standalone_guard.go`,
+`endpoint_standalone_animes.go` and `endpoint_anilist_search.go`. `standaloneGuard` is **one
+blocking rule with two consumers** (the `POST` and the search handler), so "the front does not let
+you click" and "the back returns an error" agree by construction.
 
-**`endpoint_torrents.go`** — o `path` de um arquivo é o caminho **cru** dos metadados e nunca é
-reescrito para "Ep NN": o objetivo do painel é justamente ler fansub/resolução/codec dali. `Progress`
-cai para a razão de peças (`PiecesHave/PiecesTotal`) quando `BytesCompleted` lê 0 com total não-zero.
-O `DELETE` está registrado no **mesmo** padrão de mux que pause/resume/announce — um padrão Go 1.22+
-sem prefixo de método casa todo verbo — então a checagem de método dentro do handler é o que separa os
-dois.
+**`endpoint_torrents.go`** — a file's `path` is the **raw** path from the metadata and is never
+rewritten to "Ep NN": the point of the panel is reading fansub/resolution/codec off it. `Progress`
+falls back to the piece ratio (`PiecesHave/PiecesTotal`) when `BytesCompleted` reads 0 with a
+non-zero total. `DELETE` is registered on the **same** mux pattern as pause/resume/announce — a
+Go 1.22+ pattern with no method prefix matches every verb — so the method check inside the handler
+is what separates the two.
 
 ### `src/internal/anilist/`
 
@@ -538,7 +553,7 @@ Variáveis de template (URL, headers e corpo): `{{title}}`, `{{message}}`, `{{an
 
 Builds the report bundle from **files in the data dir only** — config, `anime_settings`,
 `daemon.log` (or the newest `daemon-*.log.gz` after a rotation), `crash-pending.log` — and never
-asks the running daemon. That's what lets the planned CLI `report` command build the same bundle
+asks the running daemon. That's what lets the CLI `report` command build the same bundle
 with the daemon dead. The config is read as a raw map, **not** through `LoadConfigs`: a config that
 fails to load is exactly what a report must still carry. Nothing is ever sent; the user attaches
 the file by hand ([decisions.md #102](decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)).

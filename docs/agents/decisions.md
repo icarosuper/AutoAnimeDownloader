@@ -110,6 +110,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#101** — The disk guard counts what the queue still has to write, not only free space](#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)
 - [**#102** — The bug report has no backend: consent is the act of attaching the file](#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)
 - [**#103** — Log redaction is by key, and a test forces every new key to be classified](#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)
+- [**#104** — `--yes` is a CLI gate; the API keeps its query defaults](#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)
 
 ---
 
@@ -2958,3 +2959,18 @@ strings — then goes through the text scrubber: webhook URLs and header values 
 
 **Don't "fix" by:** defaulting unknown keys to `keep`, replacing the table with a regex over the
 whole line, or silencing the test by adding a key as `keep` without checking what it carries.
+
+### 104. --yes is a CLI gate; the API keeps its query defaults
+
+**The rule:** destructive CLI commands (`animes remove` / `redownload` / `delete` / `replace` /
+`replace-episode`, `torrents delete`) refuse without `--yes`: exit 2, code `CONFIRMATION_REQUIRED`,
+message lists the flags. No stdin, no prompt, no TTY check. After `--yes` they call the same
+endpoints with the same query defaults (`parseBoolQueryParam`: missing → `false`). `--keep-data`,
+`--block` and `--delete-episodes` map 1:1 onto those params; absent means `false`.
+
+The web UI keeps its dialog. The API does not grow a confirmation parameter. An agent cannot hang
+on stdin, and changing API defaults to match the web dialog would change the UI's "unchecked means
+false" contract too.
+
+**Don't "fix" by:** prompting when stdin is not a TTY, defaulting `--yes` on in scripts, or adding
+`confirm=true` to the API.

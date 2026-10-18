@@ -1,7 +1,7 @@
 # CLI parity
 
 **Date:** 2026-10-18
-**Status:** designed, not executed
+**Status:** executed
 **Origin:** `v2.6.0` in [TODO.md](../../TODO.md) — "Bring the CLI to parity with the webApp's features"
 **Expected scope:** `src/cmd/cli/` (split by resource, new commands), `src/internal/api/client.go`
 (one method per endpoint the CLI still lacks), `docs/guides/cli.md` (rewrite), conventions /

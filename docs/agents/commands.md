@@ -88,14 +88,22 @@ Not a test suite: live network, no pass/fail, so it never gets a `test-` prefix 
 ## CLI Notable Flags
 
 ```bash
+# global flags
+autoanimedownloader --json status               # stdout is the API data value (no envelope)
+autoanimedownloader --verbose status            # -v alias; --version is the version flag
+autoanimedownloader --endpoint http://host:8091 status
+
+# destructive commands refuse without --yes (exit 2, no prompt)
+autoanimedownloader animes remove 21 --yes
+autoanimedownloader animes remove 21 --yes --delete-episodes
+autoanimedownloader torrents delete HASH --yes --keep-data --block
+
 # logs command — flags mirror the web UI Logs page
 autoanimedownloader logs                        # last 1000 lines, colorized
 autoanimedownloader logs -n 500                 # last 500 lines
 autoanimedownloader logs --level error          # filter by level (all/debug/info/warn/error)
 autoanimedownloader logs --search "nyaa"        # text search (-q alias)
 autoanimedownloader logs --level warn -q retry  # combine filters
-
-# global flags
 autoanimedownloader --json logs                 # JSON output (returns lines/total/shown)
 NO_COLOR=1 autoanimedownloader logs             # disable ANSI colors
 ```
