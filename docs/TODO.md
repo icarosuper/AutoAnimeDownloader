@@ -3,12 +3,12 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.4.0`.
+Current version: `v2.5.0`.
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
 migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up to right after
-`v2.4.0` — bug report and CLI parity aren't visible to someone who only looks at the repo.
+`v2.5.0` — CLI parity isn't visible to someone who only looks at the repo.
 
 > The old Stage 1 (close the ceilings of what already runs) closed on 2026-08-30 **with no code**:
 > all three items were measured and all three said not to touch anything. Pack numbering by folder
@@ -34,10 +34,11 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.5.0` — bug report
 
-- Bug report mechanism — must exist well before promoting the project, otherwise feedback arrives
-  without context. **Implemented on 2026-10-14, not released yet** ([decisions.md #102](agents/decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file),
+- ~~Bug report mechanism~~ — **released in `v2.5.0` on 2026-10-18** ([decisions.md #102](agents/decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file),
   [#103](agents/decisions.md#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)). Spec:
-  [bug-report](superpowers/specs/2026-10-13-bug-report-design.md)
+  [bug-report](superpowers/specs/2026-10-13-bug-report-design.md).
+  A redacted diagnostics bundle plus crash capture, downloaded from the web UI and attached to a
+  GitHub issue. No backend: consent is the act of attaching the file.
 
 ## `v2.6.0` — CLI parity
 
