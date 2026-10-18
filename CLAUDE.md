@@ -12,7 +12,8 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add an entry to `decisions.md`
    - `architecture.md` documents what **the code can't answer by itself**: flow between files, invariants that hurt to break, negative facts ("there is no `daemon.go`"), disambiguation of similar names, and the pointer to the decision. **Don't** list symbols with a one-line purpose — `grep '^func '` answers that for free and always up to date; a hand-written symbol table is a copy that goes stale. A new file only gets text if it brings one of those five; deleted file → deleted text. The question it answers is "which file do I open and what bites me there", not "which functions exist"
    - New entry in `decisions.md` → next number (the highest today is **#103**, and entries are not in numeric order in the file) + one line in the Index at the top. When referencing a decision, always use the anchor: `[decisions.md #43](decisions.md#43-a-identidade-de-um-anime-é-mediaid-status-é-uma-pergunta-por-conta-download--or-deleção--and)`
-3. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
+3. **CLI parity**: a new API endpoint, or a web-app action that hits the API, ships with its CLI command in the **same change** (client method, nested command, `--help`, `docs/guides/cli.md`). Checklist in [conventions.md](docs/agents/conventions.md). Frontend-only work (layout, i18n, presets that live in the frontend, WebSocket) does not. A new `config.json` field is already settable through `config set`.
+4. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
 
 ## Important — Everything in English
 
@@ -69,7 +70,7 @@ request already covers isn't "in passing", it's the job. (Portuguese text is the
 ## Docs
 
 - [Architecture](docs/agents/architecture.md) — read when navigating code or adding features; update when adding packages, symbols, or API endpoints; maps all packages, symbols, data flow, API endpoints
-- [Conventions](docs/agents/conventions.md) — read when writing Go code; error handling, handler pattern, naming, checklists for new endpoints/config fields
+- [Conventions](docs/agents/conventions.md) — read when writing Go code; error handling, handler pattern, naming, checklists for new endpoints/config fields/CLI commands
 - [Config Reference](docs/agents/config.md) — read when touching `config.json` fields
 - [Environment Variables](docs/agents/environment.md) — read when touching env vars or dev setup
 - [Testing](docs/agents/testing.md) — read when writing or running tests; mock patterns

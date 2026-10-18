@@ -94,38 +94,59 @@ import (
 | JSON tags | snake_case | `json:"completed_anime_path"` |
 | Go types | PascalCase | `EpisodeStruct`, `SessionManager` |
 
-## Legibilidade
+## Readability
 
-**Nomes explicam.** Função e variável têm nome que diz o que são/fazem sem precisar ler o corpo. Nada de `tmp`, `data`, `x`, `doStuff`. Se o nome precisa de comentário para ser entendido, o nome está errado — troque o nome, não adicione o comentário.
+**Names explain.** Functions and variables are named so the reader knows what they are without
+opening the body. No `tmp`, `data`, `x`, `doStuff`. If a name needs a comment to be understood,
+the name is wrong — rename it, do not add the comment.
 
-**Condição ou expressão inline grande vira variável.** Quando um `if` (ou qualquer expressão) junta várias condições, o nome da variável passa a ser a explicação:
+**A large inline condition or expression becomes a variable.** When an `if` (or any expression)
+joins several checks, the variable name is the explanation:
 
 ```go
-// ruim
+// bad
 if ep.Number > anime.Progress && !ep.Downloaded && ep.Number <= anime.EpisodeCount {
 
-// bom
+// good
 isPendingEpisode := ep.Number > anime.Progress && !ep.Downloaded && ep.Number <= anime.EpisodeCount
 if isPendingEpisode {
 ```
 
-**Trecho que virou responsabilidade nova vira função.** Quando um bloco cresce e passa a fazer *outra coisa* dentro da função, extraia com um nome que diga essa coisa. O gatilho é a responsabilidade ter mudado, não a contagem de linhas — não quebre uma função coesa só porque ficou longa.
+**A block that grew a new responsibility becomes a function.** When a stretch of code starts
+doing *something else* inside the function, extract it and name that thing. The trigger is the
+change of responsibility, not the line count — do not split a cohesive function just because it
+got long.
 
-## Comentários
+## Comments
 
-Não escrever comentário explicando **o que** o código faz — só **por que** ele existe daquele jeito, e apenas quando não for óbvio pelos nomes de variáveis e funções. Comentário inútil encontrado fora dessa regra: remover.
+Do not write a comment that explains **what** the code does — only **why** it exists that way,
+and only when the names of the variables and functions do not already make it obvious. A comment
+found outside that rule: delete it.
 
-**Decisão não óbvia → `decisions.md` + referência no código.** Tomou uma decisão que o próximo leitor questionaria ("por que assim e não do jeito óbvio?"), registre uma entrada em [decisions.md](decisions.md) e aponte para ela do trecho relevante, pelo número:
+**Non-obvious decision → `decisions.md` + a pointer in the code.** If a later reader would ask
+"why this, when the obvious way is the other one?", add an entry to [decisions.md](decisions.md)
+and point to it from the relevant stretch, by number:
 
 ```go
-// Converte os AnimeID gravados de id de entrada para id de midia (decisions.md #43).
+// Converts saved AnimeIDs from list-entry ids to media ids (decisions.md #43).
 ```
 
-O formato usado no repo é `decisions.md #N` — mantenha ele, é o que o `grep` acha.
+The format used in the repo is `decisions.md #N` — keep it, that is what `grep` finds.
 
 ## Dual FileManagerInterface
 
 `FileManagerInterface` is declared **twice** — in `api/server.go` and `daemon/helpers.go`. Both must be kept in sync. When adding a new method to `files.FileManager`, update **both** interfaces.
+
+## CLI stays at parity with the API
+
+A new API endpoint, or a web-app action that hits the API, ships with its CLI command in the
+**same change**. The CLI is how an agent (and a human who does not open the web UI) drives the
+daemon — leaving a verb only on the screen means the agent cannot do it.
+[cli-parity spec](../superpowers/specs/2026-10-18-cli-parity-design.md).
+
+Does not apply to frontend-only work: layout, i18n, presets that live in the frontend, WebSocket.
+A new `config.json` field is already settable through `config set` (passthrough of every JSON
+key); no new command.
 
 ## Adding a New API Endpoint — Checklist
 
@@ -138,10 +159,15 @@ O formato usado no repo é `decisions.md #N` — mantenha ele, é o que o `grep`
 3. If handler needs new `FileManager` method:
    - Add method to `files.FileManager`
    - Update `FileManagerInterface` in **both** `api/server.go` and `daemon/helpers.go`
-4. If exposing to CLI: add method in CLI's `client.go`
-5. Write tests in `endpoint_<feature>_test.go`
+4. CLI, in the same change:
+   - method on `api.Client` (`src/internal/api/client.go`)
+   - nested command under the matching resource in `src/cmd/cli/` (`animes …`, `torrents …`)
+   - `--help` text (`Usage`, `ArgsUsage`, flags, defaults). Destructive actions take `--yes`
+   - `docs/guides/cli.md`
+5. Write tests in `endpoint_<feature>_test.go` (and the CLI/client tests for the new command)
 6. Run tests: `go test ./...`
-7. Update `docs/agents/architecture.md` API table — ela é a **única** doc de endpoint desde que o Swagger saiu
+7. Update `docs/agents/architecture.md` API table — it is the **only** endpoint doc since Swagger
+   left the binary
 
 ## Adding a New Config Field — Checklist
 
@@ -150,4 +176,5 @@ O formato usado no repo é `decisions.md #N` — mantenha ele, é o que o `grep`
 3. Add validation in `handleUpdateConfig()` in `endpoint_config.go` if needed
 4. Update `docs/agents/config.md`
 5. Update frontend config form (`src/internal/frontend/src/routes/Config.svelte`)
-6. Run tests: `go test ./...`
+6. CLI: no new command. `config set` already accepts every JSON key; `config get` lists them
+7. Run tests: `go test ./...`
