@@ -31,6 +31,7 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   [myanimelist-list-source](superpowers/specs/2026-10-12-myanimelist-list-source-design.md).
   MAL is a **list source** only (status + progress); identity, episodes and metadata stay on
   AniList, mapped through `idMal`. The list comes from the unofficial `load.json`, so no client ID
+  is needed; the list must be public.
 
 ## `v2.5.0` — bug report
 
