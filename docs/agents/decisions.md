@@ -925,7 +925,7 @@ A URL fica fora porque escape de URL tem regras próprias, e os headers passam p
 
 ### 48. `max_episodes_per_anime` nunca limitou batch — a regra agora vive na janela de packs, não num teto de contagem
 
-**Ver também:** [`2026-08-13-batch-per-filter-design.md`](../superpowers/specs/2026-08-13-batch-per-filter-design.md) — a spec que substituiu o teto de contagem (`max_batch_episodes`) descrito abaixo por elegibilidade decidida pelo resultado da busca. As entradas 59-62 logo após esta documentam o desenho atual em detalhe.
+**Ver também:** [#59](#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado) — elegibilidade a pack é o resultado da busca filtrada, não um teto de contagem (`max_batch_episodes`, removido). As entradas 59-62 documentam o desenho atual.
 
 **Location (histórico):** quando esta decisão foi escrita, `daemon/episodes.go` tinha `willBatchAnime` e `resolveSearchStrategy`; ambos foram removidos pela spec de batch-por-filtro. O que existe hoje: `daemon/episodes.go` — `selectEpisodes`, `effectiveMax`, `windowEnd`, `partitionSearchResults`, `pickBatches`, `packSet.covering`, `assignBatches`; `daemon/search.go` — `filterBySize`; `daemon/helpers.go` — `checkDiskSpace`/`ErrInsufficientDiskSpace`; `daemon/jobs.go` — `partiallyOrganized`; `api/endpoint_status.go` — `disk_low`.
 
@@ -1232,7 +1232,7 @@ O `PUT /animes/{id}/settings` usa ponteiro (`*int`) e faz merge parcial: um `PUT
 
 **Location:** `daemon/debug.go` — `RunAnimeDebug`; espelha `daemon/episodes.go` — `processAnimeEpisodes`.
 
-**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, roda a mesma busca por anime + `partitionSearchResults`/`pickBatches` para decidir se um pack cobre a janela (e, se sim, re-roda `selectEpisodes` com o teto levantado), e cai em `searchSingleEpisode` quando nenhum episódio pendente recebeu magnet de pack/filme — três trechos duplicados do loop de produção. Ver a spec `2026-08-13-batch-per-filter-design.md`: essa entrada documentava `willBatchAnime`/`resolveSearchStrategy`, removidos por essa spec — elegibilidade a pack agora é decidida pelo resultado da busca filtrada, não por metadado do AniList (ver entrada nova sobre isso).
+**What it looks like:** o debug de um anime não itera `anime.Media.AiringSchedule.Nodes`; monta a lista com `anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`, roda a mesma busca por anime + `partitionSearchResults`/`pickBatches` para decidir se um pack cobre a janela (e, se sim, re-roda `selectEpisodes` com o teto levantado), e cai em `searchSingleEpisode` quando nenhum episódio pendente recebeu magnet de pack/filme — três trechos duplicados do loop de produção. `willBatchAnime`/`resolveSearchStrategy` saíram: elegibilidade a pack é o resultado da busca filtrada, não metadado do AniList ([#59](#59-elegibilidade-a-batch-deixou-de-ser-metadado-e-virou-filtro-de-resultado)).
 
 **Why it's right:**
 
@@ -2708,7 +2708,6 @@ se a re-adição virar churn observado, aí sim se discute estado persistido.
 the MAL halves of `GetAnimeInfo`/`GetAnimeInfoByIDs` (`anilist/anilist.go`); the call sites in
 `daemon/verification.go` (`searchAnilist`, the delete fetch, `allAccountsAgreeOnDelete`,
 `malAccountKey`) and `api/endpoint_animes.go` (`fetchMALEntries`) / `api/standalone_guard.go`.
-Spec: [myanimelist-list-source](../superpowers/specs/2026-10-12-myanimelist-list-source-design.md).
 
 A MAL account only answers "which anime, in which status, with what progress". Each MAL id is
 mapped to an AniList `Media.Id` through `idMal_in`, and from there the entry is the same synthetic

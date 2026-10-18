@@ -2,8 +2,7 @@
 
 **Data:** 2026-08-24
 **Status:** desenhado, não implementado
-**Closes:** "Filtro por idioma de legenda nas prioridades (ex.: PT-BR)" from `TODO-competitive.md`
-(a local list that was never committed — there is no such file in the repo)
+**Closes:** "No release — subtitle language filter" in [TODO.md](../../TODO.md)
 **Escopo:** `internal/nyaa` (config, sinal, ordenação, categoria de busca),
 `internal/daemon/search.go` (filtro duro), `internal/files` (campo de config),
 `frontend/routes/Priorities.svelte` (UI).
@@ -420,7 +419,7 @@ Depois da implementação, conforme [CLAUDE.md](../../../CLAUDE.md):
 
 - **Override por anime.** Faz sentido (aceitar inglês num shounen e exigir PT-BR no que se
   assiste acompanhado) e `AnimeSettings` é o lugar, mas custa endpoint + UI por anime. Fica
-  anotado no `TODO-competitive.md`.
+  fora desta spec.
 - **Listar arquivos do torrent.** Softsub vive dentro do `.mkv`; não há o que listar. Medido.
 - **AnimeTosho como fonte de idioma.** O `files[]` dele traz `filename`/`size`/`crc32` e nenhum
   sabe idioma de legenda. Não muda o veredito de [sources.md](../../agents/sources.md).

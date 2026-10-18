@@ -12,9 +12,8 @@ configs), `src/tests/mocks` e `src/tests/unit/nyaa_test.go` (fixtures deixam de 
 
 ## O objetivo é publicabilidade, não múltiplas fontes
 
-Esta spec **não** é a continuação da [Etapa 0](2026-08-16-multiple-sources-stage0-design.md). Aquela
-pergunta se existe swarm alternativo para anime velho, continua sem resposta, e nada aqui a
-responde. Trocar de indexador continua não ressuscitando swarm.
+Trocar de indexador continua não ressuscitando swarm. Esta spec não mede isso e não constrói
+uma segunda fonte.
 
 O que esta spec quer é uma coisa só: **o repositório e o binário deixarem de conter o endereço, a
 query e o layout do Nyaa**. Que isso destrave uma segunda fonte é consequência, não motivo — e por
@@ -193,7 +192,6 @@ está cumprido.
 ## Fora do escopo
 
 - **Múltiplas fontes ao mesmo tempo**, merge e deduplicação entre fontes. Uma fonte ativa por vez.
-  Reabrir só quando a Etapa 0 confirmar que existe swarm alternativo.
 - **`kind: json` e `kind: rss`** podem ficar para depois da etapa 4 — o Nyaa é `html`, e nenhuma
   fonte conforme ao contrato acima está identificada hoje. Desenhados aqui para que o formato não
   precise mudar quando chegarem.

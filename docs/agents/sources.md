@@ -263,7 +263,7 @@ frescor de seeders.
 | Fonte | Veredito |
 |---|---|
 | **AniDex** | **Inviável** (medido 16/ago): `GET anidex.info/rss/?q=…` → **HTTP 403**, js-challenge do DDoS-Guard (`/.well-known/ddos-guard/js-challenge/`). Exigiria browser headless a cada requisição do daemon. Fora de escopo. |
-| **TokyoTosho** | **Veredito anterior ("mesmo conteúdo do Nyaa") caiu.** Medido 16/ago: `rss.php?terms=…&type=1` → 147 itens, e ele **agrega outros indexadores** — trackers `t.acg.rip`, `tr.bangumi.moe`, `open.acgtracker.com`, `tracker.kamigami.org`, hosts `acg.rip` e `files.catbox.moe`. Infohash diferente ⇒ swarm potencialmente diferente: é a única candidata que poderia ressuscitar conteúdo morto. **A pegadinha:** o RSS não expõe seeders — as tags do `<item>` são só `title`, `category`, `link`, `description`, `guid`, `pubDate` (magnet vem no HTML da `description`, e o infohash em **base32**, não hex). Sem seeders, `min_seeders` não tem o que filtrar; medir "está vivo?" exige ir ao swarm. Ver a spec da Etapa 0 em `docs/superpowers/specs/`. |
+| **TokyoTosho** | **Veredito anterior ("mesmo conteúdo do Nyaa") caiu.** Medido 16/ago: `rss.php?terms=…&type=1` → 147 itens, e ele **agrega outros indexadores** — trackers `t.acg.rip`, `tr.bangumi.moe`, `open.acgtracker.com`, `tracker.kamigami.org`, hosts `acg.rip` e `files.catbox.moe`. Infohash diferente ⇒ swarm potencialmente diferente: é a única candidata que poderia ressuscitar conteúdo morto. **A pegadinha:** o RSS não expõe seeders — as tags do `<item>` são só `title`, `category`, `link`, `description`, `guid`, `pubDate` (magnet vem no HTML da `description`, e o infohash em **base32**, não hex). Sem seeders, `min_seeders` não tem o que filtrar; medir "está vivo?" exige ir ao swarm. |
 | **RSS de fansub direto** (SubsPlease, Erai-raws) | Sinal limpíssimo e sem ruído para a temporada corrente; **inútil para backlog** (não hospedam catálogo antigo). Serve como "fonte preferida" para anime em exibição, não como fonte geral. |
 | **Usenet / NZB** | O AnimeTosho carrega `nzb_url`. Velocidade de HTTP, sem problema de seeder, retenção longa. Exige provider pago + indexer + um caminho de download inteiro em paralelo ao `rain`. Mudança grande. |
 | **Debrid** (Real-Debrid, AllDebrid) | Manda o magnet, o serviço baixa do lado dele, e você escolhe **quais arquivos** puxar por HTTP. É a única saída que dá seleção por episódio dentro de pack sem tocar no `rain`. Custa mensalidade e vira dependência externa. |
@@ -276,13 +276,10 @@ frescor de seeders.
    fonte.
 2. **Não trocar o Nyaa por nada agora.** Nem RSS (perde ordenação e paginação) nem AnimeTosho
    (perde ordenação, seeders em cache de ~22 dias). O ganho seria de parsing; o custo é a busca.
-3. **Responder a Etapa 0 antes de escrever adapter** — "existe fonte com infohash **diferente** e
-   peers **vivos** onde o Nyaa está morto?". Só o TokyoTosho tem sinal para isso. Enquanto não for
-   medido, arquitetura de múltiplas fontes é especulação.
-4. **Lista de arquivos do pack** — feito, ver `decisions.md` #84. Veio da página de detalhe do
+3. **Lista de arquivos do pack** — feito, ver `decisions.md` #84. Veio da página de detalhe do
    **Nyaa** (`/view/<id>`), não do AnimeTosho: só ela funciona em pack antigo. Resolveu a cobertura
    real; o segundo uso — desempatar a convenção de numeração pela contagem de arquivos por pasta
    (seção "Granularidade e numeração dos packs") — continua de fora. O AnimeTosho como fonte
    adicional só sobra para match por `anidb_aid`. Nenhum dos dois como substituto.
-5. **Debrid/Usenet** — só se seleção por arquivo virar requisito de verdade. É troca de
-   *protocolo*, e é a saída se a Etapa 0 for refutada.
+4. **Debrid/Usenet** — só se seleção por arquivo virar requisito de verdade. É troca de
+   *protocolo*, não de indexador.

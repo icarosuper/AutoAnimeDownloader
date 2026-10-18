@@ -166,7 +166,7 @@ See the [Build Guide](docs/guides/build.md) for full details including cross-com
 
 Configure through the web UI or CLI. Settings are stored in:
 - Linux: `~/.autoAnimeDownloader/config.json`
-- Windows: `%APPDATA%\AutoAnimeDownloader\config.json`
+- Windows: `%APPDATA%\.autoAnimeDownloader\config.json`
 
 Key settings:
 

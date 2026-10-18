@@ -69,7 +69,9 @@ request already covers isn't "in passing", it's the job. (Portuguese text is the
 
 ## Docs
 
-- [Architecture](docs/agents/architecture.md) — read when navigating code or adding features; update when adding packages, symbols, or API endpoints; maps all packages, symbols, data flow, API endpoints
+- [v3.0.0 Serval](docs/v3.0.0.md) — working checklist for the rename release; coordinate slices across chats here; lock Open decisions before any rename diff
+- [Specs](docs/superpowers/specs/README.md) — unimplemented design docs only; executed specs were deleted (git history still has them)
+- [Architecture](docs/agents/architecture.md) — read when navigating code or adding features; update when a package, endpoint or invariant appears or disappears. Flow, negative facts, disambiguation and the API table — not a symbol list
 - [Conventions](docs/agents/conventions.md) — read when writing Go code; error handling, handler pattern, naming, checklists for new endpoints/config fields/CLI commands
 - [Config Reference](docs/agents/config.md) — read when touching `config.json` fields
 - [Environment Variables](docs/agents/environment.md) — read when touching env vars or dev setup

@@ -22,10 +22,13 @@ AutoAnimeDownloader/
 │   │   ├── daemon/           # Core daemon logic / verification loop
 │   │   ├── files/            # Config and file management
 │   │   ├── logger/           # Logging system
-│   │   ├── anilist/          # Anilist API client
+│   │   ├── anilist/          # Anilist API client (MAL lists live here too)
 │   │   ├── nyaa/             # Nyaa scraper and torrent priority/matching
 │   │   ├── torrents/         # Embedded BitTorrent client (rain/v2) behind TorrentBackend
 │   │   ├── notifications/    # Webhook notifications
+│   │   ├── diagnostics/      # Bug-report bundle and crash files
+│   │   ├── datadir/          # Data-dir path (leaf package)
+│   │   ├── version/          # Build-time version via ldflags
 │   │   ├── tray/             # System tray icon
 │   │   └── frontend/         # Svelte frontend (embedded into the daemon binary)
 │   └── tests/
@@ -38,7 +41,7 @@ AutoAnimeDownloader/
 └── build/                    # Build outputs (gitignored)
 ```
 
-See [Architecture](../agents/architecture.md) for a package-by-package map of symbols and data flow.
+See [Architecture](../agents/architecture.md) for flow, invariants and which file to open.
 
 ## Setup
 
@@ -64,7 +67,7 @@ To run the daemon alone with verbose console logs:
 ENVIRONMENT=dev go run ./src/cmd/daemon
 ```
 
-Logs are written to `~/.autoAnimeDownloader/daemon.log` (Linux/macOS) or `%APPDATA%\AutoAnimeDownloader\daemon.log` (Windows); in dev mode they also print to console.
+Logs are written to `~/.autoAnimeDownloader/daemon.log` (Linux/macOS) or `%APPDATA%\.autoAnimeDownloader\daemon.log` (Windows); in dev mode they also print to console.
 
 ## Testing
 
@@ -82,7 +85,7 @@ For mock patterns and how to write new tests, see [Testing](../agents/testing.md
 ## Debugging a Specific Anime
 
 ```bash
-make debug-anime ID=123   # ID is the AniList MediaList ID
+make debug-anime ID=123   # ID is the AniList media ID (anilist.co/anime/{id})
 ```
 
 Runs a one-shot search/match pass against Nyaa without downloading anything or touching the daemon state. See [Commands](../agents/commands.md#debugging-a-specific-anime) and [Troubleshooting Downloads](../agents/troubleshooting-downloads.md) for details.

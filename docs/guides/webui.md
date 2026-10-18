@@ -30,6 +30,18 @@ Per-anime episode list, opened by clicking an anime on the Status page:
 - Episode table (episode number, Anilist watch status, downloaded state)
 - Per-episode actions: download, delete, re-download, replace with a manual magnet link
 - Bulk actions on selected episodes: download, delete, release (unpin from retry queue)
+- File list of the torrent attached to an episode, when metadata is in
+
+### Add anime (`/add`)
+
+Search AniList and add a title as a **standalone** anime (tracked without being on any AniList
+list). An AniList account is optional; this is the entry point for an install with none.
+
+### Downloads (`/downloads`)
+
+Live torrent table for the embedded client: progress, speeds, queue order, pause / resume /
+announce / prioritize / delete (single or bulk). Expanding a row shows the files inside the
+torrent.
 
 ### Config (`/config`)
 
@@ -52,6 +64,12 @@ Real-time daemon logs over WebSocket:
 - Line count and level filter (all/debug/info/warn/error), text search
 - Autoscroll and live-tail toggles, copy-to-clipboard
 - Manual reload button
+
+### Report (`/report`)
+
+Builds a redacted diagnostics bundle (environment, config, log, optional crash file) to attach to
+a GitHub issue. Consent is the act of attaching the file; there is no backend. The tray menu and
+the crash banner on Status also land here. See [decisions.md #102](../agents/decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file).
 
 ## Troubleshooting
 

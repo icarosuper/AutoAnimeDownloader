@@ -1,42 +1,16 @@
-# Auto Anime Downloader - Frontend
+# Frontend
 
-Frontend SPA para o Auto Anime Downloader, construído com Svelte + Vite + Tailwind CSS.
-
-## Desenvolvimento
-
-```bash
-npm install
-npm run dev
-```
-
-O servidor de desenvolvimento estará disponível em `http://localhost:5173` (ou outra porta se 5173 estiver ocupada).
-
-## Build
-
-Para gerar os arquivos estáticos para produção:
+Svelte 5 SPA embedded in the daemon (`//go:embed dist` in `embed.go`). The package manager is
+**Bun**, not npm.
 
 ```bash
-npm run build
+bun install
+bun run dev      # Vite, default http://localhost:5173
+bun run build    # writes dist/, which the daemon serves
 ```
 
-Os arquivos serão gerados no diretório `dist/`, que será servido pelo daemon.
+Day-to-day: `make dev` from the repo root runs Vite and the Go daemon together. There is no
+`.env` file — Vite's port is `VITE_PORT` (default 5173); the daemon proxies `/api`.
 
-## Variáveis de Ambiente
-
-Crie um arquivo `.env` baseado em `.env.example`:
-
-```bash
-cp .env.example .env
-```
-
-Variáveis disponíveis:
-
-- `VITE_API_BASE_URL`: URL base da API do daemon (padrão: `http://localhost:8091/api/v1`)
-- `VITE_PORT`: Porta do servidor de desenvolvimento Vite (padrão: `5173`)
-
-## Estrutura
-
-- `src/routes/` - Páginas da aplicação
-- `src/components/` - Componentes reutilizáveis
-- `src/lib/api/` - Cliente HTTP para a API
-
+Contributor workflow: [development.md](../../../docs/guides/development.md).
+Pages: [webui.md](../../../docs/guides/webui.md).

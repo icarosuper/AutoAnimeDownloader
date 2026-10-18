@@ -142,7 +142,8 @@ The format used in the repo is `decisions.md #N` — keep it, that is what `grep
 A new API endpoint, or a web-app action that hits the API, ships with its CLI command in the
 **same change**. The CLI is how an agent (and a human who does not open the web UI) drives the
 daemon — leaving a verb only on the screen means the agent cannot do it.
-[cli-parity spec](../superpowers/specs/2026-10-18-cli-parity-design.md).
+`--yes` is a CLI gate; the API keeps its query defaults
+([decisions.md #104](decisions.md#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)).
 
 Does not apply to frontend-only work: layout, i18n, presets that live in the frontend, WebSocket.
 A new `config.json` field is already settable through `config set` (passthrough of every JSON
