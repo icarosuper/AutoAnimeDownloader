@@ -29,6 +29,8 @@ Output lands in `build/linux-amd64/`, `build/linux-arm64/`, `build/windows-amd64
 
 `VERSION` defaults to `git describe --tags --always --dirty`; override with `make build VERSION=1.2.3`.
 
+Shipping a version (tag, GitHub Release, AUR) is [release.md](release.md).
+
 ## Windows
 
 There is no native Windows build script. Build from Windows either through WSL / Docker Desktop

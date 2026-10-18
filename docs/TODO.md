@@ -3,12 +3,13 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.5.0`.
+Current version: `v2.6.0`. Stamp a version (tag, GitHub Release, AUR):
+[guides/release.md](guides/release.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
 migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up to right after
-`v2.5.0` — CLI parity isn't visible to someone who only looks at the repo.
+`v2.6.0`.
 
 > The old Stage 1 (close the ceilings of what already runs) closed on 2026-08-30 **with no code**:
 > all three items were measured and all three said not to touch anything. Pack numbering by folder
@@ -43,8 +44,8 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.6.0` — CLI parity
 
-- ~~Bring the CLI to parity with the API / webApp~~ — implemented 2026-10-18, waiting on the
-  `v2.6.0` stamp. Spec:
+- ~~Bring the CLI to parity with the API / webApp~~ — **released in `v2.6.0` on 2026-10-18**
+  ([decisions.md #104](agents/decisions.md#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)). Spec:
   [cli-parity](superpowers/specs/2026-10-18-cli-parity-design.md). Nested commands, `--json` as
   the agent contract, `--yes` on destructive actions, no prompts. A new API endpoint ships with
   its CLI command in the same change.

@@ -75,6 +75,7 @@ request already covers isn't "in passing", it's the job. (Portuguese text is the
 - [Environment Variables](docs/agents/environment.md) — read when touching env vars or dev setup
 - [Testing](docs/agents/testing.md) — read when writing or running tests; mock patterns
 - [Commands](docs/agents/commands.md) — read when building or running the daemon/frontend
+- [Release](docs/guides/release.md) — read when stamping a version (tag, GitHub Release, AUR)
 - [Decisions](docs/agents/decisions.md) — read before "fixing" unusual patterns; 104 self-contained entries. **Start from the Index at the top and read only the entry it points to** — the whole file is 2k lines and never needs to be read end to end
 - [Troubleshooting Downloads](docs/agents/troubleshooting-downloads.md) — follow when animes fail to download; diagnose search/filter logic bugs step by step
 - [Sources](docs/agents/sources.md) — read before adding a torrent source; measured limits of Nyaa, the AnimeTosho JSON API, and why the alternatives were rejected

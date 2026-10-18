@@ -43,6 +43,8 @@ make release PLATFORM=linuxamd64    # build + package in one step
 # Makefile delegates to it — don't add build logic directly to Makefile targets
 ```
 
+`make release` packages locally. Shipping a version is tagging: [guides/release.md](../guides/release.md).
+
 The Linux install targets are **not** in this Makefile — they ship inside the release zip
 (`infra/linux/Makefile`): `make install-user` / `sudo make install-global`, and the matching
 `uninstall-user` / `uninstall-global`.
