@@ -198,8 +198,7 @@ type AniListResponse struct {
 }
 
 type PageInfo struct {
-	HasNextPage bool   `json:"hasNextPage"`
-	EndCursor   string `json:"endCursor"`
+	HasNextPage bool `json:"hasNextPage"`
 }
 
 type MediaListStatus string
@@ -543,7 +542,6 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 				}
 				pageInfo {
 					hasNextPage
-					endCursor
 				}
 			}
 		}
@@ -624,7 +622,6 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 				}
 				pageInfo {
 					hasNextPage
-					endCursor
 				}
 			}
 		}
