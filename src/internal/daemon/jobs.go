@@ -414,10 +414,10 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	}
 	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", len(created)).Msg("Organized torrent into library")
 	if configs.DisableSeeding {
-		if err := backend.Remove(hash, true); err != nil {
-			logger.Logger.Warn().Err(err).Str("hash", hash).Msg("DisableSeeding: failed to remove seeding torrent")
+		if err := backend.Remove(hash, false); err != nil {
+			logger.Logger.Warn().Err(err).Str("hash", hash).Msg("DisableSeeding: failed to remove torrent and data after organize")
 		} else {
-			logger.Logger.Info().Str("hash", hash).Msg("DisableSeeding: removed seeding torrent after organize")
+			logger.Logger.Info().Str("hash", hash).Msg("DisableSeeding: removed torrent and download data after organize")
 		}
 	}
 	return true

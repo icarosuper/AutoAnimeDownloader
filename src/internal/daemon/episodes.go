@@ -58,6 +58,19 @@ func selectEpisodes(
 		savedEp := savedEpisodesFullMap[key]
 		isInTorrents := episodeInTorrents(savedEp.EpisodeHash, torrentsHashSet)
 
+		// Quando a biblioteca ja tem o episodio organizado (LibraryPaths preenchido — ja
+		// hardlinkado ou baixado direto), nao ha ponto em baixar de novo: o usuario pede
+		// "no upload" justamente para o daemon nao ficar com nada em disco para semear.
+		// Checar o LibraryPaths aqui (e nao so o estado do torrent) evita re-baixar apos o
+		// DisableSeeding remover o torrent. Packs com cobertura parcial ficam pro caminho de
+		// pack: adiar para o download quando a janela ainda nao foi coberta.
+		if len(savedEp.LibraryPaths) > 0 && !savedEp.IsBatch {
+			// Episodio ja esta na biblioteca: conta como "downloaded" e nao baixa.
+			downloadedEpisodesOfAnime++
+			sel.downloaded = downloadedEpisodesOfAnime
+			continue
+		}
+
 		shouldDownload, shouldDelete, skipCode := checkEpisode(configs, maxEpisodes, ep, anime, savedEpisodesMap[key], &downloadedEpisodesOfAnime, isInTorrents, keepSet[key], savedEp.IsBatch)
 
 		if skipCode == IssueMaxEpisodesPerAnime {
