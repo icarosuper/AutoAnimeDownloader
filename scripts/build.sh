@@ -52,9 +52,14 @@ fi
 mkdir -p "$BUILD_DIR"
 
 # The Dockerfiles embed src/internal/frontend/dist; CI builds it in its own step.
+# Skip frontend rebuild if dist already exists to save time on local builds.
 if [ -z "$CI" ] && [ -z "$GITHUB_ACTIONS" ]; then
-    echo -e "${YELLOW}Building frontend...${NC}"
-    (cd src/internal/frontend && bun install --frozen-lockfile && bun run build)
+    if [ -d "src/internal/frontend/dist" ] && [ "$(ls -A src/internal/frontend/dist 2>/dev/null | wc -l)" -gt 0 ]; then
+        echo -e "${YELLOW}Frontend already built, skipping...${NC}"
+    else
+        echo -e "${YELLOW}Building frontend...${NC}"
+        (cd src/internal/frontend && bun install --frozen-lockfile && bun run build)
+    fi
 fi
 
 _has_buildx() {

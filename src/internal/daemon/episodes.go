@@ -35,9 +35,13 @@ type episodeSelection struct {
 
 // selectEpisodes decide, para cada episodio da lista, se ele deve ser baixado ou apagado.
 //
-// E PURA: sem I/O e sem estado entre chamadas (o contador de episodios baixados e local), e por
+// E PURA: sem I/O e sem estado entre chamadas (o counters de episodios baixados e local), e por
 // isso pode rodar duas vezes no mesmo passe — uma com o limite por anime valendo (que e a que
 // produz as delecoes) e outra com ele levantado quando um pack foi escolhido. Ver decisions.md.
+//
+// libraryExists, quando nao nil, checa no filesystem se o episodio ja esta na biblioteca
+// (usando o caminho salvo em LibraryPaths, ou reverse-parsing do nome do arquivo). Quando nil,
+// usa apenas o LibraryPaths salvo (comportamento original, sem I/O).
 func selectEpisodes(
 	configs *files.Config,
 	maxEpisodes int,
@@ -47,6 +51,7 @@ func selectEpisodes(
 	savedEpisodesFullMap map[files.EpisodeKey]files.EpisodeStruct,
 	torrentsHashSet map[string]bool,
 	keepSet, blockedMap map[files.EpisodeKey]bool,
+	libraryExists func(files.EpisodeKey) bool,
 ) episodeSelection {
 	var sel episodeSelection
 	downloadedEpisodesOfAnime := 0
@@ -64,7 +69,11 @@ func selectEpisodes(
 		// Checar o LibraryPaths aqui (e nao so o estado do torrent) evita re-baixar apos o
 		// DisableSeeding remover o torrent. Packs com cobertura parcial ficam pro caminho de
 		// pack: adiar para o download quando a janela ainda nao foi coberta.
-		if len(savedEp.LibraryPaths) > 0 && !savedEp.IsBatch {
+		//
+		// libraryExists checa no filesystem quando o torrent mudou (ex: same episode number
+		// em outro torrent) e o LibraryPaths pode ter sumido ou ter nome diferente.
+		episodeInLibrary := len(savedEp.LibraryPaths) > 0 || (libraryExists != nil && libraryExists(key))
+		if episodeInLibrary && !savedEp.IsBatch {
 			// Episodio ja esta na biblioteca: conta como "downloaded" e nao baixa.
 			downloadedEpisodesOfAnime++
 			sel.downloaded = downloadedEpisodesOfAnime
@@ -137,7 +146,17 @@ func processAnimeEpisodes(
 	// A primeira selecao e a que vale quando nao ha pack, e e ela que produz as delecoes por
 	// limite: com o limite levantado por palpite, handleAlreadySavedEpisode nunca disparava e
 	// keysToDelete vinha vazio para todo mundo.
-	sel := selectEpisodes(configs, effectiveMax(configs, episodes), anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
+	episodeExists := func(key files.EpisodeKey) bool {
+		// Look up savedEp from the full map; this function is called per episode in the loop
+		for _, ep := range episodes {
+			k := files.EpisodeKey{AnimeID: anime.Media.Id, Episode: ep.Episode}
+			if k == key {
+				return len(savedEpisodesFullMap[k].LibraryPaths) > 0
+			}
+		}
+		return false
+	}
+	sel := selectEpisodes(configs, effectiveMax(configs, episodes), anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap, episodeExists)
 
 	// Posse por cobertura, ANTES de qualquer busca: o que um pack ja baixado cobre no eixo
 	// absoluto da serie nao volta para o Nyaa (ver coverage.go).
@@ -175,7 +194,7 @@ func processAnimeEpisodes(
 				// Segunda selecao, com o limite levantado: os registros de episodes.json precisam
 				// cobrir o pack INTEIRO, senao a contagem mente e a poda apagaria o que o pack
 				// acabou de trazer.
-				sel = selectEpisodes(configs, len(episodes)+1, anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap)
+				sel = selectEpisodes(configs, len(episodes)+1, anime, episodes, savedEpisodesMap, savedEpisodesFullMap, torrentsHashSet, keepSet, blockedMap, episodeExists)
 				sel.toDownload = dropAdopted(sel.toDownload, adopted)
 				sel.toDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, sel.toDownload, batches)
 			case packStats.Input == 0:

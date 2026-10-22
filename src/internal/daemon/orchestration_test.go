@@ -691,7 +691,7 @@ func TestOrganizeTorrent_BatchContinuousNumbering(t *testing.T) {
 		t.Fatal("organizeTorrent should succeed")
 	}
 	for _, name := range []string{"My Anime - S02E01.mkv", "My Anime - S02E02.mkv"} {
-		if _, err := os.Stat(filepath.Join(completed, "My Anime", "Season 02", name)); err != nil {
+		if _, err := os.Stat(filepath.Join(completed, "My Anime", "Season 2", name)); err != nil {
 			t.Errorf("expected library link %s: %v", name, err)
 		}
 	}

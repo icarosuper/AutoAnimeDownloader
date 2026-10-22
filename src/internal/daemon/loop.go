@@ -84,7 +84,6 @@ func StartLoop(p StartLoopPayload) *LoopControl {
 	start := createStartFunc(p)
 
 	doneCh := start(p.Interval, ctx)
-	donePtr := &doneCh
 
 	return &LoopControl{
 		UpdateInterval: func(newDur time.Duration) {
@@ -93,18 +92,13 @@ func StartLoop(p StartLoopPayload) *LoopControl {
 			(*cancelPtr)()
 			ctx, cancel = context.WithCancel(context.Background())
 			cancelPtr = &cancel
-			newDone := start(newDur, ctx)
-			donePtr = &newDone
+			start(newDur, ctx)
 		},
 		Cancel: func() {
 			mu.Lock()
 			defer mu.Unlock()
 			(*cancelPtr)()
 		},
-		Done: func() <-chan struct{} {
-			mu.Lock()
-			defer mu.Unlock()
-			return *donePtr
-		}(),
+		Done: doneCh,
 	}
 }

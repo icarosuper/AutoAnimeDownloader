@@ -153,10 +153,10 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 	}
 
 	destDir := filepath.Join(req.CompletedPath, sanitizeName(req.AnimeName))
-	// Com Season definido, cria a subpasta "Season XX" (padrao Jellyfin:
-	// biblioteca/anime/Season 01/anime - S01E01.ext).
+	// Com Season definido, cria a subpasta "Season X" (padrao Jellyfin:
+	// biblioteca/anime/Season 1/anime - S01E01.ext).
 	if req.Season != nil && *req.Season > 0 {
-		destDir = filepath.Join(destDir, fmt.Sprintf("Season %02d", *req.Season))
+		destDir = filepath.Join(destDir, fmt.Sprintf("Season %d", *req.Season))
 	}
 
 	// Track whether we created destDir, so we can clean it up on a cross-device failure

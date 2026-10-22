@@ -1,6 +1,6 @@
 .git/
 .gitignore
-node_modules/
+**/node_modules/
 .env
 .env.*
 .vscode/
@@ -25,6 +25,13 @@ docs/swagger/swagger.yaml
 # Tests
 src/tests/
 **/*_test.go
+
+# Lock files and config files not needed in build context
+*.lock
+tsconfig*.json
+.eslintrc*
+.prettierrc*
+vitest.config.*
 
 # NOTE: do not broaden this to src/internal/frontend/dist — Dockerfile.build.{amd64,arm64,
 # windows} expect the frontend to be ALREADY BUILT there and copied in with the context.

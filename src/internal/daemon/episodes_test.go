@@ -1146,7 +1146,7 @@ func TestSelectEpisodes_CountsLimitSkips(t *testing.T) {
 	}
 	configs := &files.Config{MaxEpisodesPerAnime: 3}
 
-	sel := selectEpisodes(configs, 3, anime, nodes, map[files.EpisodeKey]bool{}, map[files.EpisodeKey]files.EpisodeStruct{}, map[string]bool{}, nil, nil)
+	sel := selectEpisodes(configs, 3, anime, nodes, map[files.EpisodeKey]bool{}, map[files.EpisodeKey]files.EpisodeStruct{}, map[string]bool{}, nil, nil, nil)
 
 	if len(sel.toDownload) != 3 {
 		t.Fatalf("esperava 3 para baixar, obteve %d", len(sel.toDownload))

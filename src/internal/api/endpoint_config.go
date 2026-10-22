@@ -127,6 +127,7 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 		// campo nao ter funcionado.
 		if server.Torrents != nil {
 			server.Torrents.SetMaxActiveDownloads(config.MaxConcurrentDownloads)
+			server.Torrents.SetDisableSeeding(config.DisableSeeding)
 		}
 
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Configuration updated successfully"})

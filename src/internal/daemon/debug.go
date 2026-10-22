@@ -69,7 +69,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	// A MESMA funcao da producao: o debug reportava o pipeline errado quando este trecho era uma
 	// copia mantida em sincronia a mao. savedEpisodes/torrents/keepSet/blocked vazios porque o
 	// debug ja declara que trata todo episodio como nao-baixado.
-	sel := selectEpisodes(configs, maxEpisodes, anime, episodes, nil, nil, nil, nil, nil)
+	sel := selectEpisodes(configs, maxEpisodes, anime, episodes, nil, nil, nil, nil, nil, nil)
 
 	wouldSearch := make(map[int]bool, len(sel.toDownload))
 	for _, ep := range sel.toDownload {

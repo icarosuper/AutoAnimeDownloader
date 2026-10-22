@@ -28,7 +28,7 @@ func TestSelectEpisodes_LimitProducesDeletions(t *testing.T) {
 	savedMap, savedFull := savedNonBatch(anime.Media.Id, 50)
 	episodes := anilist.EpisodeList(anime, 1)
 
-	sel := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"h": true}, nil, nil)
+	sel := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"h": true}, nil, nil, nil)
 
 	if len(sel.keysToDelete) != 38 {
 		t.Errorf("esperava 38 episódios acima do limite em keysToDelete, obteve %d", len(sel.keysToDelete))
@@ -45,8 +45,8 @@ func TestSelectEpisodes_IsPure(t *testing.T) {
 	savedMap, savedFull := savedNonBatch(anime.Media.Id, 50)
 	episodes := anilist.EpisodeList(anime, 1)
 
-	first := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"h": true}, nil, nil)
-	second := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"h": true}, nil, nil)
+	first := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"h": true}, nil, nil, nil)
+	second := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"h": true}, nil, nil, nil)
 
 	if len(first.toDownload) != len(second.toDownload) || len(first.keysToDelete) != len(second.keysToDelete) {
 		t.Errorf("chamadas iguais devolveram resultados diferentes: %d/%d vs %d/%d",
@@ -85,7 +85,7 @@ func TestSelectEpisodes_BatchStateDoesNotChurn(t *testing.T) {
 	episodes := anilist.EpisodeList(anime, 1)
 
 	for cycle := 1; cycle <= 2; cycle++ {
-		sel := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"pack": true}, nil, nil)
+		sel := selectEpisodes(limitsConfig(), 12, anime, episodes, savedMap, savedFull, map[string]bool{"pack": true}, nil, nil, nil)
 		if len(sel.keysToDelete) != 0 {
 			t.Fatalf("ciclo %d: pack salvo não deve gerar deleção, obteve %d", cycle, len(sel.keysToDelete))
 		}
@@ -149,7 +149,7 @@ func TestSelectEpisodes_PackRotation(t *testing.T) {
 	}
 	episodes := anilist.EpisodeList(watchedAll, firstEpisodeToConsider(watchedAll, savedSlice))
 	keepSet := buildWatchedKeepSet(3, watchedAll.Media.Id, episodes, savedFull, watchedAll.Progress)
-	sel := selectEpisodes(limitsConfig(), 12, watchedAll, episodes, savedMap, savedFull, map[string]bool{"pack": true}, keepSet, nil)
+	sel := selectEpisodes(limitsConfig(), 12, watchedAll, episodes, savedMap, savedFull, map[string]bool{"pack": true}, keepSet, nil, nil)
 
 	deleteSet := make(map[files.EpisodeKey]bool, len(sel.keysToDelete))
 	for _, k := range sel.keysToDelete {
@@ -166,7 +166,7 @@ func TestSelectEpisodes_PackRotation(t *testing.T) {
 	savedMap, savedFull, halfWatched := build(50)
 	episodes = anilist.EpisodeList(halfWatched, firstEpisodeToConsider(halfWatched, nil))
 	keepSet = buildWatchedKeepSet(3, halfWatched.Media.Id, episodes, savedFull, halfWatched.Progress)
-	sel = selectEpisodes(limitsConfig(), 12, halfWatched, episodes, savedMap, savedFull, map[string]bool{"pack": true}, keepSet, nil)
+	sel = selectEpisodes(limitsConfig(), 12, halfWatched, episodes, savedMap, savedFull, map[string]bool{"pack": true}, keepSet, nil, nil)
 	if len(sel.toDownload) != 0 {
 		t.Errorf("com progresso 50 nada novo deve ser buscado, obteve %d", len(sel.toDownload))
 	}
