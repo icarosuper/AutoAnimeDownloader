@@ -83,7 +83,7 @@ func TestSanitizeNameKeepsSeasonMarker(t *testing.T) {
 	}
 	seen := make(map[string]string)
 	for in, want := range cases {
-		got := sanitizeName(in)
+		got := SanitizeName(in)
 		if got != want {
 			t.Errorf("sanitizeName(%q) = %q, want %q", in, got, want)
 		}

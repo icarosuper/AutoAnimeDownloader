@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"time"
 )
 
@@ -147,12 +148,12 @@ func processAnimeEpisodes(
 	// limite: com o limite levantado por palpite, handleAlreadySavedEpisode nunca disparava e
 	// keysToDelete vinha vazio para todo mundo.
 	episodeExists := func(key files.EpisodeKey) bool {
-		// Look up savedEp from the full map; this function is called per episode in the loop
-		for _, ep := range episodes {
-			k := files.EpisodeKey{AnimeID: anime.Media.Id, Episode: ep.Episode}
-			if k == key {
-				return len(savedEpisodesFullMap[k].LibraryPaths) > 0
-			}
+		// Check filesystem: look in the completed library directory for any video file
+		// whose reverse-parsed episode number matches this episode.
+		// We need the anime name to build the library path. Use the saved episode's name.
+		if savedEp, ok := savedEpisodesFullMap[key]; ok && savedEp.AnimeName != "" {
+			animeDir := filepath.Join(configs.CompletedAnimePath, files.SanitizeName(savedEp.AnimeName))
+			return files.FindExistingByEpisode(animeDir, key.Episode, files.NewOSFileSystem())
 		}
 		return false
 	}

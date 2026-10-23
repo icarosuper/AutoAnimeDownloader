@@ -84,7 +84,7 @@ func isVideoFile(name string) bool {
 
 // sanitizeName strips filesystem-invalid characters. O marcador de season e MANTIDO: uma
 // pasta por entrada da AniList (decisions.md #45).
-func sanitizeName(name string) string {
+func SanitizeName(name string) string {
 	sanitized := stripInvalidChars(name)
 	sanitized = strings.TrimSpace(sanitized)
 	sanitized = strings.ReplaceAll(sanitized, "  ", " ")
@@ -98,6 +98,47 @@ func stripInvalidChars(name string) string {
 		sanitized = strings.ReplaceAll(sanitized, char, "")
 	}
 	return sanitized
+}
+
+// FindExistingByEpisode searches the library directory (and season subdirectories) for a video
+// file whose reverse-parsed episode number matches targetEp. Returns true if found, false
+// otherwise. Used as a fallback when LibraryPaths is empty (e.g., after a daemon restart or
+// metadata reset) to prevent duplicate downloads even when torrent filenames change.
+func FindExistingByEpisode(destDir string, targetEp int, fs FileSystem) bool {
+	// Check root anime directory
+	if found := findEpisodeInDir(destDir, targetEp, fs); found {
+		return true
+	}
+	// Check season subdirectories (e.g., "Season 1", "Season 2")
+	entries, err := fs.ReadDir(destDir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(strings.ToLower(e.Name()), "season ") {
+			seasonDir := filepath.Join(destDir, e.Name())
+			if found := findEpisodeInDir(seasonDir, targetEp, fs); found {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func findEpisodeInDir(dir string, targetEp int, fs FileSystem) bool {
+	entries, err := fs.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() || !isVideoFile(e.Name()) {
+			continue
+		}
+		if ep := nyaa.ExtractEpisodeNumber(e.Name()); ep != nil && *ep == targetEp {
+			return true
+		}
+	}
+	return false
 }
 
 // packEpisodeOffset devolve quanto subtrair do numero lido no nome do arquivo para chegar ao
@@ -129,12 +170,12 @@ func packEpisodeOffset(numbers []int, totalEpisodes int) int {
 
 // jellyfinName returns "Anime - E05.ext".
 func jellyfinName(animeName string, episodeNumber int, ext string) string {
-	return fmt.Sprintf("%s - E%02d%s", sanitizeName(animeName), episodeNumber, ext)
+	return fmt.Sprintf("%s - E%02d%s", SanitizeName(animeName), episodeNumber, ext)
 }
 
 // jellyfinNameSeason returns "Anime - S01E05.ext".
 func jellyfinNameSeason(animeName string, season, episodeNumber int, ext string) string {
-	return fmt.Sprintf("%s - S%02dE%02d%s", sanitizeName(animeName), season, episodeNumber, ext)
+	return fmt.Sprintf("%s - S%02dE%02d%s", SanitizeName(animeName), season, episodeNumber, ext)
 }
 
 func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
@@ -152,7 +193,7 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 		return nil, fmt.Errorf("no video files found in %s", req.TorrentDataDir)
 	}
 
-	destDir := filepath.Join(req.CompletedPath, sanitizeName(req.AnimeName))
+	destDir := filepath.Join(req.CompletedPath, SanitizeName(req.AnimeName))
 	// Com Season definido, cria a subpasta "Season X" (padrao Jellyfin:
 	// biblioteca/anime/Season 1/anime - S01E01.ext).
 	if req.Season != nil && *req.Season > 0 {
