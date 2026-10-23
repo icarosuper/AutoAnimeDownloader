@@ -46,6 +46,18 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   Nested commands, `--json` as the agent contract, `--yes` on destructive actions, no prompts.
   A new API endpoint ships with its CLI command in the same change.
 
+## `v2.7.0` — torrent picker
+
+Pick among the ranked torrents (Nyaa description on demand, optional query) instead of always
+taking the auto-pick. Two tasks, in this order: the screen ships first, the episode button
+reuses it.
+
+- Confirm the ranked whole-title torrent when adding a standalone and when replacing an
+  anime's torrent. Spec designed on 2026-10-23:
+  [standalone-torrent-picker](superpowers/specs/2026-10-23-standalone-torrent-picker-design.md).
+- Pick torrent when downloading / redownloading a single episode — same screen, singles
+  search instead of packs. Own spec, after the one above; do not start it in the same change.
+
 ## `v3.0.0` — Serval
 
 Working checklist (one box per change, for coordinating chats): [v3.0.0.md](v3.0.0.md).

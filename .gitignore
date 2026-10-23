@@ -27,6 +27,9 @@ daemon.log
 # --debug-anime output
 .debug_*/
 
+# Brainstorm visual-companion mockups
+.superpowers/
+
 # Playwright output
 **/test-results/*
 
