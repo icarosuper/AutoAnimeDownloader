@@ -58,6 +58,15 @@ reuses it.
 - Pick torrent when downloading / redownloading a single episode — same screen, singles
   search instead of packs. Own spec, after the one above; do not start it in the same change.
 
+## `v2.8.0` — dashboard recents
+
+A shelf of just-landed, still-unwatched episodes on Status, a Behind filter on the existing
+strip, and last-check rows that open the anime. Independent of the picker; does not wait for
+the `v3.0.0` UI overhaul.
+
+- Recents shelf, Behind chip, clickable last-check rows. Spec designed on 2026-10-23:
+  [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
+
 ## `v3.0.0` — Serval
 
 Working checklist (one box per change, for coordinating chats): [v3.0.0.md](v3.0.0.md).
