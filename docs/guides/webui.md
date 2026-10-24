@@ -28,7 +28,9 @@ Status changes push over WebSocket, so the page updates live without a refresh.
 Per-anime episode list, opened by clicking an anime on the Status page:
 
 - Episode table (episode number, Anilist watch status, downloaded state)
-- Per-episode actions: download, delete, re-download, replace with a manual magnet link
+- Header **Replace torrent** opens the [torrent picker](#torrent-picker) (`/status/:id/torrents`)
+- Per-episode actions: download, delete, re-download, replace with a manual magnet link (the
+  per-episode modal stays here)
 - Bulk actions on selected episodes: download, delete, release (unpin from retry queue)
 - File list of the torrent attached to an episode, when metadata is in
 
@@ -36,6 +38,21 @@ Per-anime episode list, opened by clicking an anime on the Status page:
 
 Search AniList and add a title as a **standalone** anime (tracked without being on any AniList
 list). An AniList account is optional; this is the entry point for an install with none.
+
+Clicking Add on a card first searches ranked whole-title torrents. An empty first search adds
+without opening the picker (singles, or track-with-zero for an unreleased title). A non-empty
+list, or Nyaa being down, opens the [torrent picker](#torrent-picker).
+
+### Torrent picker (`/add/:id/torrents`, `/status/:id/torrents`)
+
+Confirm or swap the ranked whole-title torrent before anything is saved. At most 8 rows; the
+first is the auto-pick. Selecting a row loads its Nyaa description on demand (the other rows
+are not fetched). The query field is a Nyaa `q` and is not saved. Magnet paste lives at the
+bottom of this page, not in a dialog.
+
+Confirm on Add posts the selected magnet (or the pasted one) and returns to Add. Confirm on
+Replace uses the existing replace action and returns to the anime page. Cancel saves nothing.
+The per-episode replace modal stays on Anime Detail.
 
 ### Downloads (`/downloads`)
 
