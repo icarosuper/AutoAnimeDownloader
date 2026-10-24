@@ -38,7 +38,19 @@ func TestClientMethodsHitExpectedPaths(t *testing.T) {
 			return err
 		}},
 		{"AddStandaloneAnime", http.MethodPost, "/api/v1/standalone-animes", nil, `{"media_id":21}`, "{}", func(c *Client) error {
-			_, err := c.AddStandaloneAnime(21)
+			_, err := c.AddStandaloneAnime(StandaloneAnimeRequest{MediaID: 21})
+			return err
+		}},
+		{"AddStandaloneAnimeWithMagnet", http.MethodPost, "/api/v1/standalone-animes", nil, `{"media_id":21,"magnet":"magnet:?xt=urn:btih:abc"}`, "{}", func(c *Client) error {
+			_, err := c.AddStandaloneAnime(StandaloneAnimeRequest{MediaID: 21, Magnet: "magnet:?xt=urn:btih:abc"})
+			return err
+		}},
+		{"GetTorrentCandidates", http.MethodGet, "/api/v1/animes/21/torrent-candidates", nil, "", `{"query":"","items":[]}`, func(c *Client) error {
+			_, err := c.GetTorrentCandidates(21, "")
+			return err
+		}},
+		{"GetTorrentCandidatesWithQuery", http.MethodGet, "/api/v1/animes/21/torrent-candidates", map[string]string{"q": "foo"}, "", `{"query":"foo","items":[]}`, func(c *Client) error {
+			_, err := c.GetTorrentCandidates(21, "foo")
 			return err
 		}},
 		{"RemoveStandaloneAnime", http.MethodDelete, "/api/v1/standalone-animes/21", map[string]string{"delete_episodes": "true"}, "", "null", func(c *Client) error {
@@ -161,7 +173,7 @@ func TestClientPropagatesErrorCode(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := NewClient(srv.URL).AddStandaloneAnime(21)
+	_, err := NewClient(srv.URL).AddStandaloneAnime(StandaloneAnimeRequest{MediaID: 21})
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) {
 		t.Fatalf("got %v (%T), want APIError", err, err)

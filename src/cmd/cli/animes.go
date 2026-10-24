@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"AutoAnimeDownloader/src/internal/api"
+
 	"github.com/urfave/cli/v2"
 )
 
@@ -25,10 +27,22 @@ func animesCommand() *cli.Command {
 				Action: handleAnimesSearch,
 			},
 			{
+				Name:      "candidates",
+				Usage:     "List ranked whole-title torrent candidates for an anime",
+				ArgsUsage: "<id>",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "query", Usage: "Custom Nyaa search query"},
+				},
+				Action: handleAnimesCandidates,
+			},
+			{
 				Name:      "add",
 				Usage:     "Add a standalone anime by AniList media id",
 				ArgsUsage: "<media_id>",
-				Action:    handleAnimesAdd,
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "magnet", Usage: "Magnet URI (skips auto-pick)"},
+				},
+				Action: handleAnimesAdd,
 			},
 			{
 				Name:      "remove",
@@ -121,6 +135,21 @@ func handleAnimesSearch(c *cli.Context) error {
 	return printValue(results, "No results")
 }
 
+func handleAnimesCandidates(c *cli.Context) error {
+	if err := requireArgs(c, 1, "animes candidates <id>"); err != nil {
+		return err
+	}
+	id, err := parsePositiveInt(c.Args().Get(0), "id")
+	if err != nil {
+		return err
+	}
+	candidates, err := getClient().GetTorrentCandidates(id, c.String("query"))
+	if err != nil {
+		return mapClientError(err)
+	}
+	return printValue(candidates, "No candidates")
+}
+
 func handleAnimesAdd(c *cli.Context) error {
 	if err := requireArgs(c, 1, "animes add <media_id>"); err != nil {
 		return err
@@ -129,7 +158,11 @@ func handleAnimesAdd(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	added, err := getClient().AddStandaloneAnime(mediaID)
+	req := api.StandaloneAnimeRequest{MediaID: mediaID}
+	if magnet := c.String("magnet"); magnet != "" {
+		req.Magnet = magnet
+	}
+	added, err := getClient().AddStandaloneAnime(req)
 	if err != nil {
 		return mapClientError(err)
 	}

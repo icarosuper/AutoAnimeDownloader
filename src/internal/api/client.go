@@ -184,9 +184,23 @@ func (c *Client) SearchAniList(term string, includeUnreleased bool) ([]AniListSe
 	return results, nil
 }
 
-func (c *Client) AddStandaloneAnime(mediaID int) (*StandaloneAnimeAddResponse, error) {
+func (c *Client) GetTorrentCandidates(id int, query string) (*TorrentCandidatesResponse, error) {
+	path := "/api/v1/animes/" + strconv.Itoa(id) + "/torrent-candidates"
+	if query != "" {
+		q := url.Values{}
+		q.Set("q", query)
+		path += "?" + q.Encode()
+	}
+	var out TorrentCandidatesResponse
+	if err := c.get(path, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) AddStandaloneAnime(req StandaloneAnimeRequest) (*StandaloneAnimeAddResponse, error) {
 	var out StandaloneAnimeAddResponse
-	if err := c.send(http.MethodPost, "/api/v1/standalone-animes", StandaloneAnimeRequest{MediaID: mediaID}, &out); err != nil {
+	if err := c.send(http.MethodPost, "/api/v1/standalone-animes", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

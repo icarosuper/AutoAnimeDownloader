@@ -77,7 +77,10 @@ comma-separated values; anything else is JSON when it parses, otherwise a string
 autoanimedownloader animes
 autoanimedownloader animes search "frieren"
 autoanimedownloader animes search "foo" --unreleased
+autoanimedownloader animes candidates 154587
+autoanimedownloader animes candidates 154587 --query "frieren s01"
 autoanimedownloader animes add 154587
+autoanimedownloader animes add 154587 --magnet "magnet:?xt=…"
 autoanimedownloader animes remove 154587 --yes
 autoanimedownloader animes remove 154587 --yes --delete-episodes
 autoanimedownloader animes settings 154587
@@ -92,7 +95,8 @@ autoanimedownloader animes replace-episode 154587 3 --magnet "magnet:?xt=…" --
 ```
 
 `animes` lists tracked titles (columns follow `AnimeInfo`). `search` is AniList; a term shorter than
-3 characters returns an empty list, not an error. `add` / `remove` are standalone animes.
+3 characters returns an empty list, not an error. `candidates` is the ranked whole-title list the
+picker shows; `add --magnet` skips auto-pick. `add` / `remove` are standalone animes.
 `--delete-episodes` defaults to false (files stay, marked manually managed).
 
 `release` is not destructive and does not take `--yes`.
