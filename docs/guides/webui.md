@@ -51,7 +51,7 @@ If required config is missing, the daemon opens this page automatically with a `
 
 ### Priorities (`/priorities`)
 
-Reorderable lists that drive torrent ranking during search (fansub groups, resolutions, sources, codecs, audio, an ignore list, and the order criteria are applied in). See [Config Reference](../agents/config.md#fields) for what each list does.
+Reorderable lists that drive torrent ranking during search (fansub groups, resolutions, sources, codecs, audio, an ignore list, and the order criteria are applied in). Sources rank movies and series whose AniList media status is FINISHED; audio stays movies-only. Restore-defaults is how an existing install picks up the new `criteria_order`. See [Config Reference](../agents/config.md#fields) for what each list does.
 
 ### Notifications (`/notifications`)
 

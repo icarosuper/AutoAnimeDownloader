@@ -111,6 +111,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#102** — The bug report has no backend: consent is the act of attaching the file](#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)
 - [**#103** — Log redaction is by key, and a test forces every new key to be classified](#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)
 - [**#104** — `--yes` is a CLI gate; the API keeps its query defaults](#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)
+- [**#106** — source ranks finished series, empty source is web-dl, health bands are 10/50](#106-source-ranks-finished-series-empty-source-is-web-dl-health-bands-are-1050)
 
 ---
 
@@ -1503,8 +1504,10 @@ Whoever watches through a client with no HEVC decode (a browser — Chrome and F
 HEVC for licensing) pays that as a transcode on the server, which besides burning CPU **burns the
 ASS subtitle into the video** and desyncs it. `codec` is now in `episodeCriteria`.
 
-**Only `source` stays out.** A weekly episode is WEB-DL on practically every release; the criterion
-would never break a tie and would only spend a comparison.
+**Source stays out of `episodeCriteria` (the RELEASING / weekly sort).** It enters the series sort
+only through `SortFinishedSeriesResults` when `Media.Status == FINISHED` (decision #106). A weekly
+episode is WEB-DL on practically every release; the criterion would never break a tie and would
+only spend a comparison.
 
 **The guard that keeps the change from backfiring:** `priorityIndex` returns `len(list)` for an
 unknown token, i.e. **the worst**. And `ExtractCodec` returns `""` for a name with no codec tag —
@@ -1522,8 +1525,9 @@ reason to punish the release.
 preference for H264 requires writing `h.264`, not `x264`.
 
 **Don't "fix" by:** taking the `codecCompare` guard off "because no tag is no tag"; putting
-`source` in `episodeCriteria` too; moving `codec` after `fansub` in the default to work around the
-unknown-token problem (hides the same bug instead of solving it).
+`source` in `episodeCriteria` for weekly airing (finished series use the dedicated sort); moving
+`codec` after `fansub` in the default to work around the unknown-token problem (hides the same bug
+instead of solving it).
 
 ### 70. Resolution is canonicalized in the extractor, and codec presets are a frontend reordering
 
@@ -3009,3 +3013,41 @@ false" contract too.
 
 **Don't "fix" by:** prompting when stdin is not a TTY, defaulting `--yes` on in scripts, or adding
 `confirm=true` to the API.
+
+### 106. source ranks finished series, empty source is web-dl, health bands are 10/50
+
+**Location:** `nyaa/priorities.go` — `finishedSeriesCriteria`, `SortFinishedSeriesResults`,
+`sourceCompare`, `healthTierFloors`; `nyaa/nyaa_regex.go` — `[BD]`; `daemon/search.go` —
+`rankSeriesResults`.
+
+**What it looks like:** `source` is in the default `criteria_order` and on the Priorities
+screen but `SortTorrentResults` still ignores it. A second function re-sorts the same list
+when the anime is FINISHED. Empty source is treated as `web-dl`, unlike codec's empty-tie.
+Health bands collapsed from five floors to `{10, 50}`.
+
+**Why it's right:**
+
+(a) The gate is AniList Media.Status, not MediaListStatus. CURRENT/COMPLETED/REPEATING is
+the user's watch state. A weekly show the user marked complete is still RELEASING on
+AniList until it actually ends; a finished show on a CURRENT list is the backlog case.
+nyaa does not import anilist — the daemon passes a bool.
+
+(b) Empty source = web-dl, not a tie. Weekly names (`[SubsPlease] Anime - 07 (1080p)`)
+carry no source token. `priorityIndex` would send them to the end (lose to tagged WEB-DL).
+codec's "either side empty ⇒ tie" would also tie untagged WEB with tagged BD and throw
+the criterion away.
+
+(c) Health before source, resolution before source, in the default order. A lexicographic
+sort never consults a later criterion once an earlier one differs, so source-before-health
+would pick an 8-seeder BD over an 80-seeder WEB. Bands 10/50 are the split among
+min_seeders survivors: 3–9 fragile, 10–49 completes, 50+ the user's connection is the
+limit.
+
+(d) No criteria_order migration. LoadConfigs unmarshals over defaults, same as #55.
+
+(e) `[BD]` is the usual anime-pack tag and was invisible to the extractor. Bare `\bTV\b`
+matched AniList's `(TV)` format marker in titles.
+
+**Don't "fix" by:** putting source in episodeCriteria "so one sort does both"; gating on
+MediaListStatus; auto-migrating criteria_order; treating empty source as a codec-style
+tie; putting audio on episodes; auto-replacing a saved WEB episode when a BD appears.

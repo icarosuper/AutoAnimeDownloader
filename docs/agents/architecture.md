@@ -492,7 +492,9 @@ read the same pack file list (the Librarian after download, `PackFileRange` befo
 already imports `nyaa` — the other way would be a cycle.
 
 **Sorting** (`priorities.go`): the `health` criterion compares the **band** (`healthTier`, floors
-`1/5/20/100/400` seeders), not the raw score (decisions.md #55). `SetPriorities` and
+`10/50` seeders), not the raw score (decisions.md #55, #106). `SortTorrentResults` omits
+`source`; `SortFinishedSeriesResults` includes it and the daemon applies that sort only when
+`Media.Status == FINISHED` (`rankSeriesResults` in `daemon/search.go`). `SetPriorities` and
 `SetMaxSearchPages`/`SetMaxBatchTorrentSizeGB` use the same atomic+restore pattern, pushed by
 `files.LoadConfigs` on every successful load.
 

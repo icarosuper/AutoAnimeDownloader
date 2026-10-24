@@ -1,7 +1,7 @@
 # Source ranking for finished series
 
 **Date:** 2026-10-24
-**Status:** designed, not implemented — no fixed release
+**Status:** implemented
 **Origin:** complete / standalone anime is now a real download path. Blu-ray vs WEB is the
 quality axis that matters there. Weekly airing stays WEB. The Priorities screen already has
 a source list (BDRemux, BD, BDRip, WEB-DL, …) labelled "movies only"; `SortMovieResults`
