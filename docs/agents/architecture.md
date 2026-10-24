@@ -628,10 +628,15 @@ There is no component library: daisyUI was removed (decisions.md #91). Button, m
 chip and the like live in `components/ui/`; color comes from `lib/design/tokens.css`, which is the
 single source of truth and switches themes through its own `[data-theme]`.
 
-**Routes** (hash router): `Status.svelte` (`#/`), `AddAnime.svelte` (`#/add`), `Downloads.svelte`
+**Routes** (hash router): `Status.svelte` (`#/`), `AddAnime.svelte` (`#/add`), `TorrentPicker.svelte`
+(`#/add/:id/torrents` and `#/status/:id/torrents` — longer paths are registered first in
+`App.svelte` or svelte-spa-router would let `/status/:id` swallow the picker), `Downloads.svelte`
 (`#/downloads`), `AnimeDetail.svelte` (`#/status/:id`), `Config.svelte` (`#/config`),
 `Priorities.svelte` (`#/priorities`), `Logs.svelte` (`#/logs`), `Notifications.svelte`
-(`#/notifications`), `Report.svelte` (`#/report`).
+(`#/notifications`), `Report.svelte` (`#/report`). The picker cache (`stores/pickerCache.ts`) is
+**in-memory**: Add fills it before navigating so the first paint is free; a reload of the picker
+URL fetches; confirm clears it. The description pane is on-demand (`GET …/torrent-candidates/{nyaaId}`),
+never bundled into the list.
 
 **Negative facts that save a search:**
 

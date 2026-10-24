@@ -544,12 +544,81 @@ export async function searchAniList(
   )
 }
 
+export interface TorrentCandidate {
+  name: string
+  magnet: string
+  size_bytes: number
+  seeders: number
+  leechers: number
+  fansub: string
+  resolution: string
+  is_batch: boolean
+  range_start: number
+  range_end: number
+  nyaa_id: number
+}
+
+export interface TorrentCandidates {
+  query: string
+  items: TorrentCandidate[]
+}
+
+export interface TorrentCandidateDetail {
+  description_html: string
+  files: { name: string; size_bytes: number }[]
+  nyaa_url: string
+}
+
+/**
+ * Ranked whole-title packs for the picker. `silent` because the picker draws the Nyaa-down
+ * state itself — a toast on top of that would say the same thing twice. `q` only travels when
+ * non-empty: the backend already treats a missing param as "use the title".
+ */
+export async function getTorrentCandidates(
+  id: number,
+  query?: string,
+  signal?: AbortSignal,
+): Promise<TorrentCandidates> {
+  const trimmed = query?.trim() ?? ''
+  const q = trimmed ? `?q=${encodeURIComponent(trimmed)}` : ''
+  return apiRequest<TorrentCandidates>('GET', `/animes/${id}/torrent-candidates${q}`, null, {
+    silent: true,
+    signal,
+  })
+}
+
+/**
+ * Sanitised Nyaa view page for one candidate. Fetched on select, never up front — eight
+ * `/view/<id>` on mount is the cost sources.md called out. `silent`: the pane shows the error.
+ */
+export async function getTorrentCandidateDetail(
+  id: number,
+  nyaaId: number,
+  signal?: AbortSignal,
+): Promise<TorrentCandidateDetail> {
+  return apiRequest<TorrentCandidateDetail>(
+    'GET',
+    `/animes/${id}/torrent-candidates/${nyaaId}`,
+    null,
+    { silent: true, signal },
+  )
+}
+
 /**
  * Starts tracking a standalone anime and downloads whatever is already aired. Returns how many went
- * in.
+ * in. Optional magnet fields skip the daemon's auto-pick — the picker confirm is what fills them.
+ * `silent` because the caller (AddAnime / the picker) toasts the 409s itself.
  */
-export async function addStandaloneAnime(mediaId: number): Promise<{ added: number }> {
-  return apiRequest<{ added: number }>('POST', '/standalone-animes', { media_id: mediaId }, { silent: true })
+export async function addStandaloneAnime(
+  mediaId: number,
+  opts?: { magnet?: string; name?: string; nyaa_id?: number; size_bytes?: number },
+): Promise<{ added: number }> {
+  const body: Record<string, unknown> = { media_id: mediaId }
+  if (opts?.magnet) body.magnet = opts.magnet
+  if (opts?.name) body.name = opts.name
+  if (opts?.nyaa_id !== undefined) body.nyaa_id = opts.nyaa_id
+  if (opts?.size_bytes !== undefined) body.size_bytes = opts.size_bytes
+  return apiRequest<{ added: number }>('POST', '/standalone-animes', body, { silent: true })
 }
 
 export async function removeStandaloneAnime(mediaId: number, deleteEpisodes: boolean): Promise<void> {

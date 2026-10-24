@@ -9,12 +9,17 @@
   import Notifications from "./routes/Notifications.svelte";
   import Downloads from "./routes/Downloads.svelte";
   import AddAnime from "./routes/AddAnime.svelte";
+  import TorrentPicker from "./routes/TorrentPicker.svelte";
   import Report from "./routes/Report.svelte";
 
+  // Longer paths first: svelte-spa-router walks insertion order, so `/status/:id` would
+  // swallow `/status/:id/torrents` if it were registered first.
   const routes: Record<string, unknown> = {
     "/": Status,
-    "/status": Status,
+    "/status/:id/torrents": TorrentPicker,
     "/status/:id": AnimeDetail,
+    "/status": Status,
+    "/add/:id/torrents": TorrentPicker,
     "/add": AddAnime,
     "/downloads": Downloads,
     "/config": Config,
