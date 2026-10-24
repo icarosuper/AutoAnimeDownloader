@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -55,6 +56,38 @@ func postStandalone(t *testing.T, server *Server, mediaID int) *httptest.Respons
 	rec := httptest.NewRecorder()
 	handleStandaloneAnimeAdd(server)(rec, req)
 	return rec
+}
+
+const standaloneMagnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+
+const finished24MediaJSON = `{"data":{"Media":{
+	"id": 21, "episodes": 24, "format": "TV", "status": "FINISHED",
+	"title": {"english": "Standalone Anime", "romaji": "Standalone Anime"},
+	"synonyms": [], "relations": {"edges": []},
+	"coverImage": {"large": "", "medium": ""},
+	"airingSchedule": {"nodes": []}
+}}}`
+
+func postStandaloneMagnet(t *testing.T, server *Server, body StandaloneAnimeRequest) *httptest.ResponseRecorder {
+	t.Helper()
+	raw, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/standalone-animes", bytes.NewReader(raw))
+	rec := httptest.NewRecorder()
+	handleStandaloneAnimeAdd(server)(rec, req)
+	return rec
+}
+
+func decodeAdded(t *testing.T, rec *httptest.ResponseRecorder) int {
+	t.Helper()
+	var resp struct {
+		Data struct {
+			Added int `json:"added"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid response: %v", err)
+	}
+	return resp.Data.Added
 }
 
 func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
@@ -361,4 +394,149 @@ func episodesForAnime(animeID, n int) []files.EpisodeStruct {
 		eps = append(eps, files.EpisodeStruct{EpisodeNumber: i, AnimeID: animeID})
 	}
 	return eps
+}
+
+func TestStandaloneAdd_WithMagnet_WritesOnlyCoveredEpisodes(t *testing.T) {
+	defer mockStandaloneAniList(emptyListJSON, finished24MediaJSON)()
+
+	fm := &mockFileManager{configs: standaloneConfig()}
+	server := standaloneWriteServer(fm)
+	rec := postStandaloneMagnet(t, server, StandaloneAnimeRequest{
+		MediaID: 21,
+		Magnet:  standaloneMagnet,
+		Name:    "[SubsPlease] Standalone Anime (01-12) [1080p]",
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := decodeAdded(t, rec); got != 12 {
+		t.Fatalf("want added 12 of 24, got %d", got)
+	}
+	if len(fm.standaloneAnimes) != 1 || fm.standaloneAnimes[0] != 21 {
+		t.Fatalf("standalone id 21 missing, got %v", fm.standaloneAnimes)
+	}
+	if len(fm.episodes) != 12 {
+		t.Fatalf("want 12 saved episodes, got %d", len(fm.episodes))
+	}
+	for _, ep := range fm.episodes {
+		if ep.EpisodeNumber < 1 || ep.EpisodeNumber > 12 {
+			t.Errorf("uncovered episode %d was saved", ep.EpisodeNumber)
+		}
+	}
+	backend, ok := server.Torrents.(*torrents.FakeBackend)
+	if !ok {
+		t.Fatal("want FakeBackend")
+	}
+	if len(backend.List()) != 1 {
+		t.Fatalf("want torrent in session, got %d", len(backend.List()))
+	}
+}
+
+func TestStandaloneAdd_WithMagnet_UnknownRangeWritesNoEpisodes(t *testing.T) {
+	defer mockStandaloneAniList(emptyListJSON, finished24MediaJSON)()
+
+	fm := &mockFileManager{configs: standaloneConfig()}
+	server := standaloneWriteServer(fm)
+	rec := postStandaloneMagnet(t, server, StandaloneAnimeRequest{
+		MediaID: 21,
+		Magnet:  standaloneMagnet,
+		Name:    "[SubsPlease] Standalone Anime [1080p]",
+	})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := decodeAdded(t, rec); got != 0 {
+		t.Fatalf("want added 0 for an unknown range, got %d", got)
+	}
+	if len(fm.standaloneAnimes) != 1 || fm.standaloneAnimes[0] != 21 {
+		t.Fatalf("standalone id 21 missing, got %v", fm.standaloneAnimes)
+	}
+	if len(fm.episodes) != 0 {
+		t.Fatalf("unknown range must write no episode records, got %v", fm.episodes)
+	}
+	backend := server.Torrents.(*torrents.FakeBackend)
+	if len(backend.List()) != 1 {
+		t.Fatalf("want torrent in session, got %d", len(backend.List()))
+	}
+}
+
+func TestStandaloneAdd_WithMagnet_AddFailureDoesNotWriteID(t *testing.T) {
+	defer mockStandaloneAniList(emptyListJSON, finished24MediaJSON)()
+
+	fm := &mockFileManager{configs: standaloneConfig()}
+	server := standaloneWriteServer(fm)
+	backend := server.Torrents.(*torrents.FakeBackend)
+	backend.AddErr = errors.New("refused")
+
+	rec := postStandaloneMagnet(t, server, StandaloneAnimeRequest{
+		MediaID: 21,
+		Magnet:  standaloneMagnet,
+		Name:    "[SubsPlease] Standalone Anime (01-12) [1080p]",
+	})
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("want an error when the torrent add is refused, got 200: %s", rec.Body.String())
+	}
+	if len(fm.standaloneAnimes) != 0 {
+		t.Fatalf("standalone id must stay absent, got %v", fm.standaloneAnimes)
+	}
+	if len(fm.episodes) != 0 {
+		t.Fatalf("want no episodes, got %v", fm.episodes)
+	}
+	if len(backend.List()) != 0 {
+		t.Fatalf("refused add must leave the session empty, got %d torrents", len(backend.List()))
+	}
+}
+
+func TestStandaloneAdd_WithMagnet_InvalidMagnet(t *testing.T) {
+	defer mockStandaloneAniList(emptyListJSON, finished24MediaJSON)()
+
+	fm := &mockFileManager{configs: standaloneConfig()}
+	server := standaloneWriteServer(fm)
+	rec := postStandaloneMagnet(t, server, StandaloneAnimeRequest{
+		MediaID: 21,
+		Magnet:  "http://example.com/not-a-magnet",
+		Name:    "[SubsPlease] Standalone Anime (01-12) [1080p]",
+	})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := errorCode(t, rec); got != "INVALID_MAGNET" {
+		t.Fatalf("want INVALID_MAGNET, got %s", got)
+	}
+	if len(fm.standaloneAnimes) != 0 {
+		t.Fatalf("invalid magnet must not write the id, got %v", fm.standaloneAnimes)
+	}
+}
+
+func TestStandaloneAdd_WithMagnet_BlockedNeverWritesTheFile(t *testing.T) {
+	defer mockStandaloneAniList(emptyListJSON, finished24MediaJSON)()
+
+	fm := &mockFileManager{configs: standaloneConfig(), standaloneAnimes: []int{21}}
+	server := standaloneWriteServer(fm)
+	rec := postStandaloneMagnet(t, server, StandaloneAnimeRequest{
+		MediaID: 21,
+		Magnet:  standaloneMagnet,
+		Name:    "[SubsPlease] Standalone Anime (01-12) [1080p]",
+	})
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("want 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if got := errorCode(t, rec); got != "ALREADY_STANDALONE" {
+		t.Fatalf("want ALREADY_STANDALONE, got %s", got)
+	}
+	if len(fm.standaloneAnimes) != 1 {
+		t.Fatalf("a block must not change the file: %v", fm.standaloneAnimes)
+	}
+	backend := server.Torrents.(*torrents.FakeBackend)
+	if len(backend.List()) != 0 {
+		t.Fatal("a block must not add a torrent")
+	}
+	if len(backend.EnsureCalls()) != 0 {
+		t.Fatal("a block must not reach DownloadStandaloneAnimeWithMagnet")
+	}
 }

@@ -103,6 +103,8 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}", handleDeleteEpisode(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/replace", handleReplaceAnimeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/settings", handleAnimeSettings(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/torrent-candidates", handleTorrentCandidates(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/torrent-candidates/{nyaaId}", handleTorrentCandidateDetail(s))
 	apiMux.HandleFunc("/api/v1/anilist/search", handleAniListSearch(s))
 	apiMux.HandleFunc("/api/v1/standalone-animes", handleStandaloneAnimeAdd(s))
 	apiMux.HandleFunc("/api/v1/standalone-animes/{id}", handleStandaloneAnimeRemove(s))
