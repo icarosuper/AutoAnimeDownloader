@@ -324,10 +324,10 @@
           <div class="text-copy text-body [&_a]:text-accent [&_img]:max-w-full">
             {@html detail.description_html}
           </div>
-          {#if detail.files.length > 0}
+          {#if detail.files?.length}
             <h2 class="mt-4 text-card-title text-heading">{T && T.files}</h2>
             <ul class="mt-2 space-y-1 font-mono text-caption text-subtle">
-              {#each detail.files as file (file.name)}
+              {#each detail.files ?? [] as file (file.name)}
                 <li class="flex justify-between gap-2">
                   <span class="min-w-0 truncate" title={file.name}>{file.name}</span>
                   <span class="shrink-0">{formatBytes(file.size_bytes, fmtLocale)}</span>

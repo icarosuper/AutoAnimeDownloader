@@ -224,4 +224,27 @@ describe('TorrentPicker — description pane', () => {
     )
     expect(screen.getByRole('button', { name: 'Download this' })).toBeEnabled()
   })
+
+  it('does not throw when the Nyaa page sends files: null, and Confirm still works', async () => {
+    getTorrentCandidateDetail.mockResolvedValue({
+      description_html: '<p>No file tree</p>',
+      files: null,
+      nyaa_url: 'https://nyaa.si/view/12345',
+    } as unknown as Awaited<ReturnType<typeof client.getTorrentCandidateDetail>>)
+
+    await mountPicker()
+    expect(await screen.findByText('No file tree')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Files' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Download this' })).toBeEnabled()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Download this' }))
+    await waitFor(() =>
+      expect(addStandaloneAnime).toHaveBeenCalledWith(21, {
+        magnet: 'magnet:?xt=urn:btih:aaa',
+        name: '[SubsPlease] Frieren (01-16) [1080p]',
+        nyaa_id: 12345,
+        size_bytes: 12_000_000_000,
+      }),
+    )
+  })
 })
