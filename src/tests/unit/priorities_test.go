@@ -215,6 +215,105 @@ func TestExtractSource_SpecificBDPatternsStillWin(t *testing.T) {
 	}
 }
 
+func res(s string) *string { return &s }
+
+func TestSourceCompare_UntaggedTiesWEBDL(t *testing.T) {
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[SubsPlease] Anime - 07 (1080p)", Resolution: &r1080, Seeders: "100"},
+		{Name: "[Erai-raws] Anime - 07 (1080p) WEB-DL", Resolution: &r1080, Seeders: "100"},
+	}
+	sorted := nyaa.SortMovieResults(results)
+	if !strings.Contains(sorted[0].Name, "SubsPlease") {
+		t.Fatalf("untagged must tie WEB-DL on source and let fansub decide, got %s", sorted[0].Name)
+	}
+}
+
+func TestSourceCompare_UntaggedLosesToBD(t *testing.T) {
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[SubsPlease] Anime - 07 (1080p)", Resolution: &r1080, Seeders: "100"},
+		{Name: "[Group] Anime - 07 [BD] [1080p]", Resolution: &r1080, Seeders: "100"},
+	}
+	sorted := nyaa.SortMovieResults(results)
+	if !strings.Contains(sorted[0].Name, "[BD]") {
+		t.Fatalf("untagged WEB must lose to [BD], got %s", sorted[0].Name)
+	}
+}
+
+func TestSortTorrentResults_IgnoresSource(t *testing.T) {
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[SubsPlease] Anime - 07 (1080p) WEB-DL", Resolution: &r1080, Seeders: "100"},
+		{Name: "[Ember] Anime - 07 [BD] [1080p]", Resolution: &r1080, Seeders: "100"},
+	}
+	sorted := nyaa.SortTorrentResults(results)
+	if !strings.Contains(sorted[0].Name, "SubsPlease") {
+		t.Fatalf("RELEASING sort must ignore source and let fansub decide, got %s", sorted[0].Name)
+	}
+}
+
+func TestSortFinishedSeriesResults_HealthyWEBBeatsFragileBD(t *testing.T) {
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[Group] Anime [BD] [1080p]", Resolution: &r1080, Seeders: "8"},
+		{Name: "[SubsPlease] Anime (1080p) WEB-DL", Resolution: &r1080, Seeders: "80"},
+	}
+	sorted := nyaa.SortFinishedSeriesResults(results)
+	if !strings.Contains(sorted[0].Name, "WEB-DL") {
+		t.Fatalf("health must beat source, got %s", sorted[0].Name)
+	}
+}
+
+func TestSortFinishedSeriesResults_SameBandPrefersBD(t *testing.T) {
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[SubsPlease] Anime (1080p) WEB-DL", Resolution: &r1080, Seeders: "400"},
+		{Name: "[Group] Anime [BD] [1080p]", Resolution: &r1080, Seeders: "60"},
+	}
+	sorted := nyaa.SortFinishedSeriesResults(results)
+	if !strings.Contains(sorted[0].Name, "[BD]") {
+		t.Fatalf("same health band must prefer BD, got %s", sorted[0].Name)
+	}
+}
+
+func TestSortFinishedSeriesResults_ResolutionBeforeSource(t *testing.T) {
+	r1080, r720 := "1080p", "720p"
+	results := []nyaa.TorrentResult{
+		{Name: "[Group] Anime [BD] [720p]", Resolution: &r720, Seeders: "200"},
+		{Name: "[SubsPlease] Anime (1080p) WEB-DL", Resolution: &r1080, Seeders: "200"},
+	}
+	sorted := nyaa.SortFinishedSeriesResults(results)
+	if !strings.Contains(sorted[0].Name, "WEB-DL") {
+		t.Fatalf("1080p WEB must beat 720p BD, got %s", sorted[0].Name)
+	}
+}
+
+func TestSortFinishedSeriesResults_UncensoredFirst(t *testing.T) {
+	r1080 := "1080p"
+	results := []nyaa.TorrentResult{
+		{Name: "[Group] Anime (1080p) WEB-DL uncensored", Resolution: &r1080, Seeders: "8"},
+		{Name: "[Group] Anime (1080p) WEB-DL", Resolution: &r1080, Seeders: "80"},
+	}
+	sorted := nyaa.SortFinishedSeriesResults(results)
+	if !strings.Contains(strings.ToLower(sorted[0].Name), "uncensored") {
+		t.Fatalf("uncensored must win even on a worse health band, got %s", sorted[0].Name)
+	}
+}
+
+func TestDefaultCriteriaOrder_ResolutionHealthSource(t *testing.T) {
+	order := nyaa.DefaultPriorities().CriteriaOrder
+	want := []string{"uncensored", "resolution", "health", "source", "codec", "fansub", "audio", "size"}
+	if len(order) != len(want) {
+		t.Fatalf("CriteriaOrder %v, want %v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("CriteriaOrder %v, want %v", order, want)
+		}
+	}
+}
+
 func TestExtractResolution_Canonicalizes(t *testing.T) {
 	cases := map[string]string{
 		"[Group] Anime - 01 [4K]":        "2160p",
