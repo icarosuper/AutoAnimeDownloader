@@ -117,6 +117,15 @@ tweaks would be redone by the `v3.0.0` UI/UX overhaul.
 
 After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
 
+## No release — source ranking for finished series
+
+Ships as a patch whenever it is tackled.
+
+- Rank Blu-ray above WEB on series whose AniList **media** status is `FINISHED`
+  (standalone, packs, and singles). Weekly `RELEASING` stays without source. Spec
+  designed on 2026-10-24:
+  [source-ranking-finished-series](superpowers/specs/2026-10-24-source-ranking-finished-series-design.md).
+
 ## No release — subtitle language filter
 
 Ships as a patch whenever it is tackled.
