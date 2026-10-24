@@ -61,7 +61,7 @@ func TestHealthTiers_BeatFansubAcrossTiers(t *testing.T) {
 
 func TestHealthTiers_SameTierLetsFansubDecide(t *testing.T) {
 	r1080 := "1080p"
-	// 150 and 300 are both in the 100-399 tier: health ties and fansub decides.
+	// 150 and 300 are both in the 50+ tier: health ties and fansub decides.
 	results := []nyaa.TorrentResult{
 		{Name: "[Ember] Anime - 01 1080p", Resolution: &r1080, Seeders: "300"},
 		{Name: "[SubsPlease] Anime - 01 1080p", Resolution: &r1080, Seeders: "150"},
@@ -141,7 +141,7 @@ func TestCodec_UntaggedNameIsNotPenalized(t *testing.T) {
 		CriteriaOrder: nyaa.DefaultPriorities().CriteriaOrder,
 		Fansubs:       nyaa.DefaultPriorities().Fansubs,
 		Resolutions:   nyaa.DefaultPriorities().Resolutions,
-		Codecs:        nyaa.DefaultPriorities().Codecs, // hevc primeiro
+		Codecs:        nyaa.DefaultPriorities().Codecs, // hevc first
 	})()
 
 	r1080 := "1080p"

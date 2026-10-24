@@ -112,9 +112,10 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"size":   func(a, b TorrentResult) int { return sizeCompare(a, b) },
 }
 
-// healthTierFloors are the floors of the health tiers: seeders 0 / 1-4 / 5-19 / 20-99 /
-// 100-399 / 400+ ⇒ tier 0..5. Each tier is ~4-5x the previous.
-var healthTierFloors = []int{1, 5, 20, 100, 400}
+// healthTierFloors are the floors of the health tiers: seeders 0–9 / 10–49 / 50+ ⇒ tier
+// 0..2. min_seeders (default 3) already dropped 0–2, so 10 is the first split among
+// survivors. 50 vs 5000 is the same download on a home connection (decisions.md #106).
+var healthTierFloors = []int{10, 50}
 
 // healthTier returns the torrent's health tier (higher = healthier).
 //
