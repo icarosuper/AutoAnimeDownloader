@@ -247,3 +247,10 @@ func searchNyaaForAnime(titles anilist.Title, synonyms []string, episodes []int)
 		return nyaa.ScrapNyaaForAnime(title, episodes, season, part)
 	}, "anime")
 }
+
+func rankSeriesResults(results []nyaa.TorrentResult, finished bool) []nyaa.TorrentResult {
+	if finished {
+		return nyaa.SortFinishedSeriesResults(results)
+	}
+	return results
+}
