@@ -148,7 +148,8 @@ Defaults to `"dev"` if not injected.
 **There is no `daemon.go`.** The orchestrator is split: `loop.go` (the goroutine), `verification.go`
 (the pass), `episodes.go` (per-episode selection and removal), `search.go` (Nyaa search + filters),
 `coverage.go` (ownership by coverage), `helpers.go` (config/disk guards), `stalled.go` (torrent
-with no peers), `manual_download.go` (downloads coming from the API) and `standalone.go`.
+with no peers), `manual_download.go` (downloads coming from the API), `standalone.go` and
+`preview.go`.
 
 **One pass at a time**: `AnimeVerification` takes `verificationMu.TryLock()` and returns immediately
 if another is already running (decisions.md #67).
@@ -200,6 +201,13 @@ All three go through the `min_seeders` floor (`filterSearchResults`).
 carries it, otherwise from the detail page — and memos **including failure**; without that,
 `assignBatches`, which walks the packs once per episode, would become one request per episode. Cap
 of `maxPackDetailFetches` (3) detail pages per anime per pass. See [decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything).
+
+**`preview.go`** — `PreviewWholeTitleTorrents` is the picker list: the same search + filter +
+partition as the pass, capped at 8, **without** adding a torrent, writing a standalone id, or
+fetching `/view/<id>`. Range comes from the name (`ExtractBatchInfo`); unknown stays 0. A custom `q`
+skips title variants and season/part. Empty list is not an error; Nyaa transport failure wraps
+`ErrNyaaUnavailable`. The pass helper `searchNyaaWithVariants` still swallows total failure — the
+preview has its own loop so "Nyaa down" is not an empty list.
 
 **Numbering axes.** `packAxis` are the hypotheses for how much to add to the entry's **local**
 number: relative (0, always first), continuous across the season (`ComputeEpisodeOffset` — the gate
