@@ -501,6 +501,30 @@ func TestManager_DeleteEmptyFolders_WithEmptyFolder(t *testing.T) {
 	}
 }
 
+func TestManager_DeleteEmptyFolders_WithNfoOnlyFolder(t *testing.T) {
+	mockFS := NewMockFileSystem()
+	mockFS.SetDir("/save")
+	mockFS.SetDir("/save/leftover")
+	mockFS.SetFile("/save/leftover/tvshow.nfo", []byte("show"))
+	mockFS.SetFile("/save/leftover/Anime - E01.nfo", []byte("ep"))
+	mockFS.SetDir("/save/with-poster")
+	mockFS.SetFile("/save/with-poster/tvshow.nfo", []byte("show"))
+	mockFS.SetFile("/save/with-poster/poster.jpg", []byte("art"))
+
+	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")
+
+	if err := manager.DeleteEmptyFolders("/save"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mockFS.DirExists("/save/leftover") {
+		t.Error("expected nfo-only folder to be deleted")
+	}
+	if !mockFS.DirExists("/save/with-poster") {
+		t.Error("expected folder with a poster to remain")
+	}
+}
+
 func TestManager_DeleteEmptyFolders_WithEmptyPath(t *testing.T) {
 	mockFS := NewMockFileSystem()
 	manager := files.NewManager(mockFS, "/config.json", "/episodes.txt", "/blocked_episodes", "/anime_settings", "/standalone_animes")

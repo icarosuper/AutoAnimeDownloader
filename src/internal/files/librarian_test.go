@@ -561,25 +561,140 @@ func TestOrganizeNoVideoFiles(t *testing.T) {
 }
 
 func TestRemoveFromLibrary(t *testing.T) {
-	tmp := t.TempDir()
-	target := filepath.Join(tmp, "lib", "a.mkv")
-	writeFile(t, target, "x")
-
 	lib := NewLibrarian(NewOSFileSystem())
-	if err := lib.RemoveFromLibrary(target); err != nil {
-		t.Fatalf("RemoveFromLibrary: %v", err)
+	assertMissing := func(t *testing.T, path, what string) {
+		t.Helper()
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should be gone (%s): %v", what, path, err)
+		}
 	}
-	if _, err := os.Stat(target); err == nil {
-		t.Errorf("file should be removed")
+	assertPresent := func(t *testing.T, path, what string) {
+		t.Helper()
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s should still exist (%s): %v", what, path, err)
+		}
 	}
-	// Removing again (missing) is not an error.
-	if err := lib.RemoveFromLibrary(target); err != nil {
-		t.Errorf("RemoveFromLibrary on missing path should be nil, got %v", err)
+
+	t.Run("video and sibling nfo both go", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "lib")
+		video := filepath.Join(dir, "Anime - E05.mkv")
+		nfo := filepath.Join(dir, "Anime - E05.nfo")
+		writeFile(t, video, "video")
+		writeFile(t, nfo, "nfo")
+
+		if err := lib.RemoveFromLibrary(video); err != nil {
+			t.Fatalf("RemoveFromLibrary: %v", err)
+		}
+		assertMissing(t, video, "video")
+		assertMissing(t, nfo, "sidecar nfo")
+	})
+
+	t.Run("video only is not an error", func(t *testing.T) {
+		video := filepath.Join(t.TempDir(), "lib", "a.mkv")
+		writeFile(t, video, "x")
+
+		if err := lib.RemoveFromLibrary(video); err != nil {
+			t.Fatalf("RemoveFromLibrary: %v", err)
+		}
+		assertMissing(t, video, "video")
+	})
+
+	t.Run("nfo only when video already missing", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "lib")
+		video := filepath.Join(dir, "Anime - E05.mkv")
+		nfo := filepath.Join(dir, "Anime - E05.nfo")
+		writeFile(t, nfo, "nfo")
+
+		if err := lib.RemoveFromLibrary(video); err != nil {
+			t.Fatalf("RemoveFromLibrary on missing video: %v", err)
+		}
+		assertMissing(t, nfo, "sidecar nfo")
+	})
+
+	t.Run("path that is itself an nfo does not hunt a further sidecar", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "lib")
+		nfo := filepath.Join(dir, "foo.nfo")
+		// A sibling "foo" with no extension must not be treated as a sidecar target.
+		other := filepath.Join(dir, "foo")
+		writeFile(t, nfo, "nfo")
+		writeFile(t, other, "keep")
+
+		if err := lib.RemoveFromLibrary(nfo); err != nil {
+			t.Fatalf("RemoveFromLibrary: %v", err)
+		}
+		assertMissing(t, nfo, "nfo")
+		assertPresent(t, other, "non-nfo sibling")
+	})
+
+	t.Run("empty path is a no-op", func(t *testing.T) {
+		if err := lib.RemoveFromLibrary(""); err != nil {
+			t.Errorf("RemoveFromLibrary(\"\") should be nil, got %v", err)
+		}
+	})
+}
+
+func TestRemoveFolderIfNoVideo(t *testing.T) {
+	lib := NewLibrarian(NewOSFileSystem())
+	assertMissing := func(t *testing.T, path, what string) {
+		t.Helper()
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should be gone (%s): %v", what, path, err)
+		}
 	}
-	// Empty path is a no-op.
-	if err := lib.RemoveFromLibrary(""); err != nil {
-		t.Errorf("RemoveFromLibrary(\"\") should be nil, got %v", err)
+	assertPresent := func(t *testing.T, path, what string) {
+		t.Helper()
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s should still exist (%s): %v", what, path, err)
+		}
 	}
+
+	t.Run("nfo-only folder is wiped", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "Anime")
+		writeFile(t, filepath.Join(dir, "tvshow.nfo"), "show")
+		writeFile(t, filepath.Join(dir, "Anime - E01.nfo"), "ep")
+
+		if err := lib.RemoveFolderIfNoVideo(dir); err != nil {
+			t.Fatalf("RemoveFolderIfNoVideo: %v", err)
+		}
+		assertMissing(t, dir, "library folder")
+	})
+
+	t.Run("folder with a video is left untouched", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "Anime")
+		video := filepath.Join(dir, "Anime - E01.mkv")
+		nfo := filepath.Join(dir, "tvshow.nfo")
+		writeFile(t, video, "video")
+		writeFile(t, nfo, "show")
+
+		if err := lib.RemoveFolderIfNoVideo(dir); err != nil {
+			t.Fatalf("RemoveFolderIfNoVideo: %v", err)
+		}
+		assertPresent(t, dir, "library folder")
+		assertPresent(t, video, "video")
+		assertPresent(t, nfo, "tvshow.nfo")
+	})
+
+	t.Run("poster-only folder is wiped", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "Anime")
+		writeFile(t, filepath.Join(dir, "poster.jpg"), "art")
+
+		if err := lib.RemoveFolderIfNoVideo(dir); err != nil {
+			t.Fatalf("RemoveFolderIfNoVideo: %v", err)
+		}
+		assertMissing(t, dir, "library folder")
+	})
+
+	t.Run("missing directory is not an error", func(t *testing.T) {
+		if err := lib.RemoveFolderIfNoVideo(filepath.Join(t.TempDir(), "gone")); err != nil {
+			t.Errorf("missing directory should be nil, got %v", err)
+		}
+	})
+
+	t.Run("empty path is a no-op", func(t *testing.T) {
+		if err := lib.RemoveFolderIfNoVideo(""); err != nil {
+			t.Errorf("RemoveFolderIfNoVideo(\"\") should be nil, got %v", err)
+		}
+	})
 }
 
 func TestProbePath(t *testing.T) {

@@ -524,6 +524,91 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 	})
 }
 
+func TestRemoveEpisodesAndLinks_LibraryFolderCleanup(t *testing.T) {
+	lib := files.NewLibrarian(files.NewOSFileSystem())
+	seedShow := func(t *testing.T, dir string, videos ...string) {
+		t.Helper()
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "tvshow.nfo"), []byte("show"), 0644); err != nil {
+			t.Fatalf("write tvshow.nfo: %v", err)
+		}
+		for _, name := range videos {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("video"), 0644); err != nil {
+				t.Fatalf("write %s: %v", name, err)
+			}
+			sidecar := strings.TrimSuffix(name, filepath.Ext(name)) + ".nfo"
+			if err := os.WriteFile(filepath.Join(dir, sidecar), []byte("nfo"), 0644); err != nil {
+				t.Fatalf("write %s: %v", sidecar, err)
+			}
+		}
+	}
+
+	t.Run("last episode removes video, sidecar and folder", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "library", "Anime")
+		seedShow(t, dir, "Anime - E01.mkv")
+		video := filepath.Join(dir, "Anime - E01.mkv")
+
+		saved := []files.EpisodeStruct{
+			{EpisodeNumber: 1, AnimeName: "Anime", LibraryPaths: []string{video}},
+		}
+		fm := &orchestrationFM{saved: saved}
+		if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false); err != nil {
+			t.Fatalf("removeEpisodesAndLinks: %v", err)
+		}
+
+		assertGone(t, video, "video")
+		assertGone(t, filepath.Join(dir, "Anime - E01.nfo"), "sidecar")
+		assertGone(t, dir, "library folder")
+	})
+
+	t.Run("one of two leaves sibling video, sidecar, tvshow.nfo and folder", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "library", "Anime")
+		seedShow(t, dir, "Anime - E01.mkv", "Anime - E02.mkv")
+		v1 := filepath.Join(dir, "Anime - E01.mkv")
+		v2 := filepath.Join(dir, "Anime - E02.mkv")
+
+		saved := []files.EpisodeStruct{
+			{EpisodeNumber: 1, EpisodeHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", AnimeName: "Anime", LibraryPaths: []string{v1}},
+			{EpisodeNumber: 2, EpisodeHash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", AnimeName: "Anime", LibraryPaths: []string{v2}},
+		}
+		backend := torrents.NewFakeBackend()
+		backend.AddCompleted(saved[0].EpisodeHash, t.TempDir())
+		backend.AddCompleted(saved[1].EpisodeHash, t.TempDir())
+		fm := &orchestrationFM{saved: saved}
+
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false); err != nil {
+			t.Fatalf("removeEpisodesAndLinks: %v", err)
+		}
+
+		assertGone(t, v1, "deleted episode video")
+		assertGone(t, filepath.Join(dir, "Anime - E01.nfo"), "deleted episode sidecar")
+		assertExists(t, v2, "sibling video")
+		assertExists(t, filepath.Join(dir, "Anime - E02.nfo"), "sibling sidecar")
+		assertExists(t, filepath.Join(dir, "tvshow.nfo"), "tvshow.nfo")
+		assertExists(t, dir, "library folder")
+	})
+
+	t.Run("keepData leaves video, sidecar and folder", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "library", "Anime")
+		seedShow(t, dir, "Anime - E01.mkv")
+		video := filepath.Join(dir, "Anime - E01.mkv")
+
+		saved := []files.EpisodeStruct{
+			{EpisodeNumber: 1, AnimeName: "Anime", LibraryPaths: []string{video}},
+		}
+		fm := &orchestrationFM{saved: saved}
+		if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, []files.EpisodeKey{{Episode: 1}}, saved, true, false); err != nil {
+			t.Fatalf("removeEpisodesAndLinks: %v", err)
+		}
+
+		assertExists(t, video, "video")
+		assertExists(t, filepath.Join(dir, "Anime - E01.nfo"), "sidecar")
+		assertExists(t, dir, "library folder")
+	})
+}
+
 func TestReconcileLibrary(t *testing.T) {
 	const organized = "1111111111111111111111111111111111111111"
 	const pending = "2222222222222222222222222222222222222222"

@@ -562,10 +562,12 @@ func (m *FileManager) DeleteEpisodesFromFile(keys []EpisodeKey) error {
 	return m.saveEpisodesLocked(newSaved)
 }
 
-// DeleteEmptyFolders removes the anime directories left empty in the library after a deletion. The
-// download directory lives inside it (see Config.DownloadPath), and rain allocates <download>/<id>
-// before writing any byte — that's why the sweep skips it explicitly, otherwise it would delete
-// freshly added torrents.
+// DeleteEmptyFolders removes leftover anime directories from the library: empty ones, and
+// ones that only contain `.nfo` files (tvshow.nfo plus Jellyfin episode sidecars). A
+// subdirectory, poster, or any other leftover keeps the folder. The download directory
+// lives inside the library (see Config.DownloadPath), and rain allocates <download>/<id>
+// before writing any byte — that's why the sweep skips it explicitly, otherwise it would
+// delete freshly added torrents.
 func (m *FileManager) DeleteEmptyFolders(completedAnimeSaveFolder string) error {
 	if completedAnimeSaveFolder == "" {
 		return fmt.Errorf("completed anime path cannot be empty")
@@ -831,21 +833,52 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 			continue
 		}
 
-		if len(subEntries) == 0 {
-			if err := m.fs.Remove(folderPath); err != nil {
+		if !nfoOnlyFolder(subEntries) {
+			continue
+		}
+
+		failed := false
+		for _, sub := range subEntries {
+			filePath := filepath.Join(folderPath, sub.Name())
+			if err := m.fs.Remove(filePath); err != nil {
 				logger.Logger.Warn().
 					Err(err).
-					Str("folder_path", folderPath).
-					Msg("Failed to delete empty folder")
-			} else {
-				logger.Logger.Info().
-					Str("folder_path", folderPath).
-					Msg("Deleted empty folder")
+					Str("path", filePath).
+					Msg("Failed to delete leftover nfo")
+				failed = true
 			}
+		}
+		if failed {
+			continue
+		}
+
+		if err := m.fs.Remove(folderPath); err != nil {
+			logger.Logger.Warn().
+				Err(err).
+				Str("folder_path", folderPath).
+				Msg("Failed to delete leftover library folder")
+		} else {
+			logger.Logger.Info().
+				Str("folder_path", folderPath).
+				Msg("Deleted leftover library folder")
 		}
 	}
 
 	return nil
+}
+
+// nfoOnlyFolder reports whether every remaining entry is a file whose extension is `.nfo`
+// (case-insensitive). Zero entries is the same rule: the folder is leftover.
+func nfoOnlyFolder(entries []os.DirEntry) bool {
+	for _, e := range entries {
+		if e.IsDir() {
+			return false
+		}
+		if !strings.EqualFold(filepath.Ext(e.Name()), ".nfo") {
+			return false
+		}
+	}
+	return true
 }
 
 // LoadAnilistCache reads the snapshot of the AniList caches. A missing file returns (nil, nil): a

@@ -419,7 +419,8 @@ func (l *trackingLibrarian) RemoveFromLibrary(path string) error {
 	l.removedPaths = append(l.removedPaths, path)
 	return nil
 }
-func (l *trackingLibrarian) ProbePath(string) error { return nil }
+func (l *trackingLibrarian) RemoveFolderIfNoVideo(string) error { return nil }
+func (l *trackingLibrarian) ProbePath(string) error             { return nil }
 
 func deleteTorrentRequest(hash, query string) *http.Request {
 	url := "/api/v1/torrents/" + hash

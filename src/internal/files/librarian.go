@@ -28,8 +28,16 @@ type Librarian interface {
 	// A destination holding a *different* file is replaced by the new hardlink, which
 	// is what the redownload/replace flows want.
 	Organize(req OrganizeRequest) ([]string, error)
-	// RemoveFromLibrary deletes a single library hardlink. A missing file is not an error.
+	// RemoveFromLibrary deletes a single library hardlink and, once that file is gone,
+	// its sibling with the same basename and a `.nfo` extension (Jellyfin's episode
+	// sidecar). A missing file is not an error. A path that is itself `.nfo` is not
+	// given a further sidecar. A sidecar Remove failure is logged and does not fail
+	// the call once the video is gone.
 	RemoveFromLibrary(path string) error
+	// RemoveFolderIfNoVideo deletes dir and everything in it when it contains no video
+	// files (recursive). A remaining video — including extras/NCOP that Organize
+	// hardlinked — leaves the folder untouched. A missing directory is not an error.
+	RemoveFolderIfNoVideo(dir string) error
 	// ProbePath validates, on config save and on every verification pass, that the library
 	// supports hardlinks. The cross-volume check is no longer needed (the download
 	// directory is derived from the library, so they are always on the same filesystem), but
@@ -322,13 +330,61 @@ func (o *organizer) RemoveFromLibrary(path string) error {
 		return nil
 	}
 	if err := o.fs.Remove(path); err != nil {
-		if _, statErr := o.fs.Stat(path); statErr != nil {
-			// Already gone — not an error.
-			return nil
+		if _, statErr := o.fs.Stat(path); statErr == nil {
+			// Still on disk — leave the sidecar; Jellyfin still has an episode.
+			return err
 		}
-		return err
+		// Already gone — not an error; still try the sidecar.
+	}
+	if strings.EqualFold(filepath.Ext(path), ".nfo") {
+		return nil
+	}
+	sidecar := strings.TrimSuffix(path, filepath.Ext(path)) + ".nfo"
+	if err := o.fs.Remove(sidecar); err != nil {
+		if _, statErr := o.fs.Stat(sidecar); statErr == nil {
+			logger.Logger.Warn().Err(err).Str("path", sidecar).Msg("Failed to remove episode nfo sidecar")
+		}
 	}
 	return nil
+}
+
+func (o *organizer) RemoveFolderIfNoVideo(dir string) error {
+	if dir == "" {
+		return nil
+	}
+	if _, err := o.fs.Stat(dir); err != nil {
+		return nil
+	}
+	videos, err := o.collectVideoFiles(dir)
+	if err != nil {
+		return err
+	}
+	if len(videos) > 0 {
+		return nil
+	}
+	return o.removeTree(dir)
+}
+
+// removeTree deletes path and everything under it using ReadDir + Remove. FileSystem
+// has no RemoveAll.
+func (o *organizer) removeTree(path string) error {
+	entries, err := o.fs.ReadDir(path)
+	if err != nil {
+		return o.fs.Remove(path)
+	}
+	for _, e := range entries {
+		child := filepath.Join(path, e.Name())
+		if e.IsDir() {
+			if err := o.removeTree(child); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := o.fs.Remove(child); err != nil {
+			return err
+		}
+	}
+	return o.fs.Remove(path)
 }
 
 func (o *organizer) ProbePath(completedPath string) error {

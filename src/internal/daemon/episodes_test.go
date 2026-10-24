@@ -893,7 +893,8 @@ func (s *spyLibrarian) RemoveFromLibrary(string) error {
 	s.called = true
 	return nil
 }
-func (s *spyLibrarian) ProbePath(string) error { return nil }
+func (s *spyLibrarian) RemoveFolderIfNoVideo(string) error { return nil }
+func (s *spyLibrarian) ProbePath(string) error             { return nil }
 
 // TestRemoveTorrentWithEpisodes_OrphanTorrentCallsBackendOnly checks the orphan torrent case (no
 // saved episode matches the hash): backend.Remove is called, nothing is blocked, no error.

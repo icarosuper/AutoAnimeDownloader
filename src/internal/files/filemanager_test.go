@@ -56,6 +56,19 @@ func TestLoadBlockedEpisodes_DiscardsLegacyIntList(t *testing.T) {
 }
 
 func TestDeleteEmptyFolders(t *testing.T) {
+	assertGone := func(t *testing.T, path, what string) {
+		t.Helper()
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should have been deleted (%s): %v", what, path, err)
+		}
+	}
+	assertKept := func(t *testing.T, path, what string) {
+		t.Helper()
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s should have been kept (%s): %v", what, path, err)
+		}
+	}
+
 	t.Run("deletes an empty library folder", func(t *testing.T) {
 		completed := t.TempDir()
 		empty := filepath.Join(completed, "Empty Anime")
@@ -67,9 +80,69 @@ func TestDeleteEmptyFolders(t *testing.T) {
 			t.Fatalf("DeleteEmptyFolders: %v", err)
 		}
 
-		if _, err := os.Stat(empty); err == nil {
-			t.Error("empty folder should have been deleted")
+		assertGone(t, empty, "empty folder")
+	})
+
+	t.Run("deletes a folder that only has nfo files", func(t *testing.T) {
+		completed := t.TempDir()
+		dir := filepath.Join(completed, "Prisma Illya")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
 		}
+		if err := os.WriteFile(filepath.Join(dir, "tvshow.nfo"), []byte("show"), 0644); err != nil {
+			t.Fatalf("write tvshow.nfo: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "Anime - E01.nfo"), []byte("ep"), 0644); err != nil {
+			t.Fatalf("write episode nfo: %v", err)
+		}
+
+		if err := newTestManager(t).DeleteEmptyFolders(completed); err != nil {
+			t.Fatalf("DeleteEmptyFolders: %v", err)
+		}
+
+		assertGone(t, dir, "nfo-only folder")
+	})
+
+	t.Run("keeps a folder that has a video", func(t *testing.T) {
+		completed := t.TempDir()
+		dir := filepath.Join(completed, "Anime")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "tvshow.nfo"), []byte("show"), 0644); err != nil {
+			t.Fatalf("write nfo: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "video.mkv"), []byte("video"), 0644); err != nil {
+			t.Fatalf("write video: %v", err)
+		}
+
+		if err := newTestManager(t).DeleteEmptyFolders(completed); err != nil {
+			t.Fatalf("DeleteEmptyFolders: %v", err)
+		}
+
+		assertKept(t, dir, "folder with video")
+		assertKept(t, filepath.Join(dir, "video.mkv"), "video")
+	})
+
+	t.Run("keeps a folder that has a poster", func(t *testing.T) {
+		completed := t.TempDir()
+		dir := filepath.Join(completed, "Anime")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "tvshow.nfo"), []byte("show"), 0644); err != nil {
+			t.Fatalf("write nfo: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "poster.jpg"), []byte("art"), 0644); err != nil {
+			t.Fatalf("write poster: %v", err)
+		}
+
+		if err := newTestManager(t).DeleteEmptyFolders(completed); err != nil {
+			t.Fatalf("DeleteEmptyFolders: %v", err)
+		}
+
+		assertKept(t, dir, "folder with poster")
+		assertKept(t, filepath.Join(dir, "poster.jpg"), "poster")
 	})
 
 	// rain allocates <download>/<id> and only then writes into it. Without this guard the
@@ -85,9 +158,7 @@ func TestDeleteEmptyFolders(t *testing.T) {
 			t.Fatalf("DeleteEmptyFolders: %v", err)
 		}
 
-		if _, err := os.Stat(torrentDir); err != nil {
-			t.Errorf("empty torrent directory should not have been deleted: %v", err)
-		}
+		assertKept(t, torrentDir, "empty torrent directory")
 	})
 
 	t.Run("rejects empty path", func(t *testing.T) {

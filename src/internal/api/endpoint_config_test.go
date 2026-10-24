@@ -19,6 +19,7 @@ type stubLibrarian struct {
 
 func (s *stubLibrarian) Organize(files.OrganizeRequest) ([]string, error) { return nil, nil }
 func (s *stubLibrarian) RemoveFromLibrary(string) error                   { return nil }
+func (s *stubLibrarian) RemoveFolderIfNoVideo(string) error               { return nil }
 func (s *stubLibrarian) ProbePath(completedPath string) error             { return s.probeErr }
 
 type mockFileManager struct {

@@ -10,4 +10,4 @@ remain in git history. The decisions that came out of them live in
 | [subtitle-language-filter](2026-08-24-subtitle-language-filter-design.md) | Designed, not implemented — no fixed release ([TODO](../../TODO.md)) |
 | [standalone-torrent-picker](2026-10-23-standalone-torrent-picker-design.md) | Designed, not implemented — `v2.7.0` ([TODO](../../TODO.md)) |
 | [dashboard-recent-shelf](2026-10-23-dashboard-recent-shelf-design.md) | Designed, not implemented — `v2.8.0` ([TODO](../../TODO.md)) |
-| [library-nfo-folder-cleanup](2026-10-24-library-nfo-folder-cleanup-design.md) | Designed, not implemented — leftover `tvshow.nfo` / episode `.nfo` keep library folders alive after the videos are gone |
+

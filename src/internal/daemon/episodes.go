@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path/filepath"
 	"time"
 )
 
@@ -1084,6 +1085,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 	// Remove library hardlinks (skipped when keepData: keeping the library copy while the
 	// torrent is removed anyway does not double as "keep everything" since it's the same inode).
 	if !keepData {
+		touchedDirs := make(map[string]bool)
 		for _, ep := range savedEpisodes {
 			if !deleteSet[ep.Key()] {
 				continue
@@ -1098,6 +1100,14 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 				if err := librarian.RemoveFromLibrary(p); err != nil {
 					logger.Logger.Warn().Err(err).Str("path", p).Msg("Failed to remove library hardlink")
 				}
+				if dir := filepath.Dir(p); dir != "" && dir != "." {
+					touchedDirs[dir] = true
+				}
+			}
+		}
+		for dir := range touchedDirs {
+			if err := librarian.RemoveFolderIfNoVideo(dir); err != nil {
+				logger.Logger.Warn().Err(err).Str("folder_path", dir).Msg("Failed to remove library folder")
 			}
 		}
 	}
