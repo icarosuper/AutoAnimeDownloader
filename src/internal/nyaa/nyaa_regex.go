@@ -119,10 +119,11 @@ var (
 		{regexp.MustCompile(`(?i)BDRemux`), "BDRemux"},
 		{regexp.MustCompile(`(?i)BDRip|BD\s*Ray`), "BDRip"},
 		{regexp.MustCompile(`(?i)Blu-ray|Blu\s*ray`), "BD"},
+		{regexp.MustCompile(`(?i)\[BD\]|\bBD\b`), "BD"},
 		{regexp.MustCompile(`(?i)WEB-DL`), "WEB-DL"},
 		{regexp.MustCompile(`(?i)WEBRip`), "WEBRip"},
 		{regexp.MustCompile(`(?i)HDTV`), "HDTV"},
-		{regexp.MustCompile(`(?i)\bTV\s*Rip|\bTV\b`), "TV"},
+		{regexp.MustCompile(`(?i)\bTV\s*Rip|\[TV\]`), "TV"},
 		{regexp.MustCompile(`(?i)DVD`), "DVD"},
 	}
 

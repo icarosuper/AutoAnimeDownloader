@@ -175,6 +175,44 @@ func TestDefaultPriorities_TokensAreReachable(t *testing.T) {
 			t.Errorf("default resolution %q is inert: extractResolution returns %q", res, got)
 		}
 	}
+	for _, source := range d.Sources {
+		got := strings.ToLower(nyaa.ExtractSource("[Group] Anime - 01 [" + source + "]"))
+		if got != source {
+			t.Errorf("default source %q is inert: ExtractSource returns %q", source, got)
+		}
+	}
+}
+
+func TestExtractSource_BracketBD(t *testing.T) {
+	got := nyaa.ExtractSource("[Group] Anime S01 [BD] [1080p]")
+	if got != "BD" {
+		t.Fatalf("ExtractSource([BD]) = %q, want BD", got)
+	}
+}
+
+func TestExtractSource_BareTVInTitleIsNotASource(t *testing.T) {
+	got := nyaa.ExtractSource("[SubsPlease] Lucky Star (TV) - 01 (1080p)")
+	if strings.EqualFold(got, "TV") {
+		t.Fatalf("ExtractSource on (TV) format marker returned %q", got)
+	}
+}
+
+func TestExtractSource_TVRipAndBracketTVStillMatch(t *testing.T) {
+	if got := nyaa.ExtractSource("[Group] Anime 01 [TVRip]"); !strings.EqualFold(got, "TV") {
+		t.Fatalf("TVRip → TV, got %q", got)
+	}
+	if got := nyaa.ExtractSource("[Group] Anime 01 [TV]"); !strings.EqualFold(got, "TV") {
+		t.Fatalf("[TV] → TV, got %q", got)
+	}
+}
+
+func TestExtractSource_SpecificBDPatternsStillWin(t *testing.T) {
+	if got := nyaa.ExtractSource("[Group] Anime [BDRip] [1080p]"); !strings.EqualFold(got, "BDRip") {
+		t.Fatalf("BDRip must win over bare BD, got %q", got)
+	}
+	if got := nyaa.ExtractSource("[Group] Anime [BDRemux] [1080p]"); !strings.EqualFold(got, "BDRemux") {
+		t.Fatalf("BDRemux must win over bare BD, got %q", got)
+	}
 }
 
 func TestExtractResolution_Canonicalizes(t *testing.T) {

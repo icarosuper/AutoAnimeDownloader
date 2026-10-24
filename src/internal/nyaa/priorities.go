@@ -102,7 +102,7 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"resolution": func(a, b TorrentResult) int { return resCompare(a, b) },
 	"fansub":     func(a, b TorrentResult) int { return fansubPriority(a.Name) - fansubPriority(b.Name) },
 	"source": func(a, b TorrentResult) int {
-		return sourcePriority(extractSource(a.Name)) - sourcePriority(extractSource(b.Name))
+		return sourcePriority(ExtractSource(a.Name)) - sourcePriority(ExtractSource(b.Name))
 	},
 	"codec": codecCompare,
 	"audio": func(a, b TorrentResult) int {

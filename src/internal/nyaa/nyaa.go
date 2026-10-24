@@ -1125,8 +1125,8 @@ func fansubPriority(torrentName string) int {
 	return best
 }
 
-// extractSource extracts the release source (BD, WEB-DL, TV, etc.)
-func extractSource(name string) string {
+// ExtractSource extracts the release source (BD, WEB-DL, TV, etc.)
+func ExtractSource(name string) string {
 	nameLower := strings.ToLower(name)
 	for _, sp := range reSourcePatterns {
 		if sp.re.MatchString(nameLower) {
