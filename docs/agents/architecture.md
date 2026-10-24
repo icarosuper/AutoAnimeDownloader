@@ -491,6 +491,12 @@ same ruler as the name (decisions.md #84). **`IsVideoFile` lives here, not in `f
 read the same pack file list (the Librarian after download, `PackFileRange` before) and `files`
 already imports `nyaa` — the other way would be a cycle.
 
+**`detail.go` — view-page scrape for the picker.** `FetchTorrentDetail` builds
+`getNyaaBaseURL()+"/view/"+id` itself and **never takes a URL from the caller**
+([decisions.md #105](decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller));
+HTTP 404 is `ErrTorrentNotFound`, any other transport/non-200 is `ErrNyaaUnavailable`. Movie rows
+fill `DetailURL` the same way pack rows do — the description pane needs it.
+
 **Sorting** (`priorities.go`): the `health` criterion compares the **band** (`healthTier`, floors
 `1/5/20/100/400` seeders), not the raw score (decisions.md #55). `SetPriorities` and
 `SetMaxSearchPages`/`SetMaxBatchTorrentSizeGB` use the same atomic+restore pattern, pushed by

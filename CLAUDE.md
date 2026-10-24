@@ -11,7 +11,7 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 1. **Run tests**: `go test ./...`
 2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add an entry to `decisions.md`
    - `architecture.md` documents what **the code can't answer by itself**: flow between files, invariants that hurt to break, negative facts ("there is no `daemon.go`"), disambiguation of similar names, and the pointer to the decision. **Don't** list symbols with a one-line purpose — `grep '^func '` answers that for free and always up to date; a hand-written symbol table is a copy that goes stale. A new file only gets text if it brings one of those five; deleted file → deleted text. The question it answers is "which file do I open and what bites me there", not "which functions exist"
-   - New entry in `decisions.md` → next number (the highest today is **#104**, and entries are not in numeric order in the file) + one line in the Index at the top. When referencing a decision, always use the anchor: `[decisions.md #43](decisions.md#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)`
+   - New entry in `decisions.md` → next number (the highest today is **#105**, and entries are not in numeric order in the file) + one line in the Index at the top. When referencing a decision, always use the anchor: `[decisions.md #43](decisions.md#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)`
 3. **CLI parity**: a new API endpoint, or a web-app action that hits the API, ships with its CLI command in the **same change** (client method, nested command, `--help`, `docs/guides/cli.md`). Checklist in [conventions.md](docs/agents/conventions.md). Frontend-only work (layout, i18n, presets that live in the frontend, WebSocket) does not. A new `config.json` field is already settable through `config set`.
 4. **NEVER COMMIT OR PUSH WITHOUT PERMISSION**: the user will do that themselves
 
@@ -78,6 +78,6 @@ request already covers isn't "in passing", it's the job. (Portuguese text is the
 - [Testing](docs/agents/testing.md) — read when writing or running tests; mock patterns
 - [Commands](docs/agents/commands.md) — read when building or running the daemon/frontend
 - [Release](docs/guides/release.md) — read when stamping a version (tag, GitHub Release, AUR)
-- [Decisions](docs/agents/decisions.md) — read before "fixing" unusual patterns; 104 self-contained entries. **Start from the Index at the top and read only the entry it points to** — the whole file is 2k lines and never needs to be read end to end
+- [Decisions](docs/agents/decisions.md) — read before "fixing" unusual patterns; 105 self-contained entries. **Start from the Index at the top and read only the entry it points to** — the whole file is 2k lines and never needs to be read end to end
 - [Troubleshooting Downloads](docs/agents/troubleshooting-downloads.md) — follow when animes fail to download; diagnose search/filter logic bugs step by step
 - [Sources](docs/agents/sources.md) — read before adding a torrent source; measured limits of Nyaa, the AnimeTosho JSON API, and why the alternatives were rejected

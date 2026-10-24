@@ -111,6 +111,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#102** — The bug report has no backend: consent is the act of attaching the file](#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)
 - [**#103** — Log redaction is by key, and a test forces every new key to be classified](#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)
 - [**#104** — `--yes` is a CLI gate; the API keeps its query defaults](#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)
+- [**#105** — `FetchTorrentDetail` builds the view URL itself; it never takes one from the caller](#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller)
 
 ---
 
@@ -3009,3 +3010,19 @@ false" contract too.
 
 **Don't "fix" by:** prompting when stdin is not a TTY, defaulting `--yes` on in scripts, or adding
 `confirm=true` to the API.
+
+### 105. FetchTorrentDetail builds the view URL itself; it never takes one from the caller
+
+**Location:** `nyaa/detail.go` (`FetchTorrentDetail`, `ParseNyaaID`); consumed later by the
+standalone torrent picker's description pane.
+
+**The rule:** the only input is a numeric Nyaa id. The view URL is always
+`getNyaaBaseURL()+"/view/"+strconv.Itoa(nyaaID)`. A caller that already has a `DetailURL` parses
+the id with `ParseNyaaID` and hands that over — it does not pass the string through.
+
+**Why:** the API that will expose this will take an id from the client. Accepting a URL would let
+the client point the daemon at any host (`NYAA_URL` is the operator's choice; a request body is
+not). Building the URL here keeps SSRF out of every future caller by construction.
+
+**Don't "fix" by:** adding a `FetchTorrentDetailURL(url string)` convenience that "just" reuses
+the same parser, or by letting the API accept a URL "because the UI already has it".

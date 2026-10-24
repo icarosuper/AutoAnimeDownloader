@@ -39,8 +39,8 @@ type TorrentResult struct {
 	// size ("[man] Azumanga Daioh [BD 1080p HEVC FLAC]"). Its range must come from the file list:
 	// unlike a labeled pack, an unknown range never counts as "covers everything".
 	UnlabeledPack bool `json:"-"`
-	// DetailURL is the row's /view/<id> page. Only the pack path uses it (PackFileRange), and only the
-	// searches that return packs fill it.
+	// DetailURL is the row's /view/<id> page. PackFileRange and FetchTorrentDetail consume it; the
+	// anime and movie searches fill it.
 	DetailURL string `json:"detailUrl,omitempty"`
 }
 
@@ -106,7 +106,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 		cleanRomaji := removeSpecialCharacters(romaji)
 		addVariant(cleanRomaji)
 
-		// Prioridade 2: Romaji original
+		// Priority 2: original romaji
 		addVariant(romaji)
 	}
 
@@ -115,7 +115,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 		cleanEnglish := removeSpecialCharacters(english)
 		addVariant(cleanEnglish)
 
-		// Prioridade 4: English original
+		// Priority 4: original English
 		addVariant(english)
 	}
 
@@ -467,7 +467,7 @@ func fetchNyaaPage(nyaaURL string) (*goquery.Document, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		logger.Logger.Debug().Int("status_code", resp.StatusCode).Str("url", nyaaURL).Msg("Nyaa returned non-200 status")
-		return nil, fmt.Errorf("HTTP error: status %d", resp.StatusCode)
+		return nil, &nyaaHTTPError{Status: resp.StatusCode}
 	}
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
@@ -940,6 +940,7 @@ func ScrapNyaaForMovie(animeName string, isFormatMovie ...bool) ([]TorrentResult
 			Size:       size,
 			Fansub:     fansub,
 			IsBatch:    false,
+			DetailURL:  detailURL(cells.Eq(1).Find("a").Not(".comments").AttrOr("href", "")),
 		})
 	}
 

@@ -2,6 +2,8 @@ package unit
 
 import (
 	"AutoAnimeDownloader/src/internal/nyaa"
+
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -1238,6 +1240,91 @@ func TestScrapNyaaForAnime_CapturesTheDetailURL(t *testing.T) {
 	}
 	if want := "https://nyaa.si/view/1"; results[0].DetailURL != want {
 		t.Errorf("want %q, got %q", want, results[0].DetailURL)
+	}
+}
+
+func TestScrapNyaaForMovie_CapturesTheDetailURL(t *testing.T) {
+	restore := mockHttpGet(mockHtml([]string{"[SubsPlease] Suzume no Tojimari (2022) [1080p]"}))
+	defer restore()
+	results, err := nyaa.ScrapNyaaForMovie("Suzume no Tojimari", true)
+	if err != nil {
+		t.Fatalf("ScrapNyaaForMovie: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("want at least one movie row")
+	}
+	if want := "https://nyaa.si/view/1"; results[0].DetailURL != want {
+		t.Errorf("DetailURL: want %q, got %q", want, results[0].DetailURL)
+	}
+}
+
+func TestParseNyaaID(t *testing.T) {
+	if got := nyaa.ParseNyaaID("https://nyaa.si/view/1664122"); got != 1664122 {
+		t.Errorf("got %d", got)
+	}
+	if got := nyaa.ParseNyaaID(""); got != 0 {
+		t.Errorf("empty: got %d", got)
+	}
+}
+
+func TestFetchTorrentDetail_SanitisesHTMLAndListsFiles(t *testing.T) {
+	html := `<!doctype html><html><body>
+<div id="torrent-description">
+  <p>Safe <strong>text</strong></p>
+  <script>alert(1)</script>
+  <iframe src="https://evil.example"></iframe>
+  <a href="https://nyaa.si/view/1" onclick="alert(1)">link</a>
+  <img src="/img/shot.png">
+</div>
+<div class="torrent-file-list panel-body">
+  <ul>
+    <li><a class="folder">Frieren</a>
+      <ul>
+        <li>Frieren - 01.mkv<span class="file-size">(312.1 MiB)</span></li>
+        <li>Frieren - 01.srt<span class="file-size">(40.0 KiB)</span></li>
+      </ul>
+    </li>
+  </ul>
+</div>
+</body></html>`
+	defer nyaa.MockNyaaHttpGet(func(u string) (*http.Response, error) {
+		if !strings.HasSuffix(u, "/view/1664122") {
+			t.Errorf("unexpected url %s", u)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(html)), Header: make(http.Header)}, nil
+	})()
+
+	d, err := nyaa.FetchTorrentDetail(1664122)
+	if err != nil {
+		t.Fatalf("FetchTorrentDetail: %v", err)
+	}
+	if strings.Contains(d.DescriptionHTML, "<script") || strings.Contains(d.DescriptionHTML, "iframe") || strings.Contains(d.DescriptionHTML, "onclick") {
+		t.Errorf("unsanitised HTML: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, "<p>") || !strings.Contains(d.DescriptionHTML, "Safe") {
+		t.Errorf("lost formatting: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, `src="https://nyaa.si/img/shot.png"`) {
+		t.Errorf("relative img src not resolved: %s", d.DescriptionHTML)
+	}
+	if d.NyaaURL != "https://nyaa.si/view/1664122" {
+		t.Errorf("NyaaURL = %q", d.NyaaURL)
+	}
+	if len(d.Files) != 2 {
+		t.Fatalf("files = %#v, want 2 (video and subtitle; folders are not rows)", d.Files)
+	}
+	if d.Files[0].Name != "Frieren/Frieren - 01.mkv" {
+		t.Errorf("nested name = %q", d.Files[0].Name)
+	}
+}
+
+func TestFetchTorrentDetail_Nyaa404(t *testing.T) {
+	defer nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+	})()
+	_, err := nyaa.FetchTorrentDetail(1)
+	if err == nil || !errors.Is(err, nyaa.ErrTorrentNotFound) {
+		t.Fatalf("want ErrTorrentNotFound, got %v", err)
 	}
 }
 
