@@ -176,6 +176,9 @@ All three go through the `min_seeders` floor (`filterSearchResults`).
 - `DownloadStandaloneAnime` **must never** call `handleSavedEpisodes`. With only one anime's
   episodes in hand and `delete_watched_episodes` on, `identifyEpisodesNotInWatching` would delete
   the rest of the library ([decisions.md #49](decisions.md#49-standalone-anime-tracked-by-the-list-is-the-snapshot-the-daemon-processes-and-downloadstandaloneanime-never-calls-handlesavedepisodes))
+- `DownloadStandaloneAnimeWithMagnet` adds the torrent, then the standalone id, then coverage
+  records — inverting that leaves a tracked id with no torrent. An unknown pack range writes **no**
+  episode records, not `1..total` (decisions.md #84). It also must never call `handleSavedEpisodes`.
 - `max_episodes_per_anime` is lifted **only after** a pack was actually chosen; without a pack, the
   limited selection stands and the oldest episodes are the ones that stay. `selectEpisodes` runs
   twice in the pass, and `dropAdopted` must run at **both** points — the function is pure, the
@@ -499,11 +502,13 @@ same ruler as the name (decisions.md #84). **`IsVideoFile` lives here, not in `f
 read the same pack file list (the Librarian after download, `PackFileRange` before) and `files`
 already imports `nyaa` — the other way would be a cycle.
 
-**`detail.go` — view-page scrape for the picker.** `FetchTorrentDetail` builds
-`getNyaaBaseURL()+"/view/"+id` itself and **never takes a URL from the caller**
+**`detail.go` — view-page scrape for the picker.** `FetchTorrentDetail` builds the URL through
+`ViewURL` (the `NYAA_URL` override lives only in `getNyaaBaseURL`) and **never takes a URL from the
+caller**
 ([decisions.md #105](decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller));
 HTTP 404 is `ErrTorrentNotFound`, any other transport/non-200 is `ErrNyaaUnavailable`. Movie rows
-fill `DetailURL` the same way pack rows do — the description pane needs it.
+fill `DetailURL` the same way pack rows do — the description pane needs it. `PackFileRange` still
+takes an absolute URL; daemon callers that only have an id use `ViewURL`.
 
 **Sorting** (`priorities.go`): the `health` criterion compares the **band** (`healthTier`, floors
 `1/5/20/100/400` seeders), not the raw score (decisions.md #55). `SetPriorities` and

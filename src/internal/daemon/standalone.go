@@ -3,10 +3,12 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 )
 
@@ -163,4 +165,112 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 	saveEpisodesToFile(fm, result.newEpisodes)
 
 	return len(result.newEpisodes), nil
+}
+
+// DownloadStandaloneAnimeWithMagnet adds a user-chosen whole-title magnet, then the standalone
+// id, then episode records for the pack's coverage. The torrent goes in first so a refused add
+// cannot leave a tracked id with nothing to download. An unknown pack range writes no episode
+// records (decisions.md #84).
+func DownloadStandaloneAnimeWithMagnet(fm FileManagerInterface, backend torrents.TorrentBackend, configs *files.Config, mediaID int, magnet, name string, nyaaID int, sizeBytes int64) (int, error) {
+	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
+		return 0, err
+	}
+	hash, err := addAndPrioritize(backend, magnet, sizeBytes, configs)
+	if err != nil || hash == "" {
+		return 0, fmt.Errorf("failed to add torrent to embedded client: %w", err)
+	}
+
+	if err := fm.AddStandaloneAnime(mediaID); err != nil {
+		return 0, fmt.Errorf("failed to add standalone anime: %w", err)
+	}
+
+	records, err := standaloneMagnetCoverage(mediaID, hash, name, nyaaID)
+	if err != nil {
+		rollbackStandaloneID(fm, mediaID)
+		return 0, err
+	}
+	if len(records) == 0 {
+		return 0, nil
+	}
+	if err := fm.UpsertEpisodes(records); err != nil {
+		rollbackStandaloneID(fm, mediaID)
+		return 0, fmt.Errorf("failed to save episodes: %w", err)
+	}
+	return len(records), nil
+}
+
+func rollbackStandaloneID(fm FileManagerInterface, mediaID int) {
+	if err := fm.RemoveStandaloneAnime(mediaID); err != nil {
+		logger.Logger.Warn().Err(err).Int("media_id", mediaID).
+			Msg("Failed to roll back standalone id after magnet coverage failed")
+	}
+}
+
+func standaloneMagnetCoverage(mediaID int, hash, name string, nyaaID int) ([]files.EpisodeStruct, error) {
+	anime, err := anilist.GetMediaByID(mediaID, anilist.PriorityCritical)
+	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
+		return nil, fmt.Errorf("failed to fetch anime %d from AniList: %w", mediaID, err)
+	}
+	if anime == nil {
+		return nil, fmt.Errorf("anime %d does not exist on AniList", mediaID)
+	}
+
+	title := getAnimeTitleSafe(*anime)
+	now := time.Now()
+	if isAnimeMovie(*anime) {
+		return movieMagnetRecords(*anime, mediaID, title, hash, now), nil
+	}
+
+	info := nyaa.ExtractBatchInfo(name)
+	if info.EndEpisode == 0 && nyaaID > 0 {
+		if fileInfo, ok := nyaa.PackFileRange(nyaa.ViewURL(nyaaID)); ok {
+			info = fileInfo
+		}
+	}
+	if info.EndEpisode == 0 {
+		return nil, nil
+	}
+
+	var records []files.EpisodeStruct
+	for _, node := range anilist.EpisodeList(*anime, 1) {
+		airedAndCovered := node.TimeUntilAiring <= 0 && node.Episode >= info.StartEpisode && node.Episode <= info.EndEpisode
+		if !airedAndCovered {
+			continue
+		}
+		records = append(records, magnetEpisodeRecord(mediaID, title, hash, node.Episode, now, true, info.StartEpisode, info.EndEpisode))
+	}
+	return records, nil
+}
+
+func movieMagnetRecords(anime anilist.MediaList, mediaID int, title, hash string, now time.Time) []files.EpisodeStruct {
+	var nodes []anilist.AiringNode
+	for _, node := range anilist.EpisodeList(anime, 1) {
+		if node.TimeUntilAiring <= 0 {
+			nodes = append(nodes, node)
+		}
+	}
+	if len(nodes) == 0 {
+		nodes = append(nodes, anilist.AiringNode{Episode: 1})
+	}
+
+	records := make([]files.EpisodeStruct, 0, len(nodes))
+	for _, node := range nodes {
+		records = append(records, magnetEpisodeRecord(mediaID, title, hash, node.Episode, now, false, 0, 0))
+	}
+	return records
+}
+
+func magnetEpisodeRecord(mediaID int, title, hash string, episode int, now time.Time, isBatch bool, batchStart, batchEnd int) files.EpisodeStruct {
+	return files.EpisodeStruct{
+		AnimeID:         mediaID,
+		AnimeName:       title,
+		EpisodeHash:     hash,
+		EpisodeName:     fmt.Sprintf("%s - Episode %d", title, episode),
+		EpisodeNumber:   episode,
+		IsBatch:         isBatch,
+		BatchStart:      batchStart,
+		BatchEnd:        batchEnd,
+		DownloadDate:    now,
+		ManuallyManaged: true,
+	}
 }

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -251,5 +252,159 @@ func TestDownloadStandaloneAnime_UnknownMedia(t *testing.T) {
 	fm := &mockFileManagerForEpisodes{}
 	if _, err := DownloadStandaloneAnime(fm, torrents.NewFakeBackend(), standaloneTestConfig(), 999999); err == nil {
 		t.Fatal("want an error for an unknown media id")
+	}
+}
+
+const standaloneMagnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+
+const emptyAniListPage = `{"data": {"Page": {"mediaList": []}}}`
+
+func TestDownloadStandaloneAnimeWithMagnet_WritesOnlyCoveredEpisodes(t *testing.T) {
+	defer mockAniListRouter(t, emptyAniListPage, mediaForFrierenSeason2)()
+
+	fm := &mockFileManagerForEpisodes{}
+	backend := torrents.NewFakeBackend()
+	name := "[SubsPlease] Frieren Season 2 (01-12) [1080p]"
+
+	n, err := DownloadStandaloneAnimeWithMagnet(fm, backend, standaloneTestConfig(), 700, standaloneMagnet, name, 0, 0)
+	if err != nil {
+		t.Fatalf("DownloadStandaloneAnimeWithMagnet: %v", err)
+	}
+	if n != 12 {
+		t.Fatalf("want 12 saved episodes, got %d", n)
+	}
+	if !containsID(fm.standaloneAnimes, 700) {
+		t.Fatalf("standalone id 700 missing, got %v", fm.standaloneAnimes)
+	}
+	if len(backend.List()) != 1 {
+		t.Fatalf("want torrent in session, got %d", len(backend.List()))
+	}
+	if len(fm.savedEpisodes) != 12 {
+		t.Fatalf("want 12 saved episodes on disk, got %d", len(fm.savedEpisodes))
+	}
+	seen := map[int]bool{}
+	for _, ep := range fm.savedEpisodes {
+		if ep.EpisodeNumber < 1 || ep.EpisodeNumber > 12 {
+			t.Errorf("uncovered episode %d was saved", ep.EpisodeNumber)
+		}
+		if !ep.IsBatch || ep.BatchStart != 1 || ep.BatchEnd != 12 {
+			t.Errorf("episode %d: want IsBatch 1-12, got IsBatch=%v %d-%d", ep.EpisodeNumber, ep.IsBatch, ep.BatchStart, ep.BatchEnd)
+		}
+		if !ep.ManuallyManaged {
+			t.Errorf("episode %d: want ManuallyManaged", ep.EpisodeNumber)
+		}
+		if ep.EpisodeHash == "" {
+			t.Errorf("episode %d: empty hash", ep.EpisodeNumber)
+		}
+		seen[ep.EpisodeNumber] = true
+	}
+	for i := 1; i <= 12; i++ {
+		if !seen[i] {
+			t.Errorf("missing covered episode %d", i)
+		}
+	}
+}
+
+func TestDownloadStandaloneAnimeWithMagnet_UnknownRangeWritesNoEpisodes(t *testing.T) {
+	defer mockAniListRouter(t, emptyAniListPage, mediaForAnime500)()
+
+	fm := &mockFileManagerForEpisodes{}
+	backend := torrents.NewFakeBackend()
+
+	n, err := DownloadStandaloneAnimeWithMagnet(fm, backend, standaloneTestConfig(), 500, standaloneMagnet, "[SubsPlease] Standalone Anime [1080p]", 0, 0)
+	if err != nil {
+		t.Fatalf("DownloadStandaloneAnimeWithMagnet: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("want 0 episodes for an unknown range, got %d", n)
+	}
+	if !containsID(fm.standaloneAnimes, 500) {
+		t.Fatalf("standalone id 500 missing, got %v", fm.standaloneAnimes)
+	}
+	if len(backend.List()) != 1 {
+		t.Fatalf("want torrent in session, got %d", len(backend.List()))
+	}
+	if len(fm.savedEpisodes) != 0 {
+		t.Fatalf("unknown range must write no episode records, got %v", fm.savedEpisodes)
+	}
+}
+
+func TestDownloadStandaloneAnimeWithMagnet_AddFailureDoesNotWriteID(t *testing.T) {
+	defer mockAniListRouter(t, emptyAniListPage, mediaForAnime500)()
+
+	fm := &mockFileManagerForEpisodes{}
+	backend := torrents.NewFakeBackend()
+	backend.AddErr = fmt.Errorf("refused")
+
+	n, err := DownloadStandaloneAnimeWithMagnet(fm, backend, standaloneTestConfig(), 500, standaloneMagnet, "[SubsPlease] Standalone Anime (01-12) [1080p]", 0, 0)
+	if err == nil {
+		t.Fatal("want an error when the torrent add is refused")
+	}
+	if n != 0 {
+		t.Fatalf("want 0 episodes, got %d", n)
+	}
+	if len(fm.standaloneAnimes) != 0 {
+		t.Fatalf("standalone id must stay absent, got %v", fm.standaloneAnimes)
+	}
+	if len(fm.savedEpisodes) != 0 {
+		t.Fatalf("want no episodes, got %v", fm.savedEpisodes)
+	}
+	if len(backend.List()) != 0 {
+		t.Fatalf("refused add must leave the session empty, got %d torrents", len(backend.List()))
+	}
+}
+
+func TestDownloadStandaloneAnimeWithMagnet_SaveFailureRollsBackID(t *testing.T) {
+	defer mockAniListRouter(t, emptyAniListPage, mediaForFrierenSeason2)()
+
+	fm := &mockFileManagerForEpisodes{upsertErr: fmt.Errorf("disk full")}
+	backend := torrents.NewFakeBackend()
+
+	n, err := DownloadStandaloneAnimeWithMagnet(fm, backend, standaloneTestConfig(), 700, standaloneMagnet, "[SubsPlease] Frieren Season 2 (01-12) [1080p]", 0, 0)
+	if err == nil {
+		t.Fatal("want an error when episode save fails")
+	}
+	if n != 0 {
+		t.Fatalf("want 0 episodes on rollback, got %d", n)
+	}
+	if containsID(fm.standaloneAnimes, 700) {
+		t.Fatalf("save failure must remove the standalone id, still have %v", fm.standaloneAnimes)
+	}
+	if !containsID(fm.removedStandalone, 700) {
+		t.Fatalf("want RemoveStandaloneAnime(700), got %v", fm.removedStandalone)
+	}
+	if len(backend.List()) != 1 {
+		t.Fatalf("rollback leaves the torrent, got %d", len(backend.List()))
+	}
+}
+
+func TestDownloadStandaloneAnimeWithMagnet_MovieWritesAiredRecords(t *testing.T) {
+	defer mockAniListRouter(t, emptyAniListPage, mediaForMovie600)()
+
+	fm := &mockFileManagerForEpisodes{}
+	backend := torrents.NewFakeBackend()
+
+	n, err := DownloadStandaloneAnimeWithMagnet(fm, backend, standaloneTestConfig(), 600, standaloneMagnet, "[SubsPlease] Standalone Movie [1080p]", 0, 0)
+	if err != nil {
+		t.Fatalf("DownloadStandaloneAnimeWithMagnet: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("want 1 movie record, got %d", n)
+	}
+	if !containsID(fm.standaloneAnimes, 600) {
+		t.Fatalf("standalone id 600 missing, got %v", fm.standaloneAnimes)
+	}
+	if len(backend.List()) != 1 {
+		t.Fatalf("want torrent in session, got %d", len(backend.List()))
+	}
+	if len(fm.savedEpisodes) != 1 {
+		t.Fatalf("want 1 saved episode, got %d", len(fm.savedEpisodes))
+	}
+	ep := fm.savedEpisodes[0]
+	if ep.IsBatch || ep.BatchStart != 0 || ep.BatchEnd != 0 {
+		t.Errorf("movie record must not be a pack: IsBatch=%v %d-%d", ep.IsBatch, ep.BatchStart, ep.BatchEnd)
+	}
+	if ep.EpisodeNumber != 1 || !ep.ManuallyManaged {
+		t.Errorf("want episode 1 ManuallyManaged, got %+v", ep)
 	}
 }

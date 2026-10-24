@@ -1267,6 +1267,15 @@ func TestParseNyaaID(t *testing.T) {
 	}
 }
 
+func TestViewURL(t *testing.T) {
+	if got := nyaa.ViewURL(1664122); got != "https://nyaa.si/view/1664122" {
+		t.Errorf("got %q", got)
+	}
+	if nyaa.ParseNyaaID(nyaa.ViewURL(42)) != 42 {
+		t.Error("ViewURL must round-trip through ParseNyaaID")
+	}
+}
+
 func TestFetchTorrentDetail_SanitisesHTMLAndListsFiles(t *testing.T) {
 	html := `<!doctype html><html><body>
 <div id="torrent-description">

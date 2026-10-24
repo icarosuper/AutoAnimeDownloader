@@ -37,6 +37,7 @@ type mockFileManagerForEpisodes struct {
 	removedStandalone  []int
 	savedEpisodes      []files.EpisodeStruct
 	settings           map[int]files.AnimeSettings
+	upsertErr          error
 }
 
 func (m *mockFileManagerForEpisodes) LoadConfigs() (*files.Config, error) { return nil, nil }
@@ -45,7 +46,24 @@ func (m *mockFileManagerForEpisodes) LoadSavedEpisodes() ([]files.EpisodeStruct,
 	return m.savedEpisodes, nil
 }
 func (m *mockFileManagerForEpisodes) SaveEpisodesToFile([]files.EpisodeStruct) error { return nil }
-func (m *mockFileManagerForEpisodes) UpsertEpisodes([]files.EpisodeStruct) error     { return nil }
+func (m *mockFileManagerForEpisodes) UpsertEpisodes(episodes []files.EpisodeStruct) error {
+	if m.upsertErr != nil {
+		return m.upsertErr
+	}
+	byKey := make(map[files.EpisodeKey]int, len(m.savedEpisodes))
+	for i, ep := range m.savedEpisodes {
+		byKey[ep.Key()] = i
+	}
+	for _, ep := range episodes {
+		if i, ok := byKey[ep.Key()]; ok {
+			m.savedEpisodes[i] = ep
+			continue
+		}
+		byKey[ep.Key()] = len(m.savedEpisodes)
+		m.savedEpisodes = append(m.savedEpisodes, ep)
+	}
+	return nil
+}
 func (m *mockFileManagerForEpisodes) DeleteEpisodesFromFile(keys []files.EpisodeKey) error {
 	m.deletedEpisodeKeys = append(m.deletedEpisodeKeys, keys...)
 	return nil

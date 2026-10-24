@@ -52,6 +52,11 @@ func ParseNyaaID(detailURL string) int {
 	return id
 }
 
+// ViewURL is the absolute /view/<id> page for a Nyaa id, including the NYAA_URL override.
+func ViewURL(nyaaID int) string {
+	return getNyaaBaseURL() + "/view/" + strconv.Itoa(nyaaID)
+}
+
 // FetchTorrentDetail loads a Nyaa view page by id. The URL is built here on purpose — a caller
 // never supplies one (decisions.md #105).
 func FetchTorrentDetail(nyaaID int) (TorrentDetail, error) {
@@ -59,7 +64,7 @@ func FetchTorrentDetail(nyaaID int) (TorrentDetail, error) {
 		return TorrentDetail{}, fmt.Errorf("invalid nyaa id %d", nyaaID)
 	}
 
-	viewURL := getNyaaBaseURL() + "/view/" + strconv.Itoa(nyaaID)
+	viewURL := ViewURL(nyaaID)
 	doc, err := fetchNyaaPage(viewURL)
 	if err != nil {
 		var httpErr *nyaaHTTPError
