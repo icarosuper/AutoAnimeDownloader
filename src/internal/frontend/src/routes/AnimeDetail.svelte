@@ -8,6 +8,7 @@
   // desktop and mobile render through the same `ActionMenu`. The principal action has text
   // and stays in the same column; the rest lives in the `⋯`, also labelled.
   import { onDestroy } from "svelte";
+  import { push } from "svelte-spa-router";
   import { ChevronDown, ChevronRight } from "@lucide/svelte";
   import {
     getAnimeDetail,
@@ -18,7 +19,6 @@
     releaseEpisode,
     redownloadEpisode,
     replaceEpisodeWithMagnet,
-    replaceAnimeWithMagnet,
     updateAnimeSettings,
     removeStandaloneAnime,
     deleteTorrent,
@@ -85,12 +85,11 @@
   let untrackDeleteFiles = false;
   let untrackLoading = false;
 
-  // Replace with magnet state
+  // Per-episode magnet replace. Whole-title replace is the picker at
+  // `#/status/:id/torrents` — there is no magnet modal for the header button.
   let replaceEpOpen = false;
   let pendingReplaceEp: AnimeEpisodeInfo | null = null;
   let replaceEpMagnet = "";
-  let replaceAnimeOpen = false;
-  let replaceAnimeMagnet = "";
   let replaceLoading = false;
 
   // Custom search query state. The handoff forgot this field; spec §9.2 asks for it to come
@@ -612,24 +611,6 @@
     }
   }
 
-  async function confirmReplaceAnime() {
-    if (!replaceAnimeMagnet.startsWith("magnet:")) {
-      toast.error(m.detail_replace_invalid_magnet());
-      return;
-    }
-    replaceLoading = true;
-    try {
-      await replaceAnimeWithMagnet(animeId, replaceAnimeMagnet);
-      toast.success(m.detail_replace_anime_done());
-      replaceAnimeOpen = false;
-      await loadData(animeId);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : m.detail_replace_anime_error());
-    } finally {
-      replaceLoading = false;
-    }
-  }
-
   $: loadData(animeId);
 
   // Adaptive polling for /torrents: 2s while this anime has an active (non-completed)
@@ -809,8 +790,7 @@
   <Checkbox bind:checked={untrackDeleteFiles} label={m.detail_untrack_delete_files()} />
 </ConfirmDialog>
 
-<!-- Both magnet dialogs now use the Modal primitive (focus trap, Esc, click outside),
-     instead of the two hand-rolled overlays that didn't trap focus or close on Esc. -->
+<!-- Per-episode magnet dialog. Whole-title replace navigates to the picker. -->
 <Modal open={replaceEpOpen} labelledBy="replace-ep-title" on:close={() => (replaceEpOpen = false)}>
   <h3 id="replace-ep-title" class="text-card-title text-heading">
     {m.detail_replace_ep_title({ number: pendingReplaceEp?.episode_number ?? "" })}
@@ -825,25 +805,6 @@
   <div class="mt-4 flex justify-end gap-2">
     <Button variant="ghost" on:click={() => (replaceEpOpen = false)}>{m.common_cancel()}</Button>
     <Button variant="solid" disabled={replaceLoading} on:click={confirmReplaceEp}>
-      {replaceLoading ? "..." : m.detail_btn_replace()}
-    </Button>
-  </div>
-</Modal>
-
-<Modal open={replaceAnimeOpen} labelledBy="replace-anime-title" on:close={() => (replaceAnimeOpen = false)}>
-  <h3 id="replace-anime-title" class="text-card-title text-heading">
-    {m.detail_replace_anime_title()}
-  </h3>
-  <input
-    type="text"
-    bind:value={replaceAnimeMagnet}
-    placeholder={m.detail_replace_magnet_placeholder()}
-    class="mt-4 w-full rounded-field border border-default bg-control px-3 py-2 text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle focus:border-accent"
-    on:keydown={(e) => { if (e.key === 'Enter') confirmReplaceAnime(); }}
-  />
-  <div class="mt-4 flex justify-end gap-2">
-    <Button variant="ghost" on:click={() => (replaceAnimeOpen = false)}>{m.common_cancel()}</Button>
-    <Button variant="solid" disabled={replaceLoading} on:click={confirmReplaceAnime}>
       {replaceLoading ? "..." : m.detail_btn_replace()}
     </Button>
   </div>
@@ -935,7 +896,7 @@
             {$locale && m.detail_untrack_btn()}
           </Button>
         {/if}
-        <Button variant="ghost" on:click={() => { replaceAnimeMagnet = ""; replaceAnimeOpen = true; }}>
+        <Button variant="ghost" on:click={() => push("/status/" + animeId + "/torrents")}>
           {$locale && m.detail_replace_btn_anime()}
         </Button>
       </div>

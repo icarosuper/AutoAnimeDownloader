@@ -635,8 +635,12 @@ single source of truth and switches themes through its own `[data-theme]`.
 `Priorities.svelte` (`#/priorities`), `Logs.svelte` (`#/logs`), `Notifications.svelte`
 (`#/notifications`), `Report.svelte` (`#/report`). The picker cache (`stores/pickerCache.ts`) is
 **in-memory**: Add fills it before navigating so the first paint is free; a reload of the picker
-URL fetches; confirm clears it. The description pane is on-demand (`GET …/torrent-candidates/{nyaaId}`),
-never bundled into the list.
+URL fetches; confirm clears it. Add's first search (`getTorrentCandidates` with no `q`) decides
+the route: empty `items` POSTs today's add and stays (same toasts, no picker); a non-empty list
+or `NYAA_UNAVAILABLE` pushes `#/add/:id/torrents` without POSTing; any other GET error toasts and
+stays. AnimeDetail's header "Replace torrent" pushes `#/status/:id/torrents` — there is **no**
+whole-title magnet modal; the per-episode magnet modal stays. The description pane is on-demand
+(`GET …/torrent-candidates/{nyaaId}`), never bundled into the list.
 
 **Negative facts that save a search:**
 

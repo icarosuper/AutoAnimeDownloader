@@ -5,10 +5,12 @@
   // than a modal. Management of already-existing standalones lives on Status, so this screen
   // has one job — find an anime and start tracking it.
   import { onDestroy, onMount } from "svelte";
+  import { push } from "svelte-spa-router";
   import { ArrowRight, ExternalLink, Search } from "@lucide/svelte";
   import {
     searchAniList,
     addStandaloneAnime,
+    getTorrentCandidates,
     getConfig,
     ApiError,
     type AniListSearchResult,
@@ -19,6 +21,7 @@
   import Loading from "../components/Loading.svelte";
   import Toggle from "../components/ui/Toggle.svelte";
   import { toast } from "../lib/stores/toast.js";
+  import { pickerCache } from "../lib/stores/pickerCache.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
@@ -97,22 +100,38 @@
   // snapshot up to 60s old, so a card can be clickable for an anime that just entered the
   // list. The 409 translated below is the last word; there is no retry or revalidation, the
   // next search already comes correct.
+  //
+  // First search (no q) decides the route: empty items POSTs today's add and stays; a
+  // non-empty list or NYAA_UNAVAILABLE opens the picker without saving; any other GET
+  // error toasts and stays. `adding` is always cleared in finally so a return from the
+  // picker is not stuck on the in-flight button.
   async function add(result: AniListSearchResult): Promise<void> {
     adding = new Set(adding).add(result.id);
     try {
-      const { added: count } = await addStandaloneAnime(result.id);
-      added = new Set(added).add(result.id);
-      if (count > 0) {
-        toast.success(m.add_toast_added({ count }), undefined, {
-          href: "#/downloads",
-          label: m.add_toast_downloads_link(),
-        });
-      } else {
-        // A dry "0 episodes added" would read as failure in the most common case: an anime
-        // that hasn't premiered yet.
-        toast.info(m.add_toast_tracked_no_episodes());
+      const { query, items } = await getTorrentCandidates(result.id);
+      if (items.length === 0) {
+        const { added: count } = await addStandaloneAnime(result.id);
+        added = new Set(added).add(result.id);
+        if (count > 0) {
+          toast.success(m.add_toast_added({ count }), undefined, {
+            href: "#/downloads",
+            label: m.add_toast_downloads_link(),
+          });
+        } else {
+          // A dry "0 episodes added" would read as failure in the most common case: an anime
+          // that hasn't premiered yet.
+          toast.info(m.add_toast_tracked_no_episodes());
+        }
+        return;
       }
+      pickerCache.set({ mediaId: result.id, query, items, error: null });
+      await push("/add/" + result.id + "/torrents");
     } catch (error) {
+      if (error instanceof ApiError && error.code === "NYAA_UNAVAILABLE") {
+        pickerCache.set({ mediaId: result.id, query: "", items: [], error });
+        await push("/add/" + result.id + "/torrents");
+        return;
+      }
       toast.error(addErrorMessage(error));
     } finally {
       const next = new Set(adding);
