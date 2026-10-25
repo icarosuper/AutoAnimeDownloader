@@ -138,13 +138,14 @@ func processAnimeEpisodes(
 	// batchSkipped is why max_episodes_per_anime is in force for this anime. It lives outside the if
 	// because the report publishes it further down, after sel may have been redone.
 	batchSkipped := ""
+	finished := anime.Media.Status == anilist.MediaStatusFinished
 
 	if isAnimeMovie(anime) {
 		sel.toDownload, magnetsForEpisodes = resolveMovie(configs, anime, animeTitle, sel.toDownload, searcher)
 	}
 
 	if magnetsForEpisodes == nil && len(sel.toDownload) > 0 {
-		packs, singles, packStats := partitionSearchResults(configs, anime, searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(sel.toDownload)))
+		packs, singles, packStats := partitionSearchResults(configs, anime, rankSeriesResults(searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(sel.toDownload)), finished))
 
 		// Pack eligibility: not a movie, more than one pending episode, and the FILTERED search returned
 		// a pack covering the window. None of this is AniList metadata — the torrent that's there decides
@@ -236,7 +237,7 @@ func processAnimeEpisodes(
 					Bool("earlier_episode_missing", stuck).
 					Msg("Skipping per-episode search: a recent search came back empty")
 			} else {
-				candidates, searchStats = filterSearchResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+				candidates, searchStats = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.Synonyms, anime.Media.Relations, seriesLength), finished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 				if len(candidates) == 0 && searcher.misses != nil {
 					searcher.misses.record(missKey, time.Now(), searchStats)
 				}
@@ -458,8 +459,9 @@ func batchNames(batches *packSet) []string {
 
 // partitionSearchResults splits ScrapNyaaForAnime's single list into packs and episodes, and
 // applies to each its OWN size ceiling: the two ceilings are independent (a 40 GiB pack is still
-// valid with max_episode_torrent_size_gb = 1.5). The relative order from SortTorrentResults is
-// kept, so each list comes out sorted by quality.
+// valid with max_episode_torrent_size_gb = 1.5). The relative order is the ranked list the caller
+// passed (SortTorrentResults inside the scrape, then rankSeriesResults when FINISHED), so each
+// list comes out sorted by quality.
 //
 // packStats describes what the filter did to the PACK rows, and only to them: it answers whether
 // "there was no batch" because the search returned no pack at all or because all were cut by the

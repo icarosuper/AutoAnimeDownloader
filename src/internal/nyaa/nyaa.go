@@ -1125,8 +1125,8 @@ func fansubPriority(torrentName string) int {
 	return best
 }
 
-// extractSource extracts the release source (BD, WEB-DL, TV, etc.)
-func extractSource(name string) string {
+// ExtractSource extracts the release source (BD, WEB-DL, TV, etc.)
+func ExtractSource(name string) string {
 	nameLower := strings.ToLower(name)
 	for _, sp := range reSourcePatterns {
 		if sp.re.MatchString(nameLower) {
@@ -1174,9 +1174,9 @@ func audioPriority(audio string) int {
 }
 
 // SortTorrentResults sorts torrents by quality, applying the CriteriaOrder criteria that apply to
-// episodes (episodeCriteria): uncensored, resolution, codec, health, fansub and size. Only `source`
-// is left out — a weekly episode is WEB-DL in ~every case, so the criterion would never break a
-// tie. Based on Nyaa's rules (Section 8 of the rules document)
+// episodes (episodeCriteria): uncensored, resolution, codec, health, fansub and size. Source stays
+// out because a weekly episode is WEB-DL in almost every release; finished series go through
+// SortFinishedSeriesResults. Based on Nyaa's rules (Section 8 of the rules document)
 func SortTorrentResults(results []TorrentResult) []TorrentResult {
 	return sortByCriteria(results, filterCriteria(ActivePriorities().CriteriaOrder, episodeCriteria))
 }
@@ -1254,14 +1254,8 @@ func extractSeasonFromName(name string) string {
 	return strings.TrimSpace(result)
 }
 
-// SortMovieResults sorts movie search results by quality. Sort criteria (in priority order):
-// 1. Source (BD > WEB-DL > TV)
-// 2. Resolution (1080p > 720p > 480p)
-// 3. Codec (HEVC > H.264)
-// 4. Fansub (SubsPlease > Erai-raws > ...)
-// 5. Audio (FLAC > DDP > AAC)
-// 6. Seeders (more is better)
-// 7. Size (smaller is better at the same quality)
+// SortMovieResults sorts movie search results by quality. Uses CriteriaOrder as-is
+// (every criterion, including source and audio).
 func SortMovieResults(results []TorrentResult) []TorrentResult {
 	return sortByCriteria(results, ActivePriorities().CriteriaOrder)
 }

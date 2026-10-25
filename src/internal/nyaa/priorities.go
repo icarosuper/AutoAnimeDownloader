@@ -28,8 +28,9 @@ func DefaultPriorities() Priorities {
 	return Priorities{
 		// health comes before fansub: it was 7th of 8 in a lexicographic sort and was never
 		// reached (resolution/fansub decided first), so a torrent with 12 seeders beat one
-		// with 400 for being from a better-placed fansub.
-		CriteriaOrder: []string{"uncensored", "source", "resolution", "health", "codec", "fansub", "audio", "size"},
+		// with 400 for being from a better-placed fansub. source sits after health and after
+		// resolution so a healthy 1080p WEB beats a fragile or 720p BD.
+		CriteriaOrder: []string{"uncensored", "resolution", "health", "source", "codec", "fansub", "audio", "size"},
 		Fansubs: []string{
 			"subsplease", "erai-raws", "judas", "toonshub", "asw",
 			"ember", "hd-zone", "kamig", "remix", "aniverse", "dub", "raw",
@@ -101,10 +102,8 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"uncensored": func(a, b TorrentResult) int { return boolBetter(isUncensored(a.Name), isUncensored(b.Name)) },
 	"resolution": func(a, b TorrentResult) int { return resCompare(a, b) },
 	"fansub":     func(a, b TorrentResult) int { return fansubPriority(a.Name) - fansubPriority(b.Name) },
-	"source": func(a, b TorrentResult) int {
-		return sourcePriority(extractSource(a.Name)) - sourcePriority(extractSource(b.Name))
-	},
-	"codec": codecCompare,
+	"source":     sourceCompare,
+	"codec":      codecCompare,
 	"audio": func(a, b TorrentResult) int {
 		return audioPriority(extractAudio(a.Name)) - audioPriority(extractAudio(b.Name))
 	},
@@ -112,9 +111,10 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 	"size":   func(a, b TorrentResult) int { return sizeCompare(a, b) },
 }
 
-// healthTierFloors are the floors of the health tiers: seeders 0 / 1-4 / 5-19 / 20-99 /
-// 100-399 / 400+ ⇒ tier 0..5. Each tier is ~4-5x the previous.
-var healthTierFloors = []int{1, 5, 20, 100, 400}
+// healthTierFloors are the floors of the health tiers: seeders 0–9 / 10–49 / 50+ ⇒ tier
+// 0..2. min_seeders (default 3) already dropped 0–2, so 10 is the first split among
+// survivors. 50 vs 5000 is the same download on a home connection (decisions.md #107).
+var healthTierFloors = []int{10, 50}
 
 // healthTier returns the torrent's health tier (higher = healthier).
 //
@@ -212,6 +212,33 @@ func sortByCriteria(results []TorrentResult, criteria []string) []TorrentResult 
 }
 
 var episodeCriteria = map[string]bool{"uncensored": true, "resolution": true, "codec": true, "fansub": true, "health": true, "size": true}
+
+var finishedSeriesCriteria = map[string]bool{
+	"uncensored": true, "resolution": true, "health": true, "source": true,
+	"codec": true, "fansub": true, "size": true,
+}
+
+// sourceCompare ranks by the sources list. An empty extract (weekly SubsPlease, most WEB
+// packs) canonicalizes to web-dl so it ties a tagged WEB-DL and loses to BD — the codec-style
+// "either side empty ⇒ tie" would make untagged WEB tie a tagged BD and throw the criterion
+// away (decisions.md #107).
+func sourceCompare(a, b TorrentResult) int {
+	return sourcePriority(canonicalSource(ExtractSource(a.Name))) - sourcePriority(canonicalSource(ExtractSource(b.Name)))
+}
+
+func canonicalSource(source string) string {
+	if source == "" {
+		return "web-dl"
+	}
+	return source
+}
+
+// SortFinishedSeriesResults is the series sort when Media.Status is FINISHED: same
+// criteria as SortTorrentResults plus source. The daemon calls this as a second full
+// sort; ScrapNyaa* keep using SortTorrentResults (decisions.md #107).
+func SortFinishedSeriesResults(results []TorrentResult) []TorrentResult {
+	return sortByCriteria(results, filterCriteria(ActivePriorities().CriteriaOrder, finishedSeriesCriteria))
+}
 
 func filterCriteria(order []string, allowed map[string]bool) []string {
 	out := make([]string, 0, len(order))

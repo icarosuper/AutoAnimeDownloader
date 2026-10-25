@@ -14,15 +14,14 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
 
-  // moviesOnly: the list exists but doesn't apply to episodes — only SortMovieResults reads source
-  // and audio.
-  const LISTS: { key: keyof Priorities; label: () => string; moviesOnly?: boolean }[] = [
+  // scope: source applies to movies and FINISHED series; audio stays movies-only.
+  const LISTS: { key: keyof Priorities; label: () => string; scope?: () => string }[] = [
     { key: "criteria_order", label: m.priorities_list_criteria_order },
     { key: "fansubs", label: m.priorities_list_fansubs },
     { key: "resolutions", label: m.priorities_list_resolutions },
-    { key: "sources", label: m.priorities_list_sources, moviesOnly: true },
+    { key: "sources", label: m.priorities_list_sources, scope: m.priorities_scope_movies_and_finished },
     { key: "codecs", label: m.priorities_list_codecs },
-    { key: "audio", label: m.priorities_list_audio, moviesOnly: true },
+    { key: "audio", label: m.priorities_list_audio, scope: m.priorities_scope_movies_only },
     { key: "ignore_list", label: m.priorities_list_ignore_list },
   ];
 
@@ -37,13 +36,12 @@
     title: m.priorities_title(),
     subtitle: m.priorities_subtitle(),
     loading: m.priorities_loading(),
-    moviesOnly: m.priorities_scope_movies_only(),
     resetList: m.priorities_reset_list(),
     addPlaceholder: m.priorities_add_placeholder(),
     resetAll: m.priorities_reset_all(),
     save: m.priorities_save(),
     saving: m.priorities_saving(),
-    lists: LISTS.map((l) => ({ ...l, label: l.label() })),
+    lists: LISTS.map((l) => ({ ...l, label: l.label(), scope: l.scope && l.scope() })),
     notes: Object.fromEntries(Object.entries(NOTES).map(([k, f]) => [k, f()])) as Partial<Record<keyof Priorities, string>>,
     presets: Object.fromEntries(
       Object.entries(PRESETS).map(([k, list]) => [k, (list ?? []).map((p) => ({ ...p, label: p.label(), desc: p.desc() }))]),
@@ -163,14 +161,14 @@
     <Loading message={(T && T.loading) || ""} />
   {:else if config && T}
     <div class="space-y-4">
-      {#each T.lists as { key, label, moviesOnly } (key)}
+      {#each T.lists as { key, label, scope } (key)}
         {@const items = rows(key, config.priorities[key], defaults)}
         <div class="flex flex-col rounded-card border border-default bg-sunken">
           <div class="flex flex-col gap-3 p-5">
             <div class="flex items-center justify-between">
               <h2 class="text-sm font-semibold text-subtle uppercase tracking-wider">
                 {label}
-                {#if moviesOnly}<span class="normal-case tracking-normal font-normal text-subtle">({T.moviesOnly})</span>{/if}
+                {#if scope}<span class="normal-case tracking-normal font-normal text-subtle">({scope})</span>{/if}
               </h2>
               <button
                 type="button"
