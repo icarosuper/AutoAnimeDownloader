@@ -3,13 +3,13 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.7.0`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.7.1`. Stamp a version (tag, GitHub Release, AUR):
 [guides/release.md](guides/release.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
 migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up to right after
-`v2.7.0`.
+`v2.7.1`.
 
 > The old Stage 1 (close the ceilings of what already runs) closed on 2026-08-30 **with no code**:
 > all three items were measured and all three said not to touch anything. Pack numbering by folder
@@ -54,6 +54,12 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   [#105](agents/decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller)).
   Pick among the ranked torrents (Nyaa description on demand, optional query) instead of
   always taking the auto-pick.
+
+## `v2.7.1` — leftover `.chapters` folders
+
+- ~~Wipe library folders left with only `.nfo` files and a Jellyfin `.chapters` dir~~ —
+  **released in `v2.7.1` on 2026-10-25**
+  ([decisions.md #110](agents/decisions.md#110-chapters-is-leftover-metadata-same-class-as-nfo)).
 
 ## `v2.8.0` — dashboard recents
 
