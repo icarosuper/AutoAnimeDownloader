@@ -3,13 +3,13 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.6.0`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.7.0`. Stamp a version (tag, GitHub Release, AUR):
 [guides/release.md](guides/release.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
 migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up to right after
-`v2.6.0`.
+`v2.7.0`.
 
 > The old Stage 1 (close the ceilings of what already runs) closed on 2026-08-30 **with no code**:
 > all three items were measured and all three said not to touch anything. Pack numbering by folder
@@ -48,15 +48,12 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.7.0` — torrent picker
 
-Pick among the ranked torrents (Nyaa description on demand, optional query) instead of always
-taking the auto-pick. Two tasks, in this order: the screen ships first, the episode button
-reuses it.
-
-- Confirm the ranked whole-title torrent when adding a standalone and when replacing an
-  anime's torrent. Spec designed on 2026-10-23:
-  [standalone-torrent-picker](superpowers/specs/2026-10-23-standalone-torrent-picker-design.md).
-- Pick torrent when downloading / redownloading a single episode — same screen, singles
-  search instead of packs. Own spec, after the one above; do not start it in the same change.
+- ~~Confirm the ranked whole-title torrent when adding a standalone and when replacing an
+  anime's torrent~~ — **released in `v2.7.0` on 2026-10-25**
+  ([decisions.md #108](agents/decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent),
+  [#105](agents/decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller)).
+  Pick among the ranked torrents (Nyaa description on demand, optional query) instead of
+  always taking the auto-pick.
 
 ## `v2.8.0` — dashboard recents
 
@@ -66,6 +63,12 @@ the `v3.0.0` UI overhaul.
 
 - Recents shelf, Behind chip, clickable last-check rows. Spec designed on 2026-10-23:
   [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
+
+## `v2.9.0` — episode torrent picker
+
+- Pick torrent when downloading / redownloading a single episode — same screen as the
+  whole-title picker in `v2.7.0`, singles search instead of packs. Own spec; do not start
+  it in the same change as the dashboard recents.
 
 ## `v3.0.0` — Serval
 
@@ -119,12 +122,10 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
 
 ## No release — source ranking for finished series
 
-Ships as a patch whenever it is tagged.
-
-- Rank Blu-ray above WEB on series whose AniList **media** status is `FINISHED`
-  (standalone, packs, and singles). Weekly `RELEASING` stays without source.
-  Implemented; ships as a patch whenever it is tagged:
-  [source-ranking-finished-series](superpowers/specs/2026-10-24-source-ranking-finished-series-design.md).
+- ~~Rank Blu-ray above WEB on series whose AniList **media** status is `FINISHED`
+  (standalone, packs, and singles). Weekly `RELEASING` stays without source.~~ —
+  **released in `v2.7.0` on 2026-10-25**
+  ([decisions.md #107](agents/decisions.md#107-source-ranks-finished-series-empty-source-is-web-dl-health-bands-are-1050)).
 
 ## No release — subtitle language filter
 
