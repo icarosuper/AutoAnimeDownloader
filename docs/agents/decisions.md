@@ -116,6 +116,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#107** — source ranks finished series, empty source is web-dl, health bands are 10/50](#107-source-ranks-finished-series-empty-source-is-web-dl-health-bands-are-1050)
 - [**#108** — Empty first search skips the picker; custom `q` drops variants; description is on demand; add-with-magnet writes the id after the torrent](#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)
 - [**#109** — Flags after positionals are reordered before urfave parses](#109-flags-after-positionals-are-reordered-before-urfave-parses)
+- [**#110** — `.chapters` is leftover metadata, same class as `.nfo`](#110-chapters-is-leftover-metadata-same-class-as-nfo)
 
 ---
 
@@ -3060,10 +3061,11 @@ folder when we delete the last episode".
   the disk, not `episodes.json`.
 - **Sweep stays conservative:** it walks **every** child of `completed_anime_path`, including
   folders the user may have created by hand. It only deletes empty directories and directories
-  whose remaining entries are all `.nfo` files. A `poster.jpg` or a subdirectory keeps the
-  folder. Widening it to "no video files" would delete a hand-made folder of artwork. Existing
-  nfo-only orphans have no records left, so the contextual wipe never sees them — that is what
-  the sweep is for. It still skips `.torrents`.
+  whose remaining entries are leftover Jellyfin metadata: `.nfo` files and a `.chapters` dir
+  (decisions.md #110). A `poster.jpg` or any other subdirectory keeps the folder. Widening it
+  to "no video files" would delete a hand-made folder of artwork. Existing nfo-only orphans
+  have no records left, so the contextual wipe never sees them — that is what the sweep is
+  for. It still skips `.torrents`.
 
 Accepted limit: an orphan with `poster.jpg` and no records stays on disk. Cleaning those is a
 manual delete.
@@ -3168,3 +3170,23 @@ from the command tree; do not maintain a second list of names.
 **Don't "fix" by:** telling users to put flags first; calling `newApp().Run` from tests (that
 skips the reorder); `SkipFlagParsing` (the leaf would stop seeing `--magnet` at all); bumping
 to urfave v3 only for interspersed flags.
+
+### 110. `.chapters` is leftover metadata, same class as `.nfo`
+
+**Location:** `internal/files/filemanager.go` (`nfoOnlyFolder`, `removeLeftover`).
+
+**What it looks like:** after v2.7.0 the sweep deleted nfo-only folders (Prisma Illya and five
+more on the homelab), and still left four others that "only had `.nfo` files". Those four all
+had a hidden `.chapters/` directory of `*_chapters.xml` that Jellyfin extracts from the mkv.
+File managers hide dot-directories, so the folder looks nfo-only. `nfoOnlyFolder` used to
+return false on any `IsDir()`, which is how #106 protected a hand-made `extras/` or a
+`Season 01/` — and `.chapters` walked into that rule.
+
+**Why it's right:** `.chapters` is Jellyfin's sibling of the episode `.nfo`, not a user folder.
+Treating it as leftover keeps the sweep conservative (a `poster.jpg` or any other
+subdirectory still stays) without widening it to "no video". `os.Remove` refuses a non-empty
+dir, so the sweep has to empty `.chapters` before removing it (`removeLeftover`); FileSystem
+still has no `RemoveAll`.
+
+**Don't "fix" by:** widening the sweep to "no video files" (that's the contextual wipe,
+#106); adding `RemoveAll` to `FileSystem`; treating every hidden directory as leftover.

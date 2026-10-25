@@ -103,6 +103,33 @@ func TestDeleteEmptyFolders(t *testing.T) {
 		assertGone(t, dir, "nfo-only folder")
 	})
 
+	// Jellyfin extracts chapter XML into a hidden .chapters/ dir. File managers hide it,
+	// so the folder looks nfo-only; the sweep used to keep it because any subdirectory
+	// was enough to bail out (homelab leftovers: FX Fighter Kurumi-chan and three more).
+	t.Run("deletes a folder that only has nfo files and a .chapters dir", func(t *testing.T) {
+		completed := t.TempDir()
+		dir := filepath.Join(completed, "FX Fighter Kurumi-chan")
+		chapters := filepath.Join(dir, ".chapters")
+		if err := os.MkdirAll(chapters, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "tvshow.nfo"), []byte("show"), 0644); err != nil {
+			t.Fatalf("write tvshow.nfo: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "FX Fighter Kurumi-chan - E01.nfo"), []byte("ep"), 0644); err != nil {
+			t.Fatalf("write episode nfo: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(chapters, "FX Fighter Kurumi-chan - E01_chapters.xml"), []byte("<Chapters/>"), 0644); err != nil {
+			t.Fatalf("write chapters xml: %v", err)
+		}
+
+		if err := newTestManager(t).DeleteEmptyFolders(completed); err != nil {
+			t.Fatalf("DeleteEmptyFolders: %v", err)
+		}
+
+		assertGone(t, dir, "nfo+.chapters leftover folder")
+	})
+
 	t.Run("keeps a folder that has a video", func(t *testing.T) {
 		completed := t.TempDir()
 		dir := filepath.Join(completed, "Anime")
@@ -122,6 +149,25 @@ func TestDeleteEmptyFolders(t *testing.T) {
 
 		assertKept(t, dir, "folder with video")
 		assertKept(t, filepath.Join(dir, "video.mkv"), "video")
+	})
+
+	t.Run("keeps a folder that has a non-chapters subdirectory", func(t *testing.T) {
+		completed := t.TempDir()
+		dir := filepath.Join(completed, "Anime")
+		extras := filepath.Join(dir, "extras")
+		if err := os.MkdirAll(extras, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "tvshow.nfo"), []byte("show"), 0644); err != nil {
+			t.Fatalf("write nfo: %v", err)
+		}
+
+		if err := newTestManager(t).DeleteEmptyFolders(completed); err != nil {
+			t.Fatalf("DeleteEmptyFolders: %v", err)
+		}
+
+		assertKept(t, dir, "folder with extras subdirectory")
+		assertKept(t, extras, "extras subdirectory")
 	})
 
 	t.Run("keeps a folder that has a poster", func(t *testing.T) {

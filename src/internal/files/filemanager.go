@@ -563,8 +563,8 @@ func (m *FileManager) DeleteEpisodesFromFile(keys []EpisodeKey) error {
 }
 
 // DeleteEmptyFolders removes leftover anime directories from the library: empty ones, and
-// ones that only contain `.nfo` files (tvshow.nfo plus Jellyfin episode sidecars). A
-// subdirectory, poster, or any other leftover keeps the folder. The download directory
+// ones that only contain Jellyfin leftover metadata (`.nfo` files and a `.chapters` dir).
+// A poster, a video, or any other subdirectory keeps the folder. The download directory
 // lives inside the library (see Config.DownloadPath), and rain allocates <download>/<id>
 // before writing any byte — that's why the sweep skips it explicitly, otherwise it would
 // delete freshly added torrents.
@@ -840,11 +840,11 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 		failed := false
 		for _, sub := range subEntries {
 			filePath := filepath.Join(folderPath, sub.Name())
-			if err := m.fs.Remove(filePath); err != nil {
+			if err := m.removeLeftover(filePath, sub.IsDir()); err != nil {
 				logger.Logger.Warn().
 					Err(err).
 					Str("path", filePath).
-					Msg("Failed to delete leftover nfo")
+					Msg("Failed to delete leftover library file")
 				failed = true
 			}
 		}
@@ -867,18 +867,41 @@ func (m *FileManager) deleteEmptyFolders(path string) error {
 	return nil
 }
 
-// nfoOnlyFolder reports whether every remaining entry is a file whose extension is `.nfo`
-// (case-insensitive). Zero entries is the same rule: the folder is leftover.
+// nfoOnlyFolder reports whether every remaining entry is leftover Jellyfin metadata:
+// `.nfo` files (tvshow.nfo plus episode sidecars) and a `.chapters` directory of
+// extracted chapter XML. Zero entries is the same rule: the folder is leftover.
+// A poster, a video, or any other subdirectory keeps the folder.
 func nfoOnlyFolder(entries []os.DirEntry) bool {
 	for _, e := range entries {
 		if e.IsDir() {
-			return false
+			if e.Name() != ".chapters" {
+				return false
+			}
+			continue
 		}
 		if !strings.EqualFold(filepath.Ext(e.Name()), ".nfo") {
 			return false
 		}
 	}
 	return true
+}
+
+// removeLeftover deletes path. Directories are emptied first because FileSystem.Remove
+// is os.Remove, which refuses a non-empty dir — `.chapters` always has XML in it.
+func (m *FileManager) removeLeftover(path string, isDir bool) error {
+	if !isDir {
+		return m.fs.Remove(path)
+	}
+	entries, err := m.fs.ReadDir(path)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if err := m.removeLeftover(filepath.Join(path, e.Name()), e.IsDir()); err != nil {
+			return err
+		}
+	}
+	return m.fs.Remove(path)
 }
 
 // LoadAnilistCache reads the snapshot of the AniList caches. A missing file returns (nil, nil): a

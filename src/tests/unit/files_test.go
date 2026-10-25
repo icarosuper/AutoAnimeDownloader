@@ -507,6 +507,10 @@ func TestManager_DeleteEmptyFolders_WithNfoOnlyFolder(t *testing.T) {
 	mockFS.SetDir("/save/leftover")
 	mockFS.SetFile("/save/leftover/tvshow.nfo", []byte("show"))
 	mockFS.SetFile("/save/leftover/Anime - E01.nfo", []byte("ep"))
+	mockFS.SetDir("/save/with-chapters")
+	mockFS.SetFile("/save/with-chapters/tvshow.nfo", []byte("show"))
+	mockFS.SetDir("/save/with-chapters/.chapters")
+	mockFS.SetFile("/save/with-chapters/.chapters/ep_chapters.xml", []byte("<Chapters/>"))
 	mockFS.SetDir("/save/with-poster")
 	mockFS.SetFile("/save/with-poster/tvshow.nfo", []byte("show"))
 	mockFS.SetFile("/save/with-poster/poster.jpg", []byte("art"))
@@ -519,6 +523,9 @@ func TestManager_DeleteEmptyFolders_WithNfoOnlyFolder(t *testing.T) {
 
 	if mockFS.DirExists("/save/leftover") {
 		t.Error("expected nfo-only folder to be deleted")
+	}
+	if mockFS.DirExists("/save/with-chapters") {
+		t.Error("expected nfo+.chapters folder to be deleted")
 	}
 	if !mockFS.DirExists("/save/with-poster") {
 		t.Error("expected folder with a poster to remain")
