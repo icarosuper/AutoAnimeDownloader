@@ -113,6 +113,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#104** — `--yes` is a CLI gate; the API keeps its query defaults](#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)
 - [**#105** — `FetchTorrentDetail` builds the view URL itself; it never takes one from the caller](#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller)
 - [**#106** — Empty first search skips the picker; custom `q` drops variants; description is on demand; add-with-magnet writes the id after the torrent](#106-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)
+- [**#107** — Flags after positionals are reordered before urfave parses](#107-flags-after-positionals-are-reordered-before-urfave-parses)
 
 ---
 
@@ -3066,3 +3067,22 @@ out. Writing the id before the torrent leaves a tracked anime with nothing in th
 `/view/<id>` inside the candidates handler "so the pane is instant"; writing the standalone id
 before `backend.Add`; persisting the picker cache or the custom `q`; inventing `1..total`
 coverage from a magnet that has no `name`/`nyaa_id`.
+
+### 107. Flags after positionals are reordered before urfave parses
+
+**Location:** `cmd/cli/args.go` (`reorderInterspersedFlags`); `run` in `main.go` is the only
+entry that tests and `main` use.
+
+**The rule:** Go's `flag.FlagSet.Parse` stops at the first non-flag argument. urfave/cli v2
+uses that parser, so `animes add 21 --magnet URI` never sets `--magnet` — leftover tokens fail
+`requireArgs`, or a bool flag after the id is silently ignored. `run` rewrites argv before
+`App.Run`: command names stay in order, global flags move to the front, each command's flags
+sit immediately after that command. `--` still ends flag parsing. A new CLI flag is picked up
+from the command tree; do not maintain a second list of names.
+
+**Why:** the documented order is `animes add <id> --magnet` / `candidates <id> --query` /
+`replace <id> --magnet --yes`. Putting flags first works without this; Unix tools accept both.
+
+**Don't "fix" by:** telling users to put flags first; calling `newApp().Run` from tests (that
+skips the reorder); `SkipFlagParsing` (the leaf would stop seeing `--magnet` at all); bumping
+to urfave v3 only for interspersed flags.

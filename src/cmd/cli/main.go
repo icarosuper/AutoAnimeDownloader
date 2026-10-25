@@ -57,10 +57,15 @@ func init() {
 }
 
 func main() {
-	if err := newApp().Run(os.Args); err != nil {
+	if err := run(os.Args); err != nil {
 		printCLIError(err)
 		os.Exit(exitCodeOf(err))
 	}
+}
+
+func run(args []string) error {
+	app := newApp()
+	return app.Run(reorderInterspersedFlags(app, args))
 }
 
 func newApp() *cli.App {

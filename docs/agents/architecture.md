@@ -338,7 +338,9 @@ along with `EpisodeID`: with no anime id and no episode number, that record has 
 ### `src/cmd/cli/` — daemon CLI
 
 Split by resource, same package `main` (`main_test.go` keeps testing unexported helpers): `main.go`
-holds the app, global flags, `start` / `stop` / `open` / `loop`; `config.go`, `status.go`,
+holds the app, global flags, `start` / `stop` / `open` / `loop`; `args.go` reorders flags that
+follow positionals before urfave parses ([decisions.md #107](decisions.md#107-flags-after-positionals-are-reordered-before-urfave-parses))
+— tests must call `run`, not `newApp().Run`; `config.go`, `status.go`,
 `animes.go`, `torrents.go`, `logs.go`, `report.go`, `notifications.go` hold the matching trees.
 There is no root `episodes` command and no `GetEpisodes` — `GET /api/v1/episodes` is gone; listing
 is `animes episodes <id>`. There is no command that prints a Nyaa description — `animes candidates`

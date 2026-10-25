@@ -98,7 +98,8 @@ autoanimedownloader animes replace-episode 154587 3 --magnet "magnet:?xt=…" --
 3 characters returns an empty list, not an error. `candidates` is the ranked whole-title list the
 picker shows (empty `items` is success, not an error). `--query` is a Nyaa `q` and skips title
 variants and season/part. There is no command that prints a Nyaa description — `nyaa_id` in the
-JSON is the terminal equivalent. `add --magnet` skips auto-pick. `add` / `remove` are standalone
+JSON is the terminal equivalent. `add --magnet` skips auto-pick. Flags may follow the id (`animes add 154587 --magnet "…"` is
+the same as flags-first). `add` / `remove` are standalone
 animes. `--delete-episodes` defaults to false (files stay, marked manually managed).
 
 `release` is not destructive and does not take `--yes`.
