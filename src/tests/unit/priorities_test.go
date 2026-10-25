@@ -215,8 +215,6 @@ func TestExtractSource_SpecificBDPatternsStillWin(t *testing.T) {
 	}
 }
 
-func res(s string) *string { return &s }
-
 func TestSourceCompare_UntaggedTiesWEBDL(t *testing.T) {
 	r1080 := "1080p"
 	results := []nyaa.TorrentResult{

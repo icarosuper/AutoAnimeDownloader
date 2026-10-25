@@ -119,7 +119,7 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
 
 ## No release — source ranking for finished series
 
-Ships as a patch whenever it is tackled.
+Ships as a patch whenever it is tagged.
 
 - Rank Blu-ray above WEB on series whose AniList **media** status is `FINISHED`
   (standalone, packs, and singles). Weekly `RELEASING` stays without source.
