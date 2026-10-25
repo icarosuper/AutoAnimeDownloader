@@ -25,7 +25,7 @@ func runCLI(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	}
 	os.Stdout, os.Stderr = outW, errW
 
-	runErr := newApp().Run(append([]string{"autoanimedownloader"}, args...))
+	runErr := run(append([]string{"autoanimedownloader"}, args...))
 
 	_ = outW.Close()
 	_ = errW.Close()

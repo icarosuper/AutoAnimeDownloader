@@ -111,8 +111,11 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#102** — The bug report has no backend: consent is the act of attaching the file](#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)
 - [**#103** — Log redaction is by key, and a test forces every new key to be classified](#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)
 - [**#104** — `--yes` is a CLI gate; the API keeps its query defaults](#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)
+- [**#105** — `FetchTorrentDetail` builds the view URL itself; it never takes one from the caller](#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller)
 - [**#106** — The sweep stays nfo-only; the contextual wipe is "no video"](#106-the-sweep-stays-nfo-only-the-contextual-wipe-is-no-video)
 - [**#107** — source ranks finished series, empty source is web-dl, health bands are 10/50](#107-source-ranks-finished-series-empty-source-is-web-dl-health-bands-are-1050)
+- [**#108** — Empty first search skips the picker; custom `q` drops variants; description is on demand; add-with-magnet writes the id after the torrent](#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)
+- [**#109** — Flags after positionals are reordered before urfave parses](#109-flags-after-positionals-are-reordered-before-urfave-parses)
 
 ---
 
@@ -3015,6 +3018,22 @@ false" contract too.
 **Don't "fix" by:** prompting when stdin is not a TTY, defaulting `--yes` on in scripts, or adding
 `confirm=true` to the API.
 
+### 105. FetchTorrentDetail builds the view URL itself; it never takes one from the caller
+
+**Location:** `nyaa/detail.go` (`FetchTorrentDetail`, `ParseNyaaID`); consumed later by the
+standalone torrent picker's description pane.
+
+**The rule:** the only input is a numeric Nyaa id. The view URL is always
+`getNyaaBaseURL()+"/view/"+strconv.Itoa(nyaaID)`. A caller that already has a `DetailURL` parses
+the id with `ParseNyaaID` and hands that over — it does not pass the string through.
+
+**Why:** the API that will expose this will take an id from the client. Accepting a URL would let
+the client point the daemon at any host (`NYAA_URL` is the operator's choice; a request body is
+not). Building the URL here keeps SSRF out of every future caller by construction.
+
+**Don't "fix" by:** adding a `FetchTorrentDetailURL(url string)` convenience that "just" reuses
+the same parser, or by letting the API accept a URL "because the UI already has it".
+
 ### 106. The sweep stays nfo-only; the contextual wipe is "no video"
 
 **Location:** `internal/files/librarian.go` (`RemoveFromLibrary` sidecar, `RemoveFolderIfNoVideo`);
@@ -3091,3 +3110,61 @@ matched AniList's `(TV)` format marker in titles.
 **Don't "fix" by:** putting source in episodeCriteria "so one sort does both"; gating on
 MediaListStatus; auto-migrating criteria_order; treating empty source as a codec-style
 tie; putting audio on episodes; auto-replacing a saved WEB episode when a BD appears.
+
+### 108. Empty first search skips the picker; custom q drops variants; description is on demand; add-with-magnet writes the id after the torrent
+
+**Location:** Add's first `getTorrentCandidates` (`AddAnime.svelte`); `PreviewWholeTitleTorrents`
+(`daemon/preview.go`) for a custom `q`; `GET /api/v1/animes/{id}/torrent-candidates/{nyaaId}`;
+`DownloadStandaloneAnimeWithMagnet` (`daemon/standalone.go`) and `POST /standalone-animes`.
+
+**The rule:**
+
+1. **Empty first search skips the picker.** Add's first candidates GET (no `q`) with `items: []`
+   POSTs `/standalone-animes` without a magnet — singles, or track-with-zero for an unreleased
+   title — and stays on the card. A later empty custom query does **not**: Enter on an empty
+   field is a no-op, and a custom `q` that returns no packs keeps the picker open. The
+   automatic-singles fall-through exists only for that first, daemon-query search.
+2. **Custom `q` drops variants.** A non-empty `q` is the Nyaa query as typed: no AniList
+   title-variant loop, no season/part row filter. What still runs: `ShouldIgnore`, `min_seeders`,
+   size ceiling, packs-only (or movie, when AniList format is `MOVIE`), Priorities ranking, cap 8,
+   `titleMatchesQuery` against the query tokens.
+3. **Description is on demand.** `/view/<id>` is fetched only for the selected row
+   (`GET …/torrent-candidates/{nyaaId}`). The candidates list does not scrape it; range on that
+   list comes from the name (`ExtractBatchInfo`).
+4. **Add-with-magnet writes the id after the torrent.** The magnet enters the session first,
+   then the standalone id, then coverage records. If `backend.Add` (or the disk guard) refuses,
+   the id is never written. If the id is written and a later step fails, `RemoveStandaloneAnime`
+   runs before the error returns. Coverage is only the aired episodes the chosen torrent covers
+   (name, then one `PackFileRange` if the name has none); unknown range writes **no** episode
+   records, not `1..total` ([#84](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)).
+5. **`name` / `nyaa_id` / `size_bytes` are optional on POST** because a magnet URI cannot rebuild
+   coverage or the Nyaa size. The picker sends them from the selected row; a pasted magnet may
+   omit them (coverage then unknown, disk guard without a size).
+
+**Why:** the ranking is still the right default; the picker is a confirm step, not a Nyaa
+browser. Fetching eight `/view/<id>` pages up front is the cost [sources.md](sources.md) called
+out. Writing the id before the torrent leaves a tracked anime with nothing in the session.
+
+**Don't "fix" by:** falling through to automatic singles on a custom empty query; fetching
+`/view/<id>` inside the candidates handler "so the pane is instant"; writing the standalone id
+before `backend.Add`; persisting the picker cache or the custom `q`; inventing `1..total`
+coverage from a magnet that has no `name`/`nyaa_id`.
+
+### 109. Flags after positionals are reordered before urfave parses
+
+**Location:** `cmd/cli/args.go` (`reorderInterspersedFlags`); `run` in `main.go` is the only
+entry that tests and `main` use.
+
+**The rule:** Go's `flag.FlagSet.Parse` stops at the first non-flag argument. urfave/cli v2
+uses that parser, so `animes add 21 --magnet URI` never sets `--magnet` — leftover tokens fail
+`requireArgs`, or a bool flag after the id is silently ignored. `run` rewrites argv before
+`App.Run`: command names stay in order, global flags move to the front, each command's flags
+sit immediately after that command. `--` still ends flag parsing. A new CLI flag is picked up
+from the command tree; do not maintain a second list of names.
+
+**Why:** the documented order is `animes add <id> --magnet` / `candidates <id> --query` /
+`replace <id> --magnet --yes`. Putting flags first works without this; Unix tools accept both.
+
+**Don't "fix" by:** telling users to put flags first; calling `newApp().Run` from tests (that
+skips the reorder); `SkipFlagParsing` (the leaf would stop seeing `--magnet` at all); bumping
+to urfave v3 only for interspersed flags.

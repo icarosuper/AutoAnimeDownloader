@@ -96,10 +96,12 @@ Key endpoints:
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
 | `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` — `next_airing_at` is a **timestamp**, not a countdown: the response is cached 60s and a precomputed counter would freeze. Search by `alt_names` is client-side (`lib/utils/status.ts`). `episodes_downloaded` is **files on disk right now**, not a lifetime total: it DROPS when the daemon prunes watched episodes, so `released - downloaded` is not "still to download" — `episodes_pending` is ([decisions.md #88](decisions.md#88-the-progress-bar-derives-downloaded-from-episodes_pending-not-from-episodes_downloaded)) |
 | `GET` | `/api/v1/anilist/search?q=&include_unreleased=` | `handleAniListSearch` | `endpoint_anilist_search.go` — a term shorter than 3 chars returns an empty list, **not** 400. `block_reason` per result (`""` = addable) |
-| `POST` | `/api/v1/standalone-animes` | `handleStandaloneAnimeAdd` | `endpoint_standalone_animes.go` — body `{"media_id": 21}`, answers `{"added": N}`; 409 `LIBRARY_NOT_CONFIGURED` / `ALREADY_BLACKLISTED` / `ALREADY_STANDALONE` / `ALREADY_TRACKED` / `ALREADY_DOWNLOADED` |
+| `POST` | `/api/v1/standalone-animes` | `handleStandaloneAnimeAdd` | `endpoint_standalone_animes.go` — body `{"media_id":21,"magnet":"…"}` with `magnet` optional; optional `name`/`nyaa_id`/`size_bytes` for coverage and the disk guard. No magnet: auto-pick. Magnet: 409s first, then `DownloadStandaloneAnimeWithMagnet` adds the torrent then writes the id (not the handler); records only covered aired episodes. 400 `INVALID_MAGNET` if the value lacks the `magnet:` prefix. Answers `{"added": N}`; 409 `LIBRARY_NOT_CONFIGURED` / `ALREADY_BLACKLISTED` / `ALREADY_STANDALONE` / `ALREADY_TRACKED` / `ALREADY_DOWNLOADED` |
 | `DELETE` | `/api/v1/standalone-animes/{id}?delete_episodes=<bool>` | `handleStandaloneAnimeRemove` | `endpoint_standalone_animes.go` — without `delete_episodes` the episodes stay and are marked `ManuallyManaged` |
 | `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
 | `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` |
+| `GET` | `/api/v1/animes/{id}/torrent-candidates?q=` | `handleTorrentCandidates` | `endpoint_torrent_candidates.go` — ranked whole-title list, cap 8. Empty `items` is 200 (`[]`, not null). `{id}` need not be tracked. `q` skips title variants and season/part. Does not fetch `/view/<id>`. 502 `NYAA_UNAVAILABLE`. 404 `ANIME_NOT_FOUND` |
+| `GET` | `/api/v1/animes/{id}/torrent-candidates/{nyaaId}` | `handleTorrentCandidateDetail` | sanitised Nyaa page + file list. `{nyaaId}` digits only. `{id}` unused for the fetch (still validated). `files` is `[]` not null. 404 `TORRENT_NOT_FOUND` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/download` | `handleDownloadEpisode` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/redownload` | `handleRedownloadEpisode` | `endpoint_episode_actions.go` |
 | `DELETE` | `/api/v1/animes/{id}/episodes/{episodeNumber}` | `handleDeleteEpisode` | `endpoint_episode_actions.go` |
@@ -148,7 +150,8 @@ Defaults to `"dev"` if not injected.
 **There is no `daemon.go`.** The orchestrator is split: `loop.go` (the goroutine), `verification.go`
 (the pass), `episodes.go` (per-episode selection and removal), `search.go` (Nyaa search + filters),
 `coverage.go` (ownership by coverage), `helpers.go` (config/disk guards), `stalled.go` (torrent
-with no peers), `manual_download.go` (downloads coming from the API) and `standalone.go`.
+with no peers), `manual_download.go` (downloads coming from the API), `standalone.go` and
+`preview.go`.
 
 **One pass at a time**: `AnimeVerification` takes `verificationMu.TryLock()` and returns immediately
 if another is already running (decisions.md #67).
@@ -175,6 +178,11 @@ All three go through the `min_seeders` floor (`filterSearchResults`).
 - `DownloadStandaloneAnime` **must never** call `handleSavedEpisodes`. With only one anime's
   episodes in hand and `delete_watched_episodes` on, `identifyEpisodesNotInWatching` would delete
   the rest of the library ([decisions.md #49](decisions.md#49-standalone-anime-tracked-by-the-list-is-the-snapshot-the-daemon-processes-and-downloadstandaloneanime-never-calls-handlesavedepisodes))
+- `DownloadStandaloneAnimeWithMagnet` adds the torrent, then the standalone id, then coverage
+  records — inverting that leaves a tracked id with no torrent
+  ([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
+  An unknown pack range writes **no** episode records, not `1..total` (decisions.md #84). It also
+  must never call `handleSavedEpisodes`.
 - `max_episodes_per_anime` is lifted **only after** a pack was actually chosen; without a pack, the
   limited selection stands and the oldest episodes are the ones that stay. `selectEpisodes` runs
   twice in the pass, and `dropAdopted` must run at **both** points — the function is pure, the
@@ -200,6 +208,16 @@ All three go through the `min_seeders` floor (`filterSearchResults`).
 carries it, otherwise from the detail page — and memos **including failure**; without that,
 `assignBatches`, which walks the packs once per episode, would become one request per episode. Cap
 of `maxPackDetailFetches` (3) detail pages per anime per pass. See [decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything).
+
+**`preview.go`** — `PreviewWholeTitleTorrents` is the picker list: the same search + filter +
+partition as the pass, capped at 8, **without** adding a torrent, writing a standalone id, or
+fetching `/view/<id>`. Range comes from the name (`ExtractBatchInfo`); unknown stays 0. A custom `q`
+skips title variants and season/part. Empty list is not an error; Nyaa transport failure wraps
+`ErrNyaaUnavailable`. The pass helper `searchNyaaWithVariants` still swallows total failure — the
+preview has its own loop so "Nyaa down" is not an empty list. The picker **does not persist**: this
+function is request-scoped; candidates live in a frontend memory cache for one navigation; a reload
+of `#/add/:id/torrents` fetches again; custom `q` is not saved
+([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
 
 **Numbering axes.** `packAxis` are the hypotheses for how much to add to the entry's **local**
 number: relative (0, always first), continuous across the season (`ComputeEpisodeOffset` — the gate
@@ -320,10 +338,13 @@ along with `EpisodeID`: with no anime id and no episode number, that record has 
 ### `src/cmd/cli/` — daemon CLI
 
 Split by resource, same package `main` (`main_test.go` keeps testing unexported helpers): `main.go`
-holds the app, global flags, `start` / `stop` / `open` / `loop`; `config.go`, `status.go`,
+holds the app, global flags, `start` / `stop` / `open` / `loop`; `args.go` reorders flags that
+follow positionals before urfave parses ([decisions.md #109](decisions.md#109-flags-after-positionals-are-reordered-before-urfave-parses))
+— tests must call `run`, not `newApp().Run`; `config.go`, `status.go`,
 `animes.go`, `torrents.go`, `logs.go`, `report.go`, `notifications.go` hold the matching trees.
 There is no root `episodes` command and no `GetEpisodes` — `GET /api/v1/episodes` is gone; listing
-is `animes episodes <id>`.
+is `animes episodes <id>`. There is no command that prints a Nyaa description — `animes candidates`
+plus `nyaa_id` is the terminal equivalent.
 
 `report` and `report crash-ack` call `diagnostics.Build` / `ArchivePendingCrash` against
 `datadir.Path()` and never the HTTP client, so they work with the daemon dead. `--yes` is a CLI
@@ -357,6 +378,11 @@ AniList list. "Manual" already means something else: the user touched that episo
 `endpoint_standalone_animes.go` and `endpoint_anilist_search.go`. `standaloneGuard` is **one
 blocking rule with two consumers** (the `POST` and the search handler), so "the front does not let
 you click" and "the back returns an error" agree by construction.
+
+**`endpoint_torrent_candidates.go`** — the picker **does not persist**. Candidates live in a
+frontend memory cache for one navigation; a reload of `#/add/:id/torrents` fetches again. Custom
+`q` is not saved. The daemon has no picker session
+([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
 
 **`endpoint_torrents.go`** — a file's `path` is the **raw** path from the metadata and is never
 rewritten to "Ep NN": the point of the panel is reading fansub/resolution/codec off it. `Progress`
@@ -491,6 +517,14 @@ same ruler as the name (decisions.md #84). **`IsVideoFile` lives here, not in `f
 read the same pack file list (the Librarian after download, `PackFileRange` before) and `files`
 already imports `nyaa` — the other way would be a cycle.
 
+**`detail.go` — view-page scrape for the picker.** `FetchTorrentDetail` builds the URL through
+`ViewURL` (the `NYAA_URL` override lives only in `getNyaaBaseURL`) and **never takes a URL from the
+caller**
+([decisions.md #105](decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller));
+HTTP 404 is `ErrTorrentNotFound`, any other transport/non-200 is `ErrNyaaUnavailable`. Movie rows
+fill `DetailURL` the same way pack rows do — the description pane needs it. `PackFileRange` still
+takes an absolute URL; daemon callers that only have an id use `ViewURL`.
+
 **Sorting** (`priorities.go`): the `health` criterion compares the **band** (`healthTier`, floors
 `10/50` seeders), not the raw score (decisions.md #55, #107). `SortTorrentResults` omits
 `source`; `SortFinishedSeriesResults` includes it and the daemon applies that sort only when
@@ -609,10 +643,21 @@ There is no component library: daisyUI was removed (decisions.md #91). Button, m
 chip and the like live in `components/ui/`; color comes from `lib/design/tokens.css`, which is the
 single source of truth and switches themes through its own `[data-theme]`.
 
-**Routes** (hash router): `Status.svelte` (`#/`), `AddAnime.svelte` (`#/add`), `Downloads.svelte`
+**Routes** (hash router): `Status.svelte` (`#/`), `AddAnime.svelte` (`#/add`), `TorrentPicker.svelte`
+(`#/add/:id/torrents` and `#/status/:id/torrents` — longer paths are registered first in
+`App.svelte` or svelte-spa-router would let `/status/:id` swallow the picker), `Downloads.svelte`
 (`#/downloads`), `AnimeDetail.svelte` (`#/status/:id`), `Config.svelte` (`#/config`),
 `Priorities.svelte` (`#/priorities`), `Logs.svelte` (`#/logs`), `Notifications.svelte`
-(`#/notifications`), `Report.svelte` (`#/report`).
+(`#/notifications`), `Report.svelte` (`#/report`). The picker cache (`stores/pickerCache.ts`) is
+**in-memory**: Add fills it before navigating so the first paint is free; a reload of the picker
+URL fetches; confirm clears it. Add's first search (`getTorrentCandidates` with no `q`) decides
+the route: empty `items` POSTs today's add and stays (same toasts, no picker); a non-empty list
+or `NYAA_UNAVAILABLE` pushes `#/add/:id/torrents` without POSTing; any other GET error toasts and
+stays
+([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
+AnimeDetail's header "Replace torrent" pushes `#/status/:id/torrents` — there is **no**
+whole-title magnet modal; the per-episode magnet modal stays. The description pane is on-demand
+(`GET …/torrent-candidates/{nyaaId}`), never bundled into the list.
 
 **Negative facts that save a search:**
 

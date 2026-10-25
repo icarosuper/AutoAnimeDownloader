@@ -77,7 +77,10 @@ comma-separated values; anything else is JSON when it parses, otherwise a string
 autoanimedownloader animes
 autoanimedownloader animes search "frieren"
 autoanimedownloader animes search "foo" --unreleased
+autoanimedownloader animes candidates 154587
+autoanimedownloader animes candidates 154587 --query "frieren s01"
 autoanimedownloader animes add 154587
+autoanimedownloader animes add 154587 --magnet "magnet:?xt=…"
 autoanimedownloader animes remove 154587 --yes
 autoanimedownloader animes remove 154587 --yes --delete-episodes
 autoanimedownloader animes settings 154587
@@ -92,8 +95,12 @@ autoanimedownloader animes replace-episode 154587 3 --magnet "magnet:?xt=…" --
 ```
 
 `animes` lists tracked titles (columns follow `AnimeInfo`). `search` is AniList; a term shorter than
-3 characters returns an empty list, not an error. `add` / `remove` are standalone animes.
-`--delete-episodes` defaults to false (files stay, marked manually managed).
+3 characters returns an empty list, not an error. `candidates` is the ranked whole-title list the
+picker shows (empty `items` is success, not an error). `--query` is a Nyaa `q` and skips title
+variants and season/part. There is no command that prints a Nyaa description — `nyaa_id` in the
+JSON is the terminal equivalent. `add --magnet` skips auto-pick. Flags may follow the id (`animes add 154587 --magnet "…"` is
+the same as flags-first). `add` / `remove` are standalone
+animes. `--delete-episodes` defaults to false (files stay, marked manually managed).
 
 `release` is not destructive and does not take `--yes`.
 

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, within, fireEvent } from '@testing-library/svelte'
+import { render, within, fireEvent, screen } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import AnimeDetail from '../../src/routes/AnimeDetail.svelte'
 import * as client from '../../src/lib/api/client.js'
 import type { AnimeDetailResponse, AnimeInfo } from '../../src/lib/api/client.js'
+import * as router from 'svelte-spa-router'
 
 // AnimeDetail.svelte only reads these named exports; stub every one it imports so the
 // module mock doesn't leave any binding undefined.
@@ -22,6 +23,16 @@ vi.mock('../../src/lib/api/client.js', () => ({
   deleteTorrent: vi.fn(),
   getLastCheck: vi.fn(),
 }))
+
+vi.mock('svelte-spa-router', async () => {
+  const actual = await vi.importActual<typeof router>('svelte-spa-router')
+  return {
+    ...actual,
+    push: vi.fn().mockResolvedValue(undefined),
+  }
+})
+
+const push = vi.mocked(router.push)
 
 // The last-check report is fetched on the same tick as the torrent poll; an empty report
 // is the default of every test that is not about it.
@@ -320,5 +331,29 @@ describe('AnimeDetail — a pack row swallows the episodes inside its range', ()
     await tick(); await tick()
 
     expect(container.querySelectorAll('[data-episode-row]').length).toBe(2 * 2)
+  })
+})
+
+describe('AnimeDetail — header replace', () => {
+  it('navigates to the torrent picker and does not open a magnet modal', async () => {
+    const episodes = [1, 2].map(n => ({
+      episode_number: n, airing_at: 0, time_until_airing: 0,
+      is_aired: true, is_watched: false, is_downloaded: true, episode_hash: 'pack',
+    }))
+    const detail: AnimeDetailResponse = { anime_id: 42, total_episodes: 2, progress: 0, status: 'CURRENT', episodes }
+    vi.mocked(client.getAnimeDetail).mockResolvedValue(detail)
+    vi.mocked(client.getAnimes).mockResolvedValue([animeInfo({})])
+    vi.mocked(client.getTorrents).mockResolvedValue([])
+    push.mockClear()
+
+    render(AnimeDetail, { props: { params: { id: '42' } } })
+    await tick(); await tick()
+
+    await fireEvent.click(screen.getByRole('button', { name: /replace torrent|substituir torrent/i }))
+
+    expect(push).toHaveBeenCalledWith('/status/42/torrents')
+    expect(client.replaceAnimeWithMagnet).not.toHaveBeenCalled()
+    expect(screen.queryByText(/replace anime with magnet|substituir anime com magnet/i)).toBeNull()
+    expect(screen.queryByPlaceholderText(/magnet/i)).toBeNull()
   })
 })

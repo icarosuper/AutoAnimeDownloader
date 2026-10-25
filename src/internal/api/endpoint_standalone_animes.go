@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/daemon"
@@ -13,7 +14,11 @@ import (
 )
 
 type StandaloneAnimeRequest struct {
-	MediaID int `json:"media_id" example:"21"`
+	MediaID   int    `json:"media_id" example:"21"`
+	Magnet    string `json:"magnet,omitempty"`
+	Name      string `json:"name,omitempty"`
+	NyaaID    int    `json:"nyaa_id,omitempty"`
+	SizeBytes int64  `json:"size_bytes,omitempty"`
 }
 
 type StandaloneAnimeAddResponse struct {
@@ -88,6 +93,26 @@ func handleStandaloneAnimeAdd(server *Server) http.HandlerFunc {
 		}
 		if reason := guard.blockReason(body.MediaID, totalEpisodes); reason != "" {
 			JSONError(w, http.StatusConflict, blockReasonToErrorCode[reason], standaloneBlockMessage(reason))
+			return
+		}
+
+		if body.Magnet != "" {
+			if !strings.HasPrefix(body.Magnet, "magnet:") {
+				JSONError(w, http.StatusBadRequest, "INVALID_MAGNET", "Invalid or missing magnet link")
+				return
+			}
+			// DownloadStandaloneAnimeWithMagnet writes the standalone id after the torrent
+			// is accepted — the handler must not write it first.
+			added, err := daemon.DownloadStandaloneAnimeWithMagnet(
+				server.FileManager, server.Torrents, config,
+				body.MediaID, body.Magnet, body.Name, body.NyaaID, body.SizeBytes,
+			)
+			if err != nil {
+				logger.Logger.Error().Err(err).Int("media_id", body.MediaID).Msg("Failed to download the standalone anime")
+				JSONDownloadError(w, err, "STANDALONE_DOWNLOAD_FAILED")
+				return
+			}
+			JSONSuccess(w, http.StatusOK, StandaloneAnimeAddResponse{Added: added})
 			return
 		}
 
