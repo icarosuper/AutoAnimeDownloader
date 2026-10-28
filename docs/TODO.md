@@ -124,6 +124,20 @@ tweaks would be redone by the `v3.0.0` UI/UX overhaul.
 - UI changes to work better on Windows
 - Test thoroughly
 
+## No release — dashboard account filter
+
+Near-term; ships as a patch whenever it is tackled. No spec yet.
+
+- Filter the Status list by tracked account when two or more AniList/MAL usernames are
+  configured. Membership only: the progress bar stays the household lowest
+  ([decisions.md #43](agents/decisions.md#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)).
+  One menu item per account (AniList and MAL with the same nick stay distinct). Control is an
+  `ActionMenu`, not chips — the type row is already full. Hidden with a single account.
+  `accounts` on `GET /animes`, collected during the existing per-account merge (no extra AniList
+  traffic); filter is client-side, AND with search / type / Unwatched, persisted in the
+  querystring. A title on two lists appears in both; standalone with no account drops out of a
+  user filter. CLI: `animes --account anilist:alice`.
+
 ## No release — promote
 
 After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
