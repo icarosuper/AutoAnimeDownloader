@@ -168,7 +168,7 @@ at 0%) or a huge pack the size ceiling rejects.
 
 > The three **download hygiene** items closed on 2026-09-07: the
 > disk guard now receives the torrent size
-> ([#93](agents/decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_percent--0)),
+> ([#93](agents/decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)),
 > a torrent failure now keeps the bytes already downloaded (amendment to
 > [#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist))
 > and a torrent at zero peers for more than an hour is now dropped through the same failure path

@@ -89,16 +89,11 @@ daemon — the backoff lives in memory.
 **`disk_full` / "insufficient free disk space" while `df` shows plenty free** → read the error's
 `reserved by torrents still downloading` number before suspecting statfs. The guard counts what
 the torrents already in the session still have to write, plus what the same pass already added
-([decisions.md #101](decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)):
+([decisions.md #101](decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)),
+and keeps `min_free_disk_gb` of slack after that ([decisions.md #93](decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)):
 a full queue refuses new torrents long before the disk itself fills. Free space comes back as the
-queue finishes or when queued torrents are deleted.
-
-If last-check says `disk_full` while the Status disk card is still a healthy number and `disk_low`
-is false, that mismatch is a known bug, not a wrong `statfs`:
-[disk-full-with-free-space](../superpowers/specs/2026-10-28-disk-full-with-free-space.md). `disk_low`
-ignores the reservation; `checkDiskSpace` does not. On a ~1 TB volume the 10% floor is ~93 GB of
-mandatory slack, so a catch-up queue of ~80 GB will trip the guard with ~180 GB still showing as
-free.
+queue finishes or when queued torrents are deleted. Last-check copy names that reservation; `disk_low`
+is the same add-gate (size 0, including reserved) so the Status banner tracks it.
 
 A separate, new failure class is **"the torrent downloaded but nothing shows up in the library"** — the download succeeded but the `organize` job (hardlink into `completed_anime_path` + webhook) is failing or retrying. See the embedded-client section below.
 

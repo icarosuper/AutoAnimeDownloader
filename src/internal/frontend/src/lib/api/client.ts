@@ -139,8 +139,9 @@ export interface StatusResponse {
   disk_total: number
   disk_free: number
   /**
-   * Free space below min_free_disk_percent: the daemon stopped adding torrents. Computed on the
-   * server on purpose — a threshold duplicated in the frontend would disagree with the daemon.
+   * The daemon would refuse a new torrent of size 0: free minus reserved, against
+   * min_free_disk_gb. Computed on the server on purpose — a threshold duplicated in the
+   * frontend would disagree with the daemon.
    */
   disk_low: boolean
   /**
@@ -204,8 +205,8 @@ export interface Config {
   min_seeders: number
   /** Ceiling of Nyaa pages per search. The search only goes deeper if it has few candidates. */
   max_search_pages: number
-  /** Below this percentage of free space, downloads pause. 0 disables. */
-  min_free_disk_percent: number
+  /** Slack the disk guard keeps on the library volume, in GiB. 0 disables the policy. */
+  min_free_disk_gb: number
   episode_retry_limit: number
   max_concurrent_downloads: number
   delete_watched_episodes: boolean

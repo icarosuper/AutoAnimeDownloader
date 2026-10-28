@@ -135,8 +135,8 @@ export function formatBytes(bytes: number): string {
 }
 
 // The "low disk" threshold lives on the server (StatusResponse.disk_low, computed with
-// min_free_disk_percent): a duplicated calculation here would end up disagreeing with what
-// the daemon is doing. Don't reintroduce the ratio to save a field on the response.
+// min_free_disk_gb including reserved): a duplicated calculation here would end up disagreeing
+// with what the daemon is doing. Don't reintroduce the ratio to save a field on the response.
 
 export type ProgressBreakdown = {
   watched: number

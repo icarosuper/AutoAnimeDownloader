@@ -41,7 +41,7 @@ type Report struct {
 // the bundle as a generic map, so a field this struct doesn't know still shows up.
 type rawConfig struct {
 	CompletedAnimePath string   `json:"completed_anime_path"`
-	MinFreeDiskPercent int      `json:"min_free_disk_percent"`
+	MinFreeDiskGB      int      `json:"min_free_disk_gb"`
 	AnilistUsername    string   `json:"anilist_username"`
 	AnilistUsernames   []string `json:"anilist_usernames"`
 	MALUsernames       []string `json:"mal_usernames"`
@@ -71,7 +71,7 @@ func Build(dir string, opts Options) Report {
 	for _, line := range env {
 		b.WriteString(line + "\n")
 	}
-	b.WriteString(diskLine(cfg.CompletedAnimePath, cfg.MinFreeDiskPercent) + "\n")
+	b.WriteString(diskLine(cfg.CompletedAnimePath, cfg.MinFreeDiskGB) + "\n")
 
 	if opts.Error != "" || opts.Context != "" || opts.AnimeID != "" {
 		section(&b, "Context")

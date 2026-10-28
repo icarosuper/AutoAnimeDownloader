@@ -90,7 +90,7 @@ Key endpoints:
 
 | Method | Endpoint | Handler func | File |
 |--------|----------|-------------|------|
-| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — the `disk_low` threshold lives **only** on the server. It is `free/total` against `min_free_disk_percent` and **does not** subtract the pass's `diskBudget` reservation; `checkDiskSpace` does, so last-check can report `disk_full` while `disk_low` is false ([disk-full-with-free-space](../superpowers/specs/2026-10-28-disk-full-with-free-space.md)). The AniList state is written by **any** call (a pass or a frontend poll), because they all go through `sendAnilistRequest` — decisions.md #65/#66. `anilist.cache_saved_at` is filled in on **read**, not when the state is written: it's not a fact about AniList, it's what the banner uses to say how old the cache on screen is. `pending_crash_at` (mtime of `crash-pending.log`, `null` when there is none) is what makes the web UI offer the report screen after a crash |
+| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — the `disk_low` threshold lives **only** on the server. It is the add-gate for a torrent of size 0: `free - reserved` against `min_free_disk_gb` (`daemon.DiskLow`), so the Status banner cannot disagree with what the daemon will refuse ([decisions.md #93](decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)). The AniList state is written by **any** call (a pass or a frontend poll), because they all go through `sendAnilistRequest` — decisions.md #65/#66. `anilist.cache_saved_at` is filled in on **read**, not when the state is written: it's not a fact about AniList, it's what the banner uses to say how old the cache on screen is. `pending_crash_at` (mtime of `crash-pending.log`, `null` when there is none) is what makes the web UI offer the report screen after a crash |
 | `GET` | `/api/v1/last-check` | `handleLastCheck` | `endpoint_last_check.go` — memory only. `problems` (should have downloaded and did not) and `limits` (the config doing what it was configured to do). When `pass_error` is set both lists come empty, because `SetLastCheckError` clears the report (decisions.md #82). A manual download stays out: that path returns the error on its own HTTP response |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
@@ -196,11 +196,13 @@ All three go through the `min_seeders` floor (`filterSearchResults`).
   range ("00 ~ 12", or a season pack recorded under a later cour)
 - `checkDiskSpace` bars a download, **never** the verification pass. A `statfs` error does not
   block. It receives the torrent size and is called **per candidate**: the second in the list may
-  fit where the first did not, and the size trigger still applies with the percentage off
-  ([#93](decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_percent--0)).
+  fit where the first did not, and the size trigger still applies with the GiB floor off
+  ([#93](decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)).
   In the pass it goes through a per-pass `diskBudget` (`diskbudget.go`): the size is checked on top
   of what the session's incomplete torrents and this pass's adds still have to write
-  ([#101](decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space))
+  ([#101](decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)).
+  A pack that passes `packsThatFit` and then loses at `reserve` is dropped and the choice runs
+  again ([#111](decisions.md#111-a-pack-that-loses-at-reserve-does-not-keep-the-window))
 - The pack size ceiling is applied **twice**: in the Nyaa search and again in the daemon filter
   (decisions.md #80). Changing only one of the two does not change the behavior
 

@@ -34,25 +34,36 @@ type FileManagerInterface interface {
 	RemoveStandaloneAnime(mediaID int) error
 }
 
-// ErrInsufficientDiskSpace is returned by checkDiskSpace when the library volume is below
-// Config.MinFreeDiskPercent of free space, or when the torrent to be added doesn't fit in what's
-// left.
+// ErrInsufficientDiskSpace is returned by checkDiskSpace when leftover free space would fall
+// below Config.MinFreeDiskGB, or when the torrent to be added doesn't fit in what's left.
 var ErrInsufficientDiskSpace = errors.New("insufficient free disk space")
+
+const giB = int64(1 << 30)
+
+// DiskLow is true exactly when the daemon would refuse a new torrent of size 0: the add-gate,
+// including what the session still has to write, against the GiB floor. GET /status's disk_low
+// is this flag and nothing else (decisions.md #93).
+func DiskLow(configs *files.Config, session []torrents.TorrentInfo, saved []files.EpisodeStruct) bool {
+	if configs == nil {
+		return false
+	}
+	return checkDiskSpace(configs, 0, newDiskBudget(session, saved).reserved) != nil
+}
 
 // checkDiskSpace blocks ADDING new torrents when the library volume is full OR when the requested
 // torrent doesn't fit in it.
 //
 // torrentSizeBytes is the size Nyaa announced, 0 when unknown (hand-pasted magnet) — and then the
-// guard falls back to the percentage check it always was. Without it a 61 GiB pack got into a
-// volume with 40 GiB free and only stopped when the disk filled up, mid-download: the free
-// percentage only answers "is there space NOW", never "is there space at the end".
+// guard falls back to the GiB-floor check it always was. Without it a 61 GiB pack got into a
+// volume with 40 GiB free and only stopped when the disk filled up, mid-download: free space
+// alone answers "is there space NOW", never "is there space at the end".
 //
 // reservedBytes is what the torrents already added still have to write (see diskBudget): free
 // space alone let a pass queue 130 GiB of loose episodes, each one fitting on its own, into 6 GiB
 // of headroom (decisions.md #101). It counts the same as the torrent's own size.
 //
-// The two halves have different triggers on purpose. The percentage is the user's policy and turns
-// off with min_free_disk_percent = 0; "the torrent is bigger than the free space" is arithmetic, and
+// The two halves have different triggers on purpose. The GiB floor is the user's policy and turns
+// off with min_free_disk_gb = 0; "the torrent is bigger than the free space" is arithmetic, and
 // holds even with the policy off.
 //
 // It doesn't block the verification pass: pruning watched episodes, deleteEpisodesByStatus and
@@ -64,7 +75,7 @@ var ErrInsufficientDiskSpace = errors.New("insufficient free disk space")
 // covers.
 func checkDiskSpace(configs *files.Config, torrentSizeBytes, reservedBytes int64) error {
 	needed := torrentSizeBytes + reservedBytes
-	if configs.CompletedAnimePath == "" || (configs.MinFreeDiskPercent <= 0 && needed <= 0) {
+	if configs.CompletedAnimePath == "" || (configs.MinFreeDiskGB <= 0 && needed <= 0) {
 		return nil
 	}
 	// Same volume as the download directory, by construction (see Config.DownloadPath).
@@ -79,11 +90,12 @@ func checkDiskSpace(configs *files.Config, torrentSizeBytes, reservedBytes int64
 	if needed > 0 && float64(needed) > float64(free) {
 		return fmt.Errorf("%w: torrent needs %d bytes on top of %d reserved by torrents still downloading, only %d free on %s", ErrInsufficientDiskSpace, torrentSizeBytes, reservedBytes, free, configs.CompletedAnimePath)
 	}
-	if configs.MinFreeDiskPercent <= 0 {
+	if configs.MinFreeDiskGB <= 0 {
 		return nil
 	}
-	if (float64(free)-float64(needed))/float64(total)*100 < float64(configs.MinFreeDiskPercent) {
-		return fmt.Errorf("%w: %d%% free required on %s (torrent: %d bytes, reserved by torrents still downloading: %d bytes)", ErrInsufficientDiskSpace, configs.MinFreeDiskPercent, configs.CompletedAnimePath, torrentSizeBytes, reservedBytes)
+	leftover := int64(free) - needed
+	if leftover < int64(configs.MinFreeDiskGB)*giB {
+		return fmt.Errorf("%w: %d GiB free required on %s (torrent: %d bytes, reserved by torrents still downloading: %d bytes)", ErrInsufficientDiskSpace, configs.MinFreeDiskGB, configs.CompletedAnimePath, torrentSizeBytes, reservedBytes)
 	}
 	return nil
 }

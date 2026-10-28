@@ -3,6 +3,7 @@ package api
 import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/torrents"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -92,20 +93,28 @@ func TestHandleStatus(t *testing.T) {
 	})
 }
 
-// TestHandleStatus_DiskLow: the "low disk" threshold lives on the server (min_free_disk_percent),
+// TestHandleStatus_DiskLow: the "low disk" threshold lives on the server (min_free_disk_gb),
 // and it is the same one that makes the daemon stop adding torrents.
 func TestHandleStatus_DiskLow(t *testing.T) {
+	below := t.TempDir()
+	_, free, err := files.DiskSpace(below)
+	if err != nil || free == 0 {
+		t.Skipf("no free-space reading for the temp dir: %v", err)
+	}
+	above := t.TempDir()
+	if free < 1<<30 {
+		t.Skip("need at least 1 GiB free to assert the floor passing")
+	}
+
 	cases := []struct {
 		name    string
 		configs *files.Config
 		want    bool
 	}{
-		// 100% free is impossible on a volume in use.
-		{"below the cap", &files.Config{CompletedAnimePath: t.TempDir(), MinFreeDiskPercent: 100}, true},
-		{"above the cap", &files.Config{CompletedAnimePath: t.TempDir(), MinFreeDiskPercent: 1}, false},
-		{"guard off", &files.Config{CompletedAnimePath: t.TempDir(), MinFreeDiskPercent: 0}, false},
-		// Library not configured: disk_total == 0, nothing to assert.
-		{"library not configured", &files.Config{MinFreeDiskPercent: 100}, false},
+		{"below the cap", &files.Config{CompletedAnimePath: below, MinFreeDiskGB: int(free>>30) + 1}, true},
+		{"above the cap", &files.Config{CompletedAnimePath: above, MinFreeDiskGB: 1}, false},
+		{"guard off", &files.Config{CompletedAnimePath: t.TempDir(), MinFreeDiskGB: 0}, false},
+		{"library not configured", &files.Config{MinFreeDiskGB: 100}, false},
 	}
 
 	for _, tc := range cases {
@@ -126,16 +135,61 @@ func TestHandleStatus_DiskLow(t *testing.T) {
 	}
 }
 
+func TestHandleStatus_DiskLowWhenReservedPushesUnderTheFloor(t *testing.T) {
+	dir := t.TempDir()
+	_, free, err := files.DiskSpace(dir)
+	if err != nil || free < 3<<30 {
+		t.Skipf("need a few GiB free to split between reserved and leftover: %v", err)
+	}
+	const giB = int64(1 << 30)
+	minGB := 10
+	if free < uint64(minGB)*uint64(giB)+2*uint64(giB) {
+		minGB = max(1, int(free>>30)/2)
+	}
+	reserved := int64(free) - int64(minGB-1)*giB
+
+	backend := torrents.NewFakeBackend()
+	backend.AddPaused("queuedhash", "pack", 0, 0, false)
+	fm := &mockFileManager{
+		configs:  &files.Config{CompletedAnimePath: dir, MinFreeDiskGB: minGB},
+		episodes: []files.EpisodeStruct{{EpisodeHash: "queuedhash", TorrentSize: reserved}},
+	}
+	server := &Server{State: daemon.NewState(), FileManager: fm, Torrents: backend}
+	w := httptest.NewRecorder()
+	handleStatus(server)(w, httptest.NewRequest(http.MethodGet, "/api/v1/status", nil))
+
+	var response SuccessResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	data := response.Data.(map[string]interface{})
+	if got := data["disk_low"].(bool); !got {
+		t.Errorf("disk_low: want true when reserved alone trips the floor, got false (total=%v free=%v)", data["disk_total"], data["disk_free"])
+	}
+	// The card still reports the raw free bytes: reserved is why the flag flipped.
+	if got := data["disk_free"].(float64); got < float64(minGB)*float64(giB) {
+		t.Errorf("disk_free should still look healthy on its own, got %v", got)
+	}
+}
+
 // TestHandleDownloadEpisode_DiskFullReturns409: the cause is known and the user can act on it,
 // so 409 not 500.
 func TestHandleDownloadEpisode_DiskFullReturns409(t *testing.T) {
+	dir := t.TempDir()
+	_, free, err := files.DiskSpace(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	fm := &mockFileManager{configs: &files.Config{
 		AnilistUsernames:    []string{"testuser"},
-		CompletedAnimePath:  t.TempDir(),
-		MinFreeDiskPercent:  100,
+		CompletedAnimePath:  dir,
+		MinFreeDiskGB:       int(free>>30) + 1,
 		MaxEpisodesPerAnime: 12,
 		EpisodeRetryLimit:   1,
 	}}
+	if fm.configs.MinFreeDiskGB < 1 {
+		fm.configs.MinFreeDiskGB = 1
+	}
 	server, _ := episodeActionServer(t, fm)
 
 	restore := mockAnimeInfo()

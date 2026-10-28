@@ -105,9 +105,8 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
-		// 100 would block every download forever.
-		if config.MinFreeDiskPercent < 0 || config.MinFreeDiskPercent > 99 {
-			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Min free disk percent must be between 0 and 99")
+		if config.MinFreeDiskGB < 0 {
+			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Min free disk space must be non-negative")
 			return
 		}
 

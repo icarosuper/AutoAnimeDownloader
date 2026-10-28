@@ -73,8 +73,9 @@ func orNone(s string) string {
 	return s
 }
 
-// diskLine mirrors what /api/v1/status computes: a full disk silently stops new downloads.
-func diskLine(libraryPath string, minFreePercent int) string {
+// diskLine reports the volume and whether free space alone already misses min_free_disk_gb.
+// The bundle has no session, so it cannot subtract reserved the way GET /status disk_low does.
+func diskLine(libraryPath string, minFreeGB int) string {
 	if libraryPath == "" {
 		return "Disk: library not configured"
 	}
@@ -84,8 +85,8 @@ func diskLine(libraryPath string, minFreePercent int) string {
 	}
 	freePercent := float64(free) / float64(total) * 100
 	line := fmt.Sprintf("Disk: %.1f GiB free of %.1f GiB (%.0f%%)", gib(free), gib(total), freePercent)
-	if minFreePercent > 0 && freePercent < float64(minFreePercent) {
-		line += fmt.Sprintf(" - below min_free_disk_percent (%d%%), new downloads are paused", minFreePercent)
+	if minFreeGB > 0 && int64(free) < int64(minFreeGB)<<30 {
+		line += fmt.Sprintf(" - below min_free_disk_gb (%d GiB), new downloads are paused", minFreeGB)
 	}
 	return line
 }

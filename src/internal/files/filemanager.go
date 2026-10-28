@@ -116,10 +116,11 @@ type Config struct {
 	// page while it has few accepted candidates, so the ceiling is a limit, not a fixed cost. <= 1
 	// means searching only page 1.
 	MaxSearchPages int `json:"max_search_pages"`
-	// MinFreeDiskPercent bars adding new torrents below this percentage of free space on the library
-	// volume. 0 disables.
-	MinFreeDiskPercent int `json:"min_free_disk_percent"`
-	EpisodeRetryLimit  int `json:"episode_retry_limit"`
+	// MinFreeDiskGB is the slack the disk guard keeps on the library volume, in GiB (2^30).
+	// Adding a torrent is refused when free - reserved would fall below this. 0 disables the
+	// policy; a torrent bigger than free - reserved is still refused (decisions.md #93).
+	MinFreeDiskGB     int `json:"min_free_disk_gb"`
+	EpisodeRetryLimit int `json:"episode_retry_limit"`
 	// MaxConcurrentDownloads limits how many INCOMPLETE torrents download at the same time; the excess
 	// waits in the queue (torrents.queue). 0 disables the limit. Seeding never counts.
 	//
@@ -207,11 +208,11 @@ func getDefaultConfig() *Config {
 		CheckInterval:         10,
 		MaxEpisodesPerAnime:   12,
 		MaxBatchTorrentSizeGB: 100,
-		// Passa WEB-DL (~1,4 GB) e encode de BD (~2 GB), barra BDRemux (~6-8 GB).
+		// Passes a WEB-DL (~1.4 GB) and a BD encode (~2 GB), bars a BDRemux (~6-8 GB).
 		MaxEpisodeTorrentSizeGB: 5,
 		MinSeeders:              3,
 		MaxSearchPages:          5,
-		MinFreeDiskPercent:      10,
+		MinFreeDiskGB:           10,
 		EpisodeRetryLimit:       5,
 		MaxConcurrentDownloads:  3,
 		DeleteWatchedEpisodes:   true,

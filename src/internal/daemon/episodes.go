@@ -153,7 +153,7 @@ func processAnimeEpisodes(
 		if !isAnimeMovie(anime) && len(sel.toDownload) > 1 {
 			firstPending := sel.toDownload[0].Episode
 			axis := newPackAxis(anime, seriesIndex, totalEpisodes)
-			batches := pickBatches(newPackSet(packsThatFit(configs, disk, packs), searcher.packRange), axis, firstPending, windowEnd(configs, firstPending))
+			batches := chooseCoveringPacks(configs, disk, packs, searcher.packRange, axis, firstPending, windowEnd(configs, firstPending))
 			switch {
 			case batches.len() > 0:
 				logger.Logger.Info().
@@ -294,8 +294,8 @@ func processAnimeEpisodes(
 				Code:       IssueTorrentRejected,
 				Candidates: len(candidates),
 			}
-			// The best candidate's size counts: the disk can have headroom in percent and still not fit the
-			// pack this episode wanted.
+			// The best candidate's size counts: the disk can have headroom against the GiB floor and still
+			// not fit the pack this episode wanted.
 			if errors.Is(disk.check(configs, candidates[0].Size), ErrInsufficientDiskSpace) {
 				reason = notifications.ReasonNoDiskSpace
 				issue.Code = IssueDiskFull
@@ -487,6 +487,64 @@ func partitionSearchResults(configs *files.Config, anime anilist.MediaList, resu
 	filteredPacks, packStats := filterSearchResults(packs, configs.MaxBatchTorrentSizeGB, configs.MinSeeders)
 	filteredSingles, _ := filterSearchResults(singles, configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 	return filteredPacks, filteredSingles, packStats
+}
+
+// afterPacksThatFit is a test hook that runs after packsThatFit has filtered the list, before
+// pickBatches. Tests use it to spend the disk budget in the race window #101 named: another
+// anime of the same pass reserves between the snapshot and the add.
+var afterPacksThatFit func()
+
+// chooseCoveringPacks is packsThatFit + pickBatches, retried when a chosen pack then loses at
+// reserve. packsThatFit is a snapshot; a parallel anime can spend the last bytes before this
+// one Adds, and without the retry the pack that no longer fits would keep the window
+// (decisions.md #97 via the #101 race).
+func chooseCoveringPacks(configs *files.Config, disk *diskBudget, packs []nyaa.TorrentResult, detail func(nyaa.TorrentResult) (nyaa.BatchInfo, bool), axis packAxis, firstPending, windowEnd int) *packSet {
+	remaining := append([]nyaa.TorrentResult(nil), packs...)
+	for {
+		fit := packsThatFit(configs, disk, remaining)
+		if afterPacksThatFit != nil {
+			afterPacksThatFit()
+		}
+		batches := pickBatches(newPackSet(fit, detail), axis, firstPending, windowEnd)
+		if batches.len() == 0 {
+			return batches
+		}
+		var undos []func()
+		seen := make(map[string]bool, batches.len())
+		dropped := false
+		for _, item := range batches.items {
+			key := budgetKey(item.torrent.MagnetLink)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			undo, err := disk.reserve(configs, item.torrent)
+			if err != nil {
+				logger.Logger.Info().Err(err).Str("torrent", item.torrent.Name).Msg("Skipping pack: it does not fit on disk")
+				for _, u := range undos {
+					u()
+				}
+				remaining = dropTorrent(remaining, item.torrent)
+				dropped = true
+				break
+			}
+			undos = append(undos, undo)
+		}
+		if !dropped {
+			return batches
+		}
+	}
+}
+
+func dropTorrent(packs []nyaa.TorrentResult, drop nyaa.TorrentResult) []nyaa.TorrentResult {
+	key := budgetKey(drop.MagnetLink)
+	out := make([]nyaa.TorrentResult, 0, len(packs))
+	for _, tr := range packs {
+		if budgetKey(tr.MagnetLink) != key {
+			out = append(out, tr)
+		}
+	}
+	return out
 }
 
 // packsThatFit drops the packs the disk guard would refuse. It runs BEFORE pickBatches because

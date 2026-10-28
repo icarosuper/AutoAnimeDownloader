@@ -210,7 +210,7 @@ Full field-by-field reference: [Config Reference](docs/agents/config.md).
 - That's the concurrency limit (`max_concurrent_downloads`); raise it, or prioritize a torrent from the Downloads screen
 
 **Nothing is being added anymore**
-- Free space may be below `min_free_disk_percent` — the dashboard shows a low-disk warning while that's the case
+- Free space minus the queue's remaining write may be below `min_free_disk_gb` — the dashboard shows a low-disk warning while that's the case
 
 **Frontend not loading**
 - The frontend is embedded — if the daemon is running, the UI should work

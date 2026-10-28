@@ -126,7 +126,7 @@
     max_episode_torrent_size_gb: 0,
     min_seeders: 1,
     max_search_pages: 5,
-    min_free_disk_percent: 10,
+    min_free_disk_gb: 10,
     episode_retry_limit: 5,
     max_concurrent_downloads: 3,
     delete_watched_episodes: true,
@@ -312,9 +312,8 @@
       message: m.config_val_max_search_pages,
     },
     {
-      // 100 would block every download forever.
       group: "library" as GroupId,
-      ok: config.min_free_disk_percent >= 0 && config.min_free_disk_percent <= 99,
+      ok: config.min_free_disk_gb >= 0,
       message: m.config_val_min_free_disk,
     },
   ];
@@ -574,15 +573,14 @@
 
             <div class="p-4.5">
               <Input
-                id="min_free_disk_percent"
+                id="min_free_disk_gb"
                 label={T && T.labelMinFreeDisk || ""}
                 subtitle={T && T.hintMinFreeDisk || ""}
                 type="number"
-                bind:value={config.min_free_disk_percent}
+                bind:value={config.min_free_disk_gb}
                 min="0"
-                max="99"
                 inline={true}
-                suffix="%"
+                suffix="GiB"
               />
             </div>
 

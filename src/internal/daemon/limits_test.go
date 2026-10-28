@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -353,31 +354,74 @@ func TestFilterSearchResults_DropStats(t *testing.T) {
 
 func TestCheckDiskSpace(t *testing.T) {
 	dir := t.TempDir()
-
-	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}, 0, 0); err != nil {
-		t.Errorf("with 1%% required want nil, got %v", err)
+	_, free, err := files.DiskSpace(dir)
+	if err != nil || free == 0 {
+		t.Skipf("no free-space reading for the temp dir: %v", err)
 	}
-	// 100% free is impossible on a volume in use: forces the "below the ceiling" path.
-	err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 100}, 0, 0)
+
+	if free >= uint64(giB) {
+		if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskGB: 1}, 0, 0); err != nil {
+			t.Errorf("with 1 GiB required want nil, got %v", err)
+		}
+		if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskGB: 1}, 1, 0); err != nil {
+			t.Errorf("a 1-byte torrent must fit, got %v", err)
+		}
+	}
+	// A floor larger than what's free always trips the policy.
+	err = checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskGB: int(free>>30) + 1}, 0, 0)
 	if !errors.Is(err, ErrInsufficientDiskSpace) {
 		t.Errorf("want ErrInsufficientDiskSpace, got %v", err)
 	}
-	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}, 0, 0); err != nil {
-		t.Errorf("0 turns the guard off, got %v", err)
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskGB: 0}, 0, 0); err != nil {
+		t.Errorf("0 turns the policy off, got %v", err)
 	}
-	// Size larger than the whole volume: blocked even with the percent policy off.
-	err = checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 0}, math.MaxInt64, 0)
+	// Size larger than the whole volume: blocked even with the GiB policy off.
+	err = checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskGB: 0}, math.MaxInt64, 0)
 	if !errors.Is(err, ErrInsufficientDiskSpace) {
 		t.Errorf("a torrent larger than the disk must be blocked even with the guard off, got %v", err)
 	}
-	// A 1-byte torrent fits: the size can't become an automatic "no".
-	if err := checkDiskSpace(&files.Config{CompletedAnimePath: dir, MinFreeDiskPercent: 1}, 1, 0); err != nil {
-		t.Errorf("a 1-byte torrent must fit, got %v", err)
-	}
 	// A statfs error doesn't block.
 	missing := filepath.Join(dir, "does-not-exist")
-	if err := checkDiskSpace(&files.Config{CompletedAnimePath: missing, MinFreeDiskPercent: 100}, 0, 0); err != nil {
+	if err := checkDiskSpace(&files.Config{CompletedAnimePath: missing, MinFreeDiskGB: 100}, 0, 0); err != nil {
 		t.Errorf("a statfs failure must not block, got %v", err)
+	}
+}
+
+func TestCheckDiskSpace_ReservedAloneTripsTheGiBFloor(t *testing.T) {
+	dir := t.TempDir()
+	_, free, err := files.DiskSpace(dir)
+	if err != nil || free < 3*uint64(giB) {
+		t.Skipf("need a few GiB free to split between reserved and leftover: %v", err)
+	}
+	minGB := 10
+	if free < uint64(minGB)*uint64(giB)+2*uint64(giB) {
+		minGB = max(1, int(free>>30)/2)
+	}
+	reserved := int64(free) - int64(minGB-1)*giB
+	cfg := &files.Config{CompletedAnimePath: dir, MinFreeDiskGB: minGB}
+	if err := checkDiskSpace(cfg, 0, 0); err != nil {
+		t.Fatalf("without reserved the floor must pass, got %v", err)
+	}
+	if err := checkDiskSpace(cfg, 0, reserved); !errors.Is(err, ErrInsufficientDiskSpace) {
+		t.Errorf("reserved alone must trip the GiB floor, got %v", err)
+	}
+}
+
+func TestCheckDiskSpace_PolicyOffStillRefusesBiggerThanFreeMinusReserved(t *testing.T) {
+	dir := t.TempDir()
+	_, free, err := files.DiskSpace(dir)
+	if err != nil || free < 4 {
+		t.Skipf("no free-space reading for the temp dir: %v", err)
+	}
+	cfg := &files.Config{CompletedAnimePath: dir, MinFreeDiskGB: 0}
+	reserved := int64(free) / 2
+	if err := checkDiskSpace(cfg, int64(free)-reserved+1, reserved); !errors.Is(err, ErrInsufficientDiskSpace) {
+		t.Errorf("want refuse when size+reserved > free with policy off, got %v", err)
+	}
+	if reserved > 0 {
+		if err := checkDiskSpace(cfg, reserved-1, reserved); err != nil {
+			t.Errorf("size+reserved still under free must pass with policy off, got %v", err)
+		}
 	}
 }
 
@@ -386,7 +430,14 @@ func diskFullConfig(t *testing.T) *files.Config {
 	t.Helper()
 	configs := limitsConfig()
 	configs.CompletedAnimePath = t.TempDir()
-	configs.MinFreeDiskPercent = 100
+	_, free, err := files.DiskSpace(configs.CompletedAnimePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configs.MinFreeDiskGB = int(free>>30) + 1
+	if configs.MinFreeDiskGB < 1 {
+		configs.MinFreeDiskGB = 1
+	}
 	return configs
 }
 
@@ -530,7 +581,7 @@ func TestProcessAnimeEpisodes_Issues(t *testing.T) {
 			t.Errorf("want %q, got %q", IssueAllAboveSizeLimit, got.Code)
 		}
 		if got.Candidates != 2 || got.LimitGB != 3 {
-			t.Errorf("detalhes errados: %+v", got)
+			t.Errorf("wrong details: %+v", got)
 		}
 		if got.AnimeID != anime.Media.Id || got.AnimeName == "" {
 			t.Errorf("anime identification missing: %+v", got)
@@ -610,6 +661,75 @@ func TestPackThatDoesNotFitFallsBackToLooseEpisodes(t *testing.T) {
 	for _, ep := range result.newEpisodes {
 		if ep.IsBatch {
 			t.Fatalf("episode %d came from the pack that doesn't fit", ep.EpisodeNumber)
+		}
+	}
+}
+
+// The #101 race: packsThatFit is a snapshot; another anime of the same pass can spend the
+// budget before this one Adds. The pack that then loses at reserve must not keep the window —
+// the next pack or the loose episodes take over, same as when packsThatFit dropped it up front.
+func TestPackThatLosesReserveFallsBackToSingles(t *testing.T) {
+	configs, size := budgetConfig(t)
+	disk := newDiskBudget(nil, nil)
+	anime := animeWithEpisodes(12, anilist.MediaStatusFinished, true, "")
+	pack := nyaa.TorrentResult{Name: "[X] Anime 01-12 [1080p]", MagnetLink: fakeMagnet(9001), Size: size}
+	searcher := searcherFor([]nyaa.TorrentResult{pack}, multipleFor(12, 1), nil, nil)
+
+	var once sync.Once
+	afterPacksThatFit = func() {
+		once.Do(func() {
+			if _, err := disk.reserve(configs, nyaa.TorrentResult{MagnetLink: fakeMagnet(1), Size: size}); err != nil {
+				t.Errorf("filling the budget between packsThatFit and Add: %v", err)
+			}
+		})
+	}
+	defer func() { afterPacksThatFit = nil }()
+
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher, disk)
+
+	if len(result.newEpisodes) != 12 {
+		t.Fatalf("want the 12 singles after the pack lost the budget, got %d (issues=%+v)", len(result.newEpisodes), result.issues)
+	}
+	for _, ep := range result.newEpisodes {
+		if ep.IsBatch {
+			t.Fatalf("episode %d came from the pack that no longer fitted", ep.EpisodeNumber)
+		}
+	}
+}
+
+func TestPackThatLosesReserveFallsBackToNextPack(t *testing.T) {
+	configs, size := budgetConfig(t)
+	disk := newDiskBudget(nil, nil)
+	anime := animeWithEpisodes(12, anilist.MediaStatusFinished, true, "")
+	big := nyaa.TorrentResult{Name: "[X] Anime 01-12 [BD Remux]", MagnetLink: fakeMagnet(9001), Size: size}
+	small := nyaa.TorrentResult{Name: "[Y] Anime 01-12 [1080p]", MagnetLink: fakeMagnet(9002), Size: 1}
+	searcher := searcherFor([]nyaa.TorrentResult{big, small}, nil, nil, nil)
+
+	var once sync.Once
+	afterPacksThatFit = func() {
+		once.Do(func() {
+			if _, err := disk.reserve(configs, nyaa.TorrentResult{MagnetLink: fakeMagnet(1), Size: size}); err != nil {
+				t.Errorf("filling the budget between packsThatFit and Add: %v", err)
+			}
+		})
+	}
+	defer func() { afterPacksThatFit = nil }()
+
+	result := processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher, disk)
+
+	if len(result.newEpisodes) != 12 {
+		t.Fatalf("want the 12 episodes of the smaller pack, got %d (issues=%+v)", len(result.newEpisodes), result.issues)
+	}
+	wantHash, err := torrents.InfoHash(small.MagnetLink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ep := range result.newEpisodes {
+		if !ep.IsBatch {
+			t.Fatalf("episode %d fell through to a single; want the next pack", ep.EpisodeNumber)
+		}
+		if ep.EpisodeHash != wantHash {
+			t.Fatalf("episode %d hash %q, want the smaller pack %q", ep.EpisodeNumber, ep.EpisodeHash, wantHash)
 		}
 	}
 }

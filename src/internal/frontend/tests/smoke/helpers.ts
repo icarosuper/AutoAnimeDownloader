@@ -94,7 +94,7 @@ export const baseConfig = {
     max_episode_torrent_size_gb: 0,
     min_seeders: 1,
     max_search_pages: 5,
-    min_free_disk_percent: 10,
+    min_free_disk_gb: 10,
     delete_watched_episodes: false,
     watched_episodes_to_keep: 0,
     excluded_lists: [],

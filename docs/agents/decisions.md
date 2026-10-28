@@ -99,7 +99,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#90** — There is no `config.json` versioning: the migration checks SHAPE, in one place](#90-there-is-no-configjson-versioning-the-migration-checks-shape-in-one-place)
 - [**#91** — There is no component library: daisyUI left because it was a second color vocabulary](#91-there-is-no-component-library-daisyui-left-because-it-was-a-second-color-vocabulary)
 - [**#92** — The on-disk AniList cache restores with TTL zero, and a value served from it comes with `ErrFromCache`](#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)
-- [**#93** — The disk guard has two triggers, and the size one still applies with `min_free_disk_percent = 0`](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_percent--0)
+- [**#93** — The disk guard has two triggers, and the size one still applies with `min_free_disk_gb = 0`](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)
 - [**#94** — A stalled torrent is dropped through the failure path, and only one that is *trying* counts as stalled](#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)
 - [**#95** — MyAnimeList is a list source, not a metadata source](#95-myanimelist-is-a-list-source-not-a-metadata-source)
 - [**#96** — A first-season entry rejects later-season packs, but a sequel without a marker doesn't](#96-a-first-season-entry-rejects-later-season-packs-but-a-sequel-without-a-marker-doesnt)
@@ -117,6 +117,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#108** — Empty first search skips the picker; custom `q` drops variants; description is on demand; add-with-magnet writes the id after the torrent](#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)
 - [**#109** — Flags after positionals are reordered before urfave parses](#109-flags-after-positionals-are-reordered-before-urfave-parses)
 - [**#110** — `.chapters` is leftover metadata, same class as `.nfo`](#110-chapters-is-leftover-metadata-same-class-as-nfo)
+- [**#111** — A pack that loses at reserve does not keep the window](#111-a-pack-that-loses-at-reserve-does-not-keep-the-window)
 
 ---
 
@@ -962,7 +963,7 @@ What decides pack eligibility today is **no longer** a count cap on the anime's 
 
 **(d) The disk guard bars `Add`, not the pass.** Watched pruning, `deleteEpisodesByStatus` and `organize` are exactly what **frees** space; an `if disk full { return }` at the start of the pass would leave the app stuck in the state where it cannot unclog itself. A `statfs` error does not block — a volume that does not answer (network, permission) is not proof of a full disk. When it bars, it tries no magnet and does not retry (the magnet is not the problem) and notifies `ReasonNoDiskSpace`, which the notification batch groups.
 
-**(e) The disk threshold lives on the server.** `GET /status` returns `disk_low`, computed with `min_free_disk_percent`. One place decides what "low" is, and the screen warning cannot disagree with what the daemon is doing.
+**(e) The disk threshold lives on the server.** `GET /status` returns `disk_low`, which is the add-gate for a torrent of size 0: `free - reserved` against `min_free_disk_gb` ([#93](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)). One place decides what "low" is, and the screen warning cannot disagree with what the daemon is doing.
 
 **(f) `organizeTorrent` does not re-notify a partially organized group.** If part of the group already has `LibraryPaths`, the torrent already landed and the webhook already went out: it organizes (it is idempotent), writes the marker on the new records, does not notify. Without that, the first post-upgrade pass of an existing library — where rule (a) creates the missing records for packs already on disk — would become a flood of duplicate `download_completed`.
 
@@ -2670,23 +2671,33 @@ error. The data there is seconds old and the next poll comes back fresh; the scr
 from knowing. Only a real failure carries `ErrFromCache`.
 
 
-### 93. The disk guard has two triggers, and the size one still applies with `min_free_disk_percent = 0`
+### 93. The disk guard has two triggers, and the size one still applies with `min_free_disk_gb = 0`
 
-**Location:** `daemon/helpers.go` (`checkDiskSpace`), called in `daemon/episodes.go`
+**Location:** `daemon/helpers.go` (`checkDiskSpace`, `DiskLow`), called in `daemon/episodes.go`
 (`attemptDownloadWithRetries`, once before the loop and once per candidate) and in
-`daemon/manual_download.go` (`addAndPrioritize`).
+`daemon/manual_download.go` (`addAndPrioritize`). `GET /status` `disk_low` is `DiskLow`.
 
 `checkDiskSpace` receives `torrentSizeBytes` and refuses for two different reasons:
 
-1. **the torrent does not fit** in the free space — runs whenever the size is known, including with
-   `min_free_disk_percent = 0`;
-2. **the volume would fall below the required percentage** after the download — only runs with
-   `min_free_disk_percent > 0`.
+1. **the torrent does not fit** in `free - reserved` — runs whenever the size is known, including with
+   `min_free_disk_gb = 0`;
+2. **leftover after the torrent and the reservation would fall below the GiB floor** — only runs with
+   `min_free_disk_gb > 0`.
 
 **What looks wrong:** a config documented as "`0` = off" that does not turn the whole guard off.
-Deliberate. The percentage is the user's policy ("I want 10% of slack"), and turning policy off is
+Deliberate. The GiB floor is the user's policy ("I want 10 GiB of slack"), and turning policy off is
 their right. "This torrent is bigger than the disk" is not policy, it is arithmetic: the download
 will fill the volume and stall in the middle either way, and letting it in fulfills no wish.
+
+The slack is a quantity of bytes. It used to be `min_free_disk_percent`, which measured a fraction
+of the volume: 10% of 50 GB is 5 GB, 10% of 1 TB is 93 GB. Same config, unrelated meanings, and a
+catch-up queue of ~80 GB on a 928 GiB disk tripped the guard with 177 GB still free. The field is
+now `min_free_disk_gb`, default 10, `_gb` = GiB (2^30) like the torrent size ceilings. An old
+`min_free_disk_percent` is ignored (unknown JSON key) and the install gets 10 GiB — no migration
+of the old percentage, which would have preserved the 93 GiB floor this change exists to drop.
+
+`disk_low` is this add-gate for a torrent of size 0, including reserved. The Status banner and the
+disk-card color follow that flag.
 
 **Amended by [#101](#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space):** the size is compared with the free space MINUS what the torrents already added still have to write, not with the free space alone.
 
@@ -2699,7 +2710,7 @@ again.
 
 **Size 0 = unknown, and it passes.** That is the pasted-magnet case: the size would only appear
 after the metadata, and refusing for not knowing would bar a legitimate download. Then the guard
-is the percentage it always was — see `ManualDownloadEpisodeWithMagnet`/`ManualDownloadAnimeWithMagnet`,
+is the GiB floor it always was — see `ManualDownloadEpisodeWithMagnet`/`ManualDownloadAnimeWithMagnet`,
 which pass `0` on purpose.
 
 **The check is per candidate, not one before the loop.** Each candidate has a size, and the second
@@ -2822,10 +2833,10 @@ pack filter strict for every unmarked entry (it zeroes the packs of every sequel
 
 ### 97. A pack that doesn't fit on disk is dropped before the choice, not at download time
 
-**Location:** `daemon/episodes.go` (`packsThatFit`, called right before `pickBatches` in
-`processAnimeEpisodes`, and in `debug.go`).
+**Location:** `daemon/episodes.go` (`packsThatFit`, `chooseCoveringPacks`, called right before
+`assignBatches` in `processAnimeEpisodes`, and in `debug.go`).
 
-The disk guard ([#93](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_percent--0)) already ran per candidate in
+The disk guard ([#93](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)) already ran per candidate in
 `attemptDownloadWithRetries`, but by then `pickBatches` had given the pack the whole window. On
 Flower and Asura the only covering pack was a 78.8 GB BD remux; it failed the guard and every
 episode was left with no candidate, while the SubsPlease episodes had 26 seeders. Now the packs the
@@ -2833,7 +2844,9 @@ guard would refuse leave first: the next pack covers the window, or the per-epis
 
 **What looks redundant: the guard still runs again at download time.** The early call is a
 snapshot; the space can change between the choice and the `Add`, and loose episodes never went
-through this one.
+through this one. [#111](#111-a-pack-that-loses-at-reserve-does-not-keep-the-window) retries the
+choice when a chosen pack then loses at `reserve`, so the snapshot going stale no longer keeps
+the window.
 
 **Cost accepted:** a pack dropped here and one dropped at the `Add` look the same in the report
 (`BatchSkippedNoCoverage` when no pack is left to cover). Telling them apart needs its own code.
@@ -2916,7 +2929,7 @@ the one deliberate gap in [#58](#58-runanimedebug-mirrors-processanimeepisodes-e
 `DownloadStandaloneAnime`; used by `packsThatFit` and `attemptDownloadWithRetries`;
 `files.EpisodeStruct.TorrentSize`; `torrents.InfoHash`.
 
-A clean run on a disk with 99 GB free and `min_free_disk_percent: 10` (~6 GB of headroom) queued
+A clean run on a disk with 99 GB free and a tight slack floor (~6 GB of headroom) queued
 58 torrents, ~130 GiB. The guard was right about every big pack (29 refused) and wrong about the
 sum: it compared each torrent with the free space NOW, and a torrent only takes its space as it
 downloads (rain creates sparse files). Each ~1.4 GiB loose episode fit on its own.
@@ -2936,9 +2949,11 @@ torrent of the session still has to write plus everything this pass already adde
   window and lose it at the add — #97's bug again.
 
 **Cost accepted:** a torrent with neither metadata nor a recorded size (records older than
-`torrent_size`, hand-pasted magnets) reserves nothing until its metadata arrives. And a pack can
-still pass `packsThatFit` and lose at the add when another anime of the same pass reserved the
-bytes in between — rare, and the episodes are retried next pass.
+`torrent_size`, hand-pasted magnets) reserves nothing until its metadata arrives.
+
+**Amended by [#111](#111-a-pack-that-loses-at-reserve-does-not-keep-the-window):** a pack that
+passes `packsThatFit` and then loses at `reserve` no longer keeps the window. The next pack or
+the per-episode candidates run in the same pass.
 
 **Not here:** the queue (`torrents/queue.go`) doesn't gate promotion by disk. The guard stops the
 over-commit when torrents are added; a queue already over-committed (from before this) still
@@ -3190,3 +3205,30 @@ still has no `RemoveAll`.
 
 **Don't "fix" by:** widening the sweep to "no video files" (that's the contextual wipe,
 #106); adding `RemoveAll` to `FileSystem`; treating every hidden directory as leftover.
+
+---
+
+### 111. A pack that loses at reserve does not keep the window
+
+**Location:** `daemon/episodes.go` (`chooseCoveringPacks`, wrapping `packsThatFit` + `pickBatches`
+and retrying when `disk.reserve` refuses a chosen pack).
+
+[#97](#97-a-pack-that-doesnt-fit-on-disk-is-dropped-before-the-choice-not-at-download-time)
+drops packs the guard would refuse *before* `pickBatches`. That call is a snapshot: it checks
+without reserving. Five animes of a catch-up pass run in parallel (`maxConcurrentAnimes`), and
+between the check and the add another anime can spend the last bytes. The pack that then fails
+at `Add` still owned the window, so the per-episode candidates never ran — #97 for the length of
+the race, which a 57-torrent catch-up made ordinary.
+
+**The rule:** `chooseCoveringPacks` reserves each chosen pack under the same lock `Add` will use.
+If reserve fails, that pack is dropped and the choice runs again on what remains: the next pack
+covers the window, or `magnetsByEpisode` / the per-episode search does. Same outcome as when
+`packsThatFit` dropped it up front.
+
+The reservation stays for the pass, so `attemptDownloadWithRetries` sees the hash already counted
+and does not pay twice. If `Add` then fails for a non-disk reason, that reservation is not given
+back — conservative for one pass, rebuilt from the session on the next.
+
+**Don't "fix" by:** dropping reserved from `checkDiskSpace` (that is #101); splitting `reserve`
+into a check and a later count (the parallel animes would race between the two); or waiting until
+the next pass for the singles (the window was lost for every episode of that anime, this pass).

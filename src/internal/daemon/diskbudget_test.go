@@ -14,7 +14,7 @@ func budgetConfig(t *testing.T) (*files.Config, int64) {
 	t.Helper()
 	configs := limitsConfig()
 	configs.CompletedAnimePath = t.TempDir()
-	configs.MinFreeDiskPercent = 0
+	configs.MinFreeDiskGB = 0
 	_, free, err := files.DiskSpace(configs.CompletedAnimePath)
 	if err != nil || free == 0 {
 		t.Skipf("no free-space reading for the temp dir: %v", err)

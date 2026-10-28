@@ -25,6 +25,10 @@ describe('issueMessage', () => {
     expect(text).toContain('35')
   })
 
+  it('names queued downloads on disk_full so the row is readable next to a healthy disk card', () => {
+    expect(issueMessage(issue({ code: 'disk_full' })).toLowerCase()).toMatch(/queued|reserv/)
+  })
+
   it('has a sentence for every known code', () => {
     const codes = [
       'all_above_size_limit',
