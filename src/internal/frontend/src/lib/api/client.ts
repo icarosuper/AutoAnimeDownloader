@@ -245,6 +245,11 @@ export interface AnimeInfo {
    */
   next_airing_at?: number
   /**
+   * AniList media status (RELEASING, HIATUS, FINISHED, CANCELLED, NOT_YET_RELEASED). Copied at
+   * merge; the dashboard type filter is client-side. Absent when the last merge had none.
+   */
+  media_status?: string
+  /**
    * Other titles of the same anime (romaji, English, kanji, synonyms). Only the search uses them.
    */
   alt_names?: string[]

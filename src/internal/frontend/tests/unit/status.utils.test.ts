@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { filterAnimes, sortAnimes, computeNextCheckIn, formatBytes, breakdown } from '../../src/lib/utils/status.js'
+import {
+  filterAnimes,
+  sortAnimes,
+  computeNextCheckIn,
+  formatBytes,
+  breakdown,
+  isAiringStatus,
+  isFinishedStatus,
+  encodeStatusView,
+  decodeStatusView,
+  DEFAULT_STATUS_VIEW,
+} from '../../src/lib/utils/status.js'
 import type { AnimeInfo } from '../../src/lib/api/client.js'
 
 function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
@@ -20,35 +31,35 @@ function makeAnime(overrides: Partial<AnimeInfo> = {}): AnimeInfo {
 }
 
 describe('filterAnimes', () => {
-  it('returns all animes when search is empty and filterUnwatched is false', () => {
+  it('returns all animes when search is empty and no filters are on', () => {
     const animes = [makeAnime({ name: 'Naruto' }), makeAnime({ name: 'Bleach' })]
-    expect(filterAnimes(animes, '', false)).toHaveLength(2)
+    expect(filterAnimes(animes, '')).toHaveLength(2)
   })
 
   it('filters by name (case-insensitive)', () => {
     const animes = [makeAnime({ name: 'Naruto' }), makeAnime({ name: 'Bleach' })]
-    expect(filterAnimes(animes, 'naru', false)).toHaveLength(1)
-    expect(filterAnimes(animes, 'BLEACH', false)).toHaveLength(1)
-    expect(filterAnimes(animes, 'xyz', false)).toHaveLength(0)
+    expect(filterAnimes(animes, 'naru')).toHaveLength(1)
+    expect(filterAnimes(animes, 'BLEACH')).toHaveLength(1)
+    expect(filterAnimes(animes, 'xyz')).toHaveLength(0)
   })
 
-  it('filters out fully-watched animes when filterUnwatched is true', () => {
+  it('filters out fully-watched animes when unwatched is true', () => {
     const animes = [
       makeAnime({ name: 'Watched', episodes_watched: 12, episodes_released: 12 }),
       makeAnime({ name: 'Unwatched', episodes_watched: 3, episodes_released: 12 }),
       makeAnime({ name: 'No episodes', episodes_watched: 0, episodes_released: 0 }),
     ]
-    const result = filterAnimes(animes, '', true)
+    const result = filterAnimes(animes, '', { unwatched: true })
     expect(result.map(a => a.name)).toEqual(['Unwatched', 'No episodes'])
   })
 
-  it('combines search + filterUnwatched', () => {
+  it('combines search + unwatched', () => {
     const animes = [
       makeAnime({ name: 'Naruto done', episodes_watched: 12, episodes_released: 12 }),
       makeAnime({ name: 'Naruto ongoing', episodes_watched: 5, episodes_released: 12 }),
       makeAnime({ name: 'Bleach', episodes_watched: 5, episodes_released: 12 }),
     ]
-    const result = filterAnimes(animes, 'naruto', true)
+    const result = filterAnimes(animes, 'naruto', { unwatched: true })
     expect(result).toHaveLength(1)
     expect(result[0].name).toBe('Naruto ongoing')
   })
@@ -59,25 +70,134 @@ describe('filterAnimes', () => {
       makeAnime({ name: 'Bleach' }),
     ]
     for (const term of ['shingeki', '進撃', 'aot', 'Attack']) {
-      expect(filterAnimes(animes, term, false).map(a => a.name)).toEqual(['Attack on Titan'])
+      expect(filterAnimes(animes, term).map(a => a.name)).toEqual(['Attack on Titan'])
     }
-    expect(filterAnimes(animes, 'xyz', false)).toHaveLength(0)
+    expect(filterAnimes(animes, 'xyz')).toHaveLength(0)
   })
 
   it('ignores accent and character width in the term and the title', () => {
     const animes = [makeAnime({ name: 'Kimi no Na wa.', alt_names: ['Ｙｏｕｒ Ｎａｍｅ．', 'Poké'] })]
-    expect(filterAnimes(animes, 'your name', false)).toHaveLength(1)
-    expect(filterAnimes(animes, 'poke', false)).toHaveLength(1)
-    expect(filterAnimes(animes, 'pokè', false)).toHaveLength(1)
+    expect(filterAnimes(animes, 'your name')).toHaveLength(1)
+    expect(filterAnimes(animes, 'poke')).toHaveLength(1)
+    expect(filterAnimes(animes, 'pokè')).toHaveLength(1)
   })
 
-  it('keeps only standalone animes when filterStandalone is true', () => {
+  it('keeps only standalone animes when type is standalone', () => {
     const animes = [
       makeAnime({ name: 'Standalone', is_standalone: true }),
       makeAnime({ name: 'From the list' }),
     ]
-    expect(filterAnimes(animes, '', false, true).map(a => a.name)).toEqual(['Standalone'])
-    expect(filterAnimes(animes, '', false, false)).toHaveLength(2)
+    expect(filterAnimes(animes, '', { type: 'standalone' }).map(a => a.name)).toEqual(['Standalone'])
+    expect(filterAnimes(animes, '', { type: 'all' })).toHaveLength(2)
+  })
+
+  const typed = [
+    makeAnime({ name: 'Airing', media_status: 'RELEASING' }),
+    makeAnime({ name: 'Hiatus', media_status: 'HIATUS' }),
+    makeAnime({ name: 'Finished', media_status: 'FINISHED' }),
+    makeAnime({ name: 'Cancelled', media_status: 'CANCELLED' }),
+    makeAnime({ name: 'Upcoming', media_status: 'NOT_YET_RELEASED' }),
+    makeAnime({ name: 'Unknown' }),
+    makeAnime({ name: 'Standalone airing', media_status: 'RELEASING', is_standalone: true }),
+    makeAnime({ name: 'Blacklisted finished', media_status: 'FINISHED', is_blacklisted: true }),
+  ]
+
+  it('keeps airing and hiatus rows for type airing', () => {
+    expect(filterAnimes(typed, '', { type: 'airing' }).map(a => a.name)).toEqual([
+      'Airing',
+      'Hiatus',
+      'Standalone airing',
+    ])
+  })
+
+  it('keeps finished and cancelled rows for type finished', () => {
+    expect(filterAnimes(typed, '', { type: 'finished' }).map(a => a.name)).toEqual([
+      'Finished',
+      'Cancelled',
+      'Blacklisted finished',
+    ])
+  })
+
+  it('keeps blacklisted rows for type blacklisted', () => {
+    expect(filterAnimes(typed, '', { type: 'blacklisted' }).map(a => a.name)).toEqual([
+      'Blacklisted finished',
+    ])
+  })
+
+  it('leaves NOT_YET_RELEASED and missing status out of airing and finished', () => {
+    expect(filterAnimes(typed, '', { type: 'airing' }).map(a => a.name)).not.toContain('Upcoming')
+    expect(filterAnimes(typed, '', { type: 'airing' }).map(a => a.name)).not.toContain('Unknown')
+    expect(filterAnimes(typed, '', { type: 'finished' }).map(a => a.name)).not.toContain('Upcoming')
+    expect(filterAnimes(typed, '', { type: 'finished' }).map(a => a.name)).not.toContain('Unknown')
+    expect(filterAnimes(typed, '', { type: 'all' })).toHaveLength(typed.length)
+  })
+
+  it('combines unwatched with each type', () => {
+    const animes = [
+      makeAnime({ name: 'Airing watched', media_status: 'RELEASING', episodes_watched: 12, episodes_released: 12 }),
+      makeAnime({ name: 'Airing unwatched', media_status: 'RELEASING', episodes_watched: 3, episodes_released: 12 }),
+      makeAnime({ name: 'Finished unwatched', media_status: 'FINISHED', episodes_watched: 1, episodes_released: 12 }),
+    ]
+    expect(filterAnimes(animes, '', { unwatched: true, type: 'airing' }).map(a => a.name)).toEqual([
+      'Airing unwatched',
+    ])
+    expect(filterAnimes(animes, '', { unwatched: true, type: 'finished' }).map(a => a.name)).toEqual([
+      'Finished unwatched',
+    ])
+  })
+
+  it('combines search, type and unwatched', () => {
+    const animes = [
+      makeAnime({ name: 'Beta airing', media_status: 'RELEASING', episodes_watched: 1, episodes_released: 8 }),
+      makeAnime({ name: 'Beta leftover', media_status: 'FINISHED', episodes_watched: 1, episodes_released: 8 }),
+      makeAnime({ name: 'Alpha airing', media_status: 'RELEASING', episodes_watched: 0, episodes_released: 5 }),
+    ]
+    expect(filterAnimes(animes, 'beta', { unwatched: true, type: 'airing' }).map(a => a.name)).toEqual([
+      'Beta airing',
+    ])
+  })
+
+  it('counts a type bucket under the current search and unwatched', () => {
+    const animes = [
+      makeAnime({ name: 'Beta done', media_status: 'FINISHED', episodes_watched: 12, episodes_released: 12 }),
+      makeAnime({ name: 'Beta leftover', media_status: 'FINISHED', episodes_watched: 1, episodes_released: 12 }),
+      makeAnime({ name: 'Alpha leftover', media_status: 'FINISHED', episodes_watched: 0, episodes_released: 5 }),
+    ]
+    const opts = { unwatched: true, type: 'finished' as const }
+    expect(filterAnimes(animes, 'beta', opts)).toHaveLength(1)
+    expect(filterAnimes(animes, 'beta', opts)[0].name).toBe('Beta leftover')
+  })
+})
+
+describe('isAiringStatus / isFinishedStatus', () => {
+  it('treats RELEASING and HIATUS as airing', () => {
+    expect(isAiringStatus('RELEASING')).toBe(true)
+    expect(isAiringStatus('HIATUS')).toBe(true)
+    expect(isAiringStatus('FINISHED')).toBe(false)
+    expect(isAiringStatus(undefined)).toBe(false)
+  })
+
+  it('treats FINISHED and CANCELLED as finished', () => {
+    expect(isFinishedStatus('FINISHED')).toBe(true)
+    expect(isFinishedStatus('CANCELLED')).toBe(true)
+    expect(isFinishedStatus('RELEASING')).toBe(false)
+    expect(isFinishedStatus(undefined)).toBe(false)
+  })
+})
+
+describe('encodeStatusView / decodeStatusView', () => {
+  it('encodes a clean default view as an empty querystring', () => {
+    expect(encodeStatusView(DEFAULT_STATUS_VIEW)).toBe('')
+  })
+
+  it('round-trips type, unwatched and search', () => {
+    const view = { q: 'beta', unwatched: true, type: 'airing' as const }
+    expect(encodeStatusView(view)).toBe('q=beta&unwatched=1&type=airing')
+    expect(decodeStatusView(encodeStatusView(view))).toEqual(view)
+  })
+
+  it('treats an unknown type as all and ignores leftover params', () => {
+    expect(decodeStatusView('type=foo&extra=1')).toEqual(DEFAULT_STATUS_VIEW)
   })
 })
 

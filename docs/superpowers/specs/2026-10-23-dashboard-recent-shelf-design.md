@@ -7,7 +7,7 @@ episodes hide in that table. The last-check report names animes as dead text.
 **Scope:** `internal/api/endpoint_animes.go` (`recent` on `AnimeInfo`), `internal/files`
 (`recent_shelf_days`), `frontend` (Status shelf + last-check links, Config field, i18n). No new
 endpoint. No CLI command — `config set` already covers the field. The Behind table filter was
-dropped; type filters live in [status-type-filters](2026-10-28-status-type-filters-design.md).
+dropped; type filters shipped on Status ([webui.md](../../guides/webui.md)).
 
 ---
 
@@ -123,7 +123,7 @@ Horizontal overflow scrolls. The shelf does not filter the table.
 
 Recents is the downloaded-and-still-unwatched gap inside the window. The row still shows its
 Behind chip (`episodes_pending`); there is no Behind control on the filter strip — see
-[status-type-filters](2026-10-28-status-type-filters-design.md).
+[webui.md](../../guides/webui.md).
 
 ### Last-check rows
 

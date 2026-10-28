@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Chip — spec §6 (Fase 2). Tinted background + tinted border, one of five status variants.
+  // Chip — spec §6 (Phase 2). Tinted background + tinted border, one of five status variants.
   // `deriveAnimeChip` (lib/domain/animeState.ts) returns a `variant` that maps 1:1 onto this
   // prop; screens translate the chip's `key` into the slotted text themselves (this component
   // never sees a `key`, only rendered content via the slot — keeps it free of any i18n
@@ -10,7 +10,7 @@
   // color at the same opacities, which is the same visual effect the tint tokens produce for
   // the other four variants (tint === the base color for aad-dark; only aad-light splits them).
   export let variant: 'accent' | 'ok' | 'warn' | 'danger' | 'neutral' = 'neutral'
-  // "linha esmaecida" (spec §7, blacklisted branch of deriveAnimeChip) — dims the whole chip,
+  // Dimmed row (spec §7, blacklisted branch of deriveAnimeChip) — dims the whole chip,
   // not just the text, so it reads as de-emphasized at a glance in a list.
   export let dimmed = false
 

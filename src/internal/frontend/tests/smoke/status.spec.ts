@@ -79,6 +79,31 @@ test.describe('anime list', () => {
     await expect(page.getByText('Gamma Protocol').first()).toBeVisible()
   })
 
+  test('airing type filter keeps releasing titles and All restores the table', async ({ page }) => {
+    await page.getByRole('radio', { name: /airing/i }).click()
+    await expect(page.getByText('Beta Sessions').first()).toBeVisible()
+    await expect(page.getByText('Alpha Chronicles')).toHaveCount(0)
+    await expect(page.getByText('Gamma Protocol')).toHaveCount(0)
+
+    await page.getByRole('radio', { name: /^all /i }).click()
+    await expect(page.getByText('Alpha Chronicles').first()).toBeVisible()
+    await expect(page.getByText('Gamma Protocol').first()).toBeVisible()
+  })
+
+  test('hash restores type, unwatched and search', async ({ page }) => {
+    await page.goto('/#/status?type=airing&unwatched=1&q=Beta')
+    await expect(page.getByPlaceholder(/search animes/i)).toHaveValue('Beta')
+    await expect(page.getByRole('button', { name: /unwatched/i })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('radio', { name: /airing/i })).toHaveAttribute('aria-checked', 'true')
+    await expect(page.getByText('Beta Sessions').first()).toBeVisible()
+    await expect(page.getByText('Alpha Chronicles')).toHaveCount(0)
+  })
+
+  test('standalone is a type option and the old chip is gone', async ({ page }) => {
+    await expect(page.getByRole('radio', { name: /standalone/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /standalone only/i })).toHaveCount(0)
+  })
+
   test('name column header sorts the list and toggles direction', async ({ page }) => {
     // The desktop row's name cell is the only `span[title]` inside a row link (the mobile
     // stack uses a <p>), so this selects exactly one element per visible row, in DOM order.
@@ -94,6 +119,84 @@ test.describe('anime list', () => {
   test('rows link through to the anime detail route', async ({ page }) => {
     await page.getByText('Beta Sessions').first().click()
     await expect(page).toHaveURL(/#\/status\/2$/)
+  })
+})
+
+test.describe('type filter hybrid control', () => {
+  test.describe('desktop', () => {
+    test.use({ viewport: { width: 1280, height: 720 } })
+
+    test('shows the radiogroup and hides the type menu trigger', async ({ page }) => {
+      await setupStatusPageMocks(page, 'running', makeAnimesResponse())
+      await page.goto('/')
+      await expect(page.getByRole('radiogroup', { name: /filter by type/i })).toBeVisible()
+      await expect(page.getByRole('button', { name: /^(all|airing) /i })).toHaveCount(0)
+    })
+
+    test('keeps every type radio inside the animes card', async ({ page }) => {
+      await page.addInitScript(() => localStorage.setItem('PARAGLIDE_LOCALE', 'pt-BR'))
+      await setupStatusPageMocks(page, 'running', makeAnimesResponse())
+      await page.goto('/')
+      const card = page.locator('section').filter({ has: page.getByRole('heading', { name: /^animes$/i }) })
+      const cardBox = await card.boundingBox()
+      expect(cardBox).toBeTruthy()
+      const radios = page.getByRole('radio')
+      await expect(radios).toHaveCount(5)
+      for (let i = 0; i < 5; i++) {
+        const box = await radios.nth(i).boundingBox()
+        expect(box, `radio ${i} has a box`).toBeTruthy()
+        expect(box!.x, `radio ${i} left`).toBeGreaterThanOrEqual(cardBox!.x - 1)
+        expect(box!.x + box!.width, `radio ${i} right`).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 1)
+      }
+    })
+  })
+
+  // Tightest width where the table (and the segmented type control) is on: Portuguese
+  // labels are the long ones, and this is the screenshot that was clipping Blacklist.
+  test.describe('desktop tight', () => {
+    test.use({ viewport: { width: 1024, height: 720 } })
+
+    test('keeps every type radio inside the animes card in pt-BR', async ({ page }) => {
+      await page.addInitScript(() => localStorage.setItem('PARAGLIDE_LOCALE', 'pt-BR'))
+      await setupStatusPageMocks(page, 'running', makeAnimesResponse())
+      await page.goto('/')
+      const card = page.locator('section').filter({ has: page.getByRole('heading', { name: /^animes$/i }) })
+      const cardBox = await card.boundingBox()
+      expect(cardBox).toBeTruthy()
+      const radios = page.getByRole('radio')
+      await expect(radios).toHaveCount(5)
+      for (let i = 0; i < 5; i++) {
+        const box = await radios.nth(i).boundingBox()
+        expect(box, `radio ${i} has a box`).toBeTruthy()
+        expect(box!.x, `radio ${i} left`).toBeGreaterThanOrEqual(cardBox!.x - 1)
+        expect(box!.x + box!.width, `radio ${i} right`).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 1)
+      }
+    })
+  })
+
+  // 800px is past `md` (768) but still in the card list (`lg` is 1024). The type
+  // control follows that cut: a five-segment radio does not fit beside search
+  // once the rail is on, so this width uses the ActionMenu like the phone layout.
+  test.describe('tablet', () => {
+    test.use({ viewport: { width: 800, height: 720 } })
+
+    test('shows the type menu trigger and hides the radiogroup', async ({ page }) => {
+      await setupStatusPageMocks(page, 'running', makeAnimesResponse())
+      await page.goto('/')
+      await expect(page.getByRole('radiogroup', { name: /filter by type/i })).toBeHidden()
+      await expect(page.getByRole('button', { name: /^all /i })).toBeVisible()
+    })
+  })
+
+  test.describe('narrow', () => {
+    test.use({ viewport: { width: 700, height: 720 } })
+
+    test('shows the type menu trigger and hides the radiogroup', async ({ page }) => {
+      await setupStatusPageMocks(page, 'running', makeAnimesResponse())
+      await page.goto('/')
+      await expect(page.getByRole('radiogroup', { name: /filter by type/i })).toBeHidden()
+      await expect(page.getByRole('button', { name: /^all /i })).toBeVisible()
+    })
   })
 })
 

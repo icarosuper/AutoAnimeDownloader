@@ -715,6 +715,66 @@ func TestNextAiringAt(t *testing.T) {
 	})
 }
 
+// TestMediaStatus covers the field that feeds the dashboard type filter. Both merge paths
+// (new entry and an already-downloaded one) and the orphan refresh copy AniList's Media.Status;
+// an empty status is omitted from JSON so the front treats it as "not airing, not finished".
+func TestMediaStatus(t *testing.T) {
+	str := func(s string) *string { return &s }
+	entry := func(id int, status anilist.MediaStatus) anilist.MediaList {
+		return anilist.MediaList{
+			Media: anilist.Media{
+				Id:     id,
+				Title:  anilist.Title{English: str("Anime")},
+				Status: status,
+			},
+		}
+	}
+
+	t.Run("new entry gets the status", func(t *testing.T) {
+		animeMap := map[string]*AnimeInfo{}
+		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, anilist.MediaStatusReleasing)}, nil)
+
+		if got := animeMap["Anime"].MediaStatus; got != "RELEASING" {
+			t.Errorf("media_status = %q, want RELEASING", got)
+		}
+	})
+
+	t.Run("existing entry is also updated", func(t *testing.T) {
+		existing := &AnimeInfo{AnimeID: 1, Name: "Anime", EpisodesDownloaded: 3}
+		mergeAniListAnimes(map[string]*AnimeInfo{"Anime": existing}, []anilist.MediaList{entry(1, anilist.MediaStatusHiatus)}, nil)
+
+		if existing.MediaStatus != "HIATUS" {
+			t.Errorf("media_status = %q, want HIATUS", existing.MediaStatus)
+		}
+	})
+
+	t.Run("orphan refresh copies the status", func(t *testing.T) {
+		info := &AnimeInfo{AnimeID: 1, Name: "Anime", EpisodesDownloaded: 3}
+		ml := entry(1, anilist.MediaStatusFinished)
+		applyFetchedMedia(info, &ml, nil)
+
+		if info.MediaStatus != "FINISHED" {
+			t.Errorf("media_status = %q, want FINISHED", info.MediaStatus)
+		}
+	})
+
+	t.Run("empty status is omitted from JSON", func(t *testing.T) {
+		animeMap := map[string]*AnimeInfo{}
+		mergeAniListAnimes(animeMap, []anilist.MediaList{entry(1, "")}, nil)
+
+		if got := animeMap["Anime"].MediaStatus; got != "" {
+			t.Errorf("media_status = %q, want empty", got)
+		}
+		body, err := json.Marshal(*animeMap["Anime"])
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if strings.Contains(string(body), "media_status") {
+			t.Errorf("omitempty should drop the field, got %s", body)
+		}
+	})
+}
+
 // TestAltNames covers the list that feeds dashboard search: the card shows a single title
 // (English, when it exists), but the user may search by romaji, kanji or a synonym — all
 // must come out in the payload, without repeating the name already in Name.

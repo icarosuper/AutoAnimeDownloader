@@ -69,10 +69,8 @@ anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
 - Recents shelf, clickable last-check rows. Spec designed on 2026-10-23:
   [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
 - Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
-  clear-all). Spec designed on 2026-10-28:
-  [status-type-filters](superpowers/specs/2026-10-28-status-type-filters-design.md).
-  Independent of the shelf; may ship in the same minor. The Behind chip that used to live in
-  the recents spec is out — it is not in this strip.
+  clear-all). Implemented on `status-filters`; ships with the recents shelf in this minor.
+  Independent of the shelf. The Behind chip that used to live in the recents spec is out.
 
 ## `v2.9.0` — episode torrent picker
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, fireEvent, within } from '@testing-library/svelte'
 import ActionMenu from '../../src/components/ui/ActionMenu.svelte'
+import ActionMenuSlotHost from './ActionMenu.slot-host.svelte'
 
 const items = [
   { id: 'a', label: 'Action A' },
@@ -89,6 +90,28 @@ describe('ActionMenu', () => {
     await fireEvent.click(getByRole('button', { name: 'More actions' }))
 
     expect(getByRole('menu').className).toContain('bottom-full')
+  })
+
+  it('puts slotted trigger content inside the trigger button and still opens the menu', async () => {
+    const { getByRole, queryByRole } = render(ActionMenuSlotHost, {
+      props: { items, triggerLabel: 'Filter by type', triggerClass: 'rounded-pill px-3' },
+    })
+
+    const trigger = getByRole('button', { name: 'Airing 12' })
+    expect(trigger.textContent).toContain('Airing 12')
+    expect(trigger.className).toContain('rounded-pill')
+    expect(queryByRole('menu')).not.toBeInTheDocument()
+
+    await fireEvent.click(trigger)
+
+    expect(getByRole('menu')).toBeInTheDocument()
+  })
+
+  it('keeps the kebab trigger when no slot is provided', async () => {
+    const { getByRole, container } = render(ActionMenu, { props: { items, triggerLabel: 'More actions' } })
+    const trigger = getByRole('button', { name: 'More actions' })
+    expect(trigger.querySelector('svg')).toBeTruthy()
+    expect(container.textContent).not.toContain('Airing 12')
   })
 
   it('does not flip when the panel fits within the viewport', async () => {

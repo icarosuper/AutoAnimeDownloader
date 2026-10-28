@@ -19,7 +19,7 @@ The main dashboard:
 - **Daemon card** — current status (stopped/running/checking), last check time, next check countdown, and Start/Stop/Force-check controls
 - **Library card** — total anime and episode counts
 - **Disk card** — free/total space on the library's filesystem (`completed_anime_path`, where torrents also download), with a warning color when space is low
-- **Monitored animes** — searchable/filterable table of tracked anime (progress, last download, blacklist status). Click a row to open its detail page
+- **Monitored animes** — searchable table of tracked anime (progress, last download, blacklist status). Type is a radio (Airing / Finished / Standalone / Blacklist, or All); Unwatched is an independent toggle so Finished+Unwatched is the binge queue. Counts follow search + Unwatched. Active filters persist in the querystring (`q`, `unwatched=1`, `type`); the X next to `N of M` clears them all. Click a row to open its detail page
 
 Status changes push over WebSocket, so the page updates live without a refresh.
 

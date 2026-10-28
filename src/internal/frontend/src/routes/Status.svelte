@@ -6,7 +6,8 @@
   // The artboard 1b "Queue and problems" section was DROPPED on purpose (spec §9.1): it's redundant
   // with the Downloads screen, which exists precisely for that.
   import { onMount, onDestroy } from "svelte";
-  import { ChevronRight, Eye, Search, Unlink, X } from "@lucide/svelte";
+  import { querystring, replace } from "svelte-spa-router";
+  import { ChevronDown, ChevronRight, Eye, Search, X } from "@lucide/svelte";
   import {
     getStatus,
     getAnimes,
@@ -23,6 +24,7 @@
   } from "../lib/api/client.js";
   import { WebSocketClient } from "../lib/websocket/client.js";
   import Loading from "../components/Loading.svelte";
+  import ActionMenu from "../components/ui/ActionMenu.svelte";
   import Button from "../components/ui/Button.svelte";
   import Chip from "../components/ui/Chip.svelte";
   import Cover from "../components/ui/Cover.svelte";
@@ -34,7 +36,18 @@
   import { wsConnectionState } from "../lib/stores/wsState.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
-  import { filterAnimes, sortAnimes, computeNextCheckIn, breakdown, type SortKey, type SortDir } from "../lib/utils/status.js";
+  import {
+    filterAnimes,
+    sortAnimes,
+    computeNextCheckIn,
+    breakdown,
+    encodeStatusView,
+    decodeStatusView,
+    type SortKey,
+    type SortDir,
+    type AnimeTypeFilter,
+    type StatusViewState,
+  } from "../lib/utils/status.js";
   import { totalSpeeds } from "../lib/utils/torrents.js";
   import { deriveAnimeChip, type AnimeChipState } from "../lib/domain/animeState.js";
   import { formatRelative, nextAiringIn } from "../lib/utils/relativeTime.js";
@@ -90,7 +103,13 @@
     emptyDesc: m.status_empty_desc(),
     goToConfig: m.status_go_to_config(),
     filterUnwatched: m.status_filter_unwatched(),
+    filterAll: m.status_filter_all(),
+    filterAiring: m.status_filter_airing(),
+    filterFinished: m.status_filter_finished(),
     filterStandalone: m.status_filter_standalone(),
+    filterBlacklisted: m.status_filter_blacklisted(),
+    filterType: m.status_filter_type(),
+    clearFilters: m.status_clear_filters(),
     loading: m.status_loading(),
     heroSpeedLabel: m.status_hero_speed_label(),
     heroNoDownloads: m.status_hero_no_downloads(),
@@ -129,7 +148,9 @@
   let actionLoading = false;
   let search = "";
   let filterUnwatched = false;
-  let filterStandalone = false;
+  let typeFilter: AnimeTypeFilter = "all";
+  let viewReady = false;
+  let lastWrittenQuery = "";
   let now = Date.now();
   // spec §8: progress doesn't come from the WebSocket, it comes from the HTTP poll. When a poll
   // fails the UI has to SAY so instead of keeping the last number on screen as if it were live.
@@ -140,8 +161,80 @@
 
   $: fmtLocale = ($locale ?? "en") as FormatLocale;
 
-  $: filteredAnimes = filterAnimes(animes, search, filterUnwatched, filterStandalone);
+  $: filteredAnimes = filterAnimes(animes, search, { unwatched: filterUnwatched, type: typeFilter });
   $: sortedAnimes = sortAnimes(filteredAnimes, sortKey, sortDir);
+
+  $: typeCounts = {
+    all: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "all" }).length,
+    airing: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "airing" }).length,
+    finished: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "finished" }).length,
+    standalone: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "standalone" }).length,
+    blacklisted: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "blacklisted" }).length,
+  };
+  $: unwatchedCount = filterAnimes(animes, search, { unwatched: true, type: typeFilter }).length;
+  $: filtersActive = search !== "" || filterUnwatched || typeFilter !== "all";
+
+  $: typeOptions = (
+    [
+      { id: "all" as const, label: T && T.filterAll },
+      { id: "airing" as const, label: T && T.filterAiring },
+      { id: "finished" as const, label: T && T.filterFinished },
+      { id: "standalone" as const, label: T && T.filterStandalone },
+      { id: "blacklisted" as const, label: T && T.filterBlacklisted },
+    ] as { id: AnimeTypeFilter; label: string }[]
+  ).map((opt) => ({ ...opt, count: typeCounts[opt.id] }));
+
+  $: selectedType = typeOptions.find((opt) => opt.id === typeFilter) ?? typeOptions[0];
+  $: typeMenuItems = typeOptions.map((opt) => ({
+    id: opt.id,
+    label: `${opt.label} ${opt.count}`,
+  }));
+
+  function currentView(): StatusViewState {
+    return { q: search, unwatched: filterUnwatched, type: typeFilter };
+  }
+
+  function applyView(view: StatusViewState) {
+    search = view.q;
+    filterUnwatched = view.unwatched;
+    typeFilter = view.type;
+  }
+
+  function syncStatusView() {
+    const qs = encodeStatusView(currentView());
+    lastWrittenQuery = qs;
+    replace(`/status${qs ? `?${qs}` : ""}`);
+  }
+
+  function clearFilters() {
+    applyView({ q: "", unwatched: false, type: "all" });
+  }
+
+  function setTypeFilter(type: AnimeTypeFilter) {
+    if (typeFilter === type) return;
+    typeFilter = type;
+  }
+
+  // Incoming hash (back button, a paste, a test goto) updates the strip. Compare against the
+  // query we last wrote so a replace does not loop back into applyView, and so a user click is
+  // not reset before the write lands.
+  $: if (viewReady) {
+    const raw = $querystring ?? "";
+    if (raw !== lastWrittenQuery) {
+      lastWrittenQuery = raw;
+      applyView(decodeStatusView(raw));
+    }
+  }
+
+  $: if (viewReady) {
+    search;
+    filterUnwatched;
+    typeFilter;
+    const qs = encodeStatusView(currentView());
+    if (qs !== lastWrittenQuery) {
+      syncStatusView();
+    }
+  }
 
   $: nextCheckIn = status
     ? computeNextCheckIn(status.last_check, checkInterval, status.status, now)
@@ -416,7 +509,16 @@
       : m.status_hero_ring_meta({ episode: t.episode_number, eta });
   }
 
+  function statusQuerystring(): string {
+    const hash = window.location.hash || "";
+    const q = hash.indexOf("?");
+    return q >= 0 ? hash.slice(q + 1) : "";
+  }
+
   onMount(() => {
+    applyView(decodeStatusView(statusQuerystring()));
+    lastWrittenQuery = encodeStatusView(currentView());
+    viewReady = true;
     loadInitialData();
     loadTorrents();
     torrentsPollInterval = setInterval(loadTorrents, TORRENTS_POLL_MS);
@@ -827,22 +929,33 @@
     <!-- Anime list -->
     <section class="rounded-card border border-default bg-card">
       <!-- Toolbar. `shrink-0` on the container is what keeps the filter strip from collapsing when
-           the list below grows (spec §9.1, mobile note). -->
-      <div class="flex shrink-0 flex-col gap-3 border-b border-divider p-4 sm:flex-row sm:items-center">
-        <h2 class="flex-1 text-card-title text-heading">{T && T.animesHeader}</h2>
+           the list below grows (spec §9.1, mobile note). Type segments share the row with search
+           from `lg` (same cut as the table); below that the ActionMenu sits next to Unwatched.
+           `flex-wrap` is what stops the five Portuguese labels from painting past the card edge
+           at 1024px — `overflow-x-auto` clipped them with no hint they were there. -->
+      <div class="flex shrink-0 flex-col gap-3 border-b border-divider p-4 sm:flex-row sm:flex-wrap sm:items-center">
+        <h2 class="text-card-title text-heading">{T && T.animesHeader}</h2>
 
-        {#if search || filterUnwatched || filterStandalone}
+        {#if filtersActive}
           <span class="whitespace-nowrap font-mono text-[12px] text-subtle">
             {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
           </span>
+          <button
+            type="button"
+            class="shrink-0 text-subtle hover:text-body"
+            aria-label={T && T.clearFilters}
+            on:click={clearFilters}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
         {/if}
 
         <!-- On mobile the search takes the whole line and the filters get their own strip right
              below; stacking both in the SAME scrollable strip would push the filter chip off the
              screen, with no hint that it's there. -->
-        <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+        <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <label
-            class="flex w-full shrink-0 items-center gap-2 rounded-field border border-neutral/45 bg-control px-2.5 py-1.5 transition-colors hover:border-neutral/70 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40 sm:w-64"
+            class="flex w-full min-w-0 items-center gap-2 rounded-field border border-neutral/45 bg-control px-2.5 py-1.5 transition-colors hover:border-neutral/70 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40 sm:w-64 sm:shrink-0"
           >
             <Search size={16} strokeWidth={2} class="shrink-0 text-tertiary" />
             <input
@@ -863,32 +976,60 @@
             {/if}
           </label>
 
-          <!-- Scrollable strip: today it has only one filter, but it's what absorbs the next ones
-               without squeezing the search (spec §9.1, mobile note). -->
-          <div class="flex items-center gap-2 overflow-x-auto">
+          <div class="flex flex-wrap items-center gap-2">
             <button
               type="button"
               class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {filterUnwatched
-                ? 'border-accent bg-accent-tint/16 text-accent'
+                ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
                 : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
               aria-pressed={filterUnwatched}
               on:click={() => (filterUnwatched = !filterUnwatched)}
             >
               <Eye size={14} strokeWidth={2} />
               {T && T.filterUnwatched}
+              <span class="font-mono text-[12px] opacity-70">{unwatchedCount}</span>
             </button>
 
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {filterStandalone
-                ? 'border-accent bg-accent-tint/16 text-accent'
-                : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
-              aria-pressed={filterStandalone}
-              on:click={() => (filterStandalone = !filterStandalone)}
+            <div
+              class="hidden shrink-0 overflow-hidden rounded-pill border border-neutral/45 lg:inline-flex"
+              role="radiogroup"
+              aria-label={(T && T.filterType) || undefined}
             >
-              <Unlink size={14} strokeWidth={2} />
-              {T && T.filterStandalone}
-            </button>
+              {#each typeOptions as opt, i (opt.id)}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={typeFilter === opt.id}
+                  class="inline-flex whitespace-nowrap items-center gap-1.5 px-3 py-1.5 text-caption font-semibold transition-colors {i > 0
+                    ? 'border-l border-neutral/45'
+                    : ''} {typeFilter === opt.id
+                    ? 'bg-accent-tint/12 text-accent'
+                    : 'bg-control text-body hover:text-heading'}"
+                  on:click={() => setTypeFilter(opt.id)}
+                >
+                  {opt.label}
+                  <span class="font-mono text-[12px] opacity-70">{opt.count}</span>
+                </button>
+              {/each}
+            </div>
+
+            <div class="shrink-0 lg:hidden">
+              <ActionMenu
+                items={typeMenuItems}
+                triggerLabel={(T && T.filterType) || ""}
+                triggerClass="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {typeFilter !==
+                'all'
+                  ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
+                  : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
+                on:select={(e) => setTypeFilter(e.detail as AnimeTypeFilter)}
+              >
+                <span slot="trigger" class="inline-flex items-center gap-1">
+                  {selectedType.label}
+                  <span class="font-mono text-[12px] opacity-70">{selectedType.count}</span>
+                  <ChevronDown size={14} strokeWidth={2} />
+                </span>
+              </ActionMenu>
+            </div>
           </div>
         </div>
       </div>

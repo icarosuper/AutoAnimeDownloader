@@ -1,5 +1,5 @@
 <script context="module" lang="ts">
-  // ActionMenu — spec §6 (Fase 2). One item definition renders as a desktop dropdown
+  // ActionMenu — spec §6 (Phase 2). One item definition renders as a desktop dropdown
   // (min-width 236px, 12px radius, --bg-menu background, flips upward when it would overflow
   // the viewport) OR a mobile action sheet (20px 20px 0 0 radius, 38x4px drag handle) — the
   // caller never picks which; this component decides from viewport width, same 768px
@@ -37,7 +37,18 @@
   export let items: ActionMenuItem[] = []
   /** Accessible name for the "..." trigger button — caller supplies translated text. */
   export let triggerLabel: string
+  /**
+   * Replaces the kebab padding classes when a `trigger` slot is used (Status's type pill).
+   * Without a slot the kebab trigger is unchanged.
+   */
+  export let triggerClass: string | undefined = undefined
   export let open = false
+
+  const KEBAB_TRIGGER_CLASS =
+    'rounded-control p-1.5 text-subtle transition-colors hover:bg-control hover:text-body'
+
+  $: hasTriggerSlot = $$slots.trigger
+  $: buttonClass = hasTriggerSlot && triggerClass ? triggerClass : KEBAB_TRIGGER_CLASS
 
   const dispatch = createEventDispatcher<{ select: string }>()
 
@@ -99,17 +110,21 @@
 <div class="relative inline-block" bind:this={rootEl}>
   <button
     type="button"
-    class="rounded-control p-1.5 text-subtle transition-colors hover:bg-control hover:text-body"
+    class={buttonClass}
     aria-haspopup="menu"
     aria-expanded={open}
-    aria-label={triggerLabel}
+    aria-label={hasTriggerSlot ? undefined : triggerLabel}
     on:click|stopPropagation={toggle}
   >
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-      <circle cx="5" cy="12" r="2" />
-      <circle cx="12" cy="12" r="2" />
-      <circle cx="19" cy="12" r="2" />
-    </svg>
+    {#if hasTriggerSlot}
+      <slot name="trigger" />
+    {:else}
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+        <circle cx="5" cy="12" r="2" />
+        <circle cx="12" cy="12" r="2" />
+        <circle cx="19" cy="12" r="2" />
+      </svg>
+    {/if}
   </button>
 
   {#if open}

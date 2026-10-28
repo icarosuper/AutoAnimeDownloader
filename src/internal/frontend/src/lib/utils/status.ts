@@ -3,27 +3,91 @@ import type { AnimeInfo } from '../api/client.js'
 export type SortKey = 'name' | 'episodes_watched' | 'last_download_date'
 export type SortDir = 'asc' | 'desc'
 
+export type AnimeTypeFilter = 'all' | 'airing' | 'finished' | 'standalone' | 'blacklisted'
+
+export type StatusFilterOptions = {
+  unwatched?: boolean
+  type?: AnimeTypeFilter
+}
+
+export type StatusViewState = {
+  q: string
+  unwatched: boolean
+  type: AnimeTypeFilter
+}
+
+export const DEFAULT_STATUS_VIEW: StatusViewState = {
+  q: '',
+  unwatched: false,
+  type: 'all',
+}
+
+const TYPE_FILTERS: AnimeTypeFilter[] = ['all', 'airing', 'finished', 'standalone', 'blacklisted']
+
 /**
  * NFKD + stripping diacritics: makes "Kimi no Na wa" match "kimi no na wa" and full-width
  * katakana match the normal form. Kanji passes through intact.
  */
 const normalizeName = (s: string) => s.normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 
+export function isAiringStatus(status?: string): boolean {
+  return status === 'RELEASING' || status === 'HIATUS'
+}
+
+export function isFinishedStatus(status?: string): boolean {
+  return status === 'FINISHED' || status === 'CANCELLED'
+}
+
+function matchesType(a: AnimeInfo, type: AnimeTypeFilter): boolean {
+  switch (type) {
+    case 'airing':
+      return isAiringStatus(a.media_status)
+    case 'finished':
+      return isFinishedStatus(a.media_status)
+    case 'standalone':
+      return !!a.is_standalone
+    case 'blacklisted':
+      return !!a.is_blacklisted
+    default:
+      return true
+  }
+}
+
 export function filterAnimes(
   animes: AnimeInfo[],
   search: string,
-  filterUnwatched: boolean,
-  filterStandalone = false,
+  options: StatusFilterOptions = {},
 ): AnimeInfo[] {
   const term = normalizeName(search.trim())
+  const unwatched = options.unwatched ?? false
+  const type = options.type ?? 'all'
   return animes.filter(a => {
     // Search by ANY of the anime's titles — the user may only know the romaji, the kanji or a
     // synonym, while the card shows English.
     if (term && ![a.name, ...(a.alt_names ?? [])].some(n => normalizeName(n).includes(term))) return false
-    if (filterUnwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false
-    if (filterStandalone && !a.is_standalone) return false
+    if (unwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false
+    if (!matchesType(a, type)) return false
     return true
   })
+}
+
+export function encodeStatusView(v: StatusViewState): string {
+  const params = new URLSearchParams()
+  if (v.q.trim()) params.set('q', v.q)
+  if (v.unwatched) params.set('unwatched', '1')
+  if (v.type !== 'all') params.set('type', v.type)
+  return params.toString()
+}
+
+export function decodeStatusView(qs: string): StatusViewState {
+  const params = new URLSearchParams(qs)
+  const typeRaw = params.get('type')
+  const type = TYPE_FILTERS.includes(typeRaw as AnimeTypeFilter) ? (typeRaw as AnimeTypeFilter) : 'all'
+  return {
+    q: params.get('q') ?? '',
+    unwatched: params.get('unwatched') === '1',
+    type,
+  }
 }
 
 export function sortAnimes(

@@ -43,6 +43,10 @@ type AnimeInfo struct {
 	// (finished/cancelled anime). It's the TIMESTAMP on purpose, not AniList's timeUntilAiring: the
 	// front counts down on its own, so the number doesn't freeze along with a cached response.
 	NextAiringAt int64 `json:"next_airing_at,omitempty" example:"1740394800"`
+	// MediaStatus is AniList's media status (RELEASING, HIATUS, FINISHED, CANCELLED,
+	// NOT_YET_RELEASED), copied at merge. The dashboard type filter is client-side. Do not derive
+	// this from NextAiringAt — that timestamp is also absent during a hiatus between seasons.
+	MediaStatus string `json:"media_status,omitempty" example:"RELEASING"`
 	// AltNames are the other titles of the same anime (romaji, English, native/kanji and synonyms),
 	// without Name itself. It exists only so the dashboard search matches the name the user knows;
 	// nothing renders this list.
@@ -307,23 +311,31 @@ func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo
 			continue
 		}
 
-		name, totalEpisodes, episodesReleased, coverImage, isBlacklisted := computeAnimeFields(
-			ml.Media.Title, ml.Media.Status, ml.Media.Episodes, ml.Media.CoverImage, ml.Media.AiringSchedule, ml.CustomLists, excludedLists,
-		)
-
-		if name != "" {
-			info.Name = name
-		}
-		if info.TotalEpisodes == 0 {
-			info.TotalEpisodes = totalEpisodes
-		}
-		info.EpisodesReleased = episodesReleased
-		info.EpisodesWatched = ml.Progress
-		info.CoverImage = coverImage
-		info.IsBlacklisted = isBlacklisted
-		info.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
-		info.AltNames = altNames(ml.Media, info.Name)
+		applyFetchedMedia(info, ml, excludedLists)
 	}
+}
+
+// applyFetchedMedia copies AniList-derived display fields onto an already-listed anime. Merge of a
+// brand-new entry constructs the struct itself; this is the shared body of the existing-entry merge
+// and of the orphan refresh.
+func applyFetchedMedia(info *AnimeInfo, ml *anilist.MediaList, excludedLists []string) {
+	name, totalEpisodes, episodesReleased, coverImage, isBlacklisted := computeAnimeFields(
+		ml.Media.Title, ml.Media.Status, ml.Media.Episodes, ml.Media.CoverImage, ml.Media.AiringSchedule, ml.CustomLists, excludedLists,
+	)
+
+	if name != "" {
+		info.Name = name
+	}
+	if info.TotalEpisodes == 0 {
+		info.TotalEpisodes = totalEpisodes
+	}
+	info.EpisodesReleased = episodesReleased
+	info.EpisodesWatched = ml.Progress
+	info.CoverImage = coverImage
+	info.IsBlacklisted = isBlacklisted
+	info.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
+	info.AltNames = altNames(ml.Media, info.Name)
+	info.MediaStatus = string(ml.Media.Status)
 }
 
 // refreshStandaloneOrphans fills in, in medias, the orphans no account tracks but that are in the
@@ -467,16 +479,7 @@ func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.Media
 		}
 
 		if existing, ok := knownByID[ml.Media.Id]; ok {
-			existing.Name = name
-			if existing.TotalEpisodes == 0 {
-				existing.TotalEpisodes = totalEpisodes
-			}
-			existing.EpisodesReleased = episodesReleased
-			existing.EpisodesWatched = ml.Progress
-			existing.CoverImage = coverImage
-			existing.IsBlacklisted = isBlacklisted
-			existing.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
-			existing.AltNames = altNames(ml.Media, name)
+			applyFetchedMedia(existing, &ml, excludedLists)
 			continue
 		}
 
@@ -490,6 +493,7 @@ func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.Media
 			IsBlacklisted:    isBlacklisted,
 			NextAiringAt:     nextAiringAt(ml.Media.NextAiringEpisode),
 			AltNames:         altNames(ml.Media, name),
+			MediaStatus:      string(ml.Media.Status),
 		}
 	}
 }
