@@ -63,12 +63,16 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.8.0` — dashboard recents
 
-A shelf of just-landed, still-unwatched episodes on Status, a Behind filter on the existing
-strip, and last-check rows that open the anime. Independent of the picker; does not wait for
-the `v3.0.0` UI overhaul.
+A shelf of just-landed, still-unwatched episodes on Status, and last-check rows that open the
+anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
 
-- Recents shelf, Behind chip, clickable last-check rows. Spec designed on 2026-10-23:
+- Recents shelf, clickable last-check rows. Spec designed on 2026-10-23:
   [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
+- Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
+  clear-all). Spec designed on 2026-10-28:
+  [status-type-filters](superpowers/specs/2026-10-28-status-type-filters-design.md).
+  Independent of the shelf; may ship in the same minor. The Behind chip that used to live in
+  the recents spec is out — it is not in this strip.
 
 ## `v2.9.0` — episode torrent picker
 

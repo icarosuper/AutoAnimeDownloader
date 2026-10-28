@@ -1,13 +1,13 @@
-# Dashboard: Recents shelf, Behind filter, clickable last-check rows
+# Dashboard: Recents shelf, clickable last-check rows
 
 **Date:** 2026-10-23
 **Status:** designed, not implemented — `v2.8.0`
 **Origin:** the Status anime list is a scan of everything tracked. Newly landed, still-unwatched
-episodes hide in that table. The last-check report names animes as dead text. "Behind" exists as
-a chip on each row and has no filter of its own.
+episodes hide in that table. The last-check report names animes as dead text.
 **Scope:** `internal/api/endpoint_animes.go` (`recent` on `AnimeInfo`), `internal/files`
-(`recent_shelf_days`), `frontend` (Status shelf + Behind chip + last-check links, Config field,
-i18n). No new endpoint. No CLI command — `config set` already covers the field.
+(`recent_shelf_days`), `frontend` (Status shelf + last-check links, Config field, i18n). No new
+endpoint. No CLI command — `config set` already covers the field. The Behind table filter was
+dropped; type filters live in [status-type-filters](2026-10-28-status-type-filters-design.md).
 
 ---
 
@@ -15,8 +15,7 @@ i18n). No new endpoint. No CLI command — `config set` already covers the field
 
 A weekly episode that finished downloading two hours ago is one row among fifty, sorted by last
 download only if the user left that sort on. There is no surface that answers "what just landed
-that I have not watched yet". Last-check failures name the anime and stop there. The Behind chip
-is visible on the row and invisible as a filter.
+that I have not watched yet". Last-check failures name the anime and stop there.
 
 ## What this is not
 
@@ -122,15 +121,9 @@ Caption:
 
 Horizontal overflow scrolls. The shelf does not filter the table.
 
-### Behind chip
-
-Third pill on the existing filter strip, after Standalone. Pressed state is **warn** (the Behind
-chip's colour), not accent. `filterAnimes` gains `filterBehind`: keep rows with
-`episodes_pending > 0`. Combines with search / Unwatched / Standalone.
-
-Behind is the gap on disk (`episodes_pending`: released, unwatched, **not downloaded**). Recents
-is the opposite gap (downloaded, unwatched, inside the window). The same anime can be in both
-(episode 5 landed yesterday, episode 6 still missing).
+Recents is the downloaded-and-still-unwatched gap inside the window. The row still shows its
+Behind chip (`episodes_pending`); there is no Behind control on the filter strip — see
+[status-type-filters](2026-10-28-status-type-filters-design.md).
 
 ### Last-check rows
 
@@ -184,7 +177,6 @@ whatever progress the merge did fill in.
 
 **Frontend**
 
-- `filterAnimes`: Behind keeps `episodes_pending > 0`; combines with the other flags.
 - Caption helper: the four rows of the table above, both locales.
 - Queue: 15 animes with `recent` → 12 cards, newest `downloaded_at` first.
 - Status: no `recent` anywhere → the shelf node is absent.
@@ -206,8 +198,8 @@ No new integration test. No CLI test beyond the existing `config set` passthroug
 - `api/endpoint_config.go` — 0..30 validation.
 - `api/endpoint_animes.go` — `Recent` on `AnimeInfo`, builder after the merge.
 - `frontend/src/lib/api/client.ts` — `recent` on `AnimeInfo`.
-- `frontend/src/lib/utils/status.ts` — Behind filter, shelf sort/cap, caption helper.
-- `frontend/src/routes/Status.svelte` — shelf, Behind pill, last-check links.
+- `frontend/src/lib/utils/status.ts` — shelf sort/cap, caption helper.
+- `frontend/src/routes/Status.svelte` — shelf, last-check links.
 - `frontend/src/routes/Config.svelte` — Downloads field.
 - `frontend/messages/en.json`, `pt-BR.json`.
 - Tests as above.
