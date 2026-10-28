@@ -133,6 +133,18 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
   **released in `v2.7.0` on 2026-10-25**
   ([decisions.md #107](agents/decisions.md#107-source-ranks-finished-series-empty-source-is-web-dl-health-bands-are-1050)).
 
+## No release — unclaimed extras keep a pack after a list switch
+
+Ships as a patch whenever it is tackled.
+
+- A pack whose declared span exceeds `AnimeTotalEpisodes` (OVA/specials on the same media)
+  survives `identifyEpisodesNotInWatching` after the anime leaves every tracked list,
+  because [decisions.md #74](agents/decisions.md#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)
+  treats the gap as a future cour. Observed 2026-10-28:
+  [unclaimed-pack-survives-list-switch](superpowers/specs/2026-10-28-unclaimed-pack-survives-list-switch.md).
+  Workaround: delete the torrent from Downloads (`force`). Do not start from
+  "one `anime_id`, every record in the delete set" — that is the case #74 protects.
+
 ## No release — subtitle language filter
 
 Ships as a patch whenever it is tackled.
