@@ -937,17 +937,19 @@
         <h2 class="text-card-title text-heading">{T && T.animesHeader}</h2>
 
         {#if filtersActive}
-          <span class="whitespace-nowrap font-mono text-[12px] text-subtle">
-            {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
-          </span>
-          <button
-            type="button"
-            class="shrink-0 text-subtle hover:text-body"
-            aria-label={T && T.clearFilters}
-            on:click={clearFilters}
-          >
-            <X size={14} strokeWidth={2} />
-          </button>
+          <div class="inline-flex shrink-0 items-center gap-1.5">
+            <span class="whitespace-nowrap font-mono text-[12px] text-subtle">
+              {$locale && m.status_x_of_y({ shown: filteredAnimes.length, total: animes.length })}
+            </span>
+            <button
+              type="button"
+              class="shrink-0 text-subtle hover:text-body"
+              aria-label={T && T.clearFilters}
+              on:click={clearFilters}
+            >
+              <X size={14} strokeWidth={2} />
+            </button>
+          </div>
         {/if}
 
         <!-- On mobile the search takes the whole line and the filters get their own strip right

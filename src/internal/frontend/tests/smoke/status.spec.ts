@@ -197,6 +197,22 @@ test.describe('type filter hybrid control', () => {
       await expect(page.getByRole('radiogroup', { name: /filter by type/i })).toBeHidden()
       await expect(page.getByRole('button', { name: /^all /i })).toBeVisible()
     })
+
+    test('keeps the clear X on the same row as N of M', async ({ page }) => {
+      await setupStatusPageMocks(page, 'running', makeAnimesResponse())
+      await page.goto('/')
+      await page.getByRole('button', { name: /unwatched/i }).click()
+      const count = page.getByText(/of 3/)
+      const clear = page.getByRole('button', { name: /clear filters/i })
+      const countBox = await count.boundingBox()
+      const clearBox = await clear.boundingBox()
+      expect(countBox, 'count has a box').toBeTruthy()
+      expect(clearBox, 'clear X has a box').toBeTruthy()
+      const countMid = countBox!.y + countBox!.height / 2
+      const clearMid = clearBox!.y + clearBox!.height / 2
+      expect(Math.abs(countMid - clearMid)).toBeLessThan(countBox!.height)
+      expect(clearBox!.x).toBeGreaterThan(countBox!.x)
+    })
   })
 })
 

@@ -122,6 +122,18 @@ describe('Status — type filters', () => {
     expect(screen.getAllByText('Finished Show').length).toBeGreaterThan(0)
   })
 
+  it('keeps the clear X in the same cluster as N of M, not as a sibling of the heading', async () => {
+    await renderStatus()
+    await fireEvent.click(screen.getAllByRole('radio', { name: /finished|finalizados/i })[0])
+    await tick()
+    const count = screen.getByText(/3 of 5|3 de 5/)
+    const clear = screen.getByRole('button', { name: /clear filters|limpar filtros/i })
+    const cluster = clear.parentElement
+    expect(cluster).toBe(count.parentElement)
+    expect(cluster?.contains(screen.getByRole('heading', { name: /^animes$/i }))).toBe(false)
+    expect(cluster?.querySelector('input')).toBeNull()
+  })
+
   it('restores search, unwatched and type from the hash', async () => {
     window.location.hash = '#/status?type=airing&unwatched=1&q=Airing'
     await renderStatus()
