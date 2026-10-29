@@ -1,7 +1,7 @@
 # Unclaimed extras keep a pack after a list switch
 
 **Date:** 2026-10-28
-**Status:** measured 2026-10-29 — method C locked; marker list from the sample; `PackFileRange` not changed yet
+**Status:** measured 2026-10-29 — method C locked; marker list from the sample; adjacent [#111](../../agents/decisions.md#111-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map) shipped; `PackFileRange` not changed yet
 **Origin:** switching `anilist_usernames` from JediahSk (18 titles, including K-ON!) to D4NIDx
 (5 titles, no K-ON!) left `[MTBB] K-ON! S1 (BD 1080p)` downloading. Other off-list torrents
 left. The user expected the whole previous list to stop.
@@ -293,8 +293,10 @@ C only if that number does not enter min–max — `S00E` is a season-0 extra, n
 - `isExtrasFolder` on the whole path false-positives when the torrent root is
   `(S1 + OVA + Specials)`. Immediate parent folder only.
 - `\bS00\b` misses `S00E19` (`E` is a word character). Match `S00E`.
-- `ExtractEpisodeNumber` has ` 05.mkv` and no ` 05.mp4`, so MystVortex `K-On! - 01.mp4`
-  is unnumbered. Adjacent cap, not this change.
+- Adjacent cap shipped as
+  [#111](../../agents/decisions.md#111-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map):
+  a loose integer before any `videoExtensions` suffix is an episode (`K-On! - 01.mp4` →
+  1). The dash terminator still has no `\.`, so `- 17.5` stays unnumbered.
 
 Lock the include/exclude lists above and the pin that K-ON! 13 TV + `S00E19 (OVA)`
 stores 1–13 (torrent leaves) while Mushoku 1–23 / total 11 stays. Then change

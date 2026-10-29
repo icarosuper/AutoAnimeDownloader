@@ -1150,6 +1150,49 @@ func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 	}
 }
 
+// The dash terminator is space / v2 / end / '[' — a dot is none of those, so " - 01.mkv" only
+// numbered because a later pattern required the .mkv suffix. MystVortex ships .mp4 (and IsVideoFile
+// accepts a dozen other extensions), so those files were unnumbered. A catch-all "dot ends the
+// number" would also read "- 17.5 (OVA)" as 17.
+func TestExtractEpisodeNumber_LooseNumberBeforeVideoExtension(t *testing.T) {
+	cases := []struct {
+		name string
+		want *int
+	}{
+		{"[MystVortex] K-On! - 01.mp4", intPtr(1)},
+		{"[MystVortex] K-On! - 13.MP4", intPtr(13)},
+		{"Anime 01.mkv", intPtr(1)},
+		{"Anime 01.avi", intPtr(1)},
+		{"Anime 01.mov", intPtr(1)},
+		{"Anime 01.m4v", intPtr(1)},
+		{"Anime 01.webm", intPtr(1)},
+		{"Anime 01.flv", intPtr(1)},
+		{"Anime 01.wmv", intPtr(1)},
+		{"Anime 01.ts", intPtr(1)},
+		{"Anime 01.mpg", intPtr(1)},
+		{"Anime 01.mpeg", intPtr(1)},
+		{"Anime 01.ogm", intPtr(1)},
+		// A subtitle is not a video file: the suffix must be one IsVideoFile accepts.
+		{"Anime 01.srt", nil},
+		{"Anime 01.txt", nil},
+		// Half-episode: the integer parser must not take 17 from the ".5".
+		{"Mushoku Tensei - 17.5 (OVA).mkv", nil},
+		{"Hyouka - 11.5.mkv", nil},
+	}
+
+	for _, tc := range cases {
+		got := nyaa.ExtractEpisodeNumber(tc.name)
+		switch {
+		case tc.want == nil && got != nil:
+			t.Errorf("%q: want no episode, got %d", tc.name, *got)
+		case tc.want != nil && got == nil:
+			t.Errorf("%q: want episode %d, got none", tc.name, *tc.want)
+		case tc.want != nil && *got != *tc.want:
+			t.Errorf("%q: want episode %d, got %d", tc.name, *tc.want, *got)
+		}
+	}
+}
+
 // fileListHtml builds Nyaa's detail page with the file tree, in the real format: one <li> per file,
 // with the size in a <span> inside the SAME <li>, and folders as <a.folder>.
 func fileListHtml(folder string, files []string) string {

@@ -1,6 +1,10 @@
 package nyaa
 
-import "regexp"
+import (
+	"regexp"
+	"sort"
+	"strings"
+)
 
 // Pre-compiled regexes used across the nyaa package.
 // Compiling on first call vs at package init is a significant speedup since
@@ -72,7 +76,7 @@ var (
 		{regexp.MustCompile(`(?i)\bE(\d{1,4})\b`), "E05"},
 		{regexp.MustCompile(`(?i)\[(\d{1,3})\]`), "[05]"},
 		{regexp.MustCompile(`(?i)\s(\d{1,4})\s*\(`), " 05 ("},
-		{regexp.MustCompile(`(?i)\s(\d{1,4})\.mkv`), " 05.mkv"},
+		{videoExtEpisodeRegexp(), " 05.<video ext>"},
 		{regexp.MustCompile(`(?i)\s(\d{1,4})$`), " 5"},
 	}
 
@@ -190,3 +194,15 @@ var (
 	// one builds the search query, that one tokenizes to match titles.
 	reSpecialChars = regexp.MustCompile(`[^a-z0-9\s]`)
 )
+
+// videoExtEpisodeRegexp is the " 05.mkv" pattern over every key of videoExtensions. Built from the
+// map so a new extension cannot number in IsVideoFile and stay unnumbered here. The dash terminator
+// stays without `\.`: `- 17.5 (OVA)` would then parse as 17.
+func videoExtEpisodeRegexp() *regexp.Regexp {
+	exts := make([]string, 0, len(videoExtensions))
+	for ext := range videoExtensions {
+		exts = append(exts, regexp.QuoteMeta(strings.TrimPrefix(ext, ".")))
+	}
+	sort.Strings(exts)
+	return regexp.MustCompile(`(?i)\s(\d{1,4})\.(?:` + strings.Join(exts, "|") + `)`)
+}

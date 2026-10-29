@@ -515,7 +515,11 @@ is `LastAiredEpisode` (decisions.md #56).
 **`PackFileRange`** reads the range the pack actually carries from the detail-page file list, on the
 same ruler as the name (decisions.md #84). **`IsVideoFile` lives here, not in `files`**, because both
 read the same pack file list (the Librarian after download, `PackFileRange` before) and `files`
-already imports `nyaa` — the other way would be a cycle.
+already imports `nyaa` — the other way would be a cycle. The loose-number-before-extension pattern
+is compiled from `videoExtensions`
+([decisions.md #111](decisions.md#111-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map)):
+adding an extension to the map is what numbers `Anime 01.<ext>`. Do not add `\.` to the dash
+terminator (`- 17.5` would become 17).
 
 **`detail.go` — view-page scrape for the picker.** `FetchTorrentDetail` builds the URL through
 `ViewURL` (the `NYAA_URL` override lives only in `getNyaaBaseURL`) and **never takes a URL from the
@@ -541,8 +545,8 @@ season/episode marker, and the Jaccard threshold depends on query length — `0.
 title translations). Only if the truncated name fails is each alternative title written **after**
 the marker tried on its own (decisions.md #75).
 
-**`nyaa_regex.go`** is only package-level precompiled regex, so it is not recompiled inside a
-per-torrent loop. No logic.
+**`nyaa_regex.go`** is package-level precompiled regex, so it is not recompiled inside a
+per-torrent loop. `videoExtEpisodeRegexp` is the one builder (from `videoExtensions` at init).
 
 ### `src/internal/torrents/` — embedded BitTorrent client
 

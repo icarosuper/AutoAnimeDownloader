@@ -117,6 +117,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#108** — Empty first search skips the picker; custom `q` drops variants; description is on demand; add-with-magnet writes the id after the torrent](#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)
 - [**#109** — Flags after positionals are reordered before urfave parses](#109-flags-after-positionals-are-reordered-before-urfave-parses)
 - [**#110** — `.chapters` is leftover metadata, same class as `.nfo`](#110-chapters-is-leftover-metadata-same-class-as-nfo)
+- [**#111** — The loose episode number before an extension is every video extension, compiled from the map](#111-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map)
 
 ---
 
@@ -1149,7 +1150,7 @@ The counter (`downloadedEpisodes`) still increments for pack episodes **below** 
 
 **(a2) The guard only holds if `IsBatch` recognizes the range.** The range pattern required a space AFTER the second number (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), so `One Piece EP 001-501` and `One Piece 001-501.mkv` passed as "episode 1" — the same bug as (a) through another hole, measured live on the One Piece episode 1 search (2 of the 7 candidates were 500-episode packs). The end of the range now accepts space, end of name, `.` or `[`.
 
-**(b) `isMovie`'s `!reHasEpisode && !IsBatch` branch cannot become an episode guard.** `reHasEpisode` only covers `- 05`, `episode 05` and `S01E05`; `ExtractEpisodeNumber` also covers `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` and `" 5"`. Calling all of `isMovie` would reject every release in those forms (the "Lucky Star EP015 / E015 / 15" tests catch that). Hence the split: `hasMovieMarker` (keywords + OVA/ONA + special) serves both sides, and `isMovie` remains `hasMovieMarker` plus the "has no episode marker" fallback that only makes sense on a movie search.
+**(b) `isMovie`'s `!reHasEpisode && !IsBatch` branch cannot become an episode guard.** `reHasEpisode` only covers `- 05`, `episode 05` and `S01E05`; `ExtractEpisodeNumber` also covers `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.<video ext>"` and `" 5"`. Calling all of `isMovie` would reject every release in those forms (the "Lucky Star EP015 / E015 / 15" tests catch that). Hence the split: `hasMovieMarker` (keywords + OVA/ONA + special) serves both sides, and `isMovie` remains `hasMovieMarker` plus the "has no episode marker" fallback that only makes sense on a movie search.
 
 **(c) `reOvaPattern` needs `\b`.** It was `\(?(ova|ona)\)?`, with no boundary: "ona" matches inside **Persona**, "ova" inside **Nova**. While the pattern was only used in the permissive direction (`ScrapNyaaForMovie`) that passed; as an episode guard it would become rejection of the whole anime.
 
@@ -3190,3 +3191,15 @@ still has no `RemoveAll`.
 
 **Don't "fix" by:** widening the sweep to "no video files" (that's the contextual wipe,
 #106); adding `RemoveAll` to `FileSystem`; treating every hidden directory as leftover.
+
+### 111. The loose episode number before an extension is every video extension, compiled from the map
+
+**Location:** `nyaa/nyaa_regex.go` — `videoExtEpisodeRegexp`, `reEpisodePatterns`; `nyaa/nyaa.go` — `videoExtensions`, `IsVideoFile`.
+
+**What it looks like:** the pattern used to be `\s(\d{1,4})\.mkv`. It is now built at init from `videoExtensions`, the same keys `IsVideoFile` uses.
+
+**Why it's right:** the dash terminator is space / `v2` / end / `[`. A file `K-On! - 01.mp4` (MystVortex, measured 2026-10-29) missed the dash because `.` is none of those, then missed the mkv-only suffix, and `PackFileRange` / the Jellyfin rename saw no number. Hardcoding the suffix list next to the map is how `.mp4` was forgotten. Compiling from the map is the coupling.
+
+The dash terminator still has no `\.`: `- 17.5 (OVA)` would then parse as 17, and a half-episode would enter min–max.
+
+**Don't "fix" by:** adding `\.` to the dash terminator "so any extension works"; listing the extensions a second time in the regex.
