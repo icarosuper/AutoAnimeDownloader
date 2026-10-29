@@ -135,22 +135,12 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
 
 ## No release — unclaimed extras keep a pack after a list switch
 
-Ships as a patch whenever it is tackled.
-
-- A pack whose declared span exceeds `AnimeTotalEpisodes` (OVA/specials on the same media)
-  survives `identifyEpisodesNotInWatching` after the anime leaves every tracked list,
-  because [decisions.md #74](agents/decisions.md#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)
-  treats the gap as a future cour. Observed 2026-10-28; method C locked (extras must not
-  stretch `PackFileRange`; the guard stays). The stored 1–19 on `[MTBB] K-ON! S1` was
-  min–max of `01`–`13` plus `S00E19 (OVA)`, not six extra files.
-  [unclaimed-pack-survives-list-switch](superpowers/specs/2026-10-28-unclaimed-pack-survives-list-switch.md).
-  Measured 2026-10-29 (`live_extras_measure_test.go`). Adjacent
-  [#111](agents/decisions.md#111-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map)
-  numbers a loose episode before any video extension. Next: lock how an included
-  OVA is stored so `S00E19` is not episode 19, then change `PackFileRange`.
-  Workaround: delete the torrent from Downloads (`force`). Do not start from
-  "one `anime_id`, every record in the delete set" and do not cap the span at
-  `AnimeTotalEpisodes` — those are the cases #74 protects.
+- ~~A pack whose declared span exceeds `AnimeTotalEpisodes` (OVA/specials on the same media)
+  survives `identifyEpisodesNotInWatching` after the anime leaves every tracked list~~ —
+  **implemented** ([decisions.md #112](agents/decisions.md#112-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)).
+  `PackFileRange` no longer lets `S00E19 (OVA)` become episode 19. Packs **already** stored
+  as 1–19 keep the old span until the torrent is deleted from Downloads (`force`) or
+  re-ingested. Method A (off-list bypasses the unclaimed guard) stays on the table.
 
 ## No release — subtitle language filter
 

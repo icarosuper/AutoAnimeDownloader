@@ -30,7 +30,8 @@ type nyaaSearcher struct {
 	// packRange reads a pack's REAL range from the Nyaa detail page. Separate from the searches
 	// because it isn't one: it runs after the filter and the sorting, only for the pack the name
 	// doesn't resolve, and only for the few the choice actually considers (see packSet).
-	packRange func(tr nyaa.TorrentResult) (nyaa.BatchInfo, bool)
+	// totalEpisodes is the AniList entry total (isolated total+1 extras, decisions.md #112).
+	packRange func(tr nyaa.TorrentResult, totalEpisodes int) (nyaa.BatchInfo, bool)
 	// misses holds the per-episode searches that came back empty, so a dead episode isn't asked
 	// again every check_interval (see searchMisses). nil = search every episode every time: the
 	// manual download and the tests.
@@ -42,8 +43,10 @@ func defaultNyaaSearcher() nyaaSearcher {
 		searchAnime:         searchNyaaForAnime,
 		searchSingleEpisode: searchNyaaForSingleEpisode,
 		searchMovie:         searchNyaaForMovie,
-		packRange:           func(tr nyaa.TorrentResult) (nyaa.BatchInfo, bool) { return nyaa.PackFileRange(tr.DetailURL) },
-		misses:              episodeMisses,
+		packRange: func(tr nyaa.TorrentResult, total int) (nyaa.BatchInfo, bool) {
+			return nyaa.PackFileRange(tr.DetailURL, total)
+		},
+		misses: episodeMisses,
 	}
 }
 
@@ -73,6 +76,17 @@ type searchMiss struct {
 }
 
 var episodeMisses = &searchMisses{byKey: map[files.EpisodeKey]searchMiss{}}
+
+// packDetail binds the AniList entry total into packRange. Nil when tests leave packRange unset,
+// so packSet spends no detail budget.
+func packDetail(searcher nyaaSearcher, totalEpisodes int) func(nyaa.TorrentResult) (nyaa.BatchInfo, bool) {
+	if searcher.packRange == nil {
+		return nil
+	}
+	return func(tr nyaa.TorrentResult) (nyaa.BatchInfo, bool) {
+		return searcher.packRange(tr, totalEpisodes)
+	}
+}
 
 // due reports whether the episode may be searched now, and the stats of its last miss.
 func (m *searchMisses) due(key files.EpisodeKey, now time.Time) (bool, dropStats) {

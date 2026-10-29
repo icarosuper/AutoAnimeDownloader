@@ -43,8 +43,8 @@ apart. `AAD_LIVE_QUERIES="a batch|b batch"` replaces the neutral sample.
 
 `live_extras_measure_test.go` is a third sample (extras vs next-cour files). Same gate,
 same politeness delay. Run `-run TestLive_ExtrasVsNextCour`. Offline pins:
-`TestExtrasBuckets_KnownPackFiles`. Counts live in
-[unclaimed-pack-survives-list-switch](../superpowers/specs/2026-10-28-unclaimed-pack-survives-list-switch.md).
+`TestExtrasBuckets_KnownPackFiles`. The production rule is
+[decisions.md #112](decisions.md#112-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays).
 
 ## Test Structure
 

@@ -153,7 +153,7 @@ func processAnimeEpisodes(
 		if !isAnimeMovie(anime) && len(sel.toDownload) > 1 {
 			firstPending := sel.toDownload[0].Episode
 			axis := newPackAxis(anime, seriesIndex, totalEpisodes)
-			batches := pickBatches(newPackSet(packsThatFit(configs, disk, packs), searcher.packRange), axis, firstPending, windowEnd(configs, firstPending))
+			batches := pickBatches(newPackSet(packsThatFit(configs, disk, packs), packDetail(searcher, totalEpisodes)), axis, firstPending, windowEnd(configs, firstPending))
 			switch {
 			case batches.len() > 0:
 				logger.Logger.Info().
