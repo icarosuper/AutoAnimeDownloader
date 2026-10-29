@@ -223,7 +223,7 @@ func TestProcessAnimeEpisodes_UnresolvedRangeLeavesTheRecordWithoutARange(t *tes
 func TestProcessAnimeEpisodes_DetailPageRangeStopsPhantomEpisodes(t *testing.T) {
 	anime := animeWithEpisodes(11, anilist.MediaStatusFinished, true, "")
 	searcher := searcherFor([]nyaa.TorrentResult{{Name: "[X] Anime [Batch]", MagnetLink: fakeMagnet(3), DetailURL: "/view/1"}}, nil, nil, nil)
-	searcher.packRange = func(nyaa.TorrentResult) (nyaa.BatchInfo, bool) {
+	searcher.packRange = func(nyaa.TorrentResult, int) (nyaa.BatchInfo, bool) {
 		return nyaa.BatchInfo{StartEpisode: 1, EndEpisode: 6}, true
 	}
 

@@ -1,6 +1,10 @@
 package nyaa
 
-import "regexp"
+import (
+	"regexp"
+	"sort"
+	"strings"
+)
 
 // Pre-compiled regexes used across the nyaa package.
 // Compiling on first call vs at package init is a significant speedup since
@@ -72,7 +76,7 @@ var (
 		{regexp.MustCompile(`(?i)\bE(\d{1,4})\b`), "E05"},
 		{regexp.MustCompile(`(?i)\[(\d{1,3})\]`), "[05]"},
 		{regexp.MustCompile(`(?i)\s(\d{1,4})\s*\(`), " 05 ("},
-		{regexp.MustCompile(`(?i)\s(\d{1,4})\.mkv`), " 05.mkv"},
+		{videoExtEpisodeRegexp(), " 05.<video ext>"},
 		{regexp.MustCompile(`(?i)\s(\d{1,4})$`), " 5"},
 	}
 
@@ -189,4 +193,29 @@ var (
 	// replaces with a space ("Re:Zero" -> "re zero"). The two normalizations differ on purpose: this
 	// one builds the search query, that one tokenizes to match titles.
 	reSpecialChars = regexp.MustCompile(`[^a-z0-9\s]`)
+
+	// File-level extras for PackFileRange min-max. hasMovieMarker is too wide on a file name
+	// ("Special Training!"). Immediate parent folder only: the torrent root is often
+	// "(S1 + OVA + Specials)".
+	reFileNCOPNCED   = regexp.MustCompile(`(?i)\bNC(?:OP|ED)\d*\b`)
+	reFileOpenEnding = regexp.MustCompile(`(?i)\b(?:opening|ending)s?\b`)
+	reFileCreditless = regexp.MustCompile(`(?i)creditless`)
+	reFileOPtoken    = regexp.MustCompile(`(?i)(?:^|[\s\[\]_\-\.])(?:OP|ED)(?:[\s\]_\.\d]|$)`)
+	reFilePV         = regexp.MustCompile(`(?i)\b(?:PV|preview|trailer|teaser)\d*\b`)
+	reFileMenu       = regexp.MustCompile(`(?i)\b(?:bd\s*)?menus?\b`)
+	reFileOVA        = regexp.MustCompile(`(?i)\b(?:ova|oad|ona)\d*\b`)
+	reFileS00E       = regexp.MustCompile(`(?i)S00E`)
+	reFileFracEp     = regexp.MustCompile(`(?i)(?:S\d{1,2}E|\s-\s+|\bE|\bEpisode\s+|\s)(\d{1,3}\.(?:25|5|50|75))\b`)
 )
+
+// videoExtEpisodeRegexp is the " 05.mkv" pattern over every key of videoExtensions. Built from the
+// map so a new extension cannot number in IsVideoFile and stay unnumbered here. The dash terminator
+// stays without `\.`: `- 17.5 (OVA)` would then parse as 17.
+func videoExtEpisodeRegexp() *regexp.Regexp {
+	exts := make([]string, 0, len(videoExtensions))
+	for ext := range videoExtensions {
+		exts = append(exts, regexp.QuoteMeta(strings.TrimPrefix(ext, ".")))
+	}
+	sort.Strings(exts)
+	return regexp.MustCompile(`(?i)\s(\d{1,4})\.(?:` + strings.Join(exts, "|") + `)`)
+}

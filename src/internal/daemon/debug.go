@@ -110,7 +110,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 			// Same numbering axis as production: without it debug would report "no pack covers" for every
 			// entry whose pack is numbered by season or by series (packAxis).
 			axis := newPackAxis(anime, resolveSeriesIndex([]int{animeId}, nil), mediaTotalEpisodes(anime))
-			if batches := chooseCoveringPacks(configs, nil, packs, searcher.packRange, axis, firstPending, windowEnd(configs, firstPending)); batches.len() > 0 {
+			if batches := chooseCoveringPacks(configs, nil, packs, packDetail(searcher, mediaTotalEpisodes(anime)), axis, firstPending, windowEnd(configs, firstPending)); batches.len() > 0 {
 				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, episodesToDownload, batches)
 			}
 		}

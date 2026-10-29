@@ -1294,6 +1294,23 @@ func TestRemoveEpisodesAndLinks_KeepsRecordsOfHeldPack(t *testing.T) {
 	}
 }
 
+// K-ON! after method C: 13 TV + S00E19 stores 1-13, claimed == span, the torrent leaves.
+// The 1-23 / total 11 pin above stays green (next cour).
+func TestRemoveEpisodesAndLinks_RemovesKOnPackOnceOVAIsOutOfSpan(t *testing.T) {
+	const hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	// Incident: progress was already 2, so records 3-13 of media 5680, total 13, span 1-13.
+	saved := packRange(5680, 3, 13, 13, 1, 13, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("K-ON! 1-13 with total 13 has no unclaimed cour: the torrent must leave")
+	}
+}
+
 // The cycle closes: with cour 2 adopted, the two cours together claim the pack's 23 episodes and
 // the torrent goes whole. Each one's range is in ITS OWN local numbering (1..23 and -10..12), and
 // that's why declaredSpan measures per anime_id — joining the two would give a pack of 34.

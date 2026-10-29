@@ -223,7 +223,7 @@ func standaloneMagnetCoverage(mediaID int, hash, name string, nyaaID int) ([]fil
 
 	info := nyaa.ExtractBatchInfo(name)
 	if info.EndEpisode == 0 && nyaaID > 0 {
-		if fileInfo, ok := nyaa.PackFileRange(nyaa.ViewURL(nyaaID)); ok {
+		if fileInfo, ok := nyaa.PackFileRange(nyaa.ViewURL(nyaaID), mediaTotalEpisodes(*anime)); ok {
 			info = fileInfo
 		}
 	}

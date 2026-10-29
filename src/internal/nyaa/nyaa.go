@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -243,12 +244,13 @@ func batchRange(torrentName string) (int, int, bool) {
 // (info, false) when the detail page doesn't answer, has no file list, or no video file gives a
 // number: there's no range to assert, and the caller decides what to do with the "don't know".
 //
-// The range is min..max of the numbers read, so a pack whose files RESTART numbering per season
-// (S01-S04, one folder each) gets the largest season's range instead of the total. MEASURED on
-// 2026-08-30 and kept on purpose: it's 6% of packs, packAxis's delta 0 still picks all of them
-// correctly, and a tie-break by file count per folder would count extras ("Creditless Opening 1" ->
-// episode 1) as episodes. Numbers in decisions.md #84.
-func PackFileRange(detailURL string) (BatchInfo, bool) {
+// The range is min..max of the numbers that count as TV / next-cour episodes. OP/ED, PV/Menu,
+// S00E, OVA/OAD, and `.5` bonus files stay out of the span (they ride along in the torrent). An
+// unmarked isolated total+1 (Honoka `K-ON! - 14` with AniList total 13) drops when totalEpisodes
+// is known; a contiguous run past the total (Mushoku 12–23 under cour 1) stays — that is the
+// next cour #74 protects. Multi-season packs that RESTART numbering per folder still yield the
+// largest season's range; measured 2026-08-30 and kept (decisions.md #84).
+func PackFileRange(detailURL string, totalEpisodes int) (BatchInfo, bool) {
 	if detailURL == "" {
 		return BatchInfo{}, false
 	}
@@ -258,45 +260,111 @@ func PackFileRange(detailURL string) (BatchInfo, bool) {
 		return BatchInfo{}, false
 	}
 
-	first, last, files := 0, 0, 0
-	doc.Find(".torrent-file-list li").Each(func(_ int, s *goquery.Selection) {
-		// A folder, not a file: its name usually carries the range of the whole release ("… 001-206
-		// [4x3]"), which is exactly the number that doesn't count toward coverage.
-		if s.Children().First().Is("a.folder") {
-			return
+	var nums []int
+	for _, f := range flattenTorrentFiles(doc) {
+		base := path.Base(f.Name)
+		if !IsVideoFile(base) {
+			continue
 		}
-		name := fileListEntryName(s)
-		if !IsVideoFile(name) {
-			return
+		parent := path.Base(path.Dir(f.Name))
+		if parent == "." {
+			parent = ""
 		}
-		// An unreadable number stays out: that's how NCOP/NCED and extras stay outside the range instead
-		// of widening it.
-		episode := ExtractEpisodeNumber(name)
+		if skipPackRangeEpisode(parent, base) {
+			continue
+		}
+		episode := ExtractEpisodeNumber(base)
 		if episode == nil {
-			return
+			continue
 		}
-		if files == 0 || *episode < first {
-			first = *episode
-		}
-		if *episode > last {
-			last = *episode
-		}
-		files++
-	})
+		nums = append(nums, *episode)
+	}
+	nums = dropIsolatedTotalPlusOne(nums, totalEpisodes)
 
-	if files == 0 {
+	if len(nums) == 0 {
 		logger.Logger.Debug().Str("url", detailURL).Msg("Torrent detail page has no readable episode number")
 		return BatchInfo{}, false
 	}
 
+	first, last := nums[0], nums[0]
+	for _, n := range nums[1:] {
+		if n < first {
+			first = n
+		}
+		if n > last {
+			last = n
+		}
+	}
+
 	logger.Logger.Debug().
 		Str("url", detailURL).
-		Int("files", files).
+		Int("files", len(nums)).
 		Int("first_episode", first).
 		Int("last_episode", last).
 		Msg("Pack range read from the torrent file list")
 
 	return BatchInfo{StartEpisode: first, EndEpisode: last}, true
+}
+
+// skipPackRangeEpisode reports a video whose number must not enter PackFileRange min-max:
+// OP/ED-class (name or immediate parent NC/Creditless/Menu/PV) and claimed extras (OVA/S00E/.5).
+func skipPackRangeEpisode(parent, name string) bool {
+	name = strings.ReplaceAll(name, "_", " ")
+	parent = strings.ReplaceAll(parent, "_", " ")
+	if isOPEDFolder(parent) {
+		return true
+	}
+	if reFileNCOPNCED.MatchString(name) || reFileOpenEnding.MatchString(name) ||
+		reFileCreditless.MatchString(name) || reFileOPtoken.MatchString(name) ||
+		reFilePV.MatchString(name) || reFileMenu.MatchString(name) {
+		return true
+	}
+	if reFileOVA.MatchString(name) || reFileS00E.MatchString(name) || reFileFracEp.MatchString(name) {
+		return true
+	}
+	return false
+}
+
+func isOPEDFolder(parent string) bool {
+	low := strings.ToLower(strings.TrimSpace(parent))
+	switch low {
+	case "nc", "ncop", "nced", "pv", "menu", "bd menu":
+		return true
+	}
+	return strings.Contains(low, "creditless")
+}
+
+// dropIsolatedTotalPlusOne removes a single unmarked number at total+1 (Honoka `- 14` with
+// total 13). A run of two or more (12–23 under cour 1 of 11) is the next cour and stays.
+// The main run must already be present (some number ≤ total): a Part 2 pack numbered 13–24
+// with entry total 12 would otherwise treat 13 as the extra.
+func dropIsolatedTotalPlusOne(nums []int, total int) []int {
+	if total <= 0 || len(nums) == 0 {
+		return nums
+	}
+	plus1, plus2 := total+1, total+2
+	hasMain, has1, has2 := false, false, false
+	for _, n := range nums {
+		if n <= total {
+			hasMain = true
+		}
+		if n == plus1 {
+			has1 = true
+		}
+		if n == plus2 {
+			has2 = true
+		}
+	}
+	if !hasMain || !has1 || has2 {
+		return nums
+	}
+	out := make([]int, 0, len(nums)-1)
+	for _, n := range nums {
+		if n != plus1 {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // detailURL makes the title column's href absolute ("/view/1323474"). Empty when the row has no

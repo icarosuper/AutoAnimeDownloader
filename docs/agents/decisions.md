@@ -118,6 +118,8 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#109** — Flags after positionals are reordered before urfave parses](#109-flags-after-positionals-are-reordered-before-urfave-parses)
 - [**#110** — `.chapters` is leftover metadata, same class as `.nfo`](#110-chapters-is-leftover-metadata-same-class-as-nfo)
 - [**#111** — A pack that loses at reserve does not keep the window](#111-a-pack-that-loses-at-reserve-does-not-keep-the-window)
+- [**#112** — The loose episode number before an extension is every video extension, compiled from the map](#112-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map)
+- [**#113** — PackFileRange min-max skips extras/OVA; an isolated total+1 drops; next cour stays](#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)
 
 ---
 
@@ -1150,7 +1152,7 @@ The counter (`downloadedEpisodes`) still increments for pack episodes **below** 
 
 **(a2) The guard only holds if `IsBatch` recognizes the range.** The range pattern required a space AFTER the second number (`\s\d{2,4}\s*[-~]\s*\d{2,4}\s`), so `One Piece EP 001-501` and `One Piece 001-501.mkv` passed as "episode 1" — the same bug as (a) through another hole, measured live on the One Piece episode 1 search (2 of the 7 candidates were 500-episode packs). The end of the range now accepts space, end of name, `.` or `[`.
 
-**(b) `isMovie`'s `!reHasEpisode && !IsBatch` branch cannot become an episode guard.** `reHasEpisode` only covers `- 05`, `episode 05` and `S01E05`; `ExtractEpisodeNumber` also covers `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.mkv"` and `" 5"`. Calling all of `isMovie` would reject every release in those forms (the "Lucky Star EP015 / E015 / 15" tests catch that). Hence the split: `hasMovieMarker` (keywords + OVA/ONA + special) serves both sides, and `isMovie` remains `hasMovieMarker` plus the "has no episode marker" fallback that only makes sense on a movie search.
+**(b) `isMovie`'s `!reHasEpisode && !IsBatch` branch cannot become an episode guard.** `reHasEpisode` only covers `- 05`, `episode 05` and `S01E05`; `ExtractEpisodeNumber` also covers `EP05`, `E05`, `[05]`, `" 05 ("`, `" 05.<video ext>"` and `" 5"`. Calling all of `isMovie` would reject every release in those forms (the "Lucky Star EP015 / E015 / 15" tests catch that). Hence the split: `hasMovieMarker` (keywords + OVA/ONA + special) serves both sides, and `isMovie` remains `hasMovieMarker` plus the "has no episode marker" fallback that only makes sense on a movie search.
 
 **(c) `reOvaPattern` needs `\b`.** It was `\(?(ova|ona)\)?`, with no boundary: "ona" matches inside **Persona**, "ova" inside **Nova**. While the pattern was only used in the permissive direction (`ScrapNyaaForMovie`) that passed; as an episode guard it would become rejection of the whole anime.
 
@@ -3232,3 +3234,29 @@ back — conservative for one pass, rebuilt from the session on the next.
 **Don't "fix" by:** dropping reserved from `checkDiskSpace` (that is #101); splitting `reserve`
 into a check and a later count (the parallel animes would race between the two); or waiting until
 the next pass for the singles (the window was lost for every episode of that anime, this pass).
+
+### 112. The loose episode number before an extension is every video extension, compiled from the map
+
+**Location:** `nyaa/nyaa_regex.go` — `videoExtEpisodeRegexp`, `reEpisodePatterns`; `nyaa/nyaa.go` — `videoExtensions`, `IsVideoFile`.
+
+**What it looks like:** the pattern used to be `\s(\d{1,4})\.mkv`. It is now built at init from `videoExtensions`, the same keys `IsVideoFile` uses.
+
+**Why it's right:** the dash terminator is space / `v2` / end / `[`. A file `K-On! - 01.mp4` (MystVortex, measured 2026-10-29) missed the dash because `.` is none of those, then missed the mkv-only suffix, and `PackFileRange` / the Jellyfin rename saw no number. Hardcoding the suffix list next to the map is how `.mp4` was forgotten. Compiling from the map is the coupling.
+
+The dash terminator still has no `\.`: `- 17.5 (OVA)` would then parse as 17, and a half-episode would enter min–max.
+
+**Don't "fix" by:** adding `\.` to the dash terminator "so any extension works"; listing the extensions a second time in the regex.
+
+### 113. PackFileRange min-max skips extras/OVA; an isolated total+1 drops; next cour stays
+
+**Location:** `nyaa/nyaa.go` — `PackFileRange`, `skipPackRangeEpisode`, `dropIsolatedTotalPlusOne`; `nyaa/nyaa_regex.go` — `reFile*`; `daemon/search.go` — `packDetail` passes the AniList entry total. Pinned by `TestPackFileRange_ExtrasDoNotStretchTheDeclaredSpan` and `TestRemoveEpisodesAndLinks_RemovesKOnPackOnceOVAIsOutOfSpan`.
+
+**What it looks like:** `PackFileRange(url, totalEpisodes)` still returns min..max, but OP/ED/PV/Menu, `S00E`, OVA/OAD, and `.5` files do not feed the span. When `totalEpisodes` is known and the main run is present (some number ≤ total), a single unmarked `total+1` is dropped. A contiguous run past the total stays.
+
+**Why it's right:** `[MTBB] K-ON! S1` stored 1–19 because `S00E19 (OVA)` parsed as episode 19. `hasUnclaimedContent` then saw 13 < 19 and kept the torrent after the anime left the list ([#74](#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)). The file list is 13 TV + one OVA; 14–18 do not exist. Extras must not stretch the declared span. OVA/`.5` are this anime's files (they download and leave with the torrent) and still must not become `BatchEnd`.
+
+Measured 2026-10-29 (`live_extras_measure_test.go`, 70 packs): OP/ED-class is `NCOP`/`NCED`/`Opening`/`Ending`/`Creditless`/token `OP`/`ED`/`PV`/`Menu` and parent folder `NC`/`Creditless`. Include-as-claimed (out of min-max): `OVA`/`OAD`/`S00E`/`.5`. Unmarked `total+1` with run length 1 showed up three times (Honoka/Kira/DeadFish). Mushoku `- 12`…`- 23` under cour 1 (total 11) has no extra marker — that run is the next cour.
+
+`hasMovieMarker` is too wide on a **file** name (`EP 03 - Special Training!`). Immediate parent only: the torrent root is often `(S1 + OVA + Specials)`. Isolated `total+1` requires a number ≤ total already in the set, otherwise a Part 2 pack numbered 13–24 with entry total 12 loses 13.
+
+**Don't "fix" by:** capping `declaredSpan` at `AnimeTotalEpisodes` without looking at files (deletes the 1–23 pack under cour 1); `force` on the automatic pass; applying `hasMovieMarker` to files; dropping every number > total (that is the next cour); treating the torrent-root folder as extras because its name contains `OVA`.

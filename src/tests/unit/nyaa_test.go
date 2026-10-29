@@ -1150,6 +1150,49 @@ func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 	}
 }
 
+// The dash terminator is space / v2 / end / '[' — a dot is none of those, so " - 01.mkv" only
+// numbered because a later pattern required the .mkv suffix. MystVortex ships .mp4 (and IsVideoFile
+// accepts a dozen other extensions), so those files were unnumbered. A catch-all "dot ends the
+// number" would also read "- 17.5 (OVA)" as 17.
+func TestExtractEpisodeNumber_LooseNumberBeforeVideoExtension(t *testing.T) {
+	cases := []struct {
+		name string
+		want *int
+	}{
+		{"[MystVortex] K-On! - 01.mp4", intPtr(1)},
+		{"[MystVortex] K-On! - 13.MP4", intPtr(13)},
+		{"Anime 01.mkv", intPtr(1)},
+		{"Anime 01.avi", intPtr(1)},
+		{"Anime 01.mov", intPtr(1)},
+		{"Anime 01.m4v", intPtr(1)},
+		{"Anime 01.webm", intPtr(1)},
+		{"Anime 01.flv", intPtr(1)},
+		{"Anime 01.wmv", intPtr(1)},
+		{"Anime 01.ts", intPtr(1)},
+		{"Anime 01.mpg", intPtr(1)},
+		{"Anime 01.mpeg", intPtr(1)},
+		{"Anime 01.ogm", intPtr(1)},
+		// A subtitle is not a video file: the suffix must be one IsVideoFile accepts.
+		{"Anime 01.srt", nil},
+		{"Anime 01.txt", nil},
+		// Half-episode: the integer parser must not take 17 from the ".5".
+		{"Mushoku Tensei - 17.5 (OVA).mkv", nil},
+		{"Hyouka - 11.5.mkv", nil},
+	}
+
+	for _, tc := range cases {
+		got := nyaa.ExtractEpisodeNumber(tc.name)
+		switch {
+		case tc.want == nil && got != nil:
+			t.Errorf("%q: want no episode, got %d", tc.name, *got)
+		case tc.want != nil && got == nil:
+			t.Errorf("%q: want episode %d, got none", tc.name, *tc.want)
+		case tc.want != nil && *got != *tc.want:
+			t.Errorf("%q: want episode %d, got %d", tc.name, *tc.want, *got)
+		}
+	}
+}
+
 // fileListHtml builds Nyaa's detail page with the file tree, in the real format: one <li> per file,
 // with the size in a <span> inside the SAME <li>, and folders as <a.folder>.
 func fileListHtml(folder string, files []string) string {
@@ -1169,6 +1212,36 @@ func fileListHtml(folder string, files []string) string {
 	</body></html>`
 }
 
+func fileListFileItem(name string) string {
+	return `<li><i class="fa fa-file"></i>` + name + ` <span class="file-size">(1.0 GiB)</span></li>`
+}
+
+// fileListHtmlNested is a torrent root with one extra subfolder (Specials, NC, …).
+func fileListHtmlNested(root string, files []string, subfolder string, subfiles []string) string {
+	var items []string
+	for _, f := range files {
+		items = append(items, fileListFileItem(f))
+	}
+	var nested []string
+	for _, f := range subfiles {
+		nested = append(nested, fileListFileItem(f))
+	}
+	items = append(items, `<li>
+				<a href="" class="folder"><i class="fa fa-folder-open"></i>`+subfolder+`</a>
+				<ul>`+strings.Join(nested, "\n")+`</ul>
+			</li>`)
+	return `<!doctype html><html><body>
+	<div class="torrent-file-list panel-body">
+		<ul>
+			<li>
+				<a href="" class="folder"><i class="fa fa-folder-open"></i>` + root + `</a>
+				<ul>` + strings.Join(items, "\n") + `</ul>
+			</li>
+		</ul>
+	</div>
+	</body></html>`
+}
+
 func TestPackFileRange_ReadsTheRangeFromTheFileList(t *testing.T) {
 	// The measured case: "(Season 2 | Part 2) … (Batch)" declares no range in the name and carries
 	// 13..24.
@@ -1177,7 +1250,7 @@ func TestPackFileRange_ReadsTheRangeFromTheFileList(t *testing.T) {
 	}))
 	defer restore()
 
-	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1891610")
+	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1891610", 0)
 	if !ok {
 		t.Fatal("want the range read from the files")
 	}
@@ -1195,7 +1268,7 @@ func TestPackFileRange_IgnoresFoldersExtrasAndNonVideo(t *testing.T) {
 	}))
 	defer restore()
 
-	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1")
+	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1", 0)
 	if !ok || info.StartEpisode != 1 || info.EndEpisode != 2 {
 		t.Errorf("want 1-2 (ok=%v), got %d-%d", ok, info.StartEpisode, info.EndEpisode)
 	}
@@ -1207,7 +1280,7 @@ func TestPackFileRange_UnreadableFileNamesReportUnknown(t *testing.T) {
 	restore := mockHttpGet(fileListHtml("[Group] Anime", []string{"Opening.mkv", "Interview.mkv"}))
 	defer restore()
 
-	if _, ok := nyaa.PackFileRange("https://nyaa.si/view/1"); ok {
+	if _, ok := nyaa.PackFileRange("https://nyaa.si/view/1", 0); ok {
 		t.Error("want an unknown range when no file gives the number")
 	}
 }
@@ -1220,8 +1293,114 @@ func TestPackFileRange_NoURLDoesNotFetch(t *testing.T) {
 	})
 	defer restore()
 
-	if _, ok := nyaa.PackFileRange(""); ok || fetched {
+	if _, ok := nyaa.PackFileRange("", 0); ok || fetched {
 		t.Error("without a detail URL there is nothing to fetch")
+	}
+}
+
+// Method C: extras/OVA do not feed min-max; a contiguous run past the entry total stays (next cour);
+// an unmarked total+1 with run length 1 drops. Pins for decisions.md #113.
+func TestPackFileRange_ExtrasDoNotStretchTheDeclaredSpan(t *testing.T) {
+	kOnTV := []string{
+		"[MTBB] K-ON! - 01.mkv", "[MTBB] K-ON! - 13.mkv",
+	}
+	mushokuTV := []string{
+		"[MTBB] Mushoku Tensei - 01.mkv", "[MTBB] Mushoku Tensei - 12.mkv", "[MTBB] Mushoku Tensei - 23.mkv",
+	}
+
+	cases := []struct {
+		name   string
+		html   string
+		total  int
+		wantLo int
+		wantHi int
+	}{
+		{
+			name:   "MTBB K-ON S00E19 OVA stores 1-13",
+			html:   fileListHtml("[MTBB] K-ON! S1", append(append([]string{}, kOnTV...), "[MTBB] K-ON! - S00E19 (OVA).mkv")),
+			total:  13,
+			wantLo: 1, wantHi: 13,
+		},
+		{
+			name:   "MiniMTBB S00E19 without OVA word still stores 1-13",
+			html:   fileListHtml("[MiniMTBB] K-ON! S1", append(append([]string{}, kOnTV...), "[MiniMTBB] K-ON! - S00E19.mkv")),
+			total:  13,
+			wantLo: 1, wantHi: 13,
+		},
+		{
+			name:   "Honoka unmarked 14 is isolated total+1",
+			html:   fileListHtml("[HonokaSubs] K-ON!", append(append([]string{}, kOnTV...), "[HonokaSubs] K-ON! - 14.mkv")),
+			total:  13,
+			wantLo: 1, wantHi: 13,
+		},
+		{
+			name:   "Mushoku 1-23 under cour-1 total 11 stays (next cour)",
+			html:   fileListHtml("[MTBB] Mushoku Tensei S1", mushokuTV),
+			total:  11,
+			wantLo: 1, wantHi: 23,
+		},
+		{
+			name:   "EMBER S01E24 OVA sits on the Mushoku axis and drops",
+			html:   fileListHtml("[EMBER] Mushoku Tensei S1", append(append([]string{}, mushokuTV...), "[EMBER] Mushoku Tensei - S01E24 [OVA].mkv")),
+			total:  11,
+			wantLo: 1, wantHi: 23,
+		},
+		{
+			name:   "Steins;Gate S01E25 OVA drops; 1-24 stays",
+			html:   fileListHtml("[Judas] Steins;Gate", []string{"[Judas] Steins;Gate - 01.mkv", "[Judas] Steins;Gate - 24.mkv", "[Judas] Steins;Gate - S01E25 (OVA).mkv"}),
+			total:  24,
+			wantLo: 1, wantHi: 24,
+		},
+		{
+			name:   "DeadFish unmarked 25 is isolated total+1",
+			html:   fileListHtml("[DeadFish] Steins;Gate", []string{"[DeadFish] Steins;Gate - 01.mkv", "[DeadFish] Steins;Gate - 24.mkv", "[DeadFish] Steins;Gate - 25.mkv"}),
+			total:  24,
+			wantLo: 1, wantHi: 24,
+		},
+		{
+			name:   "Creditless Opening 1 does not pull min down to 1",
+			html:   fileListHtml("[Group] Anime", []string{"[Group] Anime - 13.mkv", "[Group] Anime - 24.mkv", "Creditless Opening 1.mkv"}),
+			total:  12, // Part 2 numbering: 13 is the start, not isolated total+1
+			wantLo: 13, wantHi: 24,
+		},
+		{
+			name:   "NCOP 01 in folder NC stays out",
+			html:   fileListHtmlNested("[Group] Anime", []string{"[Group] Anime - 13.mkv", "[Group] Anime - 24.mkv"}, "NC", []string{"NCOP 01.mkv"}),
+			total:  12,
+			wantLo: 13, wantHi: 24,
+		},
+		{
+			name:   "S00E19 in Specials does not stretch; torrent-root OVA in the folder name does not mark TV files",
+			html:   fileListHtmlNested("(S1 + OVA + Specials)", []string{"[MTBB] K-ON! - 01.mkv", "[MTBB] K-ON! - 13.mkv"}, "Specials", []string{"[MTBB] K-ON! - S00E19 (OVA).mkv"}),
+			total:  13,
+			wantLo: 1, wantHi: 13,
+		},
+		{
+			name:   "half-episode 11.5 does not stretch Hyouka 1-22",
+			html:   fileListHtml("[Group] Hyouka", []string{"[Group] Hyouka - 01.mkv", "[Group] Hyouka - 22.mkv", "[Group] Hyouka - 11.5.mkv"}),
+			total:  22,
+			wantLo: 1, wantHi: 22,
+		},
+		{
+			name:   "Special Training in the episode title is still episode 3",
+			html:   fileListHtml("[Kira-Fansub] K-ON!", []string{"[Kira-Fansub] K-ON! EP 01.mkv", "[Kira-Fansub] K-ON! EP 03 - Special Training!.mkv", "[Kira-Fansub] K-ON! EP 13.mkv"}),
+			total:  13,
+			wantLo: 1, wantHi: 13,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := mockHttpGet(tc.html)
+			defer restore()
+			info, ok := nyaa.PackFileRange("https://nyaa.si/view/1", tc.total)
+			if !ok {
+				t.Fatal("want the range read from the files")
+			}
+			if info.StartEpisode != tc.wantLo || info.EndEpisode != tc.wantHi {
+				t.Errorf("want %d-%d, got %d-%d", tc.wantLo, tc.wantHi, info.StartEpisode, info.EndEpisode)
+			}
+		})
 	}
 }
 

@@ -96,7 +96,8 @@ return to the search.
 > intersection zero with the contents.
 >
 > Read rate measured on 7 packs: 574/574, 24/24, 23/23, 12/12, 103/111 files yielded a number
-> (the 8 that missed are OP/ED, correctly outside the range). Two cases needed the fixes that
+> (the 8 that missed are OP/ED, correctly outside the range). Numbered OP/ED and `S00E`/OVA
+> later left min-max as well ([decisions.md #113](decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)). Two cases needed the fixes that
 > shipped with it: a name separated by `_` (`[DB]Vinland Saga_-_01_(...)`) matched no pattern, and
 > `(2021-2022)` was read as the episode range 2021..2022 ([decisions.md #83](decisions.md#83-the-pack-names-range-is-the-first-plausible-match-not-the-first-match)).
 
