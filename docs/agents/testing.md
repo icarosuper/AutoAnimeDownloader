@@ -41,6 +41,11 @@ and in the "Detail page" section of [sources.md](sources.md). Run it before reop
 about pack coverage or the pack ceiling — it takes ~2min and makes ~70 requests to nyaa.si, 1.5s
 apart. `AAD_LIVE_QUERIES="a batch|b batch"` replaces the neutral sample.
 
+`live_extras_measure_test.go` is a third sample (extras vs next-cour files). Same gate,
+same politeness delay. Run `-run TestLive_ExtrasVsNextCour`. Offline pins:
+`TestExtrasBuckets_KnownPackFiles`. Counts live in
+[unclaimed-pack-survives-list-switch](../superpowers/specs/2026-10-28-unclaimed-pack-survives-list-switch.md).
+
 ## Test Structure
 
 - `src/tests/unit/` — unit tests (`package unit`)

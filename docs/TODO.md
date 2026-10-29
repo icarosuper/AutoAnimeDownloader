@@ -140,10 +140,15 @@ Ships as a patch whenever it is tackled.
 - A pack whose declared span exceeds `AnimeTotalEpisodes` (OVA/specials on the same media)
   survives `identifyEpisodesNotInWatching` after the anime leaves every tracked list,
   because [decisions.md #74](agents/decisions.md#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)
-  treats the gap as a future cour. Observed 2026-10-28:
+  treats the gap as a future cour. Observed 2026-10-28; method C locked (extras must not
+  stretch `PackFileRange`; the guard stays). The stored 1–19 on `[MTBB] K-ON! S1` was
+  min–max of `01`–`13` plus `S00E19 (OVA)`, not six extra files.
   [unclaimed-pack-survives-list-switch](superpowers/specs/2026-10-28-unclaimed-pack-survives-list-switch.md).
+  Measured 2026-10-29 (`live_extras_measure_test.go`). Next: lock how an included
+  OVA is stored so `S00E19` is not episode 19, then change `PackFileRange`.
   Workaround: delete the torrent from Downloads (`force`). Do not start from
-  "one `anime_id`, every record in the delete set" — that is the case #74 protects.
+  "one `anime_id`, every record in the delete set" and do not cap the span at
+  `AnimeTotalEpisodes` — those are the cases #74 protects.
 
 ## No release — subtitle language filter
 
