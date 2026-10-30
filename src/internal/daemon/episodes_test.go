@@ -1218,7 +1218,7 @@ func TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, nil); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); !ok {
@@ -1234,7 +1234,7 @@ func TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, nil); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); ok {
@@ -1265,7 +1265,7 @@ func TestRemoveEpisodesAndLinks_RemovesPackDownloadedMidWatch(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, nil); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); ok {
@@ -1285,7 +1285,7 @@ func TestRemoveEpisodesAndLinks_KeepsRecordsOfHeldPack(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, nil); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); !ok {
@@ -1293,6 +1293,42 @@ func TestRemoveEpisodesAndLinks_KeepsRecordsOfHeldPack(t *testing.T) {
 	}
 	if len(fm.deletedEpisodeKeys) != 0 {
 		t.Errorf("the record carries the range of the pack that stayed: expected none deleted, got %d", len(fm.deletedEpisodeKeys))
+	}
+}
+
+// Off-list bypass (#117): an empty watching map is "nobody is watching", not "unknown".
+// Unknown is nil and keeps today's #74 hold (KeepsPackWithUnrecordedContent).
+func TestRemoveEpisodesAndLinks_DropsUnclaimedPackWhenWatchingEmpty(t *testing.T) {
+	const hash = "8888888888888888888888888888888888888888"
+	saved := packRange(108465, 1, 11, 11, 1, 23, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, map[int]bool{}); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); ok {
+		t.Error("unclaimed content does not hold the torrent when no claimed anime is in watching")
+	}
+	if len(fm.deletedEpisodeKeys) != len(saved) {
+		t.Errorf("the S1 records must leave with the torrent, got %d deleted", len(fm.deletedEpisodeKeys))
+	}
+}
+
+func TestRemoveEpisodesAndLinks_KeepsUnclaimedPackWhenAnimeStillWatching(t *testing.T) {
+	const hash = "9999999999999999999999999999999999999999"
+	saved := packRange(108465, 1, 11, 11, 1, 23, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, map[int]bool{108465: true}); err != nil {
+		t.Fatalf("removeEpisodesAndLinks: %v", err)
+	}
+	if _, ok := backend.Get(hash); !ok {
+		t.Fatal("unclaimed content still holds while a claimed anime is in watching")
+	}
+	if len(fm.deletedEpisodeKeys) != 0 {
+		t.Errorf("forgettableKeys must keep the records of a held pack, got %d deleted", len(fm.deletedEpisodeKeys))
 	}
 }
 
@@ -1305,7 +1341,7 @@ func TestRemoveEpisodesAndLinks_RemovesKOnPackOnceOVAIsOutOfSpan(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, nil); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); ok {
@@ -1322,7 +1358,7 @@ func TestRemoveEpisodesAndLinks_RemovesPackOnceEveryCourClaimsIt(t *testing.T) {
 	backend := fakeWithTorrents(hash)
 	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, backend, testLibrarian(), keysOf(saved), saved, false, false, nil); err != nil {
 		t.Fatalf("removeEpisodesAndLinks: %v", err)
 	}
 	if _, ok := backend.Get(hash); ok {

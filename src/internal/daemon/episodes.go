@@ -1001,7 +1001,7 @@ func RemoveEpisodesWithLinks(fm FileManagerInterface, backend torrents.TorrentBa
 	if err != nil {
 		return fmt.Errorf("failed to load saved episodes: %w", err)
 	}
-	return removeEpisodesAndLinks(fm, backend, librarian, keys, saved, false, false)
+	return removeEpisodesAndLinks(fm, backend, librarian, keys, saved, false, false, nil)
 }
 
 // RemoveTorrentOptions configures RemoveTorrentWithEpisodes.
@@ -1057,7 +1057,7 @@ func RemoveTorrentWithEpisodes(
 		keys = append(keys, ep.Key())
 	}
 
-	return removeEpisodesAndLinks(fm, backend, librarian, keys, saved, opts.KeepData, true)
+	return removeEpisodesAndLinks(fm, backend, librarian, keys, saved, opts.KeepData, true, nil)
 }
 
 // deleteEpisodesByStatus deletes the episodes of the anime that ALL accounts agree to delete.
@@ -1087,7 +1087,7 @@ func deleteEpisodesByStatus(deletableMedia map[int]bool, fileManager FileManager
 		Msg("Deleting episodes for animes with delete statuses")
 
 	// Best-effort: a failure here must not abort the verification pass.
-	if err := removeEpisodesAndLinks(fileManager, backend, librarian, keysToDelete, savedEpisodes, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fileManager, backend, librarian, keysToDelete, savedEpisodes, false, false, nil); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Status-based deletion: failed to delete episodes from file")
 	}
 }
@@ -1104,7 +1104,7 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 		// the torrent guard would conclude "nobody survives" and delete the file the pass just adopted.
 		saved := append(append([]files.EpisodeStruct{}, data.savedEpisodes...), data.newEpisodes...)
 		// Best-effort: a failure here must not abort the verification pass.
-		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allKeys, saved, false, false); err != nil {
+		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allKeys, saved, false, false, nil); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
 		}
 	}
@@ -1128,7 +1128,10 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 // doesn't delete the cour that wasn't downloaded yet; when the user clicks "delete torrent" the
 // unit of deletion is the torrent and the user decided — without this the call would report success
 // without deleting anything.
-func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, keysToDelete []files.EpisodeKey, savedEpisodes []files.EpisodeStruct, keepData bool, force bool) error {
+//
+// watching == nil means the caller is not the automatic pass, so unclaimed content holds as in #74;
+// a non-nil map (even empty) is this pass's watching set (#117).
+func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, keysToDelete []files.EpisodeKey, savedEpisodes []files.EpisodeStruct, keepData bool, force bool, watching map[int]bool) error {
 	if len(keysToDelete) == 0 {
 		return nil
 	}
@@ -1154,7 +1157,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 			if !deleteSet[ep.Key()] {
 				continue
 			}
-			removingTorrent := ep.EpisodeHash == "" || force || canRemoveTorrent(byHash[ep.EpisodeHash], deleteSet)
+			removingTorrent := ep.EpisodeHash == "" || force || canRemoveTorrent(byHash[ep.EpisodeHash], deleteSet, watching)
 			if ep.IsBatch && !removingTorrent {
 				// Keep batch library files while siblings survive (can't identify a single
 				// episode's raw-named file safely). Freed only when the whole torrent goes.
@@ -1182,7 +1185,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 		if !deleteSet[ep.Key()] || ep.EpisodeHash == "" || removedHashes[ep.EpisodeHash] {
 			continue
 		}
-		if force || canRemoveTorrent(byHash[ep.EpisodeHash], deleteSet) {
+		if force || canRemoveTorrent(byHash[ep.EpisodeHash], deleteSet, watching) {
 			if err := backend.Remove(ep.EpisodeHash, keepData); err != nil {
 				logger.Logger.Warn().Err(err).Str("hash", ep.EpisodeHash).Msg("Failed to remove torrent")
 			} else {
@@ -1192,7 +1195,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 		}
 	}
 
-	forgotten := forgettableKeys(keysToDelete, byKey, byHash, force)
+	forgotten := forgettableKeys(keysToDelete, byKey, byHash, force, watching)
 	if err := fm.DeleteEpisodesFromFile(forgotten); err != nil {
 		return fmt.Errorf("failed to delete episodes from file: %w", err)
 	}
@@ -1213,13 +1216,14 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 }
 
 // forgettableKeys takes out of the deletion list the records of the pack that STAYED on disk for
-// carrying unclaimed content.
+// carrying unclaimed content that still has a watching claim (or watching == nil).
 //
 // The record is the only place where the pack's declared range exists. Deleting it while the files
 // are still there leaves an orphan pack: no future entry can adopt it (findCoveringPack requires
 // the range) and the claimed-content count never closes again, so the torrent never leaves the
 // disk. Kept, the record stays true — the file is there — and the next cour closes the count, which
-// frees the whole pack at once.
+// frees the whole pack at once. When the pack leaves, the records leave with it so they cannot
+// orphan a deleted torrent.
 //
 // It only applies to that case: a pack with a live sibling (part of the window not watched yet)
 // keeps losing the watched records, which is the usual rotation.
@@ -1228,6 +1232,7 @@ func forgettableKeys(
 	byKey map[files.EpisodeKey]files.EpisodeStruct,
 	byHash map[string][]files.EpisodeStruct,
 	force bool,
+	watching map[int]bool,
 ) []files.EpisodeKey {
 	if force {
 		return keysToDelete
@@ -1235,7 +1240,7 @@ func forgettableKeys(
 	keys := make([]files.EpisodeKey, 0, len(keysToDelete))
 	for _, k := range keysToDelete {
 		ep, ok := byKey[k]
-		if ok && ep.EpisodeHash != "" && hasUnclaimedContent(byHash[ep.EpisodeHash]) {
+		if ok && ep.EpisodeHash != "" && unclaimedHolds(byHash[ep.EpisodeHash], watching) {
 			continue
 		}
 		keys = append(keys, k)
@@ -1244,17 +1249,18 @@ func forgettableKeys(
 }
 
 // canRemoveTorrent reports whether the shared torrent can be removed: no record of the group
-// survives the delete set AND the pack carries no unclaimed content.
+// survives the delete set AND unclaimedHolds is false.
 //
 // The second condition exists because "every record" isn't "all the content": a pack that declares
 // 1..23 in its name but has only cour 1's 11 episodes claimed covers 12 episodes that never had an
 // owner — cour 2, not downloaded yet. With only the first condition, watching cour 1 deleted all of
-// cour 2 from disk.
+// cour 2 from disk. Off-list (non-nil empty watching) lets the torrent leave even when the span
+// exceeds claimed totals (decisions.md #117).
 //
 // ponytail: a pack whose range neither the name nor the file list resolved records BatchEnd == 0
 // (unknown) and stays undetectable here. It's what's left of the rare case after #84 — before, it
 // was every pack without a range in its name.
-func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKey]bool) bool {
+func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKey]bool, watching map[int]bool) bool {
 	if len(group) == 0 {
 		return true
 	}
@@ -1263,7 +1269,25 @@ func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKe
 			return false
 		}
 	}
-	return !hasUnclaimedContent(group)
+	return !unclaimedHolds(group, watching)
+}
+
+// unclaimedHolds is the second gate on #74: unclaimed content holds the torrent unless the
+// automatic pass has a watching set and no claimed anime of the group is in it (decisions.md #117).
+// watching == nil is the API / unknown default and keeps today's hold.
+func unclaimedHolds(group []files.EpisodeStruct, watching map[int]bool) bool {
+	if !hasUnclaimedContent(group) {
+		return false
+	}
+	if watching == nil {
+		return true
+	}
+	for _, ep := range group {
+		if watching[ep.AnimeID] {
+			return true
+		}
+	}
+	return false
 }
 
 // hasUnclaimedContent reports whether the pack covers content no entry of the group claims.

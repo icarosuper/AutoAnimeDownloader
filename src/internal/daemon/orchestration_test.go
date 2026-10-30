@@ -162,7 +162,7 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	backend := torrents.NewFakeBackend()
 	backend.AddCompleted(hash, t.TempDir())
 	fm := &orchestrationFM{saved: saved}
-	removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false)
+	removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false, nil)
 	if _, ok := backend.Get(hash); !ok {
 		t.Error("torrent should be kept while a batch sibling survives")
 	}
@@ -171,7 +171,7 @@ func TestRemoveEpisodesAndLinks_BatchGuard(t *testing.T) {
 	backend2 := torrents.NewFakeBackend()
 	backend2.AddCompleted(hash, t.TempDir())
 	fm2 := &orchestrationFM{saved: saved}
-	removeEpisodesAndLinks(fm2, backend2, lib, []files.EpisodeKey{{Episode: 1}, {Episode: 2}}, saved, false, false)
+	removeEpisodesAndLinks(fm2, backend2, lib, []files.EpisodeKey{{Episode: 1}, {Episode: 2}}, saved, false, false, nil)
 	if _, ok := backend2.Get(hash); ok {
 		t.Error("torrent should be removed when all batch siblings are deleted")
 	}
@@ -193,7 +193,7 @@ func TestRemoveEpisodesAndLinks_FiresEpisodeDeletedWebhook(t *testing.T) {
 
 	spy := newWebhookSpy(t)
 	fm := &orchestrationFM{saved: saved, configs: cfg(spy.server.URL)}
-	if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, keys, saved, false, false); err != nil {
+	if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, keys, saved, false, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if body := spy.waitForCall(t); body != `{"anime":"Frieren","episode":"3"}` {
@@ -202,7 +202,7 @@ func TestRemoveEpisodesAndLinks_FiresEpisodeDeletedWebhook(t *testing.T) {
 
 	spy2 := newWebhookSpy(t)
 	fm2 := &orchestrationFM{saved: saved, configs: cfg(spy2.server.URL)}
-	if err := removeEpisodesAndLinks(fm2, torrents.NewFakeBackend(), lib, keys, saved, true, false); err != nil {
+	if err := removeEpisodesAndLinks(fm2, torrents.NewFakeBackend(), lib, keys, saved, true, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(100 * time.Millisecond)
@@ -417,7 +417,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 5}}, saved, false, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 5}}, saved, false, false, nil); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -451,7 +451,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false, nil); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -484,7 +484,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false, nil); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -512,7 +512,7 @@ func TestRemoveEpisodesAndLinks_RealHardlinks(t *testing.T) {
 		backend.AddCompleted(hash, dataDir)
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}, {Episode: 2}}, saved, false, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}, {Episode: 2}}, saved, false, false, nil); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -555,7 +555,7 @@ func TestRemoveEpisodesAndLinks_LibraryFolderCleanup(t *testing.T) {
 			{EpisodeNumber: 1, AnimeName: "Anime", LibraryPaths: []string{video}},
 		}
 		fm := &orchestrationFM{saved: saved}
-		if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false, nil); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -579,7 +579,7 @@ func TestRemoveEpisodesAndLinks_LibraryFolderCleanup(t *testing.T) {
 		backend.AddCompleted(saved[1].EpisodeHash, t.TempDir())
 		fm := &orchestrationFM{saved: saved}
 
-		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, backend, lib, []files.EpisodeKey{{Episode: 1}}, saved, false, false, nil); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 
@@ -600,7 +600,7 @@ func TestRemoveEpisodesAndLinks_LibraryFolderCleanup(t *testing.T) {
 			{EpisodeNumber: 1, AnimeName: "Anime", LibraryPaths: []string{video}},
 		}
 		fm := &orchestrationFM{saved: saved}
-		if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, []files.EpisodeKey{{Episode: 1}}, saved, true, false); err != nil {
+		if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), lib, []files.EpisodeKey{{Episode: 1}}, saved, true, false, nil); err != nil {
 			t.Fatalf("removeEpisodesAndLinks: %v", err)
 		}
 

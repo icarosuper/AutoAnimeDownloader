@@ -163,7 +163,7 @@ func TestSelectEpisodes_PackRotation(t *testing.T) {
 	for _, ep := range savedFull {
 		group = append(group, ep)
 	}
-	if !canRemoveTorrent(group, deleteSet) {
+	if !canRemoveTorrent(group, deleteSet, nil) {
 		t.Errorf("with progress 100 the whole group must leave (%d of 100 in the delete set)", len(deleteSet))
 	}
 
