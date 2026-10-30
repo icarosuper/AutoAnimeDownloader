@@ -84,7 +84,11 @@ beforeEach(() => {
   getConfig.mockResolvedValue({ completed_anime_path: '/tmp/completed' } as never)
   searchAniList.mockResolvedValue([])
   // Empty first search is today's add: the existing "swaps the Add button" case still POSTs.
-  getTorrentCandidates.mockResolvedValue({ query: 'One Piece', items: [] })
+  getTorrentCandidates.mockResolvedValue({
+    query: 'One Piece',
+    media: { title: 'One Piece', format: 'TV' },
+    items: [],
+  })
   addStandaloneAnime.mockResolvedValue({ added: 2 })
   push.mockResolvedValue(undefined)
 })
@@ -140,7 +144,11 @@ describe('AddAnime — card footer', () => {
 describe('AddAnime — first search', () => {
   it('empty first search adds without magnet and does not open the picker', async () => {
     searchAniList.mockResolvedValue([result('')])
-    getTorrentCandidates.mockResolvedValue({ query: 'One Piece', items: [] })
+    getTorrentCandidates.mockResolvedValue({
+      query: 'One Piece',
+      media: { title: 'One Piece', format: 'TV' },
+      items: [],
+    })
     addStandaloneAnime.mockResolvedValue({ added: 2 })
     render(AddAnime)
     await search()
@@ -159,7 +167,11 @@ describe('AddAnime — first search', () => {
 
   it('empty first search with nothing to queue keeps the tracked-no-episodes toast', async () => {
     searchAniList.mockResolvedValue([result('')])
-    getTorrentCandidates.mockResolvedValue({ query: 'One Piece', items: [] })
+    getTorrentCandidates.mockResolvedValue({
+      query: 'One Piece',
+      media: { title: 'One Piece', format: 'TV' },
+      items: [],
+    })
     addStandaloneAnime.mockResolvedValue({ added: 0 })
     render(AddAnime)
     await search()
@@ -178,7 +190,11 @@ describe('AddAnime — first search', () => {
   it('non-empty first search navigates to the picker and does not POST', async () => {
     const items = [candidate()]
     searchAniList.mockResolvedValue([result('')])
-    getTorrentCandidates.mockResolvedValue({ query: 'Frieren', items })
+    getTorrentCandidates.mockResolvedValue({
+      query: 'Frieren',
+      media: { title: 'One Piece', format: 'TV' },
+      items,
+    })
     render(AddAnime)
     await search()
 
@@ -194,6 +210,7 @@ describe('AddAnime — first search', () => {
       query: 'Frieren',
       items,
       error: null,
+      media: { title: 'One Piece', format: 'TV' },
     })
     // finally must drop the in-flight flag so a return from the picker is not stuck on Adding.
     expect(screen.getByRole('button', { name: /^add$|^adicionar$/i })).toBeEnabled()
@@ -217,6 +234,7 @@ describe('AddAnime — first search', () => {
       query: '',
       items: [],
       error: err,
+      media: { title: 'One Piece', format: 'TV' },
     })
     expect(screen.getByRole('button', { name: /^add$|^adicionar$/i })).toBeEnabled()
   })

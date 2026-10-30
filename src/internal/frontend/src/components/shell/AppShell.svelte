@@ -50,7 +50,7 @@
     <SystemBanner />
 
     <!-- Page Content — no {#key $locale} here; each route handles its own reactivity -->
-    <main class="mx-auto w-full max-w-7xl flex-1 px-4 pb-24 pt-8 sm:px-6 md:pb-8 lg:px-8">
+    <main class="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 pb-24 pt-8 sm:px-6 md:pb-8 lg:px-8">
       <slot />
     </main>
   </div>

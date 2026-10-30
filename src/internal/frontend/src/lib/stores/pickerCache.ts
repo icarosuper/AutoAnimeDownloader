@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store'
-import type { ApiError, TorrentCandidate } from '../api/client.js'
+import type { ApiError, TorrentCandidate, TorrentCandidateMedia } from '../api/client.js'
 
 /**
  * In-memory only: Add fills this before pushing `#/add/:id/torrents` so the first paint is
@@ -11,6 +11,7 @@ export interface PickerCache {
   query: string
   items: TorrentCandidate[]
   error: ApiError | null
+  media?: TorrentCandidateMedia
 }
 
 const store = writable<PickerCache | null>(null)

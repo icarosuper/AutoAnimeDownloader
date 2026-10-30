@@ -61,6 +61,13 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   **released in `v2.7.1` on 2026-10-25**
   ([decisions.md #110](agents/decisions.md#110-chapters-is-leftover-metadata-same-class-as-nfo)).
 
+## `v2.7.2` — torrent picker UI
+
+- Identity header, Nyaa-labeled search, two confirms (list vs magnet), packs-only copy,
+  description overflow. Implemented on `torrent-picker-ui`
+  ([decisions.md #114](agents/decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this)).
+  Follow-up to the `v2.7.0` picker; independent of the `v2.8.0` recents shelf.
+
 ## `v2.8.0` — dashboard recents
 
 A shelf of just-landed, still-unwatched episodes on Status, and last-check rows that open the

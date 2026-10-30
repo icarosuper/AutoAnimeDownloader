@@ -181,6 +181,18 @@ func TestTorrentCandidates_RankedPacks(t *testing.T) {
 	if got.Resolution != "1080p" {
 		t.Fatalf("resolution: want 1080p, got %q", got.Resolution)
 	}
+	if data.Media.Title != "Standalone Anime" {
+		t.Fatalf("media.title: want Standalone Anime, got %q", data.Media.Title)
+	}
+	if data.Media.Format != "TV" {
+		t.Fatalf("media.format: want TV, got %q", data.Media.Format)
+	}
+	if data.Media.Episodes == nil || *data.Media.Episodes != 24 {
+		t.Fatalf("media.episodes: want 24, got %v", data.Media.Episodes)
+	}
+	if data.Media.CoverImage != "" {
+		t.Fatalf("standaloneMediaJSON has empty medium; cover_image must omit, got %q", data.Media.CoverImage)
+	}
 }
 
 func TestTorrentCandidates_EmptyIs200(t *testing.T) {

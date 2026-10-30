@@ -1459,6 +1459,8 @@ func TestFetchTorrentDetail_SanitisesHTMLAndListsFiles(t *testing.T) {
 	html := `<!doctype html><html><body>
 <div id="torrent-description">
   <p>Safe <strong>text</strong></p>
+  <table><thead><tr><th>Res</th></tr></thead><tbody><tr><td>1080p</td></tr></tbody></table>
+  <hr>
   <script>alert(1)</script>
   <iframe src="https://evil.example"></iframe>
   <a href="https://nyaa.si/view/1" onclick="alert(1)">link</a>
@@ -1495,6 +1497,12 @@ func TestFetchTorrentDetail_SanitisesHTMLAndListsFiles(t *testing.T) {
 	if !strings.Contains(d.DescriptionHTML, `src="https://nyaa.si/img/shot.png"`) {
 		t.Errorf("relative img src not resolved: %s", d.DescriptionHTML)
 	}
+	if !strings.Contains(d.DescriptionHTML, "<table") || !strings.Contains(d.DescriptionHTML, "<td") {
+		t.Errorf("table tags unwrapped: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, "<hr") {
+		t.Errorf("hr stripped: %s", d.DescriptionHTML)
+	}
 	if d.NyaaURL != "https://nyaa.si/view/1664122" {
 		t.Errorf("NyaaURL = %q", d.NyaaURL)
 	}
@@ -1503,6 +1511,65 @@ func TestFetchTorrentDetail_SanitisesHTMLAndListsFiles(t *testing.T) {
 	}
 	if d.Files[0].Name != "Frieren/Frieren - 01.mkv" {
 		t.Errorf("nested name = %q", d.Files[0].Name)
+	}
+}
+
+func TestFetchTorrentDetail_RendersMarkdownDescription(t *testing.T) {
+	// Live Nyaa stores markdown as escaped text with &#10; newlines (markdown-text),
+	// then the browser renders it. The scraper sees the source, not the HTML.
+	html := `<!doctype html><html><body>
+<div markdown-text class="panel-body" id="torrent-description">## Title&#10;&#10;**General** | **Video**&#10;-- | --&#10;1080p | HEVC&#10;&#10;[cmp](https://slow.pics/c/abc)&#10;&lt;script&gt;alert(1)&lt;/script&gt;</div>
+<div class="torrent-file-list panel-body"><ul></ul></div>
+</body></html>`
+	defer nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(html)), Header: make(http.Header)}, nil
+	})()
+
+	d, err := nyaa.FetchTorrentDetail(1664122)
+	if err != nil {
+		t.Fatalf("FetchTorrentDetail: %v", err)
+	}
+	if !strings.Contains(d.DescriptionHTML, "<h2") || !strings.Contains(d.DescriptionHTML, "Title") {
+		t.Errorf("heading not rendered: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, "<table") || !strings.Contains(d.DescriptionHTML, "<td") {
+		t.Errorf("markdown table not rendered: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, `href="https://slow.pics/c/abc"`) {
+		t.Errorf("markdown link not rendered: %s", d.DescriptionHTML)
+	}
+	if strings.Contains(d.DescriptionHTML, "<script") || strings.Contains(d.DescriptionHTML, "alert(1)") {
+		t.Errorf("raw HTML in markdown survived sanitiser: %s", d.DescriptionHTML)
+	}
+}
+
+func TestFetchTorrentDetail_KeepsMarkdownImages(t *testing.T) {
+	html := `<!doctype html><html><body>
+<div markdown-text class="panel-body" id="torrent-description">**Discord Server Link:** [![alt text](https://i2.extraimage.info/pix/badge.png "Join EMBER")](https://discord.gg/ZtZXgJNc3M "Discord")&#10;![alt text](https://i.postimg.cc/PfwHY1xs/shot.png "SCREENS")&#10;&lt;img src="javascript:alert(1)"&gt;</div>
+<div class="torrent-file-list panel-body"><ul></ul></div>
+</body></html>`
+	defer nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(html)), Header: make(http.Header)}, nil
+	})()
+
+	d, err := nyaa.FetchTorrentDetail(1664122)
+	if err != nil {
+		t.Fatalf("FetchTorrentDetail: %v", err)
+	}
+	if !strings.Contains(d.DescriptionHTML, `src="https://i2.extraimage.info/pix/badge.png"`) {
+		t.Errorf("linked markdown image src dropped: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, `src="https://i.postimg.cc/PfwHY1xs/shot.png"`) {
+		t.Errorf("markdown image src dropped: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, `referrerpolicy="no-referrer"`) {
+		t.Errorf("img missing no-referrer: %s", d.DescriptionHTML)
+	}
+	if strings.Contains(d.DescriptionHTML, "javascript:") {
+		t.Errorf("javascript img src survived: %s", d.DescriptionHTML)
+	}
+	if strings.Count(d.DescriptionHTML, "<img") != 2 {
+		t.Errorf("want 2 imgs (javascript one dropped), got: %s", d.DescriptionHTML)
 	}
 }
 

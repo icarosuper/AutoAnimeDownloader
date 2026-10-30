@@ -2,10 +2,11 @@
   // Torrent picker — one screen for Add (`#/add/:id/torrents`) and whole-title replace
   // (`#/status/:id/torrents`). The hash prefix is the back target; svelte-spa-router params
   // only carry `id`, so tests (and a reload) parse the hash instead of taking a mode prop.
+  // Two confirms: paste does not override the list button (decisions.md #114).
   import { onDestroy, onMount } from "svelte";
   import { get } from "svelte/store";
   import { location, pop, push } from "svelte-spa-router";
-  import { ChevronRight, ExternalLink, Search } from "@lucide/svelte";
+  import { ExternalLink, Search } from "@lucide/svelte";
   import {
     ApiError,
     addStandaloneAnime,
@@ -14,15 +15,18 @@
     replaceAnimeWithMagnet,
     type TorrentCandidate,
     type TorrentCandidateDetail,
+    type TorrentCandidateMedia,
   } from "../lib/api/client.js";
   import { pickerCache } from "../lib/stores/pickerCache.js";
   import Button from "../components/ui/Button.svelte";
   import Chip from "../components/ui/Chip.svelte";
+  import Cover from "../components/ui/Cover.svelte";
   import Loading from "../components/Loading.svelte";
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
   import { formatBytes, type FormatLocale } from "../lib/domain/format.js";
+  import { isValidMagnet } from "../lib/domain/magnet.js";
 
   export let params: { id?: string } = {};
 
@@ -55,36 +59,53 @@
     title: m.picker_title(),
     recommended: m.picker_recommended(),
     queryPlaceholder: m.picker_query_placeholder(),
+    queryLabel: m.picker_query_label(),
+    search: m.picker_search(),
+    hint: m.picker_hint(),
     confirm: m.picker_confirm(),
-    back: m.picker_back(),
     empty: m.picker_empty(),
     nyaaError: m.picker_nyaa_error(),
     detailError: m.picker_detail_error(),
     openNyaa: m.picker_open_nyaa(),
     magnetPlaceholder: m.picker_magnet_placeholder(),
+    magnetLabel: m.picker_magnet_label(),
+    magnetConfirm: m.picker_magnet_confirm(),
     files: m.picker_files(),
-    crumb: mode === "add" ? m.add_title() : m.nav_status(),
+    description: m.picker_description(),
   };
 
   let query = "";
   let items: TorrentCandidate[] = [];
   let listError: ApiError | null = null;
   let loading = false;
+  let listSettled = false;
   let selectedIndex = 0;
   let detail: TorrentCandidateDetail | null = null;
   let detailError = false;
   let detailLoading = false;
   let pastedMagnet = "";
   let confirming = false;
+  let media: TorrentCandidateMedia | null = null;
 
   let candidatesAbort: AbortController | undefined;
   let detailAbort: AbortController | undefined;
 
   $: selected = items[selectedIndex];
-  $: canConfirm = Boolean(pastedMagnet.trim() || selected?.magnet) && !confirming && !loading;
+  $: canDownloadThis = Boolean(selected?.magnet) && !confirming && !loading;
+  $: canDownloadMagnet = isValidMagnet(pastedMagnet) && !confirming && !loading;
   $: nyaaHref = selected
     ? detail?.nyaa_url || `https://nyaa.si/view/${selected.nyaa_id}`
     : "";
+  $: backLabel = !$locale
+    ? ""
+    : mode === "add"
+      ? m.picker_back_add()
+      : m.picker_back_replace({ title: media?.title || m.picker_title() });
+  $: mediaMeta = !$locale || !media
+    ? ""
+    : [media.format.replace(/_/g, " "), media.episodes != null ? m.status_episodes_count({ count: media.episodes }) : ""]
+        .filter(Boolean)
+        .join(" · ");
 
   onMount(() => {
     const cached = get(pickerCache);
@@ -92,6 +113,8 @@
       query = cached.query;
       items = cached.items;
       listError = cached.error;
+      media = cached.media ?? null;
+      listSettled = true;
       if (items.length > 0) {
         selectedIndex = 0;
         loadDetail(items[0].nyaa_id);
@@ -127,6 +150,7 @@
       if (controller.signal.aborted) return;
       items = found.items ?? [];
       query = found.query ?? q ?? "";
+      if (found.media) media = found.media;
       selectedIndex = 0;
       if (items.length > 0) loadDetail(items[0].nyaa_id);
     } catch (error) {
@@ -138,7 +162,10 @@
           ? error
           : new ApiError(error instanceof Error ? error.message : "error", "NYAA_UNAVAILABLE", 0);
     } finally {
-      if (!controller.signal.aborted) loading = false;
+      if (!controller.signal.aborted) {
+        loading = false;
+        listSettled = true;
+      }
     }
   }
 
@@ -169,40 +196,60 @@
     }
   }
 
-  async function confirm(): Promise<void> {
-    const pasted = pastedMagnet.trim();
-    const magnet = pasted || selected?.magnet;
-    if (!magnet) return;
+  async function afterSuccess(added?: { added: number }): Promise<void> {
+    pickerCache.clear();
+    if (mode === "replace") {
+      toast.success(m.detail_replace_anime_done());
+      await push(backHref.replace(/^#/, ""));
+      return;
+    }
+    const count = added?.added ?? 0;
+    if (count > 0) {
+      toast.success(m.add_toast_added({ count }), undefined, {
+        href: "#/downloads",
+        label: m.add_toast_downloads_link(),
+      });
+    } else {
+      toast.info(m.add_toast_tracked_no_episodes());
+    }
+    await pop();
+  }
+
+  async function confirmSelected(): Promise<void> {
+    if (!selected?.magnet) return;
     confirming = true;
     try {
       if (mode === "replace") {
-        await replaceAnimeWithMagnet(mediaId, magnet);
-        toast.success(m.detail_replace_anime_done());
-        pickerCache.clear();
-        await push(backHref.replace(/^#/, ""));
+        await replaceAnimeWithMagnet(mediaId, selected.magnet);
+        await afterSuccess();
         return;
       }
-      const opts = pasted
-        ? { magnet: pasted }
-        : selected
-          ? {
-              magnet: selected.magnet,
-              name: selected.name,
-              nyaa_id: selected.nyaa_id,
-              size_bytes: selected.size_bytes,
-            }
-          : { magnet };
-      const { added: count } = await addStandaloneAnime(mediaId, opts);
-      pickerCache.clear();
-      if (count > 0) {
-        toast.success(m.add_toast_added({ count }), undefined, {
-          href: "#/downloads",
-          label: m.add_toast_downloads_link(),
-        });
-      } else {
-        toast.info(m.add_toast_tracked_no_episodes());
+      const added = await addStandaloneAnime(mediaId, {
+        magnet: selected.magnet,
+        name: selected.name,
+        nyaa_id: selected.nyaa_id,
+        size_bytes: selected.size_bytes,
+      });
+      await afterSuccess(added);
+    } catch (error) {
+      toast.error(confirmErrorMessage(error));
+    } finally {
+      confirming = false;
+    }
+  }
+
+  async function confirmMagnet(): Promise<void> {
+    const pasted = pastedMagnet.trim();
+    if (!isValidMagnet(pasted)) return;
+    confirming = true;
+    try {
+      if (mode === "replace") {
+        await replaceAnimeWithMagnet(mediaId, pasted);
+        await afterSuccess();
+        return;
       }
-      await pop();
+      const added = await addStandaloneAnime(mediaId, { magnet: pasted });
+      await afterSuccess(added);
     } catch (error) {
       toast.error(confirmErrorMessage(error));
     } finally {
@@ -233,6 +280,21 @@
     }
   }
 
+  function onDescriptionMediaError(e: Event): void {
+    const t = e.target
+    if (!(t instanceof HTMLImageElement)) return
+    const parent = t.parentElement
+    t.remove()
+    if (
+      parent &&
+      parent.tagName === 'A' &&
+      parent.childElementCount === 0 &&
+      (parent.textContent ?? '').trim() === ''
+    ) {
+      parent.remove()
+    }
+  }
+
   function metaLine(item: TorrentCandidate): string {
     const parts: string[] = [];
     if (item.fansub) parts.push(item.fansub);
@@ -242,33 +304,52 @@
   }
 </script>
 
-<div class="flex flex-col gap-4.5">
-  <div>
-    <nav class="flex items-center gap-1 text-caption text-subtle" aria-label={T && T.back}>
-      <a href={backHref} class="hover:text-body">{T && T.crumb}</a>
-      <ChevronRight size={13} strokeWidth={2} aria-hidden="true" />
-      <span class="truncate text-body">{T && T.title}</span>
-    </nav>
-    <h1 class="mt-2 text-screen-title text-heading">{T && T.title}</h1>
+<div class="flex min-w-0 flex-col gap-4.5">
+  <div class="flex flex-col gap-3">
+    <a href={backHref} class="w-fit text-copy text-body hover:text-heading">{backLabel}</a>
+    <div class="flex items-start gap-3">
+      <div class="h-[68px] w-[48px] shrink-0 overflow-hidden">
+        <Cover src={media?.cover_image} alt={media?.title ?? ""} radiusClass="rounded-field" />
+      </div>
+      <div class="min-w-0">
+        <p class="text-caption text-subtle">{T && T.title}</p>
+        {#if media?.title}
+          <h1 class="truncate text-screen-title text-heading">{media.title}</h1>
+        {/if}
+        {#if mediaMeta}
+          <p class="mt-0.5 font-mono text-caption text-subtle">{mediaMeta}</p>
+        {/if}
+      </div>
+    </div>
+    <p class="text-copy text-subtle">{T && T.hint}</p>
   </div>
 
-  <form class="flex items-center gap-2" on:submit|preventDefault={onQuerySubmit}>
-    <label
-      class="flex flex-1 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-2 focus-within:border-accent"
-    >
-      <Search size={15} strokeWidth={2} class="shrink-0 text-subtle" aria-hidden="true" />
-      <input
-        type="search"
-        bind:value={query}
-        placeholder={T && T.queryPlaceholder}
-        aria-label={T && T.queryPlaceholder}
-        class="w-full bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
-      />
-    </label>
+  <form class="flex flex-col gap-1.5" on:submit|preventDefault={onQuerySubmit}>
+    <span class="text-caption text-subtle">{T && T.queryLabel}</span>
+    <div class="flex items-center gap-2">
+      <label
+        class="flex flex-1 items-center gap-2 rounded-field border border-default bg-control px-2.5 py-2 focus-within:border-accent"
+      >
+        <Search size={15} strokeWidth={2} class="shrink-0 text-subtle" aria-hidden="true" />
+        <Chip variant="neutral">Nyaa</Chip>
+        <input
+          type="search"
+          bind:value={query}
+          placeholder={T && T.queryPlaceholder}
+          aria-label={T && T.queryPlaceholder}
+          class="w-full bg-transparent text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle"
+        />
+      </label>
+      <Button variant="ghost" type="submit">{T && T.search}</Button>
+    </div>
   </form>
 
-  <div class="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
-    <div class="rounded-card border border-default bg-card">
+  {#if listSettled && !loading}
+    <p class="text-caption text-subtle">{$locale && m.picker_pack_count({ count: items.length })}</p>
+  {/if}
+
+  <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-[1.15fr_0.85fr] md:items-start">
+    <div class="min-w-0 overflow-hidden rounded-card border border-default bg-card">
       {#if loading}
         <Loading message={T && T.queryPlaceholder} />
       {:else if listError}
@@ -276,14 +357,14 @@
       {:else if items.length === 0}
         <p class="p-4 text-copy text-subtle">{T && T.empty}</p>
       {:else}
-        <ul role="listbox" aria-label={T && T.title} class="divide-y divide-divider">
+        <ul role="listbox" aria-label={T && T.title} class="min-w-0 max-h-80 space-y-0.5 overflow-y-auto p-1.5">
           {#each items as item, i (item.nyaa_id)}
             <li
               role="option"
               aria-selected={i === selectedIndex}
               tabindex="0"
-              class="cursor-pointer px-3.5 py-3 {i === selectedIndex
-                ? 'bg-accent-tint/12'
+              class="min-w-0 cursor-pointer rounded-field px-3.5 py-3 {i === selectedIndex
+                ? 'bg-accent-tint/16 ring-1 ring-inset ring-accent'
                 : 'hover:bg-control'}"
               on:click={() => select(i)}
               on:keydown={(e) => {
@@ -293,13 +374,13 @@
                 }
               }}
             >
-              <div class="flex items-start justify-between gap-2">
-                <p class="min-w-0 truncate text-copy text-heading" title={item.name}>{item.name}</p>
+              <div class="flex min-w-0 items-start justify-between gap-2">
+                <p class="min-w-0 flex-1 truncate text-copy text-heading" title={item.name}>{item.name}</p>
                 {#if i === 0}
                   <Chip variant="accent">{T && T.recommended}</Chip>
                 {/if}
               </div>
-              <p class="mt-1 font-mono text-caption text-subtle">
+              <p class="mt-1 truncate font-mono text-caption text-subtle">
                 {$locale && m.picker_seeders({ count: item.seeders })}
                 · {formatBytes(item.size_bytes, fmtLocale)}
                 {#if metaLine(item)}
@@ -310,9 +391,14 @@
           {/each}
         </ul>
       {/if}
+      <div class="flex justify-end border-t border-default px-3.5 py-3">
+        <Button variant="solid" disabled={!canDownloadThis} on:click={confirmSelected}>
+          {T && T.confirm}
+        </Button>
+      </div>
     </div>
 
-    <div class="rounded-card border border-default bg-card p-4">
+    <div class="min-w-0 rounded-card border border-default bg-card p-4">
       {#if !selected}
         <p class="text-copy text-subtle">{T && T.empty}</p>
       {:else}
@@ -321,15 +407,19 @@
         {:else if detailError}
           <p role="alert" class="text-copy text-danger">{T && T.detailError}</p>
         {:else if detail}
-          <div class="text-copy text-body [&_a]:text-accent [&_img]:max-w-full">
+          <h2 class="text-card-title text-heading">{T && T.description}</h2>
+          <div
+            class="mt-2 max-h-80 overflow-x-auto overflow-y-auto pr-3 text-copy text-body [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-default [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-caption [&_h1]:mt-2 [&_h1]:text-card-title [&_h1]:text-heading [&_h2]:mt-2 [&_h2]:text-card-title [&_h2]:text-heading [&_h3]:mt-2 [&_h3]:text-copy [&_h3]:text-heading [&_hr]:my-2 [&_hr]:border-divider [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-default [&_td]:border [&_td]:border-default [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-default [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5"
+            on:error|capture={onDescriptionMediaError}
+          >
             {@html detail.description_html}
           </div>
           {#if detail.files?.length}
             <h2 class="mt-4 text-card-title text-heading">{T && T.files}</h2>
-            <ul class="mt-2 space-y-1 font-mono text-caption text-subtle">
+            <ul class="mt-2 max-h-80 space-y-1 overflow-y-auto pr-3 font-mono text-caption text-subtle">
               {#each detail.files ?? [] as file (file.name)}
-                <li class="flex justify-between gap-2">
-                  <span class="min-w-0 truncate" title={file.name}>{file.name}</span>
+                <li class="flex justify-between gap-2 hover:bg-control">
+                  <span class="min-w-0 truncate hover:text-heading" title={file.name}>{file.name}</span>
                   <span class="shrink-0">{formatBytes(file.size_bytes, fmtLocale)}</span>
                 </li>
               {/each}
@@ -351,22 +441,21 @@
     </div>
   </div>
 
-  <input
-    type="text"
-    bind:value={pastedMagnet}
-    placeholder={T && T.magnetPlaceholder}
-    aria-label={T && T.magnetPlaceholder}
-    autocomplete="off"
-    spellcheck="false"
-    class="w-full rounded-field border border-default bg-control px-3 py-2 text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle focus:border-accent"
-  />
-
-  <div
-    class="sticky bottom-0 z-10 -mx-4 flex items-center justify-between gap-2 border-t border-default bg-window px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 max-md:bottom-16"
-  >
-    <Button variant="ghost" href={backHref}>{T && T.back}</Button>
-    <Button variant="solid" disabled={!canConfirm} on:click={confirm}>
-      {T && T.confirm}
-    </Button>
+  <div class="flex flex-col gap-1.5">
+    <span class="text-caption text-subtle">{T && T.magnetLabel}</span>
+    <div class="flex items-center gap-2">
+      <input
+        type="text"
+        bind:value={pastedMagnet}
+        placeholder={T && T.magnetPlaceholder}
+        aria-label={T && T.magnetPlaceholder}
+        autocomplete="off"
+        spellcheck="false"
+        class="w-full rounded-field border border-default bg-control px-3 py-2 text-copy text-heading outline-none placeholder:font-normal placeholder:text-subtle focus:border-accent"
+      />
+      <Button variant="ghost" disabled={!canDownloadMagnet} on:click={confirmMagnet}>
+        {T && T.magnetConfirm}
+      </Button>
+    </div>
   </div>
 </div>

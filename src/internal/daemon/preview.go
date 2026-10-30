@@ -29,14 +29,40 @@ type TorrentCandidate struct {
 
 const maxTorrentCandidates = 8
 
-func PreviewWholeTitleTorrents(configs *files.Config, mediaID int, query string) (string, []TorrentCandidate, error) {
+// PickerMedia is the AniList identity the picker header needs. Built from the GetMediaByID
+// already done for the search — no second round-trip, no seasonYear.
+type PickerMedia struct {
+	Title      string
+	CoverImage string
+	Format     string
+	Episodes   *int
+}
+
+type WholeTitlePreview struct {
+	Query string
+	Media PickerMedia
+	Items []TorrentCandidate
+}
+
+func pickerMediaFrom(anime *anilist.MediaList) PickerMedia {
+	return PickerMedia{
+		Title:      getAnimeTitleSafe(*anime),
+		CoverImage: anime.Media.CoverImage.Medium,
+		Format:     string(anime.Media.Format),
+		Episodes:   anime.Media.Episodes,
+	}
+}
+
+func PreviewWholeTitleTorrents(configs *files.Config, mediaID int, query string) (WholeTitlePreview, error) {
+	empty := WholeTitlePreview{}
 	anime, err := anilist.GetMediaByID(mediaID, anilist.PriorityCritical)
 	if err != nil && !errors.Is(err, anilist.ErrFromCache) {
-		return "", nil, fmt.Errorf("failed to fetch anime %d from AniList: %w", mediaID, err)
+		return empty, fmt.Errorf("failed to fetch anime %d from AniList: %w", mediaID, err)
 	}
 	if anime == nil {
-		return "", nil, fmt.Errorf("anime %d does not exist on AniList", mediaID)
+		return empty, fmt.Errorf("anime %d does not exist on AniList", mediaID)
 	}
+	media := pickerMediaFrom(anime)
 
 	used := strings.TrimSpace(query)
 	var results []nyaa.TorrentResult
@@ -49,7 +75,7 @@ func PreviewWholeTitleTorrents(configs *files.Config, mediaID int, query string)
 			results, err = nyaa.ScrapNyaaForMovie(used, true)
 		}
 		if err != nil {
-			return used, nil, wrapNyaaSearchError(err)
+			return WholeTitlePreview{Query: used, Media: media}, wrapNyaaSearchError(err)
 		}
 		results, _ = filterSearchResults(results, configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 	} else {
@@ -62,7 +88,7 @@ func PreviewWholeTitleTorrents(configs *files.Config, mediaID int, query string)
 			results, err = nyaa.ScrapNyaaForAnime(used, nil, nil, nil)
 		}
 		if err != nil {
-			return used, nil, wrapNyaaSearchError(err)
+			return WholeTitlePreview{Query: used, Media: media}, wrapNyaaSearchError(err)
 		}
 		packs, _, _ := partitionSearchResults(configs, *anime, results)
 		results = packs
@@ -71,7 +97,7 @@ func PreviewWholeTitleTorrents(configs *files.Config, mediaID int, query string)
 	if len(results) > maxTorrentCandidates {
 		results = results[:maxTorrentCandidates]
 	}
-	return used, toCandidates(results), nil
+	return WholeTitlePreview{Query: used, Media: media, Items: toCandidates(results)}, nil
 }
 
 func wrapNyaaSearchError(err error) error {

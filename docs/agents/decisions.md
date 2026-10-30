@@ -120,6 +120,8 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#111** — A pack that loses at reserve does not keep the window](#111-a-pack-that-loses-at-reserve-does-not-keep-the-window)
 - [**#112** — The loose episode number before an extension is every video extension, compiled from the map](#112-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map)
 - [**#113** — PackFileRange min-max skips extras/OVA; an isolated total+1 drops; next cour stays](#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)
+- [**#114** — Two picker confirms; a paste does not override Download this](#114-two-picker-confirms-a-paste-does-not-override-download-this)
+- [**#115** — Nyaa descriptions are markdown source; render then sanitise](#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)
 
 ---
 
@@ -3260,3 +3262,50 @@ Measured 2026-10-29 (`live_extras_measure_test.go`, 70 packs): OP/ED-class is `N
 `hasMovieMarker` is too wide on a **file** name (`EP 03 - Special Training!`). Immediate parent only: the torrent root is often `(S1 + OVA + Specials)`. Isolated `total+1` requires a number ≤ total already in the set, otherwise a Part 2 pack numbered 13–24 with entry total 12 loses 13.
 
 **Don't "fix" by:** capping `declaredSpan` at `AnimeTotalEpisodes` without looking at files (deletes the 1–23 pack under cour 1); `force` on the automatic pass; applying `hasMovieMarker` to files; dropping every number > total (that is the next cour); treating the torrent-root folder as extras because its name contains `OVA`.
+
+---
+
+### 114. Two picker confirms; a paste does not override Download this
+
+**Location:** `TorrentPicker.svelte` (`confirmSelected` / `confirmMagnet`);
+`GET /api/v1/animes/{id}/torrent-candidates` `media` object.
+
+**The rule:** the picker has two confirms. **Download this** always POSTs the selected
+row (add: magnet + `name` / `nyaa_id` / `size_bytes`; replace: that magnet).
+**Download magnet** POSTs the trimmed field (add: `{ magnet }` only; replace: that
+URI). A non-empty paste does not change **Download this**. Both may be enabled at
+once; the click chooses. #108.5 stays: the API still accepts a magnet without
+coverage fields. `media` on the candidates payload is the `GetMediaByID` already
+done for the search — no second AniList round-trip, no `seasonYear`.
+
+**Why:** one solid button that took `pastedMagnet.trim() || selected.magnet` made a
+paste silently override the highlighted row. The screen is a confirm of a ranked
+pack and a magnet escape hatch, not one control with two meanings.
+
+**Don't "fix" by:** merging the two buttons again; reading `GET /animes/{id}` for
+the add-mode header (the anime is not tracked yet); widening `GetMediaByID` for a
+year.
+
+---
+
+### 115. Nyaa descriptions are markdown source; render then sanitise
+
+**Location:** `internal/nyaa/detail.go` — `descriptionInnerHTML` / `sanitizeDescriptionHTML`.
+
+**What it looks like:** goldmark runs on the view-page description, then the HTML
+allow-list strips tags again. `{@html}` in the picker is still fed sanitised HTML.
+
+**Why:** live Nyaa does not send HTML. `#torrent-description` is escaped markdown
+with newlines as `&#10;` (`markdown-text`); the browser's markdown-it renders it.
+Dumping that source into `{@html}` collapses whitespace and shows `**bold**` and
+pipe-tables as one blob. goldmark (GFM, `WithUnsafe`) is the same shape as Nyaa's
+`html: true` markdown-it. We are not Nyaa, so the sanitiser stays: `script` /
+`iframe` / `style` / `on*` / non-http(s)/mailto hrefs go. `img` keeps http(s) `src`
+and `alt`, always sets `referrerpolicy=no-referrer` (hosts like extraimage.info
+hotlink-check `Referer`), and drops a tag that lost its `src` so `javascript:`
+does not become a broken icon. A fixture that already has element children skips
+the markdown pass (the existing sanitiser test).
+
+**Don't "fix" by:** injecting the view page unsanitised; iframe-ing Nyaa; skipping
+goldmark and using `white-space: pre-wrap` on the source (tables and images stay
+unreadable).

@@ -564,8 +564,16 @@ export interface TorrentCandidate {
   nyaa_id: number
 }
 
+export interface TorrentCandidateMedia {
+  title: string
+  cover_image?: string
+  format: string
+  episodes?: number
+}
+
 export interface TorrentCandidates {
   query: string
+  media: TorrentCandidateMedia
   items: TorrentCandidate[]
 }
 
