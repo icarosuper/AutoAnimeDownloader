@@ -521,9 +521,12 @@ already imports `nyaa` — the other way would be a cycle.
 `ViewURL` (the `NYAA_URL` override lives only in `getNyaaBaseURL`) and **never takes a URL from the
 caller**
 ([decisions.md #105](decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller));
-HTTP 404 is `ErrTorrentNotFound`, any other transport/non-200 is `ErrNyaaUnavailable`. Movie rows
-fill `DetailURL` the same way pack rows do — the description pane needs it. `PackFileRange` still
-takes an absolute URL; daemon callers that only have an id use `ViewURL`.
+HTTP 404 is `ErrTorrentNotFound`, any other transport/non-200 is `ErrNyaaUnavailable`. Live Nyaa
+stores the description as markdown source (`markdown-text`, newlines as `&#10;`); we render it
+with goldmark and then sanitise
+([decisions.md #115](decisions.md#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)).
+Movie rows fill `DetailURL` the same way pack rows do — the description pane needs it.
+`PackFileRange` still takes an absolute URL; daemon callers that only have an id use `ViewURL`.
 
 **Sorting** (`priorities.go`): the `health` criterion compares the **band** (`healthTier`, floors
 `10/50` seeders), not the raw score (decisions.md #55, #107). `SortTorrentResults` omits

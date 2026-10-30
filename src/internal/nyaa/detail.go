@@ -1,6 +1,7 @@
 package nyaa
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +10,10 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	goldhtml "github.com/yuin/goldmark/renderer/html"
+	"golang.org/x/net/html"
 )
 
 // ErrTorrentNotFound is returned when Nyaa answers 404 for a view page.
@@ -74,16 +79,44 @@ func FetchTorrentDetail(nyaaID int) (TorrentDetail, error) {
 		return TorrentDetail{}, fmt.Errorf("failed to fetch nyaa view %d: %w", nyaaID, ErrNyaaUnavailable)
 	}
 
-	desc, err := doc.Find("#torrent-description").Html()
-	if err != nil {
-		desc = ""
-	}
-
 	return TorrentDetail{
-		DescriptionHTML: sanitizeDescriptionHTML(desc),
+		DescriptionHTML: sanitizeDescriptionHTML(descriptionInnerHTML(doc.Find("#torrent-description"))),
 		Files:           flattenTorrentFiles(doc),
 		NyaaURL:         viewURL,
 	}, nil
+}
+
+// descriptionMarkdown matches Nyaa's client markdown-it (html, GFM tables, autolink).
+// Raw HTML in the source is allowed through here and stripped by sanitizeDescriptionHTML.
+var descriptionMarkdown = goldmark.New(
+	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithRendererOptions(goldhtml.WithUnsafe()),
+)
+
+// descriptionInnerHTML is the inner HTML of #torrent-description. Live Nyaa stores
+// markdown as escaped text with &#10; newlines (attribute markdown-text); the browser
+// renders it. A fixture that already has element children is passed through as HTML.
+func descriptionInnerHTML(sel *goquery.Selection) string {
+	if sel.Children().Length() == 0 {
+		return renderDescriptionMarkdown(sel.Text())
+	}
+	raw, err := sel.Html()
+	if err != nil {
+		return ""
+	}
+	return raw
+}
+
+func renderDescriptionMarkdown(src string) string {
+	src = strings.TrimSpace(src)
+	if src == "" {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := descriptionMarkdown.Convert([]byte(src), &buf); err != nil {
+		return ""
+	}
+	return buf.String()
 }
 
 // nyaaHTTPError carries a non-200 status from fetchNyaaPage so FetchTorrentDetail can tell 404
@@ -101,7 +134,7 @@ var descriptionAllowedTags = map[string]bool{
 	"ul": true, "ol": true, "li": true, "pre": true, "code": true, "blockquote": true,
 	"br": true, "em": true, "strong": true, "b": true, "i": true, "a": true, "img": true,
 	"table": true, "thead": true, "tbody": true, "tfoot": true, "tr": true, "th": true, "td": true,
-	"hr": true,
+	"hr": true, "del": true,
 }
 
 // sanitizeDescriptionHTML keeps a small allow-list of formatting tags, strips scripts/iframes/
@@ -117,6 +150,11 @@ func sanitizeDescriptionHTML(raw string) string {
 	base := getNyaaBaseURL()
 	root.Find("*").Each(func(_ int, s *goquery.Selection) {
 		cleanDescriptionAttrs(s, base)
+	})
+	root.Find("img").Each(func(_ int, s *goquery.Selection) {
+		if _, ok := s.Attr("src"); !ok {
+			s.Remove()
+		}
 	})
 
 	// Unwrap unknown tags deepest-first so children stay in place.
@@ -166,19 +204,34 @@ func cleanDescriptionAttrs(s *goquery.Selection, base string) {
 				continue
 			}
 		case "img":
-			if key != "src" {
+			switch key {
+			case "src":
+				src, ok := resolveImgSrc(attr.Val, base)
+				if !ok {
+					continue
+				}
+				attr.Val = src
+			case "alt":
+			default:
 				continue
 			}
-			src, ok := resolveImgSrc(attr.Val, base)
-			if !ok {
-				continue
-			}
-			attr.Val = src
 		default:
-			// Allowed tags keep no attributes other than a.href / img.src.
+			// Allowed tags keep no attributes other than a.href / img.src+alt.
 			continue
 		}
 		kept = append(kept, attr)
+	}
+	if tag == "img" {
+		hasSrc := false
+		for _, a := range kept {
+			if strings.ToLower(a.Key) == "src" {
+				hasSrc = true
+				break
+			}
+		}
+		if hasSrc {
+			kept = append(kept, html.Attribute{Key: "referrerpolicy", Val: "no-referrer"})
+		}
 	}
 	node.Attr = kept
 }

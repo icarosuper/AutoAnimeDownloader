@@ -26,6 +26,7 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
   import { formatBytes, type FormatLocale } from "../lib/domain/format.js";
+  import { isValidMagnet } from "../lib/domain/magnet.js";
 
   export let params: { id?: string } = {};
 
@@ -70,6 +71,7 @@
     magnetLabel: m.picker_magnet_label(),
     magnetConfirm: m.picker_magnet_confirm(),
     files: m.picker_files(),
+    description: m.picker_description(),
   };
 
   let query = "";
@@ -90,7 +92,7 @@
 
   $: selected = items[selectedIndex];
   $: canDownloadThis = Boolean(selected?.magnet) && !confirming && !loading;
-  $: canDownloadMagnet = Boolean(pastedMagnet.trim()) && !confirming && !loading;
+  $: canDownloadMagnet = isValidMagnet(pastedMagnet) && !confirming && !loading;
   $: nyaaHref = selected
     ? detail?.nyaa_url || `https://nyaa.si/view/${selected.nyaa_id}`
     : "";
@@ -238,7 +240,7 @@
 
   async function confirmMagnet(): Promise<void> {
     const pasted = pastedMagnet.trim();
-    if (!pasted) return;
+    if (!isValidMagnet(pasted)) return;
     confirming = true;
     try {
       if (mode === "replace") {
@@ -278,6 +280,21 @@
     }
   }
 
+  function onDescriptionMediaError(e: Event): void {
+    const t = e.target
+    if (!(t instanceof HTMLImageElement)) return
+    const parent = t.parentElement
+    t.remove()
+    if (
+      parent &&
+      parent.tagName === 'A' &&
+      parent.childElementCount === 0 &&
+      (parent.textContent ?? '').trim() === ''
+    ) {
+      parent.remove()
+    }
+  }
+
   function metaLine(item: TorrentCandidate): string {
     const parts: string[] = [];
     if (item.fansub) parts.push(item.fansub);
@@ -287,7 +304,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-4.5">
+<div class="flex min-w-0 flex-col gap-4.5">
   <div class="flex flex-col gap-3">
     <a href={backHref} class="w-fit text-copy text-body hover:text-heading">{backLabel}</a>
     <div class="flex items-start gap-3">
@@ -331,8 +348,8 @@
     <p class="text-caption text-subtle">{$locale && m.picker_pack_count({ count: items.length })}</p>
   {/if}
 
-  <div class="grid grid-cols-1 gap-4 md:grid-cols-[1.15fr_0.85fr] md:items-start">
-    <div class="rounded-card border border-default bg-card">
+  <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-[1.15fr_0.85fr] md:items-start">
+    <div class="min-w-0 overflow-hidden rounded-card border border-default bg-card">
       {#if loading}
         <Loading message={T && T.queryPlaceholder} />
       {:else if listError}
@@ -340,14 +357,14 @@
       {:else if items.length === 0}
         <p class="p-4 text-copy text-subtle">{T && T.empty}</p>
       {:else}
-        <ul role="listbox" aria-label={T && T.title} class="divide-y divide-divider">
+        <ul role="listbox" aria-label={T && T.title} class="min-w-0 max-h-80 space-y-0.5 overflow-y-auto p-1.5">
           {#each items as item, i (item.nyaa_id)}
             <li
               role="option"
               aria-selected={i === selectedIndex}
               tabindex="0"
-              class="cursor-pointer px-3.5 py-3 {i === selectedIndex
-                ? 'bg-accent-tint/12'
+              class="min-w-0 cursor-pointer rounded-field px-3.5 py-3 {i === selectedIndex
+                ? 'bg-accent-tint/16 ring-1 ring-inset ring-accent'
                 : 'hover:bg-control'}"
               on:click={() => select(i)}
               on:keydown={(e) => {
@@ -357,13 +374,13 @@
                 }
               }}
             >
-              <div class="flex items-start justify-between gap-2">
-                <p class="min-w-0 truncate text-copy text-heading" title={item.name}>{item.name}</p>
+              <div class="flex min-w-0 items-start justify-between gap-2">
+                <p class="min-w-0 flex-1 truncate text-copy text-heading" title={item.name}>{item.name}</p>
                 {#if i === 0}
                   <Chip variant="accent">{T && T.recommended}</Chip>
                 {/if}
               </div>
-              <p class="mt-1 font-mono text-caption text-subtle">
+              <p class="mt-1 truncate font-mono text-caption text-subtle">
                 {$locale && m.picker_seeders({ count: item.seeders })}
                 · {formatBytes(item.size_bytes, fmtLocale)}
                 {#if metaLine(item)}
@@ -381,7 +398,7 @@
       </div>
     </div>
 
-    <div class="rounded-card border border-default bg-card p-4">
+    <div class="min-w-0 rounded-card border border-default bg-card p-4">
       {#if !selected}
         <p class="text-copy text-subtle">{T && T.empty}</p>
       {:else}
@@ -390,14 +407,16 @@
         {:else if detailError}
           <p role="alert" class="text-copy text-danger">{T && T.detailError}</p>
         {:else if detail}
+          <h2 class="text-card-title text-heading">{T && T.description}</h2>
           <div
-            class="max-h-80 overflow-x-auto overflow-y-auto [overflow-wrap:anywhere] text-copy text-body [&_a]:text-accent [&_img]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_table]:border [&_table]:border-default [&_th]:border [&_th]:border-default [&_td]:border [&_td]:border-default [&_th]:px-2 [&_td]:px-2"
+            class="mt-2 max-h-80 overflow-x-auto overflow-y-auto pr-3 text-copy text-body [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-default [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-caption [&_h1]:mt-2 [&_h1]:text-card-title [&_h1]:text-heading [&_h2]:mt-2 [&_h2]:text-card-title [&_h2]:text-heading [&_h3]:mt-2 [&_h3]:text-copy [&_h3]:text-heading [&_hr]:my-2 [&_hr]:border-divider [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-default [&_td]:border [&_td]:border-default [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-default [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5"
+            on:error|capture={onDescriptionMediaError}
           >
             {@html detail.description_html}
           </div>
           {#if detail.files?.length}
             <h2 class="mt-4 text-card-title text-heading">{T && T.files}</h2>
-            <ul class="mt-2 space-y-1 font-mono text-caption text-subtle">
+            <ul class="mt-2 max-h-80 space-y-1 overflow-y-auto pr-3 font-mono text-caption text-subtle">
               {#each detail.files ?? [] as file (file.name)}
                 <li class="flex justify-between gap-2 hover:bg-control">
                   <span class="min-w-0 truncate hover:text-heading" title={file.name}>{file.name}</span>

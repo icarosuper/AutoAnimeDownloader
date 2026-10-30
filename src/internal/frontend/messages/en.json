@@ -420,6 +420,7 @@
   "picker_magnet_label": "Or paste a magnet",
   "picker_magnet_confirm": "Download magnet",
   "picker_magnet_placeholder": "Or paste a magnet URI",
+  "picker_description": "Description",
   "picker_files": "Files",
   "picker_seeders": "{count} seeders",
   "block_blacklist": "In the blacklist",

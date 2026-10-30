@@ -420,6 +420,7 @@
   "picker_magnet_label": "Ou cole um magnet",
   "picker_magnet_confirm": "Baixar magnet",
   "picker_magnet_placeholder": "Ou cole um magnet",
+  "picker_description": "Descrição",
   "picker_files": "Arquivos",
   "picker_seeders": "{count} seeders",
   "block_blacklist": "Na blacklist",
