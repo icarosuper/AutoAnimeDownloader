@@ -15,6 +15,7 @@
     ApiError,
     type AniListSearchResult,
     type BlockReason,
+    type TorrentCandidateMedia,
   } from "../lib/api/client.js";
   import Button from "../components/ui/Button.svelte";
   import Cover from "../components/ui/Cover.svelte";
@@ -124,11 +125,17 @@
         }
         return;
       }
-      pickerCache.set({ mediaId: result.id, query, items, error: null });
+      pickerCache.set({ mediaId: result.id, query, items, error: null, media: pickerMediaFrom(result) });
       await push("/add/" + result.id + "/torrents");
     } catch (error) {
       if (error instanceof ApiError && error.code === "NYAA_UNAVAILABLE") {
-        pickerCache.set({ mediaId: result.id, query: "", items: [], error });
+        pickerCache.set({
+          mediaId: result.id,
+          query: "",
+          items: [],
+          error,
+          media: pickerMediaFrom(result),
+        });
         await push("/add/" + result.id + "/torrents");
         return;
       }
@@ -171,6 +178,15 @@
       default:
         return "";
     }
+  }
+
+  function pickerMediaFrom(result: AniListSearchResult): TorrentCandidateMedia {
+    return {
+      title: result.title,
+      cover_image: result.cover || undefined,
+      format: result.format,
+      episodes: result.episodes || undefined,
+    };
   }
 
   function metaLine(result: AniListSearchResult): string {

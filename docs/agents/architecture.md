@@ -100,7 +100,7 @@ Key endpoints:
 | `DELETE` | `/api/v1/standalone-animes/{id}?delete_episodes=<bool>` | `handleStandaloneAnimeRemove` | `endpoint_standalone_animes.go` — without `delete_episodes` the episodes stay and are marked `ManuallyManaged` |
 | `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
 | `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` |
-| `GET` | `/api/v1/animes/{id}/torrent-candidates?q=` | `handleTorrentCandidates` | `endpoint_torrent_candidates.go` — ranked whole-title list, cap 8. Empty `items` is 200 (`[]`, not null). `{id}` need not be tracked. `q` skips title variants and season/part. Does not fetch `/view/<id>`. 502 `NYAA_UNAVAILABLE`. 404 `ANIME_NOT_FOUND` |
+| `GET` | `/api/v1/animes/{id}/torrent-candidates?q=` | `handleTorrentCandidates` | `endpoint_torrent_candidates.go` — ranked whole-title list, cap 8. Empty `items` is 200 (`[]`, not null). `{id}` need not be tracked. `q` skips title variants and season/part. Does not fetch `/view/<id>`. `media` is the AniList identity already fetched for the search (title, `cover_image` medium, format, episodes). 502 `NYAA_UNAVAILABLE`. 404 `ANIME_NOT_FOUND` |
 | `GET` | `/api/v1/animes/{id}/torrent-candidates/{nyaaId}` | `handleTorrentCandidateDetail` | sanitised Nyaa page + file list. `{nyaaId}` digits only. `{id}` unused for the fetch (still validated). `files` is `[]` not null. 404 `TORRENT_NOT_FOUND` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/download` | `handleDownloadEpisode` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/redownload` | `handleRedownloadEpisode` | `endpoint_episode_actions.go` |
@@ -657,7 +657,12 @@ stays
 ([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
 AnimeDetail's header "Replace torrent" pushes `#/status/:id/torrents` — there is **no**
 whole-title magnet modal; the per-episode magnet modal stays. The description pane is on-demand
-(`GET …/torrent-candidates/{nyaaId}`), never bundled into the list.
+(`GET …/torrent-candidates/{nyaaId}`), never bundled into the list. There is **no** page-level
+sticky footer: **Download this** lives in the list-card footer and **Download magnet** in the
+magnet strip below the grid; a paste does not override the list button
+([decisions.md #114](decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this)).
+A reload of the picker URL reads identity from `media` on the candidates payload — Add has not
+written a tracked anime yet, so `GET /animes/{id}` cannot be the source.
 
 **Negative facts that save a search:**
 

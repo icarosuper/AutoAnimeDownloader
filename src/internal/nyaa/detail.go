@@ -100,6 +100,8 @@ var descriptionAllowedTags = map[string]bool{
 	"p": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
 	"ul": true, "ol": true, "li": true, "pre": true, "code": true, "blockquote": true,
 	"br": true, "em": true, "strong": true, "b": true, "i": true, "a": true, "img": true,
+	"table": true, "thead": true, "tbody": true, "tfoot": true, "tr": true, "th": true, "td": true,
+	"hr": true,
 }
 
 // sanitizeDescriptionHTML keeps a small allow-list of formatting tags, strips scripts/iframes/

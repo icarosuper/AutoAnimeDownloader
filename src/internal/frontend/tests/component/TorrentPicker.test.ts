@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
 import TorrentPicker from '../../src/routes/TorrentPicker.svelte'
 import * as client from '../../src/lib/api/client.js'
-import { ApiError, type TorrentCandidate } from '../../src/lib/api/client.js'
+import { ApiError, type TorrentCandidate, type TorrentCandidateMedia } from '../../src/lib/api/client.js'
 import { pickerCache } from '../../src/lib/stores/pickerCache.js'
 import { locale } from '../../src/lib/stores/locale.js'
 import * as router from 'svelte-spa-router'
@@ -51,6 +51,16 @@ function candidate(over: Partial<TorrentCandidate> = {}): TorrentCandidate {
   }
 }
 
+function media(over: Partial<TorrentCandidateMedia> = {}): TorrentCandidateMedia {
+  return {
+    title: "Frieren: Beyond Journey's End",
+    cover_image: 'https://example/cover.jpg',
+    format: 'TV',
+    episodes: 28,
+    ...over,
+  }
+}
+
 function detail(over: Partial<{ description_html: string; files: { name: string; size_bytes: number }[]; nyaa_url: string }> = {}) {
   return {
     description_html: '<p>A very good pack</p>',
@@ -74,6 +84,7 @@ beforeEach(() => {
   window.location.hash = '#/add/21/torrents'
   getTorrentCandidates.mockResolvedValue({
     query: 'Frieren',
+    media: media(),
     items: [
       candidate(),
       candidate({ name: 'Other pack', nyaa_id: 222, magnet: 'magnet:?xt=urn:btih:bbb' }),
@@ -106,10 +117,12 @@ describe('TorrentPicker — list', () => {
     getTorrentCandidates
       .mockResolvedValueOnce({
         query: 'Frieren',
+        media: media(),
         items: [candidate({ name: 'Old pack', nyaa_id: 1 })],
       })
       .mockResolvedValueOnce({
         query: 'frieren batch',
+        media: media(),
         items: [candidate({ name: 'New pack', nyaa_id: 99 })],
       })
 
@@ -143,6 +156,58 @@ describe('TorrentPicker — list', () => {
   })
 })
 
+describe('TorrentPicker — header', () => {
+  it('shows media.title and back is ← Add anime on add', async () => {
+    await mountPicker()
+    expect(screen.getByText("Frieren: Beyond Journey's End")).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '← Add anime' })).toHaveAttribute('href', '#/add')
+  })
+
+  it('replace back link is ← {title}', async () => {
+    await mountPicker('#/status/21/torrents')
+    expect(screen.getByRole('link', { name: "← Frieren: Beyond Journey's End" })).toHaveAttribute(
+      'href',
+      '#/status/21',
+    )
+  })
+})
+
+describe('TorrentPicker — search', () => {
+  it('has a Nyaa search label and a Search button; Enter still refetches; empty submit does not', async () => {
+    await mountPicker()
+    expect(screen.getByText('Nyaa search')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument()
+
+    const field = screen.getByRole('searchbox')
+    await fireEvent.input(field, { target: { value: '' } })
+    await fireEvent.submit(field.closest('form') as HTMLFormElement)
+    expect(getTorrentCandidates).toHaveBeenCalledTimes(1)
+
+    await fireEvent.input(field, { target: { value: 'frieren batch' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() =>
+      expect(getTorrentCandidates).toHaveBeenLastCalledWith(21, 'frieren batch', expect.anything()),
+    )
+  })
+})
+
+describe('TorrentPicker — pack count', () => {
+  it('shows the pack count for a 2-row list', async () => {
+    await mountPicker()
+    expect(screen.getByText('2 packs · single episodes stay off this screen')).toBeInTheDocument()
+  })
+
+  it('shows the pack count for a 1-row list', async () => {
+    getTorrentCandidates.mockResolvedValue({
+      query: 'Frieren',
+      media: media(),
+      items: [candidate()],
+    })
+    await mountPicker()
+    expect(screen.getByText('1 packs · single episodes stay off this screen')).toBeInTheDocument()
+  })
+})
+
 describe('TorrentPicker — confirm', () => {
   it('POSTs the selected magnet with name, nyaa_id and size_bytes', async () => {
     await mountPicker()
@@ -161,15 +226,35 @@ describe('TorrentPicker — confirm', () => {
     expect(pop).toHaveBeenCalled()
   })
 
-  it('POSTs the pasted magnet instead of the selected row when that field is non-empty', async () => {
+  it('Download this POSTs the selected row even when the magnet field is filled', async () => {
     await mountPicker()
     await screen.findByText('[SubsPlease] Frieren (01-16) [1080p]')
-
-    await fireEvent.input(screen.getByPlaceholderText('Or paste a magnet URI'), {
+    await fireEvent.input(screen.getByLabelText('Or paste a magnet URI'), {
       target: { value: 'magnet:?xt=urn:btih:pasted' },
     })
     await fireEvent.click(screen.getByRole('button', { name: 'Download this' }))
+    await waitFor(() =>
+      expect(addStandaloneAnime).toHaveBeenCalledWith(21, {
+        magnet: 'magnet:?xt=urn:btih:aaa',
+        name: '[SubsPlease] Frieren (01-16) [1080p]',
+        nyaa_id: 12345,
+        size_bytes: 12_000_000_000,
+      }),
+    )
+    expect(addStandaloneAnime.mock.calls[0][1]).toHaveProperty('name')
+  })
 
+  it('Download magnet is disabled when the field is empty', async () => {
+    await mountPicker()
+    expect(screen.getByRole('button', { name: 'Download magnet' })).toBeDisabled()
+  })
+
+  it('Download magnet POSTs { magnet } only', async () => {
+    await mountPicker()
+    await fireEvent.input(screen.getByLabelText('Or paste a magnet URI'), {
+      target: { value: 'magnet:?xt=urn:btih:pasted' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Download magnet' }))
     await waitFor(() =>
       expect(addStandaloneAnime).toHaveBeenCalledWith(21, { magnet: 'magnet:?xt=urn:btih:pasted' }),
     )
@@ -189,6 +274,23 @@ describe('TorrentPicker — confirm', () => {
     )
     expect(addStandaloneAnime).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith('/status/21')
+  })
+
+  it('replace: list button uses the selected magnet; magnet button uses the pasted URI', async () => {
+    await mountPicker('#/status/21/torrents')
+    await fireEvent.click(screen.getByRole('button', { name: 'Download this' }))
+    await waitFor(() =>
+      expect(replaceAnimeWithMagnet).toHaveBeenCalledWith(21, 'magnet:?xt=urn:btih:aaa'),
+    )
+
+    replaceAnimeWithMagnet.mockClear()
+    await fireEvent.input(screen.getByLabelText('Or paste a magnet URI'), {
+      target: { value: 'magnet:?xt=urn:btih:pasted' },
+    })
+    await fireEvent.click(screen.getByRole('button', { name: 'Download magnet' }))
+    await waitFor(() =>
+      expect(replaceAnimeWithMagnet).toHaveBeenCalledWith(21, 'magnet:?xt=urn:btih:pasted'),
+    )
   })
 })
 
@@ -246,5 +348,11 @@ describe('TorrentPicker — description pane', () => {
         size_bytes: 12_000_000_000,
       }),
     )
+  })
+
+  it('file row has a hover class', async () => {
+    await mountPicker()
+    const row = await screen.findByTitle('Frieren_01.mkv')
+    expect(row.closest('li')?.className).toMatch(/hover:bg-control/)
   })
 })

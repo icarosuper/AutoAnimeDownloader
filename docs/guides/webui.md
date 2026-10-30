@@ -45,14 +45,16 @@ list, or Nyaa being down, opens the [torrent picker](#torrent-picker).
 
 ### Torrent picker (`/add/:id/torrents`, `/status/:id/torrents`)
 
-Confirm or swap the ranked whole-title torrent before anything is saved. At most 8 rows; the
-first is the auto-pick. Selecting a row loads its Nyaa description on demand (the other rows
-are not fetched). The query field is a Nyaa `q` and is not saved. Magnet paste lives at the
-bottom of this page, not in a dialog.
+Confirm or swap the ranked whole-title torrent before anything is saved. The header is the
+anime (cover, title, format · episodes) plus a packs-only count line — this screen lists
+packs, not singles. At most 8 rows; the first is the auto-pick. Selecting a row loads its Nyaa
+description on demand (the other rows are not fetched). The query field is a labeled Nyaa `q`
+with a Search button and is not saved.
 
-Confirm on Add posts the selected magnet (or the pasted one) and returns to Add. Confirm on
-Replace uses the existing replace action and returns to the anime page. Cancel saves nothing.
-The per-episode replace modal stays on Anime Detail.
+**Download this** sits in the list card and always posts the highlighted row. The magnet strip
+below the grid has **Download magnet** for a pasted URI; a paste does not override the list
+button. Add returns to Add; Replace returns to the anime page. Cancel saves nothing. The
+per-episode replace modal stays on Anime Detail.
 
 ### Downloads (`/downloads`)
 

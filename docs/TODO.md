@@ -64,9 +64,9 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 ## `v2.7.2` — torrent picker UI
 
 - Identity header, Nyaa-labeled search, two confirms (list vs magnet), packs-only copy,
-  description overflow. Spec designed on 2026-10-28:
-  [torrent-picker-ui](superpowers/specs/2026-10-28-torrent-picker-ui-design.md). Follow-up to
-  the `v2.7.0` picker; independent of the `v2.8.0` recents shelf.
+  description overflow. Implemented on `torrent-picker-ui`
+  ([decisions.md #114](agents/decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this)).
+  Follow-up to the `v2.7.0` picker; independent of the `v2.8.0` recents shelf.
 
 ## `v2.8.0` — dashboard recents
 

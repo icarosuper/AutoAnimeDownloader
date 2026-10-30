@@ -25,9 +25,17 @@ type TorrentCandidate struct {
 	NyaaID     int    `json:"nyaa_id"`
 }
 
+type TorrentCandidateMedia struct {
+	Title      string `json:"title"`
+	CoverImage string `json:"cover_image,omitempty"`
+	Format     string `json:"format"`
+	Episodes   *int   `json:"episodes,omitempty"`
+}
+
 type TorrentCandidatesResponse struct {
-	Query string             `json:"query"`
-	Items []TorrentCandidate `json:"items"`
+	Query string                `json:"query"`
+	Media TorrentCandidateMedia `json:"media"`
+	Items []TorrentCandidate    `json:"items"`
 }
 
 type TorrentFile struct {
@@ -61,7 +69,7 @@ func handleTorrentCandidates(server *Server) http.HandlerFunc {
 			return
 		}
 
-		used, items, err := daemon.PreviewWholeTitleTorrents(config, id, r.URL.Query().Get("q"))
+		preview, err := daemon.PreviewWholeTitleTorrents(config, id, r.URL.Query().Get("q"))
 		if err != nil {
 			if errors.Is(err, nyaa.ErrNyaaUnavailable) {
 				JSONError(w, http.StatusBadGateway, "NYAA_UNAVAILABLE", "Nyaa is unavailable")
@@ -77,8 +85,14 @@ func handleTorrentCandidates(server *Server) http.HandlerFunc {
 		}
 
 		JSONSuccess(w, http.StatusOK, TorrentCandidatesResponse{
-			Query: used,
-			Items: mapTorrentCandidates(items),
+			Query: preview.Query,
+			Media: TorrentCandidateMedia{
+				Title:      preview.Media.Title,
+				CoverImage: preview.Media.CoverImage,
+				Format:     preview.Media.Format,
+				Episodes:   preview.Media.Episodes,
+			},
+			Items: mapTorrentCandidates(preview.Items),
 		})
 	}
 }

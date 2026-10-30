@@ -117,6 +117,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#108** — Empty first search skips the picker; custom `q` drops variants; description is on demand; add-with-magnet writes the id after the torrent](#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)
 - [**#109** — Flags after positionals are reordered before urfave parses](#109-flags-after-positionals-are-reordered-before-urfave-parses)
 - [**#110** — `.chapters` is leftover metadata, same class as `.nfo`](#110-chapters-is-leftover-metadata-same-class-as-nfo)
+- [**#114** — Two picker confirms; a paste does not override Download this](#114-two-picker-confirms-a-paste-does-not-override-download-this)
 
 ---
 
@@ -3190,3 +3191,24 @@ still has no `RemoveAll`.
 
 **Don't "fix" by:** widening the sweep to "no video files" (that's the contextual wipe,
 #106); adding `RemoveAll` to `FileSystem`; treating every hidden directory as leftover.
+
+### 114. Two picker confirms; a paste does not override Download this
+
+**Location:** `TorrentPicker.svelte` (`confirmSelected` / `confirmMagnet`);
+`GET /api/v1/animes/{id}/torrent-candidates` `media` object.
+
+**The rule:** the picker has two confirms. **Download this** always POSTs the selected
+row (add: magnet + `name` / `nyaa_id` / `size_bytes`; replace: that magnet).
+**Download magnet** POSTs the trimmed field (add: `{ magnet }` only; replace: that
+URI). A non-empty paste does not change **Download this**. Both may be enabled at
+once; the click chooses. #108.5 stays: the API still accepts a magnet without
+coverage fields. `media` on the candidates payload is the `GetMediaByID` already
+done for the search — no second AniList round-trip, no `seasonYear`.
+
+**Why:** one solid button that took `pastedMagnet.trim() || selected.magnet` made a
+paste silently override the highlighted row. The screen is a confirm of a ranked
+pack and a magnet escape hatch, not one control with two meanings.
+
+**Don't "fix" by:** merging the two buttons again; reading `GET /animes/{id}` for
+the add-mode header (the anime is not tracked yet); widening `GetMediaByID` for a
+year.

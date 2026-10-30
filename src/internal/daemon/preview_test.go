@@ -97,12 +97,19 @@ func TestPreviewWholeTitleTorrents_SeriesPacksOnlyRankedAndCapped(t *testing.T) 
 	var urls []string
 	defer mockNyaaListing(t, previewListingHTML(rows...), &urls)()
 
-	used, items, err := PreviewWholeTitleTorrents(previewTestConfig(), 500, "")
+	preview, err := PreviewWholeTitleTorrents(previewTestConfig(), 500, "")
 	if err != nil {
 		t.Fatalf("PreviewWholeTitleTorrents: %v", err)
 	}
+	used, items := preview.Query, preview.Items
 	if used == "" {
 		t.Fatal("usedQuery must be the title variant that was searched")
+	}
+	if preview.Media.Title != "Standalone Anime" {
+		t.Fatalf("media title: got %q", preview.Media.Title)
+	}
+	if preview.Media.Format != "TV" {
+		t.Fatalf("media format: got %q", preview.Media.Format)
 	}
 	if len(items) == 0 {
 		t.Fatal("want ranked packs, got none")
@@ -150,10 +157,11 @@ func TestPreviewWholeTitleTorrents_EmptyListingIsNotAnError(t *testing.T) {
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, mediaForAnime500)()
 	defer mockEmptyNyaa()()
 
-	used, items, err := PreviewWholeTitleTorrents(previewTestConfig(), 500, "")
+	preview, err := PreviewWholeTitleTorrents(previewTestConfig(), 500, "")
 	if err != nil {
 		t.Fatalf("empty listing is not an error: %v", err)
 	}
+	used, items := preview.Query, preview.Items
 	if len(items) != 0 {
 		t.Fatalf("want no items, got %d", len(items))
 	}
@@ -172,10 +180,11 @@ func TestPreviewWholeTitleTorrents_CustomQuerySkipsVariantsAndSeasonPart(t *test
 	), &urls)()
 
 	query := "[judas] frieren"
-	used, items, err := PreviewWholeTitleTorrents(previewTestConfig(), 700, query)
+	preview, err := PreviewWholeTitleTorrents(previewTestConfig(), 700, query)
 	if err != nil {
 		t.Fatalf("PreviewWholeTitleTorrents: %v", err)
 	}
+	used, items := preview.Query, preview.Items
 	if used != query {
 		t.Fatalf("usedQuery: want %q, got %q", query, used)
 	}
@@ -205,10 +214,11 @@ func TestPreviewWholeTitleTorrents_MovieSetsNyaaID(t *testing.T) {
 		previewListingRow(2001, movie, "1.5 GiB", "120", "6"),
 	), nil)()
 
-	_, items, err := PreviewWholeTitleTorrents(previewTestConfig(), 600, "")
+	preview, err := PreviewWholeTitleTorrents(previewTestConfig(), 600, "")
 	if err != nil {
 		t.Fatalf("PreviewWholeTitleTorrents: %v", err)
 	}
+	items := preview.Items
 	if len(items) != 1 {
 		t.Fatalf("want 1 movie row, got %d", len(items))
 	}
@@ -224,15 +234,15 @@ func TestPreviewWholeTitleTorrents_UnknownMedia(t *testing.T) {
 	defer mockAniListRouter(t, `{"data": {"Page": {"mediaList": []}}}`, `{"data": {"Media": null}}`)()
 	defer mockEmptyNyaa()()
 
-	_, items, err := PreviewWholeTitleTorrents(previewTestConfig(), 999999, "")
+	preview, err := PreviewWholeTitleTorrents(previewTestConfig(), 999999, "")
 	if err == nil {
 		t.Fatal("unknown AniList id must error")
 	}
 	if !strings.Contains(err.Error(), "anime 999999 does not exist on AniList") {
 		t.Fatalf("want the same error DownloadStandaloneAnime uses, got %v", err)
 	}
-	if items != nil {
-		t.Fatalf("want no items on unknown media, got %+v", items)
+	if preview.Items != nil {
+		t.Fatalf("want no items on unknown media, got %+v", preview.Items)
 	}
 }
 
@@ -242,7 +252,7 @@ func TestPreviewWholeTitleTorrents_NyaaUnavailable(t *testing.T) {
 		return nil, errors.New("connection refused")
 	})()
 
-	_, _, err := PreviewWholeTitleTorrents(previewTestConfig(), 500, "")
+	_, err := PreviewWholeTitleTorrents(previewTestConfig(), 500, "")
 	if err == nil {
 		t.Fatal("Nyaa transport failure must error")
 	}

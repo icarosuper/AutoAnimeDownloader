@@ -1280,6 +1280,8 @@ func TestFetchTorrentDetail_SanitisesHTMLAndListsFiles(t *testing.T) {
 	html := `<!doctype html><html><body>
 <div id="torrent-description">
   <p>Safe <strong>text</strong></p>
+  <table><thead><tr><th>Res</th></tr></thead><tbody><tr><td>1080p</td></tr></tbody></table>
+  <hr>
   <script>alert(1)</script>
   <iframe src="https://evil.example"></iframe>
   <a href="https://nyaa.si/view/1" onclick="alert(1)">link</a>
@@ -1315,6 +1317,12 @@ func TestFetchTorrentDetail_SanitisesHTMLAndListsFiles(t *testing.T) {
 	}
 	if !strings.Contains(d.DescriptionHTML, `src="https://nyaa.si/img/shot.png"`) {
 		t.Errorf("relative img src not resolved: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, "<table") || !strings.Contains(d.DescriptionHTML, "<td") {
+		t.Errorf("table tags unwrapped: %s", d.DescriptionHTML)
+	}
+	if !strings.Contains(d.DescriptionHTML, "<hr") {
+		t.Errorf("hr stripped: %s", d.DescriptionHTML)
 	}
 	if d.NyaaURL != "https://nyaa.si/view/1664122" {
 		t.Errorf("NyaaURL = %q", d.NyaaURL)
