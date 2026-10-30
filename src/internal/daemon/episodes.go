@@ -122,6 +122,8 @@ func processAnimeEpisodes(
 	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, anime.Media.Id, episodes, savedEpisodesFullMap, anime.Progress)
 
 	totalEpisodes := mediaTotalEpisodes(anime)
+	animeSeason, _ := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.Synonyms)
+	seriesOffset := seriesIndex[anime.Media.Id].Offset
 
 	// The first selection is the one that counts when there's no pack, and it's the one that produces
 	// the limit deletions: with the limit lifted by guess, handleAlreadySavedEpisode never fired and
@@ -281,6 +283,8 @@ func processAnimeEpisodes(
 				BatchEnd:           resolved.batchEnd,
 				TorrentSize:        torrentSize,
 				DownloadDate:       time.Now(),
+				AnimeSeason:        animeSeason,
+				SeriesOffset:       seriesOffset,
 			})
 			// Completion is handled event-driven: the session's onComplete callback (and
 			// the reconciliation pass as a safety net) enqueue JobOrganize, which hardlinks

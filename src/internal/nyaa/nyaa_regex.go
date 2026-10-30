@@ -206,6 +206,8 @@ var (
 	reFileOVA        = regexp.MustCompile(`(?i)\b(?:ova|oad|ona)\d*\b`)
 	reFileS00E       = regexp.MustCompile(`(?i)S00E`)
 	reFileFracEp     = regexp.MustCompile(`(?i)(?:S\d{1,2}E|\s-\s+|\bE|\bEpisode\s+|\s)(\d{1,3}\.(?:25|5|50|75))\b`)
+	// Guardian Fitz / Erai-raws " - 00". Does not eat 001 of a long series.
+	reFileE00 = regexp.MustCompile(`(?i)(?:S\d{1,2}E00\b|\bE00\b|\s-\s+00(?:\s|v\d+|$|\[|\.))`)
 )
 
 // videoExtEpisodeRegexp is the " 05.mkv" pattern over every key of videoExtensions. Built from the

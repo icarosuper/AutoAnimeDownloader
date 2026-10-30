@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -1242,6 +1243,43 @@ func fileListHtmlNested(root string, files []string, subfolder string, subfiles 
 	</body></html>`
 }
 
+type fileListDir struct {
+	name  string
+	files []string
+}
+
+func fileListHtmlFolders(root string, dirs []fileListDir) string {
+	var inner []string
+	for _, d := range dirs {
+		var items []string
+		for _, f := range d.files {
+			items = append(items, fileListFileItem(f))
+		}
+		inner = append(inner, `<li>
+				<a href="" class="folder"><i class="fa fa-folder-open"></i>`+d.name+`</a>
+				<ul>`+strings.Join(items, "\n")+`</ul>
+			</li>`)
+	}
+	return `<!doctype html><html><body>
+	<div class="torrent-file-list panel-body">
+		<ul>
+			<li>
+				<a href="" class="folder"><i class="fa fa-folder-open"></i>` + root + `</a>
+				<ul>` + strings.Join(inner, "\n") + `</ul>
+			</li>
+		</ul>
+	</div>
+	</body></html>`
+}
+
+func numberedFiles(pattern string, from, to int) []string {
+	out := make([]string, 0, to-from+1)
+	for i := from; i <= to; i++ {
+		out = append(out, fmt.Sprintf(pattern, i))
+	}
+	return out
+}
+
 func TestPackFileRange_ReadsTheRangeFromTheFileList(t *testing.T) {
 	// The measured case: "(Season 2 | Part 2) … (Batch)" declares no range in the name and carries
 	// 13..24.
@@ -1401,6 +1439,173 @@ func TestPackFileRange_ExtrasDoNotStretchTheDeclaredSpan(t *testing.T) {
 				t.Errorf("want %d-%d, got %d-%d", tc.wantLo, tc.wantHi, info.StartEpisode, info.EndEpisode)
 			}
 		})
+	}
+}
+
+// Restart-per-season packs (S01E01-12 + S02E01-12) flatten onto the concatenated series axis
+// so S1's stored span covers S2 the same way a continuous 1-24 pack already does. Measured
+// file lists: Kaguya EMBER 1355132, Kaguya DB 1928670, AoT EMBER 1421679, Mushoku Anime Time
+// 2169474. A movie folder that also restarts (DB First Kiss 01-04) rides along as residue.
+func TestPackFileRange_RestartSeasonGroupsFlattenOntoConcatenatedAxis(t *testing.T) {
+	emberS1S2 := fileListHtmlFolders("Kaguya-sama Love is War S01-S02 1080p Dual Audio BDRip 10 bits DD x265-EMBER", []fileListDir{
+		{"Kaguya-sama Love is War S01 1080p Dual Audio BDRip 10 bits DD x265-EMBER", numberedFiles("S01E%02d-Episode Title [ABCDEF01].mkv", 1, 12)},
+		{"Kaguya-sama Love is War S02 1080p Dual Audio BDRip 10 bits AAC x265-EMBER", numberedFiles("S02E%02d-Episode Title [ABCDEF02].mkv", 1, 12)},
+	})
+	dbS1S2S3 := fileListHtmlFolders("Kaguya-sama wa Kokurasetai: Tensai-tachi no Renai Zunousen", []fileListDir{
+		{"Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen", append(
+			[]string{
+				"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen_-_NCED01_(10bit_BD1080p_x265).mkv",
+				"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen_-_NCOP_(10bit_BD1080p_x265).mkv",
+			},
+			numberedFiles("[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 12)...,
+		)},
+		{"Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season", append(
+			[]string{
+				"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season_-_NCED_(10bit_BD1080p_x265).mkv",
+				"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season_-_OVA_(10bit_WEB1080p_x265).mkv",
+			},
+			numberedFiles("[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 12)...,
+		)},
+		{"Kaguya-sama wa Kokurasetai Ultra Romantic", append(
+			[]string{
+				"[DB]Kaguya-sama wa Kokurasetai Ultra Romantic Teaser - Ishigami Yuu wa Kataritai_-_PV_(10bit_BD1080p_x265).mkv",
+				"[DB]Kaguya-sama wa Kokurasetai Ultra Romantic_-_NCOP_(10bit_BD1080p_x265).mkv",
+			},
+			numberedFiles("[DB]Kaguya-sama wa Kokurasetai Ultra Romantic_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 13)...,
+		)},
+		{"Kaguya-sama wa Kokurasetai First Kiss wa Owaranai", append(
+			[]string{
+				"[DB]Kaguya-sama wa Kokurasetai First Kiss wa Owaranai_-_NCED_(10bit_BD1080p_x265).mkv",
+			},
+			numberedFiles("[DB]Kaguya-sama wa Kokurasetai First Kiss wa Owaranai_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 4)...,
+		)},
+	})
+
+	emberAoT := fileListHtmlFolders("Shingeki No Kyojin Full Collection", []fileListDir{
+		{"Shingeki no Kyojin S01 1080p BDRip 10 bits x265-EMBER", numberedFiles("S01E%02d- Episode [14197707].mkv", 1, 25)},
+		{"Shingeki no Kyojin S02 1080p BDRip 10 bits x265-EMBER", numberedFiles("S02E%02d- Episode [C5228D49].mkv", 1, 12)},
+		{"Shingeki no Kyojin S03P01 1080p BDRip 10 bits x265-EMBER", numberedFiles("S03E%02d- Episode [FAC2D1C7].mkv", 1, 12)},
+		{"Shingeki no Kyojin S03P02 1080p BDRip 10 bits x265-EMBER", numberedFiles("S03E%02d- Episode [3B28B611].mkv", 13, 22)},
+		{"Shingeki no Kyojin S04P01 1080p BDRip 10 bits x265-EMBER", numberedFiles("S04E%02d- Episode [E4B0B00C].mkv", 1, 16)},
+	})
+	animeTimeMushoku := fileListHtmlFolders("Mushoku Tensei Jobless Reincarnation", []fileListDir{
+		{"Season 1", append(
+			numberedFiles("Mushoku Tensei Jobless Reincarnation - S01E%02d - Title.mkv", 1, 23),
+			"Mushoku Tensei Jobless Reincarnation - S01E17.5 - Eris The Goblin Slayer.mkv",
+		)},
+		{"Season 2", append(
+			[]string{"Mushoku Tensei Jobless Reincarnation - S02E00 - Guardian Fitz.mkv"},
+			numberedFiles("Mushoku Tensei Jobless Reincarnation - S02E%02d - Title.mkv", 1, 24)...,
+		)},
+	})
+
+	cases := []struct {
+		name   string
+		html   string
+		total  int
+		wantLo int
+		wantHi int
+	}{
+		{
+			name:   "Kaguya EMBER S1+S2 nyaa.si/view/1355132 is 12+12",
+			html:   emberS1S2,
+			total:  12,
+			wantLo: 1, wantHi: 24,
+		},
+		{
+			name:   "Kaguya DB S1+S2+S3+movie nyaa.si/view/1928670 is 12+12+13+4",
+			html:   dbS1S2S3,
+			total:  12,
+			wantLo: 1, wantHi: 41,
+		},
+		{
+			name:   "AoT EMBER S1+S2+S3+S4P1 nyaa.si/view/1421679 is 25+12+22+16",
+			html:   emberAoT,
+			total:  25,
+			wantLo: 1, wantHi: 75,
+		},
+		{
+			name:   "Mushoku Anime Time S1+S2 nyaa.si/view/2169474 is 23+24, skips 17.5 and S02E00",
+			html:   animeTimeMushoku,
+			total:  11,
+			wantLo: 1, wantHi: 47,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := mockHttpGet(tc.html)
+			defer restore()
+			info, ok := nyaa.PackFileRange("https://nyaa.si/view/1", tc.total)
+			if !ok {
+				t.Fatal("want the range read from the files")
+			}
+			if info.StartEpisode != tc.wantLo || info.EndEpisode != tc.wantHi {
+				t.Errorf("want %d-%d, got %d-%d", tc.wantLo, tc.wantHi, info.StartEpisode, info.EndEpisode)
+			}
+		})
+	}
+}
+
+// Continuous numbering across season folders is already min-max of the axis. Flatten must
+// not rewrite that as a sum of per-folder spans. Anime Time AoT (1739120) numbers 01-87
+// through S04 Part 2; Mushoku 01-23 is one cour-split season on the same ruler.
+func TestPackFileRange_ContinuousNumberingAcrossSeasonFoldersStaysMinMax(t *testing.T) {
+	animeTimeAoT := fileListHtmlFolders("[Anime Time] Attack On Titan (Complete Series)", []fileListDir{
+		{"[Anime Time] Attack on titan (Season 01)", numberedFiles("[Anime Time] Attack On Titan - %02d.mkv", 1, 25)},
+		{"[Anime Time] Attack on titan (Season 02)", numberedFiles("[Anime Time] Attack On Titan - %02d.mkv", 26, 37)},
+		{"[Anime Time] Attack on titan (Season 03)", numberedFiles("[Anime Time] Attack On Titan - %02d.mkv", 38, 59)},
+		{"[Anime Time] Attack On Titan (Season 4 Part 1)", numberedFiles("[Anime Time] Attack On Titan - %02d.mkv", 60, 75)},
+		{"[Anime Time] Attack On Titan (Season 4 Part 2)", numberedFiles("[Anime Time] Attack On Titan - %02d.mkv", 76, 87)},
+	})
+	mushokuContinuous := fileListHtml("[MTBB] Mushoku Tensei S1", numberedFiles("[MTBB] Mushoku Tensei - %02d.mkv", 1, 23))
+
+	cases := []struct {
+		name   string
+		html   string
+		total  int
+		wantLo int
+		wantHi int
+	}{
+		{
+			name:   "AoT Anime Time S01-S04P2 nyaa.si/view/1739120 numbers 1-87",
+			html:   animeTimeAoT,
+			total:  25,
+			wantLo: 1, wantHi: 87,
+		},
+		{
+			name:   "Mushoku 1-23 under cour-1 total 11 stays next-cour span",
+			html:   mushokuContinuous,
+			total:  11,
+			wantLo: 1, wantHi: 23,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			restore := mockHttpGet(tc.html)
+			defer restore()
+			info, ok := nyaa.PackFileRange("https://nyaa.si/view/1", tc.total)
+			if !ok {
+				t.Fatal("want the range read from the files")
+			}
+			if info.StartEpisode != tc.wantLo || info.EndEpisode != tc.wantHi {
+				t.Errorf("want %d-%d, got %d-%d", tc.wantLo, tc.wantHi, info.StartEpisode, info.EndEpisode)
+			}
+		})
+	}
+}
+
+// https://nyaa.si/view/164103 is two Kaichou wa Maid-sama files (`!-23[`, `!-24[`), not a
+// 3-season Kaguya pack. ExtractEpisodeNumber does not read a number from that name, so the
+// file list cannot resolve a range.
+func TestPackFileRange_Nyaa164103IsMaidSamaWithoutReadableRange(t *testing.T) {
+	restore := mockHttpGet(fileListHtml("[AnS]-Kaichou_wa_Maid-sama!-23-24_XviD", []string{
+		"[AnS]Kaichou_wa_Maid-sama!-23[396p-XviD+Mp3][955B2EF5].avi",
+		"[AnS]Kaichou_wa_Maid-sama!-24[396p-XviD+Mp3][7B376783].avi",
+	}))
+	defer restore()
+
+	if _, ok := nyaa.PackFileRange("https://nyaa.si/view/164103", 26); ok {
+		t.Fatal("those Maid-sama filenames do not yield a pack range")
 	}
 }
 

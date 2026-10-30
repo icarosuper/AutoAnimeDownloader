@@ -69,6 +69,14 @@ type EpisodeStruct struct {
 	// JobOrganize. Empty means "not yet organized" — the marker JobOrganize uses to fire
 	// the completion webhook and write-back exactly once (idempotent across restarts).
 	LibraryPaths []string `json:"library_paths,omitempty"`
+	// AnimeSeason is the season number extracted from the AniList titles at download/adopt
+	// time. Organize does not call AniList; a restart pack uses the Sxx markers on the
+	// files themselves, and this field is the matching entry identity.
+	AnimeSeason *int `json:"anime_season,omitempty"`
+	// SeriesOffset is anilist.Series.Offset for this entry at download/adopt time (PREQUEL
+	// chain episode count). Organize slices a multi-season/cour pack with (offset, offset+total].
+	// Zero is season/cour 1. Old records omit it and Organize keeps the whole torrent.
+	SeriesOffset int `json:"series_offset,omitempty"`
 }
 
 type WebhookPreset struct {

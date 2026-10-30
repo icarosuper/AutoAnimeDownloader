@@ -1,6 +1,7 @@
 package files
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -894,5 +895,380 @@ func TestPackEpisodeOffset(t *testing.T) {
 		if got := packEpisodeOffset(c.numbers, c.total); got != c.want {
 			t.Errorf("%s: packEpisodeOffset(%v, %d) = %d, want %d", c.name, c.numbers, c.total, got, c.want)
 		}
+	}
+}
+
+func libraryNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("readdir %s: %v", dir, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() && e.Name() != "tvshow.nfo" {
+			names = append(names, e.Name())
+		}
+	}
+	return names
+}
+
+func writeNumberedSeason(t *testing.T, dataDir, folder, pattern string, from, to int) {
+	t.Helper()
+	for i := from; i <= to; i++ {
+		name := fmt.Sprintf(pattern, i)
+		writeFile(t, filepath.Join(dataDir, folder, name), name)
+	}
+}
+
+// Kaguya EMBER S1+S2 (nyaa.si/view/1355132): S01 files land in the S1 folder, S02 stay out.
+func TestOrganizeRestartPackRoutesSeasonFilesToThisEntry(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "ember")
+	completed := filepath.Join(tmp, "completed")
+	writeNumberedSeason(t, dataDir, "S01", "S01E%02d-Episode.mkv", 1, 12)
+	writeNumberedSeason(t, dataDir, "S02", "S02E%02d-Episode.mkv", 1, 12)
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Kaguya-sama Love is War",
+		CompletedPath:  completed,
+		TotalEpisodes:  12,
+		SeriesOffset:   0,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize S1: %v", err)
+	}
+	s1dir := filepath.Join(completed, "Kaguya-sama Love is War")
+	got := libraryNames(t, s1dir)
+	if len(got) != 12 {
+		t.Fatalf("S1 library has %d files, want 12: %v", len(got), got)
+	}
+	for i := 1; i <= 12; i++ {
+		want := fmt.Sprintf("Kaguya-sama Love is War - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(s1dir, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Kaguya-sama Love is War Season 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  12,
+		SeriesOffset:   12,
+		AnimeSeason:    intPtr(2),
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize S2: %v", err)
+	}
+	s2dir := filepath.Join(completed, "Kaguya-sama Love is War Season 2")
+	if got := libraryNames(t, s2dir); len(got) != 12 {
+		t.Fatalf("S2 library has %d files, want 12: %v", len(got), got)
+	}
+	for i := 1; i <= 12; i++ {
+		want := fmt.Sprintf("Kaguya-sama Love is War Season 2 - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(s2dir, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+}
+
+// Mushoku 01-23 under cour 1 (offset 0, total 11) keeps 01-11; cour 2 (offset 11, total 12)
+// maps 12-23 onto E01-E12.
+func TestOrganizeContinuousPackSlicesBySeriesOffset(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "mushoku")
+	completed := filepath.Join(tmp, "completed")
+	for i := 1; i <= 23; i++ {
+		name := fmt.Sprintf("[MTBB] Mushoku Tensei - %02d.mkv", i)
+		writeFile(t, filepath.Join(dataDir, name), name)
+	}
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Mushoku Tensei",
+		CompletedPath:  completed,
+		TotalEpisodes:  11,
+		SeriesOffset:   0,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize cour 1: %v", err)
+	}
+	c1 := filepath.Join(completed, "Mushoku Tensei")
+	if got := libraryNames(t, c1); len(got) != 11 {
+		t.Fatalf("cour 1 library has %d files, want 11: %v", len(got), got)
+	}
+
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Mushoku Tensei Cour 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  12,
+		SeriesOffset:   11,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize cour 2: %v", err)
+	}
+	c2 := filepath.Join(completed, "Mushoku Tensei Cour 2")
+	if got := libraryNames(t, c2); len(got) != 12 {
+		t.Fatalf("cour 2 library has %d files, want 12: %v", len(got), got)
+	}
+	for i := 1; i <= 12; i++ {
+		want := fmt.Sprintf("Mushoku Tensei Cour 2 - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(c2, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+}
+
+// Anime Time S1+S2 (nyaa.si/view/2169474): S01E17.5 (Eris) and S02E00 (Guardian Fitz)
+// stay out of the pack span (#113) and still land in the matching season folder.
+func TestOrganizeRestartPackHardlinksMushokuExtras(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "animetime")
+	completed := filepath.Join(tmp, "completed")
+	writeNumberedSeason(t, dataDir, "Season 1", "Mushoku Tensei Jobless Reincarnation - S01E%02d - Title.mkv", 1, 23)
+	const eris = "Mushoku Tensei Jobless Reincarnation - S01E17.5 - Eris The Goblin Slayer.mkv"
+	writeFile(t, filepath.Join(dataDir, "Season 1", eris), eris)
+	writeNumberedSeason(t, dataDir, "Season 2", "Mushoku Tensei Jobless Reincarnation - S02E%02d - Title.mkv", 1, 24)
+	const fitz = "Mushoku Tensei Jobless Reincarnation - S02E00 - Guardian Fitz.mkv"
+	writeFile(t, filepath.Join(dataDir, "Season 2", fitz), fitz)
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Mushoku Tensei",
+		CompletedPath:  completed,
+		TotalEpisodes:  23,
+		SeriesOffset:   0,
+		AnimeSeason:    intPtr(1),
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize S1: %v", err)
+	}
+	s1 := filepath.Join(completed, "Mushoku Tensei")
+	if _, err := os.Stat(filepath.Join(s1, eris)); err != nil {
+		t.Fatalf("S1 is missing the Eris OVA hardlink: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s1, fitz)); err == nil {
+		t.Fatal("S2 episode 0 landed in the S1 folder")
+	}
+	for i := 1; i <= 23; i++ {
+		want := fmt.Sprintf("Mushoku Tensei - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(s1, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Mushoku Tensei Season 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  24,
+		SeriesOffset:   23,
+		AnimeSeason:    intPtr(2),
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize S2: %v", err)
+	}
+	s2 := filepath.Join(completed, "Mushoku Tensei Season 2")
+	if _, err := os.Stat(filepath.Join(s2, fitz)); err != nil {
+		t.Fatalf("S2 is missing the episode 0 hardlink: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s2, eris)); err == nil {
+		t.Fatal("Eris OVA landed in the S2 folder")
+	}
+	if _, err := os.Stat(filepath.Join(s2, "Mushoku Tensei Season 2 - E00.mkv")); err == nil {
+		t.Fatal("episode 0 was renamed to E00; the raw name must stay")
+	}
+	for i := 1; i <= 24; i++ {
+		want := fmt.Sprintf("Mushoku Tensei Season 2 - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(s2, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+}
+
+// EMBER names the Eris OVA S01E24 while the TV files are plain 01-23, so the extra
+// sits in its own season group. PackFileRange drops it from the span; Organize still
+// hardlinks it under the raw name — not as E24 of an 11-episode cour.
+func TestOrganizeContinuousPackHardlinksMushokuOVA(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "mushoku")
+	completed := filepath.Join(tmp, "completed")
+	for i := 1; i <= 23; i++ {
+		name := fmt.Sprintf("[MTBB] Mushoku Tensei - %02d.mkv", i)
+		writeFile(t, filepath.Join(dataDir, name), name)
+	}
+	const ova = "[EMBER] Mushoku Tensei S01E24 [OVA]-Eris the Goblin Slayer.mkv"
+	writeFile(t, filepath.Join(dataDir, ova), ova)
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Mushoku Tensei",
+		CompletedPath:  completed,
+		TotalEpisodes:  11,
+		SeriesOffset:   0,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize cour 1: %v", err)
+	}
+	c1 := filepath.Join(completed, "Mushoku Tensei")
+	if _, err := os.Stat(filepath.Join(c1, ova)); err != nil {
+		t.Fatalf("cour 1 is missing the OVA hardlink: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(c1, "Mushoku Tensei - E24.mkv")); err == nil {
+		t.Fatal("OVA was renamed to E24; the raw name must stay")
+	}
+	for i := 1; i <= 11; i++ {
+		want := fmt.Sprintf("Mushoku Tensei - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(c1, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+}
+
+// Erai-raws S2 Part 1 numbers Guardian Fitz as - 00 next to 01-12. The 00 stays
+// out of the span and is hardlinked with the raw name into the Part 1 folder.
+func TestOrganizePackHardlinksEpisodeZero(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "erai")
+	completed := filepath.Join(tmp, "completed")
+	for i := 1; i <= 12; i++ {
+		name := fmt.Sprintf("[Erai-raws] Mushoku Tensei II - %02d.mkv", i)
+		writeFile(t, filepath.Join(dataDir, name), name)
+	}
+	const ep0 = "[Erai-raws] Mushoku Tensei II - 00.mkv"
+	writeFile(t, filepath.Join(dataDir, ep0), ep0)
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Mushoku Tensei Season 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  12,
+		SeriesOffset:   0,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	dir := filepath.Join(completed, "Mushoku Tensei Season 2")
+	if _, err := os.Stat(filepath.Join(dir, ep0)); err != nil {
+		t.Fatalf("missing episode 0 hardlink: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Mushoku Tensei Season 2 - E00.mkv")); err == nil {
+		t.Fatal("episode 0 was renamed to E00; the raw name must stay")
+	}
+	for i := 1; i <= 12; i++ {
+		want := fmt.Sprintf("Mushoku Tensei Season 2 - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(dir, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+}
+
+// S02E00 next to un-tagged 01-12 files is an extras-only season group, same
+// shape as the EMBER S01E24 OVA. It still has to land in the library.
+func TestOrganizePackHardlinksSeasonTaggedEpisodeZero(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "erai")
+	completed := filepath.Join(tmp, "completed")
+	for i := 1; i <= 12; i++ {
+		name := fmt.Sprintf("[Group] Mushoku Tensei - %02d.mkv", i)
+		writeFile(t, filepath.Join(dataDir, name), name)
+	}
+	const ep0 = "[Group] Mushoku Tensei - S02E00 - Guardian Fitz.mkv"
+	writeFile(t, filepath.Join(dataDir, ep0), ep0)
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Mushoku Tensei Season 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  12,
+		SeriesOffset:   0,
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize: %v", err)
+	}
+	dir := filepath.Join(completed, "Mushoku Tensei Season 2")
+	if _, err := os.Stat(filepath.Join(dir, ep0)); err != nil {
+		t.Fatalf("missing episode 0 hardlink: %v", err)
+	}
+	for i := 1; i <= 12; i++ {
+		want := fmt.Sprintf("Mushoku Tensei Season 2 - E%02d.mkv", i)
+		if _, err := os.Stat(filepath.Join(dir, want)); err != nil {
+			t.Errorf("missing %s: %v", want, err)
+		}
+	}
+}
+
+// AoT EMBER S1+S2+S3+S4P1 (nyaa.si/view/1421679): S3 (offset 37, total 12) takes S03E01-12;
+// Final Season Part 2 is a later AniList entry (offset 49, total 10) and takes S03E13-22.
+func TestOrganizeRestartPackSplitsCoursInsideOneSeason(t *testing.T) {
+	tmp := t.TempDir()
+	dataDir := filepath.Join(tmp, "save", "aot")
+	completed := filepath.Join(tmp, "completed")
+	writeNumberedSeason(t, dataDir, "S01", "S01E%02d-Episode.mkv", 1, 25)
+	writeNumberedSeason(t, dataDir, "S02", "S02E%02d-Episode.mkv", 1, 12)
+	writeNumberedSeason(t, dataDir, "S03P01", "S03E%02d-Episode.mkv", 1, 12)
+	writeNumberedSeason(t, dataDir, "S03P02", "S03E%02d-Episode.mkv", 13, 22)
+	writeNumberedSeason(t, dataDir, "S04P01", "S04E%02d-Episode.mkv", 1, 16)
+
+	lib := NewLibrarian(NewOSFileSystem())
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Shingeki no Kyojin Season 3",
+		CompletedPath:  completed,
+		TotalEpisodes:  12,
+		SeriesOffset:   37,
+		AnimeSeason:    intPtr(3),
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize S3: %v", err)
+	}
+	s3 := filepath.Join(completed, "Shingeki no Kyojin Season 3")
+	if got := libraryNames(t, s3); len(got) != 12 {
+		t.Fatalf("S3 library has %d files, want 12: %v", len(got), got)
+	}
+	if _, err := os.Stat(filepath.Join(s3, "Shingeki no Kyojin Season 3 - E01.mkv")); err != nil {
+		t.Errorf("S3 E01: %v", err)
+	}
+
+	if _, err := lib.Organize(OrganizeRequest{
+		TorrentDataDir: dataDir,
+		AnimeName:      "Shingeki no Kyojin Season 3 Part 2",
+		CompletedPath:  completed,
+		TotalEpisodes:  10,
+		SeriesOffset:   49,
+		AnimeSeason:    intPtr(3),
+		IsBatch:        true,
+		RenameJellyfin: true,
+	}); err != nil {
+		t.Fatalf("Organize S3P2: %v", err)
+	}
+	p2 := filepath.Join(completed, "Shingeki no Kyojin Season 3 Part 2")
+	if got := libraryNames(t, p2); len(got) != 10 {
+		t.Fatalf("S3P2 library has %d files, want 10: %v", len(got), got)
+	}
+	if _, err := os.Stat(filepath.Join(p2, "Shingeki no Kyojin Season 3 Part 2 - E01.mkv")); err != nil {
+		t.Errorf("S3P2 E01 from S03E13: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(p2, "Shingeki no Kyojin Season 3 Part 2 - E10.mkv")); err != nil {
+		t.Errorf("S3P2 E10 from S03E22: %v", err)
 	}
 }

@@ -86,6 +86,7 @@ func adoptCoveredEpisodes(
 		return nil
 	}
 
+	season, _ := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.Synonyms)
 	var adopted []files.EpisodeStruct
 	for _, ep := range pending {
 		owner, ownerOffset := findCoveringPack(savedEpisodes, seriesIndex, torrentsHashSet, series, series.Offset+ep.Episode)
@@ -124,6 +125,8 @@ func adoptCoveredEpisodes(
 			// disk budget reads it from (newDiskBudget).
 			TorrentSize:  owner.TorrentSize,
 			DownloadDate: time.Now(),
+			AnimeSeason:  season,
+			SeriesOffset: series.Offset,
 		})
 	}
 	return adopted

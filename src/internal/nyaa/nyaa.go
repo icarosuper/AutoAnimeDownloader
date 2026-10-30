@@ -245,11 +245,12 @@ func batchRange(torrentName string) (int, int, bool) {
 // number: there's no range to assert, and the caller decides what to do with the "don't know".
 //
 // The range is min..max of the numbers that count as TV / next-cour episodes. OP/ED, PV/Menu,
-// S00E, OVA/OAD, and `.5` bonus files stay out of the span (they ride along in the torrent). An
+// S00E, OVA/OAD, `.5`, and episode 0 stay out of the span (they ride along in the torrent). An
 // unmarked isolated total+1 (Honoka `K-ON! - 14` with AniList total 13) drops when totalEpisodes
 // is known; a contiguous run past the total (Mushoku 12–23 under cour 1) stays — that is the
-// next cour #74 protects. Multi-season packs that RESTART numbering per folder still yield the
-// largest season's range; measured 2026-08-30 and kept (decisions.md #84).
+// next cour #74 protects. Multi-season packs that RESTART numbering per season (S01E01-12 +
+// S02E01-12) flatten onto the concatenated axis (1-24) so #74/#78 treat them like a continuous
+// pack. Season folders that already sit on one axis (Anime Time AoT 01-87) keep min-max.
 func PackFileRange(detailURL string, totalEpisodes int) (BatchInfo, bool) {
 	if detailURL == "" {
 		return BatchInfo{}, false
@@ -261,6 +262,8 @@ func PackFileRange(detailURL string, totalEpisodes int) (BatchInfo, bool) {
 	}
 
 	var nums []int
+	groups := map[string]*packRangeGroup{}
+	var groupOrder []string
 	for _, f := range flattenTorrentFiles(doc) {
 		base := path.Base(f.Name)
 		if !IsVideoFile(base) {
@@ -277,8 +280,33 @@ func PackFileRange(detailURL string, totalEpisodes int) (BatchInfo, bool) {
 		if episode == nil {
 			continue
 		}
-		nums = append(nums, *episode)
+		n := *episode
+		nums = append(nums, n)
+		key := PackRangeGroupKey(base, parent, path.Dir(f.Name))
+		if g, ok := groups[key]; ok {
+			if n < g.lo {
+				g.lo = n
+			}
+			if n > g.hi {
+				g.hi = n
+			}
+			continue
+		}
+		groups[key] = &packRangeGroup{lo: n, hi: n}
+		groupOrder = append(groupOrder, key)
 	}
+
+	if span, ok := flattenRestartPackGroups(groups, groupOrder); ok {
+		logger.Logger.Debug().
+			Str("url", detailURL).
+			Int("files", len(nums)).
+			Int("groups", len(groups)).
+			Int("first_episode", 1).
+			Int("last_episode", span).
+			Msg("Pack range flattened from restart-per-season file groups")
+		return BatchInfo{StartEpisode: 1, EndEpisode: span}, true
+	}
+
 	nums = dropIsolatedTotalPlusOne(nums, totalEpisodes)
 
 	if len(nums) == 0 {
@@ -306,8 +334,267 @@ func PackFileRange(detailURL string, totalEpisodes int) (BatchInfo, bool) {
 	return BatchInfo{StartEpisode: first, EndEpisode: last}, true
 }
 
+// packRangeGroup is one season (or folder, when the files have no Sxx marker) inside a pack.
+type packRangeGroup struct {
+	lo, hi int
+}
+
+// PackRangeGroupKey prefers the season in the file name (S01E05), then the immediate parent
+// folder ("2nd Season", "Season 4 Part 1"), then the directory path so untitled folders stay
+// distinct (Kaguya DB S1 vs Ultra Romantic vs First Kiss).
+func PackRangeGroupKey(base, parent, dir string) string {
+	if s := ExtractSeason(base); s != nil {
+		return "s:" + strconv.Itoa(*s)
+	}
+	if s := ExtractSeason(parent); s != nil {
+		return "s:" + strconv.Itoa(*s)
+	}
+	if dir == "." || dir == "" {
+		return "d:"
+	}
+	return "d:" + dir
+}
+
+// flattenRestartPackGroups reports the concatenated span when two or more groups overlap on
+// episode numbers (S01 1-12 and S02 1-12). Non-overlapping groups are one axis (AoT 01-25 +
+// 26-37) and the caller keeps min-max. The isolated total+1 drop does not run on a flattened
+// span: Ultra Romantic's 13 is a real episode of that season, not Honoka's extra.
+func flattenRestartPackGroups(groups map[string]*packRangeGroup, order []string) (int, bool) {
+	if len(groups) < 2 {
+		return 0, false
+	}
+	list := make([]*packRangeGroup, 0, len(order))
+	for _, k := range order {
+		g, ok := groups[k]
+		if !ok || g == nil {
+			continue
+		}
+		list = append(list, g)
+	}
+	overlap := false
+	for i := 0; i < len(list); i++ {
+		for j := i + 1; j < len(list); j++ {
+			a, b := list[i], list[j]
+			if a.lo <= b.hi && b.lo <= a.hi {
+				overlap = true
+				break
+			}
+		}
+		if overlap {
+			break
+		}
+	}
+	if !overlap {
+		return 0, false
+	}
+	span := 0
+	for _, g := range list {
+		span += g.hi - g.lo + 1
+	}
+	return span, true
+}
+
+// FilesInPackWindow maps torrent-relative video paths to this AniList entry's local episode
+// number. A restart pack (overlapping season groups) is laid on the concatenated axis first,
+// then sliced by (seriesOffset, seriesOffset+totalEpisodes]. A continuous pack uses the file
+// numbers as the axis: cour 1 of a 1-23 pack keeps 1-11; cour 2 (offset 11) keeps 12-23 as
+// 1-12. Unnumbered extras that share a group with a kept file come back as local 0.
+// Claimed extras (OVA/S00E/.5/E00) that sit in a season group of their own (EMBER S01E24
+// next to plain 01-23) still come back as local 0 so Organize hardlinks them.
+//
+// totalEpisodes <= 0 means "don't slice" (nil). A sequel pack numbered 13-24 under a 12-episode
+// entry with offset 0 is left whole so packEpisodeOffset can shift it. animeSeason, when set,
+// keeps extras-only Sxx groups from leaking into a different season's folder.
+func FilesInPackWindow(relPaths []string, seriesOffset, totalEpisodes int, animeSeason *int) map[string]int {
+	if totalEpisodes <= 0 || len(relPaths) == 0 {
+		return nil
+	}
+
+	type fileGroup struct {
+		packRangeGroup
+		numbered []string
+		num      map[string]int
+		extras   []string
+	}
+	groups := map[string]*fileGroup{}
+	var order []string
+	var allNums []int
+
+	for _, rel := range relPaths {
+		slash := filepath.ToSlash(rel)
+		base := path.Base(slash)
+		dir := path.Dir(slash)
+		parent := path.Base(dir)
+		if parent == "." {
+			parent = ""
+		}
+		key := PackRangeGroupKey(base, parent, dir)
+		g, ok := groups[key]
+		if !ok {
+			g = &fileGroup{num: map[string]int{}}
+			groups[key] = g
+			order = append(order, key)
+		}
+		if skipPackRangeEpisode(parent, base) {
+			g.extras = append(g.extras, rel)
+			continue
+		}
+		ep := ExtractEpisodeNumber(base)
+		if ep == nil {
+			g.extras = append(g.extras, rel)
+			continue
+		}
+		n := *ep
+		allNums = append(allNums, n)
+		g.numbered = append(g.numbered, rel)
+		g.num[rel] = n
+		if len(g.numbered) == 1 {
+			g.lo, g.hi = n, n
+		} else {
+			if n < g.lo {
+				g.lo = n
+			}
+			if n > g.hi {
+				g.hi = n
+			}
+		}
+	}
+
+	rangeGroups := make(map[string]*packRangeGroup, len(groups))
+	for k, g := range groups {
+		if len(g.numbered) == 0 {
+			continue
+		}
+		rangeGroups[k] = &g.packRangeGroup
+	}
+	_, restart := flattenRestartPackGroups(rangeGroups, order)
+
+	axisOf := map[string]int{}
+	if restart {
+		axisStart := 1
+		for _, k := range order {
+			g := groups[k]
+			if len(g.numbered) == 0 {
+				continue
+			}
+			for _, rel := range g.numbered {
+				axisOf[rel] = axisStart + (g.num[rel] - g.lo)
+			}
+			axisStart += g.hi - g.lo + 1
+		}
+	} else {
+		for _, g := range groups {
+			for _, rel := range g.numbered {
+				axisOf[rel] = g.num[rel]
+			}
+		}
+	}
+
+	lo, hi := seriesOffset+1, seriesOffset+totalEpisodes
+	useWindow := restart || seriesOffset > 0
+	if !useWindow && len(allNums) > 0 {
+		minN, maxN := allNums[0], allNums[0]
+		has1, has2 := false, false
+		for _, n := range allNums {
+			if n < minN {
+				minN = n
+			}
+			if n > maxN {
+				maxN = n
+			}
+			if n == totalEpisodes+1 {
+				has1 = true
+			}
+			if n == totalEpisodes+2 {
+				has2 = true
+			}
+		}
+		if minN <= totalEpisodes && maxN > totalEpisodes && has1 && has2 {
+			useWindow = true
+		}
+	}
+
+	out := map[string]int{}
+	keptGroup := map[string]bool{}
+	if useWindow {
+		for _, k := range order {
+			g := groups[k]
+			for _, rel := range g.numbered {
+				ax := axisOf[rel]
+				if ax < lo || ax > hi {
+					continue
+				}
+				out[rel] = ax - seriesOffset
+				keptGroup[k] = true
+			}
+		}
+	} else {
+		off := 0
+		if lowest := 0; len(allNums) > 0 {
+			lowest = allNums[0]
+			for _, n := range allNums[1:] {
+				if n < lowest {
+					lowest = n
+				}
+			}
+			if lowest > totalEpisodes && len(allNums) >= totalEpisodes {
+				off = lowest - 1
+			}
+		}
+		for _, k := range order {
+			g := groups[k]
+			for _, rel := range g.numbered {
+				out[rel] = g.num[rel] - off
+				keptGroup[k] = true
+			}
+		}
+	}
+	keptAny := len(keptGroup) > 0
+	for k, g := range groups {
+		if keptGroup[k] {
+			for _, rel := range g.extras {
+				out[rel] = 0
+			}
+			continue
+		}
+		if !keptAny || len(g.numbered) != 0 {
+			continue
+		}
+		if !extrasOnlyGroupMatches(k, animeSeason) {
+			continue
+		}
+		for _, rel := range g.extras {
+			if isClaimedExtra(path.Base(filepath.ToSlash(rel))) {
+				out[rel] = 0
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// extrasOnlyGroupMatches reports whether an extras-only group (no numbered TV files)
+// belongs on this entry. A season-tagged group (s:2) follows animeSeason when it is
+// known; a folder group (Specials) rides along with whatever window already kept files.
+func extrasOnlyGroupMatches(key string, animeSeason *int) bool {
+	if !strings.HasPrefix(key, "s:") {
+		return true
+	}
+	if animeSeason == nil {
+		return true
+	}
+	n, err := strconv.Atoi(key[2:])
+	if err != nil {
+		return true
+	}
+	return n == *animeSeason
+}
+
 // skipPackRangeEpisode reports a video whose number must not enter PackFileRange min-max:
-// OP/ED-class (name or immediate parent NC/Creditless/Menu/PV) and claimed extras (OVA/S00E/.5).
+// OP/ED-class (name or immediate parent NC/Creditless/Menu/PV) and claimed extras
+// (OVA/S00E/.5/E00).
 func skipPackRangeEpisode(parent, name string) bool {
 	name = strings.ReplaceAll(name, "_", " ")
 	parent = strings.ReplaceAll(parent, "_", " ")
@@ -319,10 +606,15 @@ func skipPackRangeEpisode(parent, name string) bool {
 		reFilePV.MatchString(name) || reFileMenu.MatchString(name) {
 		return true
 	}
-	if reFileOVA.MatchString(name) || reFileS00E.MatchString(name) || reFileFracEp.MatchString(name) {
-		return true
-	}
-	return false
+	return isClaimedExtra(name)
+}
+
+// isClaimedExtra reports a bonus episode that rides in the torrent, is hardlinked into
+// the library, and must not stretch PackFileRange: OVA/OAD, S00E, .5, episode 0.
+func isClaimedExtra(name string) bool {
+	name = strings.ReplaceAll(name, "_", " ")
+	return reFileOVA.MatchString(name) || reFileS00E.MatchString(name) ||
+		reFileFracEp.MatchString(name) || reFileE00.MatchString(name)
 }
 
 func isOPEDFolder(parent string) bool {

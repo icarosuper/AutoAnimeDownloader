@@ -64,9 +64,18 @@ type OrganizeRequest struct {
 	IsBatch bool
 	// RenameJellyfin enables the "Anime - E05.ext" naming.
 	RenameJellyfin bool
-	// TotalEpisodes is the episode total of the AniList ENTRY. Used only to detect a pack
-	// with continuous numbering (see packEpisodeOffset); zero = unknown, nothing is shifted.
+	// TotalEpisodes is the episode total of the AniList ENTRY. Used to detect a pack with
+	// continuous numbering (see packEpisodeOffset) and, with SeriesOffset, to pick this
+	// entry's slice of a multi-season/cour pack. Zero = unknown, nothing is shifted or sliced.
 	TotalEpisodes int
+	// AnimeSeason is the AniList entry's season number. Grouping still reads Sxx from the
+	// files; when set, extras-only Sxx groups (S01E24 OVA next to plain 01-23) attach only
+	// to this season. Persisted next to SeriesOffset so Organize does not call AniList.
+	AnimeSeason *int
+	// SeriesOffset is the PREQUEL-chain episode count for this entry (anilist.Series.Offset).
+	// A restart pack flattened onto 1-N maps file groups onto that axis; a continuous pack
+	// uses the file numbers directly. Zero is season 1 / cour 1.
+	SeriesOffset int
 }
 
 type organizer struct {
@@ -112,9 +121,8 @@ func stripInvalidChars(name string) string {
 // Only fires with unequivocal evidence — EVERY numbered file above the entry total AND at
 // least one file per episode, i.e. a complete pack that starts at episode 1 of the season. An
 // extra numbered 13 in a 01-12 pack keeps the minimum at 1 and shifts nothing. A PARTIAL pack
-// with continuous numbering stays as-is; if that becomes a requirement, the path is to persist
-// the offset (the PREQUEL episode count, already computed in daemon.ComputeEpisodeOffset) on
-// EpisodeStruct instead of guessing here.
+// with continuous numbering stays as-is. Multi-entry packs persist SeriesOffset on
+// EpisodeStruct and slice through FilesInPackWindow (decisions.md #116) instead of this guess.
 func packEpisodeOffset(numbers []int, totalEpisodes int) int {
 	if totalEpisodes <= 0 || len(numbers) < totalEpisodes {
 		return 0
@@ -149,6 +157,22 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 	}
 	if len(videoFiles) == 0 {
 		return nil, fmt.Errorf("no video files found in %s", req.TorrentDataDir)
+	}
+
+	localByRel := map[string]int{}
+	if req.IsBatch && req.TotalEpisodes > 0 {
+		if window := nyaa.FilesInPackWindow(videoFiles, req.SeriesOffset, req.TotalEpisodes, req.AnimeSeason); len(window) > 0 {
+			filtered := make([]string, 0, len(window))
+			for _, rel := range videoFiles {
+				if loc, ok := window[rel]; ok {
+					filtered = append(filtered, rel)
+					// 0 is an extra (OVA / E00): keep it in the map so the Jellyfin
+					// rename does not read S01E24 as episode 24.
+					localByRel[rel] = loc
+				}
+			}
+			videoFiles = filtered
+		}
 	}
 
 	destDir := filepath.Join(req.CompletedPath, sanitizeName(req.AnimeName))
@@ -193,9 +217,16 @@ func (o *organizer) Organize(req OrganizeRequest) ([]string, error) {
 			// Pack: the number comes from the file's own name, so pack episodes mix in the
 			// folder with the singles instead of keeping the fansub's raw name.
 			// Without a readable number (NCOP/NCED, extra, movie) or on a collision between
-			// two files of the same pack, the raw name stays.
-			if n := nyaa.ExtractEpisodeNumber(destName); n != nil {
-				if jf := jellyfinName(req.AnimeName, *n-packOffset, filepath.Ext(rel)); !used[jf] {
+			// two files of the same pack, the raw name stays. FilesInPackWindow already
+			// translated restart/continuous packs onto this entry's 1..N.
+			epNum := 0
+			if loc, ok := localByRel[rel]; ok {
+				epNum = loc
+			} else if n := nyaa.ExtractEpisodeNumber(destName); n != nil {
+				epNum = *n - packOffset
+			}
+			if epNum > 0 {
+				if jf := jellyfinName(req.AnimeName, epNum, filepath.Ext(rel)); !used[jf] {
 					destName = jf
 				}
 			}

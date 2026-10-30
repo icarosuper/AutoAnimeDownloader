@@ -13,9 +13,9 @@ import (
 
 // Live measurement of the two pack caps from Stage 1 of the TODO:
 //
-//  1. numbering that RESTARTS per season (known cap of decisions.md #84): PackFileRange
-//     returns min..max of the numbers read, so an S01-S04 pack with one folder per season
-//     gets the range of the LARGEST season instead of the total.
+//  1. numbering that RESTARTS per season: PackFileRange now concatenates overlapping
+//     season groups (decisions.md #116). This instrument still prints per-folder spans so
+//     a future measurement can catch a flatten regression.
 //  2. pack cap by episode instead of by total size (sources.md, "Detail page",
 //     item 2): only holds if the current cap is rejecting a pack the user wants.
 //

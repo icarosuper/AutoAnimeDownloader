@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -813,6 +814,63 @@ func TestOrganizeTorrent_BatchContinuousNumbering(t *testing.T) {
 	for _, name := range []string{"My Anime Season 2 - E01.mkv", "My Anime Season 2 - E02.mkv"} {
 		if _, err := os.Stat(filepath.Join(completed, "My Anime Season 2", name)); err != nil {
 			t.Errorf("expected library link %s: %v", name, err)
+		}
+	}
+}
+
+// A restart pack shared by two AniList entries organizes each id into its own folder.
+func TestOrganizeTorrent_RestartPackSplitsByAnimeID(t *testing.T) {
+	dataDir := t.TempDir()
+	for i := 1; i <= 12; i++ {
+		name := fmt.Sprintf("S01E%02d-Episode.mkv", i)
+		if err := os.MkdirAll(filepath.Join(dataDir, "S01"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dataDir, "S01", name), []byte(name), 0644); err != nil {
+			t.Fatal(err)
+		}
+		name2 := fmt.Sprintf("S02E%02d-Episode.mkv", i)
+		if err := os.MkdirAll(filepath.Join(dataDir, "S02"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dataDir, "S02", name2), []byte(name2), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	completed := t.TempDir()
+	const hash = "0123456789abcdef0123456789abcdef01234567"
+	s2 := 2
+
+	backend := torrents.NewFakeBackend()
+	backend.AddCompleted(hash, dataDir)
+
+	var s1eps, s2eps []files.EpisodeStruct
+	for i := 1; i <= 12; i++ {
+		s1eps = append(s1eps, files.EpisodeStruct{
+			AnimeID: 101921, AnimeName: "Kaguya-sama Love is War", AnimeTotalEpisodes: 12,
+			EpisodeHash: hash, EpisodeNumber: i, IsBatch: true, SeriesOffset: 0,
+		})
+		s2eps = append(s2eps, files.EpisodeStruct{
+			AnimeID: 112641, AnimeName: "Kaguya-sama Love is War Season 2", AnimeTotalEpisodes: 12,
+			EpisodeHash: hash, EpisodeNumber: i, IsBatch: true, SeriesOffset: 12, AnimeSeason: &s2,
+		})
+	}
+	fm := &orchestrationFM{
+		saved:   append(s1eps, s2eps...),
+		configs: &files.Config{CompletedAnimePath: completed, RenameFilesForJellyfin: true},
+	}
+
+	if ok := organizeTorrent(hash, backend, files.NewLibrarian(files.NewOSFileSystem()), fm, fm.configs); !ok {
+		t.Fatal("organizeTorrent should succeed")
+	}
+	s1dir := filepath.Join(completed, "Kaguya-sama Love is War")
+	s2dir := filepath.Join(completed, "Kaguya-sama Love is War Season 2")
+	for i := 1; i <= 12; i++ {
+		if _, err := os.Stat(filepath.Join(s1dir, fmt.Sprintf("Kaguya-sama Love is War - E%02d.mkv", i))); err != nil {
+			t.Errorf("S1 E%02d: %v", i, err)
+		}
+		if _, err := os.Stat(filepath.Join(s2dir, fmt.Sprintf("Kaguya-sama Love is War Season 2 - E%02d.mkv", i))); err != nil {
+			t.Errorf("S2 E%02d: %v", i, err)
 		}
 	}
 }

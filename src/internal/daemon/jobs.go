@@ -355,32 +355,60 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 		return true // already organized on a previous run
 	}
 
-	isBatch := matched[0].IsBatch || len(matched) > 1
-	req := files.OrganizeRequest{
-		TorrentDataDir: info.DataDir,
-		AnimeName:      matched[0].AnimeName,
-		AnimeID:        matched[0].AnimeID,
-		CompletedPath:  configs.CompletedAnimePath,
-		IsBatch:        isBatch,
-		RenameJellyfin: configs.RenameFilesForJellyfin,
-		TotalEpisodes:  matched[0].AnimeTotalEpisodes,
-	}
-	if !isBatch {
-		ep := matched[0].EpisodeNumber
-		req.EpisodeNumber = &ep
+	byID := map[int][]int{}
+	var ids []int
+	for i, ep := range matched {
+		if _, seen := byID[ep.AnimeID]; !seen {
+			ids = append(ids, ep.AnimeID)
+		}
+		byID[ep.AnimeID] = append(byID[ep.AnimeID], i)
 	}
 
-	created, err := librarian.Organize(req)
-	if err != nil {
-		logger.Logger.Warn().Err(err).Str("hash", hash).Str("anime", matched[0].AnimeName).Msg("Organize: failed to hardlink into library")
-		return false // retry with backoff; permanent errors drop after MaxRetries
+	createdCount := 0
+	for _, id := range ids {
+		idxs := byID[id]
+		head := matched[idxs[0]]
+		groupNeeds := false
+		for _, i := range idxs {
+			if len(matched[i].LibraryPaths) == 0 {
+				groupNeeds = true
+				break
+			}
+		}
+		if !groupNeeds {
+			continue
+		}
+
+		isBatch := head.IsBatch || len(idxs) > 1
+		req := files.OrganizeRequest{
+			TorrentDataDir: info.DataDir,
+			AnimeName:      head.AnimeName,
+			AnimeID:        head.AnimeID,
+			CompletedPath:  configs.CompletedAnimePath,
+			IsBatch:        isBatch,
+			RenameJellyfin: configs.RenameFilesForJellyfin,
+			TotalEpisodes:  head.AnimeTotalEpisodes,
+			AnimeSeason:    head.AnimeSeason,
+			SeriesOffset:   head.SeriesOffset,
+		}
+		if !isBatch {
+			ep := head.EpisodeNumber
+			req.EpisodeNumber = &ep
+		}
+
+		created, err := librarian.Organize(req)
+		if err != nil {
+			logger.Logger.Warn().Err(err).Str("hash", hash).Str("anime", head.AnimeName).Msg("Organize: failed to hardlink into library")
+			return false // retry with backoff; permanent errors drop after MaxRetries
+		}
+		createdCount += len(created)
+		for _, i := range idxs {
+			matched[i].LibraryPaths = created
+		}
 	}
 
 	// Write back LibraryPaths (the "organized" marker) before firing the webhook, so a
 	// crash after the webhook can't re-fire it, and a crash before write-back re-runs once.
-	for i := range matched {
-		matched[i].LibraryPaths = created
-	}
 	if err := fm.UpsertEpisodes(matched); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Organize: failed to persist library paths")
 		return false // retry; hardlinks already exist so Organize will no-op next time
@@ -396,6 +424,6 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	} else {
 		notifications.Notify(configs, notifications.DownloadCompleted, matched[0].AnimeName, matched[0].EpisodeNumber, "")
 	}
-	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", len(created)).Msg("Organized torrent into library")
+	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", createdCount).Msg("Organized torrent into library")
 	return true
 }

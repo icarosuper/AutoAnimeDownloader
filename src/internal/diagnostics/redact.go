@@ -50,7 +50,7 @@ var keyClasses = map[string]keyClass{
 	"environment": keep, "episode": keep, "episode_number": keep, "episodes": keep,
 	"episodes_checked": keep, "episodes_count": keep, "episodes_downloaded": keep,
 	"episodes_rewritten": keep, "episodes_would_search": keep, "files": keep,
-	"first_episode": keep, "frontend_lists": keep, "graphql_message": keep, "graphql_status": keep, "id": keep,
+	"first_episode": keep, "frontend_lists": keep, "groups": keep, "graphql_message": keep, "graphql_status": keep, "id": keep,
 	"last_episode": keep, "lines": keep, "magnets_found": keep,
 	"max_attempts": keep, "max_bytes": keep, "max_episodes": keep, "media_entries": keep,
 	"media_ids": keep, "media_status": keep, "method": keep, "min_seeders": keep, "new": keep,

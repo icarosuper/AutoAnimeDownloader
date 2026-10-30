@@ -106,7 +106,7 @@ func TestCoverageOwnership_SeasonPackCoversNextCour(t *testing.T) {
 	}
 	for _, ep := range result.newEpisodes {
 		if ep.AnimeID != cour2ID || ep.EpisodeHash != seasonHash || !ep.IsBatch {
-			t.Fatalf("registro adotado errado: %+v", ep)
+			t.Fatalf("adopted record is wrong: %+v", ep)
 		}
 		// The range is CONVERTED to cour 2's ruler: cour 1's 1..23 pack (offset 0) is -10..12 under cour
 		// 2 (offset 11). It's exactly what assignBatches would record if the search found the same
@@ -248,5 +248,80 @@ func TestCoverageOwnership_UnknownRangeIsNotOwnership(t *testing.T) {
 
 	if !searched {
 		t.Error("a pack without a declared range isn't ownership: the search has to run")
+	}
+}
+
+const kaguyaS2ID = 112641
+
+func kaguyaS2Anime(n int) anilist.MediaList {
+	title := "Kaguya-sama: Love is War Season 2"
+	nodes := make([]anilist.AiringNode, n)
+	for i := range nodes {
+		nodes[i] = anilist.AiringNode{ID: 3000 + i, Episode: i + 1, TimeUntilAiring: -100}
+	}
+	return anilist.MediaList{
+		Id:       kaguyaS2ID,
+		Progress: 0,
+		Status:   anilist.MediaListStatusCurrent,
+		Media: anilist.Media{
+			Id:             kaguyaS2ID,
+			Status:         anilist.MediaStatusFinished,
+			Title:          anilist.Title{English: &title},
+			AiringSchedule: anilist.AiringSchedule{Nodes: nodes},
+		},
+	}
+}
+
+// Restart packs flatten onto 1-N at download, so S2 adopts the EMBER S1+S2 hash the same
+// way Mushoku cour 2 adopts a 1-23 pack. nyaa.si/view/1355132.
+func TestCoverageOwnership_KaguyaRestartPackCoversS2(t *testing.T) {
+	defer mockKaguyaFileList(emberKaguyaS1S2HTML())()
+
+	info, ok := nyaa.PackFileRange("https://nyaa.si/view/1355132", 12)
+	if !ok {
+		t.Fatal("want PackFileRange to read the EMBER S1+S2 file list")
+	}
+	if info.StartEpisode != 1 || info.EndEpisode != 24 {
+		t.Fatalf("flattened range: want 1-24, got %d-%d", info.StartEpisode, info.EndEpisode)
+	}
+
+	const hash = "kaguyaemberhashkaguyaemberhashkaguyaem"
+	saved := packRange(kaguyaS1ID, 1, 12, 12, info.StartEpisode, info.EndEpisode, hash)
+	searched := false
+	backend := torrents.NewFakeBackend()
+
+	result := processAnimeEpisodes(
+		coverageConfigs(), backend, kaguyaS2Anime(12),
+		[]torrents.TorrentInfo{{Name: "[EMBER] Kaguya-sama (Season 1+2) [Batch]", Hash: hash}},
+		saved,
+		map[int]anilist.Series{
+			kaguyaS1ID: {Key: kaguyaS1ID, Offset: 0},
+			kaguyaS2ID: {Key: kaguyaS1ID, Offset: 12},
+		},
+		map[files.EpisodeKey]bool{}, countingSearcher(&searched), nil,
+	)
+
+	if searched {
+		t.Error("must not search Nyaa: the flattened S1+S2 pack covers S2")
+	}
+	if len(backend.List()) > 0 {
+		t.Errorf("must not add a torrent, but the client has %d", len(backend.List()))
+	}
+	if len(result.newEpisodes) != 12 {
+		t.Fatalf("expected 12 adopted records, got %d", len(result.newEpisodes))
+	}
+	for _, ep := range result.newEpisodes {
+		if ep.AnimeID != kaguyaS2ID || ep.EpisodeHash != hash || !ep.IsBatch {
+			t.Fatalf("adopted record is wrong: %+v", ep)
+		}
+		if ep.BatchStart != -11 || ep.BatchEnd != 12 {
+			t.Fatalf("S1's 1-24 pack under offset 12 is -11-12, got %d-%d", ep.BatchStart, ep.BatchEnd)
+		}
+		if ep.SeriesOffset != 12 {
+			t.Fatalf("adopted SeriesOffset: want 12, got %d", ep.SeriesOffset)
+		}
+		if ep.AnimeSeason == nil || *ep.AnimeSeason != 2 {
+			t.Fatalf("adopted AnimeSeason: want 2, got %v", ep.AnimeSeason)
+		}
 	}
 }

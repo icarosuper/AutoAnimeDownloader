@@ -320,11 +320,14 @@ have an analogous structure but would need a second parser, and anime in practic
 **`librarian.go`** — hardlink of completed videos into `<completed_anime_path>/<AnimeName>/`, one
 folder **per AniList entry**, with the season/cour marker preserved (decisions.md #45) and a
 `tvshow.nfo` carrying the AniList id (so the Jellyfin plugin matches by id, not by folder name).
-On the Jellyfin rename, a pack file's number comes from the file's own name minus
-`packEpisodeOffset` — a season ≥ 2 pack numbered continuously becomes the entry's numbering
-(decisions.md #68). With no readable number (NCOP/NCED, extras, movies) or on a name collision
-inside the pack, it keeps the raw name; two files with the same basename (per-season subfolder,
-flattened) use the relative path so one does not overwrite the other. `Organize` is idempotent.
+On the Jellyfin rename, a pack file's number comes from `FilesInPackWindow` (this entry's slice of
+a multi-season/cour pack, decisions.md #116) or, for a leftover sequel pack numbered 13–24, from
+the file's own name minus `packEpisodeOffset` (decisions.md #68). With no readable number
+(NCOP/NCED, extras, movies, episode 0) or on a name collision inside the pack, it keeps the raw name; two
+files with the same basename (per-season subfolder, flattened) use the relative path so one does
+not overwrite the other. Claimed extras (OVA / `.5` / `S00E` / E00) are hardlinked into the
+entry's folder even when they sit in a season group of their own. `Organize` is idempotent. `organizeTorrent` groups the hash's records by
+`AnimeID` so S1 and S2 of a shared pack each get their own folder.
 `ProbePath` validates that the filesystem supports hardlinks (exFAT/FAT32/some SMB do not) and runs
 on config save and on every pass (decisions.md #26, #31). `BackfillShowNFOs` is **not** on the
 `Librarian` interface — `main.go` holds the concrete `*organizer` — and only runs when
@@ -515,10 +518,14 @@ is `LastAiredEpisode` (decisions.md #56).
 (`"Euphonium 2 - 01 ~ 13"` → `2..1`).
 
 **`PackFileRange`** reads the range the pack actually carries from the detail-page file list, on the
-same ruler as the name (decisions.md #84). Min-max **skips OP/ED, `S00E`, OVA/OAD and `.5`**; an
+same ruler as the name (decisions.md #84). Min-max **skips OP/ED, `S00E`, OVA/OAD, `.5` and episode 0**; an
 isolated unmarked `total+1` drops when the AniList total is passed in; a contiguous run past the
 total stays
 ([decisions.md #113](decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)).
+Restart-per-season packs (S01E01–12 + S02E01–12) **flatten onto the concatenated axis** (1–24)
+so `#74`/`#78` treat them like a continuous pack; season folders already on one axis (Anime Time
+AoT 01–87) keep min-max
+([decisions.md #116](decisions.md#116-restart-per-season-packs-flatten-onto-the-concatenated-axis-organize-slices-by-anilist-id)).
 **`IsVideoFile` lives here, not in `files`**, because both
 read the same pack file list (the Librarian after download, `PackFileRange` before) and `files`
 already imports `nyaa` — the other way would be a cycle. The loose-number-before-extension pattern

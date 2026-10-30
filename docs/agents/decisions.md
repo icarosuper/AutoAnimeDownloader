@@ -122,6 +122,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#113** — PackFileRange min-max skips extras/OVA; an isolated total+1 drops; next cour stays](#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)
 - [**#114** — Two picker confirms; a paste does not override Download this](#114-two-picker-confirms-a-paste-does-not-override-download-this)
 - [**#115** — Nyaa descriptions are markdown source; render then sanitise](#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)
+- [**#116** — Restart-per-season packs flatten onto the concatenated axis; Organize slices by AniList id](#116-restart-per-season-packs-flatten-onto-the-concatenated-axis-organize-slices-by-anilist-id)
 
 ---
 
@@ -2278,6 +2279,8 @@ The detail-page file list answers before downloading, and it answers well: on th
 - **The tie-break would change none of the 8 results**, and would count an extras folder as an episode: `Creditless Opening 1` → 1, `OAD - 01` → 1, `Movie 01` → 1 (measured; on 61 packs those folders never stretched `min..max` past the main content, but they would enter a per-folder count directly).
 - **The residue is another, and smaller:** the STORED range exceeds the entry's total in 4 of the 8 combinations — Haikyuu S3 stores 1..25 for a 10-episode entry, SnK S2 stores 1..25 for 12, SnK S3 +3, JJK S2 +1. That is over-claim for [#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)'s ownership by coverage, and the fix for it is clamping the end at `totalEpisodes`, not reading folders.
 
+The min-max of **restart** packs is lifted by [#116](#116-restart-per-season-packs-flatten-onto-the-concatenated-axis-organize-slices-by-anilist-id): overlapping season groups flatten onto the concatenated axis. The per-folder file-count tie-break stays rejected.
+
 **Gap measured together, this one with no fix:** `ExtractEpisodeNumber` returns `nil` for a file name with a loose number followed by a title — `My Hero Academia 39 Game Start [1080p].mkv`. They were the only 3 packs in the sample where neither the name nor the files resolved the range, all three of the same MHA release.
 
 **Don't "fix" by:**
@@ -3253,9 +3256,9 @@ The dash terminator still has no `\.`: `- 17.5 (OVA)` would then parse as 17, an
 
 **Location:** `nyaa/nyaa.go` — `PackFileRange`, `skipPackRangeEpisode`, `dropIsolatedTotalPlusOne`; `nyaa/nyaa_regex.go` — `reFile*`; `daemon/search.go` — `packDetail` passes the AniList entry total. Pinned by `TestPackFileRange_ExtrasDoNotStretchTheDeclaredSpan` and `TestRemoveEpisodesAndLinks_RemovesKOnPackOnceOVAIsOutOfSpan`.
 
-**What it looks like:** `PackFileRange(url, totalEpisodes)` still returns min..max, but OP/ED/PV/Menu, `S00E`, OVA/OAD, and `.5` files do not feed the span. When `totalEpisodes` is known and the main run is present (some number ≤ total), a single unmarked `total+1` is dropped. A contiguous run past the total stays.
+**What it looks like:** `PackFileRange(url, totalEpisodes)` still returns min..max, but OP/ED/PV/Menu, `S00E`, OVA/OAD, `.5`, and episode 0 (`S02E00`, `- 00`) files do not feed the span. When `totalEpisodes` is known and the main run is present (some number ≤ total), a single unmarked `total+1` is dropped. A contiguous run past the total stays.
 
-**Why it's right:** `[MTBB] K-ON! S1` stored 1–19 because `S00E19 (OVA)` parsed as episode 19. `hasUnclaimedContent` then saw 13 < 19 and kept the torrent after the anime left the list ([#74](#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)). The file list is 13 TV + one OVA; 14–18 do not exist. Extras must not stretch the declared span. OVA/`.5` are this anime's files (they download and leave with the torrent) and still must not become `BatchEnd`.
+**Why it's right:** `[MTBB] K-ON! S1` stored 1–19 because `S00E19 (OVA)` parsed as episode 19. `hasUnclaimedContent` then saw 13 < 19 and kept the torrent after the anime left the list ([#74](#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)). The file list is 13 TV + one OVA; 14–18 do not exist. Extras must not stretch the declared span. OVA/`.5`/episode 0 are this anime's files (they download, get hardlinked into the library, and leave with the torrent) and still must not become `BatchEnd`.
 
 Measured 2026-10-29 (`live_extras_measure_test.go`, 70 packs): OP/ED-class is `NCOP`/`NCED`/`Opening`/`Ending`/`Creditless`/token `OP`/`ED`/`PV`/`Menu` and parent folder `NC`/`Creditless`. Include-as-claimed (out of min-max): `OVA`/`OAD`/`S00E`/`.5`. Unmarked `total+1` with run length 1 showed up three times (Honoka/Kira/DeadFish). Mushoku `- 12`…`- 23` under cour 1 (total 11) has no extra marker — that run is the next cour.
 
@@ -3309,3 +3312,21 @@ the markdown pass (the existing sanitiser test).
 **Don't "fix" by:** injecting the view page unsanitised; iframe-ing Nyaa; skipping
 goldmark and using `white-space: pre-wrap` on the source (tables and images stay
 unreadable).
+
+---
+
+### 116. Restart-per-season packs flatten onto the concatenated axis; Organize slices by AniList id
+
+**Location:** `nyaa/nyaa.go` — `PackFileRange`, `flattenRestartPackGroups`, `FilesInPackWindow`; `files/librarian.go` — `Organize` / `OrganizeRequest.SeriesOffset`; `files/filemanager.go` — `EpisodeStruct.SeriesOffset` / `AnimeSeason`; `daemon/jobs.go` — `organizeTorrent` groups by `AnimeID`; `daemon/episodes.go` / `coverage.go` persist the offset at download and adopt. Pinned by `TestPackFileRange_RestartSeasonGroupsFlattenOntoConcatenatedAxis`, `TestOrganizeRestartPackRoutesSeasonFilesToThisEntry`, `TestCoverageOwnership_KaguyaRestartPackCoversS2`, `TestOrganizeRestartPackHardlinksMushokuExtras`.
+
+**What it looks like:** an EMBER Kaguya S1+S2 pack (`nyaa.si/view/1355132`) stores `BatchStart/End` 1–24 under S1, not 1–12. Completing S1 with S2 still absent from watching keeps the torrent ([#74](#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)). When S2 enters watching, `findCoveringPack` adopts the hash already on disk ([#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)). `Organize` hardlinks S01 files into the S1 folder and S02 files into the S2 folder — one folder per AniList entry ([#45](#45-one-library-folder-per-anilist-entry--the-season-marker-stays-in-the-name)).
+
+**Why it's right:** [#84](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)'s min-max of restart numbering made S1 claim the whole pack (span 12 of 12) and delete it before S2 was watching. Continuous 1–24 packs already survived that pass. Flattening overlapping season groups (S01 1–12 + S02 1–12 → 1–24) reuses `#74`/`#78` with no new ownership field. Future AniList ids are **not** stored at S1 download: the PREQUEL walk has no sequels ([#71](#71-anilist-has-no-franchise-id-the-prequel-chain-is-the-only-source-and-searching-by-name-is-a-trap)); S2 resolves via `Series.Key` + offset when it is requested.
+
+**How groups are keyed.** Season from the file name (`S01E05`), else the parent folder (`2nd Season`, `Season 4 Part 1`), else the directory path so untitled folders stay distinct (Kaguya DB S1 vs Ultra Romantic vs First Kiss). Two groups **overlap** on episode numbers → concatenate spans in walk order, store `1..sum`. Non-overlapping groups are already one axis (Anime Time AoT 01–87 through S04 Part 2) and keep min-max. The isolated `total+1` drop ([#113](#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)) does not run on a flattened span: Ultra Romantic's 13 is that season's last episode.
+
+Measured packs: Kaguya EMBER 1355132 → 24; Kaguya DB 1928670 → 41 (12+12+13+ the First Kiss 01–04 residue); AoT EMBER 1421679 → 75 (25+12+22+16); Mushoku Anime Time 2169474 → 47 (23+24, `S01E17.5` and `S02E00` skipped).
+
+**Organize does not call AniList.** `SeriesOffset` and `AnimeSeason` are persisted on `EpisodeStruct` from data the pass already computed. `FilesInPackWindow` rebuilds the same groups from the on-disk paths and keeps files whose axis number is in `(offset, offset+total]`. A continuous 1–23 under cour 1 (offset 0, total 11) keeps 01–11 because a contiguous run past the total is the next cour; cour 2 (offset 11) maps 12–23 onto E01–E12. Claimed extras (OVA / `.5` / `S00E` / episode 0) stay out of the span ([#113](#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)) and are still hardlinked with the **raw** name, including extras that sit in a season group of their own (EMBER `S01E24 [OVA]` next to plain `01–23`, `S02E00` next to un-tagged `01–12`). `animeSeason` on the request keeps an extras-only `Sxx` group from leaking into another season's folder. `organizeTorrent` groups the hash's records by `AnimeID` and calls `Organize` once per folder.
+
+**Don't "fix" by:** storing sequel AniList ids at S1 download; putting `Season NN/` inside one franchise folder; using per-folder file **count** as a pack-choice tie-break ([#84](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything) still rejects that); calling AniList from `JobOrganize` ([#68](#68-pack-numbering-the-offset-is-guessed-from-the-files-themselves-and-a-basename-collision-uses-the-relative-path)); clamping `declaredSpan` at `AnimeTotalEpisodes` (that deletes the 1–24 pack under S1).

@@ -6,10 +6,12 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -1370,5 +1372,164 @@ func TestHandleSavedEpisodes_NewEpisodesProtectSharedTorrent(t *testing.T) {
 
 	if _, ok := backend.Get(hash); !ok {
 		t.Error("the torrent adopted by the same pass's new records must survive the pruning of the old ones")
+	}
+}
+
+const kaguyaS1ID = 101921
+
+func kaguyaFileItem(name string) string {
+	return `<li><i class="fa fa-file"></i>` + name + ` <span class="file-size">(1.0 GiB)</span></li>`
+}
+
+func kaguyaNumbered(pattern string, from, to int) []string {
+	out := make([]string, 0, to-from+1)
+	for i := from; i <= to; i++ {
+		out = append(out, fmt.Sprintf(pattern, i))
+	}
+	return out
+}
+
+func kaguyaFolderHTML(name string, files []string) string {
+	items := make([]string, 0, len(files))
+	for _, f := range files {
+		items = append(items, kaguyaFileItem(f))
+	}
+	return `<li>
+				<a href="" class="folder"><i class="fa fa-folder-open"></i>` + name + `</a>
+				<ul>` + strings.Join(items, "\n") + `</ul>
+			</li>`
+}
+
+func kaguyaDetailHTML(root string, folders []string) string {
+	return `<!doctype html><html><body>
+	<div class="torrent-file-list panel-body">
+		<ul>
+			<li>
+				<a href="" class="folder"><i class="fa fa-folder-open"></i>` + root + `</a>
+				<ul>` + strings.Join(folders, "\n") + `</ul>
+			</li>
+		</ul>
+	</div>
+	</body></html>`
+}
+
+func mockKaguyaFileList(html string) func() {
+	return nyaa.MockNyaaHttpGet(func(string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(strings.NewReader(html)),
+			Header:     make(http.Header),
+		}, nil
+	})
+}
+
+func emberKaguyaS1S2HTML() string {
+	return kaguyaDetailHTML("Kaguya-sama Love is War S01-S02 1080p Dual Audio BDRip 10 bits DD x265-EMBER", []string{
+		kaguyaFolderHTML("Kaguya-sama Love is War S01 1080p Dual Audio BDRip 10 bits DD x265-EMBER",
+			kaguyaNumbered("S01E%02d-Episode Title [ABCDEF01].mkv", 1, 12)),
+		kaguyaFolderHTML("Kaguya-sama Love is War S02 1080p Dual Audio BDRip 10 bits AAC x265-EMBER",
+			kaguyaNumbered("S02E%02d-Episode Title [ABCDEF02].mkv", 1, 12)),
+	})
+}
+
+func dbKaguyaS1S2S3HTML() string {
+	s1 := append(
+		[]string{
+			"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen_-_NCED01_(10bit_BD1080p_x265).mkv",
+			"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen_-_NCOP_(10bit_BD1080p_x265).mkv",
+		},
+		kaguyaNumbered("[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 12)...,
+	)
+	s2 := append(
+		[]string{
+			"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season_-_NCED_(10bit_BD1080p_x265).mkv",
+			"[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season_-_OVA_(10bit_WEB1080p_x265).mkv",
+		},
+		kaguyaNumbered("[DB]Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 12)...,
+	)
+	s3 := append(
+		[]string{
+			"[DB]Kaguya-sama wa Kokurasetai Ultra Romantic Teaser - Ishigami Yuu wa Kataritai_-_PV_(10bit_BD1080p_x265).mkv",
+			"[DB]Kaguya-sama wa Kokurasetai Ultra Romantic_-_NCOP_(10bit_BD1080p_x265).mkv",
+		},
+		kaguyaNumbered("[DB]Kaguya-sama wa Kokurasetai Ultra Romantic_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 13)...,
+	)
+	movie := append(
+		[]string{"[DB]Kaguya-sama wa Kokurasetai First Kiss wa Owaranai_-_NCED_(10bit_BD1080p_x265).mkv"},
+		kaguyaNumbered("[DB]Kaguya-sama wa Kokurasetai First Kiss wa Owaranai_-_%02d_(Dual Audio_10bit_BD1080p_x265).mkv", 1, 4)...,
+	)
+	return kaguyaDetailHTML("Kaguya-sama wa Kokurasetai: Tensai-tachi no Renai Zunousen", []string{
+		kaguyaFolderHTML("Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen", s1),
+		kaguyaFolderHTML("Kaguya-sama wa Kokurasetai Tensai-tachi no Renai Zunousen 2nd Season", s2),
+		kaguyaFolderHTML("Kaguya-sama wa Kokurasetai Ultra Romantic", s3),
+		kaguyaFolderHTML("Kaguya-sama wa Kokurasetai First Kiss wa Owaranai", movie),
+	})
+}
+
+// Completing Kaguya S1 with S2 still absent from watching: identifyEpisodesNotInWatching puts
+// every S1 record in the delete set. Restart packs now flatten onto the concatenated axis
+// (EMBER 1-24, DB 1-41), so the #74 guard keeps the torrent the same way a continuous 1-24
+// pack already did.
+func TestHandleSavedEpisodes_KaguyaMultiSeasonPackWaitsForS2NotInWatching(t *testing.T) {
+	cases := []struct {
+		name   string
+		html   string
+		url    string
+		wantHi int
+	}{
+		{name: "EMBER S1+S2 nyaa.si/view/1355132", html: emberKaguyaS1S2HTML(), url: "https://nyaa.si/view/1355132", wantHi: 24},
+		{name: "DB S1+S2+S3+Movie+OVA nyaa.si/view/1928670", html: dbKaguyaS1S2S3HTML(), url: "https://nyaa.si/view/1928670", wantHi: 41},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer mockKaguyaFileList(tc.html)()
+
+			info, ok := nyaa.PackFileRange(tc.url, 12)
+			if !ok {
+				t.Fatal("want PackFileRange to read the file list")
+			}
+			if info.StartEpisode != 1 || info.EndEpisode != tc.wantHi {
+				t.Fatalf("stored range under S1: want 1-%d, got %d-%d", tc.wantHi, info.StartEpisode, info.EndEpisode)
+			}
+
+			const hash = "kaguyahashkaguyahashkaguyahashkaguyaha"
+			saved := packRange(kaguyaS1ID, 1, 12, 12, info.StartEpisode, info.EndEpisode, hash)
+			backend := fakeWithTorrents(hash)
+			fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+			// S1 completed: not in checkedEpisodes. S2 never entered watching: no S2 records.
+			handleSavedEpisodes(fm, &files.Config{DeleteWatchedEpisodes: true}, backend, testLibrarian(), handleEpisodesData{
+				savedEpisodes:   saved,
+				checkedEpisodes: nil,
+			})
+
+			if _, still := backend.Get(hash); !still {
+				t.Fatal("flattened span exceeds S1's 12 episodes: the torrent must wait for later seasons")
+			}
+			if len(fm.deletedEpisodeKeys) != 0 {
+				t.Errorf("forgettableKeys must keep the S1 records of a held pack, got %d deleted", len(fm.deletedEpisodeKeys))
+			}
+		})
+	}
+}
+
+// Contrast: the same pass with a pack that DID declare 1-24 (continuous numbering) keeps the
+// torrent even though S2 is not in watching. That is the #74 guard the Kaguya packs miss.
+func TestHandleSavedEpisodes_ContinuousTwoSeasonPackWaitsForS2NotInWatching(t *testing.T) {
+	const hash = "continuoushashcontinuoushashcontinuous"
+	saved := packRange(kaguyaS1ID, 1, 12, 12, 1, 24, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	handleSavedEpisodes(fm, &files.Config{DeleteWatchedEpisodes: true}, backend, testLibrarian(), handleEpisodesData{
+		savedEpisodes:   saved,
+		checkedEpisodes: nil,
+	})
+
+	if _, ok := backend.Get(hash); !ok {
+		t.Fatal("a 1-24 pack under a 12-episode S1 still has unclaimed content: the torrent must wait")
+	}
+	if len(fm.deletedEpisodeKeys) != 0 {
+		t.Errorf("forgettableKeys must keep the S1 records of a held pack, got %d deleted", len(fm.deletedEpisodeKeys))
 	}
 }
