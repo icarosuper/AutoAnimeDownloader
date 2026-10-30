@@ -324,6 +324,11 @@ outer:
 	}
 
 	// Phase 3: sequential cleanup (file writes must not overlap).
+	watching := make(map[int]bool, len(animes))
+	for _, a := range animes {
+		watching[a.Media.Id] = true
+	}
+
 	deleteEpisodesByStatus(deletableMedia, fileManager, backend, librarian, savedEpisodes)
 
 	handleSavedEpisodes(fileManager, configs, backend, librarian, handleEpisodesData{
@@ -331,6 +336,7 @@ outer:
 		keysToDelete:    keysToDelete,
 		checkedEpisodes: checkedEpisodes,
 		newEpisodes:     newEpisodes,
+		watching:        watching,
 	})
 
 	state.SetLastCheck(time.Now())

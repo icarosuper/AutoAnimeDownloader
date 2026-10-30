@@ -19,6 +19,7 @@ type handleEpisodesData struct {
 	keysToDelete    []files.EpisodeKey
 	checkedEpisodes []files.EpisodeKey
 	newEpisodes     []files.EpisodeStruct
+	watching        map[int]bool
 }
 
 // episodeSelection is the result of an anime's selection loop.
@@ -1104,7 +1105,7 @@ func handleSavedEpisodes(fileManager FileManagerInterface, configs *files.Config
 		// the torrent guard would conclude "nobody survives" and delete the file the pass just adopted.
 		saved := append(append([]files.EpisodeStruct{}, data.savedEpisodes...), data.newEpisodes...)
 		// Best-effort: a failure here must not abort the verification pass.
-		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allKeys, saved, false, false, nil); err != nil {
+		if err := removeEpisodesAndLinks(fileManager, backend, librarian, allKeys, saved, false, false, data.watching); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Failed to delete episodes from file")
 		}
 	}

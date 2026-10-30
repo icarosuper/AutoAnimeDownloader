@@ -1503,10 +1503,9 @@ func dbKaguyaS1S2S3HTML() string {
 }
 
 // Completing Kaguya S1 with S2 still absent from watching: identifyEpisodesNotInWatching puts
-// every S1 record in the delete set. Restart packs now flatten onto the concatenated axis
-// (EMBER 1-24, DB 1-41), so the #74 guard keeps the torrent the same way a continuous 1-24
-// pack already did.
-func TestHandleSavedEpisodes_KaguyaMultiSeasonPackWaitsForS2NotInWatching(t *testing.T) {
+// every S1 record in the delete set. The flattened span still exceeds S1's 12 (EMBER 1-24,
+// DB 1-41), but #117 drops the pack because nobody in the group is in watching.
+func TestHandleSavedEpisodes_KaguyaMultiSeasonPackDropsWhenS2NotInWatching(t *testing.T) {
 	cases := []struct {
 		name   string
 		html   string
@@ -1533,25 +1532,23 @@ func TestHandleSavedEpisodes_KaguyaMultiSeasonPackWaitsForS2NotInWatching(t *tes
 			backend := fakeWithTorrents(hash)
 			fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
 
-			// S1 completed: not in checkedEpisodes. S2 never entered watching: no S2 records.
 			handleSavedEpisodes(fm, &files.Config{DeleteWatchedEpisodes: true}, backend, testLibrarian(), handleEpisodesData{
 				savedEpisodes:   saved,
 				checkedEpisodes: nil,
+				watching:        map[int]bool{},
 			})
 
-			if _, still := backend.Get(hash); !still {
-				t.Fatal("flattened span exceeds S1's 12 episodes: the torrent must wait for later seasons")
+			if _, still := backend.Get(hash); still {
+				t.Fatal("S1 left watching and S2 was never adopted: the torrent must leave")
 			}
-			if len(fm.deletedEpisodeKeys) != 0 {
-				t.Errorf("forgettableKeys must keep the S1 records of a held pack, got %d deleted", len(fm.deletedEpisodeKeys))
+			if len(fm.deletedEpisodeKeys) != len(saved) {
+				t.Errorf("the S1 records must leave with the torrent, got %d deleted", len(fm.deletedEpisodeKeys))
 			}
 		})
 	}
 }
 
-// Contrast: the same pass with a pack that DID declare 1-24 (continuous numbering) keeps the
-// torrent even though S2 is not in watching. That is the #74 guard the Kaguya packs miss.
-func TestHandleSavedEpisodes_ContinuousTwoSeasonPackWaitsForS2NotInWatching(t *testing.T) {
+func TestHandleSavedEpisodes_ContinuousTwoSeasonPackDropsWhenS2NotInWatching(t *testing.T) {
 	const hash = "continuoushashcontinuoushashcontinuous"
 	saved := packRange(kaguyaS1ID, 1, 12, 12, 1, 24, hash)
 	backend := fakeWithTorrents(hash)
@@ -1560,12 +1557,34 @@ func TestHandleSavedEpisodes_ContinuousTwoSeasonPackWaitsForS2NotInWatching(t *t
 	handleSavedEpisodes(fm, &files.Config{DeleteWatchedEpisodes: true}, backend, testLibrarian(), handleEpisodesData{
 		savedEpisodes:   saved,
 		checkedEpisodes: nil,
+		watching:        map[int]bool{},
+	})
+
+	if _, ok := backend.Get(hash); ok {
+		t.Fatal("a 1-24 pack under a 12-episode S1 leaves once S1 is off-list")
+	}
+	if len(fm.deletedEpisodeKeys) != len(saved) {
+		t.Errorf("the S1 records must leave with the torrent, got %d deleted", len(fm.deletedEpisodeKeys))
+	}
+}
+
+func TestHandleSavedEpisodes_KeepsUnclaimedPackWhileS1StillWatching(t *testing.T) {
+	const hash = "watchkeepwatchkeepwatchkeepwatchkeepwatc"
+	saved := packRange(kaguyaS1ID, 1, 12, 12, 1, 24, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	handleSavedEpisodes(fm, &files.Config{DeleteWatchedEpisodes: true}, backend, testLibrarian(), handleEpisodesData{
+		savedEpisodes:   saved,
+		keysToDelete:    keysOf(saved),
+		checkedEpisodes: keysOf(saved),
+		watching:        map[int]bool{kaguyaS1ID: true},
 	})
 
 	if _, ok := backend.Get(hash); !ok {
-		t.Fatal("a 1-24 pack under a 12-episode S1 still has unclaimed content: the torrent must wait")
+		t.Fatal("watched pruning must not drop a multi-season pack while S1 is still in watching")
 	}
 	if len(fm.deletedEpisodeKeys) != 0 {
-		t.Errorf("forgettableKeys must keep the S1 records of a held pack, got %d deleted", len(fm.deletedEpisodeKeys))
+		t.Errorf("forgettableKeys must keep the records of a held pack, got %d deleted", len(fm.deletedEpisodeKeys))
 	}
 }
