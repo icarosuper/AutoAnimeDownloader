@@ -163,7 +163,7 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
   **implemented** ([decisions.md #113](agents/decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)).
   `PackFileRange` no longer lets `S00E19 (OVA)` become episode 19. Packs **already** stored
   as 1–19 keep the old span until the torrent is deleted from Downloads (`force`) or
-  re-ingested. Method A (off-list bypasses the unclaimed guard) stays on the table.
+  re-ingested. Method A (off-list bypasses the unclaimed guard) shipped as [decisions.md #117](agents/decisions.md#117-off-list-bypasses-the-unclaimed-pack-guard).
 
 ## No release — subtitle language filter
 

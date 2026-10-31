@@ -123,6 +123,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#114** — Two picker confirms; a paste does not override Download this](#114-two-picker-confirms-a-paste-does-not-override-download-this)
 - [**#115** — Nyaa descriptions are markdown source; render then sanitise](#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)
 - [**#116** — Restart-per-season packs flatten onto the concatenated axis; Organize slices by AniList id](#116-restart-per-season-packs-flatten-onto-the-concatenated-axis-organize-slices-by-anilist-id)
+- [**#117** — Off-list bypasses the unclaimed pack guard](#117-off-list-bypasses-the-unclaimed-pack-guard)
 
 ---
 
@@ -1848,7 +1849,8 @@ duplicating the merge logic, and it starts on the first query.
 ### 74. The pack-exclusion guard's unit is the torrent's contents, not the list of records
 
 **Location:** `internal/daemon/episodes.go` (`canRemoveTorrent`, `hasUnclaimedContent`,
-`declaredSpan`, `forgettableKeys`, `handleSavedEpisodes`). Pinned by
+`declaredSpan`, `forgettableKeys`, `handleSavedEpisodes`, `unclaimedHolds`). The second
+gate is [#117](#117-off-list-bypasses-the-unclaimed-pack-guard). Pinned by
 `TestRemoveEpisodesAndLinks_KeepsPackWithUnrecordedContent`,
 `TestRemoveEpisodesAndLinks_RemovesFullyCoveredPack`,
 `TestRemoveEpisodesAndLinks_RemovesPackDownloadedMidWatch`,
@@ -3319,7 +3321,7 @@ unreadable).
 
 **Location:** `nyaa/nyaa.go` — `PackFileRange`, `flattenRestartPackGroups`, `FilesInPackWindow`; `files/librarian.go` — `Organize` / `OrganizeRequest.SeriesOffset`; `files/filemanager.go` — `EpisodeStruct.SeriesOffset` / `AnimeSeason`; `daemon/jobs.go` — `organizeTorrent` groups by `AnimeID`; `daemon/episodes.go` / `coverage.go` persist the offset at download and adopt. Pinned by `TestPackFileRange_RestartSeasonGroupsFlattenOntoConcatenatedAxis`, `TestOrganizeRestartPackRoutesSeasonFilesToThisEntry`, `TestCoverageOwnership_KaguyaRestartPackCoversS2`, `TestOrganizeRestartPackHardlinksMushokuExtras`.
 
-**What it looks like:** an EMBER Kaguya S1+S2 pack (`nyaa.si/view/1355132`) stores `BatchStart/End` 1–24 under S1, not 1–12. Completing S1 with S2 still absent from watching keeps the torrent ([#74](#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records)). When S2 enters watching, `findCoveringPack` adopts the hash already on disk ([#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)). `Organize` hardlinks S01 files into the S1 folder and S02 files into the S2 folder — one folder per AniList entry ([#45](#45-one-library-folder-per-anilist-entry--the-season-marker-stays-in-the-name)).
+**What it looks like:** an EMBER Kaguya S1+S2 pack (`nyaa.si/view/1355132`) stores `BatchStart/End` 1–24 under S1, not 1–12. Completing S1 with S2 still absent from watching leaves a span larger than S1's total, so [#74](#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records) still sees unclaimed content; the torrent is kept only while a claimed season is in watching ([#117](#117-off-list-bypasses-the-unclaimed-pack-guard)). When S2 enters watching, `findCoveringPack` adopts the hash already on disk ([#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)). `Organize` hardlinks S01 files into the S1 folder and S02 files into the S2 folder — one folder per AniList entry ([#45](#45-one-library-folder-per-anilist-entry--the-season-marker-stays-in-the-name)).
 
 **Why it's right:** [#84](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)'s min-max of restart numbering made S1 claim the whole pack (span 12 of 12) and delete it before S2 was watching. Continuous 1–24 packs already survived that pass. Flattening overlapping season groups (S01 1–12 + S02 1–12 → 1–24) reuses `#74`/`#78` with no new ownership field. Future AniList ids are **not** stored at S1 download: the PREQUEL walk has no sequels ([#71](#71-anilist-has-no-franchise-id-the-prequel-chain-is-the-only-source-and-searching-by-name-is-a-trap)); S2 resolves via `Series.Key` + offset when it is requested.
 
@@ -3330,3 +3332,35 @@ Measured packs: Kaguya EMBER 1355132 → 24; Kaguya DB 1928670 → 41 (12+12+13+
 **Organize does not call AniList.** `SeriesOffset` and `AnimeSeason` are persisted on `EpisodeStruct` from data the pass already computed. `FilesInPackWindow` rebuilds the same groups from the on-disk paths and keeps files whose axis number is in `(offset, offset+total]`. A continuous 1–23 under cour 1 (offset 0, total 11) keeps 01–11 because a contiguous run past the total is the next cour; cour 2 (offset 11) maps 12–23 onto E01–E12. Claimed extras (OVA / `.5` / `S00E` / episode 0) stay out of the span ([#113](#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)) and are still hardlinked with the **raw** name, including extras that sit in a season group of their own (EMBER `S01E24 [OVA]` next to plain `01–23`, `S02E00` next to un-tagged `01–12`). `animeSeason` on the request keeps an extras-only `Sxx` group from leaking into another season's folder. `organizeTorrent` groups the hash's records by `AnimeID` and calls `Organize` once per folder.
 
 **Don't "fix" by:** storing sequel AniList ids at S1 download; putting `Season NN/` inside one franchise folder; using per-folder file **count** as a pack-choice tie-break ([#84](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything) still rejects that); calling AniList from `JobOrganize` ([#68](#68-pack-numbering-the-offset-is-guessed-from-the-files-themselves-and-a-basename-collision-uses-the-relative-path)); clamping `declaredSpan` at `AnimeTotalEpisodes` (that deletes the 1–24 pack under S1).
+
+### 117. Off-list bypasses the unclaimed pack guard
+
+**Location:** `internal/daemon/episodes.go` (`unclaimedHolds`, `canRemoveTorrent`,
+`forgettableKeys`, `removeEpisodesAndLinks`, `handleSavedEpisodes`, `deleteEpisodesByStatus`),
+`internal/daemon/verification.go` (watching map from `animes`, `newEpisodes` into status
+deletion). Pinned by `TestRemoveEpisodesAndLinks_DropsUnclaimedPackWhenWatchingEmpty`,
+`TestRemoveEpisodesAndLinks_KeepsUnclaimedPackWhenAnimeStillWatching`,
+`TestHandleSavedEpisodes_KaguyaMultiSeasonPackDropsWhenS2NotInWatching`,
+`TestHandleSavedEpisodes_ContinuousTwoSeasonPackDropsWhenS2NotInWatching`,
+`TestHandleSavedEpisodes_KeepsUnclaimedPackWhileS1StillWatching` and
+`TestDeleteEpisodesByStatus_NewEpisodesProtectSharedTorrent`
+(`internal/daemon/episodes_test.go`).
+
+**What it looks like:** `#74`'s unclaimed-content hold is gated on this pass's watching set
+(media ids in `DownloadStatuses` of any account, plus standalones). A S1+S2 pack stored as
+`1..24` under a 12-episode S1 still has unclaimed content, but once S1 has left watching and
+S2 was not adopted, `canRemoveTorrent` returns true and `forgettableKeys` forgets the
+records. While S1 is still in watching, watched-episode pruning does not drop the pack.
+`watching == nil` is the API default and keeps today's `#74` hold. Manual torrent delete
+still passes `force`.
+
+**Why it's right:** keeping the torrent after S1 left, in case S2 might enter watching later,
+left multi-season packs on disk forever when the user never added S2. Same-pass adoption is
+already paid for: `handleSavedEpisodes` merges `newEpisodes`, and status deletion now uses
+the same snapshot so it cannot delete the hash S2 just adopted. Sequel ids are still not
+stored (#116 / #71). Empty vs nil is the gate: the automatic pass always passes a non-nil
+map (`make` even when `animes` is empty).
+
+**Don't "fix" by:** dropping `hasUnclaimedContent` (watched pruning of S1 would then delete
+S2's files while S1 is still CURRENT); walking SEQUEL at deletion; treating a nil watching
+map as off-list (a per-episode API delete would drop the pack).
