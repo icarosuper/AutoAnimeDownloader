@@ -195,7 +195,7 @@ func TestDeleteEpisodesByStatus_DroppedAnime(t *testing.T) {
 	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
-	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), savedEpisodes)
+	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), savedEpisodes, nil, nil)
 
 	if _, ok := backend.Get(episodeHash); ok {
 		t.Errorf("expected torrent %q removed from the client, but it is still there", episodeHash)
@@ -227,7 +227,7 @@ func TestDeleteEpisodesByStatus_ManuallyManagedNotDeleted(t *testing.T) {
 	backend := fakeWithTorrents(episodeHash)
 	fm := &mockFileManagerForEpisodes{}
 
-	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), savedEpisodes)
+	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), savedEpisodes, nil, nil)
 
 	if _, ok := backend.Get(episodeHash); !ok {
 		t.Error("a manually managed episode must not have its torrent removed")
@@ -813,7 +813,7 @@ func TestDeleteEpisodesByStatus_DeleteErrorIsTolerated(t *testing.T) {
 	fm := &failingFM{saved: saved, deleteErr: errors.New("write failed")}
 	backend := fakeWithTorrents(hash)
 
-	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), saved)
+	deleteEpisodesByStatus(deletableMedia, fm, backend, testLibrarian(), saved, nil, nil)
 
 	if _, ok := backend.Get(hash); ok {
 		t.Error("the torrent must be removed even when writing the file fails")
@@ -1586,5 +1586,20 @@ func TestHandleSavedEpisodes_KeepsUnclaimedPackWhileS1StillWatching(t *testing.T
 	}
 	if len(fm.deletedEpisodeKeys) != 0 {
 		t.Errorf("forgettableKeys must keep the records of a held pack, got %d deleted", len(fm.deletedEpisodeKeys))
+	}
+}
+
+func TestDeleteEpisodesByStatus_NewEpisodesProtectSharedTorrent(t *testing.T) {
+	const hash = "statusadoptstatusadoptstatusadoptstatusa"
+	const s1, s2 = 108465, 127720
+	saved := packRange(s1, 1, 11, 11, 1, 23, hash)
+	newEps := packRange(s2, 1, 12, 12, -10, 12, hash)
+	backend := fakeWithTorrents(hash)
+	fm := &mockFileManagerForEpisodes{savedEpisodes: saved}
+
+	deleteEpisodesByStatus(map[int]bool{s1: true}, fm, backend, testLibrarian(), saved, newEps, map[int]bool{s2: true})
+
+	if _, ok := backend.Get(hash); !ok {
+		t.Fatal("status deletion of S1 must not drop the pack S2 just adopted")
 	}
 }

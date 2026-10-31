@@ -329,7 +329,7 @@ outer:
 		watching[a.Media.Id] = true
 	}
 
-	deleteEpisodesByStatus(deletableMedia, fileManager, backend, librarian, savedEpisodes)
+	deleteEpisodesByStatus(deletableMedia, fileManager, backend, librarian, savedEpisodes, newEpisodes, watching)
 
 	handleSavedEpisodes(fileManager, configs, backend, librarian, handleEpisodesData{
 		savedEpisodes:   savedEpisodes,

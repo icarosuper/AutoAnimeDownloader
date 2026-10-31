@@ -1063,7 +1063,7 @@ func RemoveTorrentWithEpisodes(
 
 // deleteEpisodesByStatus deletes the episodes of the anime that ALL accounts agree to delete.
 // deletableMediaIDs (verification.go) decides that — it's only applied here.
-func deleteEpisodesByStatus(deletableMedia map[int]bool, fileManager FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, savedEpisodes []files.EpisodeStruct) {
+func deleteEpisodesByStatus(deletableMedia map[int]bool, fileManager FileManagerInterface, backend torrents.TorrentBackend, librarian files.Librarian, savedEpisodes []files.EpisodeStruct, newEpisodes []files.EpisodeStruct, watching map[int]bool) {
 	if len(deletableMedia) == 0 {
 		return
 	}
@@ -1087,8 +1087,10 @@ func deleteEpisodesByStatus(deletableMedia map[int]bool, fileManager FileManager
 		Int("count", len(keysToDelete)).
 		Msg("Deleting episodes for animes with delete statuses")
 
-	// Best-effort: a failure here must not abort the verification pass.
-	if err := removeEpisodesAndLinks(fileManager, backend, librarian, keysToDelete, savedEpisodes, false, false, nil); err != nil {
+	// Without newEpisodes, off-list bypass would delete the torrent this pass just adopted
+	// (defect A on the status path, decisions.md #117).
+	saved := append(append([]files.EpisodeStruct{}, savedEpisodes...), newEpisodes...)
+	if err := removeEpisodesAndLinks(fileManager, backend, librarian, keysToDelete, saved, false, false, watching); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Status-based deletion: failed to delete episodes from file")
 	}
 }
