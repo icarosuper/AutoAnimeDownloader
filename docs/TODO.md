@@ -3,13 +3,13 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.7.1`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.7.2`. Stamp a version (tag, GitHub Release, AUR):
 [guides/release.md](guides/release.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
 migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up to right after
-`v2.7.1`.
+`v2.7.2`.
 
 > The old Stage 1 (close the ceilings of what already runs) closed on 2026-08-30 **with no code**:
 > all three items were measured and all three said not to touch anything. Pack numbering by folder
@@ -63,10 +63,14 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 
 ## `v2.7.2` — torrent picker UI
 
-- Identity header, Nyaa-labeled search, two confirms (list vs magnet), packs-only copy,
-  description overflow. Implemented on `torrent-picker-ui`
-  ([decisions.md #114](agents/decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this)).
+- ~~Identity header, Nyaa-labeled search, two confirms (list vs magnet), packs-only copy,
+  description overflow~~ — **released in `v2.7.2` on 2026-11-03**
+  ([decisions.md #114](agents/decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this),
+  [#115](agents/decisions.md#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)).
   Follow-up to the `v2.7.0` picker; independent of the `v2.8.0` recents shelf.
+- ~~Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
+  clear-all)~~ — **released in `v2.7.2` on 2026-11-03**. Independent of the recents shelf.
+  The Behind chip that used to live in the recents spec is out.
 
 ## `v2.8.0` — dashboard recents
 
@@ -75,9 +79,6 @@ anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
 
 - Recents shelf, clickable last-check rows. Spec designed on 2026-10-23:
   [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
-- Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
-  clear-all). Implemented on `status-filters`; ships with the recents shelf in this minor.
-  Independent of the shelf. The Behind chip that used to live in the recents spec is out.
 
 ## `v2.9.0` — episode torrent picker
 
@@ -160,10 +161,12 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
 
 - ~~A pack whose declared span exceeds `AnimeTotalEpisodes` (OVA/specials on the same media)
   survives `identifyEpisodesNotInWatching` after the anime leaves every tracked list~~ —
-  **implemented** ([decisions.md #113](agents/decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)).
+  **released in `v2.7.2` on 2026-11-03**
+  ([decisions.md #113](agents/decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays),
+  [#117](agents/decisions.md#117-off-list-bypasses-the-unclaimed-pack-guard)).
   `PackFileRange` no longer lets `S00E19 (OVA)` become episode 19. Packs **already** stored
   as 1–19 keep the old span until the torrent is deleted from Downloads (`force`) or
-  re-ingested. Method A (off-list bypasses the unclaimed guard) shipped as [decisions.md #117](agents/decisions.md#117-off-list-bypasses-the-unclaimed-pack-guard).
+  re-ingested.
 
 ## No release — subtitle language filter
 
