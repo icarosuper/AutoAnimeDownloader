@@ -112,9 +112,8 @@ two.
 - UI/UX overhaul of the webApp
 - Visual identity — logo, palette, favicon; feeds the social preview and the landing page
 - Publish the image on ghcr — the biggest win among the options measured in
-  [distribution.md](distribution.md), the Dockerfile already exists. A `curl` `install.sh` is the
-  next step from there, if needed. `go install`, Homebrew, Scoop, .deb/.rpm and Flatpak were
-  evaluated and discarded
+  [distribution.md](distribution.md), the Dockerfile already exists. The `curl` `install.sh` already
+  shipped. `go install`, Homebrew, Scoop, .deb/.rpm and Flatpak were evaluated and discarded
 - Update the README — after the image, because that's what changes the install instructions
 - Upload a social preview on GitHub — today the shared link card is GitHub's generic one.
   Settings > General > Social preview > Upload, 1280x640, using the new visual identity. Web only,

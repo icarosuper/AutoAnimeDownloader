@@ -8,7 +8,8 @@ How the app is installed today and what is worth adding. Ordered by return on ef
   checksums bumped by hand on every release (helper outside the repo);
   `autoanimedownloader-git` builds from `master` and needs no bump. The stamp steps, including
   this bump, are in [guides/release.md](guides/release.md)
-- **GitHub Releases zip** + `make install-user` / `sudo make install-global` (`infra/linux/Makefile`)
+- **GitHub Releases zip** + `make install-user` / `sudo make install-global` (`infra/linux/Makefile`),
+  or `install.sh` (curl | bash) wrapping the same `install-user` — see section 2
 - **Windows** — a standalone exe, runs in the foreground, no service and no installer
 
 None of these gives **automatic updates**. That's the main gap, not the lack of a one-liner.
@@ -46,35 +47,23 @@ Win: installing, updating (`docker compose pull`) and uninstalling become one co
 distro, Synology, unRAID, TrueNAS. All that's missing is a README section with a ~10-line compose
 file (a volume for `completed_anime_path` and one for the data, port 8091).
 
-## 2. `install.sh` (curl | bash) — second step
+## 2. `install.sh` (curl | bash) — shipped
 
-Serves whoever runs bare-metal outside Arch. ~30 lines at the repo root, reusing the existing
+Serves whoever runs bare-metal outside Arch. `install.sh` at the repo root wraps the existing
 `make install-user`:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/icarosuper/AutoAnimeDownloader/master/install.sh | bash
 ```
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-case "$(uname -m)" in
-  x86_64) ASSET=Linux_x86 ;;
-  aarch64|arm64) ASSET=Linux_Arm64 ;;
-  *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
-esac
-TAG=$(curl -fsSL https://api.github.com/repos/icarosuper/AutoAnimeDownloader/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+')
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-ZIP="AutoAnimeDownloader_${ASSET}_${TAG}.zip"
-curl -fsSL -o "$TMP/$ZIP"        "https://github.com/icarosuper/AutoAnimeDownloader/releases/download/$TAG/$ZIP"
-curl -fsSL -o "$TMP/$ZIP.sha256" "https://github.com/icarosuper/AutoAnimeDownloader/releases/download/$TAG/$ZIP.sha256"
-(cd "$TMP" && sha256sum -c "$ZIP.sha256" && unzip -q "$ZIP")
-make -C "$TMP"/AutoAnimeDownloader_* install-user
-```
+It shipped before the ghcr image: it depends on neither. It reads the latest release from the
+GitHub API, picks the zip by its `_Linux_x86_v` / `_Linux_Arm64_v` suffix (so the project prefix in
+the asset name can change in the rename without breaking it), checks the `.sha256` that `release.yml`
+already publishes, and runs the `Makefile` inside the zip.
 
-Checking the `.sha256` is **not optional** — it's curl straight into bash. The checksum files are
-already published by `release.yml`. Still no automatic updates: whoever installed this way runs
-the script again.
+Checking the `.sha256` is **not optional** — it's curl straight into bash. Still no automatic
+updates: whoever installed this way runs the script again (`install-user` stops the service,
+replaces the binaries and starts it).
 
 ## Evaluated and discarded
 

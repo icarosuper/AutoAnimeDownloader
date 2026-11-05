@@ -47,7 +47,8 @@ make release PLATFORM=linuxamd64    # build + package in one step
 
 The Linux install targets are **not** in this Makefile — they ship inside the release zip
 (`infra/linux/Makefile`): `make install-user` / `sudo make install-global`, and the matching
-`uninstall-user` / `uninstall-global`.
+`uninstall-user` / `uninstall-global`. `install.sh` at the repo root is the `curl | bash` wrapper:
+it downloads the latest release zip, checks its `.sha256` and runs `install-user`.
 
 ## Running the Daemon
 

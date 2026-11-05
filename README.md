@@ -80,7 +80,14 @@ After install, the systemd user service starts automatically. Access the web UI 
 
 ### Linux (other distros)
 
-Grab the zip for your architecture from the [latest release](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest) — `AutoAnimeDownloader_Linux_x86_v*.zip` (x86_64) or `AutoAnimeDownloader_Linux_Arm64_v*.zip` (ARM64).
+One-liner — downloads the latest release for your architecture, verifies its checksum and runs
+`make install-user` (`~/.local/bin`, no sudo). Run it again to update:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/icarosuper/AutoAnimeDownloader/master/install.sh | bash
+```
+
+Or by hand: grab the zip for your architecture from the [latest release](https://github.com/icarosuper/AutoAnimeDownloader/releases/latest) — `AutoAnimeDownloader_Linux_x86_v*.zip` (x86_64) or `AutoAnimeDownloader_Linux_Arm64_v*.zip` (ARM64).
 
 ```bash
 unzip AutoAnimeDownloader_Linux_x86_v*.zip
