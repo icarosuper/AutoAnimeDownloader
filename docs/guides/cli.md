@@ -61,7 +61,8 @@ autoanimedownloader config get
 autoanimedownloader config set anilist_usernames me,other
 autoanimedownloader config set check_interval 15
 autoanimedownloader config set completed_anime_path "/mnt/Anime, Series"
-autoanimedownloader config set notifications '{"webhooks":[],"batch_window_seconds":30}'
+autoanimedownloader config set notifications.batch_window_seconds 30
+autoanimedownloader config set priorities.fansubs SubsPlease,Erai-raws
 autoanimedownloader priorities defaults
 ```
 
@@ -69,7 +70,11 @@ autoanimedownloader priorities defaults
 keys by JSON name (case and underscores ignored). A key that already holds a list accepts
 comma-separated values; anything else is JSON when it parses, otherwise a string.
 
-`priorities defaults` is the default torrent priority lists. To change yours: `config set priorities '…'`.
+A dotted key sets one field inside a nested object and keeps the rest of it. Setting the whole
+object (`config set notifications '{…}'`) still works, but replaces it: a field left out of the JSON
+is gone, webhooks included.
+
+`priorities defaults` is the default torrent priority lists. To change one: `config set priorities.<list> …`.
 
 ## Animes
 

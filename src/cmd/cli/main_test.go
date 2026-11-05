@@ -55,6 +55,40 @@ func TestMatchConfigKey_IgnoresCaseAndUnderscore(t *testing.T) {
 	}
 }
 
+// A dotted key patches one field of a nested object in place. Before it, changing
+// batch_window_seconds meant passing the whole notifications object, and a webhook left out of
+// that JSON was erased.
+func TestResolveConfigKey_WalksDottedKey(t *testing.T) {
+	fields := configFields(t)
+	fields["notifications"] = map[string]any{
+		"webhooks":             []any{map[string]any{"name": "ntfy"}},
+		"batch_window_seconds": float64(60),
+	}
+
+	parent, name, err := resolveConfigKey(fields, "Notifications.BatchWindowSeconds")
+	if err != nil {
+		t.Fatalf("dotted key did not resolve: %v", err)
+	}
+	if name != "batch_window_seconds" {
+		t.Fatalf("resolved to %q, want batch_window_seconds", name)
+	}
+	parent[name] = parseConfigValue(parent[name], "30")
+
+	notifications := fields["notifications"].(map[string]any)
+	if notifications["batch_window_seconds"] != float64(30) {
+		t.Errorf("value not written in place: %v", notifications["batch_window_seconds"])
+	}
+	if len(notifications["webhooks"].([]any)) != 1 {
+		t.Error("sibling field lost by the dotted write")
+	}
+
+	for _, bad := range []string{"notifications.does_not_exist", "check_interval.minutes", "does_not_exist.x"} {
+		if _, _, err := resolveConfigKey(fields, bad); err == nil {
+			t.Errorf("%q should fail as an unknown key", bad)
+		}
+	}
+}
+
 func TestParseConfigValue(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -27,6 +27,8 @@ func configCommand() *cli.Command {
 				Usage:     "Set configuration value",
 				ArgsUsage: "<key> <value>",
 				Description: "Set any key of config.json by its JSON name — `config get` lists them all.\n" +
+					"A dotted key reaches into a nested object (notifications.batch_window_seconds,\n" +
+					"priorities.fansubs) and leaves its other fields untouched.\n" +
 					"Value is parsed as JSON when it parses (3, true, [\"a\",\"b\"]); otherwise it is\n" +
 					"taken as a string. A comma-separated value is split into a list when the key\n" +
 					"already holds one.",
@@ -72,6 +74,10 @@ func handleConfigGet() error {
 //
 // The saved value is also the type oracle: a key that already holds a list accepts the
 // comma-separated form, everything else is JSON-parsed and falls back to a plain string.
+//
+// A dotted key (`notifications.batch_window_seconds`) patches one field of a nested object. Without
+// it, changing one field meant passing the whole object, and leaving a sibling out — the webhooks
+// next to batch_window_seconds — erased it.
 func handleConfigSet(key, value string) error {
 	client := getClient()
 	config, err := client.GetConfig()
@@ -88,11 +94,11 @@ func handleConfigSet(key, value string) error {
 		return fmt.Errorf("failed to decode current config: %w", err)
 	}
 
-	name, ok := matchConfigKey(fields, key)
-	if !ok {
-		return fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", key)
+	parent, name, err := resolveConfigKey(fields, key)
+	if err != nil {
+		return err
 	}
-	fields[name] = parseConfigValue(fields[name], value)
+	parent[name] = parseConfigValue(parent[name], value)
 
 	patched, err := json.Marshal(fields)
 	if err != nil {
@@ -111,7 +117,7 @@ func handleConfigSet(key, value string) error {
 		outputJSONResponse(map[string]string{"message": "Configuration updated"})
 		return nil
 	}
-	fmt.Printf("Configuration updated: %s = %s\n", name, value)
+	fmt.Printf("Configuration updated: %s = %s\n", key, value)
 	return nil
 }
 
@@ -121,6 +127,30 @@ func handlePriorityDefaults() error {
 		return mapClientError(err)
 	}
 	return printValue(priorities, "")
+}
+
+// resolveConfigKey walks a dotted key into fields and returns the object holding the last segment
+// plus that segment's real JSON name, so the caller writes the value in place. Every segment is
+// matched like a top-level key (matchConfigKey); a segment that isn't there, or a dot after a value
+// that isn't an object, is an unknown key.
+func resolveConfigKey(fields map[string]any, key string) (map[string]any, string, error) {
+	segments := strings.Split(key, ".")
+	parent := fields
+	for i, segment := range segments {
+		name, ok := matchConfigKey(parent, segment)
+		if !ok {
+			return nil, "", fmt.Errorf("unknown config key: %s (run `config get` to see the keys)", key)
+		}
+		if i == len(segments)-1 {
+			return parent, name, nil
+		}
+		child, ok := parent[name].(map[string]any)
+		if !ok {
+			return nil, "", fmt.Errorf("unknown config key: %s (%s is not an object)", key, strings.Join(segments[:i+1], "."))
+		}
+		parent = child
+	}
+	return nil, "", fmt.Errorf("unknown config key: %s", key)
 }
 
 // matchConfigKey resolves a user-typed key to the real JSON name, ignoring case and underscores so
