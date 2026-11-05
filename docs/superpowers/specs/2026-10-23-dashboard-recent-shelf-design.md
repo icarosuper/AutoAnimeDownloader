@@ -1,7 +1,7 @@
 # Dashboard: Recents shelf, clickable last-check rows
 
 **Date:** 2026-10-23
-**Status:** designed, not implemented — `v2.8.0`
+**Status:** designed, not implemented — `v2.9.0`
 **Origin:** the Status anime list is a scan of everything tracked. Newly landed, still-unwatched
 episodes hide in that table. The last-check report names animes as dead text.
 **Scope:** `internal/api/endpoint_animes.go` (`recent` on `AnimeInfo`), `internal/files`

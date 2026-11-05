@@ -3,7 +3,7 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.7.2`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.8.0`. Stamp a version (tag, GitHub Release, AUR):
 [guides/release.md](guides/release.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
@@ -67,12 +67,32 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   description overflow~~ — **released in `v2.7.2` on 2026-11-03**
   ([decisions.md #114](agents/decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this),
   [#115](agents/decisions.md#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)).
-  Follow-up to the `v2.7.0` picker; independent of the `v2.8.0` recents shelf.
+  Follow-up to the `v2.7.0` picker; independent of the `v2.9.0` recents shelf.
 - ~~Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
   clear-all)~~ — **released in `v2.7.2` on 2026-11-03**. Independent of the recents shelf.
   The Behind chip that used to live in the recents spec is out.
 
-## `v2.8.0` — dashboard recents
+## `v2.8.0` — disable seeding, batch episodes, webhook preview, install script
+
+Shipped from `master` without a section of its own; the recents shelf and the episode picker moved
+one minor down.
+
+- ~~`disable_seeding`: no upload at all, organized torrents released~~ — **released in `v2.8.0` on
+  2026-11-04**
+  ([decisions.md #119](agents/decisions.md#119-disable_seeding-means-no-upload-at-all-and-a-released-torrent-is-not-a-lost-one)).
+- ~~Delete and redownload selected episodes in one request~~ — **released in `v2.8.0` on
+  2026-11-04**.
+- ~~Webhook preview, anime debug pass through the API, consecutive episodes collapsed in webhook
+  messages (`anime_id` / `torrent_hash` exposed)~~ — **released in `v2.8.0` on 2026-11-04**.
+- ~~Nested config fields with dotted keys in `config set`~~ — **released in `v2.8.0` on
+  2026-11-04**.
+- ~~AniList list queries follow every page past the first 50 entries~~ — **released in `v2.8.0`
+  on 2026-11-04**
+  ([decisions.md #118](agents/decisions.md#118-list-fetches-follow-every-page-all-or-nothing)).
+- ~~One-line `install.sh` (curl | bash) for Linux outside the AUR~~ — **released in `v2.8.0` on
+  2026-11-04** ([distribution.md](distribution.md)).
+
+## `v2.9.0` — dashboard recents
 
 A shelf of just-landed, still-unwatched episodes on Status, and last-check rows that open the
 anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
@@ -80,7 +100,7 @@ anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
 - Recents shelf, clickable last-check rows. Spec designed on 2026-10-23:
   [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
 
-## `v2.9.0` — episode torrent picker
+## `v2.10.0` — episode torrent picker
 
 - Pick torrent when downloading / redownloading a single episode — same screen as the
   whole-title picker in `v2.7.0`, singles search instead of packs. Own spec; do not start
