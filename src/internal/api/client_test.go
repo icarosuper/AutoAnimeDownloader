@@ -111,8 +111,16 @@ func TestClientMethodsHitExpectedPaths(t *testing.T) {
 		{"DeleteTorrent", http.MethodDelete, "/api/v1/torrents/deadbeef", map[string]string{"keep_data": "true", "block": "true"}, "", "null", func(c *Client) error {
 			return c.DeleteTorrent("deadbeef", true, true)
 		}},
+		{"RunAnimeDebug", http.MethodPost, "/api/v1/animes/21/debug", nil, "", `{"anime_id":21,"anime_name":"One Piece","episodes":[]}`, func(c *Client) error {
+			_, err := c.RunAnimeDebug(21)
+			return err
+		}},
 		{"TestWebhook", http.MethodPost, "/api/v1/notifications/webhooks/discord/test", nil, "", "null", func(c *Client) error {
 			return c.TestWebhook("discord")
+		}},
+		{"PreviewWebhook", http.MethodPost, "/api/v1/notifications/webhooks/preview", nil, `{"name":"discord","url":"http://x","method":"POST","headers":null,"body":"","events":null}`, `{"method":"POST","url":"http://x","headers":{},"body":""}`, func(c *Client) error {
+			_, err := c.PreviewWebhook(files.WebhookPreset{Name: "discord", URL: "http://x", Method: "POST"})
+			return err
 		}},
 	}
 

@@ -99,6 +99,7 @@ Key endpoints:
 | `POST` | `/api/v1/standalone-animes` | `handleStandaloneAnimeAdd` | `endpoint_standalone_animes.go` — body `{"media_id":21,"magnet":"…"}` with `magnet` optional; optional `name`/`nyaa_id`/`size_bytes` for coverage and the disk guard. No magnet: auto-pick. Magnet: 409s first, then `DownloadStandaloneAnimeWithMagnet` adds the torrent then writes the id (not the handler); records only covered aired episodes. 400 `INVALID_MAGNET` if the value lacks the `magnet:` prefix. Answers `{"added": N}`; 409 `LIBRARY_NOT_CONFIGURED` / `ALREADY_BLACKLISTED` / `ALREADY_STANDALONE` / `ALREADY_TRACKED` / `ALREADY_DOWNLOADED` |
 | `DELETE` | `/api/v1/standalone-animes/{id}?delete_episodes=<bool>` | `handleStandaloneAnimeRemove` | `endpoint_standalone_animes.go` — without `delete_episodes` the episodes stay and are marked `ManuallyManaged` |
 | `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
+| `POST` | `/api/v1/animes/{id}/debug` | `handleAnimeDebug` | `endpoint_anime_debug.go` — the `--debug-anime` pass run by the live daemon; trace goes to the daemon log, summary in the response. Minutes long: `Client.RunAnimeDebug` uses its own timeout, not the client's 30s |
 | `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` |
 | `GET` | `/api/v1/animes/{id}/torrent-candidates?q=` | `handleTorrentCandidates` | `endpoint_torrent_candidates.go` — ranked whole-title list, cap 8. Empty `items` is 200 (`[]`, not null). `{id}` need not be tracked. `q` skips title variants and season/part. Does not fetch `/view/<id>`. `media` is the AniList identity already fetched for the search (title, `cover_image` medium, format, episodes). 502 `NYAA_UNAVAILABLE`. 404 `ANIME_NOT_FOUND` |
 | `GET` | `/api/v1/animes/{id}/torrent-candidates/{nyaaId}` | `handleTorrentCandidateDetail` | sanitised Nyaa page + file list. `{nyaaId}` digits only. `{id}` unused for the fetch (still validated). `files` is `[]` not null. 404 `TORRENT_NOT_FOUND` |
@@ -114,6 +115,7 @@ Key endpoints:
 | `GET` | `/api/v1/logs` | `handleLogs` | `endpoint_logs.go` |
 | `GET` | `/api/v1/diagnostics?titles=<bool>&error=&context=&anime=` | `handleDiagnostics` | `endpoint_diagnostics.go` — `{bundle, environment}`. `titles` defaults to on; `error`/`context`/`anime` are the error toast's, echoed into the bundle's Context section after redaction |
 | `DELETE` | `/api/v1/diagnostics/crash` | `handleDiagnosticsCrash` | `endpoint_diagnostics.go` — moves `crash-pending.log` to `crashes/`. Idempotent; answers the usual 200 envelope, not 204, because `apiRequest` always parses the body |
+| `POST` | `/api/v1/notifications/webhooks/preview` | `handleNotificationWebhookPreview` | `endpoint_notifications.go` — renders the preset in the BODY (the unsaved form) with the test fire's sample values; sends nothing and reads no config |
 | `POST` | `/api/v1/notifications/webhooks/{name}/test` | `handleNotificationWebhookTest` | `endpoint_notifications.go` |
 | `GET` | `/api/v1/torrents` | `handleTorrents` | `endpoint_torrents.go` |
 | `POST` | `/api/v1/torrents/{hash}/pause` | `handleTorrentPause` | `endpoint_torrents.go` |
@@ -136,6 +138,8 @@ Defaults to `"dev"` if not injected.
 ## Debug Mode
 
 `cmd/daemon/main.go` accepts `--debug-anime <anilistId>`: runs `daemon.RunAnimeDebug` (see `daemon/debug.go`) and exits, skipping the PID file / API server / tray / loop entirely. See [Commands](commands.md) and [Troubleshooting Downloads](troubleshooting-downloads.md).
+
+The same `RunAnimeDebug` is also reachable on a running daemon through `POST /api/v1/animes/{id}/debug` (CLI `animes debug <id>`). Two entry points, one pass: the flag writes `.debug_<id>_N/`, the endpoint logs into the daemon's log and answers the summary.
 
 `RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the pack search/selection (`partitionSearchResults` + `pickBatches`) that lifts the per-anime limit when it resolves, and the per-episode `searchSingleEpisode` fallback when no batch/movie/single magnet was found — so the debug pass reports the pipeline the daemon actually runs (see [decisions.md #58](decisions.md#58-runanimedebug-mirrors-processanimeepisodes-enumeration-pack-resolution-and-single-fallback)). The one deliberate difference: it searches every uncovered episode, without the miss backoff of [decisions.md #100](decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes).
 

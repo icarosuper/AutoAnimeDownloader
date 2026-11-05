@@ -3,6 +3,7 @@ package api
 import (
 	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"bytes"
 	"encoding/json"
@@ -39,7 +40,27 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
+// slowTimeout bounds the calls that search Nyaa inside the request: RunAnimeDebug pages Nyaa and
+// falls back to one search per episode, which takes minutes on a long series. The default 30s is
+// for calls that answer from local state.
+const slowTimeout = 10 * time.Minute
+
+// sendSlow is send with slowTimeout instead of the client's default.
+func (c *Client) sendSlow(method, path string, body, target interface{}) error {
+	slow := *c.httpClient
+	slow.Timeout = slowTimeout
+	resp, err := c.doRequestWith(&slow, method, path, body)
+	if err != nil {
+		return err
+	}
+	return c.parseResponse(resp, target)
+}
+
 func (c *Client) doRequest(method, path string, body interface{}) (*http.Response, error) {
+	return c.doRequestWith(c.httpClient, method, path, body)
+}
+
+func (c *Client) doRequestWith(httpClient *http.Client, method, path string, body interface{}) (*http.Response, error) {
 	var reqBody io.Reader
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -58,7 +79,7 @@ func (c *Client) doRequest(method, path string, body interface{}) (*http.Respons
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -312,6 +333,25 @@ func (c *Client) DeleteTorrent(hash string, keepData, block bool) error {
 
 func (c *Client) TestWebhook(name string) error {
 	return c.send(http.MethodPost, "/api/v1/notifications/webhooks/"+url.PathEscape(name)+"/test", nil, nil)
+}
+
+// PreviewWebhook renders preset with the test fire's sample variables; nothing is sent.
+func (c *Client) PreviewWebhook(preset files.WebhookPreset) (*notifications.RenderedWebhook, error) {
+	var rendered notifications.RenderedWebhook
+	if err := c.send(http.MethodPost, "/api/v1/notifications/webhooks/preview", preset, &rendered); err != nil {
+		return nil, err
+	}
+	return &rendered, nil
+}
+
+// RunAnimeDebug runs the daemon's debug pass for one anime and returns its summary. Nothing is
+// downloaded; the trace lands in the daemon's log.
+func (c *Client) RunAnimeDebug(id int) (*daemon.DebugSummary, error) {
+	var summary daemon.DebugSummary
+	if err := c.sendSlow(http.MethodPost, "/api/v1/animes/"+strconv.Itoa(id)+"/debug", nil, &summary); err != nil {
+		return nil, err
+	}
+	return &summary, nil
 }
 
 func episodePath(id, episode int) string {

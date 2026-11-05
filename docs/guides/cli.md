@@ -91,6 +91,7 @@ autoanimedownloader animes remove 154587 --yes --delete-episodes
 autoanimedownloader animes settings 154587
 autoanimedownloader animes settings 154587 progress 12
 autoanimedownloader animes episodes 154587
+autoanimedownloader animes debug 154587
 autoanimedownloader animes download 154587 3
 autoanimedownloader animes redownload 154587 3 --yes
 autoanimedownloader animes delete 154587 3 --yes
@@ -98,6 +99,10 @@ autoanimedownloader animes release 154587 3
 autoanimedownloader animes replace 154587 --magnet "magnet:?xt=…" --yes
 autoanimedownloader animes replace-episode 154587 3 --magnet "magnet:?xt=…" --yes
 ```
+
+`debug` runs the daemon's `--debug-anime` pass inside the running daemon: it prints which episodes
+would be searched and how many magnets each found, downloads nothing, and leaves the full trace in
+the daemon log (`logs`). It can take minutes on a long series.
 
 `animes` lists tracked titles (columns follow `AnimeInfo`). `search` is AniList; a term shorter than
 3 characters returns an empty list, not an error. `candidates` is the ranked whole-title list the
@@ -158,9 +163,11 @@ Reads the data dir on disk. The daemon may be dead. `--json` prints `{bundle, en
 
 ```bash
 autoanimedownloader notifications test discord
+autoanimedownloader notifications preview discord
 ```
 
-Fires a test payload at the webhook named in config.
+`test` fires a test payload at the webhook named in config. `preview` renders the same sample payload
+(method, URL, headers, body) and sends nothing — check a template before it reaches the service.
 
 ## Destructive flags
 

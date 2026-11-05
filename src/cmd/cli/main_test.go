@@ -155,3 +155,46 @@ func TestConfigGetPrintsEverySerializedKey(t *testing.T) {
 		}
 	}
 }
+
+// TestNotificationsPreviewSendsTheSavedPreset: the CLI previews a SAVED preset by name — it reads
+// the config and posts that preset to the render endpoint, which never fires it.
+func TestNotificationsPreviewSendsTheSavedPreset(t *testing.T) {
+	cfg := files.Config{Notifications: files.NotificationsConfig{Webhooks: []files.WebhookPreset{
+		{Name: "other", URL: "http://other"},
+		{Name: "ntfy", URL: "http://ntfy/{{anime_id}}", Method: "POST"},
+	}}}
+
+	var posted files.WebhookPreset
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/config":
+			_ = json.NewEncoder(w).Encode(api.SuccessResponse{Success: true, Data: cfg})
+		case "/api/v1/notifications/webhooks/preview":
+			if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+				t.Errorf("decode preset: %v", err)
+			}
+			_ = json.NewEncoder(w).Encode(api.SuccessResponse{Success: true, Data: map[string]any{
+				"method": "POST", "url": "http://ntfy/154587", "headers": map[string]string{}, "body": "",
+			}})
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	stdout, _, err := runCLI(t, "--endpoint", srv.URL, "notifications", "preview", "ntfy")
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if posted.URL != "http://ntfy/{{anime_id}}" {
+		t.Errorf("posted the wrong preset: %+v", posted)
+	}
+	if !strings.Contains(stdout, "http://ntfy/154587") {
+		t.Errorf("rendered url missing from output:\n%s", stdout)
+	}
+
+	if _, _, err := runCLI(t, "--endpoint", srv.URL, "notifications", "preview", "missing"); err == nil {
+		t.Error("an unknown preset name should fail")
+	}
+}

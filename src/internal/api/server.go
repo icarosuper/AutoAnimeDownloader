@@ -103,6 +103,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}", handleDeleteEpisode(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/replace", handleReplaceAnimeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/settings", handleAnimeSettings(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/debug", handleAnimeDebug(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/torrent-candidates", handleTorrentCandidates(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/torrent-candidates/{nyaaId}", handleTorrentCandidateDetail(s))
 	apiMux.HandleFunc("/api/v1/anilist/search", handleAniListSearch(s))
@@ -130,6 +131,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/announce", handleTorrentAnnounce(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/files", handleTorrentFiles(s))
 	apiMux.HandleFunc("/api/v1/torrents/{hash}/prioritize", handleTorrentPrioritize(s))
+	apiMux.HandleFunc("/api/v1/notifications/webhooks/preview", handleNotificationWebhookPreview(s))
 	apiMux.HandleFunc("/api/v1/notifications/webhooks/{name}/test", handleNotificationWebhookTest(s))
 
 	// WebSocket route (no JSON middleware)

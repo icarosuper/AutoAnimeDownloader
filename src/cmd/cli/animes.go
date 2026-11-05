@@ -61,6 +61,16 @@ func animesCommand() *cli.Command {
 				Action:    handleAnimesSettings,
 			},
 			{
+				Name:      "debug",
+				Usage:     "Run the search/match pipeline for one anime without downloading",
+				ArgsUsage: "<id>",
+				Description: "Same pass as the daemon's --debug-anime flag, run by the running daemon:\n" +
+					"prints which episodes would be searched and how many magnets each found.\n" +
+					"The full trace (AniList response, every Nyaa row, what matched) goes to the\n" +
+					"daemon log — read it with `logs`. Can take minutes on a long series.",
+				Action: handleAnimesDebug,
+			},
+			{
 				Name:      "episodes",
 				Usage:     "List episodes of an anime",
 				ArgsUsage: "<id>",
@@ -233,6 +243,26 @@ func handleAnimesEpisodes(c *cli.Context) error {
 		return nil
 	}
 	return writeSliceTable(detail.Episodes, "No episodes found")
+}
+
+func handleAnimesDebug(c *cli.Context) error {
+	if err := requireArgs(c, 1, "animes debug <id>"); err != nil {
+		return err
+	}
+	id, err := parsePositiveInt(c.Args().Get(0), "id")
+	if err != nil {
+		return err
+	}
+	summary, err := getClient().RunAnimeDebug(id)
+	if err != nil {
+		return mapClientError(err)
+	}
+	if outputJSON {
+		outputJSONResponse(summary)
+		return nil
+	}
+	fmt.Printf("%s (%d)\n", summary.AnimeName, summary.AnimeID)
+	return writeSliceTable(summary.Episodes, "No episodes selected")
 }
 
 func handleAnimesDownload(c *cli.Context) error {

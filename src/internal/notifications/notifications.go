@@ -231,27 +231,53 @@ func presetIsJSON(preset files.WebhookPreset) bool {
 	return false
 }
 
-// fireWebhook fires a preset and returns what went wrong. Automatic delivery ignores the
-// return (the log already records it); the "Test" button needs it, or it would report success
-// while the service refused the token — see decisions.md #86.
-func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
+// RenderedWebhook is a preset with its variables filled in: exactly what fireWebhook sends, and
+// what PreviewWebhook shows.
+type RenderedWebhook struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+}
+
+func renderWebhook(preset files.WebhookPreset, vars map[string]string) RenderedWebhook {
 	bodyVars := vars
 	if presetIsJSON(preset) {
 		bodyVars = escapeVarsForJSON(vars)
 	}
+	headers := make(map[string]string, len(preset.Headers))
+	for k, v := range preset.Headers {
+		// A header with \n makes net/http reject the whole request. ntfy uses
+		// `Title: {{title}}`, and nothing stops someone from putting {{message}} in a header.
+		headers[k] = strings.NewReplacer("\n", " ", "\r", " ").Replace(interpolate(v, vars))
+	}
+	return RenderedWebhook{
+		Method:  preset.Method,
+		URL:     interpolate(preset.URL, vars),
+		Headers: headers,
+		Body:    interpolate(preset.Body, bodyVars),
+	}
+}
 
-	url := interpolate(preset.URL, vars)
-	body := interpolate(preset.Body, bodyVars)
+// PreviewWebhook renders a preset with the same sample variables as the test fire, without sending
+// anything. The preset does not have to be saved: the UI previews the form as it is being edited.
+func PreviewWebhook(preset files.WebhookPreset) RenderedWebhook {
+	return renderWebhook(preset, buildBatchVars(DownloadCompleted, []Episode{sampleEpisode}))
+}
 
-	req, err := http.NewRequest(preset.Method, url, strings.NewReader(body))
+// fireWebhook fires a preset and returns what went wrong. Automatic delivery ignores the
+// return (the log already records it); the "Test" button needs it, or it would report success
+// while the service refused the token — see decisions.md #86.
+func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
+	rendered := renderWebhook(preset, vars)
+
+	req, err := http.NewRequest(rendered.Method, rendered.URL, strings.NewReader(rendered.Body))
 	if err != nil {
 		logger.Logger.Error().Err(err).Str("webhook", preset.Name).Msg("Failed to build webhook request")
 		return err
 	}
-	for k, v := range preset.Headers {
-		// A header with \n makes net/http reject the whole request. ntfy uses
-		// `Title: {{title}}`, and nothing stops someone from putting {{message}} in a header.
-		req.Header.Set(k, strings.NewReplacer("\n", " ", "\r", " ").Replace(interpolate(v, vars)))
+	for k, v := range rendered.Headers {
+		req.Header.Set(k, v)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
+	"encoding/json"
 	"errors"
 	"net/http"
 )
@@ -31,5 +33,23 @@ func handleNotificationWebhookTest(server *Server) http.HandlerFunc {
 			return
 		}
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Webhook fired successfully"})
+	}
+}
+
+// handleNotificationWebhookPreview renders the preset in the body with the test fire's sample
+// variables and sends nothing. The preset comes in the body, not by name: the UI previews the form
+// before it is saved. It reads no config, so there is no state to load.
+func handleNotificationWebhookPreview(server *Server) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			JSONError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Only POST is allowed")
+			return
+		}
+		var preset files.WebhookPreset
+		if err := json.NewDecoder(r.Body).Decode(&preset); err != nil {
+			JSONError(w, http.StatusBadRequest, "INVALID_JSON", "Body must be a webhook preset")
+			return
+		}
+		JSONSuccess(w, http.StatusOK, notifications.PreviewWebhook(preset))
 	}
 }

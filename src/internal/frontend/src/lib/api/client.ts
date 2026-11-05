@@ -640,6 +640,18 @@ export async function removeStandaloneAnime(mediaId: number, deleteEpisodes: boo
   return apiRequest<void>('DELETE', `/standalone-animes/${mediaId}?${params.toString()}`)
 }
 
+export interface RenderedWebhook {
+  method: string
+  url: string
+  headers: Record<string, string>
+  body: string
+}
+
+// The preset goes in the body, not by name: the form is previewed before it is saved.
+export async function previewWebhook(preset: WebhookPreset): Promise<RenderedWebhook> {
+  return apiRequest<RenderedWebhook>('POST', '/notifications/webhooks/preview', preset)
+}
+
 export async function testWebhook(name: string): Promise<void> {
   const res = await fetch(
     `/api/v1/notifications/webhooks/${encodeURIComponent(name)}/test`,

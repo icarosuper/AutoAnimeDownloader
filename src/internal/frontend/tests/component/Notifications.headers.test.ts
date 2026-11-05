@@ -8,10 +8,12 @@ vi.mock('../../src/lib/api/client.js', () => ({
   getConfig: vi.fn(),
   updateConfig: vi.fn(),
   testWebhook: vi.fn(),
+  previewWebhook: vi.fn(),
 }))
 
 const getConfig = vi.mocked(client.getConfig)
 const updateConfig = vi.mocked(client.updateConfig)
+const previewWebhook = vi.mocked(client.previewWebhook)
 
 const config = (webhooks: WebhookPreset[] = []) =>
   ({ notifications: { webhooks, batch_window_seconds: 0 } }) as Config
@@ -90,5 +92,32 @@ describe('Notifications — header editor', () => {
     await fireEvent.click(btn(SAVE))
 
     expect((await savedWebhooks())[0].headers).toEqual({ 'X-Emby-Token': 'new-key' })
+  })
+})
+
+describe('Notifications — preview', () => {
+  // The form is previewed before Confirm/Save: what goes to the endpoint is the form as typed,
+  // headers included, and an edit drops the rendered block instead of showing it out of date.
+  it('previews the unsaved form and drops the preview on edit', async () => {
+    previewWebhook.mockResolvedValue({ method: 'POST', url: 'http://hook/154587', headers: { Title: 'Download completed' }, body: '' })
+    await renderWith()
+    await fireEvent.click(btn(ADD))
+
+    await fireEvent.input(screen.getByPlaceholderText('e.g. ntfy'), { target: { value: 'ntfy' } })
+    await fireEvent.input(screen.getByPlaceholderText(/^https:\/\/ntfy/), { target: { value: 'http://hook/{{anime_id}}' } })
+    await fireEvent.input(screen.getByPlaceholderText('Header'), { target: { value: 'Title' } })
+    await fireEvent.input(screen.getByPlaceholderText('Value'), { target: { value: '{{title}}' } })
+
+    await fireEvent.click(btn(/Pré-visualizar|Preview/))
+
+    expect(previewWebhook).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'http://hook/{{anime_id}}',
+      headers: { Title: '{{title}}' },
+    }))
+    expect(await screen.findByText('POST http://hook/154587')).toBeTruthy()
+    expect(updateConfig).not.toHaveBeenCalled()
+
+    await fireEvent.input(screen.getByPlaceholderText(/^https:\/\/ntfy/), { target: { value: 'http://other' } })
+    await waitFor(() => expect(screen.queryByTestId('webhook-preview')).toBeNull())
   })
 })

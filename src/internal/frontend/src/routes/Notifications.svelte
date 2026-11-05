@@ -5,7 +5,9 @@
     getConfig,
     updateConfig,
     testWebhook,
+    previewWebhook,
     type Config,
+    type RenderedWebhook,
     type WebhookPreset,
   } from "../lib/api/client.js";
   import Loading from "../components/Loading.svelte";
@@ -21,6 +23,8 @@
     sectionWebhooks: m.notifications_section_webhooks(),
     btnAdd: m.notifications_btn_add(),
     btnTest: m.notifications_btn_test(),
+    btnPreview: m.notifications_btn_preview(),
+    previewTitle: m.notifications_preview_title(),
     btnRemove: m.notifications_btn_remove(),
     btnConfirm: m.notifications_btn_confirm(),
     btnCancel: m.common_cancel(),
@@ -78,6 +82,10 @@
   // keystroke. See decisions.md #87.
   let headerRows: { key: string; value: string }[] = [{ key: '', value: '' }];
 
+  // The rendered form. Any edit makes it stale, so it is dropped instead of shown out of date.
+  let preview: RenderedWebhook | null = null;
+  $: newWebhook, headerRows, (preview = null);
+
   const toRows = (headers: Record<string, string>) =>
     Object.entries(headers).map(([key, value]) => ({ key, value }));
 
@@ -126,6 +134,15 @@
       toast.success(m.notifications_toast_test_ok({ name }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : m.notifications_toast_test_err());
+    }
+  }
+
+  async function previewWebhookHandler() {
+    try {
+      const rendered = await previewWebhook({ ...newWebhook, headers: fromRows(headerRows) });
+      preview = rendered;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : m.notifications_toast_preview_err());
     }
   }
 
@@ -375,12 +392,32 @@
                 </button>
                 <button
                   type="button"
+                  on:click={previewWebhookHandler}
+                  class="inline-flex items-center px-3 py-2 rounded-md border border-default text-body hover:bg-control text-sm transition-colors"
+                >
+                  {T && T.btnPreview}
+                </button>
+                <button
+                  type="button"
                   on:click={resetForm}
                   class="inline-flex items-center px-3 py-2 rounded-md border border-default text-body hover:bg-control text-sm transition-colors"
                 >
                   {T && T.btnCancel}
                 </button>
               </div>
+
+              {#if preview}
+                <div class="flex flex-col gap-2 rounded-md border border-default p-3" data-testid="webhook-preview">
+                  <span class="text-xs font-medium text-heading">{T && T.previewTitle}</span>
+                  <code class="text-xs font-mono break-all text-body">{preview.method} {preview.url}</code>
+                  {#each Object.entries(preview.headers) as [key, value]}
+                    <code class="text-xs font-mono break-all text-subtle">{key}: {value}</code>
+                  {/each}
+                  {#if preview.body}
+                    <pre class="text-xs font-mono whitespace-pre-wrap break-all bg-control rounded p-2 text-body">{preview.body}</pre>
+                  {/if}
+                </div>
+              {/if}
             </div>
           {/if}
         </div>

@@ -72,6 +72,8 @@ Output lands in `.debug_<anilistId>_<N>/` in the current directory (`N` incremen
 
 Nothing is written to `~/.autoAnimeDownloader` during a debug run. See [Troubleshooting Downloads](troubleshooting-downloads.md) Step 0 for how to read the output.
 
+With the daemon already running (in Docker, or on another machine), `autoanimedownloader animes debug <anilistId>` runs the same pass inside it. The summary comes back on the terminal and the trace goes to the daemon log instead of `debug.jsonl`.
+
 ## Debugging a batch of animes
 
 `make debug-batch` runs the same pass over the curated list in `scripts/robustness-animes.txt` (one media ID per line, `#` comments) and writes a triaged `.debug_batch/report.md`: a table per anime plus four sections — SUSPEITOS (searched, 0 magnets), NADA BUSCADO (no episode selected), ERROS (non-zero exit), and SEM FONTE BOA NO NYAA. Open a `debug.jsonl` only for the animes the report points at.

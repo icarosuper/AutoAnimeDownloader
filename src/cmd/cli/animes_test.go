@@ -5,9 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"AutoAnimeDownloader/src/internal/api"
+	"AutoAnimeDownloader/src/internal/daemon"
 )
 
 func TestAnimesSearchShortTermReturnsEmptyList(t *testing.T) {
@@ -158,5 +160,27 @@ func TestAnimesAddMagnetAfterID(t *testing.T) {
 	}
 	if req.MediaID != 21 || req.Magnet != "magnet:?xt=urn:btih:abc" {
 		t.Errorf("req = %+v", req)
+	}
+}
+
+func TestAnimesDebugPrintsSummary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/animes/21/debug" {
+			t.Errorf("got %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(api.SuccessResponse{Success: true, Data: daemon.DebugSummary{
+			AnimeID: 21, AnimeName: "One Piece",
+			Episodes: []daemon.EpisodeDebugResult{{Episode: 1100, WouldSearch: true, MagnetsFound: 3}},
+		}})
+	}))
+	defer srv.Close()
+
+	stdout, _, err := runCLI(t, "--endpoint", srv.URL, "animes", "debug", "21")
+	if err != nil {
+		t.Fatalf("debug: %v", err)
+	}
+	if !strings.Contains(stdout, "One Piece") || !strings.Contains(stdout, "1100") {
+		t.Errorf("summary missing from output:\n%s", stdout)
 	}
 }
