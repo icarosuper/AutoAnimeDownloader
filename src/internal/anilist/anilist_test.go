@@ -1,6 +1,7 @@
 package anilist
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -195,5 +196,92 @@ func TestGetAnimeInfoByIDs_PartialFailureKeepsWhatCame(t *testing.T) {
 	}
 	if byMedia[21] == nil {
 		t.Fatal("the error can't invalidate what the other account answered")
+	}
+}
+
+// mockPagedList answers each request with pages[page-1] (page read from the request variables),
+// and hasNextPage while there are pages left. failPage > 0 answers that page with a 500.
+func mockPagedList(t *testing.T, calls *int, pages []string, failPage int) func() {
+	t.Helper()
+	return MockAniListDo(func(r *http.Request) (*http.Response, error) {
+		*calls++
+		var req struct {
+			Variables struct {
+				Page int `json:"page"`
+			} `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decoding request: %v", err)
+		}
+		page := req.Variables.Page
+		if page == failPage {
+			return &http.Response{StatusCode: http.StatusInternalServerError, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+		}
+		if page < 1 || page > len(pages) {
+			t.Errorf("unexpected page %d", page)
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":{"Page":{"mediaList":[]}}}`))}, nil
+		}
+		body := fmt.Sprintf(`{"data":{"Page":{"pageInfo":{"hasNextPage":%t},"mediaList":[%s]}}}`, page < len(pages), pages[page-1])
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+}
+
+// TestListFetchesFollowEveryPage locks the pagination: a Page without perPage stops at 50 entries,
+// and an account with more anime than that in the queried statuses lost the rest silently.
+func TestListFetchesFollowEveryPage(t *testing.T) {
+	pages := []string{
+		`{"id":1,"customLists":{"A":true},"media":{"id":10}}`,
+		`{"id":2,"media":{"id":20}}`,
+		`{"id":3,"customLists":{"B":true},"media":{"id":30}}`,
+	}
+	statuses := []string{"CURRENT"}
+
+	t.Run("GetAllCurrentAnime", func(t *testing.T) {
+		calls := 0
+		defer mockPagedList(t, &calls, pages, 0)()
+		resp, err := GetAllCurrentAnime("user", statuses)
+		if err != nil {
+			t.Fatalf("fetch failed: %v", err)
+		}
+		if calls != 3 || len(resp.Data.Page.MediaList) != 3 {
+			t.Fatalf("want 3 requests and 3 entries, got %d requests and %d entries", calls, len(resp.Data.Page.MediaList))
+		}
+	})
+
+	t.Run("GetFrontendAnimeList", func(t *testing.T) {
+		calls := 0
+		defer mockPagedList(t, &calls, pages, 0)()
+		resp, err := GetFrontendAnimeList("user", statuses)
+		if err != nil {
+			t.Fatalf("fetch failed: %v", err)
+		}
+		if calls != 3 || len(resp.Data.Page.MediaList) != 3 {
+			t.Fatalf("want 3 requests and 3 entries, got %d requests and %d entries", calls, len(resp.Data.Page.MediaList))
+		}
+	})
+
+	t.Run("GetCustomListsMap", func(t *testing.T) {
+		calls := 0
+		defer mockPagedList(t, &calls, pages, 0)()
+		m := GetCustomListsMap("user", statuses, PriorityCritical)
+		if calls != 3 || len(m) != 3 {
+			t.Fatalf("want 3 requests and 3 entries, got %d requests and %d entries", calls, len(m))
+		}
+		if !m[3]["B"] {
+			t.Errorf("customLists of the last page lost: %v", m[3])
+		}
+	})
+}
+
+// TestListFetchFailsWholeOnAFailedPage: the pages that did arrive are not a list. Returning them
+// would look complete — an anime past the failed page would read as "not in the list".
+func TestListFetchFailsWholeOnAFailedPage(t *testing.T) {
+	pages := []string{`{"id":1,"media":{"id":10}}`, `{"id":2,"media":{"id":20}}`}
+	calls := 0
+	defer mockPagedList(t, &calls, pages, 2)()
+
+	resp, err := GetAllCurrentAnime("user", []string{"CURRENT"})
+	if err == nil {
+		t.Fatalf("want an error, got %d entries", len(resp.Data.Page.MediaList))
 	}
 }

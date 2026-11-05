@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"strconv"
@@ -150,6 +151,51 @@ var aniListAPIURL = "https://graphql.anilist.co"
 // fetch by a list of ids (mediaId_in, id_in, idMal_in): asking for more than that in one query
 // would only return 50 and make the remaining ids look deleted.
 const anilistMaxPerPage = 50
+
+// maxListPages caps fetchMediaListPages: 100 pages of 50 is 5000 entries, far above any real list.
+// It exists only so a server that keeps answering hasNextPage=true can't hold the pass in a loop.
+const maxListPages = 100
+
+// mediaListPage is one page of a `Page { mediaList(...) }` query, with the pageInfo
+// fetchMediaListPages needs to know whether to ask for the next one.
+type mediaListPage[E any] struct {
+	Data struct {
+		Page struct {
+			PageInfo struct {
+				HasNextPage bool `json:"hasNextPage"`
+			} `json:"pageInfo"`
+			MediaList []E `json:"mediaList"`
+		} `json:"Page"`
+	} `json:"data"`
+}
+
+// fetchMediaListPages runs a list query page by page until hasNextPage is false and returns every
+// entry. A Page without perPage returns only 50 entries: an account with more than 50 anime in the
+// queried statuses lost the rest without any error, and the entries past the 50th were never
+// downloaded (download statuses) or never deleted (delete statuses).
+//
+// The query must declare `$page: Int`, ask for `Page(page: $page, perPage: 50)` and select
+// `pageInfo { hasNextPage }`. Each page is one request against the budget (decisions.md #72), so
+// a list of N entries costs ceil(N/50) requests.
+//
+// All or nothing: a failed page fails the whole fetch. Returning the pages that did arrive would
+// look like a complete list, and the caller's stale fallback is the better answer.
+func fetchMediaListPages[E any](query string, variables RequestVariables, priority Priority) ([]E, error) {
+	var all []E
+	for page := 1; page <= maxListPages; page++ {
+		vars := maps.Clone(variables)
+		vars["page"] = page
+		resp, err := sendAnilistRequest[mediaListPage[E]](query, vars, priority)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, resp.Data.Page.MediaList...)
+		if !resp.Data.Page.PageInfo.HasNextPage {
+			return all, nil
+		}
+	}
+	return nil, fmt.Errorf("anilist: list still has more pages after %d pages", maxListPages)
+}
 
 // ErrNotFound signals AniList answered 404: the queried object doesn't exist.
 var ErrNotFound = errors.New("anilist: not found")
@@ -442,16 +488,8 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 		Id          int         `json:"id"`
 		CustomLists CustomLists `json:"customLists"`
 	}
-	type miniResponse struct {
-		Data struct {
-			Page struct {
-				MediaList []miniEntry `json:"mediaList"`
-			} `json:"Page"`
-		} `json:"data"`
-	}
-
-	query := `query($u:String,$t:MediaType,$s:[MediaListStatus]){Page{mediaList(userName:$u,type:$t,status_in:$s){id customLists}}}`
-	resp, err := sendAnilistRequest[miniResponse](query, RequestVariables{
+	query := `query($u:String,$t:MediaType,$s:[MediaListStatus],$page:Int){Page(page:$page,perPage:` + strconv.Itoa(anilistMaxPerPage) + `){pageInfo{hasNextPage} mediaList(userName:$u,type:$t,status_in:$s){id customLists}}}`
+	entries, err := fetchMediaListPages[miniEntry](query, RequestVariables{
 		"u": userName,
 		"t": "ANIME",
 		"s": statuses,
@@ -472,9 +510,9 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 		return nil
 	}
 
-	m := make(map[int]CustomLists, len(resp.Data.Page.MediaList))
+	m := make(map[int]CustomLists, len(entries))
 	hasData := false
-	for _, ml := range resp.Data.Page.MediaList {
+	for _, ml := range entries {
 		m[ml.Id] = ml.CustomLists
 		if len(ml.CustomLists) > 0 {
 			hasData = true
@@ -493,8 +531,11 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 
 func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, error) {
 	query := `
-		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
-			Page {
+		query GetAllCurrentAnime($userName: String, $type: MediaType, $statuses: [MediaListStatus], $page: Int) {
+			Page(page: $page, perPage: ` + strconv.Itoa(anilistMaxPerPage) + `) {
+				pageInfo {
+					hasNextPage
+				}
 				mediaList(userName: $userName, type: $type, status_in: $statuses) {
 					id
 					status
@@ -554,7 +595,7 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 	}
 
 	key := userName + "\x00" + strings.Join(statuses, "\x00")
-	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityCritical)
+	list, err := fetchMediaListPages[MediaList](query, variables, PriorityCritical)
 	if err != nil {
 		if stale, ok := staleList(passListCache, key); ok {
 			return mediaListResponse(stale), ErrFromCache
@@ -562,8 +603,8 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 		return nil, err
 	}
 
-	storeList(passListCache, key, resp.Data.Page.MediaList, 0)
-	return resp, nil
+	storeList(passListCache, key, list, 0)
+	return mediaListResponse(list), nil
 }
 
 // GetFrontendAnimeList feeds /api/v1/animes, which the frontend polls every 30s per tab. The result
@@ -573,8 +614,11 @@ func GetAllCurrentAnime(userName string, statuses []string) (*AniListResponse, e
 // the daemon down.
 func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse, error) {
 	query := `
-		query GetFrontendAnimeList($userName: String, $type: MediaType, $statuses: [MediaListStatus]) {
-			Page {
+		query GetFrontendAnimeList($userName: String, $type: MediaType, $statuses: [MediaListStatus], $page: Int) {
+			Page(page: $page, perPage: ` + strconv.Itoa(anilistMaxPerPage) + `) {
+				pageInfo {
+					hasNextPage
+				}
 				mediaList(userName: $userName, type: $type, status_in: $statuses) {
 					id
 					progress
@@ -625,7 +669,7 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 		"statuses": statuses,
 	}
 
-	resp, err := sendAnilistRequest[AniListResponse](query, variables, PriorityDisposable)
+	list, err := fetchMediaListPages[MediaList](query, variables, PriorityDisposable)
 	if err != nil {
 		if stale, ok := staleList(frontendListCache, key); ok {
 			// Refused by the budget gate: this list changes when the user edits AniList, not every 30s.
@@ -644,8 +688,8 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 		return nil, err
 	}
 
-	storeList(frontendListCache, key, resp.Data.Page.MediaList, frontendListTTL)
-	return mediaListResponse(resp.Data.Page.MediaList), nil
+	storeList(frontendListCache, key, list, frontendListTTL)
+	return mediaListResponse(list), nil
 }
 
 // mediaListResponse wraps a list in an AniListResponse. It was born for GetFrontendAnimeList and
