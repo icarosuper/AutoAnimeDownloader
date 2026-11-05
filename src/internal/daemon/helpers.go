@@ -112,29 +112,29 @@ func checkDiskSpace(configs *files.Config, torrentSizeBytes, reservedBytes int64
 func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBackend, fileManager FileManagerInterface) {
 	logger.Logger.Warn().Err(cause).Str("hash", hash).Msg("Torrent stopped with error")
 
-	animeName := ""
-	episodeNumber := 0
+	failed := notifications.Episode{TorrentHash: hash}
 	if saved, err := fileManager.LoadSavedEpisodes(); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load saved episodes for the webhook")
 	} else {
 		for _, ep := range saved {
 			if ep.EpisodeHash == hash {
-				animeName = ep.AnimeName
-				episodeNumber = ep.EpisodeNumber
+				failed.AnimeID = ep.AnimeID
+				failed.AnimeName = ep.AnimeName
+				failed.Number = ep.EpisodeNumber
 				break
 			}
 		}
 	}
 
-	reason := notifications.ReasonDownloadRejected
+	failed.Reason = notifications.ReasonDownloadRejected
 	if cause != nil {
-		reason = cause.Error()
+		failed.Reason = cause.Error()
 	}
 
 	if configs, err := fileManager.LoadConfigs(); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load configs, skipping webhook")
 	} else {
-		notifications.Notify(configs, notifications.DownloadFailed, animeName, episodeNumber, reason)
+		notifications.Notify(configs, notifications.DownloadFailed, failed)
 	}
 
 	if backend == nil {

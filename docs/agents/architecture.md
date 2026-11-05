@@ -613,8 +613,9 @@ Header values have `\n`/`\r` stripped: `net/http` rejects the whole request with
 uses a header for the title.
 
 Template variables (URL, headers and body): `{{title}}`, `{{message}}`, `{{anime_name}}`,
-`{{episode}}`, `{{reason}}`, `{{count}}`. In a window with N > 1, `{{message}}` becomes one line per
-item.
+`{{episode}}`, `{{reason}}`, `{{anime_id}}`, `{{torrent_hash}}`, `{{count}}`. In a window with N > 1,
+`{{message}}` becomes one line per run of consecutive episodes of the same anime and reason —
+episodes are sorted before collapsing, because organize fires in completion order.
 
 ### `src/internal/diagnostics/` — bug report
 

@@ -53,48 +53,106 @@ func interpolate(template string, vars map[string]string) string {
 	})
 }
 
-func buildVars(animeName string, episode int, event Event, reason string) map[string]string {
-	return buildBatchVars(event, []item{{animeName: animeName, episode: episode, reason: reason}})
+// Episode is what one notification is about. AnimeID and TorrentHash are optional — zero when the
+// caller does not have them (a "no torrent found" failure has no hash) — and reach the templates
+// as {{anime_id}} / {{torrent_hash}}, blank when unknown.
+type Episode struct {
+	AnimeID     int
+	AnimeName   string
+	Number      int
+	Reason      string
+	TorrentHash string
 }
 
 // buildBatchVars builds the template variables for the items of a window. With a single item the
 // result is identical to before batching — which is why turning batching on does not change the
 // look of notifications for anyone who still receives them one at a time.
 //
-// With N > 1, `anime_name`, `episode` and `reason` stay EMPTY: there is no single value for them
-// and sending the first item's would make the template lie about the other N-1. Whoever needs
-// to identify the episodes uses `message` (one line per item) or `count`.
-func buildBatchVars(event Event, items []item) map[string]string {
-	lines := make([]string, 0, len(items))
-	for _, it := range items {
-		_, message := eventStrings(it.animeName, it.episode, event, it.reason)
-		lines = append(lines, message)
-	}
-
+// With N > 1, `anime_name`, `episode`, `reason`, `anime_id` and `torrent_hash` stay EMPTY: there
+// is no single value for them and sending the first item's would make the template lie about the
+// other N-1. Whoever needs to identify the episodes uses `message` or `count`.
+func buildBatchVars(event Event, items []Episode) map[string]string {
 	vars := map[string]string{
-		"title":      batchTitle(event, items),
-		"message":    strings.Join(lines, "\n"),
-		"anime_name": "",
-		"episode":    "",
-		"reason":     "",
-		"count":      fmt.Sprintf("%d", len(items)),
-		"quality":    "",
-		"file_path":  "",
-		"timestamp":  time.Now().Format("2006-01-02 15:04"),
+		"title":        batchTitle(event, items),
+		"message":      strings.Join(batchLines(event, items), "\n"),
+		"anime_name":   "",
+		"episode":      "",
+		"reason":       "",
+		"anime_id":     "",
+		"torrent_hash": "",
+		"count":        fmt.Sprintf("%d", len(items)),
+		"quality":      "",
+		"file_path":    "",
+		"timestamp":    time.Now().Format("2006-01-02 15:04"),
 	}
 
 	if len(items) == 1 {
-		vars["anime_name"] = items[0].animeName
-		vars["episode"] = fmt.Sprintf("%d", items[0].episode)
-		vars["reason"] = items[0].reason
+		vars["anime_name"] = items[0].AnimeName
+		vars["episode"] = fmt.Sprintf("%d", items[0].Number)
+		vars["reason"] = items[0].Reason
+		if items[0].AnimeID != 0 {
+			vars["anime_id"] = fmt.Sprintf("%d", items[0].AnimeID)
+		}
+		vars["torrent_hash"] = items[0].TorrentHash
 	}
 
 	return vars
 }
 
-func batchTitle(event Event, items []item) string {
+// batchLines is {{message}}: one line per run of consecutive episodes of the same anime with the
+// same reason, so a 24-episode pack completing is "Frieren EPs 1-24 downloaded successfully"
+// instead of 24 lines. Episodes are sorted inside each anime before collapsing — organize finishes
+// torrents in whatever order they complete, and 3, 1, 2 is still one run. Animes keep the order
+// they first appeared in the window. The reason is part of the key: merging two failures with
+// different reasons into one line would report only one of them.
+func batchLines(event Event, items []Episode) []string {
+	type groupKey struct {
+		animeID int
+		name    string // only when there is no id: an id already identifies the anime
+		reason  string
+	}
+	var order []groupKey
+	groups := make(map[groupKey][]Episode)
+	for _, it := range items {
+		key := groupKey{animeID: it.AnimeID, reason: it.Reason}
+		if it.AnimeID == 0 {
+			key.name = it.AnimeName
+		}
+		if _, seen := groups[key]; !seen {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], it)
+	}
+
+	lines := make([]string, 0, len(items))
+	for _, key := range order {
+		group := groups[key]
+		numbers := make([]int, len(group))
+		for i, it := range group {
+			numbers[i] = it.Number
+		}
+		slices.Sort(numbers)
+		numbers = slices.Compact(numbers)
+
+		first := group[0]
+		start := numbers[0]
+		for i := 1; i <= len(numbers); i++ {
+			if i < len(numbers) && numbers[i] == numbers[i-1]+1 {
+				continue
+			}
+			_, message := eventStrings(first.AnimeName, start, numbers[i-1], event, first.Reason)
+			lines = append(lines, message)
+			if i < len(numbers) {
+				start = numbers[i]
+			}
+		}
+	}
+	return lines
+}
+
+func batchTitle(event Event, items []Episode) string {
 	if len(items) == 1 {
-		title, _ := eventStrings(items[0].animeName, items[0].episode, event, items[0].reason)
+		title, _ := eventStrings(items[0].AnimeName, items[0].Number, items[0].Number, event, items[0].Reason)
 		return title
 	}
 	switch event {
@@ -110,23 +168,33 @@ func batchTitle(event Event, items []item) string {
 	return ""
 }
 
-func eventStrings(animeName string, episode int, event Event, reason string) (title, message string) {
+// eventStrings returns the title and the message line for episodes first..last of one anime;
+// first == last is a single episode.
+func eventStrings(animeName string, first, last int, event Event, reason string) (title, message string) {
+	episodes := fmt.Sprintf("EP %d", first)
+	if last != first {
+		episodes = fmt.Sprintf("EPs %d-%d", first, last)
+	}
 	switch event {
 	case NewEpisode:
 		return "New episode detected",
-			fmt.Sprintf("%s EP %d detected, starting download", animeName, episode)
+			fmt.Sprintf("%s %s detected, starting download", animeName, episodes)
 	case DownloadFailed:
 		if reason == "" {
 			reason = "all attempts failed"
 		}
 		return "Download failed",
-			fmt.Sprintf("%s EP %d failed: %s", animeName, episode, reason)
+			fmt.Sprintf("%s %s failed: %s", animeName, episodes, reason)
 	case DownloadCompleted:
 		return "Download completed",
-			fmt.Sprintf("%s EP %d downloaded successfully", animeName, episode)
+			fmt.Sprintf("%s %s downloaded successfully", animeName, episodes)
 	case EpisodeDeleted:
+		verb := "was"
+		if last != first {
+			verb = "were"
+		}
 		return "Episode deleted",
-			fmt.Sprintf("%s EP %d was removed from the library", animeName, episode)
+			fmt.Sprintf("%s %s %s removed from the library", animeName, episodes, verb)
 	}
 	return "", ""
 }
@@ -204,17 +272,10 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 	return nil
 }
 
-// item is an event waiting in the batching window.
-type item struct {
-	animeName string
-	episode   int
-	reason    string
-}
-
 // batch accumulates the items of one event's window. The timer is stored with it so Flush can
 // cancel it: without that, the shutdown flush and the timer would race on the same queue.
 type batch struct {
-	items   []item
+	items   []Episode
 	timer   *time.Timer
 	webhook []files.WebhookPreset
 }
@@ -231,15 +292,14 @@ var (
 // leaves with the others of the same window, as a single webhook. A library backfill fires one
 // DownloadCompleted per torrent (77 in a real case) and services such as ntfy.sh answer 429
 // past a certain volume — see decisions.md #47.
-func Notify(cfg *files.Config, event Event, animeName string, episode int, reason string) {
+func Notify(cfg *files.Config, event Event, it Episode) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 {
 		return
 	}
 
-	it := item{animeName: animeName, episode: episode, reason: reason}
 	window := time.Duration(cfg.Notifications.BatchWindowSeconds) * time.Second
 	if window <= 0 {
-		fireBatch(event, []item{it}, cfg.Notifications.Webhooks, false)
+		fireBatch(event, []Episode{it}, cfg.Notifications.Webhooks, false)
 		return
 	}
 
@@ -254,7 +314,7 @@ func Notify(cfg *files.Config, event Event, animeName string, episode int, reaso
 		return
 	}
 
-	b := &batch{items: []item{it}, webhook: cfg.Notifications.Webhooks}
+	b := &batch{items: []Episode{it}, webhook: cfg.Notifications.Webhooks}
 	pendingBatch[event] = b
 	b.timer = time.AfterFunc(window, func() { flushEvent(event, false) })
 }
@@ -292,7 +352,7 @@ func flushEvent(event Event, wait bool) {
 	fireBatch(event, b.items, b.webhook, wait)
 }
 
-func fireBatch(event Event, items []item, webhooks []files.WebhookPreset, wait bool) {
+func fireBatch(event Event, items []Episode, webhooks []files.WebhookPreset, wait bool) {
 	if len(items) == 0 {
 		return
 	}
@@ -320,12 +380,21 @@ func fireBatch(event Event, items []item, webhooks []files.WebhookPreset, wait b
 // the service refused.
 var ErrWebhookNotFound = errors.New("webhook not found")
 
+// sampleEpisode fills the variables of a test fire, so a template using any of them shows
+// something instead of a blank.
+var sampleEpisode = Episode{
+	AnimeID:     154587,
+	AnimeName:   "Frieren Beyond Journey's End",
+	Number:      5,
+	TorrentHash: strings.Repeat("0", 40),
+}
+
 // FireTestWebhook fires one named webhook with sample variables. Returns ErrWebhookNotFound if the
 // preset does not exist, or the delivery error if the service refused it.
 func FireTestWebhook(cfg *files.Config, name string) error {
 	for _, preset := range cfg.Notifications.Webhooks {
 		if preset.Name == name {
-			vars := buildVars("Frieren Beyond Journey's End", 5, DownloadCompleted, "")
+			vars := buildBatchVars(DownloadCompleted, []Episode{sampleEpisode})
 			return fireWebhook(preset, vars)
 		}
 	}

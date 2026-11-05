@@ -47,7 +47,7 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 		Body:    "{{anime_name}} EP {{episode}}",
 	}
 
-	vars := buildVars("Frieren", 5, NewEpisode, "")
+	vars := buildBatchVars(NewEpisode, []Episode{{AnimeName: "Frieren", Number: 5}})
 	fireWebhook(preset, vars)
 
 	if capturedBody != "Frieren EP 5" {
@@ -59,7 +59,7 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 }
 
 func TestBuildVarsDownloadFailedReason(t *testing.T) {
-	vars := buildVars("Frieren", 5, DownloadFailed, ReasonNotFound)
+	vars := buildBatchVars(DownloadFailed, []Episode{{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound}})
 	if vars["reason"] != ReasonNotFound {
 		t.Fatalf("reason var = %q", vars["reason"])
 	}
@@ -99,11 +99,11 @@ func TestFireTestWebhookFires(t *testing.T) {
 }
 
 func TestNotifyNoOp_WhenNoWebhooks(t *testing.T) {
-	Notify(&files.Config{}, NewEpisode, "Frieren", 5, "")
+	Notify(&files.Config{}, NewEpisode, Episode{AnimeName: "Frieren", Number: 5})
 }
 
 func TestNotifyNoOp_WhenNilConfig(t *testing.T) {
-	Notify(nil, NewEpisode, "Frieren", 5, "")
+	Notify(nil, NewEpisode, Episode{AnimeName: "Frieren", Number: 5})
 }
 
 func TestNotify_SkipsWebhookWhenEventNotSubscribed(t *testing.T) {
@@ -121,7 +121,7 @@ func TestNotify_SkipsWebhookWhenEventNotSubscribed(t *testing.T) {
 		},
 	}
 
-	Notify(cfg, NewEpisode, "Frieren", 5, "")
+	Notify(cfg, NewEpisode, Episode{AnimeName: "Frieren", Number: 5})
 
 	select {
 	case <-fired:
@@ -145,7 +145,7 @@ func TestNotify_FiresWebhookWhenEventSubscribed(t *testing.T) {
 		},
 	}
 
-	Notify(cfg, NewEpisode, "Frieren", 5, "")
+	Notify(cfg, NewEpisode, Episode{AnimeName: "Frieren", Number: 5})
 
 	select {
 	case <-fired:
@@ -211,9 +211,9 @@ func TestNotify_BatchesEventsWithinWindow(t *testing.T) {
 	t.Cleanup(Flush)
 	cfg := cfgWithWindow(srv.URL, 1, nil, "{{count}}|{{title}}|{{message}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
-	Notify(cfg, DownloadCompleted, "Dandadan", 3, "")
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Re:ZERO", Number: 12})
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Frieren", Number: 5})
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Dandadan", Number: 3})
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
@@ -235,8 +235,8 @@ func TestNotify_SeparateBatchPerEvent(t *testing.T) {
 	t.Cleanup(Flush)
 	cfg := cfgWithWindow(srv.URL, 1, nil, "{{title}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadFailed, "Frieren", 5, ReasonNotFound)
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Re:ZERO", Number: 12})
+	Notify(cfg, DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound})
 
 	got := drain(bodies, 2, 3*time.Second)
 	if len(got) != 2 {
@@ -256,10 +256,10 @@ func TestNotify_SingleItemBatchMatchesUnbatched(t *testing.T) {
 	t.Cleanup(Flush)
 	const body = "{{title}}|{{message}}|{{anime_name}}|{{episode}}|{{reason}}"
 
-	Notify(cfgWithWindow(srv.URL, 0, nil, body), DownloadFailed, "Frieren", 5, ReasonNotFound)
+	Notify(cfgWithWindow(srv.URL, 0, nil, body), DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound})
 	unbatched := drain(bodies, 1, time.Second)
 
-	Notify(cfgWithWindow(srv.URL, 1, nil, body), DownloadFailed, "Frieren", 5, ReasonNotFound)
+	Notify(cfgWithWindow(srv.URL, 1, nil, body), DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound})
 	batched := drain(bodies, 1, 3*time.Second)
 
 	if len(unbatched) != 1 || len(batched) != 1 {
@@ -275,8 +275,8 @@ func TestNotify_WindowZeroFiresImmediately(t *testing.T) {
 	srv, bodies := collector(t)
 	cfg := cfgWithWindow(srv.URL, 0, nil, "{{title}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Re:ZERO", Number: 12})
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Frieren", Number: 5})
 
 	got := drain(bodies, 2, time.Second)
 	if len(got) != 2 {
@@ -291,8 +291,8 @@ func TestFlush_SendsPendingBatch(t *testing.T) {
 	// Long window: only Flush can make this leave during the test.
 	cfg := cfgWithWindow(srv.URL, 3600, nil, "{{count}}")
 
-	Notify(cfg, NewEpisode, "Re:ZERO", 12, "")
-	Notify(cfg, NewEpisode, "Frieren", 5, "")
+	Notify(cfg, NewEpisode, Episode{AnimeName: "Re:ZERO", Number: 12})
+	Notify(cfg, NewEpisode, Episode{AnimeName: "Frieren", Number: 5})
 
 	if got := drain(bodies, 1, 200*time.Millisecond); len(got) != 0 {
 		t.Fatalf("nothing should leave before Flush, got %v", got)
@@ -319,8 +319,8 @@ func TestFireWebhook_EscapesJSONBody(t *testing.T) {
 		map[string]string{"Content-Type": "application/json"},
 		`{"content":"{{message}}"}`)
 
-	Notify(cfg, DownloadCompleted, `Re:"ZERO"`, 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: `Re:"ZERO"`, Number: 12})
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Frieren", Number: 5})
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
@@ -346,8 +346,8 @@ func TestFireWebhook_DoesNotEscapePlainTextBody(t *testing.T) {
 	t.Cleanup(Flush)
 	cfg := cfgWithWindow(srv.URL, 1, map[string]string{"Title": "{{title}}"}, "{{message}}")
 
-	Notify(cfg, DownloadCompleted, "Re:ZERO", 12, "")
-	Notify(cfg, DownloadCompleted, "Frieren", 5, "")
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Re:ZERO", Number: 12})
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Frieren", Number: 5})
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
@@ -375,9 +375,9 @@ func TestFireWebhook_StripsNewlinesFromHeaders(t *testing.T) {
 		Headers: map[string]string{"Title": "{{message}}"},
 		Body:    "x", Events: []string{"download_completed"},
 	}
-	fireWebhook(preset, buildBatchVars(DownloadCompleted, []item{
-		{animeName: "Re:ZERO", episode: 12},
-		{animeName: "Frieren", episode: 5},
+	fireWebhook(preset, buildBatchVars(DownloadCompleted, []Episode{
+		{AnimeName: "Re:ZERO", Number: 12},
+		{AnimeName: "Frieren", Number: 5},
 	}))
 
 	select {
@@ -390,5 +390,102 @@ func TestFireWebhook_StripsNewlinesFromHeaders(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("request never arrived — net/http rejected the header")
+	}
+}
+
+// TestBatchLines_CollapsesConsecutiveEpisodes: a pack completing is one line per run, not one per
+// episode. Organize finishes in completion order, so the episodes are sorted before collapsing; a
+// gap opens a new run, another anime or another failure reason never merges into the same line.
+func TestBatchLines_CollapsesConsecutiveEpisodes(t *testing.T) {
+	tests := []struct {
+		name  string
+		event Event
+		items []Episode
+		want  []string
+	}{
+		{
+			name:  "out-of-order run with a gap and a duplicate",
+			event: DownloadCompleted,
+			items: []Episode{
+				{AnimeID: 1, AnimeName: "Frieren", Number: 3},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 1},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 2},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 2},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 7},
+			},
+			want: []string{
+				"Frieren EPs 1-3 downloaded successfully",
+				"Frieren EP 7 downloaded successfully",
+			},
+		},
+		{
+			name:  "animes keep first-appearance order",
+			event: NewEpisode,
+			items: []Episode{
+				{AnimeID: 2, AnimeName: "Dandadan", Number: 4},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 5},
+				{AnimeID: 2, AnimeName: "Dandadan", Number: 5},
+			},
+			want: []string{
+				"Dandadan EPs 4-5 detected, starting download",
+				"Frieren EP 5 detected, starting download",
+			},
+		},
+		{
+			name:  "different reasons stay apart",
+			event: DownloadFailed,
+			items: []Episode{
+				{AnimeID: 1, AnimeName: "Frieren", Number: 1, Reason: ReasonNotFound},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 2, Reason: ReasonNoDiskSpace},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 3, Reason: ReasonNoDiskSpace},
+			},
+			want: []string{
+				"Frieren EP 1 failed: " + ReasonNotFound,
+				"Frieren EPs 2-3 failed: " + ReasonNoDiskSpace,
+			},
+		},
+		{
+			name:  "without an id the name keeps animes apart",
+			event: EpisodeDeleted,
+			items: []Episode{
+				{AnimeName: "Frieren", Number: 1},
+				{AnimeName: "Dandadan", Number: 2},
+				{AnimeName: "Frieren", Number: 2},
+			},
+			want: []string{
+				"Frieren EPs 1-2 were removed from the library",
+				"Dandadan EP 2 was removed from the library",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := batchLines(tt.event, tt.items)
+			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("lines:\n got: %q\nwant: %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestBuildBatchVars_AnimeIDAndTorrentHash: filled for a single item, blank for N items (no single
+// value), and blank when the caller has no id rather than a misleading "0".
+func TestBuildBatchVars_AnimeIDAndTorrentHash(t *testing.T) {
+	one := buildBatchVars(DownloadCompleted, []Episode{{AnimeID: 154587, AnimeName: "Frieren", Number: 5, TorrentHash: "abc"}})
+	if one["anime_id"] != "154587" || one["torrent_hash"] != "abc" {
+		t.Errorf("single item: anime_id=%q torrent_hash=%q", one["anime_id"], one["torrent_hash"])
+	}
+
+	many := buildBatchVars(DownloadCompleted, []Episode{
+		{AnimeID: 154587, AnimeName: "Frieren", Number: 5, TorrentHash: "abc"},
+		{AnimeID: 154587, AnimeName: "Frieren", Number: 6, TorrentHash: "def"},
+	})
+	if many["anime_id"] != "" || many["torrent_hash"] != "" {
+		t.Errorf("N items must leave them blank: anime_id=%q torrent_hash=%q", many["anime_id"], many["torrent_hash"])
+	}
+
+	noID := buildBatchVars(DownloadFailed, []Episode{{AnimeName: "Frieren", Number: 5}})
+	if noID["anime_id"] != "" {
+		t.Errorf("unknown id must be blank, got %q", noID["anime_id"])
 	}
 }

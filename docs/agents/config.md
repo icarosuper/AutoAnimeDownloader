@@ -36,7 +36,7 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 | `Notifications.Webhooks[].Method` | `method` | `string` | — | HTTP method (`POST`/`GET`/`PUT`) |
 | `Notifications.Webhooks[].Headers` | `headers` | `map[string]string` | — | Request headers — values support `{{vars}}` |
 | `Notifications.Webhooks[].Body` | `body` | `string` | — | Request body — supports `{{vars}}` |
-| `Notifications.BatchWindowSeconds` | `notifications.batch_window_seconds` | `int` | `60` | Groups the events of one window into a single webhook (one queue **per event**, never mixing success with failure). `0` disables it: one webhook per event, the original behavior. A `config.json` older than the field loads with **60**, not `0`: `LoadConfigs` deserializes on top of `getDefaultConfig()`. The 60s are measured, not taste — in a real backfill of 67 organizes, a 10s window would deliver 53 webhooks (and the service answered 429) and the 60s one delivers 24. With one item in the window the message is identical to the ungrouped one; with N > 1, `{{title}}` gets the count, `{{message}}` becomes N lines, `{{count}}` carries N, and `{{anime_name}}`/`{{episode}}`/`{{reason}}` are empty (there's no single value). See decisions.md #47 |
+| `Notifications.BatchWindowSeconds` | `notifications.batch_window_seconds` | `int` | `60` | Groups the events of one window into a single webhook (one queue **per event**, never mixing success with failure). `0` disables it: one webhook per event, the original behavior. A `config.json` older than the field loads with **60**, not `0`: `LoadConfigs` deserializes on top of `getDefaultConfig()`. The 60s are measured, not taste — in a real backfill of 67 organizes, a 10s window would deliver 53 webhooks (and the service answered 429) and the 60s one delivers 24. With one item in the window the message is identical to the ungrouped one; with N > 1, `{{title}}` gets the count, `{{message}}` becomes one line per run of consecutive episodes, `{{count}}` carries N, and `{{anime_name}}`/`{{episode}}`/`{{reason}}`/`{{anime_id}}`/`{{torrent_hash}}` are empty (there's no single value). See decisions.md #47 |
 | `Priorities` | `priorities` | `nyaa.Priorities` | see below | Ordered lists driving torrent ranking/filtering. Defined in `src/internal/nyaa/priorities.go` |
 | `Priorities.CriteriaOrder` | `priorities.criteria_order` | `[]string` | `["uncensored","resolution","health","source","codec","fansub","audio","size"]` | Order in which sort criteria are applied. `SortTorrentResults` uses the episode subset (`uncensored`, `resolution`, `health`, `codec`, `fansub`, `size` — no `source`, no `audio`). `SortFinishedSeriesResults` is that subset plus `source`, used when `Media.Status == FINISHED`. `SortMovieResults` uses all. `health` sits **before** `fansub` on purpose — see [decisions.md #55](decisions.md#55-health-compares-a-seeders-band-and-it-comes-before-fansub). **An existing `config.json` keeps the order it already has** (`LoadConfigs` unmarshals over the defaults); restore-defaults (or a hand edit) is how an old install picks up the new relative order of source vs health vs resolution. Health **bands** do not wait on that click |
 | `Priorities.Fansubs` | `priorities.fansubs` | `[]string` | `["subsplease","erai-raws","judas","toonshub","asw","ember","hd-zone","kamig","remix","aniverse","dub","raw"]` | Fansub preference order, lowercase, matched as substring of torrent name |
@@ -105,10 +105,13 @@ Available in `url`, `headers` values, and `body`:
 | Variable | Value |
 |----------|-------|
 | `{{title}}` | Short event label (e.g. "New episode detected") |
-| `{{message}}` | Full sentence with anime name and episode number |
+| `{{message}}` | Full sentence with anime name and episode number. In a window with N > 1, one line per run of consecutive episodes of the same anime and reason (`Frieren EPs 1-24 downloaded successfully`) |
 | `{{anime_name}}` | Anime title |
 | `{{episode}}` | Episode number as string |
 | `{{reason}}` | Failure reason (for `download_failed`); empty for other events |
+| `{{anime_id}}` | AniList media id; empty when unknown |
+| `{{torrent_hash}}` | Torrent infohash; empty when there is none yet (`new_episode`, a "no torrent found" failure) |
+| `{{count}}` | Number of episodes in the window |
 | `{{quality}}` | Always empty — not tracked at hook point |
 | `{{file_path}}` | Always empty — not tracked |
 | `{{timestamp}}` | Current time formatted as `2006-01-02 15:04` |

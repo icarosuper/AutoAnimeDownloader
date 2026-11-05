@@ -260,14 +260,14 @@ func processAnimeEpisodes(
 				issue.Code = IssueAwaitingEarlierEpisode
 			}
 			result.issues = append(result.issues, issue)
-			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, notifications.ReasonNotFound)
+			notifications.Notify(configs, notifications.DownloadFailed, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode, Reason: notifications.ReasonNotFound})
 			continue
 		}
 
 		if searcher.misses != nil {
 			searcher.misses.clear(missKey)
 		}
-		notifications.Notify(configs, notifications.NewEpisode, animeTitle, ep.Episode, "")
+		notifications.Notify(configs, notifications.NewEpisode, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode})
 
 		hash, torrentSize := attemptDownloadWithRetries(configs, backend, disk, candidates, epName)
 
@@ -312,7 +312,7 @@ func processAnimeEpisodes(
 			result.issues = append(result.issues, issue)
 			// The notification batch (BatchWindowSeconds) merges the pass's N episodes into a single
 			// message, so a full disk doesn't become a flood.
-			notifications.Notify(configs, notifications.DownloadFailed, animeTitle, ep.Episode, reason)
+			notifications.Notify(configs, notifications.DownloadFailed, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode, Reason: reason})
 		}
 	}
 
@@ -1210,7 +1210,7 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 		} else {
 			for _, k := range forgotten {
 				ep := byKey[k]
-				notifications.Notify(configs, notifications.EpisodeDeleted, ep.AnimeName, ep.EpisodeNumber, "")
+				notifications.Notify(configs, notifications.EpisodeDeleted, notifications.Episode{AnimeID: ep.AnimeID, AnimeName: ep.AnimeName, Number: ep.EpisodeNumber, TorrentHash: ep.EpisodeHash})
 			}
 		}
 	}
