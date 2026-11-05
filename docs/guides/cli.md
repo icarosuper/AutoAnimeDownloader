@@ -94,7 +94,9 @@ autoanimedownloader animes episodes 154587
 autoanimedownloader animes debug 154587
 autoanimedownloader animes download 154587 3
 autoanimedownloader animes redownload 154587 3 --yes
+autoanimedownloader animes redownload 154587 3 4 5 --yes
 autoanimedownloader animes delete 154587 3 --yes
+autoanimedownloader animes delete 154587 3 4 5 --yes
 autoanimedownloader animes release 154587 3
 autoanimedownloader animes replace 154587 --magnet "magnet:?xt=…" --yes
 autoanimedownloader animes replace-episode 154587 3 --magnet "magnet:?xt=…" --yes
@@ -111,6 +113,10 @@ variants and season/part. There is no command that prints a Nyaa description —
 JSON is the terminal equivalent. `add --magnet` skips auto-pick. Flags may follow the id (`animes add 154587 --magnet "…"` is
 the same as flags-first). `add` / `remove` are standalone
 animes. `--delete-episodes` defaults to false (files stay, marked manually managed).
+
+`delete` and `redownload` take one or more episodes. Several go in one request: `delete` frees a
+pack they share and deletes nothing if any of them is not downloaded; `redownload` keeps going past
+a failed episode, lists the failures and exits non-zero.
 
 `release` is not destructive and does not take `--yes`.
 

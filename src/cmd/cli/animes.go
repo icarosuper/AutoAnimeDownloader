@@ -84,17 +84,21 @@ func animesCommand() *cli.Command {
 			},
 			{
 				Name:      "redownload",
-				Usage:     "Redownload an episode",
-				ArgsUsage: "<id> <episode>",
-				Flags:     []cli.Flag{yesFlag()},
-				Action:    handleAnimesRedownload,
+				Usage:     "Redownload one or more episodes",
+				ArgsUsage: "<id> <episode> [<episode> ...]",
+				Description: "With several episodes, one failing does not stop the others; the ones that\n" +
+					"failed are listed and the command exits non-zero.",
+				Flags:  []cli.Flag{yesFlag()},
+				Action: handleAnimesRedownload,
 			},
 			{
 				Name:      "delete",
-				Usage:     "Delete a downloaded episode",
-				ArgsUsage: "<id> <episode>",
-				Flags:     []cli.Flag{yesFlag()},
-				Action:    handleAnimesDelete,
+				Usage:     "Delete one or more downloaded episodes",
+				ArgsUsage: "<id> <episode> [<episode> ...]",
+				Description: "Several episodes are deleted in one request, so a pack they share is freed.\n" +
+					"If any of them is not downloaded, nothing is deleted.",
+				Flags:  []cli.Flag{yesFlag()},
+				Action: handleAnimesDelete,
 			},
 			{
 				Name:      "release",
@@ -280,28 +284,55 @@ func handleAnimesRedownload(c *cli.Context) error {
 	if err := requireYes(c); err != nil {
 		return err
 	}
-	id, ep, err := animeEpisodeArgs(c, "animes redownload <id> <episode> --yes")
+	id, episodes, err := animeEpisodesArgs(c, "animes redownload <id> <episode> [<episode> ...] --yes")
 	if err != nil {
 		return err
 	}
-	if err := mapClientError(getClient().RedownloadEpisode(id, ep)); err != nil {
-		return err
+	client := getClient()
+	if len(episodes) == 1 {
+		if err := mapClientError(client.RedownloadEpisode(id, episodes[0])); err != nil {
+			return err
+		}
+		return printMessage("Episode redownload started", "Episode redownload started")
 	}
-	return printMessage("Episode redownload started", "Episode redownload started")
+
+	result, err := client.BatchRedownloadEpisodes(id, episodes)
+	if err != nil {
+		return mapClientError(err)
+	}
+	if outputJSON {
+		outputJSONResponse(result)
+	} else {
+		fmt.Printf("Redownload started: %v\n", result.Redownloaded)
+		for _, f := range result.Failed {
+			fmt.Printf("Failed: episode %d: %s\n", f.Episode, f.Error)
+		}
+	}
+	if len(result.Failed) > 0 {
+		return fmt.Errorf("%d of %d episodes failed to redownload", len(result.Failed), len(result.Failed)+len(result.Redownloaded))
+	}
+	return nil
 }
 
 func handleAnimesDelete(c *cli.Context) error {
 	if err := requireYes(c); err != nil {
 		return err
 	}
-	id, ep, err := animeEpisodeArgs(c, "animes delete <id> <episode> --yes")
+	id, episodes, err := animeEpisodesArgs(c, "animes delete <id> <episode> [<episode> ...] --yes")
 	if err != nil {
 		return err
 	}
-	if err := mapClientError(getClient().DeleteEpisode(id, ep)); err != nil {
+	client := getClient()
+	if len(episodes) == 1 {
+		if err := mapClientError(client.DeleteEpisode(id, episodes[0])); err != nil {
+			return err
+		}
+		return printMessage("Episode deleted", "Episode deleted")
+	}
+	if err := mapClientError(client.BatchDeleteEpisodes(id, episodes)); err != nil {
 		return err
 	}
-	return printMessage("Episode deleted", "Episode deleted")
+	return printMessage(fmt.Sprintf("%d episodes deleted", len(episodes)), "Episodes deleted")
 }
 
 func handleAnimesRelease(c *cli.Context) error {
@@ -367,6 +398,26 @@ func animeEpisodeArgs(c *cli.Context, usage string) (int, int, error) {
 		return 0, 0, err
 	}
 	return id, ep, nil
+}
+
+// animeEpisodesArgs is animeEpisodeArgs for commands that take one or more episodes.
+func animeEpisodesArgs(c *cli.Context, usage string) (int, []int, error) {
+	if c.NArg() < 2 {
+		return 0, nil, fmt.Errorf("usage: %s", usage)
+	}
+	id, err := parsePositiveInt(c.Args().Get(0), "id")
+	if err != nil {
+		return 0, nil, err
+	}
+	episodes := make([]int, 0, c.NArg()-1)
+	for _, arg := range c.Args().Slice()[1:] {
+		ep, err := parsePositiveInt(arg, "episode")
+		if err != nil {
+			return 0, nil, err
+		}
+		episodes = append(episodes, ep)
+	}
+	return id, episodes, nil
 }
 
 func parseNonNegativeInt(s, name string) (int, error) {

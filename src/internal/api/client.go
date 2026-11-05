@@ -40,9 +40,9 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
-// slowTimeout bounds the calls that search Nyaa inside the request: RunAnimeDebug pages Nyaa and
-// falls back to one search per episode, which takes minutes on a long series. The default 30s is
-// for calls that answer from local state.
+// slowTimeout bounds the calls that search Nyaa inside the request: RunAnimeDebug (paging plus one
+// search per episode on a long series) and BatchRedownloadEpisodes (one search per episode). The
+// default 30s is for calls that answer from local state; these take minutes.
 const slowTimeout = 10 * time.Minute
 
 // sendSlow is send with slowTimeout instead of the client's default.
@@ -266,6 +266,30 @@ func (c *Client) RedownloadEpisode(id, episode int) error {
 
 func (c *Client) DeleteEpisode(id, episode int) error {
 	return c.send(http.MethodDelete, episodePath(id, episode), nil, nil)
+}
+
+// BatchDeleteEpisodes deletes N episodes of one anime in one removal, so a shared pack is freed.
+func (c *Client) BatchDeleteEpisodes(id int, episodes []int) error {
+	return c.send(http.MethodPost, "/api/v1/animes/"+strconv.Itoa(id)+"/episodes/batch-delete", map[string][]int{"episodes": episodes}, nil)
+}
+
+// BatchRedownloadResult is what a batch redownload started and what it could not.
+type BatchRedownloadResult struct {
+	Redownloaded []int `json:"redownloaded"`
+	Failed       []struct {
+		Episode int    `json:"episode"`
+		Error   string `json:"error"`
+	} `json:"failed"`
+}
+
+// BatchRedownloadEpisodes redownloads N episodes of one anime. One failure does not stop the rest:
+// the result lists both.
+func (c *Client) BatchRedownloadEpisodes(id int, episodes []int) (*BatchRedownloadResult, error) {
+	var result BatchRedownloadResult
+	if err := c.sendSlow(http.MethodPost, "/api/v1/animes/"+strconv.Itoa(id)+"/episodes/batch-redownload", map[string][]int{"episodes": episodes}, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 func (c *Client) ReleaseEpisode(id, episode int) error {

@@ -101,6 +101,8 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/release", handleReleaseEpisode(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}/replace", handleReplaceEpisodeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/{episodeNumber}", handleDeleteEpisode(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/batch-delete", handleBatchDeleteEpisodes(s))
+	apiMux.HandleFunc("/api/v1/animes/{id}/episodes/batch-redownload", handleBatchRedownloadEpisodes(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/replace", handleReplaceAnimeWithMagnet(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/settings", handleAnimeSettings(s))
 	apiMux.HandleFunc("/api/v1/animes/{id}/debug", handleAnimeDebug(s))

@@ -640,6 +640,21 @@ export async function removeStandaloneAnime(mediaId: number, deleteEpisodes: boo
   return apiRequest<void>('DELETE', `/standalone-animes/${mediaId}?${params.toString()}`)
 }
 
+// One request for N episodes: a pack they share is only freed when its episodes leave together.
+export async function batchDeleteEpisodes(animeId: number, episodes: number[]): Promise<void> {
+  return apiRequest<void>('POST', `/animes/${animeId}/episodes/batch-delete`, { episodes })
+}
+
+export interface BatchRedownloadResult {
+  redownloaded: number[]
+  failed: { episode: number; error: string }[]
+}
+
+// One failure does not stop the others; the result lists both.
+export async function batchRedownloadEpisodes(animeId: number, episodes: number[]): Promise<BatchRedownloadResult> {
+  return apiRequest<BatchRedownloadResult>('POST', `/animes/${animeId}/episodes/batch-redownload`, { episodes })
+}
+
 export interface RenderedWebhook {
   method: string
   url: string

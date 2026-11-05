@@ -184,3 +184,47 @@ func TestAnimesDebugPrintsSummary(t *testing.T) {
 		t.Errorf("summary missing from output:\n%s", stdout)
 	}
 }
+
+// TestAnimesDeleteAndRedownloadTakeSeveralEpisodes: one episode keeps the single endpoint, several
+// go through the batch one; a batch redownload with failures exits non-zero.
+func TestAnimesDeleteAndRedownloadTakeSeveralEpisodes(t *testing.T) {
+	var paths, bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		bodies = append(bodies, string(b))
+		w.Header().Set("Content-Type", "application/json")
+		var data any
+		if strings.HasSuffix(r.URL.Path, "/batch-redownload") {
+			data = map[string]any{"redownloaded": []int{3}, "failed": []map[string]any{{"episode": 4, "error": "no torrent found"}}}
+		}
+		_ = json.NewEncoder(w).Encode(api.SuccessResponse{Success: true, Data: data})
+	}))
+	defer srv.Close()
+
+	if _, _, err := runCLI(t, "--endpoint", srv.URL, "animes", "delete", "21", "3", "--yes"); err != nil {
+		t.Fatalf("single delete: %v", err)
+	}
+	if _, _, err := runCLI(t, "--endpoint", srv.URL, "animes", "delete", "21", "3", "4", "--yes"); err != nil {
+		t.Fatalf("batch delete: %v", err)
+	}
+	stdout, _, err := runCLI(t, "--endpoint", srv.URL, "animes", "redownload", "21", "3", "4", "--yes")
+	if err == nil {
+		t.Error("a batch redownload with failures must exit non-zero")
+	}
+	if !strings.Contains(stdout, "episode 4: no torrent found") {
+		t.Errorf("failure missing from output:\n%s", stdout)
+	}
+
+	want := []string{
+		"DELETE /api/v1/animes/21/episodes/3",
+		"POST /api/v1/animes/21/episodes/batch-delete",
+		"POST /api/v1/animes/21/episodes/batch-redownload",
+	}
+	if strings.Join(paths, "\n") != strings.Join(want, "\n") {
+		t.Errorf("requests:\n got: %q\nwant: %q", paths, want)
+	}
+	if bodies[1] != `{"episodes":[3,4]}` {
+		t.Errorf("batch body = %q", bodies[1])
+	}
+}

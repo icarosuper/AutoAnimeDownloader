@@ -13,6 +13,8 @@ vi.mock('../../src/lib/api/client.js', () => ({
   getTorrents: vi.fn(),
   downloadEpisode: vi.fn(),
   deleteEpisode: vi.fn(),
+  batchDeleteEpisodes: vi.fn(),
+  batchRedownloadEpisodes: vi.fn(),
   releaseEpisode: vi.fn(),
   redownloadEpisode: vi.fn(),
   replaceEpisodeWithMagnet: vi.fn(),

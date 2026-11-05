@@ -76,6 +76,13 @@ func TestClientMethodsHitExpectedPaths(t *testing.T) {
 		{"DeleteEpisode", http.MethodDelete, "/api/v1/animes/21/episodes/3", nil, "", "null", func(c *Client) error {
 			return c.DeleteEpisode(21, 3)
 		}},
+		{"BatchDeleteEpisodes", http.MethodPost, "/api/v1/animes/21/episodes/batch-delete", nil, `{"episodes":[3,4]}`, "null", func(c *Client) error {
+			return c.BatchDeleteEpisodes(21, []int{3, 4})
+		}},
+		{"BatchRedownloadEpisodes", http.MethodPost, "/api/v1/animes/21/episodes/batch-redownload", nil, `{"episodes":[3,4]}`, `{"redownloaded":[3],"failed":[{"episode":4,"error":"x"}]}`, func(c *Client) error {
+			_, err := c.BatchRedownloadEpisodes(21, []int{3, 4})
+			return err
+		}},
 		{"ReleaseEpisode", http.MethodPost, "/api/v1/animes/21/episodes/3/release", nil, "", "null", func(c *Client) error {
 			return c.ReleaseEpisode(21, 3)
 		}},

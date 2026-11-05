@@ -106,6 +106,8 @@ Key endpoints:
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/download` | `handleDownloadEpisode` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/redownload` | `handleRedownloadEpisode` | `endpoint_episode_actions.go` |
 | `DELETE` | `/api/v1/animes/{id}/episodes/{episodeNumber}` | `handleDeleteEpisode` | `endpoint_episode_actions.go` |
+| `POST` | `/api/v1/animes/{id}/episodes/batch-delete` | `handleBatchDeleteEpisodes` | `endpoint_episode_batch.go` — `{"episodes":[…]}`, same result as N single deletes in ONE `RemoveEpisodesWithLinks`. Parallel single deletes could each see the other episodes of a shared pack and leave it on disk. An episode not downloaded → 404, nothing removed |
+| `POST` | `/api/v1/animes/{id}/episodes/batch-redownload` | `handleBatchRedownloadEpisodes` | `endpoint_episode_batch.go` — removes the downloaded ones in one call (aborts on failure, like the single redownload), then downloads each; a failure does not stop the rest. Answers `{redownloaded, failed}`. One Nyaa search per episode: `Client.sendSlow` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/release` | `handleReleaseEpisode` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/replace` | `handleReplaceEpisodeWithMagnet` | `endpoint_episode_actions.go` |
 | `POST` | `/api/v1/animes/{id}/replace` | `handleReplaceAnimeWithMagnet` | `endpoint_episode_actions.go` |

@@ -16,6 +16,8 @@
     getTorrents,
     downloadEpisode,
     deleteEpisode,
+    batchDeleteEpisodes,
+    batchRedownloadEpisodes,
     releaseEpisode,
     redownloadEpisode,
     replaceEpisodeWithMagnet,
@@ -76,6 +78,7 @@
   let selectedEpisodes: Set<number> = new Set();
   let bulkLoading = false;
   let confirmBulkOpen = false;
+  let confirmBulkRedownloadOpen = false;
 
   // Stop tracking (standalone only). Lives in the AnimeDetail header because that's where
   // the user already is after clicking the anime in the Status list, and the header is
@@ -546,21 +549,37 @@
     confirmBulkOpen = true;
   }
 
+  // One request, not N in parallel: parallel deletes could each still see the other episodes of a
+  // shared pack on file, and the pack stayed on disk.
   async function confirmBulkDelete() {
     const targets = selectedList.filter(ep => ep.is_downloaded);
     bulkLoading = true;
-    let success = 0, failed = 0;
-    await Promise.all(targets.map(async ep => {
-      try {
-        await deleteEpisode(animeId, ep.episode_number);
-        success++;
-      } catch {
-        failed++;
-      }
-    }));
+    try {
+      await batchDeleteEpisodes(animeId, targets.map(ep => ep.episode_number));
+      toast.success(m.detail_bulk_toast_del_done({ success: targets.length }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_bulk_toast_partial({ failed: targets.length }));
+    }
     bulkLoading = false;
-    if (success > 0) toast.success(m.detail_bulk_toast_del_done({ success }));
-    if (failed > 0) toast.error(m.detail_bulk_toast_partial({ failed }));
+    selectedEpisodes = new Set();
+    await loadData(animeId);
+  }
+
+  function handleBulkRedownload() {
+    confirmBulkRedownloadOpen = true;
+  }
+
+  async function confirmBulkRedownload() {
+    const targets = selectedList.filter(ep => ep.is_downloaded);
+    bulkLoading = true;
+    try {
+      const result = await batchRedownloadEpisodes(animeId, targets.map(ep => ep.episode_number));
+      if (result.redownloaded.length > 0) toast.success(m.detail_bulk_toast_redl_done({ success: result.redownloaded.length }));
+      if (result.failed.length > 0) toast.error(m.detail_bulk_toast_partial({ failed: result.failed.length }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.detail_toast_redl_error());
+    }
+    bulkLoading = false;
     selectedEpisodes = new Set();
     await loadData(animeId);
   }
@@ -777,6 +796,15 @@
   on:confirm={confirmBulkDelete}
 />
 
+<ConfirmDialog
+  bind:open={confirmBulkRedownloadOpen}
+  title={m.detail_bulk_redl_confirm_title()}
+  message={m.detail_bulk_redl_confirm_msg({ count: selectedList.filter(ep => ep.is_downloaded).length })}
+  confirmLabel={m.detail_redownload_confirm_btn()}
+  cancelLabel={m.common_cancel()}
+  on:confirm={confirmBulkRedownload}
+/>
+
 <!-- ConfirmDialog + a Checkbox in the slot. TorrentDeleteDialog doesn't belong here: it is
      specific to keepData/block, which are torrent questions, not anime ones. -->
 <ConfirmDialog
@@ -911,9 +939,8 @@
     </div>
   {:else}
     <section class="rounded-card border border-default bg-card">
-      <!-- Multi-select bar. Only the three bulk actions that EXIST today: Download, Release,
-           Delete. Bulk "Redownload" is not added — that would be new functionality
-           (spec §9.2), not a redesign. -->
+      <!-- Multi-select bar. Delete and Redownload go through the batch endpoints (one request for
+           the whole selection); Download and Release still fire one request per episode. -->
       {#if selectedEpisodes.size > 0}
         <div class="flex flex-wrap items-center gap-2 border-b border-accent bg-accent-tint/[.09] px-4 py-2.5">
           <span class="mr-auto text-copy text-accent">
@@ -930,6 +957,9 @@
             </Button>
           {/if}
           {#if canBulkDelete}
+            <Button variant="ghost" disabled={bulkLoading} on:click={handleBulkRedownload}>
+              {$locale && m.detail_bulk_redownload()}
+            </Button>
             <Button variant="warn" disabled={bulkLoading} on:click={handleBulkDelete}>
               {$locale && m.detail_bulk_delete()}
             </Button>
