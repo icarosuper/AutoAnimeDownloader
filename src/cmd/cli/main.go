@@ -19,15 +19,14 @@ package main
 import (
 	"AutoAnimeDownloader/src/internal/api"
 	processcli "AutoAnimeDownloader/src/internal/cli"
+	"AutoAnimeDownloader/src/internal/daemon"
 	"AutoAnimeDownloader/src/internal/version"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -308,20 +307,8 @@ func handleOpen() error {
 		webUIURL = "http://" + webUIURL
 	}
 
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "linux":
-		cmd = exec.Command("xdg-open", webUIURL)
-	case "darwin":
-		cmd = exec.Command("open", webUIURL)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", webUIURL)
-	default:
-		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
-	}
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to open browser: %w", err)
+	if err := daemon.OpenBrowser(webUIURL); err != nil {
+		return err
 	}
 
 	return printMessage("Opening web UI at "+webUIURL, "Browser opened")

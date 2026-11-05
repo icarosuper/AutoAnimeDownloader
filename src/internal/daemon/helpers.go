@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"testing"
 )
 
 type FileManagerInterface interface {
@@ -177,8 +178,15 @@ func isConfigComplete(config *files.Config) bool {
 }
 
 // OpenBrowser opens the URL in the user's browser. Used by the verification pass (incomplete
-// config) and by the boot (first run, see main.go).
+// config), the boot (first run, see main.go), the tray and the CLI's `open` command.
+//
+// A no-op inside a test binary (decisions.md #120): tests drive the incomplete-config pass, and
+// without the guard every `go test` popped the config page in the developer's real browser.
 func OpenBrowser(webUIURL string) error {
+	if testing.Testing() {
+		return nil
+	}
+
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "linux":

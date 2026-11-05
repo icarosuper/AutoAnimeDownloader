@@ -126,6 +126,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#117** — Off-list bypasses the unclaimed pack guard](#117-off-list-bypasses-the-unclaimed-pack-guard)
 - [**#118** — List fetches follow every page, all or nothing](#118-list-fetches-follow-every-page-all-or-nothing)
 - [**#119** — `disable_seeding` means no upload at all, and a released torrent is not a lost one](#119-disable_seeding-means-no-upload-at-all-and-a-released-torrent-is-not-a-lost-one)
+- [**#120** — `OpenBrowser` is a no-op inside a test binary](#120-openbrowser-is-a-no-op-inside-a-test-binary)
 
 ---
 
@@ -3437,3 +3438,19 @@ released pack is not.
 `AllowedFastSet`; also stopping the torrent at completion: organize runs right after completion and
 removes it, and with no upload a completed torrent has nothing to send anyway, so a stop in between
 only adds a state to keep in sync; treating `TorrentReleased` as "in session" in `findCoveringPack`.
+
+### 120. `OpenBrowser` is a no-op inside a test binary
+
+**Location:** `internal/daemon/helpers.go` — `OpenBrowser`, the `testing.Testing()` guard.
+
+**What it looks like:** production code importing `testing` and checking whether it runs under
+`go test`, instead of swapping the function out in the tests.
+
+**Why it's right:** the verification pass opens the config page in a goroutine when the config is
+incomplete, and several tests drive exactly that pass (e.g.
+`TestAnimeVerification_IncompleteConfigStillReportsMissingConfig`). Every `go test ./...` ran
+`xdg-open http://localhost:8091/#/config?missingConfig=true` in the developer's real browser. A
+var-swap would need a stub in every package whose tests can reach a pass (daemon, api, …), and the
+first new package that forgets it brings the tab back. `testing.Testing()` (Go 1.21+) is true only
+in a binary built by `go test`, so one guard covers every caller — the pass, the first-run boot and
+the tray, the CLI's `open` command — and costs nothing in the real binaries.
