@@ -67,6 +67,8 @@
     hintMinFreeDisk: m.config_hint_min_free_disk(),
     labelMaxConcurrent: m.config_label_max_concurrent(),
     hintMaxConcurrent: m.config_hint_max_concurrent(),
+    labelDisableSeeding: m.config_label_disable_seeding(),
+    hintDisableSeeding: m.config_hint_disable_seeding(),
     labelRenameJellyfin: m.config_label_rename_jellyfin(),
     hintRenameJellyfin: m.config_hint_rename_jellyfin(),
     labelExcludedList: m.config_label_excluded_list(),
@@ -133,6 +135,7 @@
     watched_episodes_to_keep: 0,
     excluded_lists: [],
     rename_files_for_jellyfin: false,
+    disable_seeding: false,
     download_statuses: ["CURRENT", "REPEATING"],
     download_media_statuses: ["RELEASING", "FINISHED"],
     delete_statuses: [],
@@ -631,6 +634,15 @@
                 inline={true}
               />
               <p class="text-caption text-subtle">{T && T.hintMaxConcurrent}</p>
+            </div>
+            <div class="space-y-1.5 p-4.5">
+              <Toggle
+                id="disable_seeding"
+                bind:checked={config.disable_seeding}
+                label={(T && T.labelDisableSeeding) || ""}
+                inline={true}
+              />
+              <p class="text-caption text-subtle">{T && T.hintDisableSeeding}</p>
             </div>
             <div class="p-4.5">
               <Input

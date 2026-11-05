@@ -69,6 +69,12 @@ type EpisodeStruct struct {
 	// JobOrganize. Empty means "not yet organized" — the marker JobOrganize uses to fire
 	// the completion webhook and write-back exactly once (idempotent across restarts).
 	LibraryPaths []string `json:"library_paths,omitempty"`
+	// TorrentReleased marks that disable_seeding removed this record's torrent (and its download
+	// copy) right after organize. The episode lives only in the library from then on, so the
+	// torrent missing from the session is not a loss: without the flag the pass reads it as one
+	// and downloads the episode again. Stays true if disable_seeding is turned off later — the
+	// file is still in the library.
+	TorrentReleased bool `json:"torrent_released,omitempty"`
 	// AnimeSeason is the season number extracted from the AniList titles at download/adopt
 	// time. Organize does not call AniList; a restart pack uses the Sxx markers on the
 	// files themselves, and this field is the matching entry identity.
@@ -134,7 +140,11 @@ type Config struct {
 	//
 	// No migration needed: LoadConfigs deserializes ON TOP of getDefaultConfig(), so a config.json
 	// older than this field already loads with the default.
-	MaxConcurrentDownloads int      `json:"max_concurrent_downloads"`
+	MaxConcurrentDownloads int `json:"max_concurrent_downloads"`
+	// DisableSeeding stops every upload: the torrent session never unchokes a peer (not even
+	// during the download), and a torrent is removed, download copy included, as soon as it is
+	// organized into the library. Toggling it rebuilds the torrent session. See decisions.md #119.
+	DisableSeeding         bool     `json:"disable_seeding"`
 	DeleteWatchedEpisodes  bool     `json:"delete_watched_episodes"`
 	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
 	ExcludedList           string   `json:"excluded_list,omitempty"`

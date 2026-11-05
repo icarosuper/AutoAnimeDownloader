@@ -245,7 +245,9 @@ does not abort.
 **Reconciliation** (`reconcileLibrary`, `verification.go`) — on boot and periodically, enqueues an
 `organize` job for every completed torrent whose episode is not yet in the library. The criterion is
 empty `LibraryPaths`, not the hardlink missing from disk (decisions.md #29); `clearLibraryPathsAfterRootSwap`
-is the only exception, when `Ensure` reports `RootSwapped` (decisions.md #34).
+is the only exception, when `Ensure` reports `RootSwapped` (decisions.md #34). With `disable_seeding` on,
+every completed torrent with records is enqueued, organized or not: that is how the setting stops
+the torrents that were seeding before it was turned on.
 
 **`stalled.go`** — called at the top of the pass, right after `backend.List()`. A torrent at zero
 peers for more than an hour **leaves the session** through the same `HandleTorrentFailure` as a
@@ -270,6 +272,18 @@ attempts, persisted in `pending_jobs.json`. Idempotence: an episode with `Librar
 filled counts as done — no re-link and no re-firing the webhook — so the completion event and the
 reconciliation pass can both enqueue without fear. Created in `main.go` before `NewServer`, wired
 to the backend/librarian by `SetOrchestration`.
+
+**`disable_seeding` has two halves, in two packages** ([decisions.md #119](decisions.md#119-disable_seeding-means-no-upload-at-all-and-a-released-torrent-is-not-a-lost-one)).
+The session half is in `torrents`: `SetUploadDisabled` → the next `Ensure` rebuilds the session
+with no unchoking and an empty allowed-fast set (`rainConfig`). Call it BEFORE `Ensure`, like
+`SetMaxActiveDownloads`. The library half is in `jobs.go`: `organizeTorrent` → `releaseTorrent`
+marks the records `TorrentReleased` and then removes the torrent with its download copy. From then
+on the episode exists only as the library hardlink, and every reader of "is the torrent in the
+session" has to read `TorrentReleased` first: `selectEpisodes` (or the pass downloads it again),
+`removeEpisodesAndLinks` (nothing to remove), `clearLibraryPathsAfterRootSwap` (the library is
+gone, the flag goes too). `findCoveringPack` deliberately does NOT: a released pack is not on
+disk to be adopted. The pass takes the session snapshot BEFORE loading `episodes.json`: release writes the
+flag and then removes, so that order is what keeps a just-released episode from reading as lost.
 
 **`migration.go`** — runs on boot **and** at the top of every pass. `verification.go` reloads the
 config right after calling it, because the migration persists a changed config that the rest of the

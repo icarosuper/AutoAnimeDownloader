@@ -106,6 +106,8 @@
   "config_label_retry_limit": "Limite de tentativas por episódio",
   "config_label_max_concurrent": "Máx. downloads simultâneos",
   "config_hint_max_concurrent": "Torrents além desse limite esperam na fila. Use 0 para não limitar; o seeding nunca é limitado.",
+  "config_label_disable_seeding": "Desativar seeding (sem upload)",
+  "config_hint_disable_seeding": "Nunca faz upload para outros peers, nem durante o download, e remove cada torrent com a cópia de download assim que o episódio entra na biblioteca. Os downloads podem ficar mais lentos: peers priorizam quem devolve. Partes de um pack que não foram para a biblioteca (outra temporada, extras) são apagadas junto.",
   "config_label_rename_jellyfin": "Renomear arquivos para deixar padronizado (útil para Plex/Jellyfin)",
   "config_hint_rename_jellyfin": "Renomeia os arquivos de episódio para \"Nome do Anime - E05.mkv\", inclusive os de dentro de packs, para melhor identificação de metadados",
   "config_label_excluded_list": "Listas excluídas",

@@ -317,6 +317,45 @@ func TestHandleUpdateConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("PUT applies disable_seeding to the session only when it changed", func(t *testing.T) {
+		// The session reads the upload setting only when it opens, so turning it on has to rebuild
+		// it right away — and a save that didn't touch it must not, or Ensure would also apply a
+		// download path change that is the pass's job.
+		backend := torrents.NewFakeBackend()
+		fm := &mockFileManager{}
+		srv := &Server{State: state, FileManager: fm, Torrents: backend}
+		put := func(disable bool) {
+			t.Helper()
+			config := files.Config{
+				AnilistUsernames:    []string{"newuser"},
+				CompletedAnimePath:  "/tmp/newcompleted",
+				CheckInterval:       15,
+				MaxEpisodesPerAnime: 20,
+				EpisodeRetryLimit:   3,
+				DisableSeeding:      disable,
+			}
+			jsonData, _ := json.Marshal(config)
+			w := httptest.NewRecorder()
+			handleUpdateConfig(srv)(w, httptest.NewRequest(http.MethodPut, "/api/v1/config", bytes.NewBuffer(jsonData)))
+			if w.Code != http.StatusOK {
+				t.Fatalf("Expected status code %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+			}
+		}
+
+		put(true)
+		if !backend.UploadDisabled || len(backend.EnsureCalls()) != 1 {
+			t.Errorf("turning it on: UploadDisabled=%v ensures=%v", backend.UploadDisabled, backend.EnsureCalls())
+		}
+		put(true)
+		if len(backend.EnsureCalls()) != 1 {
+			t.Errorf("an unchanged value must not touch the session, ensures=%v", backend.EnsureCalls())
+		}
+		put(false)
+		if backend.UploadDisabled || len(backend.EnsureCalls()) != 2 {
+			t.Errorf("turning it off: UploadDisabled=%v ensures=%v", backend.UploadDisabled, backend.EnsureCalls())
+		}
+	})
+
 	t.Run("PUT with negative max_concurrent_downloads returns 400", func(t *testing.T) {
 		config := files.Config{
 			AnilistUsernames:       []string{"newuser"},

@@ -90,9 +90,12 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// resolves itself on the next cycle. Runs BEFORE Ensure, when there may be no session yet — step 0
 	// of enforce is what handles that (see decisions.md #41).
 	backend.SetMaxActiveDownloads(configs.MaxConcurrentDownloads)
+	// Same safety net for disable_seeding; Ensure below rebuilds the session when it changed.
+	backend.SetUploadDisabled(configs.DisableSeeding)
 
 	// Ensure the embedded torrent session exists for the current save path (created lazily,
-	// recreated if the save path changed or if the download folder was swapped underneath).
+	// recreated if the save path changed, if the download folder was swapped underneath, or if
+	// disable_seeding changed).
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		logger.Logger.Error().Err(err).Msg("Failed to initialize embedded torrent session")
 		state.SetLastCheckError(fmt.Errorf("%w: %w", errCauseTorrent, err))
@@ -105,6 +108,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	}
 
 	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
+	//
+	// Taken BEFORE episodes.json is loaded, and that order matters: releaseTorrent (disable_seeding)
+	// flags the record and then removes the torrent. A torrent already gone from this snapshot has
+	// its flag on disk, so the later load sees it; the reverse order could read an unflagged record
+	// next to a session without its torrent, and the pass would download the episode again.
 	downloadedTorrents := backend.List()
 
 	// A torrent at zero peers for hours doesn't come back on its own and holds a
@@ -232,7 +240,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// Reconciliation (durable safety net): enqueue JobOrganize for any completed torrent
 	// whose episodes are not yet in the library. Covers completions missed while the daemon
 	// was down and a save-path change. JobOrganize is idempotent, so re-runs are no-ops.
-	reconcileLibrary(downloadedTorrents, savedEpisodes, jobQueue)
+	reconcileLibrary(downloadedTorrents, savedEpisodes, jobQueue, configs.DisableSeeding)
 
 	blockedMap := make(map[files.EpisodeKey]bool, len(blockedEpisodes))
 	for _, k := range blockedEpisodes {
@@ -389,10 +397,13 @@ func clearLibraryPathsAfterRootSwap(fileManager FileManagerInterface, completedP
 
 	var stale []files.EpisodeStruct
 	for _, ep := range saved {
-		if len(ep.LibraryPaths) == 0 {
+		if len(ep.LibraryPaths) == 0 && !ep.TorrentReleased {
 			continue
 		}
 		ep.LibraryPaths = nil
+		// A released episode lived only in the library that is gone; without clearing the flag the
+		// pass would keep treating it as present and never fetch it again.
+		ep.TorrentReleased = false
 		stale = append(stale, ep)
 	}
 	if len(stale) == 0 {
@@ -412,7 +423,11 @@ func clearLibraryPathsAfterRootSwap(fileManager FileManagerInterface, completedP
 // reconcileLibrary enqueues JobOrganize for completed torrents whose saved episodes have
 // not yet been hardlinked into the library (empty LibraryPaths). Enqueue is deduped, so
 // repeated passes are cheap.
-func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.EpisodeStruct, jobQueue *JobQueue) {
+//
+// With disableSeeding, EVERY completed torrent with records goes back: organize releases the
+// already-organized ones (releaseTorrent). That is how turning the setting on stops the torrents
+// that were seeding before it, and how a release interrupted by a crash finishes.
+func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.EpisodeStruct, jobQueue *JobQueue, disableSeeding bool) {
 	if jobQueue == nil {
 		return
 	}
@@ -430,7 +445,7 @@ func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.E
 		if len(eps) == 0 {
 			continue // orphan torrent with no episode record; nothing to organize
 		}
-		needs := false
+		needs := disableSeeding
 		for _, ep := range eps {
 			if len(ep.LibraryPaths) == 0 {
 				needs = true

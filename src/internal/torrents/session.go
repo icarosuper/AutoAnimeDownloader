@@ -36,6 +36,11 @@ type sessionOptions struct {
 	// Production always leaves DHT on: for a Nyaa magnet whose trackers are down, it is the
 	// only way left to find peers.
 	disableDHT bool
+	// noUpload is disable_seeding: no peer is ever unchoked, and the BEP 6 allowed-fast set — the
+	// pieces a CHOKED peer may still request — is empty. Both are needed: with unchoking off but
+	// the default allowed-fast set of 10, rain still serves those 10 pieces to every peer.
+	// rain's upload speed limit can't do this, 0 means unlimited there.
+	noUpload bool
 }
 
 // NewSession creates the embedded client. savePath is where torrent files live and keep
@@ -46,6 +51,17 @@ func NewSession(savePath, databasePath string) (*Session, error) {
 }
 
 func newSession(savePath, databasePath string, opts sessionOptions) (*Session, error) {
+	rs, err := torrent.NewSession(rainConfig(savePath, databasePath, opts))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create embedded torrent session: %w", err)
+	}
+
+	return &Session{ses: rs}, nil
+}
+
+// rainConfig is the production rain config plus opts. Apart so the tests can read what a session
+// is built with: rain doesn't hand its config back.
+func rainConfig(savePath, databasePath string, opts sessionOptions) torrent.Config {
 	cfg := torrent.DefaultConfig
 	cfg.DataDir = savePath
 	cfg.Database = databasePath
@@ -55,13 +71,12 @@ func newSession(savePath, databasePath string, opts sessionOptions) (*Session, e
 	if opts.disableDHT {
 		cfg.DHTEnabled = false
 	}
-
-	rs, err := torrent.NewSession(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create embedded torrent session: %w", err)
+	if opts.noUpload {
+		cfg.UnchokedPeers = 0
+		cfg.OptimisticUnchokedPeers = 0
+		cfg.AllowedFastSet = 0
 	}
-
-	return &Session{ses: rs}, nil
+	return cfg
 }
 
 func (s *Session) Add(magnet string) (string, error) {

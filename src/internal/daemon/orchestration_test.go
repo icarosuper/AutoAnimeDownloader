@@ -627,7 +627,7 @@ func TestReconcileLibrary(t *testing.T) {
 	}
 
 	q := NewJobQueue(&orchestrationFM{}, filepath.Join(t.TempDir(), "jobs.json"))
-	reconcileLibrary(downloaded, saved, q)
+	reconcileLibrary(downloaded, saved, q, false)
 
 	// Only the pending (completed, no LibraryPaths) torrent should be enqueued.
 	if len(q.jobs) != 1 {
@@ -661,7 +661,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: hash, Completed: true}},
 			[]files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash}},
-			q,
+			q, false,
 		)
 		got := queuedOrganizeHashes(t, q)
 		if len(got) != 1 || got[0] != hash {
@@ -679,7 +679,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: hash, Completed: true}},
 			[]files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash, LibraryPaths: []string{missing}}},
-			q,
+			q, false,
 		)
 		if got := queuedOrganizeHashes(t, q); len(got) != 0 {
 			t.Errorf("an already-organized record must not be re-enqueued (deleted files stay deleted), got %v", got)
@@ -692,7 +692,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: hash, Completed: false}},
 			[]files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash}},
-			q,
+			q, false,
 		)
 		if got := queuedOrganizeHashes(t, q); len(got) != 0 {
 			t.Errorf("a torrent that is still downloading must not be organized, got %v", got)
@@ -708,7 +708,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 				{EpisodeNumber: 1, EpisodeHash: hash, IsBatch: true, LibraryPaths: []string{"/lib/a.mkv"}},
 				{EpisodeNumber: 2, EpisodeHash: hash, IsBatch: true},
 			},
-			q,
+			q, false,
 		)
 		if got := queuedOrganizeHashes(t, q); len(got) != 1 || got[0] != hash {
 			t.Errorf("a batch with one unorganized sibling should be enqueued exactly once, got %v", got)
@@ -720,7 +720,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		reconcileLibrary(
 			[]torrents.TorrentInfo{{Hash: "5555555555555555555555555555555555555555", Completed: true}},
 			nil,
-			q,
+			q, false,
 		)
 		if got := queuedOrganizeHashes(t, q); len(got) != 0 {
 			t.Errorf("an orphan torrent has nothing to organize, got %v", got)
@@ -733,9 +733,9 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 		saved := []files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: hash}}
 
 		q := newQueue(t)
-		reconcileLibrary(downloaded, saved, q)
-		reconcileLibrary(downloaded, saved, q)
-		reconcileLibrary(downloaded, saved, q)
+		reconcileLibrary(downloaded, saved, q, false)
+		reconcileLibrary(downloaded, saved, q, false)
+		reconcileLibrary(downloaded, saved, q, false)
 
 		if got := queuedOrganizeHashes(t, q); len(got) != 1 {
 			t.Errorf("reconciliation runs every pass; enqueue must dedupe, got %v", got)
@@ -766,7 +766,7 @@ func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
 		}
 
 		q := NewJobQueue(&orchestrationFM{}, filepath.Join(t.TempDir(), "jobs.json"))
-		reconcileLibrary([]torrents.TorrentInfo{{Hash: hash, Completed: true}}, fm.saved, q)
+		reconcileLibrary([]torrents.TorrentInfo{{Hash: hash, Completed: true}}, fm.saved, q, false)
 		if got := queuedOrganizeHashes(t, q); len(got) != 1 || got[0] != hash {
 			t.Errorf("a cleared record must be re-enqueued for organizing, got %v", got)
 		}

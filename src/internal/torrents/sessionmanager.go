@@ -43,6 +43,11 @@ type SessionManager struct {
 	// queue caps how many incomplete torrents run at once. It lives on the manager, not on
 	// the Session, so it survives the session being torn down and rebuilt by Ensure.
 	queue queue
+	// uploadDisabled is what the next session is built with (SetUploadDisabled); the running
+	// session was built with sessionUploadDisabled. rain reads the unchoke settings once, when the
+	// session opens, so a difference between the two is a reason for Ensure to rebuild it.
+	uploadDisabled        bool
+	sessionUploadDisabled bool
 }
 
 // queue.mu is taken BEFORE m.mu (queue.enforce calls List/pause/resume). Every exported
@@ -66,8 +71,9 @@ func NewSessionManager(dbPath string) *SessionManager {
 	return m
 }
 
-// Ensure creates the session if absent, and recreates it when savePath changed or when the
-// download root was swapped. See ConsumeRootSwap for why the swap forces a new session.
+// Ensure creates the session if absent, and recreates it when savePath changed, when the
+// download root was swapped, or when SetUploadDisabled changed the upload setting. See
+// ConsumeRootSwap for why the swap forces a new session.
 func (m *SessionManager) Ensure(savePath string) (bool, error) {
 	created, err := m.ensure(savePath)
 	if created {
@@ -98,15 +104,19 @@ func (m *SessionManager) ensure(savePath string) (bool, error) {
 		m.pendingSwap = true
 	}
 
-	if m.session != nil && m.savePath == savePath && !swapped {
+	uploadChanged := m.sessionUploadDisabled != m.uploadDisabled
+	if m.session != nil && m.savePath == savePath && !swapped && !uploadChanged {
 		return false, nil
 	}
 	if m.session != nil {
-		if swapped {
+		switch {
+		case swapped:
 			logger.Logger.Warn().Str("save_path", savePath).
 				Msg("The download folder was moved, trashed or replaced; recreating the torrent session so the files are redownloaded at the configured path")
-		} else {
+		case m.savePath != savePath:
 			logger.Logger.Info().Str("old", m.savePath).Str("new", savePath).Msg("Download path changed, recreating torrent session")
+		default:
+			logger.Logger.Info().Bool("disable_seeding", m.uploadDisabled).Msg("Upload setting changed, recreating torrent session")
 		}
 		if err := m.session.Close(); err != nil {
 			logger.Logger.Warn().Err(err).Msg("Error closing previous torrent session")
@@ -114,13 +124,16 @@ func (m *SessionManager) ensure(savePath string) (bool, error) {
 		m.session = nil
 	}
 
-	s, err := newSession(savePath, m.dbPath, m.sessionOpts)
+	opts := m.sessionOpts
+	opts.noUpload = m.uploadDisabled
+	s, err := newSession(savePath, m.dbPath, opts)
 	if err != nil {
 		return false, err
 	}
 	s.SetCallbacks(m.wrapComplete(m.onComplete), m.onFailed)
 	m.session = s
 	m.savePath = savePath
+	m.sessionUploadDisabled = m.uploadDisabled
 
 	m.writeRoot(savePath, id)
 
@@ -357,6 +370,12 @@ func (m *SessionManager) PrioritizeAll(hashes []string) error {
 func (m *SessionManager) SetMaxActiveDownloads(n int) {
 	m.queue.setLimit(n)
 	m.queue.enforce(m)
+}
+
+func (m *SessionManager) SetUploadDisabled(disabled bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.uploadDisabled = disabled
 }
 
 func (m *SessionManager) Announce(hash string) error {

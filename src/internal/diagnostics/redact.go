@@ -45,7 +45,7 @@ var keyClasses = map[string]keyClass{
 	"absolute_episode": keep, "addr": keep, "animes_checked": keep, "animes_found": keep,
 	"attempt": keep, "attempts": keep, "avg_time_per_episode": keep, "body": keep, "body_size": keep,
 	"clients": keep, "completed_anime_path": keep, "count": keep, "debug-anime": keep,
-	"debug_dir": keep, "download_path": keep, "downloaded_episodes": keep, "duration": keep,
+	"debug_dir": keep, "disable_seeding": keep, "download_path": keep, "downloaded_episodes": keep, "duration": keep,
 	"earlier_episode_missing": keep, "end_episode": keep, "entries_resolved": keep,
 	"environment": keep, "episode": keep, "episode_number": keep, "episodes": keep,
 	"episodes_checked": keep, "episodes_count": keep, "episodes_downloaded": keep,

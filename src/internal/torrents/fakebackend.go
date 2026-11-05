@@ -39,6 +39,8 @@ type FakeBackend struct {
 	// enforce a queue — that logic is unit-tested directly in queue_test.go, and modelling
 	// it here would make every daemon test depend on it.
 	MaxActiveDownloads int
+	// UploadDisabled records the last SetUploadDisabled(bool).
+	UploadDisabled bool
 }
 
 var _ TorrentBackend = (*FakeBackend)(nil)
@@ -226,6 +228,13 @@ func (f *FakeBackend) SetMaxActiveDownloads(n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.MaxActiveDownloads = n
+}
+
+// SetUploadDisabled records the value; the fake has no session to rebuild.
+func (f *FakeBackend) SetUploadDisabled(disabled bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.UploadDisabled = disabled
 }
 
 // AnnounceCalls returns the hashes passed to Announce, in order.

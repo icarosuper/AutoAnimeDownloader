@@ -214,6 +214,8 @@ export interface Config {
   excluded_list?: string
   excluded_lists: string[]
   rename_files_for_jellyfin: boolean
+  /** No upload at all, and each torrent is removed once organized into the library. */
+  disable_seeding: boolean
   download_statuses: string[]
   download_media_statuses: string[]
   delete_statuses: string[]

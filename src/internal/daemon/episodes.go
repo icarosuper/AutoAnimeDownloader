@@ -58,7 +58,9 @@ func selectEpisodes(
 		sel.checked = append(sel.checked, key)
 
 		savedEp := savedEpisodesFullMap[key]
-		isInTorrents := episodeInTorrents(savedEp.EpisodeHash, torrentsHashSet)
+		// A released torrent (disable_seeding) is gone from the session on purpose: the episode is in
+		// the library, and reading it as missing would download it again.
+		isInTorrents := savedEp.TorrentReleased || episodeInTorrents(savedEp.EpisodeHash, torrentsHashSet)
 
 		shouldDownload, shouldDelete, skipCode := checkEpisode(configs, maxEpisodes, ep, anime, savedEpisodesMap[key], &downloadedEpisodesOfAnime, isInTorrents, keepSet[key], savedEp.IsBatch)
 
@@ -1185,7 +1187,9 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 	// Remove torrents (seeding copy) with no surviving siblings.
 	removedHashes := make(map[string]bool)
 	for _, ep := range savedEpisodes {
-		if !deleteSet[ep.Key()] || ep.EpisodeHash == "" || removedHashes[ep.EpisodeHash] {
+		// A released record's torrent already left the session: there is nothing to remove, and
+		// trying would only log a failure.
+		if !deleteSet[ep.Key()] || ep.EpisodeHash == "" || ep.TorrentReleased || removedHashes[ep.EpisodeHash] {
 			continue
 		}
 		if force || canRemoveTorrent(byHash[ep.EpisodeHash], deleteSet, watching) {

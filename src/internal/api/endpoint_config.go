@@ -115,6 +115,14 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 			return
 		}
 
+		// Read before the save, to tell whether disable_seeding changed (below).
+		previous, err := server.FileManager.LoadConfigs()
+		if err != nil {
+			logger.Logger.Error().Err(err).Msg("Failed to load configs")
+			JSONInternalError(w, err)
+			return
+		}
+
 		if err := server.FileManager.SaveConfigs(&config); err != nil {
 			logger.Logger.Error().Err(err).Msg("Failed to save configs")
 			JSONInternalError(w, err)
@@ -126,6 +134,16 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 		// the field not working.
 		if server.Torrents != nil {
 			server.Torrents.SetMaxActiveDownloads(config.MaxConcurrentDownloads)
+			// Same for disable_seeding: the session only picks it up when it is rebuilt, and waiting
+			// for the next pass would keep uploading for up to check_interval after it was turned on.
+			// Only when it changed: Ensure here would also apply a download path change, which is
+			// the pass's job. An incomplete config has no session yet; the first pass builds it right.
+			server.Torrents.SetUploadDisabled(config.DisableSeeding)
+			if path := config.DownloadPath(); path != "" && (previous == nil || previous.DisableSeeding != config.DisableSeeding) {
+				if _, err := server.Torrents.Ensure(path); err != nil {
+					logger.Logger.Warn().Err(err).Msg("Failed to apply disable_seeding to the torrent session; the next pass retries")
+				}
+			}
 		}
 
 		JSONSuccess(w, http.StatusOK, map[string]string{"message": "Configuration updated successfully"})

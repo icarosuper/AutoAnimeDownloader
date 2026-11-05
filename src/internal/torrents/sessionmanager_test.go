@@ -188,3 +188,51 @@ func TestSessionManagerConcurrentEnsureAndDelegation(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+// disable_seeding: rain reads the unchoke settings once, when the session opens, so changing them
+// has to rebuild the session — and only then, or every pass would tear down a healthy one.
+func TestSessionManagerEnsureRebuildsWhenUploadSettingChanges(t *testing.T) {
+	m, pathA, _ := newTestManager(t)
+
+	if _, err := m.Ensure(pathA); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	first := m.session
+
+	m.SetUploadDisabled(false)
+	if created, _ := m.Ensure(pathA); created || m.session != first {
+		t.Error("an unchanged upload setting must keep the session")
+	}
+
+	m.SetUploadDisabled(true)
+	created, err := m.Ensure(pathA)
+	if err != nil {
+		t.Fatalf("Ensure after disabling upload: %v", err)
+	}
+	if !created || m.session == first {
+		t.Error("turning upload off must rebuild the session")
+	}
+	if !m.sessionUploadDisabled {
+		t.Error("the rebuilt session must be the no-upload one")
+	}
+
+	second := m.session
+	if created, _ := m.Ensure(pathA); created || m.session != second {
+		t.Error("a second Ensure with upload still off must keep the session")
+	}
+}
+
+// Every way rain uploads has to be closed: unchoked and optimistic peers, and the allowed-fast set
+// (pieces a choked peer may still request). rain's upload speed limit can't do it — 0 is unlimited.
+func TestRainConfigNoUploadClosesEveryUploadPath(t *testing.T) {
+	normal := rainConfig("/dl", "/db", sessionOptions{})
+	if normal.UnchokedPeers == 0 || normal.AllowedFastSet == 0 {
+		t.Fatalf("production defaults changed: unchoked=%d allowedFast=%d", normal.UnchokedPeers, normal.AllowedFastSet)
+	}
+
+	cfg := rainConfig("/dl", "/db", sessionOptions{noUpload: true})
+	if cfg.UnchokedPeers != 0 || cfg.OptimisticUnchokedPeers != 0 || cfg.AllowedFastSet != 0 {
+		t.Errorf("no-upload session still uploads: unchoked=%d optimistic=%d allowedFast=%d",
+			cfg.UnchokedPeers, cfg.OptimisticUnchokedPeers, cfg.AllowedFastSet)
+	}
+}

@@ -191,6 +191,9 @@ func ensureStartupSession(manager *torrents.SessionManager, fileManager *files.F
 	// Before Ensure: the new session runs the queue adoption as soon as it's born, and it needs to
 	// know the limit already so it doesn't promote everything rain reopened stopped.
 	manager.SetMaxActiveDownloads(configs.MaxConcurrentDownloads)
+	// Before Ensure too: rain reads the unchoke settings only when the session opens, so a session
+	// born without it would upload until the first pass rebuilt it.
+	manager.SetUploadDisabled(configs.DisableSeeding)
 	downloadPath := configs.DownloadPath()
 	if _, err := manager.Ensure(downloadPath); err != nil {
 		logger.Logger.Error().Err(err).Str("download_path", downloadPath).Msg("Failed to create the embedded torrent session at startup; the verification pass will retry")

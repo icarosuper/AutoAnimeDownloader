@@ -352,7 +352,13 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 		}
 	}
 	if !needsOrganize {
-		return true // already organized on a previous run
+		// Already organized on a previous run. Under disable_seeding that is exactly the torrent
+		// reconcileLibrary sends back here: a release that didn't finish, or one organized before
+		// the setting was turned on.
+		if configs.DisableSeeding {
+			return releaseTorrent(hash, backend, fm, matched)
+		}
+		return true
 	}
 
 	byID := map[int][]int{}
@@ -425,5 +431,34 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 		notifications.Notify(configs, notifications.DownloadCompleted, notifications.Episode{AnimeID: matched[0].AnimeID, AnimeName: matched[0].AnimeName, Number: matched[0].EpisodeNumber, TorrentHash: hash})
 	}
 	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", createdCount).Msg("Organized torrent into library")
+	if configs.DisableSeeding {
+		return releaseTorrent(hash, backend, fm, matched)
+	}
+	return true
+}
+
+// releaseTorrent is disable_seeding's library half: once every record of the hash is organized,
+// the torrent leaves the session along with its download copy. The library keeps the files — Organize
+// only hardlinks, so they are a second name for the same data, not the copy being deleted. Whatever
+// the torrent had that was not linked (another season of a pack, extras) goes with it, by the
+// user's choice (decisions.md #119).
+//
+// The marker is written BEFORE the removal. A crash in between leaves a released record whose
+// torrent is still in the session, and the next reconcileLibrary sends it back here. The other
+// order leaves a record with no torrent and no marker, which the pass reads as a lost download and
+// fetches again.
+func releaseTorrent(hash string, backend torrents.TorrentBackend, fm FileManagerInterface, matched []files.EpisodeStruct) bool {
+	for i := range matched {
+		matched[i].TorrentReleased = true
+	}
+	if err := fm.UpsertEpisodes(matched); err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Disable seeding: failed to mark the episodes released; keeping the torrent")
+		return false
+	}
+	if err := backend.Remove(hash, false); err != nil {
+		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Disable seeding: failed to remove the organized torrent")
+		return false
+	}
+	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Msg("Disable seeding: removed the organized torrent and its download copy")
 	return true
 }

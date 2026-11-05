@@ -139,6 +139,10 @@ type TorrentBackend interface {
 	// SetMaxActiveDownloads caps how many incomplete torrents run at the same time; the rest
 	// wait in the queue. 0 (or negative) disables the limit. Seeding is never capped.
 	SetMaxActiveDownloads(n int)
+	// SetUploadDisabled is disable_seeding's session half: with it on, the session never uploads.
+	// It takes effect on the next Ensure, which rebuilds the session when the value differs from
+	// the running one. Call it BEFORE Ensure.
+	SetUploadDisabled(disabled bool)
 	// Announce forces a re-announce to all trackers and DHT. It does not override the
 	// trackers' minimum interval, so calling it in a loop achieves nothing.
 	Announce(hash string) error
