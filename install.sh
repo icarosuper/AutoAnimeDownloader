@@ -49,7 +49,7 @@ unzip -q "$TMP/$ZIP" -d "$TMP"
 PKG_DIR="$TMP/${ZIP%.zip}"
 [ -f "$PKG_DIR/Makefile" ] || die "unexpected zip layout: $PKG_DIR/Makefile not found"
 
-make -C "$PKG_DIR" install-user
+make --no-print-directory -C "$PKG_DIR" install-user
 
 case ":$PATH:" in
 *":$HOME/.local/bin:"*) ;;
