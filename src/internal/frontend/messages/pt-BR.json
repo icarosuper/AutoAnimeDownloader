@@ -432,7 +432,6 @@
   "picker_description": "Descrição",
   "picker_files": "Arquivos",
   "picker_seeders": "{count} seeders",
-  "block_blacklist": "Na blacklist",
   "block_tracked": "Já está em uma das suas listas",
   "block_downloaded": "Já baixado",
   "block_standalone": "Já adicionado",

@@ -354,6 +354,61 @@ func TestProcessAnimeEpisodes_BlacklistedAnime_PopulatesKeysToDelete(t *testing.
 	}
 }
 
+// TestProcessAnimeEpisodes_BlacklistedAnime_KeepsManuallyManaged pins decisions.md #121: a
+// blacklisted anime stops downloading, but an episode the user downloaded by hand stays on disk.
+func TestProcessAnimeEpisodes_BlacklistedAnime_KeepsManuallyManaged(t *testing.T) {
+	const animeID = 300
+
+	englishTitle := "Blacklisted Anime"
+	anime := anilist.MediaList{
+		Id:       animeID,
+		Progress: 0,
+		Status:   anilist.MediaListStatusRepeating,
+		Media: anilist.Media{
+			Id:     animeID,
+			Status: anilist.MediaStatusFinished,
+			Title:  anilist.Title{English: &englishTitle},
+			AiringSchedule: anilist.AiringSchedule{
+				Nodes: []anilist.AiringNode{
+					{Episode: 1, TimeUntilAiring: -100},
+					{Episode: 2, TimeUntilAiring: -100},
+				},
+			},
+		},
+		CustomLists: anilist.CustomLists{"Blacklist": true},
+	}
+
+	savedEpisodes := []files.EpisodeStruct{
+		{
+			EpisodeNumber:   1,
+			AnimeID:         animeID,
+			EpisodeHash:     "manualhash",
+			AnimeName:       "Blacklisted Anime",
+			ManuallyManaged: true,
+		},
+	}
+
+	configs := &files.Config{
+		ExcludedLists:         []string{"Blacklist"},
+		MaxEpisodesPerAnime:   12,
+		DeleteWatchedEpisodes: true,
+	}
+
+	backend := torrents.NewFakeBackend()
+
+	result := processAnimeEpisodes(configs, backend, anime, nil, savedEpisodes, nil, map[files.EpisodeKey]bool{}, defaultNyaaSearcher(), nil)
+
+	if containsID(result.keysToDelete, epKey(animeID, 1)) {
+		t.Errorf("a manually managed episode of a blacklisted anime must not be deleted, got keysToDelete %v", result.keysToDelete)
+	}
+	if notInWatching := identifyEpisodesNotInWatching(savedEpisodes, result.checkedEpisodes); len(notInWatching) > 0 {
+		t.Errorf("a manually managed episode must not be deleted as not-in-watching, got %v", notInWatching)
+	}
+	if len(result.newEpisodes) > 0 {
+		t.Error("a blacklisted anime must not get new episodes downloaded")
+	}
+}
+
 // TestHandleSavedEpisodes_BlacklistedAnime_NoDeleteWhenFlagOff checks that episodes marked for
 // deletion are NOT deleted when DeleteWatchedEpisodes=false.
 func TestHandleSavedEpisodes_BlacklistedAnime_NoDeleteWhenFlagOff(t *testing.T) {

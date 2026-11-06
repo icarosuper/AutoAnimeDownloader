@@ -259,7 +259,7 @@ export interface AnimeInfo {
 }
 
 /** Reasons an anime can't be added as standalone — they come ready from the server. */
-export type BlockReason = '' | 'blacklist' | 'standalone' | 'tracked' | 'downloaded'
+export type BlockReason = '' | 'standalone' | 'tracked' | 'downloaded'
 
 export interface AniListSearchResult {
   id: number

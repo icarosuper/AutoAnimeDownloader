@@ -267,8 +267,6 @@
     switch (error.code) {
       case "LIBRARY_NOT_CONFIGURED":
         return m.block_library_not_configured();
-      case "ALREADY_BLACKLISTED":
-        return m.block_blacklist();
       case "ALREADY_TRACKED":
         return m.block_tracked();
       case "ALREADY_DOWNLOADED":

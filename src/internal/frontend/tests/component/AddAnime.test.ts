@@ -116,15 +116,6 @@ describe('AddAnime — card footer', () => {
     )
   })
 
-  it('offers no detail for a blacklisted anime — it has no page', async () => {
-    searchAniList.mockResolvedValue([result('blacklist')])
-    render(AddAnime)
-    await search()
-
-    expect(screen.queryByRole('link', { name: /view status|ver status/i })).toBeNull()
-    expect(screen.getByRole('button', { name: /^add$|^adicionar$/i })).toBeDisabled()
-  })
-
   it('swaps the Add button for View status as soon as the anime goes in', async () => {
     searchAniList.mockResolvedValue([result('')])
     render(AddAnime)

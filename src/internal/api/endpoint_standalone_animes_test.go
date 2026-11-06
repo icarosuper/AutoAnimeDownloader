@@ -173,14 +173,16 @@ func TestStandaloneAdd_BlockedNeverWritesTheFile(t *testing.T) {
 			wantCode: "ALREADY_TRACKED",
 		},
 		{
-			name:     "on an excluded list",
+			// The blacklist is not a block reason (decisions.md #49): a blacklisted anime the
+			// daemon processes is refused only because it is already tracked.
+			name:     "on an excluded list and the processed list is tracked, not blacklisted",
 			listJSON: listWithAnime21,
 			fm: &mockFileManager{configs: func() *files.Config {
 				c := standaloneConfig()
 				c.ExcludedLists = []string{"Blacklist"}
 				return c
 			}()},
-			wantCode: "ALREADY_BLACKLISTED",
+			wantCode: "ALREADY_TRACKED",
 		},
 		{
 			name:     "already fully downloaded",

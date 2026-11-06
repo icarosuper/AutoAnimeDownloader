@@ -22,7 +22,7 @@ type AniListSearchResult struct {
 	Episodes int    `json:"episodes" example:"24"`
 	Cover    string `json:"cover,omitempty"`
 	// BlockReason is "" when the anime can be added as standalone, otherwise one of the
-	// reasons from standalone_guard.go. ONE field, not four booleans: the reasons are mutually
+	// reasons from standalone_guard.go. ONE field, not three booleans: the reasons are mutually
 	// exclusive by precedence and the card needs a single label. Comes from the same
 	// blockReason the POST uses for the 409 — front and back agree by construction.
 	BlockReason string `json:"block_reason"`

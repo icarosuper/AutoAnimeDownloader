@@ -28,10 +28,9 @@ type StandaloneAnimeAddResponse struct {
 	Added int `json:"added" example:"3"`
 }
 
-// blockReasonToErrorCode maps the block reason to the 409 error code. Same four reasons
+// blockReasonToErrorCode maps the block reason to the 409 error code. Same three reasons
 // the search returns in block_reason.
 var blockReasonToErrorCode = map[string]string{
-	blockReasonBlacklist:  "ALREADY_BLACKLISTED",
 	blockReasonStandalone: "ALREADY_STANDALONE",
 	blockReasonTracked:    "ALREADY_TRACKED",
 	blockReasonDownloaded: "ALREADY_DOWNLOADED",
@@ -137,8 +136,6 @@ func handleStandaloneAnimeAdd(server *Server) http.HandlerFunc {
 
 func standaloneBlockMessage(reason string) string {
 	switch reason {
-	case blockReasonBlacklist:
-		return "This anime is in an excluded AniList list"
 	case blockReasonStandalone:
 		return "This anime is already tracked as standalone"
 	case blockReasonTracked:

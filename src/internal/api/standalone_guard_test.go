@@ -31,12 +31,6 @@ func TestBlockReason(t *testing.T) {
 			want:    blockReasonTracked,
 		},
 		{
-			name:    "on an excluded list",
-			guard:   standaloneGuard{blacklisted: map[int]bool{21: true}},
-			mediaID: 21,
-			want:    blockReasonBlacklist,
-		},
-		{
 			name:          "24 records of 24 episodes",
 			guard:         standaloneGuard{downloaded: map[int]int{21: 24}},
 			mediaID:       21,
@@ -58,17 +52,6 @@ func TestBlockReason(t *testing.T) {
 			mediaID:       21,
 			totalEpisodes: 0,
 			want:          "",
-		},
-		{
-			// Precedence matters: blacklist is the only reason where adding would change
-			// behavior for the worse (the standalone record bypasses the user's filter).
-			name: "standalone AND on an excluded list returns blacklist",
-			guard: standaloneGuard{
-				standalone:  map[int]bool{21: true},
-				blacklisted: map[int]bool{21: true},
-			},
-			mediaID: 21,
-			want:    blockReasonBlacklist,
 		},
 		{
 			name: "standalone AND on the list returns standalone",

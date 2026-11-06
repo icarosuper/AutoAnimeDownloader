@@ -154,8 +154,6 @@
     switch (error.code) {
       case "LIBRARY_NOT_CONFIGURED":
         return m.block_library_not_configured();
-      case "ALREADY_BLACKLISTED":
-        return m.block_blacklist();
       case "ALREADY_TRACKED":
         return m.block_tracked();
       case "ALREADY_DOWNLOADED":
@@ -169,8 +167,6 @@
 
   function blockLabel(reason: BlockReason): string {
     switch (reason) {
-      case "blacklist":
-        return m.block_blacklist();
       case "tracked":
         return m.block_tracked();
       case "downloaded":
@@ -198,19 +194,15 @@
     return parts.join(" · ");
   }
 
-  // A card only ends in a dead button when there is nowhere to go. "standalone", "tracked"
-  // and "downloaded" mean the anime ALREADY EXISTS in the app — and an anime that exists has
-  // a page at #/status/{id}, because anime_id is AniList's own media id. On those three the
-  // button becomes the link there; the reason, which used to live only in a tooltip
-  // (invisible on mobile), becomes a line on the card.
-  //
-  // "blacklist" is the only exception: it's on an excluded list, the daemon doesn't process
-  // it and there is no detail to open. Only it stays dimmed with the button disabled.
+  // Every block reason — "standalone", "tracked" and "downloaded" — means the anime ALREADY
+  // EXISTS in the app, and an anime that exists has a page at #/status/{id}, because anime_id is
+  // AniList's own media id. So a blocked card never ends in a dead button: the button becomes the
+  // link there, and the reason, which used to live only in a tooltip (invisible on mobile),
+  // becomes a line on the card. A blacklisted anime is not blocked at all (decisions.md #49).
   $: cards =
     $locale &&
     results.map((result) => {
       const isAdded = added.has(result.id) || result.block_reason === "standalone";
-      const blacklisted = result.block_reason === "blacklist";
       const hasStatusPage =
         isAdded || result.block_reason === "tracked" || result.block_reason === "downloaded";
       return {
@@ -218,7 +210,6 @@
         meta: metaLine(result),
         note: isAdded ? m.block_standalone() : blockLabel(result.block_reason),
         isAdding: adding.has(result.id),
-        blacklisted,
         statusHref: hasStatusPage ? `#/status/${result.id}` : undefined,
         anilistHref: `${ANILIST_URL}${result.id}`,
       };
@@ -280,9 +271,7 @@
     <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {#each cards || [] as card (card.result.id)}
         <li
-          class="flex gap-3 rounded-card border border-default bg-card p-3 {card.blacklisted
-            ? 'opacity-50'
-            : ''}"
+          class="flex gap-3 rounded-card border border-default bg-card p-3"
         >
           <div class="h-[92px] w-[64px] shrink-0 overflow-hidden">
             <Cover src={card.result.cover} alt={card.result.title} radiusClass="rounded-field" />
@@ -312,7 +301,7 @@
               {:else}
                 <Button
                   variant="solid"
-                  disabled={card.blacklisted || card.isAdding}
+                  disabled={card.isAdding}
                   on:click={() => add(card.result)}
                 >
                   {#if card.isAdding}

@@ -127,6 +127,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#118** — List fetches follow every page, all or nothing](#118-list-fetches-follow-every-page-all-or-nothing)
 - [**#119** — `disable_seeding` means no upload at all, and a released torrent is not a lost one](#119-disable_seeding-means-no-upload-at-all-and-a-released-torrent-is-not-a-lost-one)
 - [**#120** — `OpenBrowser` is a no-op inside a test binary](#120-openbrowser-is-a-no-op-inside-a-test-binary)
+- [**#121** — The blacklist deletes what the daemon downloaded and spares what the user downloaded by hand](#121-the-blacklist-deletes-what-the-daemon-downloaded-and-spares-what-the-user-downloaded-by-hand)
 
 ---
 
@@ -1057,7 +1058,9 @@ The counter (`downloadedEpisodes`) still increments for pack episodes **below** 
 
 **(b) "Tracked by the list" = it appears in the set the daemon processes,** i.e. the entries that survive the `download_statuses` + `DownloadMediaStatuses` filter — **not** "an AniList entry exists". An anime in `PLANNING` with `download_statuses = [CURRENT]` is on a list and the daemon ignores it; adding it as standalone is the feature's most obvious use case, not an error to block. The same definition feeds the three consumers (automatic removal, the `POST`'s 409, the search's `block_reason`) because two different definitions would produce a grey card the backend accepts, or the inverse.
 
-**(c) One block function, two consumers.** `blockReason` decides the 409 and each search result's `block_reason`. "The front does not let you click" and "the back returns an error" need to agree **by construction**, not by discipline. Precedence `blacklist > standalone > tracked > downloaded`: blacklist comes first because it is the only reason where adding would change behaviour **for the worse** — a blacklisted one outside `download_statuses` escapes `searchAnilist`, the standalone record survives the merge and the user's filter is bypassed (the synthetic `MediaList` has null `CustomLists`, so `animeIsInExcludedList` never fires on it). `downloaded` only blocks with a **known** total: 12 records of 24 episodes is the per-anime limit, not "already downloaded".
+**(c) One block function, two consumers.** `blockReason` decides the 409 and each search result's `block_reason`. "The front does not let you click" and "the back returns an error" need to agree **by construction**, not by discipline. Precedence `standalone > tracked > downloaded`. `downloaded` only blocks with a **known** total: 12 records of 24 episodes is the per-anime limit, not "already downloaded".
+
+**The blacklist is not a block reason** (decided 2026-11-06, reversing the original `blacklist` reason that came first). Adding as standalone is a direct request from the user, and it wins over `excluded_lists` whatever the anime's status. A blacklisted anime outside `download_statuses` gets the standalone record and the daemon follows it: the synthetic `MediaList` has null `CustomLists`, so `animeIsInExcludedList` never fires on it, and that is the intent. A blacklisted anime inside `download_statuses` is still refused, but as `tracked`. The old reason was also half blind: `customLists` only come with the entries `fetchAniListEntries` returns, which are filtered by `download_statuses`, so the anime it existed for (blacklisted in `PLANNING`/`COMPLETED`) was the one it never saw. When the anime later enters a processed list while blacklisted, the standalone record is consumed and the blacklist wins — the later intent ([#121](#121-the-blacklist-deletes-what-the-daemon-downloaded-and-spares-what-the-user-downloaded-by-hand)).
 
 **(d) `DownloadStandaloneAnime` must not call `handleSavedEpisodes`.** It calls `identifyEpisodesNotInWatching`, which compares **all** saved episodes against the received `checkedEpisodes` and returns the uncovered ones for deletion. With only one anime's episodes in hand and `delete_watched_episodes` on, that would delete the entire library. For the same reason it does not call `deleteEpisodesByStatus` or `DeleteEmptyFolders`: adding an anime is not an occasion to delete anything.
 
@@ -1073,7 +1076,8 @@ The counter (`downloadedEpisodes`) still increments for pack episodes **below** 
 - Appending standalones before `DedupeByMedia` "because the merge is one" (see (a)).
 - Swapping `tracked` for "an AniList entry exists" to avoid depending on `fetchAniListEntries` — that breaks the `PLANNING` case, which is the feature's use case.
 - Duplicating the block rule in the frontend to not need the `block_reason` field on the search response (see (c)).
-- Returning four booleans instead of one `block_reason`: the reasons are mutually exclusive by precedence and the card needs one label.
+- Returning three booleans instead of one `block_reason`: the reasons are mutually exclusive by precedence and the card needs one label.
+- Bringing back a `blacklist` block reason, or fetching `customLists` for every status "so the guard sees the blacklist": a standalone add is a direct request and ignores the blacklist (see (c)).
 - Consolidating `DownloadStandaloneAnime` with `handleSavedEpisodes` "to reuse the save" (see (d)).
 - Filtering the standalone by `DownloadMediaStatuses` on append: whoever asked for the anime by hand wants to track it also while it is `NOT_YET_RELEASED`.
 - Reintroducing `anilist_usernames` as a required field (on any of the four layers) "because the app is about the AniList list": it stopped being (see (g)).
@@ -1092,7 +1096,7 @@ The counter (`downloadedEpisodes`) still increments for pack episodes **below** 
 
 **(c) Only `NOT_YET_RELEASED` leaves.** `CANCELLED` and `HIATUS` stay: an anime interrupted mid-airing has episodes out and downloadable. "Not released yet" is one status.
 
-**(d) `tracked`/`downloaded`/`standalone` become a link to `#/status/{id}`.** `anime_id` **is** AniList's media id, so the href comes from the search result itself, with no lookup — and `AddStandaloneAnime` writes before answering, so the link works the instant after the Add click, without waiting for a daemon cycle. The block reason left the `tooltip` and became a line on the card: tooltips do not exist on mobile, and the screen was born for the no-account install, which is the one that runs on a phone the most. `blacklist` is the only exception — it is not in the set the daemon processes, it has no page, it stays greyed and disabled.
+**(d) `tracked`/`downloaded`/`standalone` become a link to `#/status/{id}`.** `anime_id` **is** AniList's media id, so the href comes from the search result itself, with no lookup — and `AddStandaloneAnime` writes before answering, so the link works the instant after the Add click, without waiting for a daemon cycle. The block reason left the `tooltip` and became a line on the card: tooltips do not exist on mobile, and the screen was born for the no-account install, which is the one that runs on a phone the most. Every block reason has a page now; the greyed, disabled `blacklist` card went away with the reason ([#49](#49-standalone-anime-tracked-by-the-list-is-the-snapshot-the-daemon-processes-and-downloadstandaloneanime-never-calls-handlesavedepisodes) (c)).
 
 **(e) A `Button` with `href` renders `<a>` instead of an `on:click` that writes `location.hash`.** A button that navigates loses middle-click, "open in new tab" and the URL in the status bar. The alternative was copying the variant classes into the card, which would duplicate the style on every screen that needs it. `disabled` is ignored with `href` on purpose: there is no disabled anchor, and a link that must not be followed must not be rendered as a link.
 
@@ -1787,8 +1791,7 @@ already treat a partial failure as missing data.
 `GetFrontendAnimeList`, and refusing only one of the two is worse than refusing both: the list
 comes from the expired cache and answers **successfully**, `customLists` comes back `nil`, and the
 merge concludes that no anime is on an excluded list. `GET /animes` shows a blacklisted one as
-normal and `standalone_guard` lets you add as standalone what it should refuse — all in a
-response that looks healthy. That is why `GetCustomListsMap` also serves `getStale` when the gate
+normal — in a response that looks healthy. That is why `GetCustomListsMap` also serves `getStale` when the gate
 refuses (`TestCustomListsServesStaleCacheWhenRefused`). What remains is the window where there is
 no expired read at all (process just up with the bucket already empty); then `nil` comes back and
 #11's overlay guard keeps what the complex query brought. Nulling the whole list in that case
@@ -3454,3 +3457,50 @@ var-swap would need a stub in every package whose tests can reach a pass (daemon
 first new package that forgets it brings the tab back. `testing.Testing()` (Go 1.21+) is true only
 in a binary built by `go test`, so one guard covers every caller — the pass, the first-run boot and
 the tray, the CLI's `open` command — and costs nothing in the real binaries.
+
+### 121. The blacklist deletes what the daemon downloaded and spares what the user downloaded by hand
+
+**Location:** `internal/daemon/episodes.go` — `checkEpisode` (the `shouldSkipEpisode` branch marks
+every saved episode of a blacklisted anime for deletion) and `selectEpisodes`, whose
+`!savedEp.ManuallyManaged` guard takes the hand-downloaded ones back out;
+`internal/daemon/standalone.go` — `appendStandaloneAnimes`, which drops the standalone record once
+the anime shows up in the processed list, blacklisted or not. Pinned by
+`TestProcessAnimeEpisodes_BlacklistedAnime_PopulatesKeysToDelete`,
+`TestHandleSavedEpisodes_BlacklistedAnime_DeletesTorrents` and
+`TestProcessAnimeEpisodes_BlacklistedAnime_KeepsManuallyManaged`.
+
+**What it looks like:** two rules that seem to contradict each other. Putting an anime on an
+`excluded_lists` list deletes its episodes, unwatched ones included, because the blacklist check
+runs before the progress check. Yet an anime the user added as standalone and then blacklisted
+keeps every file. And the standalone record is thrown away the moment the anime appears in the
+list, even though the blacklist then stops it from being followed.
+
+**Why it's right:** these are two different intents, and each one is kept where it lives.
+- **The blacklist means "stop downloading this".** For an anime the daemon downloaded on its own,
+  stopping also means freeing the disk, so with `delete_watched_episodes` on its records leave.
+- **A hand download means "I want these files".** That intent lives on the episode record
+  (`manually_managed: true`, set by the standalone add, the manual episode download and the magnet
+  download), not on the standalone record. No automatic delete path removes such a record: not the
+  blacklist, not watched pruning, not `delete_statuses`, not leaving the list. Only the user, from
+  the UI or the CLI, deletes it.
+
+The real case behind this: the user downloaded Bocchi the Rock! and ONIMAI as standalone batches,
+then put them on REPEATING in AniList and on the `AutoDownloader` list. The goal was "keep what I
+downloaded, don't download anything else". That is what happens: no new download, and the 24
+records stay.
+
+So the standalone record can go. It only says "keep following this anime and download what comes
+next", and the blacklist overrules exactly that. The rule is "the later intent wins": the add
+guard ignores the blacklist, because there the click is the later intent
+([#49](#49-standalone-anime-tracked-by-the-list-is-the-snapshot-the-daemon-processes-and-downloadstandaloneanime-never-calls-handlesavedepisodes) (c));
+here the blacklist came after the add. Keeping the record would only matter once the anime leaves the list. Then it would quietly bring
+the anime back under the daemon, which the user had turned off. That is the "dormant standalone"
+rejected in `appendStandaloneAnimes`' comment.
+
+The protection is per episode, not per anime. A blacklisted anime with some hand-downloaded
+episodes and some downloaded by the daemon loses only the daemon's.
+
+**Don't "fix" by:** making the blacklist stop downloading without deleting, for every anime; letting
+the blacklist delete `manually_managed` records; keeping the standalone record of a blacklisted
+anime "to remember the intent", since the files already carry it; letting a standalone record survive
+once the anime shows up blacklisted in a processed list.

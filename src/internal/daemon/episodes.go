@@ -68,6 +68,8 @@ func selectEpisodes(
 			sel.limitSkipped++
 		}
 
+		// The ManuallyManaged guard: a hand-downloaded record survives every automatic delete, the
+		// blacklist included (decisions.md #121).
 		if shouldDownload && !blockedMap[key] {
 			sel.toDownload = append(sel.toDownload, ep)
 		} else if shouldDelete && !savedEp.ManuallyManaged {
