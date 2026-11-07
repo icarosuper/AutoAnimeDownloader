@@ -2,7 +2,8 @@
 # Runs a throwaway daemon for poking at the real web UI (by hand or with a browser agent) without
 # touching the real installation:
 #   - HOME points at .sandbox/home, so ~/.autoAnimeDownloader is a scratch copy, wiped on
-#     every start (config, state, torrents, daemon.log all live there)
+#     every start (config, state, torrents, daemon.log all live there). .sandbox/reports/ is the
+#     one thing kept: the screenshots and videos a browser check leaves for the developer
 #   - its own port (SANDBOX_PORT, default 8092), so it runs next to a real daemon on 8091
 #   - AniList and Nyaa are the mocks in src/tests/mocks — no real network for the watch list or
 #     the search, and the mock magnet is not a real torrent, so nothing is ever downloaded
@@ -26,7 +27,8 @@ for p in "$PORT" "$ANILIST_PORT" "$NYAA_PORT"; do
   fi
 done
 
-rm -rf "$SANDBOX"
+mkdir -p "$SANDBOX"
+find "$SANDBOX" -mindepth 1 -maxdepth 1 ! -name reports -exec rm -rf {} +
 mkdir -p "$SANDBOX/bin" "$SANDBOX/home/.autoAnimeDownloader" "$SANDBOX/library"
 
 if [[ "${SANDBOX_SKIP_FRONTEND:-}" != "1" ]]; then

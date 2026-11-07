@@ -42,7 +42,7 @@ export AGENT_BROWSER_SESSION=aad-sandbox
 agent-browser open 'http://localhost:8092/#/status'
 agent-browser wait --load networkidle
 agent-browser snapshot -i                  # refs for clicking
-agent-browser screenshot "$SCRATCH/status.png"   # then Read it to actually look
+agent-browser screenshot "$SCRATCH/status.png"   # your own look: Read it. Evidence goes in step 5
 agent-browser console; agent-browser errors      # JS errors are findings too
 ```
 
@@ -76,7 +76,31 @@ Not `kill -INT`: a script started in the background inherits SIGINT as ignored, 
 Not `pkill -f scripts/sandbox.sh`: the pattern also matches the shell running the `pkill` and kills it. Anything still open → find it
 with `pgrep -af '\.sandbox/bin'` and kill it.
 
-## 5. Report
+## 5. Report — with evidence the developer can open
 
-Screenshots go in the scratchpad, never in the repo. Tell the user what was checked, what was not
-(step 3), and each problem with the route, the steps and the screenshot path.
+The terminal shows no images, so every problem gets a file the developer can click instead of
+starting the app to see it. Save them in one folder per run — `.sandbox/reports/` is gitignored
+and survives the sandbox restarts (the script wipes everything else in `.sandbox/`):
+
+```bash
+REPORT="$PWD/.sandbox/reports/$(date +%Y-%m-%d_%H%M)"; mkdir -p "$REPORT"
+agent-browser screenshot '<selector of the broken element>' "$REPORT/downloads-375-chip-wraps-before.png"
+agent-browser screenshot --full "$REPORT/downloads-375-page.png"   # when the context matters
+```
+
+- **One screenshot per problem**, named `<screen>-<width>-<what>-before.png`. Prefer the element
+  (`screenshot <selector>`) — a full page at 375px is a 5000px strip nobody can read; add the page
+  only when the problem is where the element sits.
+- **Video only for behavior** a still can't show — a click that does nothing, a menu that closes,
+  something that flickers. Keep it to the repro, a few seconds:
+  `agent-browser record start "$REPORT/<screen>-<what>.webm"`, do the steps, `agent-browser record stop`.
+- **Fixed it? Add the after shot.** Same route, width, locale, theme and selector as the before,
+  so the two compare one to one; name them as a pair: `downloads-375-chip-wraps-before.png` /
+  `-after.png` (same for a video). The frontend is embedded in the daemon binary, so restart the
+  sandbox **without** `SANDBOX_SKIP_FRONTEND` first — otherwise the after shot shows the old code
+  and the fix looks like it failed. A problem only reported, not fixed, has just the before.
+- Your exploratory screenshots stay in the scratchpad; only evidence of a problem goes in the report.
+
+Then tell the user what was checked, what was not (step 3), and for each problem: route, width,
+locale and theme, what is wrong, the steps, whether it was fixed, and the **full absolute path**
+of each file (before and after) — a relative path isn't clickable in the terminal.
