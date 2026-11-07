@@ -22,6 +22,7 @@ require (
 	fyne.io/systray v1.12.0
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/cenkalti/rain/v2 v2.5.1
+	github.com/coder/websocket v1.8.15
 	github.com/jedib0t/go-pretty/v6 v6.7.7
 	github.com/rs/zerolog v1.34.0
 	github.com/urfave/cli/v2 v2.27.7
@@ -29,7 +30,6 @@ require (
 	golang.org/x/net v0.58.0
 	golang.org/x/sys v0.49.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
-	nhooyr.io/websocket v1.8.17
 )
 
 require (
