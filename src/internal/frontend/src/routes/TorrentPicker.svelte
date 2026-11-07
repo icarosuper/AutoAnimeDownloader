@@ -92,6 +92,9 @@
 
   $: selected = items[selectedIndex];
   $: canDownloadThis = Boolean(selected?.magnet) && !confirming && !loading;
+  // With nothing to pick (no packs, or Nyaa failed) the list stands alone: no detail panel and no
+  // "Download this" — both would only repeat the empty state or offer an action with no target.
+  $: hasCandidates = loading || items.length > 0;
   $: canDownloadMagnet = isValidMagnet(pastedMagnet) && !confirming && !loading;
   $: nyaaHref = selected
     ? detail?.nyaa_url || `https://nyaa.si/view/${selected.nyaa_id}`
@@ -346,7 +349,7 @@
     <p class="text-caption text-subtle">{$locale && m.picker_pack_count({ count: items.length })}</p>
   {/if}
 
-  <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-[1.15fr_0.85fr] md:items-start">
+  <div class="grid min-w-0 grid-cols-1 gap-4 md:items-start {hasCandidates ? 'md:grid-cols-[1.15fr_0.85fr]' : ''}">
     <div class="min-w-0 overflow-hidden rounded-card border border-default bg-card">
       {#if loading}
         <Loading message={T && T.queryPlaceholder} />
@@ -389,54 +392,58 @@
           {/each}
         </ul>
       {/if}
-      <div class="flex justify-end border-t border-default px-3.5 py-3">
-        <Button variant="solid" disabled={!canDownloadThis} on:click={confirmSelected}>
-          {T && T.confirm}
-        </Button>
-      </div>
-    </div>
-
-    <div class="min-w-0 rounded-card border border-default bg-card p-4">
-      {#if !selected}
-        <p class="text-copy text-subtle">{T && T.empty}</p>
-      {:else}
-        {#if detailLoading}
-          <Loading message={T && T.openNyaa} />
-        {:else if detailError}
-          <p role="alert" class="text-copy text-danger">{T && T.detailError}</p>
-        {:else if detail}
-          <h2 class="text-card-title text-heading">{T && T.description}</h2>
-          <div
-            class="mt-2 max-h-80 overflow-x-auto overflow-y-auto pr-3 text-copy text-body [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-default [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-caption [&_h1]:mt-2 [&_h1]:text-card-title [&_h1]:text-heading [&_h2]:mt-2 [&_h2]:text-card-title [&_h2]:text-heading [&_h3]:mt-2 [&_h3]:text-copy [&_h3]:text-heading [&_hr]:my-2 [&_hr]:border-divider [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-default [&_td]:border [&_td]:border-default [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-default [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5"
-            on:error|capture={onDescriptionMediaError}
-          >
-            {@html detail.description_html}
-          </div>
-          {#if detail.files?.length}
-            <h2 class="mt-4 text-card-title text-heading">{T && T.files}</h2>
-            <ul class="mt-2 max-h-80 space-y-1 overflow-y-auto pr-3 font-mono text-caption text-subtle">
-              {#each detail.files ?? [] as file (file.name)}
-                <li class="flex justify-between gap-2 hover:bg-control">
-                  <span class="min-w-0 truncate hover:text-heading" title={file.name}>{file.name}</span>
-                  <span class="shrink-0">{formatBytes(file.size_bytes, fmtLocale)}</span>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        {/if}
-        {#if nyaaHref}
-          <a
-            href={nyaaHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="mt-4 inline-flex items-center gap-1 text-copy text-accent hover:underline"
-          >
-            {T && T.openNyaa}
-            <ExternalLink size={12} strokeWidth={2} aria-hidden="true" />
-          </a>
-        {/if}
+      {#if hasCandidates}
+        <div class="flex justify-end border-t border-default px-3.5 py-3">
+          <Button variant="solid" disabled={!canDownloadThis} on:click={confirmSelected}>
+            {T && T.confirm}
+          </Button>
+        </div>
       {/if}
     </div>
+
+    {#if hasCandidates}
+      <div class="min-w-0 rounded-card border border-default bg-card p-4">
+        {#if !selected}
+          <p class="text-copy text-subtle">{T && T.empty}</p>
+        {:else}
+          {#if detailLoading}
+            <Loading message={T && T.openNyaa} />
+          {:else if detailError}
+            <p role="alert" class="text-copy text-danger">{T && T.detailError}</p>
+          {:else if detail}
+            <h2 class="text-card-title text-heading">{T && T.description}</h2>
+            <div
+              class="mt-2 max-h-80 overflow-x-auto overflow-y-auto pr-3 text-copy text-body [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-default [&_blockquote]:pl-3 [&_code]:font-mono [&_code]:text-caption [&_h1]:mt-2 [&_h1]:text-card-title [&_h1]:text-heading [&_h2]:mt-2 [&_h2]:text-card-title [&_h2]:text-heading [&_h3]:mt-2 [&_h3]:text-copy [&_h3]:text-heading [&_hr]:my-2 [&_hr]:border-divider [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1.5 [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_table]:w-full [&_table]:border-collapse [&_table]:border [&_table]:border-default [&_td]:border [&_td]:border-default [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-default [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5"
+              on:error|capture={onDescriptionMediaError}
+            >
+              {@html detail.description_html}
+            </div>
+            {#if detail.files?.length}
+              <h2 class="mt-4 text-card-title text-heading">{T && T.files}</h2>
+              <ul class="mt-2 max-h-80 space-y-1 overflow-y-auto pr-3 font-mono text-caption text-subtle">
+                {#each detail.files ?? [] as file (file.name)}
+                  <li class="flex justify-between gap-2 hover:bg-control">
+                    <span class="min-w-0 truncate hover:text-heading" title={file.name}>{file.name}</span>
+                    <span class="shrink-0">{formatBytes(file.size_bytes, fmtLocale)}</span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          {/if}
+          {#if nyaaHref}
+            <a
+              href={nyaaHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-4 inline-flex items-center gap-1 text-copy text-accent hover:underline"
+            >
+              {T && T.openNyaa}
+              <ExternalLink size={12} strokeWidth={2} aria-hidden="true" />
+            </a>
+          {/if}
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <div class="flex flex-col gap-1.5">

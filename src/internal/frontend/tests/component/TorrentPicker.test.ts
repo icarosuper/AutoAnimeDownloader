@@ -375,6 +375,18 @@ describe('TorrentPicker — cache', () => {
   })
 })
 
+describe('TorrentPicker — no packs', () => {
+  it('shows the empty state once and no "Download this" when Nyaa returns no packs', async () => {
+    getTorrentCandidates.mockResolvedValue({ query: 'Frieren', media: media(), items: [] })
+    window.location.hash = '#/add/21/torrents'
+    render(TorrentPicker)
+    await screen.findByText(/^0 packs/)
+    expect(screen.getAllByText('No packs, try another query')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Download this' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Download magnet' })).toBeInTheDocument()
+  })
+})
+
 describe('TorrentPicker — description pane', () => {
   it('keeps the list and Confirm when the Nyaa page fails', async () => {
     getTorrentCandidateDetail.mockRejectedValue(new ApiError('nyaa down', 'NYAA_UNAVAILABLE', 502))
