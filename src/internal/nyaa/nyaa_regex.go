@@ -91,8 +91,13 @@ var (
 		{regexp.MustCompile(`(?i)(\d{1,2})(?:st|nd|rd|th)\s+Season`), "1st Season"},
 		{regexp.MustCompile(`(?i)\b(\d{1,2})\s+-\s+\d{1,2}`), "2 - 07"},
 		{regexp.MustCompile(`(?i)\b(\d{1,2})\s+EP\d{1,3}`), "2 EP07"},
-		{regexp.MustCompile(`(?i)Cour\s*(\d{1,2})`), "Cour 1"},
 	}
+
+	// reCourMarker is "Cour N" as a place to CUT a torrent name (firstMarkerIndex), not as a
+	// season: a cour is a part (decisions.md #10, ExtractPart reads it). It used to sit in
+	// reSeasonPatterns, so ExtractSeason read "… Cour 2 - Eris the Goblin Slayer" (141534, the second
+	// half of season 1) as season 2 and the pack path dropped every release without a season marker.
+	reCourMarker = regexp.MustCompile(`(?i)Cour\s*(\d{1,2})`)
 
 	// Roman numeral season marker, e.g. "Katainaka no Ossan, Kensei ni Naru II".
 	// Tried as a fallback after reSeasonPatterns (lower confidence than an explicit

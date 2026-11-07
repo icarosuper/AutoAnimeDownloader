@@ -71,6 +71,9 @@ func firstMarkerIndex(name string) int {
 			earliest = loc[0]
 		}
 	}
+	if loc := reCourMarker.FindStringIndex(name); loc != nil && (earliest == -1 || loc[0] < earliest) {
+		earliest = loc[0]
+	}
 	return earliest
 }
 

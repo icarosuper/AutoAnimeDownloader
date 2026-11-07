@@ -3,6 +3,7 @@ package unit
 import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/daemon"
+	"AutoAnimeDownloader/src/internal/nyaa"
 	"testing"
 )
 
@@ -228,5 +229,27 @@ func TestComputeEpisodeOffset_KaguySa2_NoPart_ReturnsZero(t *testing.T) {
 	relations := makeRelations("PREQUEL", 12)
 	if got := daemon.ComputeEpisodeOffset(relations, nil); got != 0 {
 		t.Errorf("expected 0 for Kaguya S2 (no part), got %d", got)
+	}
+}
+
+// "Cour N" is a part, never a season (decisions.md #10). Anilist id 141534: english = "Mushoku
+// Tensei: Jobless Reincarnation Cour 2 - Eris the Goblin Slayer" (the second half of season 1),
+// romaji = "… Part 2 - Eris no Goblin Toubatsu". Reading the cour as season 2 sent the pack path
+// a season filter that the release ("… Honki Dasu Part 2 - Eris the Goblin Slayer [1080p]", no
+// season marker) can't pass, so the anime found nothing (2026-11-07).
+func TestExtractAnimeSeasonPart_MushokuEris_CourIsNotASeason(t *testing.T) {
+	title := makeTitle(
+		"Mushoku Tensei: Jobless Reincarnation Cour 2 - Eris the Goblin Slayer",
+		"Mushoku Tensei: Isekai Ittara Honki Dasu Part 2 - Eris no Goblin Toubatsu",
+	)
+	season, part := daemon.ExtractAnimeSeasonPart(title, nil)
+	if season != nil {
+		t.Errorf("expected no season (Cour 2 is a part), got %d", *season)
+	}
+	if part == nil || *part != 2 {
+		t.Errorf("expected part=2, got %v", part)
+	}
+	if s := nyaa.ExtractSeason("NieR:Automata Ver1.1a Cour 2"); s != nil {
+		t.Errorf("ExtractSeason must not read a cour as a season, got %d", *s)
 	}
 }
