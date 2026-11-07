@@ -19,15 +19,15 @@ module AutoAnimeDownloader
 go 1.27.0
 
 require (
-	fyne.io/systray v1.12.0
+	fyne.io/systray v1.12.2
 	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/cenkalti/rain/v2 v2.5.1
 	github.com/coder/websocket v1.8.15
-	github.com/jedib0t/go-pretty/v6 v6.7.7
-	github.com/rs/zerolog v1.34.0
+	github.com/jedib0t/go-pretty/v6 v6.8.3
+	github.com/rs/zerolog v1.35.1
 	github.com/urfave/cli/v2 v2.27.7
-	github.com/yuin/goldmark v1.8.6
-	golang.org/x/net v0.58.0
+	github.com/yuin/goldmark v1.8.7
+	golang.org/x/net v0.62.0
 	golang.org/x/sys v0.49.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
@@ -50,8 +50,8 @@ require (
 	github.com/jackpal/bencode-go v1.0.0 // indirect
 	github.com/juju/ratelimit v1.0.2 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/nictuku/dht v0.0.0-20201226073453-fd1c1dd3d66a // indirect
 	github.com/nictuku/nettools v0.0.0-20150117095333-8867a2107ad3 // indirect
@@ -62,5 +62,5 @@ require (
 	github.com/zeebo/bencode v1.0.0 // indirect
 	go.etcd.io/bbolt v1.5.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 )
