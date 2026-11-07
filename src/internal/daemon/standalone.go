@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"AutoAnimeDownloader/src/internal/anilist"
@@ -184,6 +185,11 @@ func DownloadStandaloneAnimeWithMagnet(fm FileManagerInterface, backend torrents
 		return 0, fmt.Errorf("failed to add standalone anime: %w", err)
 	}
 
+	// A client that sends only the magnet (an older CLI, a script) still gets a name to read the
+	// range from: the magnet's own dn, which Nyaa fills with the torrent's title (decisions.md #123).
+	if name == "" {
+		name = magnetDisplayName(magnet)
+	}
 	records, err := standaloneMagnetCoverage(mediaID, hash, name, nyaaID)
 	if err != nil {
 		rollbackStandaloneID(fm, mediaID)
@@ -227,6 +233,13 @@ func standaloneMagnetCoverage(mediaID int, hash, name string, nyaaID int) ([]fil
 			info = fileInfo
 		}
 	}
+	if info.EndEpisode == 0 && mediaTotalEpisodes(*anime) == 1 {
+		// Nothing to guess: a one-episode entry (OVA, special) can only be covered by its episode 1.
+		// The release usually names no number at all ("... - Eris the Goblin Slayer [1080p]"), and
+		// without this the torrent downloaded but never reached the library. Same records as a movie
+		// (decisions.md #123).
+		return movieMagnetRecords(*anime, mediaID, title, hash, now), nil
+	}
 	if info.EndEpisode == 0 {
 		return nil, nil
 	}
@@ -240,6 +253,15 @@ func standaloneMagnetCoverage(mediaID int, hash, name string, nyaaID int) ([]fil
 		records = append(records, magnetEpisodeRecord(mediaID, title, hash, node.Episode, now, true, info.StartEpisode, info.EndEpisode))
 	}
 	return records, nil
+}
+
+// magnetDisplayName is the magnet's dn (display name), "" when it has none or does not parse.
+func magnetDisplayName(magnet string) string {
+	u, err := url.Parse(magnet)
+	if err != nil {
+		return ""
+	}
+	return u.Query().Get("dn")
 }
 
 func movieMagnetRecords(anime anilist.MediaList, mediaID int, title, hash string, now time.Time) []files.EpisodeStruct {

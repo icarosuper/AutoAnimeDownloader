@@ -129,6 +129,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#120** — `OpenBrowser` is a no-op inside a test binary](#120-openbrowser-is-a-no-op-inside-a-test-binary)
 - [**#121** — The blacklist deletes what the daemon downloaded and spares what the user downloaded by hand](#121-the-blacklist-deletes-what-the-daemon-downloaded-and-spares-what-the-user-downloaded-by-hand)
 - [**#122** — The Tailwind opacity scale is extended with 12, 16, 28 and 32](#122-the-tailwind-opacity-scale-is-extended-with-12-16-28-and-32)
+- [**#123** — A one-episode entry covers episode 1 even when the magnet declares no range](#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)
 
 ---
 
@@ -2299,6 +2300,10 @@ The min-max of **restart** packs is lifted by [#116](#116-restart-per-season-pac
 - Going back to storing `1..total` "because the pack was chosen as complete": that was exactly the guess that fed ownership-by-coverage adoption with an invented range.
 - Filtering files by extension in a list of the `files` package's own: `nyaa.IsVideoFile` is the same list the Librarian uses after download, and `files` imports `nyaa` (the other way would cycle).
 
+**Amendment (see [#123](#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)):** "an unresolved range stores ZERO" still holds for every
+entry with more than one episode. For an AniList entry with exactly **one** episode the standalone
+magnet path records episode 1 instead — there is no range to invent.
+
 ---
 
 ### 85. The frontend's AniList cost is per ACCOUNT and per ORPHAN, not per tab
@@ -3528,4 +3533,36 @@ content assertion still passed, since the elements were there and visible.
 designed tints; or using arbitrary values (`bg-ok/[.12]`) one by one — it works, but the next
 `/28` written the normal way is silently dropped again, which is what the guard test is for. A new
 step means a new key here; the test lists any `/N` used in `src/` that the config doesn't generate.
+
+### 123. A one-episode entry covers episode 1 even when the magnet declares no range
+
+**Location:** `daemon/standalone.go` — `standaloneMagnetCoverage` (the `mediaTotalEpisodes == 1`
+branch, which reuses `movieMagnetRecords`) and `DownloadStandaloneAnimeWithMagnet` (an empty
+`name` falls back to `magnetDisplayName`, the magnet's `dn`); tests
+`TestDownloadStandaloneAnimeWithMagnet_OneEpisodeEntryRecordsEpisodeOne` and
+`TestDownloadStandaloneAnimeWithMagnet_EmptyNameFallsBackToMagnetDN`.
+
+**What it looks like:** an exception to [#84](#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything), which says an unresolved range
+writes no record because guessing one fed ownership-by-coverage with invented data.
+
+**Why it's right:** #84's danger is guessing `1..total` for a pack that may hold less. With
+`total == 1` there is nothing to guess: whatever the torrent holds, the only episode it can be for is
+episode 1. Measured on 2026-11-07 with Mushoku Tensei "Eris the Goblin Slayer" (141534, SPECIAL, one
+episode): the Erai-raws release names no number, is a single file (so `PackFileRange` has nothing
+either), and the add wrote zero records. The torrent downloaded, the organize job had no record to
+place, and the anime stayed "1 behind" with the file only under `.torrents` until a manual
+`replace-episode`.
+
+The `dn` fallback covers the other half of that case: the CLI used to send only the magnet, so even
+a release whose name does declare a range reached `ExtractBatchInfo` with `""`. The CLI now sends the
+matching candidate's name / nyaa_id / size like the web picker; the fallback keeps any other client
+that sends just a magnet from losing the range.
+
+**Don't "fix" by:**
+- Extending the rule to "total > 1 and the torrent has one file → episode 1": a single-file torrent
+  of a 12-episode entry can be any of them; that is exactly #84's invented coverage.
+- Writing the record as a batch `1..1`: it is one file for one episode, the same shape as a movie
+  record, and `IsBatch` would make the deletion guard treat it as a pack.
+- Dropping the `dn` fallback because the CLI now sends the name: the API is public and the web is not
+  its only client.
 

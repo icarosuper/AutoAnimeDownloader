@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -406,5 +407,53 @@ func TestDownloadStandaloneAnimeWithMagnet_MovieWritesAiredRecords(t *testing.T)
 	}
 	if ep.EpisodeNumber != 1 || !ep.ManuallyManaged {
 		t.Errorf("want episode 1 ManuallyManaged, got %+v", ep)
+	}
+}
+
+// A one-episode SPECIAL, as AniList returns Mushoku Tensei's "Eris the Goblin Slayer" (141534).
+const mediaForOneEpisodeSpecial = `{"data": {"Media": {
+	"id": 141534, "format": "SPECIAL", "status": "FINISHED", "episodes": 1,
+	"title": {"english": "Eris the Goblin Slayer", "romaji": "Eris no Goblin Toubatsu"},
+	"synonyms": [], "relations": {"edges": []},
+	"coverImage": {"large": "", "medium": ""},
+	"airingSchedule": {"nodes": [{"id": 901, "episode": 1, "timeUntilAiring": -100, "airingAt": 1}]}
+}}}`
+
+// A one-episode entry whose release names no number is still covered: it can only be episode 1.
+// Measured on 2026-11-07: the Erai-raws release of 141534 downloaded but never reached the library
+// because no record was written for it.
+func TestDownloadStandaloneAnimeWithMagnet_OneEpisodeEntryRecordsEpisodeOne(t *testing.T) {
+	defer mockAniListRouter(t, emptyAniListPage, mediaForOneEpisodeSpecial)()
+
+	fm := &mockFileManagerForEpisodes{}
+	name := "[Erai-raws] Mushoku Tensei - Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer [1080p][Multiple Subtitle]"
+
+	n, err := DownloadStandaloneAnimeWithMagnet(fm, torrents.NewFakeBackend(), standaloneTestConfig(), 141534, standaloneMagnet, name, 0, 0)
+	if err != nil {
+		t.Fatalf("DownloadStandaloneAnimeWithMagnet: %v", err)
+	}
+	if n != 1 || len(fm.savedEpisodes) != 1 {
+		t.Fatalf("want 1 record, got n=%d records=%v", n, fm.savedEpisodes)
+	}
+	ep := fm.savedEpisodes[0]
+	if ep.EpisodeNumber != 1 || ep.EpisodeHash == "" || ep.IsBatch {
+		t.Errorf("want episode 1, with hash, not a batch; got %+v", ep)
+	}
+}
+
+// With no name in the request the range is read from the magnet's dn — what a client that sends
+// only the magnet gets.
+func TestDownloadStandaloneAnimeWithMagnet_EmptyNameFallsBackToMagnetDN(t *testing.T) {
+	defer mockAniListRouter(t, emptyAniListPage, mediaForFrierenSeason2)()
+
+	fm := &mockFileManagerForEpisodes{}
+	magnet := standaloneMagnet + "&dn=" + url.QueryEscape("[SubsPlease] Frieren Season 2 (01-12) [1080p]")
+
+	n, err := DownloadStandaloneAnimeWithMagnet(fm, torrents.NewFakeBackend(), standaloneTestConfig(), 700, magnet, "", 0, 0)
+	if err != nil {
+		t.Fatalf("DownloadStandaloneAnimeWithMagnet: %v", err)
+	}
+	if n != 12 {
+		t.Fatalf("want the 12 episodes the dn declares, got %d", n)
 	}
 }
