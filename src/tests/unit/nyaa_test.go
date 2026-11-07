@@ -2554,3 +2554,28 @@ func TestGenerateSearchTitleVariants_RomanSeasonBaseFirst(t *testing.T) {
 		t.Errorf("Lupin III must keep its variants, got %v", got)
 	}
 }
+
+// Erai-raws names an OVA with the romaji series title and the ENGLISH subtitle: "Mushoku Tensei -
+// Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer". Nyaa ANDs the query words, so the
+// all-romaji variant (…"Toubatsu") and the all-English one (…"Jobless") both missed it (141534,
+// 2026-11-07). The mixed variant comes LAST: every anime the old variants already found keeps the
+// same result (decisions.md #76 stops at the first variant that returns anything).
+func TestGenerateSearchTitleVariants_RomajiBaseEnglishSubtitleLast(t *testing.T) {
+	got := nyaa.GenerateSearchTitleVariants(
+		"Mushoku Tensei: Isekai Ittara Honki Dasu Part 2 - Eris no Goblin Toubatsu",
+		"Mushoku Tensei: Jobless Reincarnation Cour 2 - Eris the Goblin Slayer",
+	)
+	want := "mushoku tensei isekai ittara honki dasu part 2 eris the goblin slayer"
+	if len(got) == 0 || got[len(got)-1] != want {
+		t.Fatalf("want %q as the last variant, got %v", want, got)
+	}
+	for _, w := range strings.Fields(strings.ToLower(want)) {
+		if !strings.Contains(strings.ToLower("[Erai-raws] Mushoku Tensei - Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer [1080p]"), w) {
+			t.Errorf("query word %q is not in the release name", w)
+		}
+	}
+	// No " - " subtitle on either side: nothing to mix, the variants stay as they were.
+	if got := nyaa.GenerateSearchTitleVariants("Sousou no Frieren", "Frieren: Beyond Journey's End"); len(got) != 4 {
+		t.Errorf("want the 4 usual variants, got %v", got)
+	}
+}

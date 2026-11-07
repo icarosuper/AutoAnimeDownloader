@@ -120,7 +120,31 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 		addVariant(english)
 	}
 
+	// Last: romaji series title + English subtitle, the way Erai-raws names OVAs and specials
+	// ("Mushoku Tensei - Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer"). Nyaa ANDs the
+	// words, so each single-language variant carries one the release lacks. Last, so the first
+	// variant that already returned something keeps winning (decisions.md #76).
+	if mixed, ok := romajiBaseEnglishSubtitle(romaji, english); ok {
+		addVariant(removeSpecialCharacters(mixed))
+	}
+
 	return variants
+}
+
+// romajiBaseEnglishSubtitle joins the romaji title's part before its last " - " with the English
+// title's part after its last " - ". Both titles need that separator and different subtitles;
+// otherwise there is nothing to mix.
+func romajiBaseEnglishSubtitle(romaji, english string) (string, bool) {
+	const sep = " - "
+	ri, ei := strings.LastIndex(romaji, sep), strings.LastIndex(english, sep)
+	if ri <= 0 || ei <= 0 {
+		return "", false
+	}
+	romajiSub, englishSub := romaji[ri+len(sep):], english[ei+len(sep):]
+	if englishSub == "" || strings.EqualFold(romajiSub, englishSub) {
+		return "", false
+	}
+	return romaji[:ri] + sep + englishSub, true
 }
 
 // romanSequelBase is the title without the roman numeral that closes it, and without the
