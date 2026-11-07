@@ -226,7 +226,7 @@ Full field-by-field reference: [Config Reference](docs/agents/config.md).
 
 ## Contributing
 
-Contributions are welcome! See the [Development Guide](docs/guides/development.md#contributing) for details.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## License
 

@@ -98,28 +98,7 @@ no installer and no service wrapper. Running detached as a background service is
 
 ## Contributing
 
-1. Fork the repo and create a branch off `master`: `git checkout -b feat/your-feature`
-2. Make your changes — run `go test ./...` and, for frontend changes, `make test-frontend` before opening a PR
-3. Push and open a pull request against `master`
-
-### Commit Messages
-
-```
-feat: add new endpoint for episode filtering
-fix: resolve memory leak in state manager
-docs: update build guide
-test: add tests for config validation
-refactor: simplify daemon loop logic
-```
-
-### Code Style
-
-- **Go**: `gofmt`, handle all errors, follow the patterns in [Conventions](../agents/conventions.md)
-- **Frontend**: Svelte + Tailwind, formatted with Prettier
-
-### Reporting Bugs
-
-Include: steps to reproduce, expected vs. actual behavior, relevant log lines (`autoanimedownloader logs` or `~/.autoAnimeDownloader/daemon.log`), and your OS/version.
+How to report bugs, suggest features and open a pull request: see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## See Also
 
