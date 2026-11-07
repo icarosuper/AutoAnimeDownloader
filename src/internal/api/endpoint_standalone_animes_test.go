@@ -542,3 +542,32 @@ func TestStandaloneAdd_WithMagnet_BlockedNeverWritesTheFile(t *testing.T) {
 		t.Fatal("a block must not reach DownloadStandaloneAnimeWithMagnet")
 	}
 }
+
+// TestStandaloneRemove_ClearsTheAnimesBlocks: deleting an episode blocks it, so without this a
+// removed-then-re-added standalone never downloaded the episodes deleted the first time. Only the
+// removed anime's blocks go.
+func TestStandaloneRemove_ClearsTheAnimesBlocks(t *testing.T) {
+	for _, q := range []string{"", "?delete_episodes=true"} {
+		fm := &mockFileManager{
+			configs:          standaloneConfig(),
+			standaloneAnimes: []int{21},
+			blockedEpisodes: []files.EpisodeKey{
+				{AnimeID: 21, Episode: 1},
+				{AnimeID: 99, Episode: 1},
+				{AnimeID: 21, Episode: 2},
+			},
+		}
+
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/standalone-animes/21"+q, nil)
+		req.SetPathValue("id", "21")
+		rec := httptest.NewRecorder()
+		handleStandaloneAnimeRemove(standaloneWriteServer(fm))(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%q: want 200, got %d: %s", q, rec.Code, rec.Body.String())
+		}
+		if len(fm.blockedEpisodes) != 1 || fm.blockedEpisodes[0].AnimeID != 99 {
+			t.Errorf("%q: want only the other anime's block left, got %+v", q, fm.blockedEpisodes)
+		}
+	}
+}

@@ -170,6 +170,7 @@ func handleStandaloneAnimeRemove(server *Server) http.HandlerFunc {
 			JSONInternalError(w, err)
 			return
 		}
+		clearAnimeBlocks(server.FileManager, id)
 
 		saved, err := server.FileManager.LoadSavedEpisodes()
 		if err != nil {
@@ -210,5 +211,27 @@ func handleStandaloneAnimeRemove(server *Server) http.HandlerFunc {
 		}
 
 		JSONSuccess(w, http.StatusOK, nil)
+	}
+}
+
+// clearAnimeBlocks drops every blocked episode of an anime the user stopped tracking. Deleting an
+// episode always blocks it — that is how the loop is kept from downloading it again — so the
+// blocks are bookkeeping of the tracking, not a preference: left behind, they only meant that
+// adding the anime again silently never downloaded those episodes. Only this endpoint does it: the
+// pass also drops a standalone id when the anime shows up in an AniList list, and there the
+// anime is still tracked, so its blocks must stay. Best effort — a failure is logged, not returned.
+func clearAnimeBlocks(fm FileManagerInterface, mediaID int) {
+	blocked, err := fm.LoadBlockedEpisodes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Int("media_id", mediaID).Msg("Failed to load blocked episodes to clear them")
+		return
+	}
+	for _, key := range blocked {
+		if key.AnimeID != mediaID {
+			continue
+		}
+		if err := fm.UnblockEpisode(key); err != nil {
+			logger.Logger.Warn().Err(err).Int("media_id", mediaID).Int("episode", key.Episode).Msg("Failed to unblock episode of a removed standalone anime")
+		}
 	}
 }
