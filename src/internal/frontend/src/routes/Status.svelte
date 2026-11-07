@@ -292,6 +292,13 @@
 
   $: activeDownloads = torrents.filter((t) => t.status === "downloading");
   $: seedingCount = torrents.filter((t) => t.status === "seeding").length;
+  // The summary is split on its " · " separators so each piece can be rendered unbreakable: next
+  // to the sparkline the column is narrow on phones, and a free wrap left "— de" / "envio" apart.
+  $: heroSummaryParts = ($locale && m.status_hero_summary({
+    downloading: activeDownloads.length,
+    seeding: seedingCount,
+    upload: formatSpeed(speeds.upload, fmtLocale),
+  }) || "").split(" · ");
 
   // Library summary: the sum of the already normalized breakdowns (not of the raw fields), so the
   // aggregate obeys the same invariant watched <= downloaded <= released <= total.
@@ -834,11 +841,7 @@
               <span class="text-card-title text-tertiary">{heroSpeed.unit}</span>
             </p>
             <p class="mt-1 text-caption text-subtle">
-              {$locale && m.status_hero_summary({
-                downloading: activeDownloads.length,
-                seeding: seedingCount,
-                upload: formatSpeed(speeds.upload, fmtLocale),
-              })}
+              {#each heroSummaryParts as part, i}<span class="whitespace-nowrap">{part}{i < heroSummaryParts.length - 1 ? " ·" : ""}</span>{i < heroSummaryParts.length - 1 ? " " : ""}{/each}
             </p>
           </div>
           <Sparkline values={$speedHistory} variant="accent" label={T && T.heroSpeedLabel} />
