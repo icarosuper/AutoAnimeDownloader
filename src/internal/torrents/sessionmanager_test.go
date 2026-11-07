@@ -236,3 +236,22 @@ func TestRainConfigNoUploadClosesEveryUploadPath(t *testing.T) {
 			cfg.UnchokedPeers, cfg.OptimisticUnchokedPeers, cfg.AllowedFastSet)
 	}
 }
+
+// AAD_DISABLE_DHT is how make sandbox keeps off 7246/udp, which the user's real daemon holds.
+// Anything but "1" must leave production alone: DHT is the only way to find peers for a
+// magnet whose trackers are down.
+func TestNewSessionManager_AADDisableDHT(t *testing.T) {
+	for _, tc := range []struct {
+		value   string
+		wantDHT bool
+	}{{"1", false}, {"", true}, {"0", true}, {"true", true}} {
+		t.Run("AAD_DISABLE_DHT="+tc.value, func(t *testing.T) {
+			t.Setenv("AAD_DISABLE_DHT", tc.value)
+			m := NewSessionManager(filepath.Join(t.TempDir(), "resume.db"))
+			cfg := rainConfig("/dl", "/db", m.sessionOpts)
+			if cfg.DHTEnabled != tc.wantDHT {
+				t.Errorf("DHTEnabled = %v, want %v", cfg.DHTEnabled, tc.wantDHT)
+			}
+		})
+	}
+}

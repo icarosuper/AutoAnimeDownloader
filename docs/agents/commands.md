@@ -69,7 +69,8 @@ kill "$(cat .sandbox/sandbox.pid)"   # stop it from another shell — TERM, not 
 `scripts/sandbox.sh` builds the frontend, the daemon and both mocks from `src/tests/mocks/`, then
 starts the daemon with `HOME=.sandbox/home` (so the data dir is a scratch copy, **wiped on every
 start** — everything in `.sandbox/` is, except `.sandbox/reports/`, where a browser check leaves its
-screenshots and videos), `ANILIST_API_URL`/`NYAA_URL` pointing at the mocks, and `DISPLAY`/`WAYLAND_DISPLAY` unset.
+screenshots and videos), `ANILIST_API_URL`/`NYAA_URL` pointing at the mocks, `AAD_DISABLE_DHT=1` (DHT binds the fixed
+`7246/udp`, which the user's real daemon holds) and `DISPLAY`/`WAYLAND_DISPLAY` unset.
 It writes `config.json` before boot, which is what makes it skip first boot — otherwise the daemon
 would `xdg-open` a tab on the desktop. Logs land in `.sandbox/daemon.out` and `.sandbox/mock-*.log`.
 It is not under `runtime/`: the Docker integration suite creates that directory as root.

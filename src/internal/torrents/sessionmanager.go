@@ -3,6 +3,7 @@ package torrents
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -38,7 +39,8 @@ type SessionManager struct {
 	onComplete  func(hash string)
 	onFailed    func(hash string, err error)
 	// sessionOpts is the config the manager builds its sessions with. The zero value is
-	// production; only the tests set it (see newTestManager).
+	// production; the tests set it (see newTestManager), and AAD_DISABLE_DHT=1 turns DHT off
+	// (see NewSessionManager).
 	sessionOpts sessionOptions
 	// queue caps how many incomplete torrents run at once. It lives on the manager, not on
 	// the Session, so it survives the session being torn down and rebuilt by Ensure.
@@ -64,6 +66,10 @@ func NewSessionManager(dbPath string) *SessionManager {
 	m := &SessionManager{
 		dbPath: dbPath,
 		idPath: filepath.Join(filepath.Dir(dbPath), rootIDFileName),
+		// DHT binds the fixed 7246/udp (see sessionOptions.disableDHT). make sandbox sets this so
+		// a sandbox daemon and the user's real one can run side by side: whichever started second
+		// used to lose its torrent session. A sandbox never needs peers.
+		sessionOpts: sessionOptions{disableDHT: os.Getenv("AAD_DISABLE_DHT") == "1"},
 	}
 	// queue.json lives next to the resume database for the same reason as download_root.id: it
 	// is torrent-client state, and it has to follow the database.

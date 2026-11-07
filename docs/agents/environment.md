@@ -6,6 +6,7 @@
 |----------|---------|-------|-------------|
 | `ENVIRONMENT` | `"dev"` | `cmd/daemon/main.go` | Set to `dev` for formatted console logs. Any other value = production JSON logs |
 | `PORT` | `":8091"` | `cmd/daemon/main.go`, `daemon/helpers.go` | HTTP listen address. Prefix `:` auto-added if missing |
+| `AAD_DISABLE_DHT` | — | `torrents/sessionmanager.go` (`NewSessionManager`) | `1` = the embedded torrent client runs without DHT. DHT binds the fixed `7246/udp`, so two daemons on one machine fight over it and the second loses its torrent session. Set by `make sandbox`, never needed in production — without DHT a magnet whose trackers are down finds no peers. Any other value leaves DHT on |
 | `DISPLAY` | — | `cmd/daemon/main.go` | Linux only. System tray icon shown only when non-empty (graphical session) |
 
 ## Service Overrides

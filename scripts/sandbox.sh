@@ -8,6 +8,8 @@
 #   - AniList and Nyaa are the mocks in src/tests/mocks — no real network for the watch list or
 #     the search, and the mock magnet is not a real torrent, so nothing is ever downloaded
 #   - DISPLAY/WAYLAND_DISPLAY unset: no tray icon, and no browser tab opened on the desktop
+#   - AAD_DISABLE_DHT=1: the torrent client's DHT binds the fixed 7246/udp, so with it on a sandbox
+#     and the user's real daemon fought over the port and the second one lost its torrent session
 #   - a config.json is written before boot, so the first-boot onboarding is skipped
 # Runs in the foreground; Ctrl+C — or `kill "$(cat .sandbox/sandbox.pid)"` from another shell —
 # stops the daemon and both mocks. From another shell it has to be TERM, not INT: a script started
@@ -68,6 +70,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY \
   HOME="$SANDBOX/home" \
   PORT=":$PORT" \
   ENVIRONMENT=dev \
+  AAD_DISABLE_DHT=1 \
   ANILIST_API_URL="http://127.0.0.1:$ANILIST_PORT" \
   NYAA_URL="http://127.0.0.1:$NYAA_PORT" \
   "$SANDBOX/bin/daemon" >"$SANDBOX/daemon.out" 2>&1 &
