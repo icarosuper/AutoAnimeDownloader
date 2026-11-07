@@ -71,6 +71,7 @@ request already covers isn't "in passing", it's the job. (Portuguese text is the
 ## Docs
 
 - [v3.0.0 Serval](docs/v3.0.0.md) — working checklist for the rename release; coordinate slices across chats here; lock Open decisions before any rename diff
+- [Dependency upgrades](docs/dependency-upgrades.md) — working checklist for the toolchain/library bumps: what ships in 2.9.0, what waits for its own cycle, what is not worth doing
 - [Specs](docs/superpowers/specs/README.md) — unimplemented design docs only; executed specs were deleted (git history still has them)
 - [Architecture](docs/agents/architecture.md) — read when navigating code or adding features; update when a package, endpoint or invariant appears or disappears. Flow, negative facts, disambiguation and the API table — not a symbol list
 - [Conventions](docs/agents/conventions.md) — read when writing Go code; error handling, handler pattern, naming, checklists for new endpoints/config fields/CLI commands
