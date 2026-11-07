@@ -37,16 +37,18 @@ export interface NavItem {
 }
 
 /**
- * Top group of the rail / first columns of the tab bar: Status, Add anime, Downloads.
+ * Top group of the rail / first columns of the tab bar: Status, Downloads, Add anime.
  *
- * "Add anime" comes SECOND and with the same weight as Status — it's the entry point of any anime
- * into the library, and burying it in the MoreMenu (where it was born) hid the only action an
- * install without an AniList account has to take.
+ * One order serves both shells on purpose. On the rail it's by visit frequency (Status is home,
+ * Downloads is where you keep coming back to, adding is occasional — rare with an AniList account).
+ * On the tab bar it lands "Add anime" in the 3rd of 5 columns: the center slot, under the thumb,
+ * where a creation action is expected. Don't move it back into the MoreMenu (where it was born):
+ * that hid the only action an install without an AniList account has to take.
  */
 export const primaryNavItems: NavItem[] = [
   { id: 'status', path: '/status', activePaths: ['/'], icon: Activity, label: m.nav_status },
-  { id: 'add', path: '/add', icon: Plus, label: m.nav_add_anime, shortLabel: m.nav_add_anime_short },
   { id: 'downloads', path: '/downloads', icon: Download, label: m.nav_downloads },
+  { id: 'add', path: '/add', icon: Plus, label: m.nav_add_anime, shortLabel: m.nav_add_anime_short },
 ]
 
 /** Bottom group of the rail (after the divider) / third column of the tab bar: Configuration. */

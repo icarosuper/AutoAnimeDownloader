@@ -1,5 +1,5 @@
 <script lang="ts">
-  // NavTabBar — bottom tab bar (spec §5): Status, Add anime, Downloads, Config, More. Only
+  // NavTabBar — bottom tab bar (spec §5): Status, Downloads, Add anime, Config, More. Only
   // mounted on mobile (<768px); see the comment in AppShell.svelte for why the rail-vs-tab-bar
   // choice is made in JS and not with `md:hidden`/`hidden md:flex` classes.
   import {
@@ -18,7 +18,7 @@
 
   let moreOpen = false
 
-  // Top group of the rail (Status, Add anime, Downloads) + the bottom one (Config) = the 4
+  // Top group of the rail (Status, Downloads, Add anime) + the bottom one (Config) = the 4
   // first columns; "More" is the 5th. Same source (lib/navItems.ts) NavRail uses — the tab
   // bar follows the list, never a copy of it.
   $: tabItems = $locale && [...primaryNavItems, ...secondaryNavItems].map((item) => ({
