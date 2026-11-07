@@ -62,4 +62,6 @@ start. They are not read by the Go code, and they do nothing after the file exis
 | `TEST_COMPLETED_PATH` | `~/aad-test/library` | `tests/integration/integration_test.go` | `completed_anime_path` the integration tests write. Docker overrides it to `/app/data/aad-test/library` |
 | `SCENARIO` | — | `tests/mocks/anilist/`, `tests/mocks/nyaa/` | `"empty"` = mock returns empty data |
 | `PORT` | `8080`/`8081` | `tests/mocks/*/mock_server.go` | Listen port for each mock server (Anilist, Nyaa) |
+| `SANDBOX_PORT`, `SANDBOX_ANILIST_PORT`, `SANDBOX_NYAA_PORT` | `8092`, `18080`, `18081` | `scripts/sandbox.sh` | Ports for the `make sandbox` daemon and its two mocks. The default `8092` lets it run next to a real daemon on `8091` |
+| `SANDBOX_SKIP_FRONTEND` | — | `scripts/sandbox.sh` | `1` = don't rebuild the frontend, embed the last `dist/` |
 | `TEST_LOGGER_INIT` | — | `logger/logger_test.go` | When empty, auto-inits logger for tests |

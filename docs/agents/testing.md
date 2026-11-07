@@ -238,6 +238,15 @@ Pass `daemon.LoopControl.Done` read **before** any `UpdateInterval` call: the fi
 
 Any test that lets `AnimeVerification` run to completion must also stub AniList — `t.Cleanup(anilist.MockAniListDo(...))`, registered **before** the goroutine's own cleanup so it is undone last — and point `CompletedAnimePath` at `t.TempDir()` (the download path is derived from it). Otherwise the pass hits the live API and creates the configured folders on the developer's real disk.
 
+## Seeing the Real App
+
+The suites above never show front and back running together — the smoke tests mock the API with
+hand-written fixtures. To click through the real UI on top of the real daemon (by hand, or with a
+browser agent such as `agent-browser`), run `make sandbox` and open `http://localhost:8092`.
+**Never** start the daemon without it for this: a plain `go run ./src/cmd/daemon` uses the
+developer's real data dir and the real AniList/Nyaa. What the sandbox isolates and what its mock
+data does not cover: [commands.md](commands.md#running-the-daemon).
+
 ## Docker Mock Servers
 
 `src/tests/mocks/` contains standalone HTTP servers for integration tests:

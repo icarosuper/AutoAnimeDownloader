@@ -2,7 +2,7 @@
 # Cross-platform builds using Docker
 # Works on Linux, macOS, and WSL (Windows Subsystem for Linux)
 
-.PHONY: build package release clean help dev clear-data debug-anime debug-batch
+.PHONY: build package release clean help dev sandbox clear-data debug-anime debug-batch
 .PHONY: build-linuxamd64 build-linuxarm64 build-windows
 .PHONY: package-linuxamd64 package-linuxarm64 package-windows
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
@@ -60,6 +60,7 @@ help:
 	@echo ""
 	@echo -e "$(GREEN)Dev targets:$(NC)"
 	@echo -e "  $(YELLOW)make dev$(NC)                           - Run dev server (frontend + backend)"
+	@echo -e "  $(YELLOW)make sandbox$(NC)                       - Throwaway daemon on :8092 with mock AniList/Nyaa (never touches your real data)"
 	@echo -e "  $(YELLOW)make clear-data$(NC)                    - Clear local daemon data files"
 	@echo -e "  $(YELLOW)make debug-anime ID=123$(NC)            - Debug why an anime isn't downloading"
 	@echo -e "  $(YELLOW)make debug-batch$(NC)                   - Debug the curated list (scripts/robustness-animes.txt) → .debug_batch/report.md"
@@ -251,13 +252,17 @@ package-windows:
 dev:
 	@bash scripts/dev.sh
 
+# Isolated daemon for exploring the real web UI: scratch HOME, port 8092, mock AniList/Nyaa.
+sandbox:
+	@bash scripts/sandbox.sh
+
 # Debug why a specific anime isn't downloading. Usage: make debug-anime ID=123
 # ID is the AniList MediaList ID (same ID used in /api/v1/animes/{id}/episodes).
 debug-anime:
 	@go run ./src/cmd/daemon --debug-anime $(ID)
 
-# Roda o debug-anime sobre scripts/robustness-animes.txt (rede ao vivo, minutos) e escreve
-# .debug_batch/report.md. Nao e suite: sem pass/fail, por isso nao tem prefixo test-.
+# Runs debug-anime over scripts/robustness-animes.txt (live network, takes minutes) and writes
+# .debug_batch/report.md. Not a suite: no pass/fail, hence no test- prefix.
 debug-batch:
 	@bash scripts/debug-batch.sh
 

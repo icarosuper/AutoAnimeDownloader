@@ -3,7 +3,9 @@
 .idea/
 *.sublime-workspace
 *.sublime-project
-.claude/
+# Local Claude Code state stays out; project skills are shared
+.claude/*
+!.claude/skills/
 
 # Build
 build/
@@ -26,6 +28,9 @@ daemon.log
 
 # --debug-anime output
 .debug_*/
+
+# make sandbox (scripts/sandbox.sh): scratch HOME, binaries and logs, wiped on every start
+.sandbox/
 
 # Brainstorm visual-companion mockups
 .superpowers/

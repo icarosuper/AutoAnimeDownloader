@@ -57,6 +57,32 @@ ENVIRONMENT=dev ./autoanimedownloader-daemon   # formatted logs
 PORT=:8092 ./autoanimedownloader-daemon        # custom port (default 8091)
 ```
 
+Both of these run against **the real** `~/.autoAnimeDownloader` (config, state, torrents) and the
+real AniList/Nyaa. To look at the running app without that — by hand or with a browser agent — use
+the sandbox instead:
+
+```bash
+make sandbox    # throwaway daemon on http://localhost:8092, mock AniList/Nyaa, Ctrl+C stops it all
+kill "$(cat .sandbox/sandbox.pid)"   # stop it from another shell — TERM, not INT (see the script header)
+```
+
+`scripts/sandbox.sh` builds the frontend, the daemon and both mocks from `src/tests/mocks/`, then
+starts the daemon with `HOME=.sandbox/home` (so the data dir is a scratch copy, **wiped on every
+start**), `ANILIST_API_URL`/`NYAA_URL` pointing at the mocks, and `DISPLAY`/`WAYLAND_DISPLAY` unset.
+It writes `config.json` before boot, which is what makes it skip first boot — otherwise the daemon
+would `xdg-open` a tab on the desktop. Logs land in `.sandbox/daemon.out` and `.sandbox/mock-*.log`.
+It is not under `runtime/`: the Docker integration suite creates that directory as root.
+
+What the mocks give you is thin: the AniList mock answers **every** GraphQL query with the same
+single anime ("Test Anime", progress 5, no media id, no released episodes), so the Status list has
+one row and the Nyaa mock is never searched. Enough to check layout, navigation, the config and
+priorities screens, the add-anime flow and the WebSocket; not enough to see a download happen. The
+mock magnet is not a real torrent, so nothing is ever downloaded.
+
+Variables: `SANDBOX_PORT` (8092), `SANDBOX_ANILIST_PORT` (18080), `SANDBOX_NYAA_PORT` (18081), and
+`SANDBOX_SKIP_FRONTEND=1` to reuse the last frontend build. Point the CLI at it with
+`AAD_API_ENDPOINT=http://localhost:8092`.
+
 ## Debugging a specific anime
 
 `--debug-anime <anilistId>` on the daemon binary runs a one-shot pass that fetches the anime from AniList, runs the real search/match pipeline against Nyaa, and logs everything (raw Nyaa rows, matched torrents, per-episode results). No download happens, and no running daemon is needed (the torrent client is embedded — there is nothing external to start). `<anilistId>` is the AniList **media** ID (same ID used in `/api/v1/animes/{id}/episodes` and in `anilist.co/anime/{id}`).
