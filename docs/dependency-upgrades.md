@@ -42,20 +42,20 @@ Go 1.25 has been EOL since 19 Aug 2026. The October 2026 releases (1.27.2 /
 1.27.3) carry HTTP/2 and `crypto/x509` fixes that 1.25 will never get. Alpine
 3.19 has been EOL since Nov 2025. The development machine already has go1.27.3.
 
-- [ ] `go.mod`: `go 1.25.0` → `go 1.27.0`
-- [ ] `.github/workflows/build.yml`: `go-version: '1.25'` → `'1.27'` (every job)
-- [ ] `docker/Dockerfile`: `golang:1.25-alpine` → `golang:1.27-alpine`, `alpine:3.19` → `alpine:3.24`
-- [ ] `docker/Dockerfile.build.{amd64,arm64,windows}`: `golang:1.25` → `golang:1.27`
-- [ ] `docker/docker-compose.test.yml`: `golang:1.25-alpine` → `golang:1.27-alpine`
-- [ ] `src/tests/mocks/{anilist,nyaa}`: `go.mod` and Dockerfile from Go 1.24 → 1.27, Alpine 3.19 → 3.24
-- [ ] Go version mentioned in `docs/guides/build.md`, `docs/guides/development.md`, `README.md`
+- [x] `go.mod`: `go 1.25.0` → `go 1.27.0`
+- [x] `.github/workflows/build.yml`: `go-version: '1.25'` → `'1.27'` (every job)
+- [x] `docker/Dockerfile`: `golang:1.25-alpine` → `golang:1.27-alpine`, `alpine:3.19` → `alpine:3.24`
+- [x] `docker/Dockerfile.build.{amd64,arm64,windows}`: `golang:1.25` → `golang:1.27`
+- [x] `docker/docker-compose.test.yml`: `golang:1.25-alpine` → `golang:1.27-alpine`
+- [x] `src/tests/mocks/{anilist,nyaa}`: `go.mod` and Dockerfile from Go 1.24 → 1.27, Alpine 3.19 → 3.24
+- [x] Go version mentioned in `docs/guides/build.md`, `docs/guides/development.md`, `README.md`
 
 ### G1 — goquery 1.8.0 → 1.13.0
 
 Oldest pin in the repo (Oct 2021). The API is stable.
 
-- [ ] `go get github.com/PuerkitoBio/goquery@v1.13.0`
-- [ ] Nyaa / HTML parser tests
+- [x] `go get github.com/PuerkitoBio/goquery@v1.13.0`
+- [x] Nyaa / HTML parser tests
 
 ### G2 — rain 2.3.1 → 2.5.1
 
@@ -69,11 +69,20 @@ session, stopped. Before, the torrent was removed anyway. We call it in
 `Session.Remove` (`src/internal/torrents/session.go`), used by
 `RemoveTorrentWithEpisodes` (`src/internal/daemon/episodes.go`).
 
-- [ ] `go get github.com/cenkalti/rain/v2@v2.5.1`
-- [ ] Check that `RemoveTorrentWithEpisodes` leaves the episodes and the saved
+- [x] `go get github.com/cenkalti/rain/v2@v2.5.1`
+- [x] Check that `RemoveTorrentWithEpisodes` leaves the episodes and the saved
       state consistent when the removal returns an error, and that the UI/CLI
       show the error instead of a half-removed torrent
-- [ ] `./src/internal/torrents/...` tests + a real download in the sandbox
+- [x] `./src/internal/torrents/...` tests + a real download in the sandbox
+
+Result (2026-11-07): a throwaway test seeded a local torrent from a raw rain
+session and downloaded it through our `Session` by magnet (`x.pe`). Download,
+seeding and `Remove` with data deletion all worked. With the data dir made
+undeletable, `Remove` returned `cannot remove torrent data: ... permission
+denied` and the torrent stayed in the session, stopped; a retry removed it.
+`removeEpisodesAndLinks` only logs that error and still forgets the episode
+records, so the torrent then shows up as an orphan the user can delete by hand
+(before 2.5.0 it vanished from the session and left the files on disk unseen).
 
 ### G3 — websocket import path
 
@@ -82,19 +91,19 @@ session, stopped. Before, the torrent was removed anyway. We call it in
 lower than the old pin (1.8.17) because the line was renumbered on the new
 path — it is not a downgrade.
 
-- [ ] Swap the module in `go.mod` and every import (`src/internal/api/websocket.go` and tests)
-- [ ] `go get github.com/coder/websocket@latest`
+- [x] Swap the module in `go.mod` and every import (`src/internal/api/websocket.go` and tests)
+- [x] `go get github.com/coder/websocket@latest`
 
 ### G4 — remaining Go bumps (patch/minor)
 
-- [ ] `github.com/rs/zerolog` 1.34.0 → 1.35.1
-- [ ] `github.com/jedib0t/go-pretty/v6` 6.7.7 → 6.8.3
-- [ ] `fyne.io/systray` 1.12.0 → 1.12.2
-- [ ] `github.com/yuin/goldmark` 1.8.6 → 1.8.7 (new since the October audit)
-- [ ] `golang.org/x/net` 0.48.0 → 0.62.0 (now a direct dependency)
-- [ ] `golang.org/x/sys` 0.46.0 → 0.49.0
-- [ ] `golang.org/x/crypto` 0.46.0 → 0.58.0, `x/text` 0.32.0 → 0.43.0, `x/sync` 0.21.0 → 0.24.0
-- [ ] `go mod tidy`, `go test ./...`
+- [x] `github.com/rs/zerolog` 1.34.0 → 1.35.1
+- [x] `github.com/jedib0t/go-pretty/v6` 6.7.7 → 6.8.3
+- [x] `fyne.io/systray` 1.12.0 → 1.12.2
+- [x] `github.com/yuin/goldmark` 1.8.6 → 1.8.7 (new since the October audit)
+- [x] `golang.org/x/net` 0.48.0 → 0.62.0 (now a direct dependency)
+- [x] `golang.org/x/sys` 0.46.0 → 0.49.0
+- [x] `golang.org/x/crypto` 0.46.0 → 0.58.0, `x/text` 0.32.0 → 0.43.0, `x/sync` 0.21.0 → 0.24.0
+- [x] `go mod tidy`, `go test ./...`
 
 `lumberjack.v2` 2.2.1 is already the latest.
 
@@ -103,14 +112,14 @@ path — it is not a downgrade.
 No major bump in `package.json`; only bring the lock to the top of each `^`
 range (`bun update` without `--latest`).
 
-- [ ] svelte 5.55.0 → 5.57.3, svelte-check 4.4.5 → 4.7.8,
+- [x] svelte 5.55.0 → 5.57.3, svelte-check 4.4.5 → 4.7.8,
       `@lucide/svelte` 1.27.0 → 1.70.0, `@playwright/test` 1.60.0 → 1.65.0,
       `@inlang/paraglide-js` 2.15.1 → 2.29.3, `@testing-library/svelte` 5.3.1 → 5.4.2,
       typescript 6.0.2 → 6.0.3, vite 6.4.1 → 6.4.5, vitest 3.2.4 → 3.2.7,
       postcss, autoprefixer, `@types/node` 25.x
-- [ ] Make sure no package jumped a major (vite, vitest, tailwind, jsdom,
+- [x] Make sure no package jumped a major (vite, vitest, tailwind, jsdom,
       spa-router, jest-dom, typescript, paraglide must stay on their current majors)
-- [ ] Test trio + `bun run build`, then a look at the sandbox
+- [x] Test trio + `bun run build`, then a look at the sandbox
 
 Local Bun is already 1.4.4; CI uses `bun-version: latest`.
 
