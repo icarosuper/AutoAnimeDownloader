@@ -1183,7 +1183,9 @@
                     />
                   </div>
                   <p class="mt-1.5 font-mono text-[12px] text-subtle">
-                    {row.lastDownload}{#if row.nextAiringWhen}{" · "}{m.next_airing({ when: row.nextAiringWhen })}{/if}
+                    <!-- Two unbreakable pieces: on a narrow card the line wraps between them, never
+                         inside one — "há 9 horas · Próx. ep. em 6" + "horas" alone on line two. -->
+                    <span class="whitespace-nowrap">{row.lastDownload}</span>{#if row.nextAiringWhen}{" "}<span class="whitespace-nowrap">· {m.next_airing({ when: row.nextAiringWhen })}</span>{/if}
                   </p>
                 </div>
               </div>
