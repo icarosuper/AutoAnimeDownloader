@@ -10,6 +10,7 @@
   "theme_dark": "Escuro",
   "theme_system": "Sistema",
   "ws_connected": "Atualização em tempo real ativa",
+  "ws_connecting": "Conectando...",
   "ws_reconnecting": "Reconectando...",
   "ws_disconnected": "Desconectado",
   "common_never": "Nunca",

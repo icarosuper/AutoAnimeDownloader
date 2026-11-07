@@ -17,6 +17,7 @@
   import Toasts from '../Toasts.svelte'
   import NavRail from './NavRail.svelte'
   import NavTabBar from './NavTabBar.svelte'
+  import { ensureWsConnected } from '../../lib/websocket/shared.js'
 
   const DESKTOP_QUERY = '(min-width: 768px)' // = Tailwind `md:`, as the spec asks
   const isBrowser = typeof window !== 'undefined'
@@ -30,6 +31,8 @@
 
   onMount(() => {
     desktopMql?.addEventListener('change', handleBreakpointChange)
+    // The connection dot is on every screen, so the connection opens here, not per screen.
+    ensureWsConnected()
   })
 
   onDestroy(() => {

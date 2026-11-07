@@ -22,7 +22,7 @@
     type AnimeInfo,
     type TorrentInfo,
   } from "../lib/api/client.js";
-  import { WebSocketClient } from "../lib/websocket/client.js";
+  import { ensureWsConnected, onDaemonStatus } from "../lib/websocket/shared.js";
   import Loading from "../components/Loading.svelte";
   import ActionMenu from "../components/ui/ActionMenu.svelte";
   import Button from "../components/ui/Button.svelte";
@@ -33,7 +33,6 @@
   import Sparkline from "../components/ui/Sparkline.svelte";
   import TripleProgressBar from "../components/ui/TripleProgressBar.svelte";
   import { toast } from "../lib/stores/toast.js";
-  import { wsConnectionState } from "../lib/stores/wsState.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
   import {
@@ -378,7 +377,7 @@
     return sortDir === "asc" ? m.status_sort_asc() : m.status_sort_desc();
   }
 
-  let wsClient: WebSocketClient | null = null;
+  let offDaemonStatus: (() => void) | null = null;
   let animesPollInterval: ReturnType<typeof setInterval> | null = null;
   let tickInterval: ReturnType<typeof setInterval> | null = null;
   let torrentsPollInterval: ReturnType<typeof setInterval> | null = null;
@@ -522,15 +521,15 @@
     loadInitialData();
     loadTorrents();
     torrentsPollInterval = setInterval(loadTorrents, TORRENTS_POLL_MS);
-    wsClient = new WebSocketClient();
-    wsClient.connect(handleWebSocketStatus, (state) => wsConnectionState.set(state));
+    offDaemonStatus = onDaemonStatus(handleWebSocketStatus);
+    ensureWsConnected();
     animesPollInterval = setInterval(loadAnimes, 30000);
     tickInterval = setInterval(() => { now = Date.now(); }, 1000);
   });
 
   onDestroy(() => {
-    wsClient?.disconnect();
-    wsClient = null;
+    offDaemonStatus?.();
+    offDaemonStatus = null;
     if (animesPollInterval) clearInterval(animesPollInterval);
     if (tickInterval) clearInterval(tickInterval);
     if (torrentsPollInterval) clearInterval(torrentsPollInterval);

@@ -30,6 +30,7 @@
     themeDark: m.theme_dark(),
     themeSystem: m.theme_system(),
     wsConnected: m.ws_connected(),
+    wsConnecting: m.ws_connecting(),
     wsReconnecting: m.ws_reconnecting(),
     wsDisconnected: m.ws_disconnected(),
     more: moreTriggerLabel(),
@@ -49,9 +50,11 @@
   $: wsTooltip = T
     ? $wsConnectionState === 'connected'
       ? T.wsConnected
-      : $wsConnectionState === 'reconnecting'
-        ? T.wsReconnecting
-        : T.wsDisconnected
+      : $wsConnectionState === 'connecting'
+        ? T.wsConnecting
+        : $wsConnectionState === 'reconnecting'
+          ? T.wsReconnecting
+          : T.wsDisconnected
     : ''
 
   function toggleLocale() {
@@ -143,7 +146,7 @@
       <span
         class="inline-block h-2 w-2 rounded-full {$wsConnectionState === 'connected'
           ? 'bg-ok'
-          : $wsConnectionState === 'reconnecting'
+          : $wsConnectionState === 'reconnecting' || $wsConnectionState === 'connecting'
             ? 'animate-pulse bg-warn'
             : 'bg-danger'}"
       ></span>

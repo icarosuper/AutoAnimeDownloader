@@ -10,6 +10,7 @@
   "theme_dark": "Dark",
   "theme_system": "System",
   "ws_connected": "Real-time updates active",
+  "ws_connecting": "Connecting...",
   "ws_reconnecting": "Reconnecting...",
   "ws_disconnected": "Disconnected",
   "common_never": "Never",

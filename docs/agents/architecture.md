@@ -717,11 +717,18 @@ written a tracked anime yet, so `GET /animes/{id}` cannot be the source.
   client's automatic error toasts and nothing rendered it — every one of them was silently lost
 - `AnimeDetail` has no `#` column: it repeated, in another font, the number the episode title
   already carries
+- **No screen opens its own WebSocket.** There is one connection for the app,
+  `lib/websocket/shared.ts`, opened by `AppShell` on mount: the connection dot (NavRail/MoreMenu)
+  is on every screen, so the socket has to outlive any one of them. Screens subscribe with
+  `onDaemonStatus` and call `ensureWsConnected()` on mount, which only revives a client that gave
+  up after its retries. When each screen owned a socket and closed it in `onDestroy`, leaving
+  Status turned the dot red and landing on `#/config` showed it red with the daemon fine.
+  `wsConnectionState` starts at `'connecting'`, not `'disconnected'`, for the same reason
 
 **Structure:** `components/shell/` (AppShell, NavRail, NavTabBar, MoreMenu, SystemBanner),
 `components/ui/` (primitives), `lib/domain/` (pure logic, no Svelte import, covered by vitest),
 `lib/stores/`, `lib/utils/`, `lib/api/client.ts` (typed wrappers per endpoint),
-`lib/websocket/client.ts` and `lib/report.ts` (links to the report screen and to GitHub; `REPO_URL`
+`lib/websocket/` (`client.ts`, the socket; `shared.ts`, the one app-wide connection) and `lib/report.ts` (links to the report screen and to GitHub; `REPO_URL`
 lives only there).
 
 **UI layer rules:**

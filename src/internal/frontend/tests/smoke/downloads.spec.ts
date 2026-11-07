@@ -243,8 +243,16 @@ test('the group bar is colored by the group state, not always accent', async ({ 
 // screen has to say the numbers below may be stale rather than let them read as live.
 test('a dropped daemon connection shows the stale-progress banner', async ({ page }) => {
   await mockTorrentsList(page)
+  // The banner waits for the client to give up (10 retries, 3s apart) — while it retries the
+  // progress is not stale yet. A fake clock skips the ~30s; each retry's failure is real I/O, so
+  // the clock is advanced in steps until the banner shows instead of in one jump.
+  await page.routeWebSocket('**/api/v1/ws', ws => ws.close())
+  await page.clock.install()
   await page.goto('/#/downloads')
 
-  await expect(page.getByRole('alert')).toContainText('progress below may be out of date')
+  await expect(async () => {
+    await page.clock.runFor(3_000)
+    await expect(page.getByRole('alert')).toContainText('progress below may be out of date', { timeout: 200 })
+  }).toPass({ timeout: 20_000 })
   await expect(page.getByRole('button', { name: /reconnect/i })).toBeVisible()
 })

@@ -20,7 +20,7 @@
     removeStandaloneAnime,
     type TorrentInfo,
   } from "../lib/api/client.js";
-  import { WebSocketClient } from "../lib/websocket/client.js";
+  import { ensureWsConnected, reconnectWs } from "../lib/websocket/shared.js";
   import {
     filterTorrents,
     sortTorrents,
@@ -467,27 +467,16 @@
   }
 
   let pollInterval: ReturnType<typeof setInterval> | null = null;
-  let wsClient: WebSocketClient | null = null;
 
-  // The "no connection" banner (spec §9.3) needs a WebSocket state that holds for THIS screen.
-  // Before, only Status.svelte opened the connection, so whoever went straight to /downloads saw
-  // the store stuck at its initial 'disconnected' value and the banner would always show. The
-  // screen opens its own connection, with an empty status callback — Downloads doesn't show
-  // daemon state, it only needs to know whether the channel is up.
-  function connectWs() {
-    wsClient?.disconnect();
-    wsClient = new WebSocketClient();
-    wsClient.connect(
-      () => {},
-      (state) => wsConnectionState.set(state),
-    );
-  }
+  // The "no connection" banner (spec §9.3) reads the app-wide connection (lib/websocket/shared.ts).
+  // ensureWsConnected() revives it if the client had given up; Downloads doesn't show daemon
+  // state, it only needs to know whether the channel is up.
 
   onMount(() => {
     viewState = decodeViewState($querystring ?? "");
     load();
     loadCovers();
-    connectWs();
+    ensureWsConnected();
     // Polling only while the screen is mounted: each snapshot costs one Stats() per torrent, which
     // is a blocking round-trip into each one's goroutine.
     pollInterval = setInterval(load, POLL_MS);
@@ -495,8 +484,6 @@
 
   onDestroy(() => {
     if (pollInterval) clearInterval(pollInterval);
-    wsClient?.disconnect();
-    wsClient = null;
   });
 
   // Grid of the torrent rows, shared with the column header so the two don't fall out of
@@ -569,7 +556,7 @@
       class="flex flex-wrap items-center gap-2 rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
     >
       <span class="flex-1">{T && T.wsBanner}</span>
-      <button type="button" class="underline hover:opacity-80" on:click={connectWs}>
+      <button type="button" class="underline hover:opacity-80" on:click={reconnectWs}>
         {T && T.wsReconnect}
       </button>
     </div>
