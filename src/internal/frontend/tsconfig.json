@@ -10,9 +10,6 @@
       "DOM.Iterable"
     ],
     "skipLibCheck": true,
-    // Use classic Node-style module resolution instead of the newer "bundler" mode,
-    // which currently breaks Svelte's type definitions (e.g. `import { onMount } from "svelte"`).
-    "moduleResolution": "node",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
