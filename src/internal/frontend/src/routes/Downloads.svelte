@@ -677,8 +677,10 @@
                 on:click={() => toggleGroup(group.key)}
               >
                 <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2">
-                    <span class="truncate text-[16px] font-extrabold text-heading">{group.name}</span>
+                  <!-- flex-wrap: on a phone the chips drop below the name. Without it they kept their
+                       place on the line, broke "1 torrent(s)" inside the chip and left the name "Fri…". -->
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="max-w-full truncate text-[16px] font-extrabold text-heading">{group.name}</span>
                     <Chip variant="neutral">{$locale && m.downloads_group_count({ count: group.torrents.length })}</Chip>
                     {#if group.problemCount > 0}
                       <Chip variant="danger">{$locale && m.downloads_group_problems({ count: group.problemCount })}</Chip>

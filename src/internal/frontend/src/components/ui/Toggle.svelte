@@ -24,8 +24,11 @@
   <span
     class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-pill transition-colors {checked
       ? 'bg-accent'
-      : 'bg-control'}"
+      : 'bg-neutral'}"
   >
+    <!-- Off used to be a bg-control track with a bg-card knob: the knob was the card's own color
+         and the track barely lighter than it, so an off switch was close to invisible. A solid
+         neutral track and a white knob clear 3:1 against the card in both themes. -->
     <input
       {id}
       type="checkbox"
@@ -36,7 +39,7 @@
       class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
     />
     <span
-      class="pointer-events-none inline-block h-4 w-4 translate-x-0.5 transform rounded-full bg-card transition-transform {checked
+      class="pointer-events-none inline-block h-4 w-4 translate-x-0.5 transform rounded-full bg-white shadow-sm transition-transform {checked
         ? 'translate-x-[18px]'
         : ''}"
       aria-hidden="true"

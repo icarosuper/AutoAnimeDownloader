@@ -26,7 +26,7 @@
 </script>
 
 <span
-  class="inline-flex items-center gap-1 rounded-badge border px-2 py-0.5 text-caption font-semibold leading-none {classes} {dimmed
+  class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-badge border px-2 py-0.5 text-caption font-semibold leading-none {classes} {dimmed
     ? 'opacity-60'
     : ''}"
 >

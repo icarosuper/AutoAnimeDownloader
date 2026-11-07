@@ -229,6 +229,20 @@
     return { variant: "neutral" as const, label: m.detail_badge_upcoming() };
   }
 
+  // The list status arrives as AniList's enum (CURRENT, REPEATING...); the labels are the same
+  // ones the Config screen shows for download/delete statuses.
+  const LIST_STATUS_LABELS: Record<string, () => string> = {
+    CURRENT: m.config_status_current,
+    REPEATING: m.config_status_repeating,
+    PLANNING: m.config_status_planning,
+    PAUSED: m.config_status_paused,
+    DROPPED: m.config_status_dropped,
+    COMPLETED: m.config_status_completed,
+  };
+  function listStatusLabel(status: string): string {
+    return LIST_STATUS_LABELS[status]?.() ?? status;
+  }
+
   /** Secondary note under the title: episode flags, as a phrase, not a mute icon. */
   function episodeNotes(ep: AnimeEpisodeInfo, issue: Issue | undefined): string {
     const notes: string[] = [];
@@ -730,8 +744,10 @@
   // an `auto` track would measure that row's content only — and since rows have different
   // actions (principal + ⋯ / only ⋯ / none), the leftover `1fr` differed on each one and
   // the columns misaligned with each other. With every track deterministic, `1fr` resolves
-  // the same on every row. 200px fits the longest label ("Release episode" /
-  // "Soltar episódio") plus the 32px menu button.
+  // the same on every row. Both widths are measured, not guessed: actions 187px = the widest
+  // label, "Redownloading..." (146px, shown while the action runs), + gap + the 30px menu;
+  // details 198px = "74% · ↓ 10,0 MB/s · 30m 0s" (188px) with room for a 100 MB/s digit.
+  // Details was 180px and cut that line to "30m…" while actions sat on 200px.
   //
   // The table only exists from `lg` (1024px): the fixed tracks + gaps add up to ~710px and
   // at `md` (768px) ~628px remain after the rail and the main padding, which threw the
@@ -753,7 +769,7 @@
   }
 
   const EP_GRID =
-    "grid grid-cols-[28px_minmax(0,1fr)_190px_180px_200px] items-center gap-3";
+    "grid grid-cols-[28px_minmax(0,1fr)_190px_198px_187px] items-center gap-3";
 </script>
 
 <ConfirmDialog
@@ -886,7 +902,7 @@
               watched: anime.episodes_watched,
             })}
             {#if detail?.status}
-              · {m.detail_anilist_status({ status: detail.status })}
+              · {m.detail_anilist_status({ status: listStatusLabel(detail.status) })}
             {/if}
             {#if nextAiringWhen}
               · {m.next_airing({ when: nextAiringWhen })}
@@ -1003,7 +1019,7 @@
                for the row's state (in-flight progress / download date / X until premiere),
                so a header that named only one of the three would be wrong on the other two. -->
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_info()}</span>
-          <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_actions()}</span>
+          <span class="text-right font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_actions()}</span>
         </div>
 
         {#each rows || [] as row (row.key)}

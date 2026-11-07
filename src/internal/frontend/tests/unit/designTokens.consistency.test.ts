@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
 /**
@@ -55,5 +55,38 @@ describe('tokens.css', () => {
     const dark = Object.keys(tokenThemes['aad-dark']).sort()
     const light = Object.keys(tokenThemes['aad-light']).sort()
     expect(light).toEqual(dark)
+  })
+})
+
+/**
+ * Tailwind 3 drops an opacity modifier (`border-ok-tint/28`) whose number isn't in the opacity
+ * scale — no class, no warning, and the border falls back to solid `currentColor`. Every chip in
+ * the app rendered that way until `/12`, `/16`, `/28`, `/32` were added to tailwind.config.js.
+ */
+describe('opacity modifiers', () => {
+  const DEFAULT_SCALE = new Set([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100])
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name)
+      if (e.isDirectory()) return e.name === 'i18n' ? [] : sourceFiles(full)
+      return /\.(svelte|ts|js)$/.test(e.name) ? [full] : []
+    })
+  }
+
+  it('every /N used in src is a key the Tailwind config generates', async () => {
+    const config = (await import('../../tailwind.config.js')).default
+    const extended = Object.keys(config.theme?.extend?.opacity ?? {}).map(Number)
+    const allowed = new Set([...DEFAULT_SCALE, ...extended])
+
+    const missing = new Map<number, string>()
+    const re = /\b(?:bg|border|text|ring|fill|stroke|outline|divide|from|via|to)-[a-z][\w-]*\/(\d+)\b/g
+    for (const file of sourceFiles(path.resolve(__dirname, '../../src'))) {
+      for (const m of readFileSync(file, 'utf8').matchAll(re)) {
+        const n = Number(m[1])
+        if (!allowed.has(n) && !missing.has(n)) missing.set(n, `${path.basename(file)}: ${m[0]}`)
+      }
+    }
+    expect([...missing.values()]).toEqual([])
   })
 })

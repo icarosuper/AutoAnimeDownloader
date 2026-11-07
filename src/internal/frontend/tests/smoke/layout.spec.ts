@@ -424,3 +424,32 @@ for (const locale of ['en', 'pt-BR'] as const) {
     })
   }
 }
+
+/**
+ * Logs level pills — the third screen with the same regression: the row was `overflow-x-auto`,
+ * so at 375px "Info" was cut in half and "Debug" sat behind a sideways drag. pt-BR because its
+ * labels are the longer ones (see the note on width tests in testing.md).
+ */
+for (const width of [320, 375, 414]) {
+  test(`every logs level pill is visible without horizontal scroll at ${width}px in pt-BR`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem('PARAGLIDE_LOCALE', 'pt-BR'))
+    await page.route('**/api/v1/logs**', route =>
+      route.fulfill({ json: { success: true, data: { lines: [], total: 0 } } }),
+    )
+    await page.route('**/api/v1/ws', route => route.abort())
+    await page.setViewportSize({ width, height: 800 })
+    await page.goto('/#/logs')
+
+    const group = page.locator('[role="group"]').filter({ has: page.getByRole('button', { name: /^Debug/ }) })
+    for (const pill of await group.getByRole('button').all()) {
+      await expect(pill).toBeInViewport({ ratio: 1 })
+    }
+    const { scrollWidth, clientWidth } = await group.evaluate(el => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }))
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
+  })
+}

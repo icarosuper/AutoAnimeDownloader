@@ -69,6 +69,18 @@ export default {
         sans: ['Manrope', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
+      // The tint steps from tokens.css (7–16% fill, 22–32% border). Tailwind 3 only honors an
+      // opacity modifier (`bg-ok/12`) whose number is in this scale, and the default scale goes in
+      // steps of 5 — without these four keys every `/12`, `/16`, `/28`, `/32` class is silently
+      // not generated, and a chip falls back to a solid `currentColor` border with no fill. That
+      // is how the whole app looked from the UI redesign until this was added; the guard is in
+      // tests/unit/designTokens.consistency.test.ts.
+      opacity: {
+        12: '0.12',
+        16: '0.16',
+        28: '0.28',
+        32: '0.32',
+      },
       // §4.2 — spacing: fills the 18/22/26px holes in Tailwind's default scale
       // (which already covers 4/6/8/10/14px via the 1/1.5/2/2.5/3.5 keys).
       spacing: {

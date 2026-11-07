@@ -268,7 +268,7 @@
         {/if}
       </label>
 
-      <div class="flex items-center gap-2 overflow-x-auto" role="group" aria-label={(T && T.filtersLabel) || ""}>
+      <div class="flex flex-wrap items-center gap-2" role="group" aria-label={(T && T.filtersLabel) || ""}>
         {#each levelPills as pill (pill.id)}
           <button
             type="button"

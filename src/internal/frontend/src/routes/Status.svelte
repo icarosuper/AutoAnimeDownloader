@@ -1183,7 +1183,7 @@
                     />
                   </div>
                   <p class="mt-1.5 font-mono text-[12px] text-subtle">
-                    {row.lastDownload}{#if row.nextAiringWhen} · {m.next_airing({ when: row.nextAiringWhen })}{/if}
+                    {row.lastDownload}{#if row.nextAiringWhen}{" · "}{m.next_airing({ when: row.nextAiringWhen })}{/if}
                   </p>
                 </div>
               </div>
