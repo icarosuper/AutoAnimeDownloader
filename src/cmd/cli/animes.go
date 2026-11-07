@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"AutoAnimeDownloader/src/internal/api"
+	"AutoAnimeDownloader/src/internal/torrents"
 
 	"github.com/urfave/cli/v2"
 )
@@ -41,6 +42,7 @@ func animesCommand() *cli.Command {
 				ArgsUsage: "<media_id>",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "magnet", Usage: "Magnet URI (skips auto-pick)"},
+					&cli.StringFlag{Name: "query", Usage: "With --magnet: the Nyaa query the magnet came from (same as candidates --query)"},
 				},
 				Action: handleAnimesAdd,
 			},
@@ -175,12 +177,37 @@ func handleAnimesAdd(c *cli.Context) error {
 	req := api.StandaloneAnimeRequest{MediaID: mediaID}
 	if magnet := c.String("magnet"); magnet != "" {
 		req.Magnet = magnet
+		if cand := candidateForMagnet(mediaID, c.String("query"), magnet); cand != nil {
+			req.Name, req.NyaaID, req.SizeBytes = cand.Name, cand.NyaaID, cand.SizeBytes
+		}
 	}
 	added, err := getClient().AddStandaloneAnime(req)
 	if err != nil {
 		return mapClientError(err)
 	}
 	return printValue(added, "")
+}
+
+// candidateForMagnet finds the picker row a magnet came from, so `add --magnet` sends the same
+// name / nyaa_id / size_bytes the web picker sends. Without them the daemon cannot read the episode
+// range of a pack whose name carries none (decisions.md #84) and records no episode for it: the
+// torrent downloads but never reaches the library. Best effort — a magnet from elsewhere, or a
+// failed lookup, still adds with the magnet alone.
+func candidateForMagnet(mediaID int, query, magnet string) *api.TorrentCandidate {
+	hash, err := torrents.InfoHash(magnet)
+	if err != nil {
+		return nil
+	}
+	resp, err := getClient().GetTorrentCandidates(mediaID, query)
+	if err != nil || resp == nil {
+		return nil
+	}
+	for i := range resp.Items {
+		if h, err := torrents.InfoHash(resp.Items[i].Magnet); err == nil && h == hash {
+			return &resp.Items[i]
+		}
+	}
+	return nil
 }
 
 func handleAnimesRemove(c *cli.Context) error {

@@ -86,6 +86,7 @@ autoanimedownloader animes candidates 154587
 autoanimedownloader animes candidates 154587 --query "frieren s01"
 autoanimedownloader animes add 154587
 autoanimedownloader animes add 154587 --magnet "magnet:?xt=…"
+autoanimedownloader animes add 154587 --magnet "magnet:?xt=…" --query "frieren s01"
 autoanimedownloader animes remove 154587 --yes
 autoanimedownloader animes remove 154587 --yes --delete-episodes
 autoanimedownloader animes settings 154587
@@ -110,7 +111,10 @@ the daemon log (`logs`). It can take minutes on a long series.
 3 characters returns an empty list, not an error. `candidates` is the ranked whole-title list the
 picker shows (empty `items` is success, not an error). `--query` is a Nyaa `q` and skips title
 variants and season/part. There is no command that prints a Nyaa description — `nyaa_id` in the
-JSON is the terminal equivalent. `add --magnet` skips auto-pick. Flags may follow the id (`animes add 154587 --magnet "…"` is
+JSON is the terminal equivalent. `add --magnet` skips auto-pick and looks the magnet up among the
+candidates (pass the same `--query` you used with `candidates`), so it sends the release name, Nyaa id
+and size the web picker sends — the daemon reads the episode range from them. A magnet that is not
+among them is added with the magnet alone. Flags may follow the id (`animes add 154587 --magnet "…"` is
 the same as flags-first). `add` / `remove` are standalone
 animes. `--delete-episodes` defaults to false (files stay, marked manually managed).
 

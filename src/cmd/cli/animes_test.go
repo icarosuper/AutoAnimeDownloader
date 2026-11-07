@@ -228,3 +228,57 @@ func TestAnimesDeleteAndRedownloadTakeSeveralEpisodes(t *testing.T) {
 		t.Errorf("batch body = %q", bodies[1])
 	}
 }
+
+// A magnet copied from `candidates` goes out with the row's name / nyaa_id / size_bytes, like the
+// web picker sends them: without the name the daemon cannot read a pack's range and records no
+// episode. A magnet that is not among the candidates still adds with the magnet alone.
+func TestAnimesAddMagnetSendsTheMatchingCandidate(t *testing.T) {
+	const hash = "1443c9af27a6e0c7d8d1d51f5ece2e04205269f9"
+	picked := "magnet:?xt=urn:btih:" + hash + "&dn=Pack"
+	other := "magnet:?xt=urn:btih:2443c9af27a6e0c7d8d1d51f5ece2e04205269f9"
+
+	var body, candidatesQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/animes/21/torrent-candidates" {
+			candidatesQuery = r.URL.Query().Get("q")
+			_ = json.NewEncoder(w).Encode(api.SuccessResponse{Success: true, Data: api.TorrentCandidatesResponse{
+				Items: []api.TorrentCandidate{
+					{Name: "Other", Magnet: other, NyaaID: 1, SizeBytes: 10},
+					{Name: "[Group] Show [1080p]", Magnet: "magnet:?xt=urn:btih:" + strings.ToUpper(hash) + "&dn=Pack&tr=udp%3A%2F%2Ftracker", NyaaID: 1866380, SizeBytes: 1447034880},
+				},
+			}})
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		_ = json.NewEncoder(w).Encode(api.SuccessResponse{Success: true, Data: api.StandaloneAnimeAddResponse{Added: 1}})
+	}))
+	defer srv.Close()
+
+	if _, _, err := runCLI(t, "--endpoint", srv.URL, "--json", "animes", "add", "21", "--magnet", picked, "--query", "show s01"); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if candidatesQuery != "show s01" {
+		t.Errorf("candidates q = %q, want the --query", candidatesQuery)
+	}
+	var req api.StandaloneAnimeRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("body: %v (%s)", err, body)
+	}
+	if req.Name != "[Group] Show [1080p]" || req.NyaaID != 1866380 || req.SizeBytes != 1447034880 || req.Magnet != picked {
+		t.Errorf("req = %+v, want the matching candidate's name/nyaa_id/size", req)
+	}
+
+	unknown := "magnet:?xt=urn:btih:3443c9af27a6e0c7d8d1d51f5ece2e04205269f9"
+	if _, _, err := runCLI(t, "--endpoint", srv.URL, "--json", "animes", "add", "21", "--magnet", unknown); err != nil {
+		t.Fatalf("add unknown: %v", err)
+	}
+	req = api.StandaloneAnimeRequest{}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("body: %v (%s)", err, body)
+	}
+	if req.Magnet != unknown || req.Name != "" || req.NyaaID != 0 {
+		t.Errorf("req = %+v, want the magnet alone", req)
+	}
+}
