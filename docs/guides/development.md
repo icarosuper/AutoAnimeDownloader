@@ -4,7 +4,7 @@ For contributors working on AutoAnimeDownloader itself (as opposed to just runni
 
 ## Prerequisites
 
-- **Go** 1.25+
+- **Go** 1.27+
 - **Bun** (frontend package manager/build tool — not npm)
 - **Docker** (for integration tests and cross-platform builds)
 - An **Anilist account** (for manual testing). No external torrent client is needed — the BitTorrent client is embedded.

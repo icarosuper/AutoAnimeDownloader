@@ -65,7 +65,7 @@ services:
       start_period: 10s
 
   test:
-    image: golang:1.25-alpine
+    image: golang:1.27-alpine
     volumes:
       - ..:/workspace
       - go-mod-cache:/go/pkg/mod

@@ -177,7 +177,7 @@ See the [CLI Guide](docs/guides/cli.md) for the full reference.
 
 ## Building from Source
 
-**Prerequisites:** Go 1.25+, Bun (not npm), make (Linux/macOS/WSL), Docker (only for the cross-platform `make build`)
+**Prerequisites:** Go 1.27+, Bun (not npm), make (Linux/macOS/WSL), Docker (only for the cross-platform `make build`)
 
 The frontend must be built before the Go binaries, as it's embedded into the daemon.
 

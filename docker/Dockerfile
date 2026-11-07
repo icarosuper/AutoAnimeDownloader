@@ -11,7 +11,7 @@ COPY src/internal/frontend/ ./
 RUN bun run build
 
 # Stage 2: Build Go daemon (frontend is embedded)
-FROM golang:1.25-alpine AS go-builder
+FROM golang:1.27-alpine AS go-builder
 
 WORKDIR /build
 
@@ -29,7 +29,7 @@ COPY --from=frontend-builder /build/dist ./src/internal/frontend/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/daemon ./src/cmd/daemon
 
 # Stage 3: Runtime
-FROM alpine:3.19
+FROM alpine:3.24
 
 # Update package index and install dependencies with retry logic
 # Retry up to 3 times to handle transient DNS/network issues
