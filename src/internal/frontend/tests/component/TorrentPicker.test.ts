@@ -252,7 +252,7 @@ describe('TorrentPicker — pack count', () => {
       items: [candidate()],
     })
     await mountPicker()
-    expect(screen.getByText('1 packs · single episodes stay off this screen')).toBeInTheDocument()
+    expect(screen.getByText('1 pack · single episodes stay off this screen')).toBeInTheDocument()
   })
 })
 

@@ -28,8 +28,34 @@
   "status_card_disk": "Espaço em Disco",
   "status_disk_free_of_total": "livres de {total}",
   "status_checking": "Verificando...",
-  "status_animes_count": "{count} animes",
-  "status_episodes_count": "{count} episódios",
+  "status_animes_count": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} anime",
+        "count=*": "{count} animes"
+      }
+    }
+  ],
+  "status_episodes_count": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} episódio",
+        "count=*": "{count} episódios"
+      }
+    }
+  ],
   "status_error_alert": "Erro detectado na última verificação. Veja os logs para detalhes.",
   "status_start": "Iniciar Daemon",
   "status_starting": "Iniciando...",
@@ -156,7 +182,20 @@
   "logs_error_load": "Falha ao carregar logs",
   "logs_scroll_top": "Ir ao início",
   "logs_label_live": "Ao vivo",
-  "logs_new_logs": "+{count} novo(s)",
+  "logs_new_logs": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "+{count} novo",
+        "count=*": "+{count} novos"
+      }
+    }
+  ],
   "detail_back": "Voltar ao Status",
   "detail_title_fallback": "Detalhes do Anime",
   "detail_progress": "Progresso: {progress} / {total} episódios · {status}",
@@ -189,20 +228,59 @@
   "detail_toast_pack_deleted": "Episódios {label} deletados",
   "detail_toast_del_error": "Falha ao deletar episódio",
   "detail_toast_load_error": "Falha ao carregar detalhes do anime",
-  "detail_bulk_selected": "{count} selecionado(s)",
+  "detail_bulk_selected": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} selecionado",
+        "count=*": "{count} selecionados"
+      }
+    }
+  ],
   "detail_bulk_download": "Baixar Selecionados",
   "detail_bulk_delete": "Deletar Selecionados",
   "detail_bulk_release": "Soltar Selecionados",
   "detail_bulk_deselect_all": "Desmarcar Tudo",
   "detail_bulk_confirm_title": "Deletar episódios selecionados?",
-  "detail_bulk_confirm_msg": "{count} episódio(s) serão removidos. Esta ação não pode ser desfeita.",
+  "detail_bulk_confirm_msg": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} episódio será removido. Esta ação não pode ser desfeita.",
+        "count=*": "{count} episódios serão removidos. Esta ação não pode ser desfeita."
+      }
+    }
+  ],
   "detail_bulk_confirm_btn": "Deletar Todos",
   "detail_bulk_toast_dl_done": "{success} episódio(s) adicionado(s) para download",
   "detail_bulk_toast_del_done": "{success} episódio(s) deletado(s)",
   "detail_bulk_toast_rel_done": "{success} episódio(s) solto(s)",
   "detail_bulk_redownload": "Rebaixar Selecionados",
   "detail_bulk_redl_confirm_title": "Rebaixar episódios selecionados?",
-  "detail_bulk_redl_confirm_msg": "{count} episódio(s) serão deletados e buscados novamente no Nyaa.",
+  "detail_bulk_redl_confirm_msg": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} episódio será deletado e buscado novamente no Nyaa.",
+        "count=*": "{count} episódios serão deletados e buscados novamente no Nyaa."
+      }
+    }
+  ],
   "detail_bulk_toast_redl_done": "{success} episódio(s) recolocado(s) para download",
   "detail_bulk_toast_partial": "{failed} falharam",
   "detail_btn_replace": "Substituir",
@@ -283,14 +361,40 @@
   "downloads_delete": "Excluir",
   "downloads_search_placeholder": "Buscar por nome…",
   "downloads_status_filter": "Status",
-  "downloads_selected": "{count} selecionado(s)",
+  "downloads_selected": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} selecionado",
+        "count=*": "{count} selecionados"
+      }
+    }
+  ],
   "downloads_select_all": "Selecionar todos os torrents visíveis",
   "downloads_select_row": "Selecionar {name}",
   "downloads_bulk_pause": "Pausar",
   "downloads_bulk_resume": "Retomar",
   "downloads_bulk_announce": "Re-announce",
   "downloads_bulk_prioritize": "Priorizar",
-  "downloads_bulk_prioritized": "{count} priorizado(s)",
+  "downloads_bulk_prioritized": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} priorizado",
+        "count=*": "{count} priorizados"
+      }
+    }
+  ],
   "downloads_group_prioritize": "Priorizar todos os torrents de {name}",
   "downloads_queue_position": "Na fila #{position}",
   "downloads_bulk_delete": "Excluir",
@@ -305,7 +409,20 @@
   "downloads_empty_filtered_desc": "Tente outro termo de busca ou limpe o filtro de status.",
   "downloads_clear_filters": "Limpar filtros",
   "downloads_delete_title_single": "Excluir \"{name}\"?",
-  "downloads_delete_title_bulk": "Excluir {count} torrents?",
+  "downloads_delete_title_bulk": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "Excluir {count} torrent?",
+        "count=*": "Excluir {count} torrents?"
+      }
+    }
+  ],
   "downloads_delete_confirm_btn": "Excluir",
   "downloads_delete_checkbox_files": "Apagar os arquivos baixados",
   "downloads_delete_checkbox_block": "Não baixar este episódio de novo",
@@ -335,10 +452,36 @@
   "status_active_downloads_label": "Downloads ativos",
   "status_polling_note": "polling {seconds}s",
   "status_stale_note": "Falha no último poll — valores congelados",
-  "progress_legend_watched": "{count} vistos",
+  "progress_legend_watched": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} visto",
+        "count=*": "{count} vistos"
+      }
+    }
+  ],
   "progress_legend_to_watch": "{count} a assistir",
   "progress_legend_to_download": "{count} a baixar",
-  "progress_legend_unreleased": "{count} não lançados",
+  "progress_legend_unreleased": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} não lançado",
+        "count=*": "{count} não lançados"
+      }
+    }
+  ],
   "status_col_state": "Estado",
   "status_clear_search": "Limpar busca",
   "status_sort_asc": "ordenado crescente",
@@ -346,7 +489,20 @@
   "common_save": "Salvar",
   "detail_btn_release": "Soltar episódio",
   "detail_actions_menu": "Mais ações do episódio {number}",
-  "detail_counts": "{downloaded} / {total} · {watched} assistidos",
+  "detail_counts": [
+    {
+      "declarations": [
+        "input watched"
+      ],
+      "selectors": [
+        "watched"
+      ],
+      "match": {
+        "watched=1": "{downloaded} / {total} · {watched} assistido",
+        "watched=*": "{downloaded} / {total} · {watched} assistidos"
+      }
+    }
+  ],
   "detail_progress_label": "Episódios assistidos",
   "detail_progress_hint": "Progresso manual do anime avulso. Aumentar apaga o que ficou para trás (respeitando \"quantos assistidos manter\" fora de pack, e o pack inteiro dentro dele). Com \"apagar episódios assistidos\" desligado nada é apagado e nenhum pack novo vem.",
   "detail_btn_watched_here": "Assisti até aqui",
@@ -370,12 +526,51 @@
   "downloads_ws_reconnect": "Reconectar",
   "downloads_group_toggle": "Expandir ou recolher {name}",
   "downloads_group_select": "Selecionar todos os torrents de {name}",
-  "downloads_group_count": "{count} torrent(s)",
-  "downloads_group_problems": "{count} travados",
+  "downloads_group_count": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} torrent",
+        "count=*": "{count} torrents"
+      }
+    }
+  ],
+  "downloads_group_problems": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} travado",
+        "count=*": "{count} travados"
+      }
+    }
+  ],
   "downloads_col_status": "Estado",
   "downloads_col_episode": "Ep.",
   "downloads_sort_by": "Ordenar por",
-  "downloads_peers_count": "{count} peers",
+  "downloads_peers_count": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} peer",
+        "count=*": "{count} peers"
+      }
+    }
+  ],
   "downloads_group_progress": "Progresso geral de {name}",
   "config_label_max_batch_size": "Tamanho máx. do torrent batch",
   "config_hint_max_batch_size": "Torrents de pack acima desse tamanho são descartados do resultado da busca. É a única guarda de pack: ~40 GiB cabe um pack de 26 episódios em 1080p, e o default de 100 GiB de propósito NÃO cabe um pack completo de One Piece (pack parcial cabe). Use 0 para não limitar.",
@@ -405,9 +600,35 @@
   "add_btn_view_status": "Ver status",
   "add_link_anilist": "Abrir no AniList",
   "add_toggle_unreleased": "Incluir não lançados",
-  "add_meta_episodes": "{count} eps",
+  "add_meta_episodes": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} ep",
+        "count=*": "{count} eps"
+      }
+    }
+  ],
   "add_library_required": "Configure a biblioteca antes de adicionar animes.",
-  "add_toast_added": "{count} episódios na fila",
+  "add_toast_added": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} episódio na fila",
+        "count=*": "{count} episódios na fila"
+      }
+    }
+  ],
   "add_toast_tracked_no_episodes": "Acompanhando — nenhum episódio disponível ainda",
   "add_toast_downloads_link": "Ver downloads",
   "picker_title": "Escolher torrent",
@@ -416,7 +637,20 @@
   "picker_query_label": "Busca no Nyaa",
   "picker_search": "Buscar",
   "picker_hint": "Escolha o lote. O primeiro é o que o daemon baixaria.",
-  "picker_pack_count": "{count} lotes · episódios avulsos ficam fora desta tela",
+  "picker_pack_count": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} lote · episódios avulsos ficam fora desta tela",
+        "count=*": "{count} lotes · episódios avulsos ficam fora desta tela"
+      }
+    }
+  ],
   "picker_back_add": "← Adicionar anime",
   "picker_back_replace": "← {title}",
   "picker_confirm": "Baixar este",
@@ -430,7 +664,20 @@
   "picker_magnet_placeholder": "Ou cole um magnet",
   "picker_description": "Descrição",
   "picker_files": "Arquivos",
-  "picker_seeders": "{count} seeders",
+  "picker_seeders": [
+    {
+      "declarations": [
+        "input count"
+      ],
+      "selectors": [
+        "count"
+      ],
+      "match": {
+        "count=1": "{count} seeder",
+        "count=*": "{count} seeders"
+      }
+    }
+  ],
   "block_tracked": "Já está em uma das suas listas",
   "block_downloaded": "Já baixado",
   "block_standalone": "Já adicionado",
@@ -445,13 +692,69 @@
   "lastcheck_section_problems": "Problemas ({count})",
   "lastcheck_section_limits": "Limites aplicados ({count})",
   "lastcheck_episodes": "ep. {episodes}",
-  "lastcheck_all_above_size_limit": "{candidates} torrents encontrados, todos acima do teto de {limit} GB.",
-  "lastcheck_no_seeders": "{candidates} torrents encontrados, nenhum com pelo menos {seeders} seeders.",
+  "lastcheck_all_above_size_limit": [
+    {
+      "declarations": [
+        "input candidates"
+      ],
+      "selectors": [
+        "candidates"
+      ],
+      "match": {
+        "candidates=1": "{candidates} torrent encontrado, acima do teto de {limit} GB.",
+        "candidates=*": "{candidates} torrents encontrados, todos acima do teto de {limit} GB."
+      }
+    }
+  ],
+  "lastcheck_no_seeders": [
+    {
+      "declarations": [
+        "input candidates",
+        "input seeders"
+      ],
+      "selectors": [
+        "candidates",
+        "seeders"
+      ],
+      "match": {
+        "candidates=1, seeders=1": "{candidates} torrent encontrado, sem pelo menos {seeders} seeder.",
+        "candidates=1, seeders=*": "{candidates} torrent encontrado, sem pelo menos {seeders} seeders.",
+        "candidates=*, seeders=1": "{candidates} torrents encontrados, nenhum com pelo menos {seeders} seeder.",
+        "candidates=*, seeders=*": "{candidates} torrents encontrados, nenhum com pelo menos {seeders} seeders."
+      }
+    }
+  ],
   "lastcheck_no_torrent_found": "Nenhum torrent encontrado no Nyaa.",
   "lastcheck_disk_full": "Espaço insuficiente depois de contar os downloads na fila e a folga mínima em disco.",
-  "lastcheck_torrent_rejected": "O cliente de torrent recusou todos os {candidates} magnets.",
+  "lastcheck_torrent_rejected": [
+    {
+      "declarations": [
+        "input candidates"
+      ],
+      "selectors": [
+        "candidates"
+      ],
+      "match": {
+        "candidates=1": "O cliente de torrent recusou o único magnet.",
+        "candidates=*": "O cliente de torrent recusou todos os {candidates} magnets."
+      }
+    }
+  ],
   "lastcheck_awaiting_earlier_episode": "Ainda não buscado: um episódio anterior continua faltando.",
-  "lastcheck_max_episodes_per_anime": "Limite por anime atingido: {downloaded} baixados, {pending} na espera.",
+  "lastcheck_max_episodes_per_anime": [
+    {
+      "declarations": [
+        "input downloaded"
+      ],
+      "selectors": [
+        "downloaded"
+      ],
+      "match": {
+        "downloaded=1": "Limite por anime atingido: {downloaded} baixado, {pending} na espera.",
+        "downloaded=*": "Limite por anime atingido: {downloaded} baixados, {pending} na espera."
+      }
+    }
+  ],
   "lastcheck_batch_no_result": "Nenhum torrent de batch foi encontrado para este anime.",
   "lastcheck_batch_above_size_limit": "Um batch foi encontrado, mas está acima do teto de tamanho de batch.",
   "lastcheck_batch_no_coverage": "Os batches encontrados não cobrem os episódios pendentes.",

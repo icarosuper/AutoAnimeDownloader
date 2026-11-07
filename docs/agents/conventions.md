@@ -133,6 +133,24 @@ and point to it from the relevant stretch, by number:
 
 The format used in the repo is `decisions.md #N` — keep it, that is what `grep` finds.
 
+## Messages With a Count (i18n)
+
+A message that prints a count whose noun changes with it ("1 episode" / "2 episodes") is written
+as variants in `messages/{en,pt-BR}.json`, never as `episode(s)`:
+
+```json
+"add_toast_added": [{
+  "declarations": ["input count"],
+  "selectors": ["count"],
+  "match": { "count=1": "{count} episode queued", "count=*": "{count} episodes queued" }
+}]
+```
+
+Exact match on `1`, **not** `local countPlural = count: plural`: CLDR puts 0 in "one" for
+Portuguese, so the plural rule prints "0 visto". With two counts, one selector each
+(`"candidates=1, seeders=*"`). A locale whose text doesn't change keeps a plain string — `en`
+"{count} watched" next to pt-BR's variants is fine. Pinned by `tests/unit/plurals.test.ts`.
+
 ## Dual FileManagerInterface
 
 `FileManagerInterface` is declared **twice** — in `api/server.go` and `daemon/helpers.go`. Both must be kept in sync. When adding a new method to `files.FileManager`, update **both** interfaces.
