@@ -11,6 +11,21 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// TestMain points the data dir at a scratch folder: Init opens <data dir>/daemon.log, and without
+// this every `go test ./...` appended its test lines to the developer's real
+// ~/.autoAnimeDownloader/daemon.log.
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "aad-logger-test-")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", home)
+	os.Setenv("APPDATA", home)
+	code := m.Run()
+	os.RemoveAll(home)
+	os.Exit(code)
+}
+
 func TestInit_DevelopmentMode(t *testing.T) {
 	// Save original logger
 	originalLogger := Logger
