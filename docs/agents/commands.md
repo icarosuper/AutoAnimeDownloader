@@ -43,7 +43,7 @@ make release PLATFORM=linuxamd64    # build + package in one step
 # Makefile delegates to it — don't add build logic directly to Makefile targets
 ```
 
-`make release` packages locally. Shipping a version is tagging: [guides/release.md](../guides/release.md).
+`make release` packages locally. Shipping a version is tagging: the [release skill](../../.claude/skills/release/SKILL.md).
 
 The Linux install targets are **not** in this Makefile — they ship inside the release zip
 (`infra/linux/Makefile`): `make install-user` / `sudo make install-global`, and the matching
@@ -99,13 +99,13 @@ Output lands in `.debug_<anilistId>_<N>/` in the current directory (`N` incremen
 - `debug.jsonl` — full structured trace (raw Nyaa rows, matched torrent names, skip reasons), one JSON object per line
 - `summary.json` — per-episode quick view (`would_search`, `magnets_found`)
 
-Nothing is written to `~/.autoAnimeDownloader` during a debug run. See [Troubleshooting Downloads](troubleshooting-downloads.md) Step 0 for how to read the output.
+Nothing is written to `~/.autoAnimeDownloader` during a debug run. The [debug-anime skill](../../.claude/skills/debug-anime/SKILL.md) covers how to read the output and the diagnosis that follows.
 
 With the daemon already running (in Docker, or on another machine), `autoanimedownloader animes debug <anilistId>` runs the same pass inside it. The summary comes back on the terminal and the trace goes to the daemon log instead of `debug.jsonl`.
 
 ## Debugging a batch of animes
 
-`make debug-batch` runs the same pass over the curated list in `scripts/robustness-animes.txt` (one media ID per line, `#` comments) and writes a triaged `.debug_batch/report.md`: a table per anime plus four sections — SUSPEITOS (searched, 0 magnets), NADA BUSCADO (no episode selected), ERROS (non-zero exit), and SEM FONTE BOA NO NYAA. Open a `debug.jsonl` only for the animes the report points at.
+`make debug-batch` runs the same pass over the curated list in `scripts/robustness-animes.txt` (one media ID per line, `#` comments) and writes a triaged `.debug_batch/report.md`: a table per anime plus four sections — SUSPECTS (searched, 0 magnets), NOTHING SEARCHED (no episode selected), ERRORS (non-zero exit), and NO GOOD SOURCE ON NYAA. Open a `debug.jsonl` only for the animes the report points at.
 
 That last section is the running list of animes Nyaa serves badly — no magnet at all, or a best matched torrent under `WEAK_SEEDERS` (default 10, `WEAK_SEEDERS=25 make debug-batch` to raise it). Seeders come from the `matched_torrents` log line, so the bar is applied to what survived filtering. It's the input for evaluating alternative torrent sources.
 

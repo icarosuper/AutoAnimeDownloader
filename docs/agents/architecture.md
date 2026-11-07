@@ -139,7 +139,7 @@ Defaults to `"dev"` if not injected.
 
 ## Debug Mode
 
-`cmd/daemon/main.go` accepts `--debug-anime <anilistId>`: runs `daemon.RunAnimeDebug` (see `daemon/debug.go`) and exits, skipping the PID file / API server / tray / loop entirely. See [Commands](commands.md) and [Troubleshooting Downloads](troubleshooting-downloads.md).
+`cmd/daemon/main.go` accepts `--debug-anime <anilistId>`: runs `daemon.RunAnimeDebug` (see `daemon/debug.go`) and exits, skipping the PID file / API server / tray / loop entirely. See [Commands](commands.md) and the [debug-anime skill](../../.claude/skills/debug-anime/SKILL.md).
 
 The same `RunAnimeDebug` is also reachable on a running daemon through `POST /api/v1/animes/{id}/debug` (CLI `animes debug <id>`). Two entry points, one pass: the flag writes `.debug_<id>_N/`, the endpoint logs into the daemon's log and answers the summary.
 

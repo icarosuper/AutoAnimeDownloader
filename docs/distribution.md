@@ -7,7 +7,7 @@ How the app is installed today and what is worth adding. Ordered by return on ef
 - **AUR** — `autoanimedownloader-bin` repackages the release zips and gets its `pkgver` and
   checksums bumped by hand on every release (helper outside the repo);
   `autoanimedownloader-git` builds from `master` and needs no bump. The stamp steps, including
-  this bump, are in [guides/release.md](guides/release.md)
+  this bump, are in the [release skill](../.claude/skills/release/SKILL.md)
 - **GitHub Releases zip** + `make install-user` / `sudo make install-global` (`infra/linux/Makefile`),
   or `install.sh` (curl | bash) wrapping the same `install-user` — see section 2
 - **Windows** — a standalone exe, runs in the foreground, no service and no installer

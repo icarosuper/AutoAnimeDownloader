@@ -88,7 +88,7 @@ For mock patterns and how to write new tests, see [Testing](../agents/testing.md
 make debug-anime ID=123   # ID is the AniList media ID (anilist.co/anime/{id})
 ```
 
-Runs a one-shot search/match pass against Nyaa without downloading anything or touching the daemon state. See [Commands](../agents/commands.md#debugging-a-specific-anime) and [Troubleshooting Downloads](../agents/troubleshooting-downloads.md) for details.
+Runs a one-shot search/match pass against Nyaa without downloading anything or touching the daemon state. See [Commands](../agents/commands.md#debugging-a-specific-anime) and the [debug-anime skill](../../.claude/skills/debug-anime/SKILL.md) for details.
 
 ## Windows Service Install
 
@@ -103,6 +103,6 @@ How to report bugs, suggest features and open a pull request: see [CONTRIBUTING.
 ## See Also
 
 - [Build Guide](build.md) — building release binaries
-- [Release](release.md) — tagging a version, GitHub Release, AUR bump
+- [Release](../../.claude/skills/release/SKILL.md) — tagging a version, GitHub Release, AUR bump (a Claude Code skill; readable as plain steps)
 - [CLI Guide](cli.md) — CLI reference
 - [WebUI Guide](webui.md) — web interface reference

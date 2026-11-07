@@ -4,7 +4,7 @@ Grouped by release: each section is **one** release, and its bump is the largest
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
 Current version: `v2.8.0`. Stamp a version (tag, GitHub Release, AUR):
-[guides/release.md](guides/release.md).
+the [release skill](../.claude/skills/release/SKILL.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double

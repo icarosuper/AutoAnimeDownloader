@@ -125,6 +125,7 @@ found outside that rule: delete it.
 
 **Non-obvious decision → `decisions.md` + a pointer in the code.** If a later reader would ask
 "why this, when the obvious way is the other one?", add an entry to [decisions.md](decisions.md)
+(with the [record-decision skill](../../.claude/skills/record-decision/SKILL.md))
 and point to it from the relevant stretch, by number:
 
 ```go
