@@ -28,6 +28,12 @@ export interface NavItem {
   icon: IconComponent
   /** i18n message function — call it inside a reactive `$: T = $locale && {...}` */
   label: () => string
+  /**
+   * Shorter label for the bottom tab bar, where a column is ~70px at 390px. Only for items whose
+   * full label doesn't fit there in some locale ("Configuration", "Adicionar anime"); the rail and
+   * the MoreMenu keep `label`.
+   */
+  shortLabel?: () => string
 }
 
 /**
@@ -39,13 +45,13 @@ export interface NavItem {
  */
 export const primaryNavItems: NavItem[] = [
   { id: 'status', path: '/status', activePaths: ['/'], icon: Activity, label: m.nav_status },
-  { id: 'add', path: '/add', icon: Plus, label: m.nav_add_anime },
+  { id: 'add', path: '/add', icon: Plus, label: m.nav_add_anime, shortLabel: m.nav_add_anime_short },
   { id: 'downloads', path: '/downloads', icon: Download, label: m.nav_downloads },
 ]
 
 /** Bottom group of the rail (after the divider) / third column of the tab bar: Configuration. */
 export const secondaryNavItems: NavItem[] = [
-  { id: 'config', path: '/config', icon: Settings, label: m.nav_config },
+  { id: 'config', path: '/config', icon: Settings, label: m.nav_config, shortLabel: m.nav_config_short },
 ]
 
 /** Items hosted inside the MoreMenu, behind the "More" trigger. */

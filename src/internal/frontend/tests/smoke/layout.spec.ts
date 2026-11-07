@@ -453,3 +453,31 @@ for (const width of [320, 375, 414]) {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth)
   })
 }
+
+/**
+ * Bottom tab bar labels. Each column is `flex-1` with a `truncate` label, so a label wider than
+ * ~70px silently became an ellipsis: "Configuration" read "Configurati…" at 390px in en, and
+ * "Adicionar anime"/"Configurações" were cut in pt-BR. Those items now carry a `shortLabel`
+ * (navItems.ts); this checks that every label renders whole at the common phone widths.
+ */
+for (const locale of ['en', 'pt-BR'] as const) {
+  for (const width of [375, 390, 414] as const) {
+    test(`no tab bar label is cut at ${width}px in ${locale}`, async ({ page }) => {
+      await page.addInitScript(l => localStorage.setItem('PARAGLIDE_LOCALE', l), locale)
+      await setupStatusPageMocks(page, 'running')
+      await page.setViewportSize({ width, height: 844 })
+      await page.goto('/#/status')
+
+      const labels = page.getByRole('navigation', { name: 'Main' }).locator('span.truncate')
+      await expect(labels).toHaveCount(5)
+      for (const label of await labels.all()) {
+        const { scrollWidth, clientWidth, text } = await label.evaluate(el => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+          text: el.textContent,
+        }))
+        expect(scrollWidth, `"${text}" is cut`).toBeLessThanOrEqual(clientWidth)
+      }
+    })
+  }
+}

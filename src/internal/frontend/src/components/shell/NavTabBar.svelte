@@ -23,7 +23,7 @@
   // bar follows the list, never a copy of it.
   $: tabItems = $locale && [...primaryNavItems, ...secondaryNavItems].map((item) => ({
     ...item,
-    label: item.label(),
+    label: (item.shortLabel ?? item.label)(),
   }))
 
   $: moreLabel = $locale && moreTriggerLabel()
@@ -31,8 +31,9 @@
   // `min-w-0` + the `truncate` on the label (see markup) keep a column from invading its
   // neighbor, and that's what lets the column count be a consequence of `navItems.ts` instead
   // of a fixed number here: columns are `flex-1`, so adding an item squeezes them instead of
-  // wrapping the row. With 5 columns ~72px remain per column at 375px and ~61px at 320px —
-  // labels like "Settings" (~82px at this scale) become ellipses, which is the correct degrade.
+  // wrapping the row. With 5 columns ~72px remain per column at 375px and ~61px at 320px. A label
+  // that doesn't fit at 375px gets a `shortLabel` in navItems.ts ("Configuration" read as
+  // "Configurati…"); the ellipsis is only the fallback for narrower screens and new items.
   function tabItemClass(active: boolean): string {
     return `flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-[5px] rounded-field px-0.5 text-[11.5px] ${
       active ? 'bg-accent-tint/16 font-bold text-nav-active' : 'font-semibold text-subtle'
