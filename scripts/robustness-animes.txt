@@ -19,3 +19,4 @@
 108465  # Mushoku Tensei — split-cour: ExtractAnimeSeasonPart, offset by PREQUEL
 20594   # Sword Art Online II — roman-numeral sequel: reRomanSeason
 101922  # Kimetsu no Yaiba — posted as "Demon Slayer": title variants, Jaccard
+141534  # Mushoku Tensei "Eris the Goblin Slayer" — one-episode SPECIAL, Erai names it romaji + English subtitle with no number, English title says "Cour 2"

@@ -157,10 +157,10 @@ func processAnimeEpisodes(
 		// Pack eligibility: not a movie, more than one pending episode, and the FILTERED search returned
 		// a pack covering the window. None of this is AniList metadata — the torrent that's there decides
 		// (see decisions.md).
-		if !isAnimeMovie(anime) && len(sel.toDownload) > 1 {
+		if windowPacks, ok := packsForWindow(packs, totalEpisodes, sel.toDownload); !isAnimeMovie(anime) && ok {
 			firstPending := sel.toDownload[0].Episode
 			axis := newPackAxis(anime, seriesIndex, totalEpisodes)
-			batches := chooseCoveringPacks(configs, disk, packs, packDetail(searcher, totalEpisodes), axis, firstPending, windowEnd(configs, firstPending))
+			batches := chooseCoveringPacks(configs, disk, windowPacks, packDetail(searcher, totalEpisodes), axis, firstPending, windowEnd(configs, firstPending))
 			switch {
 			case batches.len() > 0:
 				logger.Logger.Info().
@@ -498,6 +498,29 @@ func partitionSearchResults(configs *files.Config, anime anilist.MediaList, resu
 	return filteredPacks, filteredSingles, packStats
 }
 
+// packsForWindow says whether the pack path runs and with which packs. The rule is more than one
+// pending episode: one pending episode of a series is a loose episode, not a pack. The exception is a
+// one-episode entry (OVA, special) whose release names no number — "[Erai-raws] … Part 2 - Eris the
+// Goblin Slayer [1080p]" is an unlabeled pack to the search and has no episode number for the
+// single path, so it was never downloaded. For it only UNLABELED packs pass: a labeled one
+// ("Violet Evergarden - 01 ~ 14 (Plus Specials) [BATCH]") covers "episode 1" on the axis and would
+// bring a whole series for a special (decisions.md #123).
+func packsForWindow(packs []nyaa.TorrentResult, totalEpisodes int, toDownload []anilist.AiringNode) ([]nyaa.TorrentResult, bool) {
+	if len(toDownload) > 1 {
+		return packs, true
+	}
+	if totalEpisodes != 1 || len(toDownload) != 1 || toDownload[0].Episode != 1 {
+		return nil, false
+	}
+	var unlabeled []nyaa.TorrentResult
+	for _, tr := range packs {
+		if tr.UnlabeledPack {
+			unlabeled = append(unlabeled, tr)
+		}
+	}
+	return unlabeled, len(unlabeled) > 0
+}
+
 // afterPacksThatFit is a test hook that runs after packsThatFit has filtered the list, before
 // pickBatches. Tests use it to spend the disk budget in the race window #101 named: another
 // anime of the same pass reserves between the snapshot and the add.
@@ -747,10 +770,20 @@ func (p *packSet) covering(axis packAxis, episode int) (*packCandidate, nyaa.Bat
 		if info.EndEpisode == 0 {
 			// A pack known only by its size has nothing but the file list to say it is a pack
 			// of THIS window; without it, it could be a single long episode or a different cut.
+			// Except for a one-episode entry (OVA, special): a single long episode IS its content,
+			// and episode 1 is the only one it can cover (decisions.md #123).
 			if p.items[i].torrent.UnlabeledPack {
+				if axis.totalEpisodes == 1 && episode == 1 {
+					return &p.items[i], nyaa.BatchInfo{StartEpisode: 1, EndEpisode: 1}
+				}
 				continue
 			}
 			return &p.items[i], info
+		}
+		// A one-episode entry takes an unlabeled pack only when its files are that one episode: one
+		// whose files span 1..26 is a whole series, not the special (decisions.md #123).
+		if axis.totalEpisodes == 1 && p.items[i].torrent.UnlabeledPack && (info.StartEpisode != 1 || info.EndEpisode != 1) {
+			continue
 		}
 		if local, ok := axis.localRange(info, episode); ok {
 			return &p.items[i], local

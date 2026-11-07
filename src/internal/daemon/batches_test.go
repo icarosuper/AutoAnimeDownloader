@@ -331,3 +331,53 @@ func TestPickBatches_UnlabeledPackNeedsTheFileRange(t *testing.T) {
 		t.Errorf("unlabeled pack whose files cover the window must be picked, got %v", batchNames(got))
 	}
 }
+
+// For a ONE-episode entry an unresolved unlabeled "pack" is the episode itself — the reason it is
+// refused elsewhere ("it could be a single long episode") is exactly what a one-episode OVA is.
+// Measured on 141534 ("[Erai-raws] … Part 2 - Eris the Goblin Slayer [1080p]", 1.3 GiB, a single
+// file with no number): it reached pickBatches and was dropped, so the special never downloaded
+// (decisions.md #123).
+func TestPickBatches_UnresolvedUnlabeledPackCoversAOneEpisodeEntry(t *testing.T) {
+	unlabeled := pack("[Erai-raws] Mushoku Tensei - Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer [1080p]", 1)
+	unlabeled.UnlabeledPack = true
+	noDetail := func(nyaa.TorrentResult) (nyaa.BatchInfo, bool) { return nyaa.BatchInfo{}, false }
+
+	if got := pickBatches(newPackSet([]nyaa.TorrentResult{unlabeled}, noDetail), packAxis{totalEpisodes: 1}, 1, 1); got.len() != 1 {
+		t.Fatalf("one-episode entry: want the unlabeled pack picked, got %v", batchNames(got))
+	}
+	if _, info := newPackSet([]nyaa.TorrentResult{unlabeled}, noDetail).covering(packAxis{totalEpisodes: 1}, 1); info.StartEpisode != 1 || info.EndEpisode != 1 {
+		t.Errorf("want the range 1..1 recorded, got %+v", info)
+	}
+	if got := pickBatches(newPackSet([]nyaa.TorrentResult{unlabeled}, noDetail), packAxis{totalEpisodes: 2}, 1, 2); got.len() != 0 {
+		t.Errorf("two-episode entry: the unresolved unlabeled pack must still be refused, got %v", batchNames(got))
+	}
+	// Whose files say it is a whole series (1..26): not the special.
+	wholeSeries := func(nyaa.TorrentResult) (nyaa.BatchInfo, bool) {
+		return nyaa.BatchInfo{StartEpisode: 1, EndEpisode: 26}, true
+	}
+	if got := pickBatches(newPackSet([]nyaa.TorrentResult{unlabeled}, wholeSeries), packAxis{totalEpisodes: 1}, 1, 1); got.len() != 0 {
+		t.Errorf("one-episode entry: an unlabeled pack whose files span 1..26 must be refused, got %v", batchNames(got))
+	}
+}
+
+// For a one-episode entry only an unlabeled pack may stand for the episode: a labeled pack
+// ("Violet Evergarden - 01 ~ 14 (Plus Specials) [BATCH]") covers "episode 1" on the axis and would
+// download a whole series for a special.
+func TestOneEpisodeEntryPacks_KeepsOnlyUnlabeled(t *testing.T) {
+	labeled := pack("[Erai-raws] Violet Evergarden - 01 ~ 14 (Plus Specials) [1080p][BATCH]", 1)
+	unlabeled := pack("[Erai-raws] Mushoku Tensei - Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer [1080p]", 1)
+	unlabeled.UnlabeledPack = true
+	one := []anilist.AiringNode{{Episode: 1}}
+
+	got, ok := packsForWindow([]nyaa.TorrentResult{labeled, unlabeled}, 1, one)
+	if !ok || len(got) != 1 || got[0].Name != unlabeled.Name {
+		t.Errorf("one-episode entry: want only the unlabeled pack, got ok=%v %v", ok, got)
+	}
+	if _, ok := packsForWindow([]nyaa.TorrentResult{labeled, unlabeled}, 12, one); ok {
+		t.Error("one pending episode of a 12-episode entry must not take the pack path")
+	}
+	two := []anilist.AiringNode{{Episode: 1}, {Episode: 2}}
+	if got, ok := packsForWindow([]nyaa.TorrentResult{labeled, unlabeled}, 12, two); !ok || len(got) != 2 {
+		t.Errorf("two pending episodes: want every pack, got ok=%v %v", ok, got)
+	}
+}

@@ -23,7 +23,10 @@ Zero results → the query is wrong (step 5). Results, but the anime still fails
 ## 5. The search query
 
 Built from the title variants: `search.go:buildTitleVariants` → `nyaa.GenerateSearchTitleVariants`
-(`nyaa/nyaa.go`), which tries clean romaji → original romaji → clean english → original english.
+(`nyaa/nyaa.go`), which tries clean romaji → original romaji → clean english → original english → (last) romaji base
+title + English subtitle, the way Erai-raws names OVAs ("… Honki Dasu Part 2 - Eris the Goblin
+Slayer"). A one-episode entry (OVA, special) whose release has no number is found as an unlabeled
+pack, not an episode: see [decisions.md #123](../../../docs/agents/decisions.md#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range).
 `ExtractAnimeSeasonPart` (`daemon/helpers.go`) decides the season/part that shape the query and the
 filter.
 

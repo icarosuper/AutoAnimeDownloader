@@ -521,6 +521,13 @@ ones in `daemon/verification.go` and `api/endpoint_animes.go`/`api/standalone_gu
 **`ScrapNyaaForAnime` returns packs and episodes in the _same_ list** — what splits them is
 `daemon.partitionSearchResults`. It is the single search behind pack + episode resolution.
 
+**The pack path needs more than one pending episode — except a one-episode entry**, which
+`daemon.packsForWindow` lets through with **unlabeled packs only**: its release usually names no
+number, so it is neither an episode nor a labeled pack
+([decisions.md #123](decisions.md#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)).
+`ExtractSeason` never reads "Cour N" (a part, [decisions.md #10](decisions.md#10-cour-n-treated-as-part-n-not-as-a-distinct-concept));
+`reCourMarker` is only a cut point for `firstMarkerIndex`.
+
 **Adaptive pagination** (`fetchSearchPages`, shared by the three searches): page 1, and it only
 walks further while accepted candidates are below `enoughCandidates` (3) and the page has rows, up
 to `ActiveMaxSearchPages()`. An error is only an error on page 1.

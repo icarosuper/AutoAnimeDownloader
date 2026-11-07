@@ -105,12 +105,12 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	}
 	if magnetsForEpisodes == nil {
 		packs, singles, _ := partitionSearchResults(configs, anime, rankSeriesResults(searcher.searchAnime(anime.Media.Title, anime.Media.Synonyms, episodeNumbers(episodesToDownload)), details.isFinished))
-		if !isAnimeMovie(anime) && len(episodesToDownload) > 1 {
+		if windowPacks, ok := packsForWindow(packs, mediaTotalEpisodes(anime), episodesToDownload); !isAnimeMovie(anime) && ok {
 			firstPending := episodesToDownload[0].Episode
 			// Same numbering axis as production: without it debug would report "no pack covers" for every
 			// entry whose pack is numbered by season or by series (packAxis).
 			axis := newPackAxis(anime, resolveSeriesIndex([]int{animeId}, nil), mediaTotalEpisodes(anime))
-			if batches := chooseCoveringPacks(configs, nil, packs, packDetail(searcher, mediaTotalEpisodes(anime)), axis, firstPending, windowEnd(configs, firstPending)); batches.len() > 0 {
+			if batches := chooseCoveringPacks(configs, nil, windowPacks, packDetail(searcher, mediaTotalEpisodes(anime)), axis, firstPending, windowEnd(configs, firstPending)); batches.len() > 0 {
 				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, episodesToDownload, batches)
 			}
 		}
