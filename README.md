@@ -6,6 +6,10 @@ Syncs with [Anilist](https://anilist.co) and [MyAnimeList](https://myanimelist.n
 
 [![CI](https://github.com/icarosuper/AutoAnimeDownloader/actions/workflows/build.yml/badge.svg)](https://github.com/icarosuper/AutoAnimeDownloader/actions/workflows/build.yml)
 
+<p align="center">
+  <img src="docs/images/readme/main-flow.gif" alt="Dashboard synced with an AniList list, opening an anime and the live downloads">
+</p>
+
 ---
 
 ## Table of Contents
@@ -45,9 +49,32 @@ Syncs with [Anilist](https://anilist.co) and [MyAnimeList](https://myanimelist.n
 
 ## Screenshots
 
-| Dashboard | Anime Status | Configuration |
-|-----------|--------------|--------------|
-| ![Dashboard](https://i.imgur.com/i8gVepu.png) | ![Anime Status](https://i.imgur.com/vjmUxqL.png) | ![Configuration](https://i.imgur.com/vAFpGTy.png) |
+The UI has a light and a dark theme (or follows the system); the screenshots below show both.
+
+<table>
+  <tr>
+    <td width="72%"><img src="docs/images/readme/dashboard-dark.png" alt="Dashboard"><br><b>Dashboard</b> — your AniList/MAL list, what is watched, downloaded and still airing</td>
+    <td width="28%"><img src="docs/images/readme/mobile-light.png" alt="Dashboard on a phone"><br><b>Mobile</b> — the UI adapts to a phone</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/readme/detail-light.png" alt="Anime detail"><br><b>Anime detail</b> — every episode's state, with download, redownload and replace-torrent actions</td>
+    <td width="50%"><img src="docs/images/readme/downloads-dark.png" alt="Downloads"><br><b>Downloads</b> — the built-in torrent client: progress, queue, pause, prioritize</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/readme/picker-dark.png" alt="Torrent picker"><br><b>Torrent picker</b> — the ranked Nyaa results; the first is what the daemon picks</td>
+    <td width="50%"><img src="docs/images/readme/priorities-light.png" alt="Torrent priorities"><br><b>Priorities</b> — the ranking criteria, fansubs, resolutions and ignore list</td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/images/readme/add-light.png" alt="Add anime"><br><b>Add anime</b> — track an anime that is in none of your lists</td>
+  </tr>
+</table>
+
+**Live downloads** — the page refreshes itself every couple of seconds:
+
+<img src="docs/images/readme/downloads-live.gif" alt="Downloads page updating live">
 
 ## Requirements
 
