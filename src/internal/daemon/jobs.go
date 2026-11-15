@@ -428,7 +428,7 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	if partiallyOrganized {
 		logger.Logger.Debug().Str("hash", hash).Msg("Organize: group was already partially organized, skipping the completion webhook")
 	} else {
-		notifications.NotifyAll(configs, notifications.DownloadCompleted, episodeRuns(matched))
+		notifications.NotifyAll(configs, notifications.DownloadCompleted, episodeItems(matched))
 	}
 	logger.Logger.Info().Str("hash", hash).Str("anime", matched[0].AnimeName).Int("files", createdCount).Msg("Organized torrent into library")
 	if configs.DisableSeeding {

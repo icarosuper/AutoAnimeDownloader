@@ -57,48 +57,32 @@ func interpolate(template string, vars map[string]string) string {
 // caller does not have them (a "no torrent found" failure has no hash) — and reach the templates
 // as {{anime_id}} / {{torrent_hash}}, blank when unknown.
 //
-// Last turns the item into a run Number..Last of one torrent: a batch pack is ONE event (one push,
-// one Jellyfin scan), not N. Zero (or equal to Number) is a single episode.
+// PackSize > 1 turns the item into a whole batch pack of that many episodes: ONE event (one push,
+// one Jellyfin scan), not N. A pack's text names only the anime and {{episode}} is blank — the
+// variable is always a single number or nothing, never a range a template can't use as a number
+// (decisions.md #124). Number is then the pack's first pending episode, kept only for ordering.
 type Episode struct {
 	AnimeID     int
 	AnimeName   string
 	Number      int
-	Last        int
+	PackSize    int
 	Reason      string
 	TorrentHash string
 }
 
-func (e Episode) last() int {
-	if e.Last > e.Number {
-		return e.Last
-	}
-	return e.Number
-}
+func (e Episode) isPack() bool { return e.PackSize > 1 }
 
-// Runs splits the episode numbers of one anime (and one torrent) into items of consecutive
-// episodes, each a copy of base with Number..Last set. A pack whose records skip a watched episode
-// in the middle becomes two runs instead of a range that claims the gap.
-func Runs(base Episode, numbers []int) []Episode {
-	numbers = slices.Clone(numbers)
-	slices.Sort(numbers)
-	numbers = slices.Compact(numbers)
-	var runs []Episode
-	for i, n := range numbers {
-		if i > 0 && n == numbers[i-1]+1 {
-			runs[len(runs)-1].Last = n
-			continue
-		}
-		run := base
-		run.Number, run.Last = n, n
-		runs = append(runs, run)
+func (e Episode) episodes() int {
+	if e.isPack() {
+		return e.PackSize
 	}
-	return runs
+	return 1
 }
 
 func episodeCount(items []Episode) int {
 	total := 0
 	for _, it := range items {
-		total += it.last() - it.Number + 1
+		total += it.episodes()
 	}
 	return total
 }
@@ -127,9 +111,8 @@ func buildBatchVars(event Event, items []Episode) map[string]string {
 
 	if len(items) == 1 {
 		vars["anime_name"] = items[0].AnimeName
-		vars["episode"] = fmt.Sprintf("%d", items[0].Number)
-		if last := items[0].last(); last != items[0].Number {
-			vars["episode"] = fmt.Sprintf("%d-%d", items[0].Number, last)
+		if !items[0].isPack() {
+			vars["episode"] = fmt.Sprintf("%d", items[0].Number)
 		}
 		vars["reason"] = items[0].Reason
 		if items[0].AnimeID != 0 {
@@ -142,11 +125,12 @@ func buildBatchVars(event Event, items []Episode) map[string]string {
 }
 
 // batchLines is {{message}}: one line per run of consecutive episodes of the same anime with the
-// same reason, so a 24-episode pack completing is "Frieren EPs 1-24 downloaded successfully"
-// instead of 24 lines. Episodes are sorted inside each anime before collapsing — organize finishes
-// torrents in whatever order they complete, and 3, 1, 2 is still one run. Animes keep the order
-// they first appeared in the window. The reason is part of the key: merging two failures with
-// different reasons into one line would report only one of them.
+// same reason, so 24 single-episode torrents completing are "Frieren EPs 1-24 downloaded
+// successfully" instead of 24 lines. Episodes are sorted inside each anime before collapsing —
+// organize finishes torrents in whatever order they complete, and 3, 1, 2 is still one run. A pack
+// adds one line naming only the anime, once per anime however many packs it has in the window.
+// Animes keep the order they first appeared in the window. The reason is part of the key: merging
+// two failures with different reasons into one line would report only one of them.
 func batchLines(event Event, items []Episode) []string {
 	type groupKey struct {
 		animeID int
@@ -169,16 +153,26 @@ func batchLines(event Event, items []Episode) []string {
 	lines := make([]string, 0, len(items))
 	for _, key := range order {
 		group := groups[key]
+		first := group[0]
 		var numbers []int
+		hasPack := false
 		for _, it := range group {
-			for n := it.Number; n <= it.last(); n++ {
-				numbers = append(numbers, n)
+			if it.isPack() {
+				hasPack = true
+			} else {
+				numbers = append(numbers, it.Number)
 			}
+		}
+		if hasPack {
+			_, message := packStrings(first.AnimeName, event, first.Reason)
+			lines = append(lines, message)
+		}
+		if len(numbers) == 0 {
+			continue
 		}
 		slices.Sort(numbers)
 		numbers = slices.Compact(numbers)
 
-		first := group[0]
 		start := numbers[0]
 		for i := 1; i <= len(numbers); i++ {
 			if i < len(numbers) && numbers[i] == numbers[i-1]+1 {
@@ -196,7 +190,11 @@ func batchLines(event Event, items []Episode) []string {
 
 func batchTitle(event Event, items []Episode) string {
 	if len(items) == 1 {
-		title, _ := eventStrings(items[0].AnimeName, items[0].Number, items[0].last(), event, items[0].Reason)
+		if items[0].isPack() {
+			title, _ := packStrings(items[0].AnimeName, event, items[0].Reason)
+			return title
+		}
+		title, _ := eventStrings(items[0].AnimeName, items[0].Number, items[0].Number, event, items[0].Reason)
 		return title
 	}
 	// Counts episodes, not items: one item can be a whole pack.
@@ -212,6 +210,13 @@ func batchTitle(event Event, items []Episode) string {
 		return fmt.Sprintf("%d episodes deleted", count)
 	}
 	return ""
+}
+
+func failureReason(reason string) string {
+	if reason == "" {
+		return "all attempts failed"
+	}
+	return reason
 }
 
 // eventStrings returns the title and the message line for episodes first..last of one anime;
@@ -230,25 +235,38 @@ func eventStrings(animeName string, first, last int, event Event, reason string)
 		return "New episode detected",
 			fmt.Sprintf("%s %s detected, starting download", animeName, episodes)
 	case DownloadFailed:
-		if reason == "" {
-			reason = "all attempts failed"
-		}
 		return "Download failed",
-			fmt.Sprintf("%s %s failed: %s", animeName, episodes, reason)
+			fmt.Sprintf("%s %s failed: %s", animeName, episodes, failureReason(reason))
 	case DownloadCompleted:
 		return "Download completed",
 			fmt.Sprintf("%s %s downloaded successfully", animeName, episodes)
 	case EpisodeDeleted:
-		verb := "was"
 		if last != first {
-			verb = "were"
+			return "Episodes deleted",
+				fmt.Sprintf("%s %s were removed from the library", animeName, episodes)
 		}
-		title := "Episode deleted"
-		if last != first {
-			title = "Episodes deleted"
-		}
-		return title,
-			fmt.Sprintf("%s %s %s removed from the library", animeName, episodes, verb)
+		return "Episode deleted",
+			fmt.Sprintf("%s %s was removed from the library", animeName, episodes)
+	}
+	return "", ""
+}
+
+// packStrings is eventStrings for a batch pack: the text names the anime only, no episode numbers —
+// a pack is "Frieren", whatever range its name claims and whichever of its episodes were pending.
+func packStrings(animeName string, event Event, reason string) (title, message string) {
+	switch event {
+	case NewEpisode:
+		return "New episodes detected",
+			fmt.Sprintf("New episodes of %s detected, starting download", animeName)
+	case DownloadFailed:
+		return "Download failed",
+			fmt.Sprintf("%s failed: %s", animeName, failureReason(reason))
+	case DownloadCompleted:
+		return "Download completed",
+			fmt.Sprintf("%s downloaded successfully", animeName)
+	case EpisodeDeleted:
+		return "Episodes deleted",
+			fmt.Sprintf("Episodes of %s were removed from the library", animeName)
 	}
 	return "", ""
 }
@@ -362,10 +380,11 @@ func AccountSource(source, username string) string {
 }
 
 // SourceResolver answers, for each anime id, its sources: the keys of the configured accounts
-// that have it on their list right now (any list status) plus SourceStandalone when it is tracked
-// as standalone. An id missing from the map is UNKNOWN — a webhook filtered by source then skips
-// it, it can't prove it belongs. It is resolved at fire time, not stored on the episode record, so
-// records written before the filter existed (and deletions of long-finished animes) work too.
+// known to have it on their list plus SourceStandalone when it is tracked as standalone. An id
+// missing from the map is UNKNOWN, and an unknown anime reaches every filtered webhook (fail-open):
+// a spare push beats a lost download_completed whose library scan never runs. It is resolved at
+// fire time, not stored on the episode record, so records written before the filter existed work
+// too (decisions.md #126). It must not block: Flush runs it on shutdown.
 type SourceResolver func(cfg *files.Config, animeIDs []int) map[int][]string
 
 var (
@@ -374,7 +393,8 @@ var (
 )
 
 // SetSourceResolver wires the resolver. The daemon sets it at boot (it needs AniList and the
-// standalone file, which this package doesn't know); without one, every filtered webhook skips.
+// standalone file, which this package doesn't know); without one every anime is unknown, so every
+// filtered webhook gets everything.
 func SetSourceResolver(r SourceResolver) {
 	resolverMu.Lock()
 	defer resolverMu.Unlock()
@@ -401,14 +421,16 @@ func resolveSources(cfg *files.Config, items []Episode) map[int][]string {
 }
 
 // itemsFor keeps the items a preset wants: all of them when it has no AnimeSources, otherwise those
-// whose anime has at least one of the preset's sources (OR).
+// whose anime has at least one of the preset's sources (OR), plus those whose anime is unknown
+// (fail-open — see SourceResolver).
 func itemsFor(preset files.WebhookPreset, items []Episode, sources map[int][]string) []Episode {
 	if len(preset.AnimeSources) == 0 {
 		return items
 	}
 	var kept []Episode
 	for _, it := range items {
-		if slices.ContainsFunc(sources[it.AnimeID], func(s string) bool { return slices.Contains(preset.AnimeSources, s) }) {
+		known, ok := sources[it.AnimeID]
+		if !ok || it.AnimeID == 0 || slices.ContainsFunc(known, func(s string) bool { return slices.Contains(preset.AnimeSources, s) }) {
 			kept = append(kept, it)
 		}
 	}
@@ -439,9 +461,11 @@ func Notify(cfg *files.Config, event Event, it Episode) {
 	NotifyAll(cfg, event, []Episode{it})
 }
 
-// NotifyAll delivers items that belong to ONE event as a single webhook even with batching off —
-// a pack completing, or a pack being deleted, is one push and one Jellyfin/Plex scan, not one per
-// episode (decisions.md #124). With a batch window the items join the window like any other.
+// NotifyAll delivers several items of one event at once. With batching off each item is its own
+// webhook, as it always was — a deletion of two animes is two pushes, each with its {{anime_id}}
+// and {{torrent_hash}} filled. What makes a pack one push and one Jellyfin/Plex scan is that the
+// caller hands it as ONE item (PackSize), not that its items share a call (decisions.md #124).
+// With a batch window the items join the window like any other.
 func NotifyAll(cfg *files.Config, event Event, items []Episode) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 || len(items) == 0 {
 		return
@@ -449,7 +473,9 @@ func NotifyAll(cfg *files.Config, event Event, items []Episode) {
 
 	window := time.Duration(cfg.Notifications.BatchWindowSeconds) * time.Second
 	if window <= 0 {
-		fireBatch(event, items, cfg, false)
+		for _, it := range items {
+			fireBatch(event, []Episode{it}, cfg, false)
+		}
 		return
 	}
 
@@ -507,8 +533,8 @@ func flushEvent(event Event, wait bool) {
 // of 3 completions where 1 is the filtered account's reads as that 1, not as "3 episodes".
 // The sources are looked up here, at fire time, not stored on the record (decisions.md #126).
 //
-// Without wait it returns at once: the source lookup can go to AniList, and with batching off
-// this runs on the verification pass's goroutine.
+// Without wait it returns at once: with batching off this runs on the verification pass's
+// goroutine, and the requests themselves take up to the client timeout.
 func fireBatch(event Event, items []Episode, cfg *files.Config, wait bool) {
 	if len(items) == 0 || cfg == nil {
 		return

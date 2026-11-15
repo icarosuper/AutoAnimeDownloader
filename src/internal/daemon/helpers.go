@@ -339,29 +339,30 @@ func isInDeleteStatuses(deleteStatuses []string, status anilist.MediaListStatus)
 	return false
 }
 
-// episodeRuns turns saved records into notification items: one run of consecutive episodes per
-// anime and torrent, in the order the records came. A pack's N records become "EPs 1-12" in one
-// item instead of N items (or, as before, one item that named only the first episode) —
+// episodeItems turns saved records into notification items: one per anime and torrent, in the
+// order the records came. A pack's N records become one pack item (PackSize N) instead of N items —
 // decisions.md #124.
-func episodeRuns(records []files.EpisodeStruct) []notifications.Episode {
+func episodeItems(records []files.EpisodeStruct) []notifications.Episode {
 	type key struct {
 		animeID int
 		hash    string
 	}
 	var order []key
-	numbers := make(map[key][]int)
-	bases := make(map[key]notifications.Episode)
+	byKey := make(map[key]*notifications.Episode)
 	for _, ep := range records {
 		k := key{ep.AnimeID, ep.EpisodeHash}
-		if _, seen := numbers[k]; !seen {
+		it, seen := byKey[k]
+		if !seen {
 			order = append(order, k)
-			bases[k] = notifications.Episode{AnimeID: ep.AnimeID, AnimeName: ep.AnimeName, TorrentHash: ep.EpisodeHash}
+			byKey[k] = &notifications.Episode{AnimeID: ep.AnimeID, AnimeName: ep.AnimeName, Number: ep.EpisodeNumber, TorrentHash: ep.EpisodeHash, PackSize: 1}
+			continue
 		}
-		numbers[k] = append(numbers[k], ep.EpisodeNumber)
+		it.PackSize++
+		it.Number = min(it.Number, ep.EpisodeNumber)
 	}
-	var items []notifications.Episode
+	items := make([]notifications.Episode, 0, len(order))
 	for _, k := range order {
-		items = append(items, notifications.Runs(bases[k], numbers[k])...)
+		items = append(items, *byKey[k])
 	}
 	return items
 }

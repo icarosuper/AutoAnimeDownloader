@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -213,7 +214,7 @@ func TestRemoveEpisodesAndLinks_FiresEpisodeDeletedWebhook(t *testing.T) {
 	}
 }
 
-// Deleting a whole pack is one episode_deleted (one Jellyfin scan), carrying the range — not one
+// Deleting a whole pack is one episode_deleted (one Jellyfin scan) naming only the anime — not one
 // webhook per record.
 func TestRemoveEpisodesAndLinks_PackFiresOneEpisodeDeletedWebhook(t *testing.T) {
 	const hash = "pack"
@@ -236,28 +237,55 @@ func TestRemoveEpisodesAndLinks_PackFiresOneEpisodeDeletedWebhook(t *testing.T) 
 	if n := spy.callCount(); n != 1 {
 		t.Fatalf("want one episode_deleted webhook for the pack, got %d", n)
 	}
-	if want := "Episodes deleted|1-3|Frieren EPs 1-3 were removed from the library"; body != want {
+	if want := "Episodes deleted||Episodes of Frieren were removed from the library"; body != want {
 		t.Errorf("body = %q, want %q", body, want)
 	}
 }
 
-// A pack completing names its range, not the first record's episode.
-func TestEpisodeRuns_PackIsOneRunPerAnimeAndTorrent(t *testing.T) {
+// A pack's records become one pack item per anime and torrent, not one item per record.
+func TestEpisodeItems_PackIsOneItemPerAnimeAndTorrent(t *testing.T) {
 	records := []files.EpisodeStruct{
 		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 3, EpisodeHash: "h"},
 		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 1, EpisodeHash: "h"},
-		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 2, EpisodeHash: "h"},
 		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 5, EpisodeHash: "h"},
 		{AnimeID: 9, AnimeName: "Dandadan", EpisodeNumber: 4, EpisodeHash: "h"},
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 6, EpisodeHash: "other"},
 	}
-	got := episodeRuns(records)
+	got := episodeItems(records)
 	want := []notifications.Episode{
-		{AnimeID: 7, AnimeName: "Frieren", Number: 1, Last: 3, TorrentHash: "h"},
-		{AnimeID: 7, AnimeName: "Frieren", Number: 5, Last: 5, TorrentHash: "h"},
-		{AnimeID: 9, AnimeName: "Dandadan", Number: 4, Last: 4, TorrentHash: "h"},
+		{AnimeID: 7, AnimeName: "Frieren", Number: 1, PackSize: 3, TorrentHash: "h"},
+		{AnimeID: 9, AnimeName: "Dandadan", Number: 4, PackSize: 1, TorrentHash: "h"},
+		{AnimeID: 7, AnimeName: "Frieren", Number: 6, PackSize: 1, TorrentHash: "other"},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("episodeRuns = %+v, want %+v", got, want)
+		t.Errorf("episodeItems = %+v, want %+v", got, want)
+	}
+}
+
+// With batching off, deleting two animes at once is two webhooks, each with its own anime_id —
+// not one webhook whose single-value variables come out blank.
+func TestRemoveEpisodesAndLinks_TwoAnimesFireTwoWebhooks(t *testing.T) {
+	saved := []files.EpisodeStruct{
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 1, EpisodeHash: strings.Repeat("a", 40)},
+		{AnimeID: 9, AnimeName: "Dandadan", EpisodeNumber: 4, EpisodeHash: strings.Repeat("b", 40)},
+	}
+	spy := newWebhookSpy(t)
+	fm := &orchestrationFM{saved: saved, configs: &files.Config{Notifications: files.NotificationsConfig{Webhooks: []files.WebhookPreset{{
+		Name: "spy", URL: spy.server.URL, Method: http.MethodPost,
+		Body: "{{anime_id}}|{{episode}}", Events: []string{"episode_deleted"},
+	}}}}}
+	keys := []files.EpisodeKey{{AnimeID: 7, Episode: 1}, {AnimeID: 9, Episode: 4}}
+	if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()), keys, saved, false, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	spy.waitForCall(t)
+	spy.waitForCall(t)
+	spy.mu.Lock()
+	got := slices.Clone(spy.bodies)
+	spy.mu.Unlock()
+	slices.Sort(got)
+	if want := []string{"7|1", "9|4"}; !slices.Equal(got, want) {
+		t.Errorf("bodies = %v, want %v", got, want)
 	}
 }
 

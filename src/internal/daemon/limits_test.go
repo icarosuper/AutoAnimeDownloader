@@ -782,7 +782,7 @@ func TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes(t *testing.T) {
 }
 
 // TestWillBatch_NotifiesNewEpisodeOncePerPack: the loop meets a pack once per episode it covers;
-// the push has to be one "EPs 1-26", not 26 "EP n".
+// the push has to be one naming only the anime, not 26 "EP n" — and {{episode}} stays blank.
 func TestWillBatch_NotifiesNewEpisodeOncePerPack(t *testing.T) {
 	spy := newWebhookSpy(t)
 	configs := limitsConfig()
@@ -800,8 +800,61 @@ func TestWillBatch_NotifiesNewEpisodeOncePerPack(t *testing.T) {
 	if n := spy.callCount(); n != 1 {
 		t.Fatalf("want one new_episode webhook for the pack, got %d", n)
 	}
-	want := "New episodes detected|1-26|26|Limits Test Anime EPs 1-26 detected, starting download"
+	want := "New episodes detected||26|New episodes of Limits Test Anime detected, starting download"
 	if body != want {
 		t.Errorf("body = %q, want %q", body, want)
+	}
+}
+
+// flakyBackend rejects the first `fails` Adds, then behaves like the fake.
+type flakyBackend struct {
+	*torrents.FakeBackend
+	fails int
+}
+
+func (b *flakyBackend) Add(magnet string) (string, error) {
+	if b.fails > 0 {
+		b.fails--
+		return "", errors.New("transient")
+	}
+	return b.FakeBackend.Add(magnet)
+}
+
+// TestWillBatch_PackFailureWaitsForTheLoop: the first episode's Add of a pack fails, the next
+// episode retries the same torrent and gets it in. No "failed" push may go out for a pack that is
+// downloading. When every episode fails, the pack fails once, naming only the anime.
+func TestWillBatch_PackFailureWaitsForTheLoop(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		fails int
+		want  int
+	}{
+		{name: "a later episode adds the pack", fails: 1, want: 0},
+		{name: "every episode fails", fails: 1000, want: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			spy := newWebhookSpy(t)
+			configs := limitsConfig()
+			configs.Notifications = files.NotificationsConfig{Webhooks: []files.WebhookPreset{{
+				Name: "spy", URL: spy.server.URL, Method: http.MethodPost, Headers: map[string]string{},
+				Body: "{{episode}}|{{message}}", Events: []string{"download_failed"},
+			}}}
+			anime := animeWithEpisodes(4, anilist.MediaStatusFinished, true, "")
+			searcher := searcherFor([]nyaa.TorrentResult{{Name: "batch", MagnetLink: fakeMagnet(9002)}}, nil, nil, nil)
+			backend := &flakyBackend{FakeBackend: torrents.NewFakeBackend(), fails: tt.fails}
+
+			processAnimeEpisodes(configs, backend, anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher, nil)
+
+			if tt.want == 1 {
+				body := spy.waitForCall(t)
+				if want := "|Limits Test Anime failed: " + notifications.ReasonDownloadRejected; body != want {
+					t.Errorf("body = %q, want %q", body, want)
+				}
+			}
+			time.Sleep(200 * time.Millisecond)
+			if n := spy.callCount(); n != tt.want {
+				t.Errorf("download_failed webhooks = %d, want %d", n, tt.want)
+			}
+		})
 	}
 }

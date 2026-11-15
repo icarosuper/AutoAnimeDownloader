@@ -214,8 +214,9 @@ func processAnimeEpisodes(
 	// per-episode search too, and still get whatever the anime search found (decisions.md #100).
 	stuck := false
 	// A pack hands the same candidates to every episode it covers, so the loop meets it N times.
-	// The "new" and "rejected" notifications go out once per torrent, as the run of its episodes
-	// (decisions.md #124).
+	// The "new" and "rejected" notifications go out once per torrent, as one pack item
+	// (decisions.md #124). "Rejected" waits for the end of the loop: a later episode of the same
+	// pack retries the same candidates and may add the torrent after all.
 	torrentEpisodes := make(map[string][]int)
 	for _, ep := range episodesToDownload {
 		if c := magnetsForEpisodes[ep.Episode].candidates; len(c) > 0 {
@@ -223,14 +224,16 @@ func processAnimeEpisodes(
 		}
 	}
 	notifiedNew := make(map[string]bool)
-	notifiedFailed := make(map[string]bool)
+	added := make(map[string]bool)
+	var failedOrder []string
+	failed := make(map[string]notifications.Episode)
 	// An episode whose candidates came from its own per-episode search below isn't in the map:
 	// it is a torrent of its own.
-	torrentRuns := func(magnet string, base notifications.Episode) []notifications.Episode {
-		if numbers := torrentEpisodes[magnet]; len(numbers) > 0 {
-			return notifications.Runs(base, numbers)
+	torrentItem := func(magnet string, base notifications.Episode) notifications.Episode {
+		if n := len(torrentEpisodes[magnet]); n > 1 {
+			base.PackSize = n
 		}
-		return []notifications.Episode{base}
+		return base
 	}
 	for _, ep := range episodesToDownload {
 		epName := fmt.Sprintf("%s - Episode %d", animeTitle, ep.Episode)
@@ -293,12 +296,13 @@ func processAnimeEpisodes(
 		torrentKey := candidates[0].MagnetLink
 		if !notifiedNew[torrentKey] {
 			notifiedNew[torrentKey] = true
-			notifications.NotifyAll(configs, notifications.NewEpisode, torrentRuns(torrentKey, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode}))
+			notifications.Notify(configs, notifications.NewEpisode, torrentItem(torrentKey, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode}))
 		}
 
 		hash, torrentSize := attemptDownloadWithRetries(configs, backend, disk, candidates, epName)
 
 		if hash != "" {
+			added[torrentKey] = true
 			result.newEpisodes = append(result.newEpisodes, files.EpisodeStruct{
 				AnimeID:            anime.Media.Id,
 				AnimeTotalEpisodes: totalEpisodes,
@@ -339,10 +343,16 @@ func processAnimeEpisodes(
 			result.issues = append(result.issues, issue)
 			// The notification batch (BatchWindowSeconds) merges the pass's N episodes into a single
 			// message, so a full disk doesn't become a flood.
-			if !notifiedFailed[torrentKey] {
-				notifiedFailed[torrentKey] = true
-				notifications.NotifyAll(configs, notifications.DownloadFailed, torrentRuns(torrentKey, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode, Reason: reason}))
+			if _, seen := failed[torrentKey]; !seen {
+				failedOrder = append(failedOrder, torrentKey)
 			}
+			// The last attempt's reason wins: it is the state the pass ended in.
+			failed[torrentKey] = torrentItem(torrentKey, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode, Reason: reason})
+		}
+	}
+	for _, key := range failedOrder {
+		if !added[key] {
+			notifications.Notify(configs, notifications.DownloadFailed, failed[key])
 		}
 	}
 
@@ -1277,8 +1287,8 @@ func removeEpisodesAndLinks(fm FileManagerInterface, backend torrents.TorrentBac
 			for _, k := range forgotten {
 				removed = append(removed, byKey[k])
 			}
-			// One webhook for the whole deletion: a pack leaving is one push and one library scan.
-			notifications.NotifyAll(configs, notifications.EpisodeDeleted, episodeRuns(removed))
+			// One item per torrent: a pack leaving is one push and one library scan.
+			notifications.NotifyAll(configs, notifications.EpisodeDeleted, episodeItems(removed))
 		}
 	}
 

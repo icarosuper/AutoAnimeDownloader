@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -490,35 +491,68 @@ func TestBuildBatchVars_AnimeIDAndTorrentHash(t *testing.T) {
 	}
 }
 
-// TestNotifyAll_PackIsOneWebhookWithRange: with batching off, a pack completing is still ONE
-// request (one push, one Jellyfin scan), and it names the range instead of the first episode.
-func TestNotifyAll_PackIsOneWebhookWithRange(t *testing.T) {
+// TestNotifyAll_PackIsOneWebhookNamingTheAnime: with batching off, a pack completing is still ONE
+// request (one push, one Jellyfin scan). Its text names only the anime and {{episode}} is blank —
+// the variable is a single number or nothing, never a range.
+func TestNotifyAll_PackIsOneWebhookNamingTheAnime(t *testing.T) {
 	srv, bodies := collector(t)
 	cfg := cfgWithWindow(srv.URL, 0, nil, "{{title}}|{{anime_name}}|{{episode}}|{{count}}|{{message}}")
 
-	NotifyAll(cfg, DownloadCompleted, Runs(Episode{AnimeName: "Frieren"}, []int{3, 1, 2, 4}))
+	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Frieren", Number: 1, PackSize: 4})
 
 	got := drain(bodies, 1, 3*time.Second)
 	if len(got) != 1 {
 		t.Fatalf("expected 1 request for the pack, got %d: %v", len(got), got)
 	}
-	if want := "Download completed|Frieren|1-4|4|Frieren EPs 1-4 downloaded successfully"; got[0] != want {
+	if want := "Download completed|Frieren||4|Frieren downloaded successfully"; got[0] != want {
 		t.Errorf("body = %q, want %q", got[0], want)
 	}
 }
 
-// TestRuns_GapSplitsTheRange: a range must not claim an episode the torrent's records skip.
-func TestRuns_GapSplitsTheRange(t *testing.T) {
-	got := Runs(Episode{AnimeName: "X"}, []int{5, 1, 2, 2, 6})
-	if len(got) != 2 || got[0].Number != 1 || got[0].Last != 2 || got[1].Number != 5 || got[1].Last != 6 {
-		t.Errorf("Runs = %+v", got)
+// TestNotifyAll_WindowZeroFiresOnePerItem: with batching off, items handed together are still one
+// webhook each, so the single-value variables stay filled.
+func TestNotifyAll_WindowZeroFiresOnePerItem(t *testing.T) {
+	srv, bodies := collector(t)
+	cfg := cfgWithWindow(srv.URL, 0, nil, "{{anime_id}}|{{torrent_hash}}")
+
+	NotifyAll(cfg, DownloadCompleted, []Episode{
+		{AnimeID: 1, AnimeName: "Frieren", Number: 3, TorrentHash: "a"},
+		{AnimeID: 2, AnimeName: "Dandadan", Number: 1, PackSize: 12, TorrentHash: "b"},
+	})
+
+	got := drain(bodies, 2, 3*time.Second)
+	slices.Sort(got)
+	if want := []string{"1|a", "2|b"}; !slices.Equal(got, want) {
+		t.Errorf("bodies = %v, want %v", got, want)
+	}
+}
+
+// TestBatchLines_PackNamesOnlyTheAnime: in a window, a pack is one line naming the anime, next to
+// the runs of the anime's single-episode torrents.
+func TestBatchLines_PackNamesOnlyTheAnime(t *testing.T) {
+	got := batchLines(DownloadCompleted, []Episode{
+		{AnimeID: 1, AnimeName: "Frieren", Number: 1, PackSize: 12},
+		{AnimeID: 1, AnimeName: "Frieren", Number: 13},
+		{AnimeID: 2, AnimeName: "Dandadan", Number: 1, PackSize: 12},
+	})
+	want := []string{
+		"Frieren downloaded successfully",
+		"Frieren EP 13 downloaded successfully",
+		"Dandadan downloaded successfully",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("lines:\n got: %q\nwant: %q", got, want)
+	}
+	if title := batchTitle(DownloadCompleted, []Episode{{AnimeName: "Frieren", Number: 1, PackSize: 12}, {AnimeName: "Frieren", Number: 13}}); title != "13 episodes downloaded" {
+		t.Errorf("title counts the pack's episodes, got %q", title)
 	}
 }
 
 // TestFireBatch_SourceFilter: a webhook with Sources only gets the items of those sources, and its
-// template is built from that share (a window of 3 where 1 is alice's reads as that 1). A webhook
-// without Sources still gets everything, and an anime the resolver can't place (Re:ZERO, id 3)
-// never reaches a filtered webhook.
+// template is built from that share (a window of 4 where 1 is alice's reads as that 1, plus the
+// unknown one). A webhook without Sources still gets everything. An anime the resolver can't place
+// (Re:ZERO, id 3) reaches every filtered webhook — fail-open — while one it places elsewhere (id 4,
+// bob's only) reaches only bob's.
 func TestFireBatch_SourceFilter(t *testing.T) {
 	srvAll, all := collector(t)
 	srvAlice, alice := collector(t)
@@ -526,7 +560,7 @@ func TestFireBatch_SourceFilter(t *testing.T) {
 	t.Cleanup(Flush)
 
 	SetSourceResolver(func(_ *files.Config, ids []int) map[int][]string {
-		return map[int][]string{1: {"anilist:alice", "anilist:bob"}, 2: {"standalone"}}
+		return map[int][]string{1: {"anilist:alice", "anilist:bob"}, 2: {"standalone"}, 4: {"anilist:bob"}}
 	})
 	t.Cleanup(func() { SetSourceResolver(nil) })
 
@@ -543,21 +577,22 @@ func TestFireBatch_SourceFilter(t *testing.T) {
 	Notify(cfg, DownloadCompleted, Episode{AnimeID: 1, AnimeName: "Frieren", Number: 5})
 	Notify(cfg, DownloadCompleted, Episode{AnimeID: 2, AnimeName: "Dandadan", Number: 3})
 	Notify(cfg, DownloadCompleted, Episode{AnimeID: 3, AnimeName: "Re:ZERO", Number: 12})
+	Notify(cfg, DownloadCompleted, Episode{AnimeID: 4, AnimeName: "Mushishi", Number: 2})
 
-	if got := drain(all, 1, 3*time.Second); len(got) != 1 || !strings.HasPrefix(got[0], "3|") {
-		t.Errorf("the unfiltered webhook gets all 3, got %v", got)
+	if got := drain(all, 1, 3*time.Second); len(got) != 1 || !strings.HasPrefix(got[0], "4|") {
+		t.Errorf("the unfiltered webhook gets all 4, got %v", got)
 	}
-	if got := drain(alice, 1, 3*time.Second); len(got) != 1 || got[0] != "1|Frieren EP 5 downloaded successfully" {
-		t.Errorf("alice's webhook gets only Frieren, got %v", got)
+	if got := drain(alice, 1, 3*time.Second); len(got) != 1 || got[0] != "2|Frieren EP 5 downloaded successfully\nRe:ZERO EP 12 downloaded successfully" {
+		t.Errorf("alice's webhook gets Frieren and the unknown Re:ZERO, got %v", got)
 	}
-	if got := drain(loose, 1, 3*time.Second); len(got) != 1 || got[0] != "1|Dandadan EP 3 downloaded successfully" {
-		t.Errorf("the standalone webhook gets only Dandadan, got %v", got)
+	if got := drain(loose, 1, 3*time.Second); len(got) != 1 || got[0] != "2|Dandadan EP 3 downloaded successfully\nRe:ZERO EP 12 downloaded successfully" {
+		t.Errorf("the standalone webhook gets Dandadan and the unknown Re:ZERO, got %v", got)
 	}
 }
 
-// TestFireBatch_FilteredWebhookWithoutResolverSkips: no resolver means no way to prove an anime
-// belongs to the filter, so the filtered webhook stays quiet while the unfiltered one fires.
-func TestFireBatch_FilteredWebhookWithoutResolverSkips(t *testing.T) {
+// TestFireBatch_FilteredWebhookWithoutResolverFailsOpen: with no resolver every anime is unknown,
+// and unknown reaches the filtered webhook too — a spare push beats a lost one.
+func TestFireBatch_FilteredWebhookWithoutResolverFailsOpen(t *testing.T) {
 	srvAll, all := collector(t)
 	srvAlice, alice := collector(t)
 	SetSourceResolver(nil)
@@ -571,7 +606,7 @@ func TestFireBatch_FilteredWebhookWithoutResolverSkips(t *testing.T) {
 	if got := drain(all, 1, time.Second); len(got) != 1 {
 		t.Errorf("the unfiltered webhook must fire, got %v", got)
 	}
-	if got := drain(alice, 1, 300*time.Millisecond); len(got) != 0 {
-		t.Errorf("the filtered webhook must skip without a resolver, got %v", got)
+	if got := drain(alice, 1, time.Second); len(got) != 1 {
+		t.Errorf("the filtered webhook must fire for an unknown anime, got %v", got)
 	}
 }
