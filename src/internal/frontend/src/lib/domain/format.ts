@@ -81,15 +81,41 @@ export function formatBytes(bytes: number, locale: FormatLocale): string {
   return `${formatDecimal(value, locale)} ${unit}`
 }
 
+/** AniList's score formats; MAL is always POINT_10. */
+export type ScoreFormat = 'POINT_100' | 'POINT_10_DECIMAL' | 'POINT_10' | 'POINT_5' | 'POINT_3'
+
+/** How a list score is shown: text, or AniList's three faces for POINT_3. null = not scored. */
+export type ScoreDisplay = { kind: 'text'; text: string } | { kind: 'smiley'; mood: 'good' | 'ok' | 'bad' } | null
+
 /**
- * Formats a list score (0–10, one decimal at most) as "9/10" or "8.5/10". The backend already
- * normalizes every account's own score format to this scale. 0 means "not scored" and returns
- * an empty string, so callers can just test the result.
+ * Shows a list score the way its own account sees it on AniList: `85/100`, `8,5/10`, `8/10`,
+ * `★ 4/5`, or a face for POINT_3. `score` is the 0–10 one the API always sends; `raw` + `format`
+ * are the account's own, absent when unknown — then the 0–10 score is shown as `x/10`.
  */
-export function formatScore(score: number | undefined, locale: FormatLocale): string {
-  if (!score || score <= 0) return ''
-  const value = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score)
-  return `${value}/10`
+export function formatScore(
+  score: number | undefined,
+  locale: FormatLocale,
+  raw?: number,
+  format?: string,
+): ScoreDisplay {
+  if (!score || score <= 0) return null
+  const num = (n: number, digits = 0) => new Intl.NumberFormat(locale, { maximumFractionDigits: digits }).format(n)
+  const text = (t: string): ScoreDisplay => ({ kind: 'text', text: t })
+  if (raw && raw > 0) {
+    switch (format) {
+      case 'POINT_100':
+        return text(`${num(raw)}/100`)
+      case 'POINT_10_DECIMAL':
+        return text(`${num(raw, 1)}/10`)
+      case 'POINT_10':
+        return text(`${num(raw)}/10`)
+      case 'POINT_5':
+        return text(`★ ${num(raw)}/5`)
+      case 'POINT_3':
+        return { kind: 'smiley', mood: raw >= 3 ? 'good' : raw >= 2 ? 'ok' : 'bad' }
+    }
+  }
+  return text(`${num(score, 1)}/10`)
 }
 
 /** Formats a 0..1 progress fraction as a whole, clamped percentage. */

@@ -62,6 +62,11 @@ type AnimeListAccount struct {
 	Progress int    `json:"progress" example:"5"`
 	// Score is 0–10 with one decimal whatever the account's own score format; 0 = not scored.
 	Score float64 `json:"score,omitempty" example:"8.5"`
+	// ScoreRaw is the score in the account's own ScoreFormat (POINT_100, POINT_10_DECIMAL,
+	// POINT_10, POINT_5, POINT_3 — MAL is always POINT_10). Both absent when the format is
+	// unknown; then only Score can be shown.
+	ScoreRaw    float64 `json:"score_raw,omitempty" example:"85"`
+	ScoreFormat string  `json:"score_format,omitempty" example:"POINT_100"`
 	// Avatar is the AniList avatar URL; empty for MAL, whose list endpoint has none.
 	Avatar string `json:"avatar,omitempty"`
 }
@@ -79,6 +84,10 @@ func listAccounts(accounts []anilist.AccountEntry) []AnimeListAccount {
 			Progress: a.Progress,
 			Score:    a.Score,
 			Avatar:   a.Avatar,
+		}
+		if a.Score > 0 && a.ScoreFormat != "" {
+			out[i].ScoreRaw = a.ScoreRaw
+			out[i].ScoreFormat = a.ScoreFormat
 		}
 	}
 	return out

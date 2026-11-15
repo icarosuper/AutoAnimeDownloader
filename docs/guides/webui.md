@@ -27,7 +27,7 @@ Status changes push over WebSocket, so the page updates live without a refresh.
 
 Per-anime episode list, opened by clicking an anime on the Status page:
 
-- **On lists** — every configured account that has the anime on its list, in any status, with its own status and score (0–10, whatever the account's score format), avatar and a link to the account's list
+- **On lists** — every configured account that has the anime on its list, in any status, with its own status, progress (`ep 7/12`) and score in that account's own format (`85/100`, `8.5/10`, `★ 4/5`, a face for AniList's 3-point scale; MAL is always `x/10`), avatar and a link to the account's list
 - Episode table (episode number, Anilist watch status, downloaded state)
 - Header **Replace torrent** opens the [torrent picker](#torrent-picker) (`/status/:id/torrents`)
 - Per-episode actions: download, delete, re-download, replace with a manual magnet link (the

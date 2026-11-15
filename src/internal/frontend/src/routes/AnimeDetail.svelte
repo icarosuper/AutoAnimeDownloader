@@ -945,7 +945,11 @@
     </div>
   </div>
 
-  <AnimeAccountsPanel accounts={detail?.accounts ?? []} statusLabel={listStatusLabel} />
+  <AnimeAccountsPanel
+    accounts={detail?.accounts ?? []}
+    statusLabel={listStatusLabel}
+    totalEpisodes={anime?.total_episodes ?? 0}
+  />
 
   {#if loading}
     <Loading message={m.detail_loading()} />

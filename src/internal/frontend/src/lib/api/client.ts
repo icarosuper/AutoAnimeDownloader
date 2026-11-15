@@ -438,6 +438,10 @@ export interface AnimeListAccount {
   progress: number
   /** 0–10 whatever the account's score format; absent = not scored. */
   score?: number
+  /** The score in the account's own format; both absent when the format is unknown. */
+  score_raw?: number
+  /** POINT_100, POINT_10_DECIMAL, POINT_10, POINT_5 or POINT_3 (MAL: always POINT_10). */
+  score_format?: string
   /** AniList avatar URL; absent for MAL. */
   avatar?: string
 }

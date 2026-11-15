@@ -291,7 +291,7 @@ func TestGetAnimeInfo_CarriesEachAccountsEntry(t *testing.T) {
 	scored := `{"anime_id":2,"anime_title":"Anime 2","status":2,"num_watched_episodes":12,"is_rewatching":0,"score":7}`
 	fake := &malFake{
 		pages:   map[int]string{0: "[" + scored + "]"},
-		entries: `{"id":77,"status":"PLANNING","progress":0,"score":8.5,"user":{"avatar":{"medium":"http://av"}},"media":{"id":1002,"status":"RELEASING"}}`,
+		entries: `{"id":77,"status":"PLANNING","progress":0,"score":8.5,"rawScore":85,"user":{"avatar":{"medium":"http://av"},"mediaListOptions":{"scoreFormat":"POINT_100"}},"media":{"id":1002,"status":"RELEASING"}}`,
 	}
 	defer MockAniListDo(fake.do)()
 
@@ -300,8 +300,8 @@ func TestGetAnimeInfo_CarriesEachAccountsEntry(t *testing.T) {
 		t.Fatalf("GetAnimeInfo: %+v, %v", ml, err)
 	}
 	want := []AccountEntry{
-		{Source: AccountSourceAniList, Username: "anilistUser", Status: MediaListStatusPlanning, Progress: 0, Score: 8.5, Avatar: "http://av"},
-		{Source: AccountSourceMAL, Username: "malUser", Status: MediaListStatusCompleted, Progress: 12, Score: 7},
+		{Source: AccountSourceAniList, Username: "anilistUser", Status: MediaListStatusPlanning, Progress: 0, Score: 8.5, ScoreRaw: 85, ScoreFormat: "POINT_100", Avatar: "http://av"},
+		{Source: AccountSourceMAL, Username: "malUser", Status: MediaListStatusCompleted, Progress: 12, Score: 7, ScoreRaw: 7, ScoreFormat: ScoreFormatPoint10},
 	}
 	if fmt.Sprint(ml.Accounts) != fmt.Sprint(want) {
 		t.Fatalf("accounts:\n got %+v\nwant %+v", ml.Accounts, want)

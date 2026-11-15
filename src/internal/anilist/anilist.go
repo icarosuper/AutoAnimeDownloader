@@ -267,7 +267,11 @@ type MediaList struct {
 	// account uses: the queries that read it ask for `score(format: POINT_10_DECIMAL)`. Only
 	// getMediaListEntry (the detail screen) asks; every other query leaves it 0.
 	Score float64 `json:"score,omitempty"`
-	// User is the list owner, only requested by getMediaListEntry (for the avatar).
+	// RawScore is the same score in the account's own format (User.MediaListOptions.ScoreFormat):
+	// 85 on POINT_100, 4 on POINT_5, 1–3 on POINT_3. Asked next to Score (`rawScore: score`), so
+	// the 0–10 one is still there when the format doesn't come back.
+	RawScore float64 `json:"rawScore,omitempty"`
+	// User is the list owner, only requested by getMediaListEntry (avatar and score format).
 	User *ListUser `json:"user,omitempty"`
 	// Accounts says which list accounts have this media, each with its OWN progress. It never
 	// comes from AniList (`json:"-"`, so the on-disk cache snapshots don't carry it either): the
@@ -289,19 +293,31 @@ type ListUser struct {
 	Avatar struct {
 		Medium string `json:"medium"`
 	} `json:"avatar"`
+	MediaListOptions *struct {
+		ScoreFormat string `json:"scoreFormat"`
+	} `json:"mediaListOptions,omitempty"`
 }
+
+// ScoreFormatPoint10 is AniList's name for a whole 1–10 score, which is also MAL's only scale.
+const ScoreFormatPoint10 = "POINT_10"
 
 // AccountEntry is one account's own list entry for a media: who (source + username) and their
 // status, progress and score. Source is needed because the same username can exist on AniList and
 // on MAL. Avatar is empty for MAL (its list endpoint has none) and for every query that doesn't
 // ask for the user.
+//
+// Score is always 0–10. ScoreRaw + ScoreFormat are the same score as the account itself sees it;
+// ScoreFormat is empty when it is unknown (queries that don't ask for the user, cache snapshots
+// written before it was asked), and then only Score can be shown.
 type AccountEntry struct {
-	Source   string
-	Username string
-	Status   MediaListStatus
-	Progress int
-	Score    float64
-	Avatar   string
+	Source      string
+	Username    string
+	Status      MediaListStatus
+	Progress    int
+	Score       float64
+	ScoreRaw    float64
+	ScoreFormat string
+	Avatar      string
 }
 
 // StampAccount marks every entry of one account's list as belonging to that account. It writes
@@ -317,6 +333,14 @@ func StampAccount(list []MediaList, source, username string) {
 		}
 		if list[i].User != nil {
 			entry.Avatar = list[i].User.Avatar.Medium
+			if opts := list[i].User.MediaListOptions; opts != nil && opts.ScoreFormat != "" {
+				entry.ScoreRaw = list[i].RawScore
+				entry.ScoreFormat = opts.ScoreFormat
+			}
+		}
+		if source == AccountSourceMAL && list[i].Score > 0 {
+			entry.ScoreRaw = list[i].Score
+			entry.ScoreFormat = ScoreFormatPoint10
 		}
 		list[i].Accounts = []AccountEntry{entry}
 	}
@@ -987,7 +1011,8 @@ func getMediaListEntry(userName string, mediaId int, priority Priority) (*AniLis
 					status
 					progress
 					score(format: POINT_10_DECIMAL)
-					user { avatar { medium } }
+					rawScore: score
+					user { avatar { medium } mediaListOptions { scoreFormat } }
 					customLists
 					media {` + mediaByIDFields + `}
 				}

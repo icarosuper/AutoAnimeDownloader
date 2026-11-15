@@ -119,14 +119,26 @@ describe('formatDate', () => {
 })
 
 describe('formatScore', () => {
-  it('shows a whole score without decimals and a half score with one', () => {
-    expect(formatScore(9, 'en')).toBe('9/10')
-    expect(formatScore(8.5, 'en')).toBe('8.5/10')
-    expect(formatScore(8.5, 'pt-BR')).toBe('8,5/10')
+  const text = (t: string) => ({ kind: 'text', text: t })
+
+  it('shows the score in the account\'s own format', () => {
+    expect(formatScore(8.5, 'en', 85, 'POINT_100')).toEqual(text('85/100'))
+    expect(formatScore(8.5, 'pt-BR', 8.5, 'POINT_10_DECIMAL')).toEqual(text('8,5/10'))
+    expect(formatScore(8, 'en', 8, 'POINT_10')).toEqual(text('8/10'))
+    expect(formatScore(8, 'en', 4, 'POINT_5')).toEqual(text('★ 4/5'))
+    expect(formatScore(8.5, 'en', 3, 'POINT_3')).toEqual({ kind: 'smiley', mood: 'good' })
+    expect(formatScore(6, 'en', 2, 'POINT_3')).toEqual({ kind: 'smiley', mood: 'ok' })
+    expect(formatScore(3.5, 'en', 1, 'POINT_3')).toEqual({ kind: 'smiley', mood: 'bad' })
   })
 
-  it('is empty for an unscored entry', () => {
-    expect(formatScore(0, 'en')).toBe('')
-    expect(formatScore(undefined, 'en')).toBe('')
+  it('falls back to the 0–10 score when the format is unknown', () => {
+    expect(formatScore(9, 'en')).toEqual(text('9/10'))
+    expect(formatScore(8.5, 'pt-BR')).toEqual(text('8,5/10'))
+    expect(formatScore(8.5, 'en', 85, 'SOMETHING_NEW')).toEqual(text('8.5/10'))
+  })
+
+  it('is null for an unscored entry', () => {
+    expect(formatScore(0, 'en', 0, 'POINT_100')).toBeNull()
+    expect(formatScore(undefined, 'en')).toBeNull()
   })
 })
