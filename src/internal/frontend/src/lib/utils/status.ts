@@ -33,6 +33,36 @@ export function accountKey(source: AccountSource, username: string): string {
   return `${source}:${username}`
 }
 
+/** A configured list account, as the user filter and the webhook source filter both list it. */
+export type ListAccount = {
+  key: string
+  source: AccountSource
+  username: string
+  /** Only set when the same username exists on AniList and MAL — the label needs it then. */
+  service?: 'AniList' | 'MAL'
+}
+
+/** Every configured account, AniList first, in config order. */
+export function listAccounts(anilist: string[], mal: string[]): ListAccount[] {
+  const all = [
+    ...anilist.map(username => ({ source: 'anilist' as const, username })),
+    ...mal.map(username => ({ source: 'mal' as const, username })),
+  ]
+  return all.map(acc => ({
+    key: accountKey(acc.source, acc.username),
+    source: acc.source,
+    username: acc.username,
+    ...(all.filter(o => o.username === acc.username).length > 1
+      ? { service: acc.source === 'anilist' ? ('AniList' as const) : ('MAL' as const) }
+      : {}),
+  }))
+}
+
+/** The username alone; the service is spelled out only when the name is ambiguous. */
+export function accountLabel(acc: { username: string; service?: string }): string {
+  return acc.service ? `${acc.username} (${acc.service})` : acc.username
+}
+
 const ACCOUNT_KEY = /^(anilist|mal):.+$/
 
 /**
@@ -95,17 +125,47 @@ export function filterAnimes(
   search: string,
   options: StatusFilterOptions = {},
 ): AnimeInfo[] {
+  return animes.filter(animeFilter(search, options))
+}
+
+function animeFilter(search: string, options: StatusFilterOptions): (a: AnimeInfo) => boolean {
   const term = normalizeName(search.trim())
   const unwatched = options.unwatched ?? false
   const type = options.type ?? 'all'
-  return animes.filter(a => {
+  return a => {
     // Search by ANY of the anime's titles — the user may only know the romaji, the kanji or a
     // synonym, while the card shows English.
     if (term && ![a.name, ...(a.alt_names ?? [])].some(n => normalizeName(n).includes(term))) return false
     if (unwatched && a.episodes_watched >= a.episodes_released && a.episodes_released > 0) return false
     if (!matchesType(a, type)) return false
     return true
-  })
+  }
+}
+
+/**
+ * For each key, what `filterAnimes(scopeToAccounts(animes, [key]), search, options).length` would
+ * be — the count the user filter shows next to each account — in one pass over the list instead
+ * of one pass per account. Each anime is tested with its watched/pending projected onto that one
+ * account, like scopeToAccounts does.
+ */
+export function accountCounts(
+  animes: AnimeInfo[],
+  keys: string[],
+  search: string,
+  options: StatusFilterOptions = {},
+): Record<string, number> {
+  const counts: Record<string, number> = Object.fromEntries(keys.map(k => [k, 0]))
+  const matches = animeFilter(search, options)
+  for (const a of animes) {
+    const seen = new Set<string>()
+    for (const acc of a.accounts ?? []) {
+      const key = accountKey(acc.source, acc.username)
+      if (!(key in counts) || seen.has(key)) continue
+      seen.add(key)
+      if (matches({ ...a, episodes_watched: acc.episodes_watched, episodes_pending: acc.episodes_pending })) counts[key]++
+    }
+  }
+  return counts
 }
 
 export function encodeStatusView(v: StatusViewState): string {

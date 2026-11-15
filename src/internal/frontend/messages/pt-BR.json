@@ -88,6 +88,7 @@
   "status_filter_account": "Filtrar por usuário",
   "status_filter_accounts_all": "Todos os usuários",
   "status_filter_accounts_more": "{first} +{more}",
+  "status_filter_account_removed": "O filtro de usuário apontava para uma conta que não está mais configurada, então ela foi removida.",
   "status_clear_filters": "Limpar filtros",
   "status_loading": "Carregando status...",
   "status_toast_load_failed": "Falha ao carregar os dados",

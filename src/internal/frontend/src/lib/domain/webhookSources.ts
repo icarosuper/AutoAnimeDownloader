@@ -1,3 +1,5 @@
+import { listAccounts } from '../utils/status.js'
+
 // Options and toggling for the per-webhook source filter (WebhookPreset.anime_sources): which animes a
 // webhook notifies about. Keys are the backend's: "anilist:<user>", "mal:<user>", "standalone".
 // An empty list means every anime — the behavior before the filter existed — and matching is OR.
@@ -16,15 +18,11 @@ export type SourceOption =
  * `service` is only set when the same username exists on AniList and MAL.
  */
 export function sourceOptions(anilist: string[], mal: string[], current: string[] = []): SourceOption[] {
-  const accounts = [
-    ...anilist.map(username => ({ key: `anilist:${username}`, username, service: 'AniList' as const })),
-    ...mal.map(username => ({ key: `mal:${username}`, username, service: 'MAL' as const })),
-  ]
-  const options: SourceOption[] = accounts.map(acc => ({
+  const options: SourceOption[] = listAccounts(anilist, mal).map(acc => ({
     key: acc.key,
     kind: 'account',
     username: acc.username,
-    ...(accounts.filter(o => o.username === acc.username).length > 1 ? { service: acc.service } : {}),
+    ...(acc.service ? { service: acc.service } : {}),
   }))
   options.push({ key: SOURCE_STANDALONE, kind: 'standalone' })
   for (const key of current) {

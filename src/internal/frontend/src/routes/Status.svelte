@@ -42,7 +42,9 @@
     breakdown,
     encodeStatusView,
     decodeStatusView,
-    accountKey,
+    accountCounts,
+    accountLabel,
+    listAccounts,
     scopeToAccounts,
     type SortKey,
     type SortDir,
@@ -148,6 +150,9 @@
   let anilistUsernames: string[] = [];
   let malUsernames: string[] = [];
   let loading = true;
+  // The account options come from the config. Until it answers once — it may fail on load, and is
+  // then retried on the animes poll — a URL selection can't be validated and is trusted as is.
+  let configLoaded = false;
   let actionLoading = false;
   let search = "";
   let filterUnwatched = false;
@@ -170,23 +175,31 @@
   // User filter. The options come from the config, not from the animes: an account with nothing
   // listed right now is still an account. The username alone is the label; the source is only
   // spelled out when the same name exists on both AniList and MAL.
-  $: accountOptions = [
-    ...anilistUsernames.map((username) => ({ source: "anilist" as const, username })),
-    ...malUsernames.map((username) => ({ source: "mal" as const, username })),
-  ].map((acc, _, all) => ({
-    key: accountKey(acc.source, acc.username),
-    label: all.filter((o) => o.username === acc.username).length > 1
-      ? `${acc.username} (${acc.source === "anilist" ? "AniList" : "MAL"})`
-      : acc.username,
+  $: accountOptions = listAccounts(anilistUsernames, malUsernames).map((acc) => ({
+    key: acc.key,
+    label: accountLabel(acc),
   }));
   // Filtering by user only makes sense with two or more accounts.
   $: showAccountFilter = accountOptions.length >= 2;
   // Until the config answers there are no options to validate against, so a URL selection is
-  // trusted for that moment instead of flashing the unfiltered list. Afterwards a removed account
-  // just stops counting.
-  $: activeAccounts = loading
-    ? selectedAccounts
-    : selectedAccounts.filter((key) => accountOptions.some((o) => o.key === key));
+  // trusted instead of silently showing the unfiltered list.
+  $: activeAccounts = configLoaded
+    ? selectedAccounts.filter((key) => accountOptions.some((o) => o.key === key))
+    : selectedAccounts;
+
+  // An account the config no longer has leaves the selection — and the URL — with a notice, so a
+  // shared link that pointed at it doesn't pass for filtered while showing everything. Called when
+  // the config arrives and when a URL is applied; a reactive block would loop through activeAccounts.
+  function dropUnknownAccounts() {
+    if (!configLoaded) return;
+    // From the usernames, not accountOptions: that one is reactive and may not have caught up yet.
+    const configured = listAccounts(anilistUsernames, malUsernames).map((acc) => acc.key);
+    const known = selectedAccounts.filter((key) => configured.includes(key));
+    if (known.length !== selectedAccounts.length) {
+      selectedAccounts = known;
+      toast.info(m.status_filter_account_removed());
+    }
+  }
 
   // Everything below reads `scopedAnimes`: the user filter also re-projects watched/pending onto
   // the selected accounts, so every count, chip and the "Unwatched" toggle answer for them.
@@ -203,11 +216,16 @@
   };
   $: unwatchedCount = filterAnimes(scopedAnimes, search, { unwatched: true, type: typeFilter }).length;
   // Each account's count is what selecting ONLY it would show, like the type segments.
+  $: accountCountsByKey = accountCounts(
+    animes,
+    accountOptions.map((opt) => opt.key),
+    search,
+    { unwatched: filterUnwatched, type: typeFilter },
+  );
   $: accountItems = accountOptions.map((opt) => ({
     ...opt,
     checked: activeAccounts.includes(opt.key),
-    count: filterAnimes(scopeToAccounts(animes, [opt.key]), search, { unwatched: filterUnwatched, type: typeFilter })
-      .length,
+    count: accountCountsByKey[opt.key] ?? 0,
   }));
   $: accountMenuItems = accountItems.map((opt) => ({
     id: opt.key,
@@ -247,6 +265,7 @@
     filterUnwatched = view.unwatched;
     typeFilter = view.type;
     selectedAccounts = view.accounts;
+    dropUnknownAccounts();
   }
 
   function syncStatusView() {
@@ -447,11 +466,24 @@
   let torrentsPollInterval: ReturnType<typeof setInterval> | null = null;
 
   async function loadAnimes() {
+    if (!configLoaded) {
+      loadConfig().catch((err) => console.error("Failed to load config:", err));
+    }
     try {
       animes = await getAnimes();
     } catch (err) {
       console.error("Failed to load animes:", err);
     }
+  }
+
+  async function loadConfig() {
+    const configData = await getConfig();
+    checkInterval = configData.check_interval;
+    completedPath = configData.completed_anime_path ?? "";
+    anilistUsernames = configData.anilist_usernames ?? [];
+    malUsernames = configData.mal_usernames ?? [];
+    configLoaded = true;
+    dropUnknownAccounts();
   }
 
   async function loadTorrents() {
@@ -482,17 +514,16 @@
   async function loadInitialData() {
     try {
       loading = true;
-      const [statusData, animesData, configData] = await Promise.all([
+      // The config on its own: its failure must not cost the animes, and the poll retries it.
+      const [statusData, animesData] = await Promise.all([
         getStatus(),
         getAnimes(),
-        getConfig(),
+        loadConfig().catch((err) => {
+          toast.error(err instanceof Error ? err.message : m.status_toast_load_failed());
+        }),
       ]);
       status = statusData;
       animes = animesData;
-      checkInterval = configData.check_interval;
-      completedPath = configData.completed_anime_path ?? "";
-      anilistUsernames = configData.anilist_usernames ?? [];
-      malUsernames = configData.mal_usernames ?? [];
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.status_toast_load_failed());
     } finally {

@@ -46,7 +46,7 @@ const library: AnimeInfo[] = [
   anime({ anime_id: 5, name: 'Blacklisted Show', media_status: 'FINISHED', is_blacklisted: true }),
 ]
 
-async function renderStatus(animes: AnimeInfo[] = library, config: Record<string, unknown> = {}) {
+async function renderStatus(animes: AnimeInfo[] = library, config: Record<string, unknown> | Error = {}) {
   vi.mocked(client.getStatus).mockResolvedValue({
     status: 'running',
     last_check: '2026-08-19T12:00:00Z',
@@ -57,7 +57,8 @@ async function renderStatus(animes: AnimeInfo[] = library, config: Record<string
     disk_low: false,
   } as StatusResponse)
   vi.mocked(client.getAnimes).mockResolvedValue(animes)
-  vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60, ...config } as never)
+  if (config instanceof Error) vi.mocked(client.getConfig).mockRejectedValue(config)
+  else vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60, ...config } as never)
   vi.mocked(client.getTorrents).mockResolvedValue([])
   vi.mocked(client.getLastCheck).mockResolvedValue({
     finished_at: '0001-01-01T00:00:00Z',
@@ -241,5 +242,16 @@ describe('Status — user filter', () => {
     expect(screen.getByRole('button', { name: /^bob$/ })).toBeTruthy()
     expect(screen.queryByText('Loose Show')).toBeNull()
     expect(screen.getByText(/2 of 3|2 de 3/)).toBeTruthy()
+    // The gone account leaves the URL too, so the link no longer claims a filter it can't apply.
+    await tick()
+    expect(window.location.hash).not.toContain('gone')
+  })
+
+  it('keeps the URL selection when the config fails to load instead of showing everything', async () => {
+    window.location.hash = '#/status?account=anilist%3Abob'
+    await renderStatus(users, new Error('boom'))
+    expect(screen.getAllByText('Bob Show').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Loose Show')).toBeNull()
+    expect(window.location.hash).toContain('bob')
   })
 })

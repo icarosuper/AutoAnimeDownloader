@@ -10,6 +10,9 @@ import {
   encodeStatusView,
   decodeStatusView,
   DEFAULT_STATUS_VIEW,
+  accountCounts,
+  accountLabel,
+  listAccounts,
   scopeToAccounts,
   accountKey,
 } from '../../src/lib/utils/status.js'
@@ -384,5 +387,41 @@ describe('breakdown', () => {
     expect(b).toEqual({ watched: 9, downloaded: 9, released: 9, total: 12 })
     expect(b.downloaded - b.watched).toBeGreaterThanOrEqual(0)
     expect(b.released - b.downloaded).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('listAccounts / accountLabel', () => {
+  it('names the service only when the username is on both', () => {
+    const accs = listAccounts(['alice'], ['alice', 'carol'])
+    expect(accs.map(a => a.key)).toEqual(['anilist:alice', 'mal:alice', 'mal:carol'])
+    expect(accs.map(accountLabel)).toEqual(['alice (AniList)', 'alice (MAL)', 'carol'])
+  })
+})
+
+describe('accountCounts', () => {
+  const acc = (username: string, watched: number, pending: number) => ({
+    source: 'anilist' as const, username, episodes_watched: watched, episodes_pending: pending,
+  })
+  const base = {
+    episodes_downloaded: 0, total_episodes: 12, latest_episode_number: 1, last_download_date: '',
+    episodes_released: 12, episodes_watched: 0, episodes_pending: 0,
+  }
+  const animes = [
+    { ...base, anime_id: 1, name: 'Shared', accounts: [acc('alice', 12, 0), acc('bob', 2, 10)] },
+    { ...base, anime_id: 2, name: 'Bob only', accounts: [acc('bob', 1, 11)] },
+    { ...base, anime_id: 3, name: 'Nobody' },
+  ]
+
+  it('matches scoping to each account alone', () => {
+    for (const opts of [{}, { unwatched: true }]) {
+      const counts = accountCounts(animes, ['anilist:alice', 'anilist:bob'], '', opts)
+      for (const key of ['anilist:alice', 'anilist:bob']) {
+        expect(counts[key]).toBe(filterAnimes(scopeToAccounts(animes, [key]), '', opts).length)
+      }
+    }
+    expect(accountCounts(animes, ['anilist:alice', 'anilist:bob'], '', { unwatched: true })).toEqual({
+      'anilist:alice': 0,
+      'anilist:bob': 2,
+    })
   })
 })

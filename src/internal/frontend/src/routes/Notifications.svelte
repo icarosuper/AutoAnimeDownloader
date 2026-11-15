@@ -16,6 +16,7 @@
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
   import { sourceOptions, toggleSource, type SourceOption } from "../lib/domain/webhookSources.js";
+  import { accountLabel } from "../lib/utils/status.js";
 
   $: T = $locale && {
     title: m.notifications_title(),
@@ -63,7 +64,7 @@
   function sourceLabel(opt: SourceOption): string {
     switch (opt.kind) {
       case 'account':
-        return opt.service ? `${opt.username} (${opt.service})` : opt.username;
+        return accountLabel(opt);
       case 'standalone':
         return (T && T.sourceStandalone) || '';
       default:
