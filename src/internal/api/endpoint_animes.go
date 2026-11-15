@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -270,7 +271,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			// same burst as decisions.md #65, now without even a chance of working.
 			logger.Logger.Warn().Msg("Skipping orphan refresh: the AniList list came from the local cache")
 		} else {
-			refreshOrphanAnimes(server.FileManager, animeMap, covered, config.ExcludedLists, config.AnilistUsernames, config.MALUsernames, standaloneSet)
+			refreshOrphanAnimes(server.FileManager, animeMap, covered, config.ExcludedLists, config.DownloadStatuses, config.AnilistUsernames, config.MALUsernames, standaloneSet)
 		}
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
@@ -313,7 +314,7 @@ func countPendingEpisodes(watched, released int, downloaded map[int]bool) int {
 // the biggest consumer of the AniList budget, and the one its burst limiter punishes. That's also
 // why the previous version needed a concurrency semaphore: with two queries in total, there's
 // nothing left to limit.
-func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists []string, usernames, malUsers []string, standalone map[int]bool) {
+func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo, covered map[int]bool, excludedLists, downloadStatuses []string, usernames, malUsers []string, standalone map[int]bool) {
 	var orphans []*AnimeInfo
 	var ids []int
 	for _, info := range animeMap {
@@ -347,7 +348,23 @@ func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo
 		}
 
 		applyFetchedMedia(info, ml, excludedLists)
+		// GetAnimeInfoByIDs answers in ANY list status, but on the dashboard an anime belongs to the
+		// accounts that have it in a download status — the same accounts the filtered list fetch
+		// stamps on covered animes. Without the cut the user filter would mean "on the list" for
+		// orphans and "being downloaded for" for everything else.
+		info.Accounts = animeAccounts(inStatuses(ml.Accounts, downloadStatuses))
 	}
+}
+
+// inStatuses keeps the accounts whose own list status is one of statuses.
+func inStatuses(accounts []anilist.AccountEntry, statuses []string) []anilist.AccountEntry {
+	var kept []anilist.AccountEntry
+	for _, a := range accounts {
+		if slices.Contains(statuses, string(a.Status)) {
+			kept = append(kept, a)
+		}
+	}
+	return kept
 }
 
 // applyFetchedMedia copies AniList-derived display fields onto an already-listed anime. Merge of a

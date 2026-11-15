@@ -379,11 +379,11 @@ func TestHandleAnimes(t *testing.T) {
 		if animeData["episodes_watched"].(float64) != 10 {
 			t.Errorf("expected refreshed episodes_watched=10, got %v", animeData["episodes_watched"])
 		}
-		// An orphan is still on someone's list (just outside the download statuses): the user filter
-		// must still find it under that account.
-		accounts, _ := animeData["accounts"].([]interface{})
-		if len(accounts) != 1 || accounts[0].(map[string]interface{})["username"] != "testuser" {
-			t.Errorf("the refreshed orphan must carry the account that tracks it, got %v", animeData["accounts"])
+		// The orphan is still on testuser's list, but COMPLETED — outside the download statuses. On the
+		// dashboard an anime belongs to the accounts it is downloaded for, so the user filter must not
+		// list it under testuser (the same rule the filtered fetch applies to covered animes).
+		if accounts, _ := animeData["accounts"].([]interface{}); len(accounts) != 0 {
+			t.Errorf("an orphan outside the download statuses must carry no account, got %v", animeData["accounts"])
 		}
 	})
 
@@ -883,5 +883,17 @@ func TestMergeAniListAnimesAltNames(t *testing.T) {
 	mergeAniListAnimes(map[string]*AnimeInfo{"Anime": existing}, []anilist.MediaList{entry}, nil)
 	if len(existing.AltNames) != 2 {
 		t.Errorf("existing entry missing alt_names: %q", existing.AltNames)
+	}
+}
+
+// inStatuses keeps only the accounts whose own list status is a download status.
+func TestInStatuses(t *testing.T) {
+	got := inStatuses([]anilist.AccountEntry{
+		{Source: "anilist", Username: "a", Status: "CURRENT"},
+		{Source: "anilist", Username: "b", Status: "COMPLETED"},
+		{Source: "mal", Username: "c", Status: "REPEATING"},
+	}, []string{"CURRENT", "REPEATING"})
+	if len(got) != 2 || got[0].Username != "a" || got[1].Username != "c" {
+		t.Errorf("inStatuses = %+v", got)
 	}
 }
