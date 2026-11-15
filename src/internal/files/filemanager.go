@@ -92,6 +92,11 @@ type WebhookPreset struct {
 	Headers map[string]string `json:"headers"`
 	Body    string            `json:"body"`
 	Events  []string          `json:"events"`
+	// AnimeSources narrows the webhook to the animes of some accounts and/or the standalone ones:
+	// "anilist:<user>", "mal:<user>", "standalone". Empty = every anime (the behavior before the
+	// field existed). An anime matches when ANY of its sources is listed; see
+	// notifications.SourceResolver for what an anime's sources are.
+	AnimeSources []string `json:"anime_sources,omitempty"`
 }
 
 type NotificationsConfig struct {

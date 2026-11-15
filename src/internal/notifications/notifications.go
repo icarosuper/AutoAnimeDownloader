@@ -352,12 +352,75 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 	return nil
 }
 
+// SourceStandalone is the WebhookPreset.AnimeSources key of the standalone animes.
+const SourceStandalone = "standalone"
+
+// AccountSource is the WebhookPreset.AnimeSources key of a list account — the same "<source>:<user>"
+// the dashboard user filter puts in its URL, so one account is spelled the same everywhere.
+func AccountSource(source, username string) string {
+	return source + ":" + username
+}
+
+// SourceResolver answers, for each anime id, its sources: the keys of the configured accounts
+// that have it on their list right now (any list status) plus SourceStandalone when it is tracked
+// as standalone. An id missing from the map is UNKNOWN — a webhook filtered by source then skips
+// it, it can't prove it belongs. It is resolved at fire time, not stored on the episode record, so
+// records written before the filter existed (and deletions of long-finished animes) work too.
+type SourceResolver func(cfg *files.Config, animeIDs []int) map[int][]string
+
+var (
+	resolverMu     sync.RWMutex
+	sourceResolver SourceResolver
+)
+
+// SetSourceResolver wires the resolver. The daemon sets it at boot (it needs AniList and the
+// standalone file, which this package doesn't know); without one, every filtered webhook skips.
+func SetSourceResolver(r SourceResolver) {
+	resolverMu.Lock()
+	defer resolverMu.Unlock()
+	sourceResolver = r
+}
+
+func resolveSources(cfg *files.Config, items []Episode) map[int][]string {
+	resolverMu.RLock()
+	r := sourceResolver
+	resolverMu.RUnlock()
+	if r == nil {
+		return nil
+	}
+	var ids []int
+	for _, it := range items {
+		if it.AnimeID != 0 && !slices.Contains(ids, it.AnimeID) {
+			ids = append(ids, it.AnimeID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return r(cfg, ids)
+}
+
+// itemsFor keeps the items a preset wants: all of them when it has no AnimeSources, otherwise those
+// whose anime has at least one of the preset's sources (OR).
+func itemsFor(preset files.WebhookPreset, items []Episode, sources map[int][]string) []Episode {
+	if len(preset.AnimeSources) == 0 {
+		return items
+	}
+	var kept []Episode
+	for _, it := range items {
+		if slices.ContainsFunc(sources[it.AnimeID], func(s string) bool { return slices.Contains(preset.AnimeSources, s) }) {
+			kept = append(kept, it)
+		}
+	}
+	return kept
+}
+
 // batch accumulates the items of one event's window. The timer is stored with it so Flush can
 // cancel it: without that, the shutdown flush and the timer would race on the same queue.
 type batch struct {
-	items   []Episode
-	timer   *time.Timer
-	webhook []files.WebhookPreset
+	items []Episode
+	timer *time.Timer
+	cfg   *files.Config
 }
 
 var (
@@ -386,7 +449,7 @@ func NotifyAll(cfg *files.Config, event Event, items []Episode) {
 
 	window := time.Duration(cfg.Notifications.BatchWindowSeconds) * time.Second
 	if window <= 0 {
-		fireBatch(event, items, cfg.Notifications.Webhooks, false)
+		fireBatch(event, items, cfg, false)
 		return
 	}
 
@@ -395,13 +458,13 @@ func NotifyAll(cfg *files.Config, event Event, items []Episode) {
 
 	if b, ok := pendingBatch[event]; ok {
 		b.items = append(b.items, items...)
-		// The window's webhooks are those of the last config seen: if the user edited the
-		// presets mid-window, the latest one wins.
-		b.webhook = cfg.Notifications.Webhooks
+		// The window's webhooks (and accounts, for the source filter) are those of the last config
+		// seen: if the user edited the presets mid-window, the latest one wins.
+		b.cfg = cfg
 		return
 	}
 
-	b := &batch{items: slices.Clone(items), webhook: cfg.Notifications.Webhooks}
+	b := &batch{items: slices.Clone(items), cfg: cfg}
 	pendingBatch[event] = b
 	b.timer = time.AfterFunc(window, func() { flushEvent(event, false) })
 }
@@ -436,29 +499,58 @@ func flushEvent(event Event, wait bool) {
 	}
 	batchMu.Unlock()
 
-	fireBatch(event, b.items, b.webhook, wait)
+	fireBatch(event, b.items, b.cfg, wait)
 }
 
-func fireBatch(event Event, items []Episode, webhooks []files.WebhookPreset, wait bool) {
-	if len(items) == 0 {
+// fireBatch sends the items to every preset subscribed to the event. A preset filtered by source
+// gets only its share of the items, with the template variables built from that share — a window
+// of 3 completions where 1 is the filtered account's reads as that 1, not as "3 episodes".
+// The sources are looked up here, at fire time, not stored on the record (decisions.md #126).
+//
+// Without wait it returns at once: the source lookup can go to AniList, and with batching off
+// this runs on the verification pass's goroutine.
+func fireBatch(event Event, items []Episode, cfg *files.Config, wait bool) {
+	if len(items) == 0 || cfg == nil {
 		return
 	}
 	eventStr := eventString(event)
-	vars := buildBatchVars(event, items)
-
-	var wg sync.WaitGroup
-	for _, preset := range webhooks {
-		if !slices.Contains(preset.Events, eventStr) {
-			continue
+	var presets []files.WebhookPreset
+	filtered := false
+	for _, preset := range cfg.Notifications.Webhooks {
+		if slices.Contains(preset.Events, eventStr) {
+			presets = append(presets, preset)
+			filtered = filtered || len(preset.AnimeSources) > 0
 		}
-		wg.Add(1)
-		go func(p files.WebhookPreset) {
-			defer wg.Done()
-			fireWebhook(p, vars)
-		}(preset)
+	}
+	if len(presets) == 0 {
+		return
+	}
+
+	send := func() {
+		// Only asked when some preset filters: an install with no filter never pays the lookup.
+		var sources map[int][]string
+		if filtered {
+			sources = resolveSources(cfg, items)
+		}
+		var wg sync.WaitGroup
+		for _, preset := range presets {
+			mine := itemsFor(preset, items, sources)
+			if len(mine) == 0 {
+				continue
+			}
+			vars := buildBatchVars(event, mine)
+			wg.Add(1)
+			go func(p files.WebhookPreset) {
+				defer wg.Done()
+				fireWebhook(p, vars)
+			}(preset)
+		}
+		wg.Wait()
 	}
 	if wait {
-		wg.Wait()
+		send()
+	} else {
+		go send()
 	}
 }
 

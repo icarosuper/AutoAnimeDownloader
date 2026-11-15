@@ -646,6 +646,13 @@ and one Jellyfin/Plex scan for `new_episode`, `download_failed`, `download_compl
 notifies on the first one, keyed by the first candidate's magnet. Looping `Notify` per record
 brings back N pushes and N library scans ([decisions.md #124](decisions.md#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record)).
 
+**Per-webhook anime filter (`anime_sources`).** The package doesn't know AniList or the standalone
+file: the daemon injects `daemon.NotificationSources` with `SetSourceResolver` at boot, and
+`fireBatch` asks it once per window, only when a subscribed webhook filters. Each filtered webhook
+gets its share of the items, with the template built from that share; an anime the resolver can't
+place skips filtered webhooks. Without a resolver (tests, or a future binary that forgets the
+wiring) every filtered webhook stays silent ([decisions.md #126](decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-as-they-are-now-not-stored-on-the-episode-record)).
+
 Notifications are grouped by window, and JSON escaping happens **only in the body and only when the
 preset declares `Content-Type: application/json`** (decisions.md #47).
 Header values have `\n`/`\r` stripped: `net/http` rejects the whole request with them, and ntfy

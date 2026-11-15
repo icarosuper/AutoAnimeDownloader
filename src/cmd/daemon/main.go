@@ -250,6 +250,10 @@ func main() {
 	// the pass standing while it's down, restart included.
 	anilist.EnablePersistence(fileManager.LoadAnilistCache, fileManager.SaveAnilistCache)
 
+	// Per-webhook source filter: which accounts (or standalone) an anime belongs to is answered by
+	// the daemon at fire time — the notifications package knows neither AniList nor the files.
+	notifications.SetSourceResolver(daemon.NotificationSources(fileManager))
+
 	dataDir, err := datadir.Path()
 	if err != nil {
 		logger.Logger.Fatal().Err(err).Msg("Failed to determine the data directory")

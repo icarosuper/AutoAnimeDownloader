@@ -179,6 +179,11 @@ export interface WebhookPreset {
   headers: Record<string, string>
   body: string
   events: string[]
+  /**
+   * Which animes this webhook notifies about: "anilist:<user>", "mal:<user>", "standalone".
+   * Absent/empty = every anime. An anime matches when any of its sources is listed.
+   */
+  anime_sources?: string[]
 }
 
 export interface Priorities {

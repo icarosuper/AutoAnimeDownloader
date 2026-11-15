@@ -132,6 +132,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#123** — A one-episode entry covers episode 1 even when the magnet declares no range](#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)
 - [**#124** — A torrent is one notification: a pack goes out as one run of episodes, not one webhook per record](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record)
 - [**#125** — The dashboard user filter re-projects progress onto the selected accounts, not just their membership](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)
+- [**#126** — A webhook's anime filter is resolved when it fires, from the lists as they are now, not stored on the episode record](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-as-they-are-now-not-stored-on-the-episode-record)
 
 ---
 
@@ -3678,3 +3679,49 @@ mode. The selection lives in the URL as repeated `account=<source>:<username>`.
 - Appending onto the survivor's `Accounts` in `DedupeByMedia`: that slice may alias the caller's
   input; it builds a fresh one.
 - Stamping inside `GetFrontendAnimeList` / the cache: the cached slice is shared across polls.
+
+### 126. A webhook's anime filter is resolved when it fires, from the lists as they are now, not stored on the episode record
+
+**Location:** `internal/daemon/notification_sources.go` — `NotificationSources` (the resolver,
+wired with `notifications.SetSourceResolver` in `cmd/daemon/main.go`);
+`internal/notifications/notifications.go` — `fireBatch`, `itemsFor`, `resolveSources`;
+`files.WebhookPreset.AnimeSources`. Pinned by `TestNotificationSources`,
+`TestFireBatch_SourceFilter` and `TestFireBatch_FilteredWebhookWithoutResolverSkips`.
+
+**What it looks like:** a notification costs AniList queries. "Whose anime is this" is known when
+the episode is downloaded, so it looks like it should be written on the episode record then, and
+the webhook should read it from there for free.
+
+**Why it's right:** the events fire from four places (the pass, the deletion, organize and the
+torrent-failure callback), and the records are created in about eight. Stored on the record, every
+record written before the filter existed would have no owner — and `episode_deleted` mostly fires
+for exactly those: old episodes of an anime every account already finished. Asked at fire time,
+"its sources" is the configured accounts that have the anime on their list **now**, in **any** list
+status (a finished anime is still that account's), plus `standalone` from the standalone file. It
+costs one `GetAnimeInfoByIDs` per account per 50 ids, once per fired window, and only when a
+subscribed webhook has a filter — an install without filters never pays it.
+
+The trade-offs, accepted:
+- The lookup is `PriorityDisposable` with no cache fallback. With the AniList budget low
+  ([#72](#72-anilist-budget-is-measured-from-the-response-headers-not-from-a-counter-of-ours)) it is refused and the animes come back **unknown**. A filtered webhook skips an
+  unknown anime: a filter can't prove an anime belongs to it, and a ntfy topic set to "only alice"
+  getting everyone's animes is the failure it exists to prevent. Unfiltered webhooks never depend on
+  the lookup.
+- Each filtered webhook gets only its share of a window, and the template variables are built from
+  that share (`buildBatchVars` per preset). A window of 3 completions where one is alice's reads
+  as that one, with its `{{anime_name}}`, not as "3 episodes".
+- Account keys are the dashboard's `<source>:<user>` ([#125](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)), so one account is spelled
+  the same everywhere. The JSON field is `anime_sources`, not `sources`: `priorities.sources`
+  (torrent sources like `bdremux`) already exists in the same file.
+- The Test button (`FireTestWebhook`) ignores the filter: it is a delivery check.
+
+**Don't "fix" by:**
+- Storing the owners on `EpisodeStruct`: old records, and the adoption/manual/API paths that create
+  records without a list in hand, would have no owner.
+- Firing a filtered webhook for an unknown anime "so nothing is lost": that is the leak the filter
+  exists to stop.
+- Resolving inside `NotifyAll`'s caller: with batching off `fireBatch` runs on the verification
+  pass's goroutine, so the lookup is moved into `send`, which runs in its own goroutine unless
+  `Flush` is waiting.
+- Building the template once for all presets: a filtered webhook would describe episodes it was
+  not told about. This keeps the one-torrent-one-notification shape of [#124](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record) per webhook.

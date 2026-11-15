@@ -15,6 +15,7 @@
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
+  import { sourceOptions, toggleSource, type SourceOption } from "../lib/domain/webhookSources.js";
 
   $: T = $locale && {
     title: m.notifications_title(),
@@ -45,7 +46,30 @@
     eventDownloadFailed: m.notifications_event_download_failed(),
     eventDownloadCompleted: m.notifications_event_download_completed(),
     eventEpisodeDeleted: m.notifications_event_episode_deleted(),
+    labelSources: m.notifications_label_sources(),
+    hintSources: m.notifications_hint_sources(),
+    sourceAll: m.notifications_source_all(),
+    sourceStandalone: m.status_filter_standalone(),
   };
+
+  // Source filter options come from the accounts in the config, plus whatever the open webhook
+  // still points at that is no longer configured (so it can be unchecked).
+  $: webhookSourceOptions = sourceOptions(
+    fullConfig?.anilist_usernames ?? [],
+    fullConfig?.mal_usernames ?? [],
+    newWebhook.anime_sources ?? [],
+  );
+
+  function sourceLabel(opt: SourceOption): string {
+    switch (opt.kind) {
+      case 'account':
+        return opt.service ? `${opt.username} (${opt.service})` : opt.username;
+      case 'standalone':
+        return (T && T.sourceStandalone) || '';
+      default:
+        return m.notifications_source_stale({ key: opt.key });
+    }
+  }
 
   const ALL_EVENTS = ['new_episode', 'download_failed', 'download_completed', 'episode_deleted'] as const;
 
@@ -102,12 +126,13 @@
   }
 
   function applyPreset(key: string) {
-    newWebhook = { ...WEBHOOK_PRESETS[key] };
+    // The source filter isn't part of a preset: picking one keeps what was already chosen.
+    newWebhook = { ...WEBHOOK_PRESETS[key], anime_sources: newWebhook.anime_sources };
     headerRows = toRows(WEBHOOK_PRESETS[key].headers);
   }
 
   function editWebhook(index: number) {
-    newWebhook = { ...notifications.webhooks[index], headers: { ...notifications.webhooks[index].headers }, events: [...(notifications.webhooks[index].events ?? [])] };
+    newWebhook = { ...notifications.webhooks[index], headers: { ...notifications.webhooks[index].headers }, events: [...(notifications.webhooks[index].events ?? [])], anime_sources: [...(notifications.webhooks[index].anime_sources ?? [])] };
     headerRows = toRows(notifications.webhooks[index].headers);
     editingIndex = index;
     showWebhookForm = true;
@@ -379,6 +404,31 @@
                     />
                   {/each}
                 </div>
+              </div>
+
+              <!-- Which animes: none checked = every anime ("All" checked and locked — pick an
+                   account to narrow it; unchecking the last one goes back to all). OR between
+                   the checked ones. -->
+              <div class="flex flex-col gap-2">
+                <span id="webhook-sources-label" class="text-xs font-medium text-heading">{T && T.labelSources}</span>
+                <div class="flex flex-col gap-1" role="group" aria-labelledby="webhook-sources-label">
+                  <Checkbox
+                    label={(T && T.sourceAll) || ""}
+                    checked={!newWebhook.anime_sources?.length}
+                    disabled={!newWebhook.anime_sources?.length}
+                    on:change={() => (newWebhook.anime_sources = [])}
+                  />
+                  {#each webhookSourceOptions as opt (opt.key)}
+                    <Checkbox
+                      label={sourceLabel(opt)}
+                      checked={newWebhook.anime_sources?.includes(opt.key) ?? false}
+                      on:change={(e) => {
+                        newWebhook.anime_sources = toggleSource(newWebhook.anime_sources, opt.key, (e.target as HTMLInputElement).checked);
+                      }}
+                    />
+                  {/each}
+                </div>
+                <p class="text-xs text-subtle">{T && T.hintSources}</p>
               </div>
 
               <div class="flex gap-2">
