@@ -53,6 +53,9 @@ type malRawEntry struct {
 	Title    string          `json:"title"`
 	Status   MediaListStatus `json:"status"`
 	Progress int             `json:"progress"`
+	// Score is MAL's 0–10 integer score, 0 = not scored. Absent from snapshots written before it
+	// existed, which reads as "not scored" until the next fetch.
+	Score int `json:"score,omitempty"`
 }
 
 // MALEntry is one MAL list entry mapped to AniList. No Media: it costs nothing beyond the MAL
@@ -61,6 +64,17 @@ type MALEntry struct {
 	MediaID  int // AniList Media.Id
 	Status   MediaListStatus
 	Progress int
+	Score    int // 0–10, 0 = not scored
+}
+
+// malScore reads load.json's score, which is a number on most entries but has to survive any
+// other shape: anything that isn't a whole number in 1–10 is "not scored".
+func malScore(raw any) int {
+	n, ok := raw.(float64)
+	if !ok || n < 1 || n > 10 || n != float64(int(n)) {
+		return 0
+	}
+	return int(n)
 }
 
 // malStatus maps load.json's numeric status. is_rewatching wins: MAL models a rewatch as a flag
@@ -91,6 +105,9 @@ func fetchMALList(user string) ([]malRawEntry, error) {
 		AnimeTitle         any `json:"anime_title"` // MAL sometimes sends a number for numeric titles
 		Status             int `json:"status"`
 		NumWatchedEpisodes int `json:"num_watched_episodes"`
+		// 0–10, 0 = not scored. `any` like is_rewatching: a field that is a number on most entries can
+		// still come as "" on some.
+		Score any `json:"score"`
 		// Usually 0/1, but measured as "" on some entries (12 of 300 on 2026-10-12).
 		IsRewatching any `json:"is_rewatching"`
 	}
@@ -131,6 +148,7 @@ func fetchMALList(user string) ([]malRawEntry, error) {
 				Title:    fmt.Sprint(it.AnimeTitle),
 				Status:   status,
 				Progress: it.NumWatchedEpisodes,
+				Score:    malScore(it.Score),
 			})
 		}
 		if len(page) < malPageSize {
@@ -271,7 +289,7 @@ func GetMALEntries(user string, priority Priority) ([]MALEntry, error) {
 				Msg("MAL entry has no AniList counterpart, skipping")
 			continue
 		}
-		entries = append(entries, MALEntry{MediaID: mediaID, Status: e.Status, Progress: e.Progress})
+		entries = append(entries, MALEntry{MediaID: mediaID, Status: e.Status, Progress: e.Progress, Score: e.Score})
 	}
 
 	if len(entries) == 0 {
@@ -344,6 +362,7 @@ func hydrateMALEntries(entries []MALEntry, priority Priority, fromCache bool) ([
 		}
 		ml.Status = e.Status
 		ml.Progress = e.Progress
+		ml.Score = float64(e.Score)
 		list = append(list, *ml)
 	}
 	if err != nil && !errors.Is(err, ErrFromCache) {

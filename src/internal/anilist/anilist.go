@@ -263,34 +263,62 @@ type MediaList struct {
 	Progress    int             `json:"progress"`
 	CustomLists CustomLists     `json:"customLists"`
 	Media       Media           `json:"media"`
+	// Score is the account's score on a 0–10 scale (0 = not scored), whatever score format the
+	// account uses: the queries that read it ask for `score(format: POINT_10_DECIMAL)`. Only
+	// getMediaListEntry (the detail screen) asks; every other query leaves it 0.
+	Score float64 `json:"score,omitempty"`
+	// User is the list owner, only requested by getMediaListEntry (for the avatar).
+	User *ListUser `json:"user,omitempty"`
 	// Accounts says which list accounts have this media, each with its OWN progress. It never
 	// comes from AniList (`json:"-"`, so the on-disk cache snapshots don't carry it either): the
 	// caller that knows which account a list belongs to stamps it with StampAccount, and
 	// DedupeByMedia unions it — so after the collapse to the lowest Progress, the per-account
 	// answer the dashboard user filter needs is still here. Nil means nobody stamped it, not
 	// "no account" (decisions.md #125).
-	Accounts []AccountProgress `json:"-"`
+	Accounts []AccountEntry `json:"-"`
 }
 
-// Account sources for AccountProgress.Source.
+// Account sources for AccountEntry.Source.
 const (
 	AccountSourceAniList = "anilist"
 	AccountSourceMAL     = "mal"
 )
 
-// AccountProgress is one account's view of a media: who (source + username) and how far they
-// watched. Source is needed because the same username can exist on AniList and on MAL.
-type AccountProgress struct {
+// ListUser is the owner of a list entry.
+type ListUser struct {
+	Avatar struct {
+		Medium string `json:"medium"`
+	} `json:"avatar"`
+}
+
+// AccountEntry is one account's own list entry for a media: who (source + username) and their
+// status, progress and score. Source is needed because the same username can exist on AniList and
+// on MAL. Avatar is empty for MAL (its list endpoint has none) and for every query that doesn't
+// ask for the user.
+type AccountEntry struct {
 	Source   string
 	Username string
+	Status   MediaListStatus
 	Progress int
+	Score    float64
+	Avatar   string
 }
 
 // StampAccount marks every entry of one account's list as belonging to that account. It writes
 // into the slice it's given, so pass a list the caller owns — never a cached slice.
 func StampAccount(list []MediaList, source, username string) {
 	for i := range list {
-		list[i].Accounts = []AccountProgress{{Source: source, Username: username, Progress: list[i].Progress}}
+		entry := AccountEntry{
+			Source:   source,
+			Username: username,
+			Status:   list[i].Status,
+			Progress: list[i].Progress,
+			Score:    list[i].Score,
+		}
+		if list[i].User != nil {
+			entry.Avatar = list[i].User.Avatar.Medium
+		}
+		list[i].Accounts = []AccountEntry{entry}
 	}
 }
 
@@ -420,9 +448,9 @@ func DedupeByMedia(list []MediaList) []MediaList {
 		}
 		if idx, ok := byMedia[anime.Media.Id]; ok {
 			// A fresh slice, never an append onto the survivor's: that one may alias the caller's input.
-			var accounts []AccountProgress
+			var accounts []AccountEntry
 			if len(result[idx].Accounts)+len(anime.Accounts) > 0 {
-				accounts = append(append(make([]AccountProgress, 0, len(result[idx].Accounts)+len(anime.Accounts)),
+				accounts = append(append(make([]AccountEntry, 0, len(result[idx].Accounts)+len(anime.Accounts)),
 					result[idx].Accounts...), anime.Accounts...)
 			}
 			if anime.Progress < result[idx].Progress {
@@ -854,7 +882,11 @@ func GetAnimeInfo(mediaId int, usernames, malUsers []string, priority Priority) 
 			lastErr = err
 			continue
 		}
-		entries = append(entries, resp.Data.Page.MediaList...)
+		// A copy: the stamp writes into the entries, and the response is never a cached slice today
+		// — this keeps it that way if it ever is.
+		own := append([]MediaList(nil), resp.Data.Page.MediaList...)
+		StampAccount(own, AccountSourceAniList, username)
+		entries = append(entries, own...)
 	}
 
 	malList, err := malEntriesFor([]int{mediaId}, malUsers, priority)
@@ -954,6 +986,8 @@ func getMediaListEntry(userName string, mediaId int, priority Priority) (*AniLis
 					id
 					status
 					progress
+					score(format: POINT_10_DECIMAL)
+					user { avatar { medium } }
 					customLists
 					media {` + mediaByIDFields + `}
 				}

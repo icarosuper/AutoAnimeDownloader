@@ -71,7 +71,7 @@ type AnimeAccount struct {
 
 // animeAccounts converts the stamped accounts of a MediaList. Pending is filled at the end of the
 // handler, once the downloaded episode numbers and the released count are final.
-func animeAccounts(accounts []anilist.AccountProgress) []AnimeAccount {
+func animeAccounts(accounts []anilist.AccountEntry) []AnimeAccount {
 	if len(accounts) == 0 {
 		return nil
 	}

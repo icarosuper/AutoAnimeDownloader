@@ -100,7 +100,7 @@ Key endpoints:
 | `DELETE` | `/api/v1/standalone-animes/{id}?delete_episodes=<bool>` | `handleStandaloneAnimeRemove` | `endpoint_standalone_animes.go` — without `delete_episodes` the episodes stay and are marked `ManuallyManaged`. Either way the anime's `blocked_episodes` entries are cleared (`clearAnimeBlocks`) — not in `RemoveStandaloneAnime`, which the pass also calls when the anime enters a list and the blocks must stay |
 | `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
 | `POST` | `/api/v1/animes/{id}/debug` | `handleAnimeDebug` | `endpoint_anime_debug.go` — the `--debug-anime` pass run by the live daemon; trace goes to the daemon log, summary in the response. Minutes long: `Client.RunAnimeDebug` uses its own timeout, not the client's 30s |
-| `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` |
+| `GET` | `/api/v1/animes/{id}/episodes` | `handleAnimeEpisodes` | `endpoint_anime_episodes.go` — `accounts` is every configured account that has the anime, in **any** list status, each with its own status/progress/score (the "On lists" panel). The top-level `status` is one arbitrary account's: read `accounts` instead. `score` is 0–10 whatever the account's own format: only `getMediaListEntry` asks for it (`score(format: POINT_10_DECIMAL)`) and for `user { avatar }`; every other query leaves both empty |
 | `GET` | `/api/v1/animes/{id}/torrent-candidates?q=` | `handleTorrentCandidates` | `endpoint_torrent_candidates.go` — ranked whole-title list, cap 8. Empty `items` is 200 (`[]`, not null). `{id}` need not be tracked. `q` skips title variants and season/part. Does not fetch `/view/<id>`. `media` is the AniList identity already fetched for the search (title, `cover_image` medium, format, episodes). 502 `NYAA_UNAVAILABLE`. 404 `ANIME_NOT_FOUND` |
 | `GET` | `/api/v1/animes/{id}/torrent-candidates/{nyaaId}` | `handleTorrentCandidateDetail` | sanitised Nyaa page + file list. `{nyaaId}` digits only. `{id}` unused for the fetch (still validated). `files` is `[]` not null. 404 `TORRENT_NOT_FOUND` |
 | `POST` | `/api/v1/animes/{id}/episodes/{episodeNumber}/download` | `handleDownloadEpisode` | `endpoint_episode_actions.go` |
@@ -432,7 +432,8 @@ Older installs are converted by `MigrateAnimeIDsToMedia`, with the pass aborting
 episode is only "watched"/deletable when every account has seen it. The one field that is **not**
 winner-takes-all is `MediaList.Accounts` (`json:"-"`, never from AniList): the caller that knows
 whose list it fetched stamps it with `StampAccount`, and the dedupe unions it. An unstamped list
-(the daemon pass) just carries nil. The surviving entry's `Status`
+(the daemon pass) just carries nil. Each `AccountEntry` copies that account's own status,
+progress, score and avatar — the per-account answer the surviving entry no longer has. The surviving entry's `Status`
 **must not be read**: it belongs to an arbitrary account. Status is per account:
 
 - **Download — OR**: one account having the anime in a `DownloadStatuses` status is enough

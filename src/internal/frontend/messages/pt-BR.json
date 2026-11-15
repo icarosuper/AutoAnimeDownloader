@@ -522,6 +522,8 @@
   "detail_select_all": "Selecionar todos os episódios",
   "detail_select_episode": "Selecionar episódio {number}",
   "detail_anilist_status": "AniList: {status}",
+  "detail_lists_title": "Nas listas",
+  "detail_lists_profile": "Abrir a lista de {username}",
   "detail_col_info": "Detalhes",
   "downloads_filter_all": "Todos",
   "downloads_filter_problems": "Problemas",

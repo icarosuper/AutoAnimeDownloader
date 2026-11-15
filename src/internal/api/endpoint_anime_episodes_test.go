@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -261,5 +262,50 @@ func TestHandleAnimeEpisodes_OpensFromCacheDuringOutage(t *testing.T) {
 	}
 	if episodes, ok := data["episodes"].([]interface{}); !ok || len(episodes) != 2 {
 		t.Fatalf("want the 2 cached episodes, got %v", data["episodes"])
+	}
+}
+
+// TestHandleAnimeEpisodes_ListsEachAccountsEntry: the detail response carries every account that
+// has the anime, in any status, with its own status/progress/score — and the query asks for the
+// score on a fixed 0–10 scale, so the screen never has to know an account's score format.
+func TestHandleAnimeEpisodes_ListsEachAccountsEntry(t *testing.T) {
+	entry := func(status string, progress int, score float64, avatar string) string {
+		return strings.NewReplacer("STATUS", status, "PROGRESS", fmt.Sprint(progress), "SCORE", fmt.Sprint(score), "AVATAR", avatar).Replace(
+			`{"id":1,"status":"STATUS","progress":PROGRESS,"score":SCORE,"user":{"avatar":{"medium":"AVATAR"}},"customLists":{},
+			"media":{"id":21,"episodes":12,"format":"TV","status":"FINISHED","title":{"romaji":"X"},"synonyms":[],"relations":{"edges":[]},
+			"coverImage":{"large":"","medium":""},"airingSchedule":{"nodes":[]}}}`)
+	}
+	askedFormat := false
+	defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+		body := readBody(req)
+		askedFormat = askedFormat || strings.Contains(body, "POINT_10_DECIMAL")
+		e := entry("COMPLETED", 12, 9, "http://a")
+		if strings.Contains(body, `"userName":"bob"`) {
+			e = entry("PLANNING", 0, 0, "http://b")
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":{"Page":{"mediaList":[` + e + `]}}}`))}, nil
+	})()
+
+	server := &Server{FileManager: &mockFileManager{configs: &files.Config{AnilistUsernames: []string{"alice", "bob"}}}}
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/animes/21/episodes", nil)
+	req.SetPathValue("id", "21")
+	w := httptest.NewRecorder()
+	handleAnimeEpisodes(server)(w, req)
+
+	var response struct {
+		Data AnimeDetailResponse `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decode: %v (%s)", err, w.Body.String())
+	}
+	want := []AnimeListAccount{
+		{Source: "anilist", Username: "alice", Status: "COMPLETED", Progress: 12, Score: 9, Avatar: "http://a"},
+		{Source: "anilist", Username: "bob", Status: "PLANNING", Progress: 0, Avatar: "http://b"},
+	}
+	if fmt.Sprint(response.Data.Accounts) != fmt.Sprint(want) {
+		t.Errorf("accounts:\n got %+v\nwant %+v", response.Data.Accounts, want)
+	}
+	if !askedFormat {
+		t.Error("the entry query must ask for score(format: POINT_10_DECIMAL)")
 	}
 }

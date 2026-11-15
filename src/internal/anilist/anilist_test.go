@@ -303,7 +303,7 @@ func TestDedupeByMedia_UnionsAccounts(t *testing.T) {
 	if got[0].Progress != 2 {
 		t.Errorf("lowest progress still wins, got %d", got[0].Progress)
 	}
-	want := []AccountProgress{{AccountSourceAniList, "x", 7}, {AccountSourceMAL, "x", 2}}
+	want := []AccountEntry{{Source: AccountSourceAniList, Username: "x", Progress: 7}, {Source: AccountSourceMAL, Username: "x", Progress: 2}}
 	if fmt.Sprint(got[0].Accounts) != fmt.Sprint(want) {
 		t.Errorf("accounts: got %+v, want %+v", got[0].Accounts, want)
 	}

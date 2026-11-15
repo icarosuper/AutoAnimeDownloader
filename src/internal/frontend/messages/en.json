@@ -431,6 +431,8 @@
   "detail_select_all": "Select all episodes",
   "detail_select_episode": "Select episode {number}",
   "detail_anilist_status": "AniList: {status}",
+  "detail_lists_title": "On lists",
+  "detail_lists_profile": "Open {username}'s list",
   "detail_col_info": "Details",
   "downloads_filter_all": "All",
   "downloads_filter_problems": "Problems",

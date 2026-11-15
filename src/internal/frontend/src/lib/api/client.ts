@@ -417,6 +417,24 @@ export interface AnimeDetailResponse {
   status: string
   cover_image?: string
   episodes: AnimeEpisodeInfo[]
+  /**
+   * The configured accounts that have this anime on their list, in any status, each with its own
+   * entry. Absent for a standalone no account tracks.
+   */
+  accounts?: AnimeListAccount[]
+}
+
+/** One account's own list entry for an anime (the detail screen's "on lists" panel). */
+export interface AnimeListAccount {
+  source: AccountSource
+  username: string
+  /** List status: CURRENT, PLANNING, COMPLETED, PAUSED, DROPPED, REPEATING. */
+  status: string
+  progress: number
+  /** 0–10 whatever the account's score format; absent = not scored. */
+  score?: number
+  /** AniList avatar URL; absent for MAL. */
+  avatar?: string
 }
 
 export interface AnimeSettings {

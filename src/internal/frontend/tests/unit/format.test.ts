@@ -5,7 +5,7 @@
 process.env.TZ = 'UTC'
 
 import { describe, it, expect } from 'vitest'
-import { formatSpeed, formatSpeedParts, formatBytes, formatPercent, formatEta, formatDate } from '../../src/lib/domain/format'
+import { formatSpeed, formatSpeedParts, formatBytes, formatPercent, formatEta, formatDate, formatScore } from '../../src/lib/domain/format'
 
 describe('formatSpeed', () => {
   it('formats zero as an idle dash regardless of locale', () => {
@@ -115,5 +115,18 @@ describe('formatDate', () => {
 
   it('renders month/day/year order in en', () => {
     expect(formatDate('2026-03-04T10:30:00Z', 'en')).toBe('3/4/26, 10:30 AM')
+  })
+})
+
+describe('formatScore', () => {
+  it('shows a whole score without decimals and a half score with one', () => {
+    expect(formatScore(9, 'en')).toBe('9/10')
+    expect(formatScore(8.5, 'en')).toBe('8.5/10')
+    expect(formatScore(8.5, 'pt-BR')).toBe('8,5/10')
+  })
+
+  it('is empty for an unscored entry', () => {
+    expect(formatScore(0, 'en')).toBe('')
+    expect(formatScore(undefined, 'en')).toBe('')
   })
 })

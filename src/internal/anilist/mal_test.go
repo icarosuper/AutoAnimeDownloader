@@ -284,6 +284,40 @@ func TestGetAnimeInfo_MALAccountLowerProgressWins(t *testing.T) {
 	}
 }
 
+// TestGetAnimeInfo_CarriesEachAccountsEntry: the detail screen's "who has it" panel reads each
+// account's own status/progress/score through the collapse — the survivor's own fields belong to
+// one arbitrary account (decisions.md #43).
+func TestGetAnimeInfo_CarriesEachAccountsEntry(t *testing.T) {
+	scored := `{"anime_id":2,"anime_title":"Anime 2","status":2,"num_watched_episodes":12,"is_rewatching":0,"score":7}`
+	fake := &malFake{
+		pages:   map[int]string{0: "[" + scored + "]"},
+		entries: `{"id":77,"status":"PLANNING","progress":0,"score":8.5,"user":{"avatar":{"medium":"http://av"}},"media":{"id":1002,"status":"RELEASING"}}`,
+	}
+	defer MockAniListDo(fake.do)()
+
+	ml, err := GetAnimeInfo(1002, []string{"anilistUser"}, []string{"malUser"}, PriorityCritical)
+	if err != nil || ml == nil {
+		t.Fatalf("GetAnimeInfo: %+v, %v", ml, err)
+	}
+	want := []AccountEntry{
+		{Source: AccountSourceAniList, Username: "anilistUser", Status: MediaListStatusPlanning, Progress: 0, Score: 8.5, Avatar: "http://av"},
+		{Source: AccountSourceMAL, Username: "malUser", Status: MediaListStatusCompleted, Progress: 12, Score: 7},
+	}
+	if fmt.Sprint(ml.Accounts) != fmt.Sprint(want) {
+		t.Fatalf("accounts:\n got %+v\nwant %+v", ml.Accounts, want)
+	}
+}
+
+func TestMALScore(t *testing.T) {
+	for raw, want := range map[string]int{`7`: 7, `0`: 0, `""`: 0, `11`: 0, `7.5`: 0, `null`: 0} {
+		var v any
+		json.Unmarshal([]byte(raw), &v)
+		if got := malScore(v); got != want {
+			t.Errorf("malScore(%s) = %d, want %d", raw, got, want)
+		}
+	}
+}
+
 func TestGetAnimeInfo_OnlyMALAccountTracksIt(t *testing.T) {
 	fake := &malFake{pages: map[int]string{0: "[" + malItem(1, 1, 3, 0) + "]"}}
 	defer MockAniListDo(fake.do)()

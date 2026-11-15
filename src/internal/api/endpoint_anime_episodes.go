@@ -48,6 +48,40 @@ type AnimeDetailResponse struct {
 	Status        string             `json:"status"`
 	CoverImage    string             `json:"cover_image,omitempty"`
 	Episodes      []AnimeEpisodeInfo `json:"episodes"`
+	// Accounts are the configured accounts that have this anime on their list, in ANY status (not
+	// only the download ones), each with its own entry — the "who has it" panel. Empty for a
+	// standalone no account tracks.
+	Accounts []AnimeListAccount `json:"accounts,omitempty"`
+}
+
+// AnimeListAccount is one account's own list entry for the anime.
+type AnimeListAccount struct {
+	Source   string `json:"source" example:"anilist"`
+	Username string `json:"username" example:"icaro"`
+	Status   string `json:"status" example:"CURRENT"`
+	Progress int    `json:"progress" example:"5"`
+	// Score is 0–10 with one decimal whatever the account's own score format; 0 = not scored.
+	Score float64 `json:"score,omitempty" example:"8.5"`
+	// Avatar is the AniList avatar URL; empty for MAL, whose list endpoint has none.
+	Avatar string `json:"avatar,omitempty"`
+}
+
+func listAccounts(accounts []anilist.AccountEntry) []AnimeListAccount {
+	if len(accounts) == 0 {
+		return nil
+	}
+	out := make([]AnimeListAccount, len(accounts))
+	for i, a := range accounts {
+		out[i] = AnimeListAccount{
+			Source:   a.Source,
+			Username: a.Username,
+			Status:   string(a.Status),
+			Progress: a.Progress,
+			Score:    a.Score,
+			Avatar:   a.Avatar,
+		}
+	}
+	return out
 }
 
 func handleAnimeEpisodes(server *Server) http.HandlerFunc {
@@ -164,6 +198,7 @@ func handleAnimeEpisodes(server *Server) http.HandlerFunc {
 			Status:        string(mediaList.Status),
 			CoverImage:    coverImage,
 			Episodes:      episodes,
+			Accounts:      listAccounts(mediaList.Accounts),
 		}
 
 		JSONSuccess(w, http.StatusOK, response)

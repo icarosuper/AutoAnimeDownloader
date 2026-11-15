@@ -81,6 +81,17 @@ export function formatBytes(bytes: number, locale: FormatLocale): string {
   return `${formatDecimal(value, locale)} ${unit}`
 }
 
+/**
+ * Formats a list score (0–10, one decimal at most) as "9/10" or "8.5/10". The backend already
+ * normalizes every account's own score format to this scale. 0 means "not scored" and returns
+ * an empty string, so callers can just test the result.
+ */
+export function formatScore(score: number | undefined, locale: FormatLocale): string {
+  if (!score || score <= 0) return ''
+  const value = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(score)
+  return `${value}/10`
+}
+
 /** Formats a 0..1 progress fraction as a whole, clamped percentage. */
 export function formatPercent(fraction: number, locale: FormatLocale): string {
   const clamped = Math.max(0, Math.min(1, fraction || 0))
