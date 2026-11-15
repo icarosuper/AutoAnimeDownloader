@@ -16,6 +16,24 @@ afterEach(() => {
 })
 
 describe('ActionMenu', () => {
+  it('on mobile a tap on the backdrop closes the sheet, also in multiple mode', async () => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) => ({ ...original(query), matches: query.includes('max-width') })) as typeof window.matchMedia
+    try {
+      const { getByRole, queryByRole, container } = render(ActionMenu, {
+        props: { multiple: true, triggerLabel: 'Users', items: [{ id: 'a', label: 'Alice' }] },
+      })
+      await fireEvent.click(getByRole('button', { name: 'Users' }))
+      expect(getByRole('menu')).toBeInTheDocument()
+
+      await fireEvent.click(container.querySelector('.fixed.inset-0') as HTMLElement)
+
+      expect(queryByRole('menu')).not.toBeInTheDocument()
+    } finally {
+      window.matchMedia = original
+    }
+  })
+
   it('in multiple mode renders checkbox items and stays open after a pick', async () => {
     const onSelect = vi.fn()
     const { getByRole, queryByRole } = render(ActionMenu, {

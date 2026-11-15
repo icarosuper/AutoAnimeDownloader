@@ -137,7 +137,11 @@
 
   {#if open}
     {#if isMobile}
-      <div class="fixed inset-0 z-50 bg-window/70" aria-hidden="true"></div>
+      <!-- The backdrop closes the sheet itself: it lives INSIDE rootEl, so the window's
+           outside-click check reads a tap on it as a click on the menu, and it covers the
+           trigger. Single-select never noticed (picking closes); the multi-select had no way
+           out but Escape. -->
+      <div class="fixed inset-0 z-50 bg-window/70" aria-hidden="true" on:click|stopPropagation={close}></div>
       <div
         bind:this={panelEl}
         role="menu"
