@@ -3,7 +3,7 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.9.0`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.10.0`. Stamp a version (tag, GitHub Release, AUR):
 the [release skill](../.claude/skills/release/SKILL.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
@@ -67,7 +67,7 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   description overflow~~ — **released in `v2.7.2` on 2026-11-03**
   ([decisions.md #114](agents/decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this),
   [#115](agents/decisions.md#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)).
-  Follow-up to the `v2.7.0` picker; independent of the `v2.10.0` recents shelf.
+  Follow-up to the `v2.7.0` picker; independent of the `v2.11.0` recents shelf.
 - ~~Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
   clear-all)~~ — **released in `v2.7.2` on 2026-11-03**. Independent of the recents shelf.
   The Behind chip that used to live in the recents spec is out.
@@ -109,7 +109,24 @@ one minor down again.
 - ~~A standalone add ignores the blacklist; one app-wide WebSocket; tab bar and status layout fixes
   on phones~~ — **released in `v2.9.0` on 2026-11-07**.
 
-## `v2.10.0` — dashboard recents
+## `v2.10.0` — per-account dashboard, webhooks and anime page
+
+Shipped from `master` without a section of its own; the recents shelf and the episode picker moved
+one minor down again.
+
+- ~~Filter the dashboard by user (multi-select, each account's own progress), with an anime under a
+  user only when that account has it in a download status~~ — **released in `v2.10.0` on
+  2026-11-15** ([decisions.md #125](agents/decisions.md#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)).
+- ~~The anime page lists which accounts have it, with status, progress and score in each account's
+  own scale~~ — **released in `v2.10.0` on 2026-11-15**.
+- ~~A webhook can notify only about the animes of chosen accounts or the standalone ones, resolved
+  from the last pass's lists~~ — **released in `v2.10.0` on 2026-11-15**
+  ([decisions.md #126](agents/decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)).
+- ~~A batch pack is one notification naming the anime; `{{episode}}` is always a single number~~ —
+  **released in `v2.10.0` on 2026-11-15**
+  ([decisions.md #124](agents/decisions.md#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record)).
+
+## `v2.11.0` — dashboard recents
 
 A shelf of just-landed, still-unwatched episodes on Status, and last-check rows that open the
 anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
@@ -117,7 +134,7 @@ anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
 - Recents shelf, clickable last-check rows. Spec designed on 2026-10-23:
   [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
 
-## `v2.11.0` — episode torrent picker
+## `v2.12.0` — episode torrent picker
 
 - Pick torrent when downloading / redownloading a single episode — same screen as the
   whole-title picker in `v2.7.0`, singles search instead of packs. Own spec; do not start
@@ -168,19 +185,13 @@ tweaks would be redone by the `v3.0.0` UI/UX overhaul.
 - UI changes to work better on Windows
 - Test thoroughly
 
-## No release — dashboard account filter
+## No release — dashboard account filter in the CLI
 
-Near-term; ships as a patch whenever it is tackled. No spec yet.
+The web filter shipped in `v2.10.0`; the CLI half of the plan did not. Ships as a patch whenever it
+is tackled.
 
-- Filter the Status list by tracked account when two or more AniList/MAL usernames are
-  configured. Membership only: the progress bar stays the household lowest
-  ([decisions.md #43](agents/decisions.md#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)).
-  One menu item per account (AniList and MAL with the same nick stay distinct). Control is an
-  `ActionMenu`, not chips — the type row is already full. Hidden with a single account.
-  `accounts` on `GET /animes`, collected during the existing per-account merge (no extra AniList
-  traffic); filter is client-side, AND with search / type / Unwatched, persisted in the
-  querystring. A title on two lists appears in both; standalone with no account drops out of a
-  user filter. CLI: `animes --account anilist:alice`.
+- `animes --account anilist:alice`: the same membership rule as the dashboard (the account has the
+  anime in a download status), applied to `GET /animes`'s `accounts`.
 
 ## No release — promote
 
