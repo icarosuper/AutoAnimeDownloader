@@ -1,32 +1,29 @@
 package daemon
 
 import (
-	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
-	"io"
-	"net/http"
 	"slices"
-	"strings"
 	"testing"
 )
 
-// An anime's sources are every account that has it on its list in ANY status (alice finished it,
-// bob plans it) plus "standalone" from the standalone file. An id nobody tracks and that isn't
-// standalone stays out of the map: unknown, so filtered webhooks skip it.
+// An anime's sources are the accounts whose last fetched lists hold it — download or delete kind —
+// plus "standalone" from the standalone file. An id no list holds and that isn't standalone stays
+// out of the map: unknown, so the filtered webhooks get it (fail-open). An account dropped from the
+// config no longer counts, and a failed fetch (nothing recorded) keeps the previous answer.
 func TestNotificationSources(t *testing.T) {
-	defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
-		b, _ := io.ReadAll(req.Body)
-		body := `{"data":{"Page":{"mediaList":[{"id":1,"status":"COMPLETED","progress":12,"media":{"id":21}}]}}}`
-		if strings.Contains(string(b), `"userName":"bob"`) {
-			body = `{"data":{"Page":{"mediaList":[{"id":2,"status":"PLANNING","progress":0,"media":{"id":21}}]}}}`
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
-	})()
+	saved := passLists
+	passLists = &accountLists{byID: make(map[listKind]map[string]map[int]bool)}
+	t.Cleanup(func() { passLists = saved })
+
+	passLists.record(listDownload, "anilist:alice", map[int]bool{21: true})
+	passLists.record(listDelete, "anilist:bob", map[int]bool{21: true, 55: true})
+	passLists.record(listDownload, "mal:carol", map[int]bool{55: true})
+	passLists.record(listDownload, "anilist:gone", map[int]bool{44: true})
 
 	fm := &mockFileManagerForEpisodes{standaloneAnimes: []int{21, 33}}
-	cfg := &files.Config{AnilistUsernames: []string{"alice", "bob"}}
+	cfg := &files.Config{AnilistUsernames: []string{"alice", "bob"}, MALUsernames: []string{"carol"}}
 
-	got := NotificationSources(fm)(cfg, []int{21, 33, 44})
+	got := NotificationSources(fm)(cfg, []int{21, 33, 44, 55})
 
 	if want := []string{"anilist:alice", "anilist:bob", "standalone"}; !slices.Equal(got[21], want) {
 		t.Errorf("anime 21: got %v, want %v", got[21], want)
@@ -35,6 +32,15 @@ func TestNotificationSources(t *testing.T) {
 		t.Errorf("anime 33: got %v, want %v", got[33], want)
 	}
 	if _, ok := got[44]; ok {
-		t.Errorf("an anime nobody tracks must be unknown, got %v", got[44])
+		t.Errorf("an anime only a removed account held must be unknown, got %v", got[44])
+	}
+	if want := []string{"anilist:bob", "mal:carol"}; !slices.Equal(got[55], want) {
+		t.Errorf("anime 55: got %v, want %v", got[55], want)
+	}
+
+	// A new answer replaces that account's list of that kind only.
+	passLists.record(listDownload, "anilist:alice", map[int]bool{})
+	if got := NotificationSources(fm)(cfg, []int{21}); !slices.Equal(got[21], []string{"anilist:bob", "standalone"}) {
+		t.Errorf("after alice dropped it: got %v", got[21])
 	}
 }

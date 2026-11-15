@@ -4,6 +4,7 @@ import (
 	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
+	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"context"
 	"errors"
@@ -207,6 +208,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 					Int("animes_found", len(byMedia)).
 					Msg("Fetched animes from Anilist for delete statuses")
 				inDeleteStatus[username] = byMedia
+				passLists.record(listDelete, notifications.AccountSource(anilist.AccountSourceAniList, username), byMedia)
 			}
 			for _, user := range configs.MALUsernames {
 				entries, e := anilist.GetMALEntries(user, anilist.PriorityCritical)
@@ -222,6 +224,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 					byMedia[entry.MediaID] = true
 				}
 				inDeleteStatus[malAccountKey(user)] = byMedia
+				passLists.record(listDelete, notifications.AccountSource(anilist.AccountSourceMAL, user), byMedia)
 			}
 		}()
 	}
@@ -602,6 +605,14 @@ func searchAnilist(fileManager FileManagerInterface, configs *files.Config, stan
 			continue
 		}
 
+		// Before the media-status cut: the account still has the anime in a download status, and that
+		// is what the webhook source filter asks.
+		owned := make(map[int]bool, len(resp.Data.Page.MediaList))
+		for _, ml := range resp.Data.Page.MediaList {
+			owned[ml.Media.Id] = true
+		}
+		passLists.record(listDownload, notifications.AccountSource(anilist.AccountSourceAniList, username), owned)
+
 		var filtered []anilist.MediaList
 		for i := range resp.Data.Page.MediaList {
 			ml := &resp.Data.Page.MediaList[i]
@@ -635,6 +646,11 @@ func searchAnilist(fileManager FileManagerInterface, configs *files.Config, stan
 			lastMALErr = err
 			continue
 		}
+		owned := make(map[int]bool, len(list))
+		for _, ml := range list {
+			owned[ml.Media.Id] = true
+		}
+		passLists.record(listDownload, notifications.AccountSource(anilist.AccountSourceMAL, user), owned)
 		count := 0
 		for _, ml := range list {
 			if anilist.MediaStatusAllowed(configs.DownloadMediaStatuses, ml.Media.Status) {
