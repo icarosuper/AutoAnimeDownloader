@@ -896,15 +896,12 @@
         {/if}
 
         {#if anime}
-          <p class="mt-2 font-mono text-caption text-subtle">
+          <p class="mt-2 text-copy text-body">
             {$locale && m.detail_counts({
               downloaded: anime.episodes_downloaded,
               total: anime.total_episodes || "?",
               watched: anime.episodes_watched,
             })}
-            {#if detail?.status}
-              · {m.detail_anilist_status({ status: listStatusLabel(detail.status) })}
-            {/if}
             {#if nextAiringWhen}
               · {m.next_airing({ when: nextAiringWhen })}
             {/if}
