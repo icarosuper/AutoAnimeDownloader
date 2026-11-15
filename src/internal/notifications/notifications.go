@@ -56,12 +56,51 @@ func interpolate(template string, vars map[string]string) string {
 // Episode is what one notification is about. AnimeID and TorrentHash are optional — zero when the
 // caller does not have them (a "no torrent found" failure has no hash) — and reach the templates
 // as {{anime_id}} / {{torrent_hash}}, blank when unknown.
+//
+// Last turns the item into a run Number..Last of one torrent: a batch pack is ONE event (one push,
+// one Jellyfin scan), not N. Zero (or equal to Number) is a single episode.
 type Episode struct {
 	AnimeID     int
 	AnimeName   string
 	Number      int
+	Last        int
 	Reason      string
 	TorrentHash string
+}
+
+func (e Episode) last() int {
+	if e.Last > e.Number {
+		return e.Last
+	}
+	return e.Number
+}
+
+// Runs splits the episode numbers of one anime (and one torrent) into items of consecutive
+// episodes, each a copy of base with Number..Last set. A pack whose records skip a watched episode
+// in the middle becomes two runs instead of a range that claims the gap.
+func Runs(base Episode, numbers []int) []Episode {
+	numbers = slices.Clone(numbers)
+	slices.Sort(numbers)
+	numbers = slices.Compact(numbers)
+	var runs []Episode
+	for i, n := range numbers {
+		if i > 0 && n == numbers[i-1]+1 {
+			runs[len(runs)-1].Last = n
+			continue
+		}
+		run := base
+		run.Number, run.Last = n, n
+		runs = append(runs, run)
+	}
+	return runs
+}
+
+func episodeCount(items []Episode) int {
+	total := 0
+	for _, it := range items {
+		total += it.last() - it.Number + 1
+	}
+	return total
 }
 
 // buildBatchVars builds the template variables for the items of a window. With a single item the
@@ -80,7 +119,7 @@ func buildBatchVars(event Event, items []Episode) map[string]string {
 		"reason":       "",
 		"anime_id":     "",
 		"torrent_hash": "",
-		"count":        fmt.Sprintf("%d", len(items)),
+		"count":        fmt.Sprintf("%d", episodeCount(items)),
 		"quality":      "",
 		"file_path":    "",
 		"timestamp":    time.Now().Format("2006-01-02 15:04"),
@@ -89,6 +128,9 @@ func buildBatchVars(event Event, items []Episode) map[string]string {
 	if len(items) == 1 {
 		vars["anime_name"] = items[0].AnimeName
 		vars["episode"] = fmt.Sprintf("%d", items[0].Number)
+		if last := items[0].last(); last != items[0].Number {
+			vars["episode"] = fmt.Sprintf("%d-%d", items[0].Number, last)
+		}
 		vars["reason"] = items[0].Reason
 		if items[0].AnimeID != 0 {
 			vars["anime_id"] = fmt.Sprintf("%d", items[0].AnimeID)
@@ -127,9 +169,11 @@ func batchLines(event Event, items []Episode) []string {
 	lines := make([]string, 0, len(items))
 	for _, key := range order {
 		group := groups[key]
-		numbers := make([]int, len(group))
-		for i, it := range group {
-			numbers[i] = it.Number
+		var numbers []int
+		for _, it := range group {
+			for n := it.Number; n <= it.last(); n++ {
+				numbers = append(numbers, n)
+			}
 		}
 		slices.Sort(numbers)
 		numbers = slices.Compact(numbers)
@@ -152,18 +196,20 @@ func batchLines(event Event, items []Episode) []string {
 
 func batchTitle(event Event, items []Episode) string {
 	if len(items) == 1 {
-		title, _ := eventStrings(items[0].AnimeName, items[0].Number, items[0].Number, event, items[0].Reason)
+		title, _ := eventStrings(items[0].AnimeName, items[0].Number, items[0].last(), event, items[0].Reason)
 		return title
 	}
+	// Counts episodes, not items: one item can be a whole pack.
+	count := episodeCount(items)
 	switch event {
 	case NewEpisode:
-		return fmt.Sprintf("%d new episodes detected", len(items))
+		return fmt.Sprintf("%d new episodes detected", count)
 	case DownloadFailed:
-		return fmt.Sprintf("%d download errors", len(items))
+		return fmt.Sprintf("%d episodes failed to download", count)
 	case DownloadCompleted:
-		return fmt.Sprintf("%d downloads completed", len(items))
+		return fmt.Sprintf("%d episodes downloaded", count)
 	case EpisodeDeleted:
-		return fmt.Sprintf("%d episodes deleted", len(items))
+		return fmt.Sprintf("%d episodes deleted", count)
 	}
 	return ""
 }
@@ -177,6 +223,10 @@ func eventStrings(animeName string, first, last int, event Event, reason string)
 	}
 	switch event {
 	case NewEpisode:
+		if last != first {
+			return "New episodes detected",
+				fmt.Sprintf("%s %s detected, starting download", animeName, episodes)
+		}
 		return "New episode detected",
 			fmt.Sprintf("%s %s detected, starting download", animeName, episodes)
 	case DownloadFailed:
@@ -193,7 +243,11 @@ func eventStrings(animeName string, first, last int, event Event, reason string)
 		if last != first {
 			verb = "were"
 		}
-		return "Episode deleted",
+		title := "Episode deleted"
+		if last != first {
+			title = "Episodes deleted"
+		}
+		return title,
 			fmt.Sprintf("%s %s %s removed from the library", animeName, episodes, verb)
 	}
 	return "", ""
@@ -319,13 +373,20 @@ var (
 // DownloadCompleted per torrent (77 in a real case) and services such as ntfy.sh answer 429
 // past a certain volume — see decisions.md #47.
 func Notify(cfg *files.Config, event Event, it Episode) {
-	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 {
+	NotifyAll(cfg, event, []Episode{it})
+}
+
+// NotifyAll delivers items that belong to ONE event as a single webhook even with batching off —
+// a pack completing, or a pack being deleted, is one push and one Jellyfin/Plex scan, not one per
+// episode (decisions.md #124). With a batch window the items join the window like any other.
+func NotifyAll(cfg *files.Config, event Event, items []Episode) {
+	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 || len(items) == 0 {
 		return
 	}
 
 	window := time.Duration(cfg.Notifications.BatchWindowSeconds) * time.Second
 	if window <= 0 {
-		fireBatch(event, []Episode{it}, cfg.Notifications.Webhooks, false)
+		fireBatch(event, items, cfg.Notifications.Webhooks, false)
 		return
 	}
 
@@ -333,14 +394,14 @@ func Notify(cfg *files.Config, event Event, it Episode) {
 	defer batchMu.Unlock()
 
 	if b, ok := pendingBatch[event]; ok {
-		b.items = append(b.items, it)
+		b.items = append(b.items, items...)
 		// The window's webhooks are those of the last config seen: if the user edited the
 		// presets mid-window, the latest one wins.
 		b.webhook = cfg.Notifications.Webhooks
 		return
 	}
 
-	b := &batch{items: []Episode{it}, webhook: cfg.Notifications.Webhooks}
+	b := &batch{items: slices.Clone(items), webhook: cfg.Notifications.Webhooks}
 	pendingBatch[event] = b
 	b.timer = time.AfterFunc(window, func() { flushEvent(event, false) })
 }

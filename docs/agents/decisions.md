@@ -130,6 +130,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#121** — The blacklist deletes what the daemon downloaded and spares what the user downloaded by hand](#121-the-blacklist-deletes-what-the-daemon-downloaded-and-spares-what-the-user-downloaded-by-hand)
 - [**#122** — The Tailwind opacity scale is extended with 12, 16, 28 and 32](#122-the-tailwind-opacity-scale-is-extended-with-12-16-28-and-32)
 - [**#123** — A one-episode entry covers episode 1 even when the magnet declares no range](#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)
+- [**#124** — A torrent is one notification: a pack goes out as one run of episodes, not one webhook per record](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record)
 
 ---
 
@@ -3590,3 +3591,46 @@ magnet; 101432 (Violet Evergarden Special, only labeled series packs on Nyaa) st
 - Dropping the `dn` fallback because the CLI now sends the name: the API is public and the web is not
   its only client.
 
+
+### 124. A torrent is one notification: a pack goes out as one run of episodes, not one webhook per record
+
+**Location:** `internal/notifications/notifications.go` — `Episode.Last`, `Runs`, `NotifyAll`,
+`episodeCount` (titles and `{{count}}`); `daemon/helpers.go` — `episodeRuns`; `daemon/jobs.go` —
+the completion webhook in organize; `daemon/episodes.go` — `torrentEpisodes`/`notifiedNew`/
+`notifiedFailed` in `processAnimeEpisodes`, and the `episode_deleted` webhook in
+`removeEpisodesAndLinks`. Pinned by `TestNotifyAll_PackIsOneWebhookWithRange`, `TestRuns_GapSplitsTheRange`,
+`TestWillBatch_NotifiesNewEpisodeOncePerPack`, `TestRemoveEpisodesAndLinks_PackFiresOneEpisodeDeletedWebhook`,
+`TestEpisodeRuns_PackIsOneRunPerAnimeAndTorrent`.
+
+**What it looks like:** a second entry point (`NotifyAll`) next to `Notify`, an `Episode` that can be
+a range, and a per-pass map keyed by magnet that suppresses notifications in the episode loop —
+when "call `Notify` for each episode" looks simpler.
+
+**Why it's right:** a pack is one torrent, and the user experiences it as one event. Before this,
+the three paths each got it wrong in their own way: organize fires once per hash but named only
+`matched[0]`'s episode, so a finished 12-episode pack pushed "EP 1 downloaded successfully";
+`processAnimeEpisodes` meets the pack once per episode it covers (every episode gets the same
+candidates), so `new_episode` fired N times; deleting a pack fired `episode_deleted` once per
+record. With `batch_window_seconds = 0` that was N phone pushes and — for the Jellyfin/Plex scan
+presets, subscribed to `download_completed` and `episode_deleted` — N library scans for one
+deletion. The window from [#47](#47-notifications-are-grouped-by-window-and-the-body-is-escaped-only-when-the-preset-is-json)
+hid part of it, but only when on, and its title still counted items.
+
+So the unit is the torrent: records become runs of consecutive episodes per anime and hash
+(`episodeRuns` → `Runs`), and `NotifyAll` fires them as one webhook with the window off, or adds
+them to the window with it on. The loop key is the first candidate's magnet because that is the
+torrent the episode will `Add` — two episodes sharing it are the same download. An episode whose
+candidates came from its own per-episode search is not in the pre-scan and is a run of one.
+
+A run, not "min..max": records skip watched episodes, and "EPs 1-12" over records 1-3 and 6-12
+would claim episodes the pack's records don't have. With N > 1 items, titles and `{{count}}` count
+**episodes** (`episodeCount`), because one item can be a whole pack. A single run keeps the
+single-item variables filled (`{{episode}}` becomes `1-12`), as #47 (b) requires.
+
+**Don't "fix" by:**
+- Looping `Notify` over a torrent's records: back to N pushes and N Jellyfin scans with the window off.
+- Sending `matched[0].EpisodeNumber` on completion: the push names one episode of a pack.
+- Building the range as min..max of the records: it lies across a gap.
+- Dropping the magnet dedupe in the loop "because the window merges them": it does not when the
+  window is `0`, and the batch title would still say "26 new episodes" for one download.
+- Making `{{count}}` the number of items again: a pack would count as 1.

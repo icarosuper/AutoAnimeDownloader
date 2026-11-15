@@ -634,6 +634,14 @@ sending.
 `NewEpisode` only fires when there is **at least one magnet to try**; an episode with no search
 result goes straight to `DownloadFailed`/`ReasonNotFound`.
 
+**One torrent is one notification.** A pack's episodes reach the template as a single `Episode`
+run (`Number..Last`, built by `notifications.Runs` / `daemon.episodeRuns`) and go out through
+`NotifyAll`, which fires them as ONE webhook even with the batch window off — so a pack is one push
+and one Jellyfin/Plex scan for `new_episode`, `download_failed`, `download_completed` and
+`episode_deleted`. In `processAnimeEpisodes` the loop still meets a pack once per episode; it
+notifies on the first one, keyed by the first candidate's magnet. Looping `Notify` per record
+brings back N pushes and N library scans ([decisions.md #124](decisions.md#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record)).
+
 Notifications are grouped by window, and JSON escaping happens **only in the body and only when the
 preset declares `Content-Type: application/json`** (decisions.md #47).
 Header values have `\n`/`\r` stripped: `net/http` rejects the whole request with them, and ntfy

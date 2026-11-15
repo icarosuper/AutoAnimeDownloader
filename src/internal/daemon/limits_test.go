@@ -780,3 +780,28 @@ func TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes(t *testing.T) {
 		t.Fatalf("after the wait: want episodes 1-3 searched and 2 downloaded, got %v and %d", searched, len(result.newEpisodes))
 	}
 }
+
+// TestWillBatch_NotifiesNewEpisodeOncePerPack: the loop meets a pack once per episode it covers;
+// the push has to be one "EPs 1-26", not 26 "EP n".
+func TestWillBatch_NotifiesNewEpisodeOncePerPack(t *testing.T) {
+	spy := newWebhookSpy(t)
+	configs := limitsConfig()
+	configs.Notifications = files.NotificationsConfig{Webhooks: []files.WebhookPreset{{
+		Name: "spy", URL: spy.server.URL, Method: http.MethodPost, Headers: map[string]string{},
+		Body: "{{title}}|{{episode}}|{{count}}|{{message}}", Events: []string{"new_episode"},
+	}}}
+	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
+	searcher := searcherFor([]nyaa.TorrentResult{{Name: "batch", MagnetLink: fakeMagnet(9001)}}, nil, nil, nil)
+
+	processAnimeEpisodes(configs, torrents.NewFakeBackend(), anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher, nil)
+
+	body := spy.waitForCall(t)
+	time.Sleep(100 * time.Millisecond)
+	if n := spy.callCount(); n != 1 {
+		t.Fatalf("want one new_episode webhook for the pack, got %d", n)
+	}
+	want := "New episodes detected|1-26|26|Limits Test Anime EPs 1-26 detected, starting download"
+	if body != want {
+		t.Errorf("body = %q, want %q", body, want)
+	}
+}

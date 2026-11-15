@@ -219,7 +219,7 @@ func TestNotify_BatchesEventsWithinWindow(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("expected 1 request for the 3 events, got %d: %v", len(got), got)
 	}
-	want := "3|3 downloads completed|" +
+	want := "3|3 episodes downloaded|" +
 		"Re:ZERO EP 12 downloaded successfully\n" +
 		"Frieren EP 5 downloaded successfully\n" +
 		"Dandadan EP 3 downloaded successfully"
@@ -487,5 +487,30 @@ func TestBuildBatchVars_AnimeIDAndTorrentHash(t *testing.T) {
 	noID := buildBatchVars(DownloadFailed, []Episode{{AnimeName: "Frieren", Number: 5}})
 	if noID["anime_id"] != "" {
 		t.Errorf("unknown id must be blank, got %q", noID["anime_id"])
+	}
+}
+
+// TestNotifyAll_PackIsOneWebhookWithRange: with batching off, a pack completing is still ONE
+// request (one push, one Jellyfin scan), and it names the range instead of the first episode.
+func TestNotifyAll_PackIsOneWebhookWithRange(t *testing.T) {
+	srv, bodies := collector(t)
+	cfg := cfgWithWindow(srv.URL, 0, nil, "{{title}}|{{anime_name}}|{{episode}}|{{count}}|{{message}}")
+
+	NotifyAll(cfg, DownloadCompleted, Runs(Episode{AnimeName: "Frieren"}, []int{3, 1, 2, 4}))
+
+	got := drain(bodies, 1, 3*time.Second)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 request for the pack, got %d: %v", len(got), got)
+	}
+	if want := "Download completed|Frieren|1-4|4|Frieren EPs 1-4 downloaded successfully"; got[0] != want {
+		t.Errorf("body = %q, want %q", got[0], want)
+	}
+}
+
+// TestRuns_GapSplitsTheRange: a range must not claim an episode the torrent's records skip.
+func TestRuns_GapSplitsTheRange(t *testing.T) {
+	got := Runs(Episode{AnimeName: "X"}, []int{5, 1, 2, 2, 6})
+	if len(got) != 2 || got[0].Number != 1 || got[0].Last != 2 || got[1].Number != 5 || got[1].Last != 6 {
+		t.Errorf("Runs = %+v", got)
 	}
 }

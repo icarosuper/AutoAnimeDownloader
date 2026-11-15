@@ -338,3 +338,30 @@ func isInDeleteStatuses(deleteStatuses []string, status anilist.MediaListStatus)
 	}
 	return false
 }
+
+// episodeRuns turns saved records into notification items: one run of consecutive episodes per
+// anime and torrent, in the order the records came. A pack's N records become "EPs 1-12" in one
+// item instead of N items (or, as before, one item that named only the first episode) —
+// decisions.md #124.
+func episodeRuns(records []files.EpisodeStruct) []notifications.Episode {
+	type key struct {
+		animeID int
+		hash    string
+	}
+	var order []key
+	numbers := make(map[key][]int)
+	bases := make(map[key]notifications.Episode)
+	for _, ep := range records {
+		k := key{ep.AnimeID, ep.EpisodeHash}
+		if _, seen := numbers[k]; !seen {
+			order = append(order, k)
+			bases[k] = notifications.Episode{AnimeID: ep.AnimeID, AnimeName: ep.AnimeName, TorrentHash: ep.EpisodeHash}
+		}
+		numbers[k] = append(numbers[k], ep.EpisodeNumber)
+	}
+	var items []notifications.Episode
+	for _, k := range order {
+		items = append(items, notifications.Runs(bases[k], numbers[k])...)
+	}
+	return items
+}

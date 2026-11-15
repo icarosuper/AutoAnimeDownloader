@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"AutoAnimeDownloader/src/internal/files"
+	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/torrents"
 )
 
@@ -208,6 +210,54 @@ func TestRemoveEpisodesAndLinks_FiresEpisodeDeletedWebhook(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	if n := spy2.callCount(); n != 0 {
 		t.Errorf("keepData must not fire episode_deleted, got %d calls", n)
+	}
+}
+
+// Deleting a whole pack is one episode_deleted (one Jellyfin scan), carrying the range — not one
+// webhook per record.
+func TestRemoveEpisodesAndLinks_PackFiresOneEpisodeDeletedWebhook(t *testing.T) {
+	const hash = "pack"
+	saved := []files.EpisodeStruct{
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 1, EpisodeHash: hash, IsBatch: true},
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 2, EpisodeHash: hash, IsBatch: true},
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 3, EpisodeHash: hash, IsBatch: true},
+	}
+	spy := newWebhookSpy(t)
+	fm := &orchestrationFM{saved: saved, configs: &files.Config{Notifications: files.NotificationsConfig{Webhooks: []files.WebhookPreset{{
+		Name: "spy", URL: spy.server.URL, Method: http.MethodPost,
+		Body: "{{title}}|{{episode}}|{{message}}", Events: []string{"episode_deleted"},
+	}}}}}
+	keys := []files.EpisodeKey{{AnimeID: 7, Episode: 1}, {AnimeID: 7, Episode: 2}, {AnimeID: 7, Episode: 3}}
+	if err := removeEpisodesAndLinks(fm, torrents.NewFakeBackend(), files.NewLibrarian(files.NewOSFileSystem()), keys, saved, false, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	body := spy.waitForCall(t)
+	time.Sleep(100 * time.Millisecond)
+	if n := spy.callCount(); n != 1 {
+		t.Fatalf("want one episode_deleted webhook for the pack, got %d", n)
+	}
+	if want := "Episodes deleted|1-3|Frieren EPs 1-3 were removed from the library"; body != want {
+		t.Errorf("body = %q, want %q", body, want)
+	}
+}
+
+// A pack completing names its range, not the first record's episode.
+func TestEpisodeRuns_PackIsOneRunPerAnimeAndTorrent(t *testing.T) {
+	records := []files.EpisodeStruct{
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 3, EpisodeHash: "h"},
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 1, EpisodeHash: "h"},
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 2, EpisodeHash: "h"},
+		{AnimeID: 7, AnimeName: "Frieren", EpisodeNumber: 5, EpisodeHash: "h"},
+		{AnimeID: 9, AnimeName: "Dandadan", EpisodeNumber: 4, EpisodeHash: "h"},
+	}
+	got := episodeRuns(records)
+	want := []notifications.Episode{
+		{AnimeID: 7, AnimeName: "Frieren", Number: 1, Last: 3, TorrentHash: "h"},
+		{AnimeID: 7, AnimeName: "Frieren", Number: 5, Last: 5, TorrentHash: "h"},
+		{AnimeID: 9, AnimeName: "Dandadan", Number: 4, Last: 4, TorrentHash: "h"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("episodeRuns = %+v, want %+v", got, want)
 	}
 }
 
