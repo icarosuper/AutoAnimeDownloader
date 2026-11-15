@@ -51,6 +51,35 @@ type AnimeInfo struct {
 	// without Name itself. It exists only so the dashboard search matches the name the user knows;
 	// nothing renders this list.
 	AltNames []string `json:"alt_names,omitempty" example:"ワンピース"`
+	// Accounts lists the list accounts that track this anime, each with its own progress.
+	// EpisodesWatched/EpisodesPending above are the COMBINED view (lowest progress across accounts,
+	// see anilist.DedupeByMedia); these are what the dashboard user filter projects onto when the
+	// user picks accounts (decisions.md #125). Empty for standalone animes and for orphans no
+	// account tracks.
+	Accounts []AnimeAccount `json:"accounts,omitempty"`
+}
+
+// AnimeAccount is one account's progress on an anime. Source is "anilist" or "mal": the same
+// username can exist on both, so the pair is the account's identity.
+type AnimeAccount struct {
+	Source          string `json:"source" example:"anilist"`
+	Username        string `json:"username" example:"icaro"`
+	EpisodesWatched int    `json:"episodes_watched" example:"5"`
+	// EpisodesPending is AnimeInfo.EpisodesPending computed from this account's progress.
+	EpisodesPending int `json:"episodes_pending" example:"2"`
+}
+
+// animeAccounts converts the stamped accounts of a MediaList. Pending is filled at the end of the
+// handler, once the downloaded episode numbers and the released count are final.
+func animeAccounts(accounts []anilist.AccountProgress) []AnimeAccount {
+	if len(accounts) == 0 {
+		return nil
+	}
+	out := make([]AnimeAccount, len(accounts))
+	for i, a := range accounts {
+		out[i] = AnimeAccount{Source: a.Source, Username: a.Username, EpisodesWatched: a.Progress}
+	}
+	return out
 }
 
 // altNames gathers every title variant of a Media, dropping empties, duplicates and the name that
@@ -201,6 +230,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 				continue
 			}
 			fromCache = fromCache || cached
+			anilist.StampAccount(list, anilist.AccountSourceAniList, username)
 			for _, ml := range list {
 				covered[ml.Media.Id] = true
 			}
@@ -214,6 +244,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 				continue
 			}
 			fromCache = fromCache || cached
+			anilist.StampAccount(list, anilist.AccountSourceMAL, user)
 			for _, ml := range list {
 				covered[ml.Media.Id] = true
 			}
@@ -244,7 +275,11 @@ func handleAnimes(server *Server) http.HandlerFunc {
 
 		animes := make([]AnimeInfo, 0, len(animeMap))
 		for key, animeInfo := range animeMap {
-			animeInfo.EpisodesPending = countPendingEpisodes(animeInfo, downloadedNums[key])
+			animeInfo.EpisodesPending = countPendingEpisodes(animeInfo.EpisodesWatched, animeInfo.EpisodesReleased, downloadedNums[key])
+			for i := range animeInfo.Accounts {
+				acc := &animeInfo.Accounts[i]
+				acc.EpisodesPending = countPendingEpisodes(acc.EpisodesWatched, animeInfo.EpisodesReleased, downloadedNums[key])
+			}
 			animeInfo.IsStandalone = standaloneSet[animeInfo.AnimeID]
 			animes = append(animes, *animeInfo)
 		}
@@ -256,9 +291,9 @@ func handleAnimes(server *Server) http.HandlerFunc {
 // countPendingEpisodes counts the released episodes above the watch progress that aren't on disk
 // yet. It walks by number (not released-downloaded) because watched episodes may stay saved
 // (watched_episodes_to_keep) and would inflate the subtraction.
-func countPendingEpisodes(info *AnimeInfo, downloaded map[int]bool) int {
+func countPendingEpisodes(watched, released int, downloaded map[int]bool) int {
 	pending := 0
-	for n := info.EpisodesWatched + 1; n <= info.EpisodesReleased; n++ {
+	for n := watched + 1; n <= released; n++ {
 		if !downloaded[n] {
 			pending++
 		}
@@ -331,6 +366,7 @@ func applyFetchedMedia(info *AnimeInfo, ml *anilist.MediaList, excludedLists []s
 	}
 	info.EpisodesReleased = episodesReleased
 	info.EpisodesWatched = ml.Progress
+	info.Accounts = animeAccounts(ml.Accounts)
 	info.CoverImage = coverImage
 	info.IsBlacklisted = isBlacklisted
 	info.NextAiringAt = nextAiringAt(ml.Media.NextAiringEpisode)
@@ -494,6 +530,7 @@ func mergeAniListAnimes(animeMap map[string]*AnimeInfo, filtered []anilist.Media
 			NextAiringAt:     nextAiringAt(ml.Media.NextAiringEpisode),
 			AltNames:         altNames(ml.Media, name),
 			MediaStatus:      string(ml.Media.Status),
+			Accounts:         animeAccounts(ml.Accounts),
 		}
 	}
 }

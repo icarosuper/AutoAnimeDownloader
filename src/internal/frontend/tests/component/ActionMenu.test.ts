@@ -16,6 +16,30 @@ afterEach(() => {
 })
 
 describe('ActionMenu', () => {
+  it('in multiple mode renders checkbox items and stays open after a pick', async () => {
+    const onSelect = vi.fn()
+    const { getByRole, queryByRole } = render(ActionMenu, {
+      props: {
+        multiple: true,
+        triggerLabel: 'Users',
+        items: [
+          { id: 'a', label: 'Alice', checked: true },
+          { id: 'b', label: 'Bob' },
+        ],
+      },
+      events: { select: onSelect },
+    })
+    await fireEvent.click(getByRole('button', { name: 'Users' }))
+
+    expect(getByRole('menuitemcheckbox', { name: 'Alice' }).getAttribute('aria-checked')).toBe('true')
+    expect(getByRole('menuitemcheckbox', { name: 'Bob' }).getAttribute('aria-checked')).toBe('false')
+
+    await fireEvent.click(getByRole('menuitemcheckbox', { name: 'Bob' }))
+
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ detail: 'b' }))
+    expect(queryByRole('menu')).toBeInTheDocument()
+  })
+
   it('is closed by default and opens the panel when the trigger is clicked', async () => {
     const { getByRole, queryByRole } = render(ActionMenu, { props: { items, triggerLabel: 'More actions' } })
     expect(queryByRole('menu')).not.toBeInTheDocument()

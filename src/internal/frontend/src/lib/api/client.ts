@@ -256,6 +256,23 @@ export interface AnimeInfo {
    * Other titles of the same anime (romaji, English, kanji, synonyms). Only the search uses them.
    */
   alt_names?: string[]
+  /**
+   * The list accounts that track this anime, each with its own progress. `episodes_watched` /
+   * `episodes_pending` above are the combined view (lowest progress across accounts); the
+   * dashboard user filter projects onto these instead. Absent for standalones and for orphans no
+   * account tracks.
+   */
+  accounts?: AnimeAccount[]
+}
+
+export type AccountSource = 'anilist' | 'mal'
+
+/** One account's progress on an anime. `source` + `username` is the identity. */
+export interface AnimeAccount {
+  source: AccountSource
+  username: string
+  episodes_watched: number
+  episodes_pending: number
 }
 
 /** Reasons an anime can't be added as standalone — they come ready from the server. */

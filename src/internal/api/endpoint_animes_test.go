@@ -379,6 +379,12 @@ func TestHandleAnimes(t *testing.T) {
 		if animeData["episodes_watched"].(float64) != 10 {
 			t.Errorf("expected refreshed episodes_watched=10, got %v", animeData["episodes_watched"])
 		}
+		// An orphan is still on someone's list (just outside the download statuses): the user filter
+		// must still find it under that account.
+		accounts, _ := animeData["accounts"].([]interface{})
+		if len(accounts) != 1 || accounts[0].(map[string]interface{})["username"] != "testuser" {
+			t.Errorf("the refreshed orphan must carry the account that tracks it, got %v", animeData["accounts"])
+		}
 	})
 
 	// Regression of the inverse shape of the storm below: even with the list OK, one request
@@ -638,6 +644,61 @@ func TestHandleAnimes(t *testing.T) {
 			t.Errorf("the downloaded episode must still be counted, got %v", animeData["episodes_downloaded"])
 		}
 	})
+	// The dedupe keeps the LOWEST progress for the combined fields; the dashboard user filter needs
+	// each account's own answer, so the accounts survive the collapse with their progress, and
+	// pending is recomputed per account against the same episodes on disk.
+	t.Run("Same anime in two accounts carries each account's progress", func(t *testing.T) {
+		entry := func(id int, progress int) string {
+			return fmt.Sprintf(`{"id":%d,"status":"CURRENT","progress":%d,"customLists":{},"media":{"id":194829,"format":"TV","status":"FINISHED","episodes":4,"title":{"english":"Two Account Anime","romaji":"Two Account Anime"},"coverImage":{"large":"http://cover","medium":""},"synonyms":[],"relations":{"edges":[]},"airingSchedule":{"nodes":[]}}}`, id, progress)
+		}
+		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+			body := readBody(req)
+			id, progress := 111, 3
+			if strings.Contains(body, "accountB") {
+				id, progress = 222, 0
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(
+				`{"data":{"Page":{"mediaList":[` + entry(id, progress) + `]}}}`))}, nil
+		})()
+
+		serverDup := &Server{State: state, FileManager: &mockFileManager{
+			// Episode 1 on disk: B (progress 0) is behind on 2,3,4; A (progress 3) only on 4.
+			episodes: []files.EpisodeStruct{{
+				EpisodeNumber: 1, AnimeID: 194829, AnimeName: "Two Account Anime",
+				EpisodeName: "Two Account Anime - Episode 1", DownloadDate: time.Now(),
+			}},
+			configs: &files.Config{
+				AnilistUsernames:      []string{"accountA", "accountB"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING", "FINISHED"},
+			},
+		}}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil)
+		w := httptest.NewRecorder()
+		handleAnimes(serverDup)(w, req)
+
+		var response struct {
+			Data []AnimeInfo `json:"data"`
+		}
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if len(response.Data) != 1 {
+			t.Fatalf("want 1 anime, got %+v", response.Data)
+		}
+		got := response.Data[0]
+		if got.EpisodesWatched != 0 || got.EpisodesPending != 3 {
+			t.Errorf("combined view is the lowest progress (0) → 3 pending, got watched=%d pending=%d", got.EpisodesWatched, got.EpisodesPending)
+		}
+		want := []AnimeAccount{
+			{Source: "anilist", Username: "accountA", EpisodesWatched: 3, EpisodesPending: 1},
+			{Source: "anilist", Username: "accountB", EpisodesWatched: 0, EpisodesPending: 3},
+		}
+		if fmt.Sprint(got.Accounts) != fmt.Sprint(want) {
+			t.Errorf("accounts:\n got %+v\nwant %+v", got.Accounts, want)
+		}
+	})
 }
 
 func TestCountPendingEpisodes(t *testing.T) {
@@ -655,7 +716,7 @@ func TestCountPendingEpisodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := countPendingEpisodes(&tt.info, tt.downloaded); got != tt.want {
+			if got := countPendingEpisodes(tt.info.EpisodesWatched, tt.info.EpisodesReleased, tt.downloaded); got != tt.want {
 				t.Fatalf("countPendingEpisodes = %d, want %d", got, tt.want)
 			}
 		})

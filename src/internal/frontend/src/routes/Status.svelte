@@ -7,7 +7,7 @@
   // with the Downloads screen, which exists precisely for that.
   import { onMount, onDestroy } from "svelte";
   import { querystring, replace } from "svelte-spa-router";
-  import { ChevronDown, ChevronRight, Eye, Search, X } from "@lucide/svelte";
+  import { ChevronDown, ChevronRight, Eye, Search, User, X } from "@lucide/svelte";
   import {
     getStatus,
     getAnimes,
@@ -42,6 +42,8 @@
     breakdown,
     encodeStatusView,
     decodeStatusView,
+    accountKey,
+    scopeToAccounts,
     type SortKey,
     type SortDir,
     type AnimeTypeFilter,
@@ -108,6 +110,8 @@
     filterStandalone: m.status_filter_standalone(),
     filterBlacklisted: m.status_filter_blacklisted(),
     filterType: m.status_filter_type(),
+    filterAccount: m.status_filter_account(),
+    filterAccountsAll: m.status_filter_accounts_all(),
     clearFilters: m.status_clear_filters(),
     loading: m.status_loading(),
     heroSpeedLabel: m.status_hero_speed_label(),
@@ -148,6 +152,9 @@
   let search = "";
   let filterUnwatched = false;
   let typeFilter: AnimeTypeFilter = "all";
+  // Account keys from the URL/clicks. May hold an account the config no longer has — the
+  // filtering reads `activeAccounts`, never this directly.
+  let selectedAccounts: string[] = [];
   let viewReady = false;
   let lastWrittenQuery = "";
   let now = Date.now();
@@ -160,18 +167,63 @@
 
   $: fmtLocale = ($locale ?? "en") as FormatLocale;
 
-  $: filteredAnimes = filterAnimes(animes, search, { unwatched: filterUnwatched, type: typeFilter });
+  // User filter. The options come from the config, not from the animes: an account with nothing
+  // listed right now is still an account. The username alone is the label; the source is only
+  // spelled out when the same name exists on both AniList and MAL.
+  $: accountOptions = [
+    ...anilistUsernames.map((username) => ({ source: "anilist" as const, username })),
+    ...malUsernames.map((username) => ({ source: "mal" as const, username })),
+  ].map((acc, _, all) => ({
+    key: accountKey(acc.source, acc.username),
+    label: all.filter((o) => o.username === acc.username).length > 1
+      ? `${acc.username} (${acc.source === "anilist" ? "AniList" : "MAL"})`
+      : acc.username,
+  }));
+  // Filtering by user only makes sense with two or more accounts. Up to ACCOUNT_CHIPS_MAX they are
+  // chips on wide screens; past that (and always below `lg`) they collapse into a multi-select.
+  const ACCOUNT_CHIPS_MAX = 3;
+  $: showAccountFilter = accountOptions.length >= 2;
+  $: accountChips = accountOptions.length <= ACCOUNT_CHIPS_MAX;
+  // Until the config answers there are no options to validate against, so a URL selection is
+  // trusted for that moment instead of flashing the unfiltered list. Afterwards a removed account
+  // just stops counting.
+  $: activeAccounts = loading
+    ? selectedAccounts
+    : selectedAccounts.filter((key) => accountOptions.some((o) => o.key === key));
+
+  // Everything below reads `scopedAnimes`: the user filter also re-projects watched/pending onto
+  // the selected accounts, so every count, chip and the "Unwatched" toggle answer for them.
+  $: scopedAnimes = scopeToAccounts(animes, activeAccounts);
+  $: filteredAnimes = filterAnimes(scopedAnimes, search, { unwatched: filterUnwatched, type: typeFilter });
   $: sortedAnimes = sortAnimes(filteredAnimes, sortKey, sortDir);
 
   $: typeCounts = {
-    all: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "all" }).length,
-    airing: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "airing" }).length,
-    finished: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "finished" }).length,
-    standalone: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "standalone" }).length,
-    blacklisted: filterAnimes(animes, search, { unwatched: filterUnwatched, type: "blacklisted" }).length,
+    all: filterAnimes(scopedAnimes, search, { unwatched: filterUnwatched, type: "all" }).length,
+    airing: filterAnimes(scopedAnimes, search, { unwatched: filterUnwatched, type: "airing" }).length,
+    finished: filterAnimes(scopedAnimes, search, { unwatched: filterUnwatched, type: "finished" }).length,
+    standalone: filterAnimes(scopedAnimes, search, { unwatched: filterUnwatched, type: "standalone" }).length,
+    blacklisted: filterAnimes(scopedAnimes, search, { unwatched: filterUnwatched, type: "blacklisted" }).length,
   };
-  $: unwatchedCount = filterAnimes(animes, search, { unwatched: true, type: typeFilter }).length;
-  $: filtersActive = search !== "" || filterUnwatched || typeFilter !== "all";
+  $: unwatchedCount = filterAnimes(scopedAnimes, search, { unwatched: true, type: typeFilter }).length;
+  // Each account's count is what selecting ONLY it would show, like the type segments.
+  $: accountItems = accountOptions.map((opt) => ({
+    ...opt,
+    checked: activeAccounts.includes(opt.key),
+    count: filterAnimes(scopeToAccounts(animes, [opt.key]), search, { unwatched: filterUnwatched, type: typeFilter })
+      .length,
+  }));
+  $: accountMenuItems = accountItems.map((opt) => ({
+    id: opt.key,
+    label: `${opt.label} ${opt.count}`,
+    checked: opt.checked,
+  }));
+  $: accountTriggerLabel = (() => {
+    const picked = accountItems.filter((o) => o.checked);
+    if (picked.length === 0) return T && T.filterAccountsAll;
+    if (picked.length === 1) return picked[0].label;
+    return $locale && m.status_filter_accounts_more({ first: picked[0].label, more: picked.length - 1 });
+  })();
+  $: filtersActive = search !== "" || filterUnwatched || typeFilter !== "all" || activeAccounts.length > 0;
 
   $: typeOptions = (
     [
@@ -190,13 +242,14 @@
   }));
 
   function currentView(): StatusViewState {
-    return { q: search, unwatched: filterUnwatched, type: typeFilter };
+    return { q: search, unwatched: filterUnwatched, type: typeFilter, accounts: selectedAccounts };
   }
 
   function applyView(view: StatusViewState) {
     search = view.q;
     filterUnwatched = view.unwatched;
     typeFilter = view.type;
+    selectedAccounts = view.accounts;
   }
 
   function syncStatusView() {
@@ -206,7 +259,13 @@
   }
 
   function clearFilters() {
-    applyView({ q: "", unwatched: false, type: "all" });
+    applyView({ q: "", unwatched: false, type: "all", accounts: [] });
+  }
+
+  function toggleAccount(key: string) {
+    selectedAccounts = selectedAccounts.includes(key)
+      ? selectedAccounts.filter((k) => k !== key)
+      : [...selectedAccounts, key];
   }
 
   function setTypeFilter(type: AnimeTypeFilter) {
@@ -229,6 +288,7 @@
     search;
     filterUnwatched;
     typeFilter;
+    selectedAccounts;
     const qs = encodeStatusView(currentView());
     if (qs !== lastWrittenQuery) {
       syncStatusView();
@@ -1034,6 +1094,51 @@
                 </span>
               </ActionMenu>
             </div>
+
+            {#if showAccountFilter}
+              {#if accountChips}
+                <!-- Toggle chips, OR between them: an anime shows when ANY picked account has it. -->
+                <div
+                  class="hidden shrink-0 flex-wrap items-center gap-2 lg:inline-flex"
+                  role="group"
+                  aria-label={(T && T.filterAccount) || undefined}
+                >
+                  {#each accountItems as opt (opt.key)}
+                    <button
+                      type="button"
+                      class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {opt.checked
+                        ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
+                        : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
+                      aria-pressed={opt.checked}
+                      on:click={() => toggleAccount(opt.key)}
+                    >
+                      <User size={14} strokeWidth={2} />
+                      {opt.label}
+                      <span class="font-mono text-[12px] opacity-70">{opt.count}</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+
+              <div class="shrink-0 {accountChips ? 'lg:hidden' : ''}">
+                <ActionMenu
+                  multiple
+                  items={accountMenuItems}
+                  triggerLabel={(T && T.filterAccount) || ""}
+                  triggerClass="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {activeAccounts.length >
+                  0
+                    ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
+                    : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
+                  on:select={(e) => toggleAccount(e.detail)}
+                >
+                  <span slot="trigger" class="inline-flex items-center gap-1">
+                    <User size={14} strokeWidth={2} />
+                    {accountTriggerLabel}
+                    <ChevronDown size={14} strokeWidth={2} />
+                  </span>
+                </ActionMenu>
+              </div>
+            {/if}
           </div>
         </div>
       </div>

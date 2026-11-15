@@ -263,6 +263,35 @@ type MediaList struct {
 	Progress    int             `json:"progress"`
 	CustomLists CustomLists     `json:"customLists"`
 	Media       Media           `json:"media"`
+	// Accounts says which list accounts have this media, each with its OWN progress. It never
+	// comes from AniList (`json:"-"`, so the on-disk cache snapshots don't carry it either): the
+	// caller that knows which account a list belongs to stamps it with StampAccount, and
+	// DedupeByMedia unions it — so after the collapse to the lowest Progress, the per-account
+	// answer the dashboard user filter needs is still here. Nil means nobody stamped it, not
+	// "no account" (decisions.md #125).
+	Accounts []AccountProgress `json:"-"`
+}
+
+// Account sources for AccountProgress.Source.
+const (
+	AccountSourceAniList = "anilist"
+	AccountSourceMAL     = "mal"
+)
+
+// AccountProgress is one account's view of a media: who (source + username) and how far they
+// watched. Source is needed because the same username can exist on AniList and on MAL.
+type AccountProgress struct {
+	Source   string
+	Username string
+	Progress int
+}
+
+// StampAccount marks every entry of one account's list as belonging to that account. It writes
+// into the slice it's given, so pass a list the caller owns — never a cached slice.
+func StampAccount(list []MediaList, source, username string) {
+	for i := range list {
+		list[i].Accounts = []AccountProgress{{Source: source, Username: username, Progress: list[i].Progress}}
+	}
 }
 
 type MediaStatus string
@@ -378,6 +407,9 @@ type CustomLists map[string]bool
 // so nothing may branch on it. Status is a per-account question: download is the OR of the
 // lists already filtered by status_in in searchAnilist; deletion is answered by
 // deletableMediaIDs, which applies the AND rule across accounts.
+//
+// Accounts is the one field that is NOT winner-takes-all: the survivor carries the union of
+// every collapsed entry's accounts, in input order.
 func DedupeByMedia(list []MediaList) []MediaList {
 	byMedia := make(map[int]int, len(list)) // media id -> index in result
 	result := make([]MediaList, 0, len(list))
@@ -387,9 +419,16 @@ func DedupeByMedia(list []MediaList) []MediaList {
 			continue
 		}
 		if idx, ok := byMedia[anime.Media.Id]; ok {
+			// A fresh slice, never an append onto the survivor's: that one may alias the caller's input.
+			var accounts []AccountProgress
+			if len(result[idx].Accounts)+len(anime.Accounts) > 0 {
+				accounts = append(append(make([]AccountProgress, 0, len(result[idx].Accounts)+len(anime.Accounts)),
+					result[idx].Accounts...), anime.Accounts...)
+			}
 			if anime.Progress < result[idx].Progress {
 				result[idx] = anime
 			}
+			result[idx].Accounts = accounts
 			continue
 		}
 		byMedia[anime.Media.Id] = len(result)
@@ -762,6 +801,7 @@ func GetAnimeInfoByIDs(mediaIds []int, usernames, malUsers []string) (map[int]*M
 				lastErr = err
 				continue
 			}
+			StampAccount(resp.Data.Page.MediaList, AccountSourceAniList, username)
 			entries = append(entries, resp.Data.Page.MediaList...)
 		}
 	}

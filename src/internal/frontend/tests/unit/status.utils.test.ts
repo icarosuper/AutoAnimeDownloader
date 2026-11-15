@@ -10,6 +10,8 @@ import {
   encodeStatusView,
   decodeStatusView,
   DEFAULT_STATUS_VIEW,
+  scopeToAccounts,
+  accountKey,
 } from '../../src/lib/utils/status.js'
 import type { AnimeInfo } from '../../src/lib/api/client.js'
 
@@ -191,13 +193,67 @@ describe('encodeStatusView / decodeStatusView', () => {
   })
 
   it('round-trips type, unwatched and search', () => {
-    const view = { q: 'beta', unwatched: true, type: 'airing' as const }
+    const view = { q: 'beta', unwatched: true, type: 'airing' as const, accounts: [] }
     expect(encodeStatusView(view)).toBe('q=beta&unwatched=1&type=airing')
     expect(decodeStatusView(encodeStatusView(view))).toEqual(view)
   })
 
   it('treats an unknown type as all and ignores leftover params', () => {
     expect(decodeStatusView('type=foo&extra=1')).toEqual(DEFAULT_STATUS_VIEW)
+  })
+  it('round-trips the selected accounts as repeated params', () => {
+    const view = { ...DEFAULT_STATUS_VIEW, accounts: ['anilist:icaro', 'mal:icaro'] }
+    expect(encodeStatusView(view)).toBe('account=anilist%3Aicaro&account=mal%3Aicaro')
+    expect(decodeStatusView(encodeStatusView(view))).toEqual(view)
+  })
+
+  it('drops account params without a known source and repeated ones', () => {
+    expect(decodeStatusView('account=icaro&account=kitsu:x&account=mal:a&account=mal:a').accounts).toEqual(['mal:a'])
+  })
+})
+
+describe('scopeToAccounts', () => {
+  const shared = makeAnime({
+    anime_id: 1,
+    episodes_watched: 0,
+    episodes_pending: 10,
+    accounts: [
+      { source: 'anilist', username: 'a', episodes_watched: 8, episodes_pending: 2 },
+      { source: 'anilist', username: 'b', episodes_watched: 0, episodes_pending: 10 },
+      { source: 'mal', username: 'c', episodes_watched: 5, episodes_pending: 5 },
+    ],
+  })
+  const onlyB = makeAnime({
+    anime_id: 2,
+    accounts: [{ source: 'anilist', username: 'b', episodes_watched: 3, episodes_pending: 1 }],
+  })
+  const standalone = makeAnime({ anime_id: 3, is_standalone: true })
+  const all = [shared, onlyB, standalone]
+
+  it('returns the list untouched with no selection', () => {
+    expect(scopeToAccounts(all, [])).toBe(all)
+  })
+
+  it('keeps an anime ANY selected account tracks, and drops the ones with no account', () => {
+    const ids = scopeToAccounts(all, [accountKey('anilist', 'a'), accountKey('anilist', 'b')]).map(x => x.anime_id)
+    expect(ids).toEqual([1, 2])
+  })
+
+  it('projects watched/pending onto the selected account, not the combined lowest', () => {
+    const [got] = scopeToAccounts(all, [accountKey('anilist', 'a')])
+    expect(got.episodes_watched).toBe(8)
+    expect(got.episodes_pending).toBe(2)
+    expect(shared.episodes_watched).toBe(0) // the input is not mutated
+  })
+
+  it('takes the lowest progress among several selected accounts', () => {
+    const [got] = scopeToAccounts([shared], [accountKey('anilist', 'a'), accountKey('mal', 'c')])
+    expect(got.episodes_watched).toBe(5)
+    expect(got.episodes_pending).toBe(5)
+  })
+
+  it('tells the same username apart by source', () => {
+    expect(scopeToAccounts(all, [accountKey('mal', 'a')])).toEqual([])
   })
 })
 

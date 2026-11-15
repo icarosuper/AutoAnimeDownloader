@@ -131,6 +131,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#122** — The Tailwind opacity scale is extended with 12, 16, 28 and 32](#122-the-tailwind-opacity-scale-is-extended-with-12-16-28-and-32)
 - [**#123** — A one-episode entry covers episode 1 even when the magnet declares no range](#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)
 - [**#124** — A torrent is one notification: a pack goes out as one run of episodes, not one webhook per record](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record)
+- [**#125** — The dashboard user filter re-projects progress onto the selected accounts, not just their membership](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)
 
 ---
 
@@ -3634,3 +3635,46 @@ single-item variables filled (`{{episode}}` becomes `1-12`), as #47 (b) requires
 - Dropping the magnet dedupe in the loop "because the window merges them": it does not when the
   window is `0`, and the batch title would still say "26 new episodes" for one download.
 - Making `{{count}}` the number of items again: a pack would count as 1.
+
+### 125. The dashboard user filter re-projects progress onto the selected accounts, not just their membership
+
+**Location:** `internal/anilist/anilist.go` — `MediaList.Accounts`, `StampAccount`, the accounts
+union in `DedupeByMedia`; `internal/api/endpoint_animes.go` — `AnimeInfo.Accounts` (pending
+recomputed per account at the end of `handleAnimes`); `frontend/src/lib/utils/status.ts` —
+`scopeToAccounts`, run before `filterAnimes` in `routes/Status.svelte`. Pinned by
+`TestDedupeByMedia_UnionsAccounts`, `Same anime in two accounts carries each account's progress`
+(`endpoint_animes_test.go`), `scopeToAccounts` in `status.utils.test.ts` and
+`Status — user filter` in `Status.filters.test.ts`.
+
+**What it looks like:** a filter that rewrites data. Picking an account changes the
+`episodes_watched` / `episodes_pending` of the rows it keeps, so the same anime shows "4 watched"
+unfiltered and "10 watched" with one account picked. And `/api/v1/animes` ships progress twice:
+the top-level pair and again inside `accounts`.
+
+**Why it's right:** the top-level pair is the combined view — the lowest progress across accounts
+([#43](#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)),
+which is what the daemon downloads and deletes by. A filter that only kept the picked account's
+animes would still answer "Unwatched", the progress bar, the "behind" chip, the sort and every
+count for whichever account is furthest behind — possibly one the user didn't pick, which reads
+as a bug. So `scopeToAccounts` keeps an anime when ANY picked account tracks it (OR) and replaces
+the pair with the lowest progress among the picked accounts (highest pending, the same thing),
+before every other filter, so everything downstream agrees. Pending can't be derived on the client
+(it needs the episode numbers on disk), so the server sends it per account. The account list
+survives the dedupe because `Accounts` is the one field `DedupeByMedia` unions instead of taking
+from the winner; it is `json:"-"` and stamped by the caller that knows whose list it fetched, so
+the on-disk cache snapshots never carry it and the daemon pass, which doesn't stamp, gets nil.
+
+UI: hidden with fewer than 2 configured accounts (options come from the config, not the animes);
+toggle chips up to 3 accounts on `lg`; past 3, and always below `lg`, an `ActionMenu` in `multiple`
+mode. The selection lives in the URL as repeated `account=<source>:<username>`.
+
+**Don't "fix" by:**
+- Filtering by membership only: "Unwatched" would answer for an account the user didn't pick.
+- Replacing the top-level pair with one account's progress on the server, or adding `?account=`:
+  the combined pair is what the rest of the app means by progress, the list poll is cached per
+  username ([#46](#46-getfrontendanimelist-is-cached-for-60s--the-apiv1animes-poll-is-what-blows-anilists-quota)), and the type filter is
+  already client-side.
+- Keying accounts by username alone: the same name can exist on AniList and on MAL.
+- Appending onto the survivor's `Accounts` in `DedupeByMedia`: that slice may alias the caller's
+  input; it builds a fresh one.
+- Stamping inside `GetFrontendAnimeList` / the cache: the cached slice is shared across polls.

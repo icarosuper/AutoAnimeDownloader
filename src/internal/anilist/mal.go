@@ -396,6 +396,7 @@ func malEntriesFor(mediaIDs []int, malUsers []string, priority Priority) ([]Medi
 			lastErr = err
 			continue
 		}
+		StampAccount(hydrated, AccountSourceMAL, user)
 		list = append(list, hydrated...)
 	}
 

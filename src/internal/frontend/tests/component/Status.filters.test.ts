@@ -46,7 +46,7 @@ const library: AnimeInfo[] = [
   anime({ anime_id: 5, name: 'Blacklisted Show', media_status: 'FINISHED', is_blacklisted: true }),
 ]
 
-async function renderStatus(animes: AnimeInfo[] = library) {
+async function renderStatus(animes: AnimeInfo[] = library, config: Record<string, unknown> = {}) {
   vi.mocked(client.getStatus).mockResolvedValue({
     status: 'running',
     last_check: '2026-08-19T12:00:00Z',
@@ -57,7 +57,7 @@ async function renderStatus(animes: AnimeInfo[] = library) {
     disk_low: false,
   } as StatusResponse)
   vi.mocked(client.getAnimes).mockResolvedValue(animes)
-  vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60 } as never)
+  vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60, ...config } as never)
   vi.mocked(client.getTorrents).mockResolvedValue([])
   vi.mocked(client.getLastCheck).mockResolvedValue({
     finished_at: '0001-01-01T00:00:00Z',
@@ -156,5 +156,84 @@ describe('Status — type filters', () => {
     await renderStatus()
     expect(screen.getAllByRole('radio', { name: /standalone|avulsos/i }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /standalone only|só avulsos/i })).toBeNull()
+  })
+})
+
+describe('Status — user filter', () => {
+  beforeEach(() => {
+    window.location.hash = '#/status'
+  })
+
+  const acc = (source: 'anilist' | 'mal', username: string, watched: number, pending: number) => ({
+    source,
+    username,
+    episodes_watched: watched,
+    episodes_pending: pending,
+  })
+  // "Shared" is behind for bob (combined watched 2) but finished for alice.
+  const shared = anime({
+    anime_id: 1, name: 'Shared Show', episodes_released: 12, episodes_watched: 2, episodes_pending: 10,
+    accounts: [acc('anilist', 'alice', 12, 0), acc('anilist', 'bob', 2, 10)],
+  })
+  const bobOnly = anime({
+    anime_id: 2, name: 'Bob Show', episodes_released: 12, episodes_watched: 1, episodes_pending: 11,
+    accounts: [acc('anilist', 'bob', 1, 11)],
+  })
+  const loose = anime({ anime_id: 3, name: 'Loose Show', is_standalone: true })
+  const users = [shared, bobOnly, loose]
+
+  it('does not render with a single account', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice'] })
+    expect(screen.queryByRole('group', { name: /filter by user|filtrar por usuário/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /all users|todos os usuários/i })).toBeNull()
+  })
+
+  it('a chip keeps only that account\'s animes and Unwatched answers for it', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
+    const chip = screen.getByRole('button', { name: /^alice 1$/ })
+    await fireEvent.click(chip)
+    await tick()
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getAllByText('Shared Show').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Bob Show')).toBeNull()
+    expect(screen.queryByText('Loose Show')).toBeNull()
+
+    // Combined progress says "Shared" is unwatched (bob is at 2/12); alice finished it.
+    await fireEvent.click(screen.getByRole('button', { name: /unwatched|não vistos/i }))
+    await tick()
+    expect(screen.queryByText('Shared Show')).toBeNull()
+  })
+
+  it('two chips are OR', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
+    await fireEvent.click(screen.getByRole('button', { name: /^alice / }))
+    await fireEvent.click(screen.getByRole('button', { name: /^bob / }))
+    await tick()
+    expect(screen.getByText(/2 of 3|2 de 3/)).toBeTruthy()
+  })
+
+  it('past three accounts there are no chips, only the multi-select', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob', 'carol'], mal_usernames: ['dave'] })
+    expect(screen.queryByRole('group', { name: /filter by user|filtrar por usuário/i })).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: /all users|todos os usuários/i }))
+    await fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /^bob / }))
+    await tick()
+    expect(screen.queryByText('Loose Show')).toBeNull()
+    expect(screen.getByText(/2 of 3|2 de 3/)).toBeTruthy()
+  })
+
+  it('labels the source only when the same username exists on both', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob'], mal_usernames: ['bob'] })
+    expect(screen.getByRole('button', { name: /^bob \(AniList\) / })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^bob \(MAL\) / })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^alice / })).toBeTruthy()
+  })
+
+  it('restores the accounts from the hash and ignores one no longer configured', async () => {
+    window.location.hash = '#/status?account=anilist%3Abob&account=anilist%3Agone'
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
+    expect(screen.getByRole('button', { name: /^bob / }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByText('Loose Show')).toBeNull()
+    expect(screen.getByText(/2 of 3|2 de 3/)).toBeTruthy()
   })
 })

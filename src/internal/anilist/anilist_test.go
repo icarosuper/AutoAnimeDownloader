@@ -285,3 +285,29 @@ func TestListFetchFailsWholeOnAFailedPage(t *testing.T) {
 		t.Fatalf("want an error, got %d entries", len(resp.Data.Page.MediaList))
 	}
 }
+
+// TestDedupeByMedia_UnionsAccounts: the progress collapse is winner-takes-all, but the accounts are
+// not — the dashboard user filter needs to know every account that has the media, with its own
+// progress, whichever entry survived.
+func TestDedupeByMedia_UnionsAccounts(t *testing.T) {
+	a := []MediaList{{Progress: 7, Media: Media{Id: 1}}}
+	b := []MediaList{{Progress: 2, Media: Media{Id: 1}}, {Progress: 0, Media: Media{Id: 2}}}
+	StampAccount(a, AccountSourceAniList, "x")
+	StampAccount(b, AccountSourceMAL, "x")
+	input := append(append([]MediaList{}, a...), b...)
+
+	got := DedupeByMedia(input)
+	if len(got) != 2 {
+		t.Fatalf("want 2 medias, got %d", len(got))
+	}
+	if got[0].Progress != 2 {
+		t.Errorf("lowest progress still wins, got %d", got[0].Progress)
+	}
+	want := []AccountProgress{{AccountSourceAniList, "x", 7}, {AccountSourceMAL, "x", 2}}
+	if fmt.Sprint(got[0].Accounts) != fmt.Sprint(want) {
+		t.Errorf("accounts: got %+v, want %+v", got[0].Accounts, want)
+	}
+	if len(input[0].Accounts) != 1 || len(input[1].Accounts) != 1 {
+		t.Errorf("the merge must not write into the caller's entries, got %+v", input)
+	}
+}

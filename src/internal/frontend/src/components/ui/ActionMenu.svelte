@@ -9,6 +9,8 @@
     label: string
     destructive?: boolean
     disabled?: boolean
+    /** Only read with `multiple`: the item's checked state, owned by the caller. */
+    checked?: boolean
   }
 
   // Enforces "only one ActionMenu open at a time" (spec §6/§11) across every instance mounted
@@ -43,6 +45,12 @@
    */
   export let triggerClass: string | undefined = undefined
   export let open = false
+  /**
+   * Multi-select (Status's user filter): items render as checkboxes and a click toggles one
+   * WITHOUT closing the menu — picking three accounts must not take three opens. The caller
+   * still owns the state: `select` fires with the id, and `checked` comes back on the items.
+   */
+  export let multiple = false
 
   const KEBAB_TRIGGER_CLASS =
     'rounded-control p-1.5 text-subtle transition-colors hover:bg-control hover:text-body'
@@ -86,7 +94,7 @@
   function selectItem(item: ActionMenuItem) {
     if (item.disabled) return
     dispatch('select', item.id)
-    close()
+    if (!multiple) close()
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -140,13 +148,26 @@
         {#each items as item (item.id)}
           <button
             type="button"
-            role="menuitem"
+            role={multiple ? 'menuitemcheckbox' : 'menuitem'}
+            aria-checked={multiple ? !!item.checked : undefined}
             disabled={item.disabled}
             class="flex w-full items-center px-4 py-3 text-left text-copy transition-colors disabled:opacity-50 {item.destructive
               ? 'text-danger'
               : 'text-body'}"
             on:click|stopPropagation={() => selectItem(item)}
           >
+            {#if multiple}
+              <span
+                class="mr-2.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border {item.checked
+                  ? 'border-accent bg-accent'
+                  : 'border-default bg-control'}"
+                aria-hidden="true"
+              >
+                {#if item.checked}
+                  <span class="font-mono text-[11px] leading-none text-on-accent">✓</span>
+                {/if}
+              </span>
+            {/if}
             {item.label}
           </button>
         {/each}
@@ -163,13 +184,26 @@
         {#each items as item (item.id)}
           <button
             type="button"
-            role="menuitem"
+            role={multiple ? 'menuitemcheckbox' : 'menuitem'}
+            aria-checked={multiple ? !!item.checked : undefined}
             disabled={item.disabled}
             class="flex w-full items-center px-3 py-2 text-left text-copy transition-colors hover:bg-control disabled:opacity-50 {item.destructive
               ? 'text-danger'
               : 'text-body'}"
             on:click|stopPropagation={() => selectItem(item)}
           >
+            {#if multiple}
+              <span
+                class="mr-2.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border {item.checked
+                  ? 'border-accent bg-accent'
+                  : 'border-default bg-control'}"
+                aria-hidden="true"
+              >
+                {#if item.checked}
+                  <span class="font-mono text-[11px] leading-none text-on-accent">✓</span>
+                {/if}
+              </span>
+            {/if}
             {item.label}
           </button>
         {/each}

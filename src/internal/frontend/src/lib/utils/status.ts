@@ -1,4 +1,4 @@
-import type { AnimeInfo } from '../api/client.js'
+import type { AccountSource, AnimeInfo } from '../api/client.js'
 
 export type SortKey = 'name' | 'episodes_watched' | 'last_download_date'
 export type SortDir = 'asc' | 'desc'
@@ -14,12 +14,49 @@ export type StatusViewState = {
   q: string
   unwatched: boolean
   type: AnimeTypeFilter
+  /** Selected account keys (`accountKey`); empty = every account, i.e. no user filter. */
+  accounts: string[]
 }
 
 export const DEFAULT_STATUS_VIEW: StatusViewState = {
   q: '',
   unwatched: false,
   type: 'all',
+  accounts: [],
+}
+
+/**
+ * The identity of a list account in the user filter and in the URL. The source is part of it
+ * because the same username can exist on AniList and on MyAnimeList.
+ */
+export function accountKey(source: AccountSource, username: string): string {
+  return `${source}:${username}`
+}
+
+const ACCOUNT_KEY = /^(anilist|mal):.+$/
+
+/**
+ * Applies the user filter: keeps the animes at least one selected account tracks (OR), and
+ * re-projects `episodes_watched` / `episodes_pending` onto THOSE accounts — the lowest progress
+ * among them, same rule the backend uses across all accounts. Without the projection "Unwatched",
+ * the progress bar, the "behind" chip and the sort would keep answering for the account furthest
+ * behind, even an unselected one. Runs BEFORE filterAnimes, so every count downstream agrees.
+ * An empty selection returns the list untouched (decisions.md #125).
+ */
+export function scopeToAccounts(animes: AnimeInfo[], selected: string[]): AnimeInfo[] {
+  if (selected.length === 0) return animes
+  const wanted = new Set(selected)
+  const scoped: AnimeInfo[] = []
+  for (const a of animes) {
+    const mine = (a.accounts ?? []).filter(acc => wanted.has(accountKey(acc.source, acc.username)))
+    if (mine.length === 0) continue
+    scoped.push({
+      ...a,
+      episodes_watched: Math.min(...mine.map(acc => acc.episodes_watched)),
+      episodes_pending: Math.max(...mine.map(acc => acc.episodes_pending)),
+    })
+  }
+  return scoped
 }
 
 const TYPE_FILTERS: AnimeTypeFilter[] = ['all', 'airing', 'finished', 'standalone', 'blacklisted']
@@ -76,6 +113,7 @@ export function encodeStatusView(v: StatusViewState): string {
   if (v.q.trim()) params.set('q', v.q)
   if (v.unwatched) params.set('unwatched', '1')
   if (v.type !== 'all') params.set('type', v.type)
+  for (const key of v.accounts) params.append('account', key)
   return params.toString()
 }
 
@@ -87,6 +125,8 @@ export function decodeStatusView(qs: string): StatusViewState {
     q: params.get('q') ?? '',
     unwatched: params.get('unwatched') === '1',
     type,
+    // Only the shape is checked here; whether the account is still configured is the screen's call.
+    accounts: [...new Set(params.getAll('account').filter(k => ACCOUNT_KEY.test(k)))],
   }
 }
 
