@@ -130,9 +130,9 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#121** — The blacklist deletes what the daemon downloaded and spares what the user downloaded by hand](#121-the-blacklist-deletes-what-the-daemon-downloaded-and-spares-what-the-user-downloaded-by-hand)
 - [**#122** — The Tailwind opacity scale is extended with 12, 16, 28 and 32](#122-the-tailwind-opacity-scale-is-extended-with-12-16-28-and-32)
 - [**#123** — A one-episode entry covers episode 1 even when the magnet declares no range](#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)
-- [**#124** — A torrent is one notification: a pack goes out as one run of episodes, not one webhook per record](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record)
+- [**#124** — A torrent is one notification: a pack goes out as one item naming only the anime, not one webhook per record](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record)
 - [**#125** — The dashboard user filter re-projects progress onto the selected accounts, not just their membership](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)
-- [**#126** — A webhook's anime filter is resolved when it fires, from the lists as they are now, not stored on the episode record](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-as-they-are-now-not-stored-on-the-episode-record)
+- [**#126** — A webhook's anime filter is resolved when it fires, from the lists the last pass fetched, not stored on the episode record](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)
 
 ---
 
@@ -3594,19 +3594,23 @@ magnet; 101432 (Violet Evergarden Special, only labeled series packs on Nyaa) st
   its only client.
 
 
-### 124. A torrent is one notification: a pack goes out as one run of episodes, not one webhook per record
+### 124. A torrent is one notification: a pack goes out as one item naming only the anime, not one webhook per record
 
-**Location:** `internal/notifications/notifications.go` — `Episode.Last`, `Runs`, `NotifyAll`,
-`episodeCount` (titles and `{{count}}`); `daemon/helpers.go` — `episodeRuns`; `daemon/jobs.go` —
-the completion webhook in organize; `daemon/episodes.go` — `torrentEpisodes`/`notifiedNew`/
-`notifiedFailed` in `processAnimeEpisodes`, and the `episode_deleted` webhook in
-`removeEpisodesAndLinks`. Pinned by `TestNotifyAll_PackIsOneWebhookWithRange`, `TestRuns_GapSplitsTheRange`,
-`TestWillBatch_NotifiesNewEpisodeOncePerPack`, `TestRemoveEpisodesAndLinks_PackFiresOneEpisodeDeletedWebhook`,
-`TestEpisodeRuns_PackIsOneRunPerAnimeAndTorrent`.
+**Location:** `internal/notifications/notifications.go` — `Episode.PackSize`, `packStrings`,
+`buildBatchVars` (`{{episode}}` blank for a pack), `NotifyAll` (one webhook per item with the
+window off), `episodeCount` (titles and `{{count}}`); `daemon/helpers.go` — `episodeItems`;
+`daemon/jobs.go` — the completion webhook in organize; `daemon/episodes.go` — `torrentEpisodes`/
+`notifiedNew`/`failed`/`added` in `processAnimeEpisodes`, and the `episode_deleted` webhook in
+`removeEpisodesAndLinks`. Pinned by `TestNotifyAll_PackIsOneWebhookNamingTheAnime`,
+`TestNotifyAll_WindowZeroFiresOnePerItem`, `TestBatchLines_PackNamesOnlyTheAnime`,
+`TestWillBatch_NotifiesNewEpisodeOncePerPack`, `TestWillBatch_PackFailureWaitsForTheLoop`,
+`TestRemoveEpisodesAndLinks_PackFiresOneEpisodeDeletedWebhook`,
+`TestRemoveEpisodesAndLinks_TwoAnimesFireTwoWebhooks`, `TestEpisodeItems_PackIsOneItemPerAnimeAndTorrent`.
 
-**What it looks like:** a second entry point (`NotifyAll`) next to `Notify`, an `Episode` that can be
-a range, and a per-pass map keyed by magnet that suppresses notifications in the episode loop —
-when "call `Notify` for each episode" looks simpler.
+**What it looks like:** an `Episode` that can stand for a whole pack, a pack push that names no
+episode at all ("Frieren downloaded successfully"), a blank `{{episode}}` exactly when the event is
+about the most episodes, and a per-pass map keyed by magnet that holds back the failure push until
+the episode loop ends — when "call `Notify` for each episode" looks simpler.
 
 **Why it's right:** a pack is one torrent, and the user experiences it as one event. Before this,
 the three paths each got it wrong in their own way: organize fires once per hash but named only
@@ -3615,26 +3619,42 @@ the three paths each got it wrong in their own way: organize fires once per hash
 candidates), so `new_episode` fired N times; deleting a pack fired `episode_deleted` once per
 record. With `batch_window_seconds = 0` that was N phone pushes and — for the Jellyfin/Plex scan
 presets, subscribed to `download_completed` and `episode_deleted` — N library scans for one
-deletion. The window from [#47](#47-notifications-are-grouped-by-window-and-the-body-is-escaped-only-when-the-preset-is-json)
-hid part of it, but only when on, and its title still counted items.
+deletion. The window from [#47](#47-notifications-are-grouped-by-window-and-the-body-is-escaped-only-when-the-preset-is-json) hid part of it, but only when on, and its title still
+counted items.
 
-So the unit is the torrent: records become runs of consecutive episodes per anime and hash
-(`episodeRuns` → `Runs`), and `NotifyAll` fires them as one webhook with the window off, or adds
-them to the window with it on. The loop key is the first candidate's magnet because that is the
-torrent the episode will `Add` — two episodes sharing it are the same download. An episode whose
-candidates came from its own per-episode search is not in the pre-scan and is a run of one.
+So the unit is the torrent: a torrent's records become ONE item per anime and hash
+(`episodeItems`), with `PackSize` = how many records it has. The loop key is the first candidate's
+magnet because that is the torrent the episode will `Add` — two episodes sharing it are the same
+download. An episode whose candidates came from its own per-episode search is not in the pre-scan
+and is a single episode.
 
-A run, not "min..max": records skip watched episodes, and "EPs 1-12" over records 1-3 and 6-12
-would claim episodes the pack's records don't have. With N > 1 items, titles and `{{count}}` count
-**episodes** (`episodeCount`), because one item can be a whole pack. A single run keeps the
-single-item variables filled (`{{episode}}` becomes `1-12`), as #47 (b) requires.
+The pack's text names only the anime, by the owner's choice: a range was tried first and did not
+hold. Built from the records it lies across a gap (records skip watched episodes), split into runs
+it turned one pack into several items and so several webhooks, and `{{episode}}` = `1-12` broke
+templates that use it as a number (`"ep": {{episode}}` becomes invalid JSON). So `{{episode}}` is a
+single number or blank, never a range; `{{anime_name}}`, `{{anime_id}}` and `{{torrent_hash}}`
+stay filled, and `{{count}}` and the window titles count **episodes** (`episodeCount`), because
+one item can be a whole pack. Single-episode torrents in a window still collapse into "EPs 1-24"
+lines — those are separate downloads, not a pack.
+
+`NotifyAll` with the window off fires **one webhook per item**: deleting two animes at once is two
+pushes, each with its own single-item variables ([#47](#47-notifications-are-grouped-by-window-and-the-body-is-escaped-only-when-the-preset-is-json) (b)), not one push whose
+`{{anime_id}}` is blank because it holds two animes.
+
+A pack's `download_failed` waits for the end of the loop and goes out only if no episode of it got
+the torrent added: the next episode retries the same candidates, and a transient failure on the
+first one used to push "failed" for a pack that was downloading.
 
 **Don't "fix" by:**
 - Looping `Notify` over a torrent's records: back to N pushes and N Jellyfin scans with the window off.
 - Sending `matched[0].EpisodeNumber` on completion: the push names one episode of a pack.
-- Building the range as min..max of the records: it lies across a gap.
+- Putting a range back in `{{episode}}` or in the pack's text: see above — it lies across gaps or
+  breaks numeric templates.
+- Firing everything `NotifyAll` gets as one webhook with the window off: two animes share one push
+  and its single-value variables go blank.
 - Dropping the magnet dedupe in the loop "because the window merges them": it does not when the
   window is `0`, and the batch title would still say "26 new episodes" for one download.
+- Notifying a pack's failure on the first failed episode: a later episode may still add it.
 - Making `{{count}}` the number of items again: a pack would count as 1.
 
 ### 125. The dashboard user filter re-projects progress onto the selected accounts, not just their membership
@@ -3643,8 +3663,8 @@ single-item variables filled (`{{episode}}` becomes `1-12`), as #47 (b) requires
 union in `DedupeByMedia`; `internal/api/endpoint_animes.go` — `AnimeInfo.Accounts` (pending
 recomputed per account at the end of `handleAnimes`); `frontend/src/lib/utils/status.ts` —
 `scopeToAccounts`, run before `filterAnimes` in `routes/Status.svelte`. Pinned by
-`TestDedupeByMedia_UnionsAccounts`, `Same anime in two accounts carries each account's progress`
-(`endpoint_animes_test.go`), `scopeToAccounts` in `status.utils.test.ts` and
+`TestDedupeByMedia_UnionsAccounts`, `Same anime in two accounts carries each account's progress`,
+`TestInStatuses` and the orphan case of `TestHandleAnimes` (`endpoint_animes_test.go`), `scopeToAccounts` in `status.utils.test.ts` and
 `Status — user filter` in `Status.filters.test.ts`.
 
 **What it looks like:** a filter that rewrites data. Picking an account changes the
@@ -3665,6 +3685,14 @@ survives the dedupe because `Accounts` is the one field `DedupeByMedia` unions i
 from the winner; it is `json:"-"` and stamped by the caller that knows whose list it fetched, so
 the on-disk cache snapshots never carry it and the daemon pass, which doesn't stamp, gets nil.
 
+Membership is "the account has the anime in a **download** status", the same for every row: the
+covered animes get it from the filtered list fetch, and the orphan refresh (whose
+`GetAnimeInfoByIDs` answers in any status) cuts its accounts down to `download_statuses`
+(`inStatuses`). An anime alice watches and bob dropped is not under bob. Before, orphans counted any
+status and covered animes only download ones, so the filter meant two things. The anime page's
+"on lists" panel and the webhook filter ([#126](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)) still use any status — they ask "who has
+it", not "who is it downloaded for".
+
 UI: hidden with fewer than 2 configured accounts (options come from the config, not the animes);
 an `ActionMenu` in `multiple` mode on every width, whatever the number of accounts (per-account
 chips were tried and took too much of the toolbar). The selection lives in the URL as repeated
@@ -3676,53 +3704,62 @@ chips were tried and took too much of the toolbar). The selection lives in the U
   the combined pair is what the rest of the app means by progress, the list poll is cached per
   username ([#46](#46-getfrontendanimelist-is-cached-for-60s--the-apiv1animes-poll-is-what-blows-anilists-quota)), and the type filter is
   already client-side.
+- Giving orphans their accounts in any status "because they're still on the list": the filter
+  would mean "being downloaded for" on some rows and "on the list" on others.
 - Keying accounts by username alone: the same name can exist on AniList and on MAL.
 - Appending onto the survivor's `Accounts` in `DedupeByMedia`: that slice may alias the caller's
   input; it builds a fresh one.
 - Stamping inside `GetFrontendAnimeList` / the cache: the cached slice is shared across polls.
 
-### 126. A webhook's anime filter is resolved when it fires, from the lists as they are now, not stored on the episode record
+### 126. A webhook's anime filter is resolved when it fires, from the lists the last pass fetched, not stored on the episode record
 
-**Location:** `internal/daemon/notification_sources.go` — `NotificationSources` (the resolver,
-wired with `notifications.SetSourceResolver` in `cmd/daemon/main.go`);
-`internal/notifications/notifications.go` — `fireBatch`, `itemsFor`, `resolveSources`;
-`files.WebhookPreset.AnimeSources`. Pinned by `TestNotificationSources`,
-`TestFireBatch_SourceFilter` and `TestFireBatch_FilteredWebhookWithoutResolverSkips`.
+**Location:** `internal/daemon/notification_sources.go` — `accountLists`/`passLists` (the
+snapshot), `NotificationSources` (the resolver, wired with `notifications.SetSourceResolver` in
+`cmd/daemon/main.go`); `internal/daemon/verification.go` — the `passLists.record` calls in
+`searchAnilist` and in the delete-status fetch; `internal/notifications/notifications.go` —
+`fireBatch`, `itemsFor`, `resolveSources`; `files.WebhookPreset.AnimeSources`. Pinned by
+`TestNotificationSources`, `TestFireBatch_SourceFilter` and
+`TestFireBatch_FilteredWebhookWithoutResolverFailsOpen`.
 
-**What it looks like:** a notification costs AniList queries. "Whose anime is this" is known when
-the episode is downloaded, so it looks like it should be written on the episode record then, and
-the webhook should read it from there for free.
+**What it looks like:** two oddities. "Whose anime is this" is known when the episode is
+downloaded, so it looks like it should be written on the episode record. And a filtered webhook
+gets animes it can't place — a filter "only alice" that lets unknown animes through looks like a
+leak.
 
 **Why it's right:** the events fire from four places (the pass, the deletion, organize and the
 torrent-failure callback), and the records are created in about eight. Stored on the record, every
 record written before the filter existed would have no owner — and `episode_deleted` mostly fires
-for exactly those: old episodes of an anime every account already finished. Asked at fire time,
-"its sources" is the configured accounts that have the anime on their list **now**, in **any** list
-status (a finished anime is still that account's), plus `standalone` from the standalone file. It
-costs one `GetAnimeInfoByIDs` per account per 50 ids, once per fired window, and only when a
-subscribed webhook has a filter — an install without filters never pays it.
+for exactly those. So the owners are asked at fire time, and the answer comes from what the pass
+already fetched: each account's download-status list (before the media-status cut) and its
+delete-status list, kept in memory per account and per kind, plus `standalone` from the standalone
+file. No network at fire time.
+
+It used to be a live `GetAnimeInfoByIDs` per account per window. That spent the AniList budget
+([#65](#65-anilist-budget-is-spent-by-the-orphan-refresh-not-by-the-daemon-pass--and-a-200s-errors-field-is-not-read)) on every webhook when batching was off; with the budget low the query was refused,
+the anime came back unknown and the filtered webhook dropped it — including the
+`download_completed` that triggers a Jellyfin scan. It also ran on the shutdown `Flush`, which
+waits, so a slow network could outlast systemd's stop timeout.
 
 The trade-offs, accepted:
-- The lookup is `PriorityDisposable` with no cache fallback. With the AniList budget low
-  ([#72](#72-anilist-budget-is-measured-from-the-response-headers-not-from-a-counter-of-ours)) it is refused and the animes come back **unknown**. A filtered webhook skips an
-  unknown anime: a filter can't prove an anime belongs to it, and a ntfy topic set to "only alice"
-  getting everyone's animes is the failure it exists to prevent. Unfiltered webhooks never depend on
-  the lookup.
+- Unknown is **fail-open**: an anime no fetched list holds (a manual deletion of an anime in a
+  status outside both lists, say PAUSED, or anything before the first pass) reaches every filtered
+  webhook. A spare push beats a lost scan. An anime known to belong to other accounts is still
+  filtered out.
+- An account whose fetch failed keeps its previous answer: stale ownership beats none. An account
+  removed from the config stops counting even while its snapshot lingers.
 - Each filtered webhook gets only its share of a window, and the template variables are built from
-  that share (`buildBatchVars` per preset). A window of 3 completions where one is alice's reads
-  as that one, with its `{{anime_name}}`, not as "3 episodes".
-- Account keys are the dashboard's `<source>:<user>` ([#125](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)), so one account is spelled
-  the same everywhere. The JSON field is `anime_sources`, not `sources`: `priorities.sources`
-  (torrent sources like `bdremux`) already exists in the same file.
+  that share (`buildBatchVars` per preset).
+- Account keys are the dashboard's `<source>:<user>` ([#125](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)), so one account is spelled the
+  same everywhere. The JSON field is `anime_sources`, not `sources`: `priorities.sources` (torrent
+  sources like `bdremux`) already exists in the same file.
 - The Test button (`FireTestWebhook`) ignores the filter: it is a delivery check.
 
 **Don't "fix" by:**
 - Storing the owners on `EpisodeStruct`: old records, and the adoption/manual/API paths that create
   records without a list in hand, would have no owner.
-- Firing a filtered webhook for an unknown anime "so nothing is lost": that is the leak the filter
-  exists to stop.
-- Resolving inside `NotifyAll`'s caller: with batching off `fireBatch` runs on the verification
-  pass's goroutine, so the lookup is moved into `send`, which runs in its own goroutine unless
-  `Flush` is waiting.
+- Going back to a live AniList lookup in the resolver: budget spent per webhook, notifications
+  dropped when it's refused, and a blocking call on shutdown.
+- Skipping unknown animes on filtered webhooks: a refused or missing answer silently eats the
+  library scan.
 - Building the template once for all presets: a filtered webhook would describe episodes it was
-  not told about. This keeps the one-torrent-one-notification shape of [#124](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record) per webhook.
+  not told about. This keeps the one-torrent-one-notification shape of [#124](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record) per webhook.

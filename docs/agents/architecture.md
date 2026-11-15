@@ -94,7 +94,7 @@ Key endpoints:
 | `GET` | `/api/v1/last-check` | `handleLastCheck` | `endpoint_last_check.go` — memory only. `problems` (should have downloaded and did not) and `limits` (the config doing what it was configured to do). When `pass_error` is set both lists come empty, because `SetLastCheckError` clears the report (decisions.md #82). A manual download stays out: that path returns the error on its own HTTP response |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
-| `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` — `next_airing_at` is a **timestamp**, not a countdown: the response is cached 60s and a precomputed counter would freeze. `media_status` is AniList media status, copied at merge; the dashboard type filter is client-side (`lib/utils/status.ts`). Search by `alt_names` is client-side. `episodes_downloaded` is **files on disk right now**, not a lifetime total: it DROPS when the daemon prunes watched episodes, so `released - downloaded` is not "still to download" — `episodes_pending` is ([decisions.md #88](decisions.md#88-the-progress-bar-derives-downloaded-from-episodes_pending-not-from-episodes_downloaded)). `episodes_watched`/`episodes_pending` are the **combined** view (lowest progress across accounts); `accounts` carries each account's own pair, which the dashboard user filter projects onto (`scopeToAccounts`, [decisions.md #125](decisions.md#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)) |
+| `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` — `next_airing_at` is a **timestamp**, not a countdown: the response is cached 60s and a precomputed counter would freeze. `media_status` is AniList media status, copied at merge; the dashboard type filter is client-side (`lib/utils/status.ts`). Search by `alt_names` is client-side. `episodes_downloaded` is **files on disk right now**, not a lifetime total: it DROPS when the daemon prunes watched episodes, so `released - downloaded` is not "still to download" — `episodes_pending` is ([decisions.md #88](decisions.md#88-the-progress-bar-derives-downloaded-from-episodes_pending-not-from-episodes_downloaded)). `episodes_watched`/`episodes_pending` are the **combined** view (lowest progress across accounts); `accounts` carries each account's own pair, which the dashboard user filter projects onto (`scopeToAccounts`). `accounts` holds only the accounts that have the anime in a **download** status — orphans included, cut by `inStatuses` — unlike `/animes/{id}/episodes`, which lists any status ([decisions.md #125](decisions.md#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)) |
 | `GET` | `/api/v1/anilist/search?q=&include_unreleased=` | `handleAniListSearch` | `endpoint_anilist_search.go` — a term shorter than 3 chars returns an empty list, **not** 400. `block_reason` per result (`""` = addable) |
 | `POST` | `/api/v1/standalone-animes` | `handleStandaloneAnimeAdd` | `endpoint_standalone_animes.go` — body `{"media_id":21,"magnet":"…"}` with `magnet` optional; optional `name`/`nyaa_id`/`size_bytes` for coverage and the disk guard (no `name` → the magnet's `dn`; a one-episode entry with no readable range still records episode 1, [decisions.md #123](decisions.md#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)). No magnet: auto-pick. Magnet: 409s first, then `DownloadStandaloneAnimeWithMagnet` adds the torrent then writes the id (not the handler); records only covered aired episodes. 400 `INVALID_MAGNET` if the value lacks the `magnet:` prefix. Answers `{"added": N}`; 409 `LIBRARY_NOT_CONFIGURED` / `ALREADY_STANDALONE` / `ALREADY_TRACKED` / `ALREADY_DOWNLOADED` |
 | `DELETE` | `/api/v1/standalone-animes/{id}?delete_episodes=<bool>` | `handleStandaloneAnimeRemove` | `endpoint_standalone_animes.go` — without `delete_episodes` the episodes stay and are marked `ManuallyManaged`. Either way the anime's `blocked_episodes` entries are cleared (`clearAnimeBlocks`) — not in `RemoveStandaloneAnime`, which the pass also calls when the anime enters a list and the blocks must stay |
@@ -638,20 +638,23 @@ sending.
 `NewEpisode` only fires when there is **at least one magnet to try**; an episode with no search
 result goes straight to `DownloadFailed`/`ReasonNotFound`.
 
-**One torrent is one notification.** A pack's episodes reach the template as a single `Episode`
-run (`Number..Last`, built by `notifications.Runs` / `daemon.episodeRuns`) and go out through
-`NotifyAll`, which fires them as ONE webhook even with the batch window off — so a pack is one push
-and one Jellyfin/Plex scan for `new_episode`, `download_failed`, `download_completed` and
-`episode_deleted`. In `processAnimeEpisodes` the loop still meets a pack once per episode; it
-notifies on the first one, keyed by the first candidate's magnet. Looping `Notify` per record
-brings back N pushes and N library scans ([decisions.md #124](decisions.md#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-run-of-episodes-not-one-webhook-per-record)).
+**One torrent is one notification.** A pack's records reach the template as ONE `Episode` with
+`PackSize` = its record count (`daemon.episodeItems`, `torrentItem` in `processAnimeEpisodes`), so
+a pack is one push and one Jellyfin/Plex scan for `new_episode`, `download_failed`,
+`download_completed` and `episode_deleted`. A pack's text names only the anime and its
+`{{episode}}` is blank — the variable is never a range. `NotifyAll` with the window off fires one
+webhook **per item** (two animes deleted together are two pushes). In `processAnimeEpisodes` the
+loop meets a pack once per episode: `new_episode` goes out on the first one, keyed by the first
+candidate's magnet; `download_failed` waits for the loop to end and goes out only if no episode
+got the torrent added ([decisions.md #124](decisions.md#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record)).
 
 **Per-webhook anime filter (`anime_sources`).** The package doesn't know AniList or the standalone
-file: the daemon injects `daemon.NotificationSources` with `SetSourceResolver` at boot, and
-`fireBatch` asks it once per window, only when a subscribed webhook filters. Each filtered webhook
-gets its share of the items, with the template built from that share; an anime the resolver can't
-place skips filtered webhooks. Without a resolver (tests, or a future binary that forgets the
-wiring) every filtered webhook stays silent ([decisions.md #126](decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-as-they-are-now-not-stored-on-the-episode-record)).
+file: the daemon injects `daemon.NotificationSources` with `SetSourceResolver` at boot. The
+resolver makes **no network call**: it reads `passLists`, the per-account lists the last pass
+fetched (download statuses in `searchAnilist`, delete statuses in the delete fetch), plus the
+standalone file. Each filtered webhook gets its share of the items, with the template built from
+that share. An anime no list holds is **unknown and fail-open**: it reaches every filtered webhook,
+and so does everything when no resolver is wired ([decisions.md #126](decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)).
 
 Notifications are grouped by window, and JSON escaping happens **only in the body and only when the
 preset declares `Content-Type: application/json`** (decisions.md #47).
