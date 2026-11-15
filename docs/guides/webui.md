@@ -19,7 +19,7 @@ The main dashboard:
 - **Daemon card** — current status (stopped/running/checking), last check time, next check countdown, and Start/Stop/Force-check controls
 - **Library card** — total anime and episode counts
 - **Disk card** — free/total space on the library's filesystem (`completed_anime_path`, where torrents also download), with a warning color when space is low
-- **Monitored animes** — searchable table of tracked anime (progress, last download, blacklist status). Type is a radio (Airing / Finished / Standalone / Blacklist, or All); Unwatched is an independent toggle so Finished+Unwatched is the binge queue. Counts follow search + Unwatched. Active filters persist in the querystring (`q`, `unwatched=1`, `type`); the X next to `N of M` clears them all. Click a row to open its detail page
+- **Monitored animes** — searchable table of tracked anime (progress, last download, blacklist status). Type is a radio (Airing / Finished / Standalone / Blacklist, or All); Unwatched is an independent toggle so Finished+Unwatched is the binge queue. Counts follow search + Unwatched. With two or more list accounts there is also a **user** filter: chips for up to three accounts, a multi-select past that (and always on phones); several accounts are OR, and the progress, Unwatched and every count then follow the selected accounts' own progress instead of the slowest account's. Active filters persist in the querystring (`q`, `unwatched=1`, `type`, `account=<anilist|mal>:<user>`); the X next to `N of M` clears them all. Click a row to open its detail page
 
 Status changes push over WebSocket, so the page updates live without a refresh.
 
@@ -27,6 +27,7 @@ Status changes push over WebSocket, so the page updates live without a refresh.
 
 Per-anime episode list, opened by clicking an anime on the Status page:
 
+- **On lists** — every configured account that has the anime on its list, in any status, with its own status and score (0–10, whatever the account's score format), avatar and a link to the account's list
 - Episode table (episode number, Anilist watch status, downloaded state)
 - Header **Replace torrent** opens the [torrent picker](#torrent-picker) (`/status/:id/torrents`)
 - Per-episode actions: download, delete, re-download, replace with a manual magnet link (the
