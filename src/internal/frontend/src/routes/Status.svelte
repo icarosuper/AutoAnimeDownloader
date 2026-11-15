@@ -179,11 +179,8 @@
       ? `${acc.username} (${acc.source === "anilist" ? "AniList" : "MAL"})`
       : acc.username,
   }));
-  // Filtering by user only makes sense with two or more accounts. Up to ACCOUNT_CHIPS_MAX they are
-  // chips on wide screens; past that (and always below `lg`) they collapse into a multi-select.
-  const ACCOUNT_CHIPS_MAX = 3;
+  // Filtering by user only makes sense with two or more accounts.
   $: showAccountFilter = accountOptions.length >= 2;
-  $: accountChips = accountOptions.length <= ACCOUNT_CHIPS_MAX;
   // Until the config answers there are no options to validate against, so a URL selection is
   // trusted for that moment instead of flashing the unfiltered list. Afterwards a removed account
   // just stops counting.
@@ -1017,9 +1014,12 @@
         <!-- On mobile the search takes the whole line and the filters get their own strip right
              below; stacking both in the SAME scrollable strip would push the filter chip off the
              screen, with no hint that it's there. -->
+        <!-- From `sm` the search is the piece that gives way: it wraps on its 10rem basis and grows
+             up to 16rem, so the filters only drop to a second line once the search is already
+             down to 10rem. A fixed `w-64 shrink-0` search pushed them down 96px earlier. -->
         <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <label
-            class="flex w-full min-w-0 items-center gap-2 rounded-field border border-neutral/45 bg-control px-2.5 py-1.5 transition-colors hover:border-neutral/70 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40 sm:w-64 sm:shrink-0"
+            class="flex w-full min-w-0 items-center gap-2 rounded-field border border-neutral/45 bg-control px-2.5 py-1.5 transition-colors hover:border-neutral/70 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/40 sm:w-auto sm:max-w-64 sm:flex-[1_1_10rem]"
           >
             <Search size={16} strokeWidth={2} class="shrink-0 text-tertiary" />
             <input
@@ -1096,31 +1096,9 @@
             </div>
 
             {#if showAccountFilter}
-              {#if accountChips}
-                <!-- Toggle chips, OR between them: an anime shows when ANY picked account has it. -->
-                <div
-                  class="hidden shrink-0 flex-wrap items-center gap-2 lg:inline-flex"
-                  role="group"
-                  aria-label={(T && T.filterAccount) || undefined}
-                >
-                  {#each accountItems as opt (opt.key)}
-                    <button
-                      type="button"
-                      class="inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-caption font-semibold transition-colors {opt.checked
-                        ? 'border-accent-tint/28 bg-accent-tint/12 text-accent'
-                        : 'border-neutral/45 bg-control text-body hover:border-neutral/70 hover:text-heading'}"
-                      aria-pressed={opt.checked}
-                      on:click={() => toggleAccount(opt.key)}
-                    >
-                      <User size={14} strokeWidth={2} />
-                      {opt.label}
-                      <span class="font-mono text-[12px] opacity-70">{opt.count}</span>
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-
-              <div class="shrink-0 {accountChips ? 'lg:hidden' : ''}">
+              <!-- A multi-select on every width, OR between the picks: an anime shows when ANY picked
+                   account has it. -->
+              <div class="shrink-0">
                 <ActionMenu
                   multiple
                   items={accountMenuItems}

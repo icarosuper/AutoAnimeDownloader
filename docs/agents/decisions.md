@@ -3666,8 +3666,9 @@ from the winner; it is `json:"-"` and stamped by the caller that knows whose lis
 the on-disk cache snapshots never carry it and the daemon pass, which doesn't stamp, gets nil.
 
 UI: hidden with fewer than 2 configured accounts (options come from the config, not the animes);
-toggle chips up to 3 accounts on `lg`; past 3, and always below `lg`, an `ActionMenu` in `multiple`
-mode. The selection lives in the URL as repeated `account=<source>:<username>`.
+an `ActionMenu` in `multiple` mode on every width, whatever the number of accounts (per-account
+chips were tried and took too much of the toolbar). The selection lives in the URL as repeated
+`account=<source>:<username>`.
 
 **Don't "fix" by:**
 - Filtering by membership only: "Unwatched" would answer for an account the user didn't pick.

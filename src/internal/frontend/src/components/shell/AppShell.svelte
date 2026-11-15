@@ -40,6 +40,7 @@
   })
 
   $: currentPath = $location
+  $: wide = currentPath === '/' || currentPath === '/status'
 </script>
 
 <div class="flex min-h-screen bg-window text-body">
@@ -53,7 +54,12 @@
     <SystemBanner />
 
     <!-- Page Content — no {#key $locale} here; each route handles its own reactivity -->
-    <main class="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 pb-24 pt-8 sm:px-6 md:pb-8 lg:px-8">
+    <!-- The dashboard is wider than the other screens: its anime toolbar (search, Unwatched, five
+         type segments, user filter) needs ~1200px to stay on one line, and its table has the
+         columns to use the room. The other screens are forms and lists that read worse wider. -->
+    <main
+      class="mx-auto w-full min-w-0 {wide ? 'max-w-[1440px]' : 'max-w-7xl'} flex-1 px-4 pb-24 pt-8 sm:px-6 md:pb-8 lg:px-8"
+    >
       <slot />
     </main>
   </div>

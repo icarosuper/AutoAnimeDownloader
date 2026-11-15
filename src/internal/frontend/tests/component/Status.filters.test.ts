@@ -188,12 +188,26 @@ describe('Status — user filter', () => {
     expect(screen.queryByRole('button', { name: /all users|todos os usuários/i })).toBeNull()
   })
 
-  it('a chip keeps only that account\'s animes and Unwatched answers for it', async () => {
-    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
-    const chip = screen.getByRole('button', { name: /^alice 1$/ })
-    await fireEvent.click(chip)
+  // The trigger shows the pick ("All users", "bob", "alice +1"); the menu stays open between picks.
+  const openMenu = () => fireEvent.click(screen.getByRole('button', { name: /all users|todos os usuários/i }))
+  const pick = async (name: RegExp) => {
+    await fireEvent.click(screen.getByRole('menuitemcheckbox', { name }))
     await tick()
-    expect(chip.getAttribute('aria-pressed')).toBe('true')
+  }
+
+  it('there are no per-user chips, only the multi-select, whatever the number of accounts', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
+    expect(screen.queryByRole('group', { name: /filter by user|filtrar por usuário/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^alice / })).toBeNull()
+    await openMenu()
+    expect(screen.getAllByRole('menuitemcheckbox')).toHaveLength(2)
+  })
+
+  it('picking an account keeps only its animes and Unwatched answers for it', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
+    await openMenu()
+    await pick(/^alice 1$/)
+    expect(screen.getByRole('menuitemcheckbox', { name: /^alice / }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getAllByText('Shared Show').length).toBeGreaterThan(0)
     expect(screen.queryByText('Bob Show')).toBeNull()
     expect(screen.queryByText('Loose Show')).toBeNull()
@@ -204,35 +218,27 @@ describe('Status — user filter', () => {
     expect(screen.queryByText('Shared Show')).toBeNull()
   })
 
-  it('two chips are OR', async () => {
-    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
-    await fireEvent.click(screen.getByRole('button', { name: /^alice / }))
-    await fireEvent.click(screen.getByRole('button', { name: /^bob / }))
-    await tick()
-    expect(screen.getByText(/2 of 3|2 de 3/)).toBeTruthy()
-  })
-
-  it('past three accounts there are no chips, only the multi-select', async () => {
+  it('two picks are OR', async () => {
     await renderStatus(users, { anilist_usernames: ['alice', 'bob', 'carol'], mal_usernames: ['dave'] })
-    expect(screen.queryByRole('group', { name: /filter by user|filtrar por usuário/i })).toBeNull()
-    await fireEvent.click(screen.getByRole('button', { name: /all users|todos os usuários/i }))
-    await fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /^bob / }))
-    await tick()
+    await openMenu()
+    await pick(/^alice /)
+    await pick(/^bob /)
     expect(screen.queryByText('Loose Show')).toBeNull()
     expect(screen.getByText(/2 of 3|2 de 3/)).toBeTruthy()
   })
 
   it('labels the source only when the same username exists on both', async () => {
     await renderStatus(users, { anilist_usernames: ['alice', 'bob'], mal_usernames: ['bob'] })
-    expect(screen.getByRole('button', { name: /^bob \(AniList\) / })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /^bob \(MAL\) / })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /^alice / })).toBeTruthy()
+    await openMenu()
+    expect(screen.getByRole('menuitemcheckbox', { name: /^bob \(AniList\) / })).toBeTruthy()
+    expect(screen.getByRole('menuitemcheckbox', { name: /^bob \(MAL\) / })).toBeTruthy()
+    expect(screen.getByRole('menuitemcheckbox', { name: /^alice / })).toBeTruthy()
   })
 
   it('restores the accounts from the hash and ignores one no longer configured', async () => {
     window.location.hash = '#/status?account=anilist%3Abob&account=anilist%3Agone'
     await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
-    expect(screen.getByRole('button', { name: /^bob / }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: /^bob$/ })).toBeTruthy()
     expect(screen.queryByText('Loose Show')).toBeNull()
     expect(screen.getByText(/2 of 3|2 de 3/)).toBeTruthy()
   })
