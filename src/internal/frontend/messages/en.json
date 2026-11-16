@@ -313,6 +313,7 @@
   "notifications_event_episode_deleted": "Episode deleted",
   "notifications_event_library_missing": "Library folder is gone",
   "notifications_event_daemon_crashed": "Daemon crashed",
+  "notifications_event_check_failing": "Checks are failing (and back to normal)",
   "notifications_group_episodes": "Episodes",
   "notifications_group_library": "Library",
   "notifications_group_system": "System",

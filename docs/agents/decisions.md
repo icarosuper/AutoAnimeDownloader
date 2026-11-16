@@ -133,6 +133,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#124** — A torrent is one notification: a pack goes out as one item naming only the anime, not one webhook per record](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record)
 - [**#125** — The dashboard user filter re-projects progress onto the selected accounts, not just their membership](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)
 - [**#126** — A webhook's anime filter is resolved when it fires, from the lists the last pass fetched, not stored on the episode record](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)
+- [**#127** — A state alert fires on the edge and remembers it in notification_state, not every pass the state holds](#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)
 
 ---
 
@@ -3763,3 +3764,30 @@ The trade-offs, accepted:
   library scan.
 - Building the template once for all presets: a filtered webhook would describe episodes it was
   not told about. This keeps the one-torrent-one-notification shape of [#124](#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record) per webhook.
+
+### 127. A state alert fires on the edge and remembers it in notification_state, not every pass the state holds
+
+**Location:** `internal/daemon/health.go` — `trackCheckFailing` (and every later state alert);
+`internal/notifications/state.go` — `AlertState`, `UpdateState`. Pinned by
+`TestTrackCheckFailing` and `TestTrackCheckFailing_SurvivesRestart`.
+
+**What it looks like:** a file and a small state machine just to send a notification. The obvious
+version is "if the condition holds at the end of the pass, `Notify`".
+
+**Why it's right:** the alert events (checks failing, disk low, an episode stuck…) are **states**,
+true on every pass while they last. Firing on the condition sends one push per `check_interval` —
+the same ntfy.sh quota blow-up [#47](#47-notifications-are-grouped-by-window-and-the-body-is-escaped-only-when-the-preset-is-json) measured for episodes. Each state alert therefore fires
+when the state **starts** and re-arms only when it **ends**, and what was already said lives in a
+data-dir file so a restart neither repeats the push nor forgets to send `check_failing`'s recovery.
+The file is disposable: deleting it costs at most one round of repeated notifications, so a corrupted
+one starts empty with a warning instead of failing the boot. `check_failing` is counted from a defer
+in `AnimeVerification`, so a pass started by `POST /check` counts too, and a cancelled pass (which
+clears the error) never reads as a recovery.
+
+**Don't "fix" by:**
+- Firing on the condition and relying on the batch window: the window only groups one minute; the
+  state lasts hours.
+- Keeping the edge in memory only: every restart (and an update is one) re-announces every state,
+  and an outage that spans a restart never sends "back to normal".
+- Moving the thresholds to `config.json` preemptively: they are `ponytail:` constants until
+  someone asks for a different number.

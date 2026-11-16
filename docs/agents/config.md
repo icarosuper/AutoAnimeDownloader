@@ -130,6 +130,7 @@ System; a new message preset starts with the episode events plus the system ones
 | `download_completed` | Episodes | an episode was organized into the library |
 | `episode_deleted` | Episodes | episodes were removed from the library |
 | `library_missing` | System | the library folder vanished or was replaced (unmounted drive); everything in it will be downloaded again |
+| `check_failing` | System | checks have aborted for ≥ 30 min and ≥ 2 passes in a row (setup incomplete doesn't count); once per run of failures, and again with `{{reason}}` = `recovered` on the first pass that finishes. `{{reason}}` is otherwise the pass error code |
 | `daemon_crashed` | System | at boot, when the previous run crashed (the crash report is waiting on the Report screen) |
 
 The Library and System events are **alerts**: `{{message}}` is one line per alert, `{{title}}`

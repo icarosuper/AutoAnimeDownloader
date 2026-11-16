@@ -258,6 +258,10 @@ func main() {
 	if err != nil {
 		logger.Logger.Fatal().Err(err).Msg("Failed to determine the data directory")
 	}
+	// What the alert notifications already said, so a restart neither repeats them nor forgets a
+	// recovery. Before anything that can fire one.
+	notifications.OpenState(filepath.Join(dataDir, notifications.StateFileName))
+
 	// The previous run crashed: tell whoever subscribed daemon_crashed. Here and not in
 	// startCrashCapture, which runs before the logger and the config exist.
 	if crashPromoted {

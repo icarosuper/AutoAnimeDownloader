@@ -29,6 +29,7 @@ const (
 	// any account.
 	LibraryMissing
 	DaemonCrashed
+	CheckFailing
 )
 
 // Download-failure reasons, used as {{reason}} and in the default message.
@@ -37,6 +38,11 @@ const (
 	ReasonDownloadRejected = "torrent rejected"
 	ReasonNoDiskSpace      = "insufficient disk space"
 )
+
+// ReasonRecovered is check_failing's {{reason}} on the "back to normal" message; on the failing one
+// it is the pass error code. One event key for both: subscribing to "checks are failing" without
+// wanting "they're back" makes no sense.
+const ReasonRecovered = "recovered"
 
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
 
@@ -54,6 +60,8 @@ func eventString(e Event) string {
 		return "library_missing"
 	case DaemonCrashed:
 		return "daemon_crashed"
+	case CheckFailing:
+		return "check_failing"
 	}
 	return ""
 }
@@ -251,6 +259,12 @@ func alertTitle(event Event, items []Episode) string {
 		return "Library folder is gone"
 	case DaemonCrashed:
 		return "AutoAnimeDownloader crashed"
+	case CheckFailing:
+		// The latest item wins: a window holding both the failure and the recovery ends recovered.
+		if items[len(items)-1].Reason == ReasonRecovered {
+			return "Checks are back to normal"
+		}
+		return "Checks are failing"
 	}
 	return ""
 }

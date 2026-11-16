@@ -339,6 +339,7 @@
   "notifications_event_episode_deleted": "Episódio removido",
   "notifications_event_library_missing": "Pasta da biblioteca sumiu",
   "notifications_event_daemon_crashed": "O daemon travou",
+  "notifications_event_check_failing": "Verificações falhando (e normalizadas)",
   "notifications_group_episodes": "Episódios",
   "notifications_group_library": "Biblioteca",
   "notifications_group_system": "Sistema",

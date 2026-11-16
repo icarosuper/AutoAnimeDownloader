@@ -42,6 +42,15 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	}
 	defer verificationMu.Unlock()
 
+	// Every pass that ran feeds check_failing — registered before the first abort so all of them
+	// count. Not a cancelled one: it clears the error and would read as a recovery.
+	var configs *files.Config
+	defer func() {
+		if ctx.Err() == nil {
+			trackCheckFailing(configs, state.GetLastCheckErrorCode(), time.Now())
+		}
+	}()
+
 	configs, err := fileManager.LoadConfigs()
 	if err != nil {
 		logger.Logger.Error().Err(err).Stack().Msg("Failed to load configs")
