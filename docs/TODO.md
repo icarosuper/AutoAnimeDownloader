@@ -3,7 +3,7 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.10.0`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.11.0`. Stamp a version (tag, GitHub Release, AUR):
 the [release skill](../.claude/skills/release/SKILL.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
@@ -67,7 +67,7 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   description overflow~~ — **released in `v2.7.2` on 2026-11-03**
   ([decisions.md #114](agents/decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this),
   [#115](agents/decisions.md#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)).
-  Follow-up to the `v2.7.0` picker; independent of the `v2.11.0` recents shelf.
+  Follow-up to the `v2.7.0` picker; independent of the `v2.12.0` recents shelf.
 - ~~Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
   clear-all)~~ — **released in `v2.7.2` on 2026-11-03**. Independent of the recents shelf.
   The Behind chip that used to live in the recents spec is out.
@@ -126,7 +126,24 @@ one minor down again.
   **released in `v2.10.0` on 2026-11-15**
   ([decisions.md #124](agents/decisions.md#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record)).
 
-## `v2.11.0` — dashboard recents
+## `v2.11.0` — health notifications
+
+Shipped from the `feat/health-notifications` branch; the recents shelf and the episode picker moved
+one minor down again.
+
+- ~~Ten new webhook events about the daemon and the library, not single episodes~~ — **released in
+  `v2.11.0` on 2026-11-15**
+  ([decisions.md #127](agents/decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds),
+  [#128](agents/decisions.md#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)).
+  Library folder gone, crash, checks failing, update available (plus the badge in the web UI, the
+  CLI `status` line and the `check_for_updates` field), low disk, episode limit reached, episode
+  stuck, season complete, unwatched backlog and a weekly digest of watched files still on disk.
+  **Breaking:** `download_failed` no longer reports "no torrent found" nor "insufficient disk
+  space" — they moved to `episode_stuck` (after 48 h) and `disk_low` — and it reports a real failure
+  once per episode and torrent. Existing webhooks get none of the new events until the user ticks
+  them.
+
+## `v2.12.0` — dashboard recents
 
 A shelf of just-landed, still-unwatched episodes on Status, and last-check rows that open the
 anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
@@ -134,7 +151,7 @@ anime. Independent of the picker; does not wait for the `v3.0.0` UI overhaul.
 - Recents shelf, clickable last-check rows. Spec designed on 2026-10-23:
   [dashboard-recent-shelf](superpowers/specs/2026-10-23-dashboard-recent-shelf-design.md).
 
-## `v2.12.0` — episode torrent picker
+## `v2.13.0` — episode torrent picker
 
 - Pick torrent when downloading / redownloading a single episode — same screen as the
   whole-title picker in `v2.7.0`, singles search instead of packs. Own spec; do not start
@@ -214,23 +231,6 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
   `PackFileRange` no longer lets `S00E19 (OVA)` become episode 19. Packs **already** stored
   as 1–19 keep the old span until the torrent is deleted from Downloads (`force`) or
   re-ingested.
-
-## No release — health notifications
-
-Implemented on the `feat/health-notifications` branch, one commit per event; waiting for the merge
-into `master` and a release.
-
-- ~~Ten new webhook events about the daemon and the library, not single episodes~~ — **done on
-  2026-11-15, not released**
-  ([decisions.md #127](agents/decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds),
-  [#128](agents/decisions.md#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)).
-  Library folder gone, crash, checks failing, update available (plus the badge in the web UI, the
-  CLI `status` line and the `check_for_updates` field), low disk, episode limit reached, episode
-  stuck, season complete, unwatched backlog and a weekly digest of watched files still on disk.
-  **Breaking, for the release notes:** `download_failed` no longer reports "no torrent found" nor
-  "insufficient disk space" — they moved to `episode_stuck` (after 48 h) and `disk_low` — and it
-  reports a real failure once per episode and torrent. Existing webhooks get none of the new
-  events until the user ticks them.
 
 ## No release — subtitle language filter
 
