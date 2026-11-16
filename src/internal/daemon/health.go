@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
@@ -270,7 +271,11 @@ type passAlerts struct {
 	// watching is every anime the pass covered (media id) — an anime outside it left every
 	// download status, and its alerts are dropped.
 	watching map[int]bool
-	now      time.Time
+	// animes is the pass's list (progress, airing status, episode count); saved is episodes.json
+	// read AFTER the pass's own deletions, so what the cleanup removed is never reported.
+	animes []anilist.MediaList
+	saved  []files.EpisodeStruct
+	now    time.Time
 }
 
 func alertsAfterPass(cfg *files.Config, in passAlerts) {
@@ -279,16 +284,19 @@ func alertsAfterPass(cfg *files.Config, in passAlerts) {
 		trackDiskLow(cfg, total, free, diskFullEpisodes(in.problems))
 	}
 
-	var limitItems, stuckItems []notifications.Episode
+	library := libraryIndex(in.saved)
+	var limitItems, stuckItems, completeItems []notifications.Episode
 	notifications.UpdateStateIfChanged(func(s *notifications.AlertState) {
 		// The first pass after the upgrade records, doesn't announce (AlertState.Seeded).
 		seeding := !s.Seeded
 		s.Seeded = true
 		limitItems = trackEpisodeLimit(s, in.limits, seeding)
 		stuckItems = trackEpisodeStuck(s, in.problems, in.watching, in.now)
+		completeItems = trackSeasonComplete(s, in.animes, library, seeding)
 	})
 	notifications.NotifyAll(cfg, notifications.EpisodeLimitReached, limitItems)
 	notifications.NotifyAll(cfg, notifications.EpisodeStuck, stuckItems)
+	notifications.NotifyAll(cfg, notifications.SeasonComplete, completeItems)
 }
 
 // trackEpisodeLimit fires for each anime whose max_episodes_per_anime limit appeared since the last
@@ -461,4 +469,54 @@ func stuckSentence(code string) string {
 	default:
 		return "not downloading"
 	}
+}
+
+// libraryIndex maps (anime, episode) to the record that is in the library (has LibraryPaths). A
+// pack counts through its records, which already cover its range.
+func libraryIndex(saved []files.EpisodeStruct) map[files.EpisodeKey]files.EpisodeStruct {
+	index := make(map[files.EpisodeKey]files.EpisodeStruct, len(saved))
+	for _, ep := range saved {
+		if len(ep.LibraryPaths) > 0 {
+			index[files.EpisodeKey{AnimeID: ep.AnimeID, Episode: ep.EpisodeNumber}] = ep
+		}
+	}
+	return index
+}
+
+// trackSeasonComplete fires once per anime, ever, when a FINISHED anime has every unwatched episode
+// in the library. At least one unwatched episode: a fully watched anime is not "ready to binge".
+// Called under the state store's lock; seeded on the first run, or the upgrade would announce every
+// completed anime in the library.
+func trackSeasonComplete(s *notifications.AlertState, animes []anilist.MediaList, library map[files.EpisodeKey]files.EpisodeStruct, seeding bool) []notifications.Episode {
+	var items []notifications.Episode
+	for _, a := range animes {
+		if a.Media.Status != anilist.MediaStatusFinished || a.Media.Episodes == nil || slices.Contains(s.SeasonComplete, a.Media.Id) {
+			continue
+		}
+		total := *a.Media.Episodes
+		if a.Progress >= total {
+			continue
+		}
+		complete := true
+		for ep := a.Progress + 1; ep <= total; ep++ {
+			if _, ok := library[files.EpisodeKey{AnimeID: a.Media.Id, Episode: ep}]; !ok {
+				complete = false
+				break
+			}
+		}
+		if !complete {
+			continue
+		}
+		s.SeasonComplete = append(s.SeasonComplete, a.Media.Id)
+		if seeding {
+			continue
+		}
+		name := getAnimeTitleSafe(a)
+		items = append(items, notifications.Episode{
+			AnimeID:   a.Media.Id,
+			AnimeName: name,
+			Text:      fmt.Sprintf("%s is complete: %s ready to watch.", name, plural(total-a.Progress, "episode")),
+		})
+	}
+	return items
 }

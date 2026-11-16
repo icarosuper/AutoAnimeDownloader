@@ -376,7 +376,14 @@ outer:
 	})
 
 	// The alerts about the pass as a whole, from what it just found (daemon/health.go).
-	alertsAfterPass(configs, passAlerts{problems: problems, limits: limits, watching: watching, now: time.Now()})
+	// episodes.json again, not the snapshot from the start of the pass: the library alerts must not
+	// report what the pass's own cleanup just deleted.
+	afterPass, err := fileManager.LoadSavedEpisodes()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to reload saved episodes; the library alerts use the start-of-pass snapshot")
+		afterPass = savedEpisodes
+	}
+	alertsAfterPass(configs, passAlerts{problems: problems, limits: limits, watching: watching, animes: animes, saved: afterPass, now: time.Now()})
 
 	if err := fileManager.DeleteEmptyFolders(configs.CompletedAnimePath); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to delete empty folders")

@@ -35,6 +35,8 @@ type AlertState struct {
 	// FailedTorrents is the (episode, torrent) pairs download_failed already reported, as
 	// "<anime id>:<episode>:<infohash>"; pruned when the episode is organized.
 	FailedTorrents []string `json:"failed_torrents,omitempty"`
+	// SeasonComplete is the animes season_complete already announced — once per anime, ever.
+	SeasonComplete []int `json:"season_complete,omitempty"`
 }
 
 // StuckClock is one episode's run without success: since its first problem, the latest problem

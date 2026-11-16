@@ -430,3 +430,48 @@ func TestDownloadFailed_OncePerEpisodeAndTorrent(t *testing.T) {
 		noneReceived(t, bodies)
 	})
 }
+
+func finishedAnime(id int, name string, episodes, progress int) anilist.MediaList {
+	a := anilist.MediaList{Progress: progress}
+	a.Media.Id = id
+	a.Media.Status = anilist.MediaStatusFinished
+	a.Media.Episodes = &episodes
+	a.Media.Title.Romaji = &name
+	return a
+}
+
+func inLibrary(id int, eps ...int) []files.EpisodeStruct {
+	var out []files.EpisodeStruct
+	for _, ep := range eps {
+		out = append(out, files.EpisodeStruct{AnimeID: id, EpisodeNumber: ep, LibraryPaths: []string{"/lib/x.mkv"}, DownloadDate: time.Now()})
+	}
+	return out
+}
+
+func TestSeasonComplete(t *testing.T) {
+	notifications.ResetState()
+	cfg, bodies := alertHook(t, "season_complete")
+	watching := map[int]bool{1: true, 2: true}
+	pass := func(animes []anilist.MediaList, saved []files.EpisodeStruct) {
+		runAlerts(t, cfg, passAlerts{watching: watching, animes: animes, saved: saved})
+	}
+
+	// Seeded: complete before the upgrade, never announced.
+	pass([]anilist.MediaList{finishedAnime(2, "Old", 2, 0)}, inLibrary(2, 1, 2))
+	noneReceived(t, bodies)
+
+	pass([]anilist.MediaList{finishedAnime(1, "Frieren", 4, 1)}, inLibrary(1, 2, 3))
+	noneReceived(t, bodies) // EP 4 missing
+
+	pass([]anilist.MediaList{finishedAnime(1, "Frieren", 4, 1)}, inLibrary(1, 2, 3, 4))
+	if got := received(bodies); got != "Ready to binge|Frieren is complete: 3 episodes ready to watch." {
+		t.Errorf("got %q", got)
+	}
+	pass([]anilist.MediaList{finishedAnime(1, "Frieren", 4, 2)}, inLibrary(1, 3, 4))
+	noneReceived(t, bodies) // once per anime
+
+	notifications.ResetState()
+	pass(nil, nil) // seed
+	pass([]anilist.MediaList{finishedAnime(1, "Frieren", 4, 4)}, inLibrary(1, 1, 2, 3, 4))
+	noneReceived(t, bodies) // fully watched is not "ready to binge"
+}

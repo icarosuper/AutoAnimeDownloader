@@ -681,7 +681,12 @@ problems (`trackEpisodeStuck`, awaiting-earlier left out), `HandleTorrentFailure
 reaches the report, because every add succeeds), and organize (`clearStuck` in `jobs.go`, the only
 thing that ends a run). A clock fires only while its last problem is under `stuckRecent` (3 h) old:
 an episode found late that then downloads slowly is not "stuck". Clocks of an anime outside the
-pass's `watching` set are dropped. With batching off, an alert's items from one evaluation still go
+pass's `watching` set are dropped.
+
+The library alerts (`season_complete` onward) read `episodes.json` **again** after
+`handleSavedEpisodes`, not the start-of-pass snapshot: what the pass's own cleanup deleted is never
+reported. The `seeded` flag ([decisions.md #127](decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)) keeps the first pass after the
+upgrade from announcing the whole library (`episode_limit_reached`, `season_complete`). With batching off, an alert's items from one evaluation still go
 out as **one** webhook (`NotifyAll`). System alerts carry
 `AnimeID == 0`, which `itemsFor` lets through every `anime_sources` filter.
 

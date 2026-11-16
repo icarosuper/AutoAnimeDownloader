@@ -34,6 +34,7 @@ const (
 	DiskLow
 	EpisodeLimitReached
 	EpisodeStuck
+	SeasonComplete
 )
 
 // ReasonDownloadRejected is download_failed's {{reason}} when the torrent client refused every
@@ -78,6 +79,8 @@ func eventString(e Event) string {
 		return "episode_limit_reached"
 	case EpisodeStuck:
 		return "episode_stuck"
+	case SeasonComplete:
+		return "season_complete"
 	}
 	return ""
 }
@@ -308,6 +311,11 @@ func alertTitle(event Event, items []Episode) string {
 			return fmt.Sprintf("%d episodes are not downloading", n)
 		}
 		return "Episode is not downloading"
+	case SeasonComplete:
+		if len(items) > 1 {
+			return fmt.Sprintf("%d animes ready to binge", len(items))
+		}
+		return "Ready to binge"
 	}
 	return ""
 }
