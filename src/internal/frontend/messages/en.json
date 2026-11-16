@@ -322,6 +322,7 @@
   "notifications_event_episode_stuck": "Episode not downloading for 2 days",
   "notifications_event_season_complete": "Finished anime fully in the library",
   "notifications_event_unwatched_backlog": "Next episode unwatched for 30 days",
+  "notifications_event_leftover_files": "Weekly digest of watched files still on disk",
   "notifications_group_episodes": "Episodes",
   "notifications_group_library": "Library",
   "notifications_group_system": "System",

@@ -348,6 +348,7 @@
   "notifications_event_episode_stuck": "Episódio sem baixar há 2 dias",
   "notifications_event_season_complete": "Anime finalizado completo na biblioteca",
   "notifications_event_unwatched_backlog": "Próximo episódio sem assistir há 30 dias",
+  "notifications_event_leftover_files": "Resumo semanal de arquivos assistidos ainda no disco",
   "notifications_group_episodes": "Episódios",
   "notifications_group_library": "Biblioteca",
   "notifications_group_system": "Sistema",

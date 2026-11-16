@@ -40,6 +40,8 @@ type AlertState struct {
 	// BacklogFired is, per anime (media id as a string, JSON keys), the progress unwatched_backlog
 	// last fired at: a different progress re-arms it.
 	BacklogFired map[string]int `json:"backlog_fired,omitempty"`
+	// LeftoverLastDigest is when the last leftover_files digest went out.
+	LeftoverLastDigest time.Time `json:"leftover_last_digest,omitzero"`
 }
 
 // StuckClock is one episode's run without success: since its first problem, the latest problem

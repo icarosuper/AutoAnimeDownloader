@@ -41,6 +41,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		return
 	}
 	defer verificationMu.Unlock()
+	passStarted := time.Now()
 
 	// Every pass that ran feeds check_failing — registered before the first abort so all of them
 	// count. Not a cancelled one: it clears the error and would read as a recovery.
@@ -383,7 +384,10 @@ outer:
 		logger.Logger.Warn().Err(err).Msg("Failed to reload saved episodes; the library alerts use the start-of-pass snapshot")
 		afterPass = savedEpisodes
 	}
-	alertsAfterPass(configs, passAlerts{problems: problems, limits: limits, watching: watching, animes: animes, saved: afterPass, now: time.Now()})
+	alertsAfterPass(configs, passAlerts{problems: problems, limits: limits, watching: watching, animes: animes, saved: afterPass,
+		listsComplete: passLists.allRecordedSince(listDownload, configuredAccounts(configs), passStarted),
+		now:           time.Now(),
+	})
 
 	if err := fileManager.DeleteEmptyFolders(configs.CompletedAnimePath); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to delete empty folders")

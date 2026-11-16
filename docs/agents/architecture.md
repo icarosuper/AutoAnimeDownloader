@@ -686,7 +686,11 @@ pass's `watching` set are dropped.
 The library alerts (`season_complete` onward) read `episodes.json` **again** after
 `handleSavedEpisodes`, not the start-of-pass snapshot: what the pass's own cleanup deleted is never
 reported. The `seeded` flag ([decisions.md #127](decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)) keeps the first pass after the
-upgrade from announcing the whole library (`episode_limit_reached`, `season_complete`). With batching off, an alert's items from one evaluation still go
+upgrade from announcing the whole library (`episode_limit_reached`, `season_complete`).
+`leftover_files` is skipped on a pass where some configured list account did not answer
+(`passLists.allRecordedSince`, from the per-account record times): `accountLists` keeps a failed
+account's previous list for the source filter, so "is the anime off the lists" can't be read from it
+on such a pass. With batching off, an alert's items from one evaluation still go
 out as **one** webhook (`NotifyAll`). System alerts carry
 `AnimeID == 0`, which `itemsFor` lets through every `anime_sources` filter.
 

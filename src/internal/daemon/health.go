@@ -277,7 +277,10 @@ type passAlerts struct {
 	// read AFTER the pass's own deletions, so what the cleanup removed is never reported.
 	animes []anilist.MediaList
 	saved  []files.EpisodeStruct
-	now    time.Time
+	// listsComplete is false when some list account failed to fetch in this pass (nothing fresh,
+	// nothing cached): every anime of that account would look "off the lists".
+	listsComplete bool
+	now           time.Time
 }
 
 func alertsAfterPass(cfg *files.Config, in passAlerts) {
@@ -287,7 +290,7 @@ func alertsAfterPass(cfg *files.Config, in passAlerts) {
 	}
 
 	library := libraryIndex(in.saved)
-	var limitItems, stuckItems, completeItems, backlogItems []notifications.Episode
+	var limitItems, stuckItems, completeItems, backlogItems, leftoverItems []notifications.Episode
 	notifications.UpdateStateIfChanged(func(s *notifications.AlertState) {
 		// The first pass after the upgrade records, doesn't announce (AlertState.Seeded).
 		seeding := !s.Seeded
@@ -297,11 +300,15 @@ func alertsAfterPass(cfg *files.Config, in passAlerts) {
 		completeItems = trackSeasonComplete(s, in.animes, library, seeding)
 		// Not seeded: a 60-day-old backlog is real news, and it goes out as one message.
 		backlogItems = trackUnwatchedBacklog(s, in.animes, library, in.now)
+		if in.listsComplete {
+			leftoverItems = leftoverDigest(s, in.animes, in.watching, library, cfg.WatchedEpisodesToKeep, in.now)
+		}
 	})
 	notifications.NotifyAll(cfg, notifications.EpisodeLimitReached, limitItems)
 	notifications.NotifyAll(cfg, notifications.EpisodeStuck, stuckItems)
 	notifications.NotifyAll(cfg, notifications.SeasonComplete, completeItems)
 	notifications.NotifyAll(cfg, notifications.UnwatchedBacklog, backlogItems)
+	notifications.NotifyAll(cfg, notifications.LeftoverFiles, leftoverItems)
 }
 
 // trackEpisodeLimit fires for each anime whose max_episodes_per_anime limit appeared since the last
@@ -598,4 +605,69 @@ func librarySize(records []files.EpisodeStruct) uint64 {
 		}
 	}
 	return total
+}
+
+// leftover_files goes out at most this often, while watched or off-list files remain.
+// ponytail: a constant until someone asks for another number.
+const leftoverEvery = 7 * 24 * time.Hour
+
+// leftoverDigest is the weekly digest of library files the user is done with, still on disk AFTER
+// the pass's own deletions: an episode of an anime that left every download status, or one at or
+// below progress − watched_episodes_to_keep. With the default cleanup on this is almost always empty;
+// it fills up with delete_watched_episodes off, manually managed records, and packs the
+// unclaimed-content guard holds back (decisions.md #74). It repeats weekly while the files stay — a
+// reminder is the point; whoever keeps them on purpose doesn't subscribe this event. Called under
+// the state store's lock, and only on a pass where every list account answered.
+func leftoverDigest(s *notifications.AlertState, animes []anilist.MediaList, watching map[int]bool, library map[files.EpisodeKey]files.EpisodeStruct, keep int, now time.Time) []notifications.Episode {
+	if !s.LeftoverLastDigest.IsZero() && now.Sub(s.LeftoverLastDigest) < leftoverEvery {
+		return nil
+	}
+	progress := make(map[int]int, len(animes))
+	for _, a := range animes {
+		progress[a.Media.Id] = a.Progress
+	}
+
+	type group struct {
+		name    string
+		offList bool
+		records []files.EpisodeStruct
+	}
+	groups := make(map[int]*group)
+	for k, ep := range library {
+		offList := !watching[k.AnimeID]
+		if !offList && k.Episode > progress[k.AnimeID]-keep {
+			continue
+		}
+		g := groups[k.AnimeID]
+		if g == nil {
+			g = &group{name: ep.AnimeName, offList: offList}
+			groups[k.AnimeID] = g
+		}
+		g.records = append(g.records, ep)
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+
+	ids := make([]int, 0, len(groups))
+	for id := range groups {
+		ids = append(ids, id)
+	}
+	slices.SortFunc(ids, func(a, b int) int { return strings.Compare(groups[a].name, groups[b].name) })
+
+	var items []notifications.Episode
+	var total uint64
+	for _, id := range ids {
+		g := groups[id]
+		size := librarySize(g.records)
+		total += size
+		line := fmt.Sprintf("%s: %s watched (%s)", g.name, plural(len(g.records), "episode"), gigabytes(size))
+		if g.offList {
+			line = fmt.Sprintf("%s: left your lists, %s (%s)", g.name, plural(len(g.records), "episode"), gigabytes(size))
+		}
+		items = append(items, notifications.Episode{AnimeID: id, AnimeName: g.name, Text: line})
+	}
+	items[0].Title = fmt.Sprintf("%s of watched anime still on disk", gigabytes(total))
+	s.LeftoverLastDigest = now
+	return items
 }

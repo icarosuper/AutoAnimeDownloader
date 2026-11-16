@@ -7,6 +7,7 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -518,4 +519,64 @@ func TestUnwatchedBacklog(t *testing.T) {
 	}
 	pass(6, now.Add(3*day)) // EP 7 is 5 days old
 	noneReceived(t, bodies)
+}
+
+func TestLeftoverDigest(t *testing.T) {
+	notifications.ResetState()
+	cfg, bodies := alertHook(t, "leftover_files")
+	cfg.WatchedEpisodesToKeep = 2
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.Local)
+	const day = 24 * time.Hour
+	dir := t.TempDir()
+	rec := func(id int, name string, ep int) files.EpisodeStruct {
+		p := filepath.Join(dir, fmt.Sprintf("%d-%d.mkv", id, ep))
+		if err := os.WriteFile(p, make([]byte, 1<<28), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return files.EpisodeStruct{AnimeID: id, AnimeName: name, EpisodeNumber: ep, LibraryPaths: []string{p}, DownloadDate: now}
+	}
+	saved := []files.EpisodeStruct{
+		rec(1, "Frieren", 1), rec(1, "Frieren", 2), rec(1, "Frieren", 3), rec(1, "Frieren", 4), // progress 4, keep 2: EPs 1-2 leftover
+		rec(2, "Dandadan", 1), // off the lists
+	}
+	animes := []anilist.MediaList{finishedAnime(1, "Frieren", 12, 4)}
+	pass := func(at time.Time, complete bool) {
+		runAlerts(t, cfg, passAlerts{watching: map[int]bool{1: true}, animes: animes, saved: saved, listsComplete: complete, now: at})
+	}
+
+	pass(now, false) // an account failed: Dandadan only looks off-list
+	noneReceived(t, bodies)
+
+	pass(now, true)
+	if got := received(bodies); got != "0.8 GB of watched anime still on disk|Dandadan: left your lists, 1 episode (0.2 GB)\nFrieren: 2 episodes watched (0.5 GB)" {
+		t.Errorf("got %q", got)
+	}
+	pass(now.Add(6*day), true)
+	noneReceived(t, bodies)
+	pass(now.Add(7*day), true)
+	if got := received(bodies); !strings.HasPrefix(got, "0.8 GB of watched anime still on disk|") {
+		t.Errorf("weekly reminder, got %q", got)
+	}
+}
+
+// The leftover guard: an account that didn't answer in this pass keeps its older list, and that is
+// exactly what allRecordedSince has to catch.
+func TestAccountLists_AllRecordedSince(t *testing.T) {
+	l := &accountLists{byID: make(map[listKind]map[string]map[int]bool)}
+	before := time.Now().Add(-time.Second)
+	l.record(listDownload, "anilist:alice", map[int]bool{1: true})
+	passStart := time.Now()
+	if l.allRecordedSince(listDownload, []string{"anilist:alice"}, passStart) {
+		t.Error("alice's list is older than the pass")
+	}
+	l.record(listDownload, "anilist:alice", map[int]bool{1: true})
+	if !l.allRecordedSince(listDownload, []string{"anilist:alice"}, passStart) {
+		t.Error("alice answered in this pass")
+	}
+	if l.allRecordedSince(listDownload, []string{"anilist:alice", "mal:bob"}, before) {
+		t.Error("bob never answered")
+	}
+	if !l.allRecordedSince(listDownload, nil, passStart) {
+		t.Error("no accounts (standalone only) is complete")
+	}
 }

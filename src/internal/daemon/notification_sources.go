@@ -7,6 +7,7 @@ import (
 	"AutoAnimeDownloader/src/internal/notifications"
 	"slices"
 	"sync"
+	"time"
 )
 
 // listKind tells apart the two per-account lists a pass fetches: the download-status one
@@ -29,6 +30,9 @@ const (
 type accountLists struct {
 	mu   sync.RWMutex
 	byID map[listKind]map[string]map[int]bool // kind -> account source key -> media ids
+	// at is when each account's list of each kind was last recorded: a list older than the pass
+	// means that account's fetch failed in it (fresh and cached both).
+	at map[listKind]map[string]time.Time
 }
 
 var passLists = &accountLists{byID: make(map[listKind]map[string]map[int]bool)}
@@ -41,6 +45,26 @@ func (l *accountLists) record(kind listKind, account string, ids map[int]bool) {
 		l.byID[kind] = make(map[string]map[int]bool)
 	}
 	l.byID[kind][account] = ids
+	if l.at == nil {
+		l.at = make(map[listKind]map[string]time.Time)
+	}
+	if l.at[kind] == nil {
+		l.at[kind] = make(map[string]time.Time)
+	}
+	l.at[kind][account] = time.Now()
+}
+
+// allRecordedSince reports whether every account answered its list of this kind at or after t —
+// false when any of them failed in the pass that started at t.
+func (l *accountLists) allRecordedSince(kind listKind, accounts []string, t time.Time) bool {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, account := range accounts {
+		if at, ok := l.at[kind][account]; !ok || at.Before(t) {
+			return false
+		}
+	}
+	return true
 }
 
 // owners returns, for each id, the configured accounts whose last known lists hold it. Accounts no
