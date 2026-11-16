@@ -656,6 +656,12 @@ standalone file. Each filtered webhook gets its share of the items, with the tem
 that share. An anime no list holds is **unknown and fail-open**: it reaches every filtered webhook,
 and so does everything when no resolver is wired ([decisions.md #126](decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)).
 
+**A webhook's URL and headers are secrets** (the ntfy Bearer, the Discord/Slack path, Telegram's
+`bot<token>`). `fireWebhook` passes every net/http error through `redactURLError` (scheme + host
+only) before logging or returning it — a raw `*url.Error` prints the full URL into `daemon.log` and
+the Test toast. The CLI's `config set` doesn't echo a value under `notifications`/`notifications.webhooks`.
+`config get` and `notifications preview` do print them: showing them is what those commands are for.
+
 Notifications are grouped by window, and JSON escaping happens **only in the body and only when the
 preset declares `Content-Type: application/json`** (decisions.md #47).
 Header values have `\n`/`\r` stripped: `net/http` rejects the whole request with them, and ntfy

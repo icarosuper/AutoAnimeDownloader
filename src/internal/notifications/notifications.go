@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -345,6 +346,7 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 
 	req, err := http.NewRequest(rendered.Method, rendered.URL, strings.NewReader(rendered.Body))
 	if err != nil {
+		err = redactURLError(err)
 		logger.Logger.Error().Err(err).Str("webhook", preset.Name).Msg("Failed to build webhook request")
 		return err
 	}
@@ -355,6 +357,7 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		err = redactURLError(err)
 		logger.Logger.Error().Err(err).Str("webhook", preset.Name).Msg("Webhook request failed")
 		return err
 	}
@@ -368,6 +371,28 @@ func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 		return fmt.Errorf("webhook %q returned status %d", preset.Name, resp.StatusCode)
 	}
 	return nil
+}
+
+// redactURLError cuts the URL inside a net/http error down to scheme and host. *url.Error prints
+// the whole URL, and a webhook URL carries its credential: in the path (Discord, Slack) or as the
+// path (Telegram's bot<token>). Unredacted, a failed fire wrote the token to daemon.log and to the
+// Test button's toast.
+func redactURLError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+	redacted := *urlErr
+	redacted.URL = redactWebhookURL(urlErr.URL)
+	return &redacted
+}
+
+func redactWebhookURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return "<webhook url>"
+	}
+	return parsed.Scheme + "://" + parsed.Host + "/<redacted>"
 }
 
 // SourceStandalone is the WebhookPreset.AnimeSources key of the standalone animes.

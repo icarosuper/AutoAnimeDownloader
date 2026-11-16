@@ -72,7 +72,8 @@ comma-separated values; anything else is JSON when it parses, otherwise a string
 
 A dotted key sets one field inside a nested object and keeps the rest of it. Setting the whole
 object (`config set notifications '{…}'`) still works, but replaces it: a field left out of the JSON
-is gone, webhooks included.
+is gone, webhooks included. A value under `notifications` / `notifications.webhooks` isn't echoed
+back after saving: webhook URLs and headers hold tokens.
 
 `priorities defaults` is the default torrent priority lists. To change one: `config set priorities.<list> …`.
 

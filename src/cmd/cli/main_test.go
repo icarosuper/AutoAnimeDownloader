@@ -198,3 +198,16 @@ func TestNotificationsPreviewSendsTheSavedPreset(t *testing.T) {
 		t.Error("an unknown preset name should fail")
 	}
 }
+
+// Webhook URLs and headers carry tokens; `config set` must not echo them back.
+func TestConfigSetSummary_HidesWebhookValues(t *testing.T) {
+	secret := `[{"name":"ntfy","url":"http://localhost:2586/t","headers":{"Authorization":"Bearer tk_secret"}}]`
+	for _, key := range []string{"notifications", "notifications.webhooks", "Notifications.Webhooks"} {
+		if got := configSetSummary(key, secret); strings.Contains(got, "tk_secret") {
+			t.Errorf("key %q leaked the value: %s", key, got)
+		}
+	}
+	if got := configSetSummary("notifications.batch_window_seconds", "30"); !strings.Contains(got, "= 30") {
+		t.Errorf("a non-secret value should still be echoed, got %s", got)
+	}
+}

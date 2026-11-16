@@ -610,3 +610,21 @@ func TestFireBatch_FilteredWebhookWithoutResolverFailsOpen(t *testing.T) {
 		t.Errorf("the filtered webhook must fire for an unknown anime, got %v", got)
 	}
 }
+
+// A failed fire's error (logged, and shown by the Test button) must not carry the webhook URL's
+// path: Discord and Telegram put the token there.
+func TestFireWebhook_ErrorDoesNotLeakURLPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close() // connection refused from here on
+
+	for _, raw := range []string{addr + "/api/webhooks/123/supersecrettoken", "http://[::1/botsupersecrettoken"} {
+		err := fireWebhook(files.WebhookPreset{Name: "x", URL: raw, Method: "POST"}, nil)
+		if err == nil {
+			t.Fatalf("%s: expected an error", raw)
+		}
+		if strings.Contains(err.Error(), "supersecrettoken") {
+			t.Errorf("error leaked the URL path: %v", err)
+		}
+	}
+}

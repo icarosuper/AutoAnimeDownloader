@@ -117,8 +117,19 @@ func handleConfigSet(key, value string) error {
 		outputJSONResponse(map[string]string{"message": "Configuration updated"})
 		return nil
 	}
-	fmt.Printf("Configuration updated: %s = %s\n", key, value)
+	fmt.Println(configSetSummary(key, value))
 	return nil
+}
+
+// configSetSummary is the line `config set` prints. It echoes the value so a mistyped one shows up,
+// except when the value holds webhooks: their URLs and headers carry tokens (the ntfy Bearer, the
+// Discord URL), and echoing them put the secret in the terminal and its scrollback.
+func configSetSummary(key, value string) string {
+	norm := strings.ToLower(strings.ReplaceAll(key, "_", ""))
+	if norm == "notifications" || norm == "notifications.webhooks" || strings.HasPrefix(norm, "notifications.webhooks.") {
+		return fmt.Sprintf("Configuration updated: %s (value not shown: webhooks hold tokens)", key)
+	}
+	return fmt.Sprintf("Configuration updated: %s = %s", key, value)
 }
 
 func handlePriorityDefaults() error {
