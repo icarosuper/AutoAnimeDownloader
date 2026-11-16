@@ -343,6 +343,7 @@
   "notifications_event_daemon_crashed": "O daemon travou",
   "notifications_event_check_failing": "Verificações falhando (e normalizadas)",
   "notifications_event_update_available": "Nova versão disponível",
+  "notifications_event_disk_low": "Disco quase cheio / downloads parados",
   "notifications_group_episodes": "Episódios",
   "notifications_group_library": "Biblioteca",
   "notifications_group_system": "Sistema",

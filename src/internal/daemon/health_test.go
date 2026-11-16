@@ -167,3 +167,66 @@ func TestNotifyUpdate_OncePerVersion(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestTrackDiskLow(t *testing.T) {
+	const gib = uint64(1 << 30)
+	const total = 1000 * gib
+	newCfg := func(t *testing.T) (*files.Config, chan string) {
+		notifications.ResetState()
+		cfg, bodies := alertHook(t, "disk_low")
+		cfg.CompletedAnimePath = "/media/anime"
+		cfg.MinFreeDiskGB = 10 // warning floor 20 GiB
+		return cfg, bodies
+	}
+
+	t.Run("warning once, re-armed only above the floor x1.25", func(t *testing.T) {
+		cfg, bodies := newCfg(t)
+		trackDiskLow(cfg, total, 30*gib, 0)
+		noneReceived(t, bodies)
+
+		trackDiskLow(cfg, total, 18*gib, 0)
+		if got := received(bodies); got != "Disk almost full|Only 18.0 GB free on /media/anime; new downloads stop below 10 GB." {
+			t.Errorf("got %q", got)
+		}
+		trackDiskLow(cfg, total, 17*gib, 0)
+		trackDiskLow(cfg, total, 22*gib, 0) // above the floor, under x1.25: still armed off
+		trackDiskLow(cfg, total, 19*gib, 0)
+		noneReceived(t, bodies)
+
+		trackDiskLow(cfg, total, 26*gib, 0) // re-armed
+		trackDiskLow(cfg, total, 19*gib, 0)
+		if got := received(bodies); !strings.HasPrefix(got, "Disk almost full|") {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("straight to full fires blocked only, once", func(t *testing.T) {
+		cfg, bodies := newCfg(t)
+		trackDiskLow(cfg, total, 5*gib, 3)
+		if got := received(bodies); got != "Downloads stopped: disk full|Downloads are stopped: only 5.0 GB free on /media/anime. 3 episodes are waiting for space." {
+			t.Errorf("got %q", got)
+		}
+		trackDiskLow(cfg, total, 5*gib, 4)
+		trackDiskLow(cfg, total, 9*gib, 0) // nothing refused, but still under min x1.25
+		trackDiskLow(cfg, total, 5*gib, 2)
+		noneReceived(t, bodies)
+
+		trackDiskLow(cfg, total, 13*gib, 0) // freed: blocked re-armed, warning still fired (under 25)
+		noneReceived(t, bodies)
+		trackDiskLow(cfg, total, 5*gib, 1)
+		if got := received(bodies); !strings.HasPrefix(got, "Downloads stopped: disk full|") || !strings.Contains(got, "1 episode is waiting") {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("with the policy off the warning is 5% of the volume", func(t *testing.T) {
+		cfg, bodies := newCfg(t)
+		cfg.MinFreeDiskGB = 0
+		trackDiskLow(cfg, total, 60*gib, 0)
+		noneReceived(t, bodies)
+		trackDiskLow(cfg, total, 40*gib, 0)
+		if got := received(bodies); !strings.Contains(got, "new downloads stop once a torrent no longer fits") {
+			t.Errorf("got %q", got)
+		}
+	})
+}

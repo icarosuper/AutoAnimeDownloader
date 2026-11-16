@@ -22,6 +22,13 @@ type AlertState struct {
 	CheckFailing CheckFailingState `json:"check_failing"`
 	// UpdateAnnounced is the last version update_available announced: once per version.
 	UpdateAnnounced string `json:"update_announced,omitempty"`
+	// DiskLowFired holds disk_low's two levels, each edge-triggered on its own.
+	DiskLowFired DiskLowState `json:"disk_low_fired"`
+}
+
+type DiskLowState struct {
+	Warning bool `json:"warning"`
+	Blocked bool `json:"blocked"`
 }
 
 // CheckFailingState tracks a run of aborted passes: since when, how many in a row, and whether

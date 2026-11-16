@@ -317,6 +317,7 @@
   "notifications_event_daemon_crashed": "Daemon crashed",
   "notifications_event_check_failing": "Checks are failing (and back to normal)",
   "notifications_event_update_available": "New version available",
+  "notifications_event_disk_low": "Disk almost full / downloads stopped",
   "notifications_group_episodes": "Episodes",
   "notifications_group_library": "Library",
   "notifications_group_system": "System",

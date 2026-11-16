@@ -664,7 +664,13 @@ and the title comes from `alertTitle`. The text and the edge tracking that keeps
 firing every pass live in `daemon/health.go`; `notifications` only delivers and keeps the
 `notification_state` store (`UpdateState`). `check_failing` is counted from a defer in
 `AnimeVerification`, not in the loop: a `POST /check` pass counts, a cancelled one doesn't
-([decisions.md #127](decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)). System alerts carry
+([decisions.md #127](decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)).
+The alerts about a **finished** pass are evaluated in `alertsAfterPass`, called right after
+`SetLastCheckReport` with the aggregated `problems`/`limits`: an aborted or cancelled pass has no
+report and evaluates none of them. `disk_low` there is not the `/status` `disk_low` flag (the
+Status banner, `daemon.DiskLow`): the banner asks "would a 0-byte add be refused now", the event
+has its own warning floor (2 × `min_free_disk_gb`) and a `blocked` level fed by the pass's
+`IssueDiskFull` problems. System alerts carry
 `AnimeID == 0`, which `itemsFor` lets through every `anime_sources` filter.
 
 **A webhook's URL and headers are secrets** (the ntfy Bearer, the Discord/Slack path, Telegram's

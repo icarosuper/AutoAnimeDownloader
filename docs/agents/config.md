@@ -135,6 +135,7 @@ System; a new message preset starts with the episode events plus the system ones
 | `library_missing` | System | the library folder vanished or was replaced (unmounted drive); everything in it will be downloaded again |
 | `check_failing` | System | checks have aborted for ≥ 30 min and ≥ 2 passes in a row (setup incomplete doesn't count); once per run of failures, and again with `{{reason}}` = `recovered` on the first pass that finishes. `{{reason}}` is otherwise the pass error code |
 | `update_available` | System | a newer release is on GitHub (`check_for_updates`); once per version. `{{version}}` and `{{url}}` (the release page) are filled only here |
+| `disk_low` | System | two levels, each once until space is freed (free > its floor × 1.25): `{{reason}}` = `warning` when free space drops under 2 × `min_free_disk_gb` (5 % of the volume with the policy at 0), `blocked` when a pass refused downloads for lack of space. A disk that goes straight from fine to full sends `blocked` only |
 | `daemon_crashed` | System | at boot, when the previous run crashed (the crash report is waiting on the Report screen) |
 
 The Library and System events are **alerts**: `{{message}}` is one line per alert, `{{title}}`

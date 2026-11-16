@@ -31,6 +31,7 @@ const (
 	DaemonCrashed
 	CheckFailing
 	UpdateAvailable
+	DiskLow
 )
 
 // Download-failure reasons, used as {{reason}} and in the default message.
@@ -44,6 +45,12 @@ const (
 // it is the pass error code. One event key for both: subscribing to "checks are failing" without
 // wanting "they're back" makes no sense.
 const ReasonRecovered = "recovered"
+
+// disk_low's two levels, as its {{reason}}.
+const (
+	DiskWarning = "warning"
+	DiskBlocked = "blocked"
+)
 
 var reVar = regexp.MustCompile(`\{\{(\w+)\}\}`)
 
@@ -65,6 +72,8 @@ func eventString(e Event) string {
 		return "check_failing"
 	case UpdateAvailable:
 		return "update_available"
+	case DiskLow:
+		return "disk_low"
 	}
 	return ""
 }
@@ -278,6 +287,13 @@ func alertTitle(event Event, items []Episode) string {
 		return "Checks are failing"
 	case UpdateAvailable:
 		return "Update available"
+	case DiskLow:
+		for _, it := range items {
+			if it.Reason == DiskBlocked {
+				return "Downloads stopped: disk full"
+			}
+		}
+		return "Disk almost full"
 	}
 	return ""
 }
