@@ -106,7 +106,9 @@ func interpolate(template string, vars map[string]string) string {
 // vanished library, a crash) are not "EP N of anime X" and don't go through the episode-run
 // grouping. Their title comes from alertTitle.
 //
-// Title, on an alert's first item, overrides alertTitle — for a digest whose title carries a total.
+// Bytes is the size of the files a leftover_files line is about. The digest's title is their sum,
+// taken in alertTitle over the items a webhook actually gets: a total computed by the caller would
+// count the animes a source-filtered webhook never sees.
 //
 // Version and URL are update_available's {{version}} and {{url}}, blank in every other event.
 //
@@ -122,7 +124,7 @@ type Episode struct {
 	Reason      string
 	TorrentHash string
 	Text        string
-	Title       string
+	Bytes       uint64
 	Version     string
 	URL         string
 }
@@ -290,10 +292,6 @@ func isAlert(event Event) bool {
 // an alert item is a line about the library or the daemon, and a window of two of them is still
 // one problem to look at.
 func alertTitle(event Event, items []Episode) string {
-	// A digest names its total, which only the caller knows.
-	if len(items) > 0 && items[0].Title != "" {
-		return items[0].Title
-	}
 	switch event {
 	case LibraryMissing:
 		return "Library folder is gone"
@@ -334,8 +332,19 @@ func alertTitle(event Event, items []Episode) string {
 			return fmt.Sprintf("%d animes waiting for you to watch", len(items))
 		}
 		return "Waiting for you to watch"
+	case LeftoverFiles:
+		var total uint64
+		for _, it := range items {
+			total += it.Bytes
+		}
+		return Gigabytes(total) + " of watched anime still on disk"
 	}
 	return ""
+}
+
+// Gigabytes is a size in GiB, the unit min_free_disk_gb is in, written as GB like the config screen.
+func Gigabytes(bytes uint64) string {
+	return fmt.Sprintf("%.1f GB", float64(bytes)/float64(1<<30))
 }
 
 func failureReason(reason string) string {

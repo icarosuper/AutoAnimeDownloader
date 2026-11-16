@@ -667,6 +667,38 @@ func TestFireBatch_SourceFilterLetsSystemEventsThrough(t *testing.T) {
 	}
 }
 
+// The leftover_files title is the total of the lines the webhook gets, not of the whole digest: a
+// webhook filtered to alice must not read bob's gigabytes in its title, whether bob's anime sorts
+// first (and used to carry the title away) or not.
+func TestFireBatch_LeftoverTitleIsTheFilteredTotal(t *testing.T) {
+	srvAll, all := collector(t)
+	srvAlice, alice := collector(t)
+	SetSourceResolver(func(_ *files.Config, ids []int) map[int][]string {
+		return map[int][]string{1: {"anilist:bob"}, 2: {"anilist:alice"}}
+	})
+	t.Cleanup(func() { SetSourceResolver(nil) })
+
+	hook := func(name, url string, sources ...string) files.WebhookPreset {
+		return files.WebhookPreset{Name: name, URL: url, Method: "POST", Body: "{{title}}|{{message}}",
+			Events: []string{"leftover_files"}, AnimeSources: sources}
+	}
+	cfg := &files.Config{Notifications: files.NotificationsConfig{Webhooks: []files.WebhookPreset{
+		hook("all", srvAll.URL),
+		hook("alice", srvAlice.URL, "anilist:alice"),
+	}}}
+	NotifyAll(cfg, LeftoverFiles, []Episode{
+		{AnimeID: 1, AnimeName: "Dandadan", Text: "Dandadan line", Bytes: 3 << 30},
+		{AnimeID: 2, AnimeName: "Frieren", Text: "Frieren line", Bytes: 1 << 29},
+	})
+
+	if got := drain(all, 1, time.Second); len(got) != 1 || got[0] != "3.5 GB of watched anime still on disk|Dandadan line\nFrieren line" {
+		t.Errorf("unfiltered webhook, got %v", got)
+	}
+	if got := drain(alice, 1, time.Second); len(got) != 1 || got[0] != "0.5 GB of watched anime still on disk|Frieren line" {
+		t.Errorf("alice's webhook counts only her line, got %v", got)
+	}
+}
+
 // reasonStalled is the text HandleTorrentFailure passes for a stalled torrent — any free-text
 // reason goes through the templates the same way.
 const reasonStalled = "stalled: no peers for 1h0m"

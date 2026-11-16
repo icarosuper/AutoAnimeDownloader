@@ -226,20 +226,15 @@ func diskWarningItem(cfg *files.Config, free uint64) notifications.Episode {
 	}
 	return notifications.Episode{
 		Reason: notifications.DiskWarning,
-		Text:   fmt.Sprintf("Only %s free on %s; new downloads stop %s.", gigabytes(free), cfg.CompletedAnimePath, stop),
+		Text:   fmt.Sprintf("Only %s free on %s; new downloads stop %s.", notifications.Gigabytes(free), cfg.CompletedAnimePath, stop),
 	}
 }
 
 func diskBlockedItem(path string, free uint64, waiting int) notifications.Episode {
 	return notifications.Episode{
 		Reason: notifications.DiskBlocked,
-		Text:   fmt.Sprintf("Downloads are stopped: only %s free on %s. %s waiting for space.", gigabytes(free), path, pluralVerb(waiting, "episode", "is", "are")),
+		Text:   fmt.Sprintf("Downloads are stopped: only %s free on %s. %s waiting for space.", notifications.Gigabytes(free), path, pluralVerb(waiting, "episode", "is", "are")),
 	}
-}
-
-// gigabytes is a size in GiB, the unit min_free_disk_gb is in, written as GB like the config screen.
-func gigabytes(bytes uint64) string {
-	return fmt.Sprintf("%.1f GB", float64(bytes)/float64(giB))
 }
 
 // pluralVerb is "1 episode is" / "3 episodes are".
@@ -564,7 +559,7 @@ func trackUnwatchedBacklog(s *notifications.AlertState, animes []anilist.MediaLi
 			AnimeID:   a.Media.Id,
 			AnimeName: name,
 			Text: fmt.Sprintf("%s: EP %d has been waiting for %d days (%s unwatched, %s).", name, a.Progress+1,
-				int(now.Sub(next.DownloadDate)/(24*time.Hour)), plural(len(unwatched), "episode"), gigabytes(librarySize(unwatched))),
+				int(now.Sub(next.DownloadDate)/(24*time.Hour)), plural(len(unwatched), "episode"), notifications.Gigabytes(librarySize(unwatched))),
 		})
 	}
 	for key := range s.BacklogFired {
@@ -656,18 +651,15 @@ func leftoverDigest(s *notifications.AlertState, animes []anilist.MediaList, wat
 	slices.SortFunc(ids, func(a, b int) int { return strings.Compare(groups[a].name, groups[b].name) })
 
 	var items []notifications.Episode
-	var total uint64
 	for _, id := range ids {
 		g := groups[id]
 		size := librarySize(g.records)
-		total += size
-		line := fmt.Sprintf("%s: %s watched (%s)", g.name, plural(len(g.records), "episode"), gigabytes(size))
+		line := fmt.Sprintf("%s: %s watched (%s)", g.name, plural(len(g.records), "episode"), notifications.Gigabytes(size))
 		if g.offList {
-			line = fmt.Sprintf("%s: left your lists, %s (%s)", g.name, plural(len(g.records), "episode"), gigabytes(size))
+			line = fmt.Sprintf("%s: left your lists, %s (%s)", g.name, plural(len(g.records), "episode"), notifications.Gigabytes(size))
 		}
-		items = append(items, notifications.Episode{AnimeID: id, AnimeName: g.name, Text: line})
+		items = append(items, notifications.Episode{AnimeID: id, AnimeName: g.name, Text: line, Bytes: size})
 	}
-	items[0].Title = fmt.Sprintf("%s of watched anime still on disk", gigabytes(total))
 	s.LeftoverLastDigest = now
 	return items
 }
