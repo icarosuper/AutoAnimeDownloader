@@ -19,11 +19,17 @@ const StateFileName = "notification_state"
 // AlertState is the content of notification_state. Each alert event owns its fields; the daemon
 // reads and changes them through UpdateState.
 type AlertState struct {
+	// Seeded is set by the first finished pass that sees the store. That pass records the current
+	// state of the alerts that would otherwise announce months of history at once (an anime at the
+	// episode limit since forever) WITHOUT firing them.
+	Seeded bool `json:"seeded"`
 	CheckFailing CheckFailingState `json:"check_failing"`
 	// UpdateAnnounced is the last version update_available announced: once per version.
 	UpdateAnnounced string `json:"update_announced,omitempty"`
 	// DiskLowFired holds disk_low's two levels, each edge-triggered on its own.
 	DiskLowFired DiskLowState `json:"disk_low_fired"`
+	// LimitReached is the animes (media ids) at max_episodes_per_anime at the last evaluation.
+	LimitReached []int `json:"limit_reached,omitempty"`
 }
 
 type DiskLowState struct {
@@ -88,6 +94,17 @@ func UpdateState(fn func(s *AlertState) (changed bool)) {
 	if err := writeState(statePath, state); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to save the notification state")
 	}
+}
+
+// UpdateStateIfChanged is UpdateState for an fn that touches many fields: the file is written only
+// when the state's JSON actually changed, so a pass where nothing moved costs no write.
+func UpdateStateIfChanged(fn func(s *AlertState)) {
+	UpdateState(func(s *AlertState) bool {
+		before, _ := json.Marshal(s)
+		fn(s)
+		after, _ := json.Marshal(s)
+		return string(before) != string(after)
+	})
 }
 
 func writeState(path string, s AlertState) error {

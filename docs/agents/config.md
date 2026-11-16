@@ -132,6 +132,7 @@ System; a new message preset starts with the episode events plus the system ones
 | `download_failed` | Episodes | a download failed (see `{{reason}}`) |
 | `download_completed` | Episodes | an episode was organized into the library |
 | `episode_deleted` | Episodes | episodes were removed from the library |
+| `episode_limit_reached` | Library | an anime hit `max_episodes_per_anime` (N downloaded, M waiting for you to watch); once until it drops below the limit |
 | `library_missing` | System | the library folder vanished or was replaced (unmounted drive); everything in it will be downloaded again |
 | `check_failing` | System | checks have aborted for ≥ 30 min and ≥ 2 passes in a row (setup incomplete doesn't count); once per run of failures, and again with `{{reason}}` = `recovered` on the first pass that finishes. `{{reason}}` is otherwise the pass error code |
 | `update_available` | System | a newer release is on GitHub (`check_for_updates`); once per version. `{{version}}` and `{{url}}` (the release page) are filled only here |

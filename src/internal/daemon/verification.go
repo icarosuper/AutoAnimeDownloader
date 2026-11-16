@@ -376,7 +376,7 @@ outer:
 	})
 
 	// The alerts about the pass as a whole, from what it just found (daemon/health.go).
-	alertsAfterPass(configs, problems)
+	alertsAfterPass(configs, problems, limits)
 
 	if err := fileManager.DeleteEmptyFolders(configs.CompletedAnimePath); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to delete empty folders")

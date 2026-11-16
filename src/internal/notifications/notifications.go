@@ -32,6 +32,7 @@ const (
 	CheckFailing
 	UpdateAvailable
 	DiskLow
+	EpisodeLimitReached
 )
 
 // Download-failure reasons, used as {{reason}} and in the default message.
@@ -74,6 +75,8 @@ func eventString(e Event) string {
 		return "update_available"
 	case DiskLow:
 		return "disk_low"
+	case EpisodeLimitReached:
+		return "episode_limit_reached"
 	}
 	return ""
 }
@@ -294,6 +297,11 @@ func alertTitle(event Event, items []Episode) string {
 			}
 		}
 		return "Disk almost full"
+	case EpisodeLimitReached:
+		if len(items) > 1 {
+			return fmt.Sprintf("%d animes hit the episode limit", len(items))
+		}
+		return "Episode limit reached"
 	}
 	return ""
 }

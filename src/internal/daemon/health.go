@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -261,9 +262,42 @@ var diskSpace = files.DiskSpace
 
 // alertsAfterPass evaluates the state alerts at the end of a pass that finished. Each one is
 // edge-triggered through the state store (decisions.md #127).
-func alertsAfterPass(cfg *files.Config, problems []Issue) {
+func alertsAfterPass(cfg *files.Config, problems, limits []Issue) {
 	// A statfs error skips the disk alert silently — same reasoning as checkDiskSpace.
 	if total, free, err := diskSpace(cfg.CompletedAnimePath); err == nil {
 		trackDiskLow(cfg, total, free, diskFullEpisodes(problems))
 	}
+
+	var fire []notifications.Episode
+	notifications.UpdateStateIfChanged(func(s *notifications.AlertState) {
+		// The first pass after the upgrade records, doesn't announce (AlertState.Seeded).
+		seeding := !s.Seeded
+		s.Seeded = true
+		fire = append(fire, trackEpisodeLimit(s, limits, seeding)...)
+	})
+	notifications.NotifyAll(cfg, notifications.EpisodeLimitReached, fire)
+}
+
+// trackEpisodeLimit fires for each anime whose max_episodes_per_anime limit appeared since the last
+// evaluation, and re-arms an anime once its limit is gone. Called under the state store's lock.
+func trackEpisodeLimit(s *notifications.AlertState, limits []Issue, seeding bool) []notifications.Episode {
+	var items []notifications.Episode
+	current := make([]int, 0, len(limits))
+	for _, l := range limits {
+		if l.Code != IssueMaxEpisodesPerAnime || slices.Contains(current, l.AnimeID) {
+			continue
+		}
+		current = append(current, l.AnimeID)
+		if seeding || slices.Contains(s.LimitReached, l.AnimeID) {
+			continue
+		}
+		items = append(items, notifications.Episode{
+			AnimeID:   l.AnimeID,
+			AnimeName: l.AnimeName,
+			Text:      fmt.Sprintf("%s: %s downloaded, %d more waiting for you to watch.", l.AnimeName, plural(l.Downloaded, "episode"), l.Pending),
+		})
+	}
+	slices.Sort(current)
+	s.LimitReached = current
+	return items
 }

@@ -230,3 +230,38 @@ func TestTrackDiskLow(t *testing.T) {
 		}
 	})
 }
+
+func limitIssue(id int, name string, downloaded, pending int) Issue {
+	return Issue{AnimeID: id, AnimeName: name, Code: IssueMaxEpisodesPerAnime, Downloaded: downloaded, Pending: pending}
+}
+
+// alertsAfterPass with the disk check stubbed out (always plenty of space).
+func runAlerts(t *testing.T, cfg *files.Config, problems, limits []Issue) {
+	t.Helper()
+	orig := diskSpace
+	diskSpace = func(string) (uint64, uint64, error) { return 1 << 40, 1 << 39, nil }
+	t.Cleanup(func() { diskSpace = orig })
+	alertsAfterPass(cfg, problems, limits)
+}
+
+func TestEpisodeLimitReached(t *testing.T) {
+	notifications.ResetState()
+	cfg, bodies := alertHook(t, "episode_limit_reached")
+
+	// First pass after the upgrade: an anime at the limit for months is recorded, not announced.
+	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16)})
+	noneReceived(t, bodies)
+
+	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 900)})
+	if got := received(bodies); got != "Episode limit reached|One Piece: 12 episodes downloaded, 900 more waiting for you to watch." {
+		t.Errorf("got %q", got)
+	}
+	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 899)})
+	noneReceived(t, bodies)
+
+	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16)}) // One Piece below the limit: re-armed
+	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 898)})
+	if got := received(bodies); !strings.Contains(got, "One Piece") {
+		t.Errorf("got %q", got)
+	}
+}

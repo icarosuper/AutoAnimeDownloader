@@ -3784,6 +3784,11 @@ one starts empty with a warning instead of failing the boot. `check_failing` is 
 in `AnimeVerification`, so a pass started by `POST /check` counts too, and a cancelled pass (which
 clears the error) never reads as a recovery.
 
+The first finished pass that finds the store without `seeded` **records without firing** the
+alerts whose state may be months old (an anime at the episode limit, a finished anime already in
+the library): without it, the upgrade's first pass would announce the whole library at once. Alerts
+whose age is itself the news (a backlog of 60 days) are not seeded.
+
 **Don't "fix" by:**
 - Firing on the condition and relying on the batch window: the window only groups one minute; the
   state lasts hours.
