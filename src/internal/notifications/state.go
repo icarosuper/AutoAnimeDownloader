@@ -22,7 +22,7 @@ type AlertState struct {
 	// Seeded is set by the first finished pass that sees the store. That pass records the current
 	// state of the alerts that would otherwise announce months of history at once (an anime at the
 	// episode limit since forever) WITHOUT firing them.
-	Seeded bool `json:"seeded"`
+	Seeded       bool              `json:"seeded"`
 	CheckFailing CheckFailingState `json:"check_failing"`
 	// UpdateAnnounced is the last version update_available announced: once per version.
 	UpdateAnnounced string `json:"update_announced,omitempty"`
