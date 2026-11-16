@@ -222,8 +222,9 @@ Ships on the `feat/health-notifications` branch, one commit per event.
 - Ten new webhook events about the daemon and the library, not single episodes: library folder
   gone, crash, checks failing, update available (plus the badge in the web UI and the CLI), low
   disk, episode limit reached, episode stuck, season complete, unwatched backlog and a weekly
-  digest of watched files still on disk. `download_failed` stops reporting a missing torrent and a
-  full disk (breaking for its subscribers) and reports a real failure once. Spec designed on 2026-11-15:
+  digest of watched files still on disk. **Breaking:** `download_failed` stops reporting "no
+  torrent found" and "insufficient disk space" (they moved to `episode_stuck` and `disk_low`) and
+  reports a real failure once per episode and torrent — the release notes must say so. Spec designed on 2026-11-15:
   [health-notifications](superpowers/specs/2026-11-15-health-notifications-design.md).
 
 ## No release — subtitle language filter

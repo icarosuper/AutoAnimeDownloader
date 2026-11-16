@@ -113,7 +113,7 @@ Available in `url`, `headers` values, and `body`:
 | `{{episode}}` | Episode number as string; always a single number — empty for a batch pack (its message names only the anime) |
 | `{{reason}}` | Failure reason (for `download_failed`); empty for other events |
 | `{{anime_id}}` | AniList media id; empty when unknown |
-| `{{torrent_hash}}` | Torrent infohash; empty when there is none yet (`new_episode`, a "no torrent found" failure) |
+| `{{torrent_hash}}` | Torrent infohash; empty when there is none yet (`new_episode`) |
 | `{{count}}` | Number of episodes in the window (a pack counts each of its episodes) |
 | `{{quality}}` | Always empty — not tracked at hook point |
 | `{{file_path}}` | Always empty — not tracked |
@@ -129,7 +129,7 @@ System; a new message preset starts with the episode events plus the system ones
 | Event | Group | Fires when |
 |-------|-------|------------|
 | `new_episode` | Episodes | a torrent for a new episode was found and is being added |
-| `download_failed` | Episodes | a download failed (see `{{reason}}`) |
+| `download_failed` | Episodes | a real failure: every candidate refused by the torrent client (`{{reason}}` = `torrent rejected`) or the torrent dropped for an error or stalling (`{{reason}}` = its error). Once per (episode, torrent); a different torrent failing is sent again. **Not** a missing torrent (that is `episode_stuck`) nor a full disk (`disk_low`) |
 | `download_completed` | Episodes | an episode was organized into the library |
 | `episode_deleted` | Episodes | episodes were removed from the library |
 | `episode_limit_reached` | Library | an anime hit `max_episodes_per_anime` (N downloaded, M waiting for you to watch); once until it drops below the limit |

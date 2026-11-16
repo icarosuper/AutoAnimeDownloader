@@ -36,12 +36,10 @@ const (
 	EpisodeStuck
 )
 
-// Download-failure reasons, used as {{reason}} and in the default message.
-const (
-	ReasonNotFound         = "no torrent found"
-	ReasonDownloadRejected = "torrent rejected"
-	ReasonNoDiskSpace      = "insufficient disk space"
-)
+// ReasonDownloadRejected is download_failed's {{reason}} when the torrent client refused every
+// candidate; a dropped torrent carries its error text instead. "No torrent found" and "insufficient
+// disk space" are no longer failures: they are waiting, reported by episode_stuck and disk_low.
+const ReasonDownloadRejected = "torrent rejected"
 
 // ReasonRecovered is check_failing's {{reason}} on the "back to normal" message; on the failing one
 // it is the pass error code. One event key for both: subscribing to "checks are failing" without

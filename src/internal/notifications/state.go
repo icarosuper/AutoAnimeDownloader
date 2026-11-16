@@ -32,6 +32,9 @@ type AlertState struct {
 	LimitReached []int `json:"limit_reached,omitempty"`
 	// Stuck is episode_stuck's clock per episode, keyed by StuckKey.
 	Stuck map[string]StuckClock `json:"stuck,omitempty"`
+	// FailedTorrents is the (episode, torrent) pairs download_failed already reported, as
+	// "<anime id>:<episode>:<infohash>"; pruned when the episode is organized.
+	FailedTorrents []string `json:"failed_torrents,omitempty"`
 }
 
 // StuckClock is one episode's run without success: since its first problem, the latest problem

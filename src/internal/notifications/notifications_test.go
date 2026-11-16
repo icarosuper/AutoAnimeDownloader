@@ -60,11 +60,11 @@ func TestFireWebhookInterpolatesURLAndBody(t *testing.T) {
 }
 
 func TestBuildVarsDownloadFailedReason(t *testing.T) {
-	vars := buildBatchVars(DownloadFailed, []Episode{{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound}})
-	if vars["reason"] != ReasonNotFound {
+	vars := buildBatchVars(DownloadFailed, []Episode{{AnimeName: "Frieren", Number: 5, Reason: reasonStalled}})
+	if vars["reason"] != reasonStalled {
 		t.Fatalf("reason var = %q", vars["reason"])
 	}
-	if want := "Frieren EP 5 failed: " + ReasonNotFound; vars["message"] != want {
+	if want := "Frieren EP 5 failed: " + reasonStalled; vars["message"] != want {
 		t.Fatalf("message = %q, want %q", vars["message"], want)
 	}
 }
@@ -237,7 +237,7 @@ func TestNotify_SeparateBatchPerEvent(t *testing.T) {
 	cfg := cfgWithWindow(srv.URL, 1, nil, "{{title}}")
 
 	Notify(cfg, DownloadCompleted, Episode{AnimeName: "Re:ZERO", Number: 12})
-	Notify(cfg, DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound})
+	Notify(cfg, DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: reasonStalled})
 
 	got := drain(bodies, 2, 3*time.Second)
 	if len(got) != 2 {
@@ -257,10 +257,10 @@ func TestNotify_SingleItemBatchMatchesUnbatched(t *testing.T) {
 	t.Cleanup(Flush)
 	const body = "{{title}}|{{message}}|{{anime_name}}|{{episode}}|{{reason}}"
 
-	Notify(cfgWithWindow(srv.URL, 0, nil, body), DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound})
+	Notify(cfgWithWindow(srv.URL, 0, nil, body), DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: reasonStalled})
 	unbatched := drain(bodies, 1, time.Second)
 
-	Notify(cfgWithWindow(srv.URL, 1, nil, body), DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: ReasonNotFound})
+	Notify(cfgWithWindow(srv.URL, 1, nil, body), DownloadFailed, Episode{AnimeName: "Frieren", Number: 5, Reason: reasonStalled})
 	batched := drain(bodies, 1, 3*time.Second)
 
 	if len(unbatched) != 1 || len(batched) != 1 {
@@ -436,13 +436,13 @@ func TestBatchLines_CollapsesConsecutiveEpisodes(t *testing.T) {
 			name:  "different reasons stay apart",
 			event: DownloadFailed,
 			items: []Episode{
-				{AnimeID: 1, AnimeName: "Frieren", Number: 1, Reason: ReasonNotFound},
-				{AnimeID: 1, AnimeName: "Frieren", Number: 2, Reason: ReasonNoDiskSpace},
-				{AnimeID: 1, AnimeName: "Frieren", Number: 3, Reason: ReasonNoDiskSpace},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 1, Reason: reasonStalled},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 2, Reason: ReasonDownloadRejected},
+				{AnimeID: 1, AnimeName: "Frieren", Number: 3, Reason: ReasonDownloadRejected},
 			},
 			want: []string{
-				"Frieren EP 1 failed: " + ReasonNotFound,
-				"Frieren EPs 2-3 failed: " + ReasonNoDiskSpace,
+				"Frieren EP 1 failed: " + reasonStalled,
+				"Frieren EPs 2-3 failed: " + ReasonDownloadRejected,
 			},
 		},
 		{
@@ -666,3 +666,7 @@ func TestFireBatch_SourceFilterLetsSystemEventsThrough(t *testing.T) {
 		t.Errorf("a filtered webhook must get the system event, got %v", got)
 	}
 }
+
+// reasonStalled is the text HandleTorrentFailure passes for a stalled torrent — any free-text
+// reason goes through the templates the same way.
+const reasonStalled = "stalled: no peers for 1h0m"

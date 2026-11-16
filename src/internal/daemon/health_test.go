@@ -1,8 +1,12 @@
 package daemon
 
 import (
+	"AutoAnimeDownloader/src/internal/anilist"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/notifications"
+	"AutoAnimeDownloader/src/internal/nyaa"
+	"AutoAnimeDownloader/src/internal/torrents"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -372,5 +376,57 @@ func TestHandleTorrentFailure_StartsTheStuckClockOfEveryRecord(t *testing.T) {
 			t.Errorf("clocks = %+v", s.Stuck)
 		}
 		return false
+	})
+}
+
+// download_failed reports a real failure once per (episode, torrent): the same magnet refused on
+// every pass, or a dead torrent dropped every hour, is one push. A different torrent for the same
+// episode is news; organizing the episode forgets the pairs (decisions.md #128).
+func TestDownloadFailed_OncePerEpisodeAndTorrent(t *testing.T) {
+	const hashA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	const hashB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+	t.Run("dropped torrent", func(t *testing.T) {
+		notifications.ResetState()
+		cfg, bodies := alertHook(t, "download_failed")
+		saved := []files.EpisodeStruct{{AnimeID: 1, AnimeName: "Frieren", EpisodeNumber: 5, EpisodeHash: hashA}}
+		fm := &orchestrationFM{configs: cfg, saved: saved}
+
+		HandleTorrentFailure(hashA, errors.New("stalled: no peers for 1h0m"), nil, fm)
+		if got := received(bodies); got != "Download failed|Frieren EP 5 failed: stalled: no peers for 1h0m" {
+			t.Errorf("got %q", got)
+		}
+		HandleTorrentFailure(hashA, errors.New("stalled: no peers for 1h2m"), nil, fm)
+		noneReceived(t, bodies)
+
+		fm.saved[0].EpisodeHash = hashB
+		HandleTorrentFailure(hashB, errors.New("boom"), nil, fm)
+		if got := received(bodies); !strings.Contains(got, "boom") {
+			t.Errorf("a different torrent must fire, got %q", got)
+		}
+
+		clearStuck(fm.saved) // organized
+		fm.saved[0].EpisodeHash = hashA
+		HandleTorrentFailure(hashA, errors.New("stalled again"), nil, fm)
+		if got := received(bodies); !strings.Contains(got, "stalled again") {
+			t.Errorf("organize must forget the pairs, got %q", got)
+		}
+	})
+
+	t.Run("rejected add", func(t *testing.T) {
+		notifications.ResetState()
+		cfg, bodies := alertHook(t, "download_failed")
+		cfg.MaxEpisodesPerAnime, cfg.EpisodeRetryLimit = 12, 1
+		anime := animeWithEpisodes(1, anilist.MediaStatusReleasing, false, "")
+		searcher := searcherFor(nil, nil, []nyaa.TorrentResult{{MagnetLink: fakeMagnet(1)}}, nil)
+		backend := torrents.NewFakeBackend()
+		backend.AddErr = errors.New("refused")
+
+		processAnimeEpisodes(cfg, backend, anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher, nil)
+		if got := received(bodies); !strings.HasPrefix(got, "Download failed|") {
+			t.Errorf("got %q", got)
+		}
+		processAnimeEpisodes(cfg, backend, anime, nil, nil, nil, map[files.EpisodeKey]bool{}, searcher, nil)
+		noneReceived(t, bodies)
 	})
 }

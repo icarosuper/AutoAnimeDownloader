@@ -1035,7 +1035,7 @@ func TestRemoveTorrentWithEpisodes_LoadErrorAbortsWithoutRemoving(t *testing.T) 
 // the episode must not fire "new episode detected, starting download" — that push used to go
 // out on every loop pass (every 10 min) for an episode that never started downloading, and
 // also made attemptDownloadWithRetries log "failed after all attempts" with zero attempts.
-// Only the failure webhook (reason: no torrent found) should fire.
+// Neither webhook fires: not found is waiting, reported by episode_stuck once it lasts.
 func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 	events := make(chan string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -1097,8 +1097,13 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 		case <-time.After(300 * time.Millisecond):
 		}
 	}
-	if len(got) != 1 || got[0] != "Download failed" {
-		t.Errorf("expected only the failure webhook, got %v", got)
+	// Neither: "starting download" would be a lie, and not found is waiting, not failure — it reaches
+	// the report (and episode_stuck after two days), not download_failed (decisions.md #128).
+	if len(got) != 0 {
+		t.Errorf("expected no webhook, got %v", got)
+	}
+	if len(result.issues) == 0 || result.issues[0].Code != IssueNoTorrentFound {
+		t.Errorf("issues = %+v, want no_torrent_found", result.issues)
 	}
 }
 

@@ -285,8 +285,10 @@ func processAnimeEpisodes(
 			if awaitingEarlier {
 				issue.Code = IssueAwaitingEarlierEpisode
 			}
+			// No download_failed: not found is WAITING, not failure — a weekly episode is routinely
+			// missing for the first hours after it airs. The issue feeds episode_stuck, which says it
+			// once it has lasted two days (decisions.md #128).
 			result.issues = append(result.issues, issue)
-			notifications.Notify(configs, notifications.DownloadFailed, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode, Reason: notifications.ReasonNotFound})
 			continue
 		}
 
@@ -322,7 +324,6 @@ func processAnimeEpisodes(
 			// the reconciliation pass as a safety net) enqueue JobOrganize, which hardlinks
 			// the finished files into the library and fires the completion webhook.
 		} else {
-			reason := notifications.ReasonDownloadRejected
 			issue := Issue{
 				AnimeID:    anime.Media.Id,
 				AnimeName:  animeTitle,
@@ -332,8 +333,8 @@ func processAnimeEpisodes(
 			}
 			// The best candidate's size counts: the disk can have headroom against the GiB floor and still
 			// not fit the pack this episode wanted.
-			if errors.Is(disk.check(configs, candidates[0].Size), ErrInsufficientDiskSpace) {
-				reason = notifications.ReasonNoDiskSpace
+			diskFull := errors.Is(disk.check(configs, candidates[0].Size), ErrInsufficientDiskSpace)
+			if diskFull {
 				issue.Code = IssueDiskFull
 				// A full disk isn't about the candidates: either none was tried (attemptDownloadWithRetries
 				// returns before the first Add), or they were skipped for not fitting — in both cases "N
@@ -341,18 +342,31 @@ func processAnimeEpisodes(
 				issue.Candidates = 0
 			}
 			result.issues = append(result.issues, issue)
-			// The notification batch (BatchWindowSeconds) merges the pass's N episodes into a single
-			// message, so a full disk doesn't become a flood.
+			// A full disk is a state of the volume, not a failure of this episode: disk_low's
+			// "blocked" level says it once for every episode (decisions.md #128).
+			if diskFull {
+				continue
+			}
 			if _, seen := failed[torrentKey]; !seen {
 				failedOrder = append(failedOrder, torrentKey)
 			}
 			// The last attempt's reason wins: it is the state the pass ended in.
-			failed[torrentKey] = torrentItem(torrentKey, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode, Reason: reason})
+			failed[torrentKey] = torrentItem(torrentKey, notifications.Episode{AnimeID: anime.Media.Id, AnimeName: animeTitle, Number: ep.Episode, Reason: notifications.ReasonDownloadRejected})
 		}
 	}
 	for _, key := range failedOrder {
-		if !added[key] {
-			notifications.Notify(configs, notifications.DownloadFailed, failed[key])
+		if added[key] {
+			continue
+		}
+		// The same magnet is tried again every pass with no backoff: once per (episode, torrent).
+		it := failed[key]
+		hash, _ := torrents.InfoHash(key)
+		if hash == "" {
+			hash = key
+		}
+		if firstFailure(it.AnimeID, it.Number, hash) {
+			it.TorrentHash = hash
+			notifications.Notify(configs, notifications.DownloadFailed, it)
 		}
 	}
 
@@ -419,8 +433,8 @@ func mediaTotalEpisodes(anime anilist.MediaList) int {
 // assignBatches gives each episode the magnet of ITS pack and returns only the covered episodes.
 //
 // The truncation is required: without it, the episodes outside the coverage would fall into loose
-// episodes and on One Piece the fallback would find nothing, firing DownloadFailed/ReasonNotFound
-// for ~1000 episodes per pass. The list comes from the schedule in ascending order and the chosen
+// episodes and on One Piece the fallback would search ~1000 episodes per pass and report them all
+// as not found. The list comes from the schedule in ascending order and the chosen
 // packs are contiguous from the first pending one, so the cut is always a prefix.
 //
 // overrideName carries the range when it's known: two packs of the same anime in the same cycle

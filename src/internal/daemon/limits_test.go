@@ -453,7 +453,10 @@ func TestAttemptDownloadWithRetries_DiskFullDoesNotCallAdd(t *testing.T) {
 	}
 }
 
-func TestProcessAnimeEpisodes_DiskFullNotifiesNoDiskSpaceReason(t *testing.T) {
+// A full disk is not a download failure any more: it is disk_low's "blocked" level, said once for
+// every episode instead of once per episode per pass (decisions.md #128). The issue still reaches the
+// report, which is what feeds that level.
+func TestProcessAnimeEpisodes_DiskFullDoesNotNotifyDownloadFailed(t *testing.T) {
 	bodies := make(chan string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -474,14 +477,14 @@ func TestProcessAnimeEpisodes_DiskFullNotifiesNoDiskSpaceReason(t *testing.T) {
 	if len(result.newEpisodes) != 0 {
 		t.Errorf("nothing must be recorded with a full disk, got %d", len(result.newEpisodes))
 	}
+	if len(result.issues) != 1 || result.issues[0].Code != IssueDiskFull {
+		t.Errorf("issues = %+v, want one disk_full", result.issues)
+	}
 
 	select {
 	case body := <-bodies:
-		if !strings.Contains(body, notifications.ReasonNoDiskSpace) {
-			t.Errorf("want reason %q in the webhook, got %q", notifications.ReasonNoDiskSpace, body)
-		}
-	case <-time.After(500 * time.Millisecond):
-		t.Error("no failure webhook received")
+		t.Errorf("a full disk must not fire download_failed, got %q", body)
+	case <-time.After(300 * time.Millisecond):
 	}
 }
 
@@ -833,6 +836,7 @@ func TestWillBatch_PackFailureWaitsForTheLoop(t *testing.T) {
 		{name: "every episode fails", fails: 1000, want: 1},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			notifications.ResetState() // download_failed dedups by (episode, torrent) across tests
 			spy := newWebhookSpy(t)
 			configs := limitsConfig()
 			configs.Notifications = files.NotificationsConfig{Webhooks: []files.WebhookPreset{{

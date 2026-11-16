@@ -139,7 +139,12 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 		failed.Reason = cause.Error()
 	}
 
-	if configs, err := fileManager.LoadConfigs(); err != nil {
+	// Once per (episode, torrent): a dead torrent is re-picked and drops again about every hour, and
+	// the key is the hash, never the reason — "stalled: no peers for 1h0m" changes text every drop.
+	// A different torrent failing for the same episode is news and goes out (decisions.md #128).
+	if !firstFailure(failed.AnimeID, failed.Number, hash) {
+		logger.Logger.Debug().Str("hash", hash).Msg("Torrent failure: already notified for this episode and torrent")
+	} else if configs, err := fileManager.LoadConfigs(); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load configs, skipping webhook")
 	} else {
 		notifications.Notify(configs, notifications.DownloadFailed, failed)

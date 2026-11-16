@@ -111,7 +111,7 @@ func TestAssignBatches_EachEpisodeGetsItsOwnPack(t *testing.T) {
 }
 
 // Partial coverage: the episodes outside do NOT fall into loose episodes (on One Piece that would
-// fire ~1000 ReasonNotFound notifications per pass). The cut is a prefix.
+// search and report ~1000 episodes as not found per pass). The cut is a prefix.
 func TestAssignBatches_TruncatesUncoveredEpisodes(t *testing.T) {
 	anime := animeWithEpisodes(500, anilist.MediaStatusReleasing, false, "")
 	episodes := anilist.EpisodeList(anime, 1)

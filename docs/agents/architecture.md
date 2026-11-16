@@ -637,8 +637,11 @@ a library-path swap.
 the requests have finished — it is called on shutdown, where a goroutine would be the same as not
 sending.
 
-`NewEpisode` only fires when there is **at least one magnet to try**; an episode with no search
-result goes straight to `DownloadFailed`/`ReasonNotFound`.
+`NewEpisode` only fires when there is **at least one magnet to try**. An episode with no search
+result fires **nothing** — not found is waiting, reported by `episode_stuck` after 48 h — and neither
+does an add refused for a full disk (`disk_low`'s `blocked` level). `DownloadFailed` is a real
+failure only (add refused, torrent dropped), once per (episode, infohash) via `firstFailure`
+([decisions.md #128](decisions.md#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)).
 
 **One torrent is one notification.** A pack's records reach the template as ONE `Episode` with
 `PackSize` = its record count (`daemon.episodeItems`, `torrentItem` in `processAnimeEpisodes`), so

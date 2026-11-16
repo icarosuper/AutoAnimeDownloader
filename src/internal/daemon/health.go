@@ -407,7 +407,8 @@ func recordTorrentDrop(records []files.EpisodeStruct, now time.Time) {
 	})
 }
 
-// clearStuck stops the clocks of episodes that made it into the library.
+// clearStuck stops the clocks of episodes that made it into the library, and forgets the torrents
+// download_failed reported for them.
 func clearStuck(records []files.EpisodeStruct) {
 	notifications.UpdateState(func(s *notifications.AlertState) bool {
 		changed := false
@@ -417,9 +418,29 @@ func clearStuck(records []files.EpisodeStruct) {
 				delete(s.Stuck, key)
 				changed = true
 			}
+			before := len(s.FailedTorrents)
+			s.FailedTorrents = slices.DeleteFunc(s.FailedTorrents, func(f string) bool { return strings.HasPrefix(f, key+":") })
+			changed = changed || len(s.FailedTorrents) != before
 		}
 		return changed
 	})
+}
+
+// firstFailure records that download_failed is about to report this (episode, torrent) and says
+// whether it is the first time. A different torrent failing for the same episode is new
+// information; the same one failing again is not (decisions.md #128).
+func firstFailure(animeID, episode int, hash string) bool {
+	key := notifications.StuckKey(animeID, episode) + ":" + strings.ToLower(hash)
+	first := false
+	notifications.UpdateState(func(s *notifications.AlertState) bool {
+		if slices.Contains(s.FailedTorrents, key) {
+			return false
+		}
+		s.FailedTorrents = append(s.FailedTorrents, key)
+		first = true
+		return true
+	})
+	return first
 }
 
 // stuckSentence is the reason in plain English, from the clock's latest code.

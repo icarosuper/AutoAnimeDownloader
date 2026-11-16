@@ -134,6 +134,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#125** — The dashboard user filter re-projects progress onto the selected accounts, not just their membership](#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)
 - [**#126** — A webhook's anime filter is resolved when it fires, from the lists the last pass fetched, not stored on the episode record](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)
 - [**#127** — A state alert fires on the edge and remembers it in notification_state, not every pass the state holds](#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)
+- [**#128** — download_failed reports a real failure once per episode and torrent; not found and a full disk are waiting, not failures](#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)
 
 ---
 
@@ -984,7 +985,7 @@ What decides pack eligibility today is **no longer** a count cap on the anime's 
 
 **(c) `Size == 0` passes the size filter.** That is `nyaa.parseSize`'s value when Nyaa changes the column format. Discarding unknown size would swap "sometimes downloads a large torrent" for "downloads nothing": a parsing bug would become a silent stall. The filter runs **after** priority sort and preserves order, so the pick is the best **among those that fit**.
 
-**(d) The disk guard bars `Add`, not the pass.** Watched pruning, `deleteEpisodesByStatus` and `organize` are exactly what **frees** space; an `if disk full { return }` at the start of the pass would leave the app stuck in the state where it cannot unclog itself. A `statfs` error does not block — a volume that does not answer (network, permission) is not proof of a full disk. When it bars, it tries no magnet and does not retry (the magnet is not the problem) and notifies `ReasonNoDiskSpace`, which the notification batch groups.
+**(d) The disk guard bars `Add`, not the pass.** Watched pruning, `deleteEpisodesByStatus` and `organize` are exactly what **frees** space; an `if disk full { return }` at the start of the pass would leave the app stuck in the state where it cannot unclog itself. A `statfs` error does not block — a volume that does not answer (network, permission) is not proof of a full disk. When it bars, it tries no magnet and does not retry (the magnet is not the problem) and, since [#128](#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures), does not notify per episode: the pass's `disk_full` issues feed `disk_low`'s `blocked` level, said once for the whole disk.
 
 **(e) The disk threshold lives on the server.** `GET /status` returns `disk_low`, which is the add-gate for a torrent of size 0: `free - reserved` against `min_free_disk_gb` ([#93](#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)). One place decides what "low" is, and the screen warning cannot disagree with what the daemon is doing.
 
@@ -1022,7 +1023,7 @@ Today who decides is `partitionSearchResults` (splits packs from loose episodes 
 
 **What it looks like:** `pickBatches(packs, firstPending, windowEnd)` walks a cursor from the first pending episode, and `assignBatches` stops assigning a magnet at the first episode in the list that no chosen pack covers — instead of giving everyone the magnet of the first pack found, or trying a loose episode for the rest.
 
-**Why it's right:** without the window anchored on the first pending, `batchResult[0]` would go to every pending episode and episode 800 of a long series would receive the magnet of pack 1-100 — wrong data, not "no magnet". Without the prefix truncation in `assignBatches`, episodes outside coverage would fall into the loose-episode fallback (`magnetsByEpisode`), which on One Piece would fire `DownloadFailed`/`ReasonNotFound` for ~1000 episodes **per pass** — none of them will show up loose on Nyaa, so it is pure error notification, with no chance of success. The cut is always a **prefix** (never "a hole in the middle") because the schedule (`anilist.EpisodeList`) comes in increasing order and the packs `pickBatches` chooses are contiguous from the cursor — there is no way a later pack covers an earlier episode without `packSet.covering` already having picked it first.
+**Why it's right:** without the window anchored on the first pending, `batchResult[0]` would go to every pending episode and episode 800 of a long series would receive the magnet of pack 1-100 — wrong data, not "no magnet". Without the prefix truncation in `assignBatches`, episodes outside coverage would fall into the loose-episode fallback (`magnetsByEpisode`), which on One Piece would search and report ~1000 episodes as not found **per pass** — none of them will show up loose on Nyaa, so it is pure noise, with no chance of success. The cut is always a **prefix** (never "a hole in the middle") because the schedule (`anilist.EpisodeList`) comes in increasing order and the packs `pickBatches` chooses are contiguous from the cursor — there is no way a later pack covers an earlier episode without `packSet.covering` already having picked it first.
 
 **Don't "fix" by:**
 - Applying the magnet of the first pack found to every pending episode "because it's an episode either way" — an episode outside the pack's range simply is not in the `.torrent`.
@@ -3796,3 +3797,39 @@ whose age is itself the news (a backlog of 60 days) are not seeded.
   and an outage that spans a restart never sends "back to normal".
 - Moving the thresholds to `config.json` preemptively: they are `ponytail:` constants until
   someone asks for a different number.
+
+### 128. download_failed reports a real failure once per episode and torrent; not found and a full disk are waiting, not failures
+
+**Location:** `internal/daemon/episodes.go` — `processAnimeEpisodes` (the `len(candidates) == 0`
+branch sends nothing; a disk-full refusal skips the `failed` map); `internal/daemon/helpers.go` —
+`HandleTorrentFailure`; `internal/daemon/health.go` — `firstFailure`, `clearStuck`. Pinned by
+`TestDownloadFailed_OncePerEpisodeAndTorrent`, `TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook`,
+`TestProcessAnimeEpisodes_DiskFullDoesNotNotifyDownloadFailed`.
+
+**What it looks like:** a search that found nothing, or an add refused for lack of space, sends no
+`download_failed`; a torrent that keeps failing is reported only the first time.
+
+**Why it's right:** before this, `download_failed` went out on every pass for all of it, and almost
+none of it was actionable at that moment. "No torrent found" fired every `check_interval` per
+episode — also on passes the miss backoff skipped, and for awaiting-earlier episodes that were never
+searched — while a weekly episode is routinely missing for the first hours after it airs. A full disk
+is a state of the volume: the fix is the same for every episode, and it repeated every pass while
+the disk stayed full. Firing only once instead would have been wrong the other way: the user would
+see one "failed" and then silence, even after the episode downloaded. So failure is separated from
+waiting:
+
+- not found → `episode_stuck`, once it lasts 48 h (per-episode clock);
+- disk full → `disk_low`'s `blocked` level, once until space is freed;
+- add refused / torrent dropped → `download_failed` once per (episode, infohash), persisted in
+  `notification_state` (`failed_torrents`, [#127](#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)) and pruned when the episode is
+  organized. The key is the hash, never the reason text: `stalled: no peers for 1h0m` changes on
+  every drop. A **different** torrent failing for the same episode is new information and fires.
+
+**Breaking for subscribers:** whoever subscribed `download_failed` stops receiving "no torrent
+found" and "insufficient disk space" (the reason constants are gone). The release notes must say so.
+
+**Don't "fix" by:**
+- Bringing back the not-found push "because the user wants to know": `episode_stuck` tells them once
+  it matters, and the report screen shows it immediately.
+- Keying the dedup on the reason text: every stall has a new duration in it, so nothing would dedup.
+- Deduping per episode only: a new torrent failing after a dead one was replaced is news.
