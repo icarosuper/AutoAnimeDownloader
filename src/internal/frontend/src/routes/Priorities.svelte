@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import {
     getConfig,
     updateConfig,
@@ -13,6 +13,7 @@
   import { PRESETS, applyPreset } from "../lib/domain/priorityPresets.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
+  import { setUnsaved, snapshot } from "../lib/stores/unsavedChanges.js";
 
   // scope: source applies to movies and FINISHED series; audio stays movies-only.
   const LISTS: { key: keyof Priorities; label: () => string; scope?: () => string }[] = [
@@ -53,6 +54,11 @@
   let loading = true;
   let saving = false;
   let newItem: Record<string, string> = {};
+  // What was loaded (or last saved): dirty means "differs from it", so undoing a change clears it.
+  let baseline = "";
+
+  $: setUnsaved("priorities", !!config && snapshot(config) !== baseline);
+  onDestroy(() => setUnsaved("priorities", false));
 
   async function load() {
     try {
@@ -60,6 +66,7 @@
       const [c, d] = await Promise.all([getConfig(), getPriorityDefaults()]);
       config = c;
       defaults = d;
+      baseline = snapshot(c);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.priorities_toast_load_error());
     } finally {
@@ -140,6 +147,7 @@
     try {
       saving = true;
       await updateConfig(config);
+      baseline = snapshot(config);
       toast.success(m.priorities_toast_saved());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.priorities_toast_save_error());

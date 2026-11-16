@@ -700,6 +700,10 @@ only) before logging or returning it — a raw `*url.Error` prints the full URL 
 the Test toast. The CLI's `config set` doesn't echo a value under `notifications`/`notifications.webhooks`.
 `config get` and `notifications preview` do print them: showing them is what those commands are for.
 
+**A webhook's name is its identity** — `FireTestWebhook` fires the *first* webhook with that name.
+Only the web form (`Notifications.svelte`, `nameTaken`) refuses a name that is already taken; the
+backend does not validate it, so `config set` can still save two webhooks with the same name.
+
 Notifications are grouped by window, and JSON escaping happens **only in the body and only when the
 preset declares `Content-Type: application/json`** (decisions.md #47).
 Header values have `\n`/`\r` stripped: `net/http` rejects the whole request with them, and ntfy
@@ -776,7 +780,10 @@ single source of truth and switches themes through its own `[data-theme]`.
 `App.svelte` or svelte-spa-router would let `/status/:id` swallow the picker), `Downloads.svelte`
 (`#/downloads`), `AnimeDetail.svelte` (`#/status/:id`), `Config.svelte` (`#/config`),
 `Priorities.svelte` (`#/priorities`), `Logs.svelte` (`#/logs`), `Notifications.svelte`
-(`#/notifications`), `Report.svelte` (`#/report`). The picker cache (`stores/pickerCache.ts`) is
+(`#/notifications`), `Report.svelte` (`#/report`). Config, Priorities and Notifications
+ask before leaving with unsaved changes (`stores/unsavedChanges.ts`, installed in `App.svelte`
+before `<Router>`); a new page with a Save button joins by calling `setUnsaved` against a
+`snapshot` baseline ([decisions.md #129](decisions.md#129-unsaved-changes-means-different-from-what-was-loaded-and-a-capture-phase-hashchange-listener-vetoes-the-router)). The picker cache (`stores/pickerCache.ts`) is
 **in-memory**: Add fills it before navigating so the first paint is free; a reload of the picker
 URL fetches; confirm clears it. Add's first search (`getTorrentCandidates` with no `q`) decides
 the route: empty `items` POSTs today's add and stays (same toasts, no picker); a non-empty list

@@ -7,7 +7,7 @@
   // The new layout is the 196px side index with ONE group visible at a time. The list fields
   // (anilist_usernames, mal_usernames, excluded_lists) swapped the "input + button +" pair for
   // artboard 1e's ChipsInput.
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { ArrowUpRight, Check } from "@lucide/svelte";
   import {
     getConfig,
@@ -23,6 +23,7 @@
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
+  import { setUnsaved, snapshot } from "../lib/stores/unsavedChanges.js";
   import {
     ONBOARDING_STEP_IDS,
     onboardingDismissed,
@@ -195,6 +196,12 @@
   let loading = true;
   let saving = false;
   let showMissingConfigBanner = false;
+  // Snapshot of what was loaded (or last saved); "" = nothing loaded, never dirty. Taken AFTER the
+  // load's normalization below, or the legacy anilist_username fill-in would read as an edit.
+  let baseline = "";
+
+  $: setUnsaved("config", baseline !== "" && snapshot(config) !== baseline);
+  onDestroy(() => setUnsaved("config", false));
 
   /**
    * The app is a hash SPA, so the query can be in `?a=b#/config` (rare) or after the `?` INSIDE the
@@ -247,6 +254,7 @@
       }
       if (!config.notifications) config.notifications = { webhooks: [], batch_window_seconds: 0 };
       if (!Array.isArray(config.notifications.webhooks)) config.notifications.webhooks = [];
+      baseline = snapshot(config);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.config_error_load());
     } finally {
@@ -343,6 +351,7 @@
       }
 
       await updateConfig(config);
+      baseline = snapshot(config);
       toast.success(m.config_saved());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.config_error_save());

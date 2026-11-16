@@ -327,6 +327,9 @@
   "notifications_group_library": "Library",
   "notifications_group_system": "System",
   "notifications_btn_edit": "Edit",
+  "notifications_btn_duplicate": "Duplicate",
+  "notifications_copy_name": "{name} (copy)",
+  "notifications_err_name_taken": "A webhook named \"{name}\" already exists",
   "notifications_section_batch": "Batching",
   "notifications_label_batch_window": "Batch window (seconds)",
   "notifications_hint_batch_window": "Groups the events of the same window into a single webhook. Use 0 to disable and send one per event. Useful with rate-limited services (e.g. ntfy.sh) — a library backfill can fire dozens of notifications at once.",
@@ -766,5 +769,6 @@
   "priorities_preset_space_label": "I prefer smaller files",
   "priorities_preset_space_desc": "AV1/HEVC first. Up to half the size at the same quality, but needs a player that decodes them — in the browser it becomes a transcode.",
   "downloads_toast_action_error": "Action failed",
-  "update_badge_available": "v{version} available"
+  "update_badge_available": "v{version} available",
+  "unsaved_changes_confirm": "You have unsaved changes. Leave this page and discard them?"
 }

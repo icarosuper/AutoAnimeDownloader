@@ -11,6 +11,13 @@
   import AddAnime from "./routes/AddAnime.svelte";
   import TorrentPicker from "./routes/TorrentPicker.svelte";
   import Report from "./routes/Report.svelte";
+  import { onDestroy } from "svelte";
+  import { installUnsavedGuard } from "./lib/stores/unsavedChanges.js";
+  import * as m from "./lib/i18n/messages.js";
+
+  // Installed here, before <Router> mounts, so its hashchange listener runs ahead of the router's
+  // (decisions.md #129).
+  onDestroy(installUnsavedGuard(() => window.confirm(m.unsaved_changes_confirm())));
 
   // Longer paths first: svelte-spa-router walks insertion order, so `/status/:id` would
   // swallow `/status/:id/torrents` if it were registered first.

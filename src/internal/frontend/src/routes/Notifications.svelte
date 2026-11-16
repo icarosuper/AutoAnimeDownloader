@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import Checkbox from "../components/ui/Checkbox.svelte";
   import {
     getConfig,
@@ -15,6 +15,7 @@
   import { toast } from "../lib/stores/toast.js";
   import * as m from "../lib/i18n/messages.js";
   import { locale } from "../lib/stores/locale.js";
+  import { setUnsaved, snapshot } from "../lib/stores/unsavedChanges.js";
   import { sourceOptions, toggleSource, type SourceOption } from "../lib/domain/webhookSources.js";
   import { accountLabel } from "../lib/utils/status.js";
   import { EVENT_GROUPS, MESSAGE_PRESET_EVENTS, eventLabel, groupLabel } from "../lib/domain/notificationEvents.js";
@@ -40,6 +41,7 @@
     labelBody: m.notifications_label_body(),
     presetLabel: m.notifications_preset_label(),
     btnEdit: m.notifications_btn_edit(),
+    btnDuplicate: m.notifications_btn_duplicate(),
     sectionBatch: m.notifications_section_batch(),
     labelBatchWindow: m.notifications_label_batch_window(),
     hintBatchWindow: m.notifications_hint_batch_window(),
@@ -120,11 +122,30 @@
   const fromRows = (rows: { key: string; value: string }[]) =>
     Object.fromEntries(rows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value]));
 
+  // Unsaved = the list differs from what was loaded/saved, OR the open form differs from what it
+  // opened with (its edits are lost on leaving too). Compared by value, so undoing an edit — or
+  // opening the form and touching nothing — is not dirty. The form is compared through `fromRows`,
+  // the same shape Confirm would produce: a blank header row is not a change.
+  let baseline = "";
+  let formBaseline = "";
+  const formSnapshot = (hook: WebhookPreset, rows: { key: string; value: string }[]) =>
+    snapshot({ ...hook, headers: fromRows(rows) });
+
+  $: listDirty = baseline !== "" && snapshot(notifications) !== baseline;
+  $: formDirty = showWebhookForm && formSnapshot(newWebhook, headerRows) !== formBaseline;
+  $: setUnsaved("notifications", listDirty || formDirty);
+  onDestroy(() => setUnsaved("notifications", false));
+
   function resetForm() {
     newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...MESSAGE_PRESET_EVENTS] };
     headerRows = [{ key: '', value: '' }];
     editingIndex = null;
     showWebhookForm = false;
+  }
+
+  function openNewForm() {
+    showWebhookForm = true;
+    formBaseline = formSnapshot(newWebhook, headerRows);
   }
 
   function applyPreset(key: string) {
@@ -133,15 +154,33 @@
     headerRows = toRows(WEBHOOK_PRESETS[key].headers);
   }
 
-  function editWebhook(index: number) {
-    newWebhook = { ...notifications.webhooks[index], headers: { ...notifications.webhooks[index].headers }, events: [...(notifications.webhooks[index].events ?? [])], anime_sources: [...(notifications.webhooks[index].anime_sources ?? [])] };
-    headerRows = toRows(notifications.webhooks[index].headers);
-    editingIndex = index;
+  // Deep copy into the form: editing the form must not touch the listed webhook until Confirm.
+  function openForm(source: WebhookPreset) {
+    newWebhook = { ...source, headers: { ...source.headers }, events: [...(source.events ?? [])], anime_sources: [...(source.anime_sources ?? [])] };
+    headerRows = toRows(source.headers);
     showWebhookForm = true;
+    formBaseline = formSnapshot(newWebhook, headerRows);
   }
 
+  function editWebhook(index: number) {
+    openForm(notifications.webhooks[index]);
+    editingIndex = index;
+  }
+
+  // Opens the form as a NEW webhook with the source's settings; nothing joins the list until
+  // Confirm, so Cancel leaves no stray copy behind.
+  function duplicateWebhook(index: number) {
+    const source = notifications.webhooks[index];
+    openForm({ ...source, name: m.notifications_copy_name({ name: source.name }) });
+    editingIndex = null;
+  }
+
+  // The name is the webhook's identity: the test endpoint fires the first webhook with that
+  // name, so two with the same name would make Test hit the wrong one.
+  $: nameTaken = notifications.webhooks.some((h, i) => i !== editingIndex && h.name.trim() === newWebhook.name.trim());
+
   function confirmWebhook() {
-    if (!newWebhook.name || !newWebhook.url) return;
+    if (!newWebhook.name || !newWebhook.url || nameTaken) return;
     const webhook = { ...newWebhook, headers: fromRows(headerRows) };
     if (editingIndex !== null) {
       notifications.webhooks = notifications.webhooks.map((h, i) => i === editingIndex ? webhook : h);
@@ -187,6 +226,7 @@
       fullConfig = await getConfig();
       notifications = fullConfig.notifications ?? { webhooks: [], batch_window_seconds: 0 };
       savedWebhookNames = new Set(notifications.webhooks.map(h => h.name));
+      baseline = snapshot(notifications);
     } finally {
       loading = false;
     }
@@ -200,6 +240,7 @@
       fullConfig = await getConfig();
       notifications = fullConfig.notifications ?? { webhooks: [], batch_window_seconds: 0 };
       savedWebhookNames = new Set(notifications.webhooks.map(h => h.name));
+      baseline = snapshot(notifications);
       toast.success(m.notifications_toast_saved());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : m.notifications_toast_save_err());
@@ -267,6 +308,13 @@
                     </button>
                     <button
                       type="button"
+                      on:click={() => duplicateWebhook(i)}
+                      class="inline-flex items-center px-2 py-1 rounded text-xs border border-default text-body hover:bg-control transition-colors"
+                    >
+                      {T && T.btnDuplicate}
+                    </button>
+                    <button
+                      type="button"
                       on:click={() => removeWebhook(i)}
                       class="inline-flex items-center px-2 py-1 rounded text-xs border border-danger-tint/28 text-danger hover:bg-danger-tint/12 transition-colors"
                     >
@@ -281,7 +329,7 @@
           {#if !showWebhookForm}
             <button
               type="button"
-              on:click={() => { showWebhookForm = true; }}
+              on:click={openNewForm}
               class="inline-flex items-center gap-1 px-3 py-2 rounded-md border border-dashed border-default text-body hover:bg-control text-sm transition-colors w-fit"
             >
               + {T && T.btnAdd}
@@ -311,8 +359,13 @@
                     type="text"
                     bind:value={newWebhook.name}
                     placeholder="e.g. ntfy"
+                    aria-invalid={nameTaken}
+                    aria-describedby={nameTaken ? 'webhook-name-error' : undefined}
                     class="block rounded-md border-default bg-control text-heading shadow-sm focus:border-accent text-sm px-3 py-2"
                   />
+                  {#if nameTaken}
+                    <p id="webhook-name-error" class="text-xs text-danger">{$locale && m.notifications_err_name_taken({ name: newWebhook.name.trim() })}</p>
+                  {/if}
                 </div>
                 <div class="flex flex-col gap-1">
                   <label for="webhook-method" class="text-xs font-medium text-heading">{T && T.labelMethod}</label>
@@ -437,7 +490,7 @@
                 <button
                   type="button"
                   on:click={confirmWebhook}
-                  disabled={!newWebhook.name || !newWebhook.url}
+                  disabled={!newWebhook.name || !newWebhook.url || nameTaken}
                   class="inline-flex items-center px-3 py-2 rounded-md bg-accent text-on-accent hover:opacity-90 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {T && T.btnConfirm}

@@ -92,3 +92,22 @@ describe('Priorities', () => {
     expect(updateConfig.mock.calls[0][0].priorities.codecs).toEqual(['h.264', 'hevc', 'av1', 'xvid'])
   })
 })
+
+describe('Priorities — unsaved changes', () => {
+  // Dirty is "differs from what was loaded", not "was touched".
+  it('a change makes it dirty, undoing it clears it, saving clears it', async () => {
+    const { get } = await import('svelte/store')
+    const { hasUnsavedChanges } = await import('../../src/lib/stores/unsavedChanges.js')
+    await setup()
+    expect(get(hasUnsavedChanges)).toBe(false)
+
+    await fireEvent.click(screen.getByLabelText(/Use xvid$/))
+    expect(get(hasUnsavedChanges)).toBe(true)
+    await fireEvent.click(screen.getByLabelText(/Use xvid$/))
+    expect(get(hasUnsavedChanges)).toBe(false)
+
+    await fireEvent.click(screen.getByLabelText(/Use xvid$/))
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(get(hasUnsavedChanges)).toBe(false))
+  })
+})

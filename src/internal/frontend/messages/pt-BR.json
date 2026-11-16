@@ -353,6 +353,9 @@
   "notifications_group_library": "Biblioteca",
   "notifications_group_system": "Sistema",
   "notifications_btn_edit": "Editar",
+  "notifications_btn_duplicate": "Duplicar",
+  "notifications_copy_name": "{name} (cópia)",
+  "notifications_err_name_taken": "Já existe um webhook chamado \"{name}\"",
   "notifications_section_batch": "Agrupamento",
   "notifications_label_batch_window": "Janela de agrupamento (segundos)",
   "notifications_hint_batch_window": "Junta os eventos da mesma janela num webhook só. Use 0 para desligar e mandar um por evento. Útil com serviços que limitam volume (ex.: ntfy.sh) — um backfill da biblioteca pode disparar dezenas de avisos de uma vez.",
@@ -883,5 +886,6 @@
   "priorities_preset_space_label": "Prefiro arquivos menores",
   "priorities_preset_space_desc": "AV1/HEVC primeiro. Até metade do tamanho na mesma qualidade, mas exige player que decodifique — no navegador vira transcode.",
   "downloads_toast_action_error": "A ação falhou",
-  "update_badge_available": "v{version} disponível"
+  "update_badge_available": "v{version} disponível",
+  "unsaved_changes_confirm": "Você tem alterações não salvas. Sair da página e descartá-las?"
 }
