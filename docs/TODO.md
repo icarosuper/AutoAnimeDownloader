@@ -217,15 +217,20 @@ After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
 
 ## No release — health notifications
 
-Ships on the `feat/health-notifications` branch, one commit per event.
+Implemented on the `feat/health-notifications` branch, one commit per event; waiting for the merge
+into `master` and a release.
 
-- Ten new webhook events about the daemon and the library, not single episodes: library folder
-  gone, crash, checks failing, update available (plus the badge in the web UI and the CLI), low
-  disk, episode limit reached, episode stuck, season complete, unwatched backlog and a weekly
-  digest of watched files still on disk. **Breaking:** `download_failed` stops reporting "no
-  torrent found" and "insufficient disk space" (they moved to `episode_stuck` and `disk_low`) and
-  reports a real failure once per episode and torrent — the release notes must say so. Spec designed on 2026-11-15:
-  [health-notifications](superpowers/specs/2026-11-15-health-notifications-design.md).
+- ~~Ten new webhook events about the daemon and the library, not single episodes~~ — **done on
+  2026-11-15, not released**
+  ([decisions.md #127](agents/decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds),
+  [#128](agents/decisions.md#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)).
+  Library folder gone, crash, checks failing, update available (plus the badge in the web UI, the
+  CLI `status` line and the `check_for_updates` field), low disk, episode limit reached, episode
+  stuck, season complete, unwatched backlog and a weekly digest of watched files still on disk.
+  **Breaking, for the release notes:** `download_failed` no longer reports "no torrent found" nor
+  "insufficient disk space" — they moved to `episode_stuck` (after 48 h) and `disk_low` — and it
+  reports a real failure once per episode and torrent. Existing webhooks get none of the new
+  events until the user ticks them.
 
 ## No release — subtitle language filter
 
