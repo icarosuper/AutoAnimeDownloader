@@ -11,6 +11,9 @@
 #   - AAD_DISABLE_DHT=1: the torrent client's DHT binds the fixed 7246/udp, so with it on a sandbox
 #     and the user's real daemon fought over the port and the second one lost its torrent session
 #   - a config.json is written before boot, so the first-boot onboarding is skipped
+#   - GitHub is a mock too (src/tests/mocks/github, latest = v99.0.0), and the daemon is built as
+#     SANDBOX_VERSION (default 0.0.1) instead of "dev", which never checks: the update badge shows
+#     up about two minutes after boot, when the first update check runs
 # Runs in the foreground; Ctrl+C — or `kill "$(cat .sandbox/sandbox.pid)"` from another shell —
 # stops the daemon and both mocks. From another shell it has to be TERM, not INT: a script started
 # in the background with `&` inherits SIGINT as ignored, and a non-interactive bash can't trap it.
@@ -21,10 +24,12 @@ SANDBOX="$ROOT/.sandbox"
 PORT="${SANDBOX_PORT:-8092}"
 ANILIST_PORT="${SANDBOX_ANILIST_PORT:-18080}"
 NYAA_PORT="${SANDBOX_NYAA_PORT:-18081}"
+GITHUB_PORT="${SANDBOX_GITHUB_PORT:-18082}"
+VERSION="${SANDBOX_VERSION:-0.0.1}"
 
-for p in "$PORT" "$ANILIST_PORT" "$NYAA_PORT"; do
+for p in "$PORT" "$ANILIST_PORT" "$NYAA_PORT" "$GITHUB_PORT"; do
   if (exec 3<>"/dev/tcp/127.0.0.1/$p") 2>/dev/null; then
-    echo "port $p is already in use — stop whatever holds it or set SANDBOX_PORT/SANDBOX_ANILIST_PORT/SANDBOX_NYAA_PORT" >&2
+    echo "port $p is already in use — stop whatever holds it or set SANDBOX_PORT/SANDBOX_ANILIST_PORT/SANDBOX_NYAA_PORT/SANDBOX_GITHUB_PORT" >&2
     exit 1
   fi
 done
@@ -39,9 +44,10 @@ if [[ "${SANDBOX_SKIP_FRONTEND:-}" != "1" ]]; then
 fi
 
 echo "==> Building daemon and mocks..."
-(cd "$ROOT" && go build -o "$SANDBOX/bin/daemon" ./src/cmd/daemon)
+(cd "$ROOT" && go build -ldflags "-X AutoAnimeDownloader/src/internal/version.Version=$VERSION" -o "$SANDBOX/bin/daemon" ./src/cmd/daemon)
 (cd "$ROOT/src/tests/mocks/anilist" && go build -o "$SANDBOX/bin/mock-anilist" .)
 (cd "$ROOT/src/tests/mocks/nyaa" && go build -o "$SANDBOX/bin/mock-nyaa" .)
+(cd "$ROOT/src/tests/mocks/github" && go build -o "$SANDBOX/bin/mock-github" .)
 
 cat > "$SANDBOX/home/.autoAnimeDownloader/config.json" <<EOF
 {
@@ -65,6 +71,8 @@ PORT="$ANILIST_PORT" "$SANDBOX/bin/mock-anilist" >"$SANDBOX/mock-anilist.log" 2>
 pids+=($!)
 PORT="$NYAA_PORT" "$SANDBOX/bin/mock-nyaa" >"$SANDBOX/mock-nyaa.log" 2>&1 &
 pids+=($!)
+PORT="$GITHUB_PORT" "$SANDBOX/bin/mock-github" >"$SANDBOX/mock-github.log" 2>&1 &
+pids+=($!)
 
 env -u DISPLAY -u WAYLAND_DISPLAY \
   HOME="$SANDBOX/home" \
@@ -73,12 +81,13 @@ env -u DISPLAY -u WAYLAND_DISPLAY \
   AAD_DISABLE_DHT=1 \
   ANILIST_API_URL="http://127.0.0.1:$ANILIST_PORT" \
   NYAA_URL="http://127.0.0.1:$NYAA_PORT" \
+  GITHUB_API_URL="http://127.0.0.1:$GITHUB_PORT" \
   "$SANDBOX/bin/daemon" >"$SANDBOX/daemon.out" 2>&1 &
 pids+=($!)
 
 for _ in $(seq 1 50); do
   if (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then break; fi
-  if ! kill -0 "${pids[2]}" 2>/dev/null; then
+  if ! kill -0 "${pids[3]}" 2>/dev/null; then
     echo "daemon exited during startup — see $SANDBOX/daemon.out" >&2
     exit 1
   fi
@@ -89,9 +98,9 @@ cat <<EOF
 
 Sandbox up: http://localhost:$PORT
   data dir   $SANDBOX/home/.autoAnimeDownloader
-  logs       $SANDBOX/daemon.out, mock-anilist.log, mock-nyaa.log
+  logs       $SANDBOX/daemon.out, mock-anilist.log, mock-nyaa.log, mock-github.log
   CLI        AAD_API_ENDPOINT=http://localhost:$PORT go run ./src/cmd/cli <command>
 Ctrl+C to stop.
 EOF
 
-wait "${pids[2]}"
+wait "${pids[3]}"

@@ -30,6 +30,7 @@ const (
 	LibraryMissing
 	DaemonCrashed
 	CheckFailing
+	UpdateAvailable
 )
 
 // Download-failure reasons, used as {{reason}} and in the default message.
@@ -62,6 +63,8 @@ func eventString(e Event) string {
 		return "daemon_crashed"
 	case CheckFailing:
 		return "check_failing"
+	case UpdateAvailable:
+		return "update_available"
 	}
 	return ""
 }
@@ -81,6 +84,8 @@ func interpolate(template string, vars map[string]string) string {
 // vanished library, a crash) are not "EP N of anime X" and don't go through the episode-run
 // grouping. Their title comes from alertTitle.
 //
+// Version and URL are update_available's {{version}} and {{url}}, blank in every other event.
+//
 // PackSize > 1 turns the item into a whole batch pack of that many episodes: ONE event (one push,
 // one Jellyfin scan), not N. A pack's text names only the anime and {{episode}} is blank — the
 // variable is always a single number or nothing, never a range a template can't use as a number
@@ -93,6 +98,8 @@ type Episode struct {
 	Reason      string
 	TorrentHash string
 	Text        string
+	Version     string
+	URL         string
 }
 
 func (e Episode) isPack() bool { return e.PackSize > 1 }
@@ -132,6 +139,8 @@ func buildBatchVars(event Event, items []Episode) map[string]string {
 		"quality":      "",
 		"file_path":    "",
 		"timestamp":    time.Now().Format("2006-01-02 15:04"),
+		"version":      "",
+		"url":          "",
 	}
 
 	if len(items) == 1 {
@@ -144,6 +153,8 @@ func buildBatchVars(event Event, items []Episode) map[string]string {
 			vars["anime_id"] = fmt.Sprintf("%d", items[0].AnimeID)
 		}
 		vars["torrent_hash"] = items[0].TorrentHash
+		vars["version"] = items[0].Version
+		vars["url"] = items[0].URL
 	}
 
 	return vars
@@ -265,6 +276,8 @@ func alertTitle(event Event, items []Episode) string {
 			return "Checks are back to normal"
 		}
 		return "Checks are failing"
+	case UpdateAvailable:
+		return "Update available"
 	}
 	return ""
 }

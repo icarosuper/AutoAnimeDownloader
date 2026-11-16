@@ -20,6 +20,8 @@ const StateFileName = "notification_state"
 // reads and changes them through UpdateState.
 type AlertState struct {
 	CheckFailing CheckFailingState `json:"check_failing"`
+	// UpdateAnnounced is the last version update_available announced: once per version.
+	UpdateAnnounced string `json:"update_announced,omitempty"`
 }
 
 // CheckFailingState tracks a run of aborted passes: since when, how many in a row, and whether

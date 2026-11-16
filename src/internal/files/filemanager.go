@@ -149,7 +149,11 @@ type Config struct {
 	// DisableSeeding stops every upload: the torrent session never unchokes a peer (not even
 	// during the download), and a torrent is removed, download copy included, as soon as it is
 	// organized into the library. Toggling it rebuilds the torrent session. See decisions.md #119.
-	DisableSeeding         bool     `json:"disable_seeding"`
+	DisableSeeding bool `json:"disable_seeding"`
+	// CheckForUpdates lets the daemon ask GitHub once a day for the latest release (the update badge
+	// and update_available). false = no request ever leaves; whoever installs from the AUR or a
+	// container image already hears about updates from there.
+	CheckForUpdates        bool     `json:"check_for_updates"`
 	DeleteWatchedEpisodes  bool     `json:"delete_watched_episodes"`
 	WatchedEpisodesToKeep  int      `json:"watched_episodes_to_keep"`
 	ExcludedList           string   `json:"excluded_list,omitempty"`
@@ -239,6 +243,7 @@ func getDefaultConfig() *Config {
 		EpisodeRetryLimit:       5,
 		MaxConcurrentDownloads:  3,
 		DeleteWatchedEpisodes:   true,
+		CheckForUpdates:         true,
 		// DeleteWatchedEpisodes comes on by default: with no slack the episode disappears as soon as it's
 		// marked watched. Two forgive "I marked it by mistake" and "I wanted to rewatch".
 		WatchedEpisodesToKeep: 2,

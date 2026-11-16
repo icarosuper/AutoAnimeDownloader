@@ -17,6 +17,7 @@ These override values from `config.json`. Useful for Docker/CI:
 |----------|---------|-------|-------------|
 | `NYAA_URL` | `"https://nyaa.si"` | `nyaa/nyaa.go` | Override Nyaa base URL |
 | `ANILIST_API_URL` | `"https://graphql.anilist.co"` | `anilist/anilist.go` | Override Anilist GraphQL endpoint |
+| `GITHUB_API_URL` | `"https://api.github.com"` | `updates/updates.go` | Override the GitHub API base the update check asks for the latest release (the sandbox points it at `tests/mocks/github`) |
 
 > The former `QBITTORRENT_URL` override was removed along with the external qBittorrent dependency — the BitTorrent client is now embedded (`github.com/cenkalti/rain/v2`).
 
@@ -62,7 +63,9 @@ start. They are not read by the Go code, and they do nothing after the file exis
 | `DAEMON_URL` | — (unset = skip) | `tests/integration/integration_test.go` | Daemon base URL for integration tests. **Must be set explicitly or every integration test skips** — the suite overwrites the config of whatever daemon answers, so it must never find a developer's daemon by accident. Set to `http://daemon:8091` by `docker-compose.test.yml`. When set but empty/unreachable, tests also skip. The `http://localhost:8091` fallback is only used to build the URL once the gate has passed |
 | `TEST_COMPLETED_PATH` | `~/aad-test/library` | `tests/integration/integration_test.go` | `completed_anime_path` the integration tests write. Docker overrides it to `/app/data/aad-test/library` |
 | `SCENARIO` | — | `tests/mocks/anilist/`, `tests/mocks/nyaa/` | `"empty"` = mock returns empty data |
-| `PORT` | `8080`/`8081` | `tests/mocks/*/mock_server.go` | Listen port for each mock server (Anilist, Nyaa) |
-| `SANDBOX_PORT`, `SANDBOX_ANILIST_PORT`, `SANDBOX_NYAA_PORT` | `8092`, `18080`, `18081` | `scripts/sandbox.sh` | Ports for the `make sandbox` daemon and its two mocks. The default `8092` lets it run next to a real daemon on `8091` |
+| `PORT` | `8080`/`8081`/`8082` | `tests/mocks/*/mock_server.go` | Listen port for each mock server (Anilist, Nyaa, GitHub) |
+| `LATEST_TAG` | `v99.0.0` | `tests/mocks/github/` | The release tag the GitHub mock answers |
+| `SANDBOX_PORT`, `SANDBOX_ANILIST_PORT`, `SANDBOX_NYAA_PORT`, `SANDBOX_GITHUB_PORT` | `8092`, `18080`, `18081`, `18082` | `scripts/sandbox.sh` | Ports for the `make sandbox` daemon and its three mocks. The default `8092` lets it run next to a real daemon on `8091` |
+| `SANDBOX_VERSION` | `0.0.1` | `scripts/sandbox.sh` | Version the sandbox daemon is built as. Not `dev`: a dev build never runs the update check, and the sandbox wants the badge |
 | `SANDBOX_SKIP_FRONTEND` | — | `scripts/sandbox.sh` | `1` = don't rebuild the frontend, embed the last `dist/` |
 | `TEST_LOGGER_INIT` | — | `logger/logger_test.go` | When empty, auto-inits logger for tests |

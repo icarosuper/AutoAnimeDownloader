@@ -221,6 +221,8 @@ export interface Config {
   rename_files_for_jellyfin: boolean
   /** No upload at all, and each torrent is removed once organized into the library. */
   disable_seeding: boolean
+  /** Asks GitHub once a day whether a newer release exists (the update badge and update_available). */
+  check_for_updates: boolean
   download_statuses: string[]
   download_media_statuses: string[]
   delete_statuses: string[]

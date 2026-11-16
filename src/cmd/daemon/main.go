@@ -27,6 +27,8 @@ import (
 	"AutoAnimeDownloader/src/internal/notifications"
 	"AutoAnimeDownloader/src/internal/torrents"
 	"AutoAnimeDownloader/src/internal/tray"
+	"AutoAnimeDownloader/src/internal/updates"
+	"AutoAnimeDownloader/src/internal/version"
 	"context"
 	"errors"
 	"flag"
@@ -322,6 +324,13 @@ func main() {
 	ensureStartupSession(torrentManager, fileManager)
 
 	state := daemon.NewState()
+
+	// GitHub's latest release, once a day, unless check_for_updates is off (asked before every
+	// check, so turning it off needs no restart). A "dev" build never asks.
+	updates.Start(context.Background(), version.Version, func() bool {
+		cfg, err := fileManager.LoadConfigs()
+		return err == nil && cfg.CheckForUpdates
+	}, func(v, url string) { daemon.NotifyUpdate(fileManager, v, url) })
 
 	apiPort := getPort()
 	apiServer := api.NewServer(apiPort, state, fileManager, func(p daemon.StartLoopPayload) *daemon.LoopControl {

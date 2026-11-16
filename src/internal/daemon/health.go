@@ -133,3 +133,30 @@ func roughDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm", int(d/time.Minute))
 	}
 }
+
+// NotifyUpdate fires update_available for a version the checker found, once per version: the last
+// one announced lives in the state store, so a restart doesn't announce it again.
+func NotifyUpdate(fileManager FileManagerInterface, version, url string) {
+	fire := false
+	notifications.UpdateState(func(s *notifications.AlertState) bool {
+		if s.UpdateAnnounced == version {
+			return false
+		}
+		s.UpdateAnnounced = version
+		fire = true
+		return true
+	})
+	if !fire {
+		return
+	}
+	configs, err := fileManager.LoadConfigs()
+	if err != nil {
+		logger.Logger.Warn().Err(err).Msg("Failed to load configs; the update notification was not sent")
+		return
+	}
+	notifications.Notify(configs, notifications.UpdateAvailable, notifications.Episode{
+		Version: version,
+		URL:     url,
+		Text:    fmt.Sprintf("AutoAnimeDownloader %s is available: %s", version, url),
+	})
+}

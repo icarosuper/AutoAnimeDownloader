@@ -29,6 +29,7 @@ Struct defined in `src/internal/files/filemanager.go`. Defaults set in `getDefau
 | `RenameFilesForJellyfin` | `rename_files_for_jellyfin` | `bool` | `false` | Give the **library hardlink** a Jellyfin-compatible name (`"Anime Name - E05.mkv"`). Single episodes use the episode number from the record (only when the torrent holds one video file); **batch packs** rename each file using the number parsed out of its own filename, so pack episodes mix into the anime folder alongside individually downloaded ones. Files with no readable number (NCOP/NCED, extras, movies) keep the raw name. The seeded copy in the download directory is never renamed (that would break seeding) |
 | `DownloadStatuses` | `download_statuses` | `[]string` | `["CURRENT", "REPEATING"]` | Anilist **list** statuses (user's relationship to the anime) to download. Also governs which not-yet-downloaded animes appear in `/api/v1/animes` (filtered server-side via GraphQL `status_in`). Valid values: `CURRENT`, `REPEATING`, `COMPLETED`, `PAUSED`, `DROPPED`, `PLANNING` |
 | `DownloadMediaStatuses` | `download_media_statuses` | `[]string` | `["RELEASING", "FINISHED"]` | Anilist **media** statuses (the anime's own airing state) eligible for download. Also governs which not-yet-downloaded animes appear in `/api/v1/animes` (filtered client-side, since AniList doesn't support this in the same `status_in` filter as list status). Filtered via `anilist.MediaStatusAllowed` in both `searchAnilist` (`daemon/verification.go`, download pipeline) and `fetchAniListEntries` (`api/endpoint_animes.go`, frontend listing). Animes with at least one downloaded episode are never hidden by either filter regardless of current status — see [Architecture](architecture.md#media-status-filter). Whitelist semantics: empty = nothing downloads/shows. Valid values: `RELEASING`, `FINISHED`, `CANCELLED`, `HIATUS` (`NOT_YET_RELEASED` excluded — can never have episodes) |
+| `CheckForUpdates` | `check_for_updates` | `bool` | `true` | Asks GitHub once a day (first check ~2 min after boot) for the latest release: the update badge in the web UI, `Update available` in CLI `status`, and the `update_available` event. `false` = no request ever leaves; read before every check, so it needs no restart. A `dev` build never checks. Whoever installs from the AUR or a container image already hears about updates there |
 | `DeleteStatuses` | `delete_statuses` | `[]string` | `[]` | Anilist list statuses to auto-delete episodes from. Same valid values as `DownloadStatuses`. With several accounts (AniList and MyAnimeList alike) the rule is **AND**: every account that has the anime must have it in one of these statuses (not necessarily the same one). Download is the opposite, **OR** — see [Architecture](architecture.md#media-status-filter) |
 | `AnimeIDsAreMediaIDs` | `anime_ids_are_media_ids` | `bool` | `false` | Internal marker: `daemon.MigrateAnimeIDsToMedia` already converted the saved `anime_id`s from entry id (`MediaList.Id`, per account) to media id. Default `false` on purpose — a `config.json` older than the field needs to migrate; on a new install the migration runs with nothing to do and turns the field on. Don't edit by hand: turning it on without migrating leaves the records on disk keyed in a way nothing else understands. See [Architecture](architecture.md#media-status-filter) and decisions.md #43 |
 | `Notifications.Webhooks` | `notifications.webhooks` | `[]WebhookPreset` | `[]` | List of webhook presets to fire on events |
@@ -117,6 +118,8 @@ Available in `url`, `headers` values, and `body`:
 | `{{quality}}` | Always empty — not tracked at hook point |
 | `{{file_path}}` | Always empty — not tracked |
 | `{{timestamp}}` | Current time formatted as `2006-01-02 15:04` |
+| `{{version}}` | `update_available` only: the new version (`2.11.0`) |
+| `{{url}}` | `update_available` only: the release page |
 
 ## Webhook Events
 
@@ -131,6 +134,7 @@ System; a new message preset starts with the episode events plus the system ones
 | `episode_deleted` | Episodes | episodes were removed from the library |
 | `library_missing` | System | the library folder vanished or was replaced (unmounted drive); everything in it will be downloaded again |
 | `check_failing` | System | checks have aborted for ≥ 30 min and ≥ 2 passes in a row (setup incomplete doesn't count); once per run of failures, and again with `{{reason}}` = `recovered` on the first pass that finishes. `{{reason}}` is otherwise the pass error code |
+| `update_available` | System | a newer release is on GitHub (`check_for_updates`); once per version. `{{version}}` and `{{url}}` (the release page) are filled only here |
 | `daemon_crashed` | System | at boot, when the previous run crashed (the crash report is waiting on the Report screen) |
 
 The Library and System events are **alerts**: `{{message}}` is one line per alert, `{{title}}`

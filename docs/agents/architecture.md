@@ -27,10 +27,11 @@ src/internal/
   diagnostics/       → Bug report bundle (redacted environment, config, log) and the crash file lifecycle
   tray/              → System tray icon (fyne/systray)
   version/           → Build-time version injection via ldflags
+  updates/           → Asks GitHub for the latest release once a day (`check_for_updates`); Latest() feeds /status
 src/tests/
   unit/              → Unit tests with mocks
   integration/       → Docker-based end-to-end tests
-  mocks/             → Mock servers for Anilist and Nyaa
+  mocks/             → Mock servers for Anilist, Nyaa and GitHub (the update check)
 ```
 
 The daemon ships as a single self-contained binary — the BitTorrent client is embedded (`github.com/cenkalti/rain/v2`), so there is no external qBittorrent to install, configure, or connect to.
@@ -681,6 +682,17 @@ Template variables (URL, headers and body): `{{title}}`, `{{message}}`, `{{anime
 `{{episode}}`, `{{reason}}`, `{{anime_id}}`, `{{torrent_hash}}`, `{{count}}`. In a window with N > 1,
 `{{message}}` becomes one line per run of consecutive episodes of the same anime and reason —
 episodes are sorted before collapsing, because organize fires in completion order.
+
+### `src/internal/updates/` — update check
+
+`Start` (from `main.go`) asks `GET {GITHUB_API_URL}/repos/icarosuper/AutoAnimeDownloader/releases/latest`
+2 min after boot and then every 24 h. A `dev` build never starts it; `check_for_updates` is read
+before **every** check, so turning it off stops the requests and clears `Latest()` without a restart.
+Every failure (network, non-200 — the 60/h unauthenticated rate limit included —, an unparsable tag)
+is a `Debug` line and another try next tick: never a pass error, never a notification. `Newer` is a
+hand-rolled X.Y.Z compare (no semver dependency); a prerelease is older than its release. The
+announcement is deduped by the daemon (`daemon.NotifyUpdate`, `update_announced` in
+`notification_state`), not here.
 
 ### `src/internal/diagnostics/` — bug report
 

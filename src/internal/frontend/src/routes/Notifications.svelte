@@ -90,7 +90,7 @@
   };
 
   const bodyPlaceholder = '{"message":"{{message}}"}';
-  const varsHint = 'Variables: {{title}}, {{message}}, {{anime_name}}, {{episode}}, {{reason}}, {{anime_id}}, {{torrent_hash}}, {{count}}, {{timestamp}}';
+  const varsHint = 'Variables: {{title}}, {{message}}, {{anime_name}}, {{episode}}, {{reason}}, {{anime_id}}, {{torrent_hash}}, {{count}}, {{timestamp}}, {{version}}, {{url}}';
 
   let fullConfig: Config | null = null;
   let notifications: { webhooks: WebhookPreset[]; batch_window_seconds: number } = { webhooks: [], batch_window_seconds: 0 };

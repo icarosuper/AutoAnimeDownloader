@@ -69,6 +69,8 @@
     hintMaxConcurrent: m.config_hint_max_concurrent(),
     labelDisableSeeding: m.config_label_disable_seeding(),
     hintDisableSeeding: m.config_hint_disable_seeding(),
+    labelCheckForUpdates: m.config_label_check_for_updates(),
+    hintCheckForUpdates: m.config_hint_check_for_updates(),
     labelRenameJellyfin: m.config_label_rename_jellyfin(),
     hintRenameJellyfin: m.config_hint_rename_jellyfin(),
     labelExcludedList: m.config_label_excluded_list(),
@@ -136,6 +138,7 @@
     excluded_lists: [],
     rename_files_for_jellyfin: false,
     disable_seeding: false,
+    check_for_updates: true,
     download_statuses: ["CURRENT", "REPEATING"],
     download_media_statuses: ["RELEASING", "FINISHED"],
     delete_statuses: [],
@@ -585,6 +588,16 @@
                 inline={true}
                 suffix="GiB"
               />
+            </div>
+
+            <div class="space-y-1.5 p-4.5">
+              <Toggle
+                id="check_for_updates"
+                bind:checked={config.check_for_updates}
+                label={(T && T.labelCheckForUpdates) || ""}
+                inline={true}
+              />
+              <p class="text-caption text-subtle">{T && T.hintCheckForUpdates}</p>
             </div>
 
             <!-- The way back to the first-steps card. It's NOT a config field: it doesn't go into

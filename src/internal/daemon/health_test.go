@@ -148,3 +148,22 @@ func TestTrackCheckFailing_SurvivesRestart(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestNotifyUpdate_OncePerVersion(t *testing.T) {
+	notifications.ResetState()
+	cfg, bodies := alertHook(t, "update_available")
+	cfg.Notifications.Webhooks[0].Body = "{{title}}|{{version}}|{{url}}"
+	fm := &orchestrationFM{configs: cfg}
+
+	NotifyUpdate(fm, "2.11.0", "https://example.invalid/v2.11.0")
+	if got := received(bodies); got != "Update available|2.11.0|https://example.invalid/v2.11.0" {
+		t.Errorf("got %q", got)
+	}
+	NotifyUpdate(fm, "2.11.0", "https://example.invalid/v2.11.0")
+	noneReceived(t, bodies)
+
+	NotifyUpdate(fm, "2.12.0", "https://example.invalid/v2.12.0")
+	if got := received(bodies); got != "Update available|2.12.0|https://example.invalid/v2.12.0" {
+		t.Errorf("got %q", got)
+	}
+}

@@ -81,7 +81,11 @@ one row and the Nyaa mock is never searched. Enough to check layout, navigation,
 priorities screens, the add-anime flow and the WebSocket; not enough to see a download happen. The
 mock magnet is not a real torrent, so nothing is ever downloaded.
 
-Variables: `SANDBOX_PORT` (8092), `SANDBOX_ANILIST_PORT` (18080), `SANDBOX_NYAA_PORT` (18081), and
+GitHub is mocked too (latest release `v99.0.0`) and the daemon is built as `0.0.1`, so the update
+badge appears about two minutes after boot, when the first update check runs.
+
+Variables: `SANDBOX_PORT` (8092), `SANDBOX_ANILIST_PORT` (18080), `SANDBOX_NYAA_PORT` (18081),
+`SANDBOX_GITHUB_PORT` (18082), `SANDBOX_VERSION` (0.0.1), and
 `SANDBOX_SKIP_FRONTEND=1` to reuse the last frontend build. Point the CLI at it with
 `AAD_API_ENDPOINT=http://localhost:8092`.
 
