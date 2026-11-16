@@ -6,7 +6,7 @@ export type EventGroup = 'episodes' | 'library' | 'system'
 
 export const EVENT_GROUPS: { group: EventGroup; events: string[] }[] = [
   { group: 'episodes', events: ['new_episode', 'download_failed', 'download_completed', 'episode_deleted'] },
-  { group: 'library', events: ['episode_limit_reached', 'episode_stuck', 'season_complete'] },
+  { group: 'library', events: ['episode_limit_reached', 'episode_stuck', 'season_complete', 'unwatched_backlog'] },
   { group: 'system', events: ['library_missing', 'daemon_crashed', 'check_failing', 'update_available', 'disk_low'] },
 ]
 
@@ -54,6 +54,8 @@ export function eventLabel(event: string): string {
       return m.notifications_event_episode_stuck()
     case 'season_complete':
       return m.notifications_event_season_complete()
+    case 'unwatched_backlog':
+      return m.notifications_event_unwatched_backlog()
     default:
       return event
   }

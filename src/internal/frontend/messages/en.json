@@ -321,6 +321,7 @@
   "notifications_event_episode_limit_reached": "Anime hit the episode limit",
   "notifications_event_episode_stuck": "Episode not downloading for 2 days",
   "notifications_event_season_complete": "Finished anime fully in the library",
+  "notifications_event_unwatched_backlog": "Next episode unwatched for 30 days",
   "notifications_group_episodes": "Episodes",
   "notifications_group_library": "Library",
   "notifications_group_system": "System",

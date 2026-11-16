@@ -6,7 +6,9 @@ import (
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/notifications"
 	"fmt"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -285,7 +287,7 @@ func alertsAfterPass(cfg *files.Config, in passAlerts) {
 	}
 
 	library := libraryIndex(in.saved)
-	var limitItems, stuckItems, completeItems []notifications.Episode
+	var limitItems, stuckItems, completeItems, backlogItems []notifications.Episode
 	notifications.UpdateStateIfChanged(func(s *notifications.AlertState) {
 		// The first pass after the upgrade records, doesn't announce (AlertState.Seeded).
 		seeding := !s.Seeded
@@ -293,10 +295,13 @@ func alertsAfterPass(cfg *files.Config, in passAlerts) {
 		limitItems = trackEpisodeLimit(s, in.limits, seeding)
 		stuckItems = trackEpisodeStuck(s, in.problems, in.watching, in.now)
 		completeItems = trackSeasonComplete(s, in.animes, library, seeding)
+		// Not seeded: a 60-day-old backlog is real news, and it goes out as one message.
+		backlogItems = trackUnwatchedBacklog(s, in.animes, library, in.now)
 	})
 	notifications.NotifyAll(cfg, notifications.EpisodeLimitReached, limitItems)
 	notifications.NotifyAll(cfg, notifications.EpisodeStuck, stuckItems)
 	notifications.NotifyAll(cfg, notifications.SeasonComplete, completeItems)
+	notifications.NotifyAll(cfg, notifications.UnwatchedBacklog, backlogItems)
 }
 
 // trackEpisodeLimit fires for each anime whose max_episodes_per_anime limit appeared since the last
@@ -519,4 +524,78 @@ func trackSeasonComplete(s *notifications.AlertState, animes []anilist.MediaList
 		})
 	}
 	return items
+}
+
+// unwatched_backlog fires when the next episode to watch has been in the library this long.
+// ponytail: a constant until someone asks for another number.
+const backlogAfter = 30 * 24 * time.Hour
+
+// trackUnwatchedBacklog fires once per (anime, progress) when the record of episode progress+1 is in
+// the library and older than backlogAfter. No progress history is stored: the age of the next episode
+// already IS how long the user has not watched this. Watching one episode and stopping again
+// restarts the clock from that episode's own DownloadDate. Called under the state store's lock.
+func trackUnwatchedBacklog(s *notifications.AlertState, animes []anilist.MediaList, library map[files.EpisodeKey]files.EpisodeStruct, now time.Time) []notifications.Episode {
+	listed := make(map[string]bool, len(animes))
+	var items []notifications.Episode
+	for _, a := range animes {
+		key := strconv.Itoa(a.Media.Id)
+		listed[key] = true
+		next, ok := library[files.EpisodeKey{AnimeID: a.Media.Id, Episode: a.Progress + 1}]
+		if !ok || next.DownloadDate.IsZero() || now.Sub(next.DownloadDate) < backlogAfter {
+			continue
+		}
+		if fired, ok := s.BacklogFired[key]; ok && fired == a.Progress {
+			continue
+		}
+		if s.BacklogFired == nil {
+			s.BacklogFired = make(map[string]int)
+		}
+		s.BacklogFired[key] = a.Progress
+		unwatched := unwatchedRecords(a.Media.Id, a.Progress, library)
+		name := getAnimeTitleSafe(a)
+		items = append(items, notifications.Episode{
+			AnimeID:   a.Media.Id,
+			AnimeName: name,
+			Text: fmt.Sprintf("%s: EP %d has been waiting for %d days (%s unwatched, %s).", name, a.Progress+1,
+				int(now.Sub(next.DownloadDate)/(24*time.Hour)), plural(len(unwatched), "episode"), gigabytes(librarySize(unwatched))),
+		})
+	}
+	for key := range s.BacklogFired {
+		if !listed[key] {
+			delete(s.BacklogFired, key)
+		}
+	}
+	return items
+}
+
+// unwatchedRecords is the anime's records in the library above progress.
+func unwatchedRecords(animeID, progress int, library map[files.EpisodeKey]files.EpisodeStruct) []files.EpisodeStruct {
+	var out []files.EpisodeStruct
+	for k, ep := range library {
+		if k.AnimeID == animeID && k.Episode > progress {
+			out = append(out, ep)
+		}
+	}
+	return out
+}
+
+// librarySize is what the records' library files take on disk: os.Stat over their LibraryPaths,
+// each path once — every record of a pack carries the pack's whole file list. A file that is gone
+// counts 0. Hardlinks share bytes with the seeding copy, so this is what deleting them would free
+// only once the torrent is gone too; it is still the honest "how much of the library is this".
+func librarySize(records []files.EpisodeStruct) uint64 {
+	seen := make(map[string]bool)
+	var total uint64
+	for _, r := range records {
+		for _, p := range r.LibraryPaths {
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				total += uint64(info.Size())
+			}
+		}
+	}
+	return total
 }

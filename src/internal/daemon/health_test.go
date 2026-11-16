@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -474,4 +475,47 @@ func TestSeasonComplete(t *testing.T) {
 	pass(nil, nil) // seed
 	pass([]anilist.MediaList{finishedAnime(1, "Frieren", 4, 4)}, inLibrary(1, 1, 2, 3, 4))
 	noneReceived(t, bodies) // fully watched is not "ready to binge"
+}
+
+func TestUnwatchedBacklog(t *testing.T) {
+	notifications.ResetState()
+	cfg, bodies := alertHook(t, "unwatched_backlog")
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.Local)
+	dir := t.TempDir()
+	file := func(name string, size int) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, make([]byte, size), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	ep := func(n int, age time.Duration, paths ...string) files.EpisodeStruct {
+		return files.EpisodeStruct{AnimeID: 1, EpisodeNumber: n, LibraryPaths: paths, DownloadDate: now.Add(-age)}
+	}
+	const day = 24 * time.Hour
+	pack := []string{file("e5.mkv", 1<<29), file("e6.mkv", 1<<29)}
+	saved := []files.EpisodeStruct{ep(5, 34*day, pack...), ep(6, 34*day, pack...), ep(7, 2*day, file("e7.mkv", 1<<29))}
+	airing := func(progress int) []anilist.MediaList {
+		a := finishedAnime(1, "Frieren", 28, progress)
+		a.Media.Status = anilist.MediaStatusReleasing
+		return []anilist.MediaList{a}
+	}
+	pass := func(progress int, at time.Time) {
+		runAlerts(t, cfg, passAlerts{watching: map[int]bool{1: true}, animes: airing(progress), saved: saved, now: at})
+	}
+
+	// Not seeded: an old backlog is news on the first pass too.
+	pass(4, now)
+	if got := received(bodies); got != "Waiting for you to watch|Frieren: EP 5 has been waiting for 34 days (3 episodes unwatched, 1.5 GB)." {
+		t.Errorf("got %q", got)
+	}
+	pass(4, now.Add(day))
+	noneReceived(t, bodies)
+
+	pass(5, now.Add(2*day)) // watched EP 5; EP 6 is just as old
+	if got := received(bodies); !strings.Contains(got, "EP 6 has been waiting for 36 days") {
+		t.Errorf("got %q", got)
+	}
+	pass(6, now.Add(3*day)) // EP 7 is 5 days old
+	noneReceived(t, bodies)
 }

@@ -37,6 +37,9 @@ type AlertState struct {
 	FailedTorrents []string `json:"failed_torrents,omitempty"`
 	// SeasonComplete is the animes season_complete already announced — once per anime, ever.
 	SeasonComplete []int `json:"season_complete,omitempty"`
+	// BacklogFired is, per anime (media id as a string, JSON keys), the progress unwatched_backlog
+	// last fired at: a different progress re-arms it.
+	BacklogFired map[string]int `json:"backlog_fired,omitempty"`
 }
 
 // StuckClock is one episode's run without success: since its first problem, the latest problem
