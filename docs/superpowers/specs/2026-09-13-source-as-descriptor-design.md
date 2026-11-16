@@ -1,75 +1,75 @@
-# A fonte de torrent vira descriptor externo — tirar o Nyaa do repositório
+# The torrent source becomes an external descriptor — taking Nyaa out of the repository
 
-**Data:** 2026-09-13
-**Status:** desenhado, não executado
-**Origem:** "tirar a dependência hard do nyaa do código pra ficar mais seguro de publicar nos
-lugares. creio que nesse caso faria um sistema de plugin tipo o app de ler mangá mihon"
-**Escopo previsto:** `src/internal/nyaa` (quebra em dois pacotes), `src/internal/daemon/search.go`
-(`nyaaSearcher` passa a carregar a fonte), `src/internal/files` (carregar o descriptor da pasta de
-configs), `src/tests/mocks` e `src/tests/unit/nyaa_test.go` (fixtures deixam de citar `nyaa.si`).
+**Date:** 2026-09-13
+**Status:** designed, not executed
+**Origin:** "take the hard dependency on nyaa out of the code so it's safer to publish in
+places. I think in this case it would be a plugin system like the manga reader app mihon"
+**Expected scope:** `src/internal/nyaa` (split into two packages), `src/internal/daemon/search.go`
+(`nyaaSearcher` starts carrying the source), `src/internal/files` (load the descriptor from the
+config folder), `src/tests/mocks` and `src/tests/unit/nyaa_test.go` (fixtures stop citing `nyaa.si`).
 
 ---
 
-## O objetivo é publicabilidade, não múltiplas fontes
+## The goal is publishability, not multiple sources
 
-Trocar de indexador continua não ressuscitando swarm. Esta spec não mede isso e não constrói
-uma segunda fonte.
+Switching indexers still doesn't bring a swarm back to life. This spec doesn't measure that and doesn't build
+a second source.
 
-O que esta spec quer é uma coisa só: **o repositório e o binário deixarem de conter o endereço, a
-query e o layout do Nyaa**. Que isso destrave uma segunda fonte é consequência, não motivo — e por
-isso o desenho abaixo se recusa a construir agregação, merge de resultados ou catálogo.
+What this spec wants is one thing only: **the repository and the binary no longer containing Nyaa's address,
+query and layout**. That this unlocks a second source is a consequence, not the reason — and that is
+why the design below refuses to build aggregation, result merging or a catalog.
 
-**O que ela não compra:** blindagem jurídica. O app continua sendo "baixa anime por torrent
-automaticamente". O que sai é o artefato mais direto — o código que raspa um site nomeado. Precedente
-útil: o repo do Tachiyomi sobreviveu, o `tachiyomi-extensions` é que levou o takedown e teve de sair
-da org (virou keiyoushi), e mesmo assim o app tomou C&D depois. Vale desenhar sabendo disso.
+**What it does not buy:** legal shielding. The app is still "downloads anime by torrent
+automatically". What goes away is the most direct artifact — the code that scrapes a named site. Useful
+precedent: the Tachiyomi repo survived, it was `tachiyomi-extensions` that got the takedown and had to leave
+the org (it became keiyoushi), and even so the app got a C&D later. Worth designing knowing that.
 
-## Plugin compilado está fora
+## A compiled plugin is out
 
-O pacote `plugin` da stdlib é Linux-only, exige que app e plugin sejam compilados com o **mesmo**
-compilador e as **mesmas** versões de todas as dependências em comum, e não funciona com
-`CGO_ENABLED=0`. O projeto tem tray em Windows (`internal/tray`). Um ABI de plugin em Go seria uma
-matriz de build por plataforma e por release, para hospedar ~150 linhas de CSS selector.
+The stdlib `plugin` package is Linux-only, requires the app and the plugin to be compiled with the **same**
+compiler and the **same** versions of every shared dependency, and does not work with
+`CGO_ENABLED=0`. The project has a tray on Windows (`internal/tray`). A Go plugin ABI would be a
+build matrix per platform and per release, to host ~150 lines of CSS selectors.
 
-Runtime de script embutido (goja, starlark, yaegi, wasm) resolveria, ao custo de uma dependência
-nova e de um sandbox para código de terceiro. Desproporcional: as três fontes já medidas em
-[`sources.md`](../../agents/sources.md) são todas *"GET uma URL → linhas"*. Isso é dado, não código.
+An embedded script runtime (goja, starlark, yaegi, wasm) would solve it, at the cost of a new
+dependency and of a sandbox for third-party code. Disproportionate: the three sources already measured in
+[`sources.md`](../../agents/sources.md) are all *"GET a URL → rows"*. That is data, not code.
 
-**Decisão: descriptor declarativo em JSON, sem execução de código.**
+**Decision: a declarative descriptor in JSON, with no code execution.**
 
-## A fronteira já está medida
+## The boundary is already measured
 
-O pacote `internal/nyaa` tem 2217 linhas. O que é específico do Nyaa:
+The `internal/nyaa` package has 2217 lines. What is Nyaa-specific:
 
-| o que | onde |
+| what | where |
 |---|---|
-| URL base e parâmetros da query (`f`, `c`, `s`, `o`, `p`) | `nyaa.go:56`, e repetido nas três `Scrap*` |
-| posição das células — `cells.Eq(1/2/3/5/6)` | dentro dos três `parseRow` |
-| seletor de linha `.torrent-list tbody tr` | `parsePagesWith` (`nyaa.go:423`) |
-| formato de data `2006-01-02 15:04` | `parseNyaaDate` (`nyaa.go:1048`) |
-| lista de arquivos do detalhe — `div.torrent-file-list`, `span.file-size` | `PackFileRange` (`nyaa.go:224`), `fileListEntryName` |
-| montagem do `/view/<id>` | `detailURL` (`nyaa.go:277`) |
+| base URL and query parameters (`f`, `c`, `s`, `o`, `p`) | `nyaa.go:56`, and repeated in the three `Scrap*` |
+| cell positions — `cells.Eq(1/2/3/5/6)` | inside the three `parseRow` |
+| row selector `.torrent-list tbody tr` | `parsePagesWith` (`nyaa.go:423`) |
+| date format `2006-01-02 15:04` | `parseNyaaDate` (`nyaa.go:1048`) |
+| detail page file list — `div.torrent-file-list`, `span.file-size` | `PackFileRange` (`nyaa.go:224`), `fileListEntryName` |
+| building `/view/<id>` | `detailURL` (`nyaa.go:277`) |
 
-São ~150 linhas. **Todo o resto — ~2050 — não é Nyaa:** `nyaa_match.go` inteiro (jaccard de título),
-`nyaa_regex.go` inteiro, `priorities.go` inteiro (`ShouldIgnore`, sort por critério), e os
-`Extract*` / `parseSize` / `ParseSeeders` / `SortTorrentResults` do `nyaa.go`. Isso é parsing de
-**nome de release**, que segue a mesma convenção de cena em qualquer fonte.
+That is ~150 lines. **Everything else — ~2050 — is not Nyaa:** all of `nyaa_match.go` (title jaccard),
+all of `nyaa_regex.go`, all of `priorities.go` (`ShouldIgnore`, sort by criterion), and the
+`Extract*` / `parseSize` / `ParseSeeders` / `SortTorrentResults` in `nyaa.go`. That is parsing of the
+**release name**, which follows the same scene convention on any source.
 
-Prova empírica de que a fronteira cai exatamente no `TorrentResult`: o `sources.md` registra que o
-JSON do AnimeTosho "mapeia quase 1:1 em `nyaa.TorrentResult`".
+Empirical proof that the boundary falls exactly on `TorrentResult`: `sources.md` records that
+AnimeTosho's JSON "maps almost 1:1 onto `nyaa.TorrentResult`".
 
-> **Por isso o plugin NÃO inclui o tratamento.** O Mihon é má analogia aqui: site de mangá não tem
-> convenção de nome, então a extensão precisa parsear. Release de anime tem —
-> `[Grupo] Nome - 01 (1080p) [HEVC]` é a mesma coisa em toda fonte. Mandar o tratamento para o
-> descriptor duplicaria 2050 linhas por fonte e jogaria fora os testes que já existem sobre elas.
+> **That is why the plugin does NOT include the processing.** Mihon is a bad analogy here: manga sites have no
+> naming convention, so the extension has to parse. Anime releases do —
+> `[Group] Name - 01 (1080p) [HEVC]` is the same thing on every source. Sending the processing to the
+> descriptor would duplicate 2050 lines per source and throw away the tests that already exist over them.
 
-## O descriptor
+## The descriptor
 
 ```jsonc
 {
-  "name": "exemplo",
+  "name": "example",
   "search": {
-    "url": "https://exemplo.tld/?q={query}&s=seeders&o=desc&p={page}",
+    "url": "https://example.tld/?q={query}&s=seeders&o=desc&p={page}",
     "kind": "html",
     "row": ".torrent-list tbody tr",
     "fields": {
@@ -87,121 +87,121 @@ JSON do AnimeTosho "mapeia quase 1:1 em `nyaa.TorrentResult`".
 }
 ```
 
-`{query}` e `{page}` são os dois únicos placeholders. A **montagem da query** (`extractSeasonFromName`,
-`episodeQueries`, as variantes de título de `GenerateSearchTitleVariants`) continua no app: é texto de
-busca, não é específico de fonte. O teto de páginas continua sendo `max_search_pages` do
-`config.json`, não campo do descriptor.
+`{query}` and `{page}` are the only two placeholders. **Building the query** (`extractSeasonFromName`,
+`episodeQueries`, the title variants from `GenerateSearchTitleVariants`) stays in the app: it is search
+text, not source-specific. The page cap is still `max_search_pages` from
+`config.json`, not a descriptor field.
 
-`kind` aceita `html` (goquery, já instalado), `json` (`encoding/json`) e `rss` (`encoding/xml`).
-Nenhuma dependência nova. Para `json`/`rss`, `fields` carrega caminho de campo em vez de seletor CSS.
+`kind` accepts `html` (goquery, already installed), `json` (`encoding/json`) and `rss` (`encoding/xml`).
+No new dependency. For `json`/`rss`, `fields` carries a field path instead of a CSS selector.
 
-`detail` é opcional. Fonte sem ele desliga o `packRange` — pack sem faixa no nome grava faixa zero,
-que é exatamente o fallback que [decisions.md #84](../../agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
-já definiu.
+`detail` is optional. A source without it turns off `packRange` — a pack without a range in its name records a zero range,
+which is exactly the fallback that [decisions.md #84](../../agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
+already defined.
 
-### O contrato que a fonte precisa cumprir — e quem reprova
+### The contract the source has to meet — and who fails it
 
-Declarar isso no formato é o que impede o descriptor de virar uma linguagem de programação:
+Declaring this in the format is what keeps the descriptor from turning into a programming language:
 
-1. **Ordenar por seeders decrescente.** A descida de páginas de
-   [decisions.md #57](../../agents/decisions.md#57-paginação-adaptativa-sequencial-com-piso-de-candidatos-sem-orçamento-por-anime)
-   para no piso de candidatos porque confia que o topo é o melhor.
-2. **Paginar de verdade.** `{page}` tem que devolver página diferente.
-3. **Expor seeders por linha.** `filterBySeeders` e `min_seeders` não têm o que filtrar sem isso.
+1. **Sort by seeders descending.** The page descent of
+   [decisions.md #57](../../agents/decisions.md#57-adaptive-pagination-sequential-with-a-candidate-floor-no-per-anime-budget)
+   stops at the candidate floor because it trusts that the top is the best.
+2. **Actually paginate.** `{page}` has to return a different page.
+3. **Expose seeders per row.** `filterBySeeders` and `min_seeders` have nothing to filter without it.
 
-Medido em `sources.md`, isso já reprova: o RSS do Nyaa (ignora `s=` e `p=`), o JSON do AnimeTosho
-(`order=seeders-d` silenciosamente ignorado, `seeders` em cache de ~22 dias de mediana) e o
-TokyoTosho (RSS sem tag de seeders). **Nenhuma escape hatch para eles até que uma fonte real e
-conforme apareça pedindo** — inclusive o magnet em base32 do TokyoTosho, que não se normaliza aqui.
+Measured in `sources.md`, this already fails: Nyaa's RSS (ignores `s=` and `p=`), AnimeTosho's JSON
+(`order=seeders-d` silently ignored, `seeders` cached with a ~22-day median) and
+TokyoTosho (RSS without a seeders tag). **No escape hatch for them until a real, conforming source shows up
+asking for one** — including TokyoTosho's base32 magnet, which is not normalized here.
 
-## A refatoração real: `parseRow` se parte em três
+## The real refactor: `parseRow` splits in three
 
-O trabalho não é o descriptor, é que hoje a extração do DOM e a classificação estão no mesmo
-`parseRow` (`nyaa.go:714` é o caso completo). Ele faz, na mesma função: lê célula por posição,
-chama `ShouldIgnore`, casa título, extrai season/part/episode, aplica os portões de season/part,
-aplica `batchTooBig`, e acumula. Só a primeira dessas coisas é do Nyaa.
+The work is not the descriptor, it is that today DOM extraction and classification live in the same
+`parseRow` (`nyaa.go:714` is the full case). In one function it: reads cells by position,
+calls `ShouldIgnore`, matches the title, extracts season/part/episode, applies the season/part gates,
+applies `batchTooBig`, and accumulates. Only the first of those things is Nyaa's.
 
-Quebra proposta:
+Proposed split:
 
 ```
-extract(linha) → RawRow{Name, Magnet, DetailURL, Seeders, Leechers, Size, Date}   ← descriptor
-classify(RawRow) → TorrentResult                                                  ← genérico
-accept(TorrentResult, critérios) → bool                                           ← genérico
+extract(row)   → RawRow{Name, Magnet, DetailURL, Seeders, Leechers, Size, Date}   ← descriptor
+classify(RawRow) → TorrentResult                                                  ← generic
+accept(TorrentResult, criteria) → bool                                            ← generic
 ```
 
-O laço de páginas (`fetchSearchPages`) fica no lado genérico, porque o `accepted()` que ele conta
-depende do `accept` — só o fetch de uma página e o `extract` de uma linha atravessam para a fonte.
+The page loop (`fetchSearchPages`) stays on the generic side, because the `accepted()` it counts
+depends on `accept` — only fetching a page and the `extract` of a row cross over to the source.
 
-**Sem interface.** Vai existir uma implementação só (a dirigida por descriptor); um `Source` struct
-basta. Os testes não precisam de fake: apontar o descriptor para um `httptest.Server` é mais barato
-que o `MockNyaaHttpGet` de hoje, e deixa de existir `getNyaaBaseURL`/`NYAA_URL`.
+**No interface.** There will be only one implementation (the descriptor-driven one); a `Source` struct
+is enough. The tests don't need a fake: pointing the descriptor at an `httptest.Server` is cheaper
+than today's `MockNyaaHttpGet`, and `getNyaaBaseURL`/`NYAA_URL` stop existing.
 
-### Pacotes depois da quebra
+### Packages after the split
 
-| pacote | conteúdo |
+| package | contents |
 |---|---|
-| `internal/release` | `nyaa_match.go`, `nyaa_regex.go`, `priorities.go`, todos os `Extract*`, `parseSize`, `ParseSeeders`, `SortTorrentResults`, `TorrentResult` |
-| `internal/source` | descriptor, fetch, `extract`, paginação, lista de arquivos do detalhe |
+| `internal/release` | `nyaa_match.go`, `nyaa_regex.go`, `priorities.go`, all the `Extract*`, `parseSize`, `ParseSeeders`, `SortTorrentResults`, `TorrentResult` |
+| `internal/source` | descriptor, fetch, `extract`, pagination, detail page file list |
 
-Custo mecânico medido: 21 arquivos importam `internal/nyaa`, com 277 ocorrências de `nyaa.`.
-É o grosso do diff, e é busca-e-substitui. Efeito colateral bom: `ScrapNyaaForAnime`,
-`searchNyaaForMovie` e companhia param de mentir no nome.
+Measured mechanical cost: 21 files import `internal/nyaa`, with 277 occurrences of `nyaa.`.
+It is the bulk of the diff, and it is search-and-replace. Good side effect: `ScrapNyaaForAnime`,
+`searchNyaaForMovie` and company stop lying in their names.
 
-O `nyaaSearcher` de
+The `nyaaSearcher` from
 [decisions.md #14](../../agents/decisions.md#14-nyaasearcher--dependency-injection-for-nyaa-search-in-processanimeepisodes)
-sobrevive quase intacto — os quatro campos já são os quatro certos, incluindo o `packRange`. Muda o
-nome e o `defaultNyaaSearcher()` passa a receber a fonte carregada em vez de fechar sobre funções de
-pacote.
+survives almost intact — the four fields are already the right four, including `packRange`. Its
+name changes and `defaultNyaaSearcher()` starts receiving the loaded source instead of closing over package
+functions.
 
-## Onde o descriptor mora
+## Where the descriptor lives
 
-- **No repo do app: nenhum.** Nem de exemplo com host real. `docs/` descreve o formato; um
-  `exemplo.json` apontando para `localhost` serve de referência.
-- **Em disco:** ao lado do `config.json` (`files.configFileName`, `filemanager.go:17`), em
-  `sources/*.json`. Sem fonte configurada, o daemon **sobe normalmente** e a busca vira no-op com
-  mensagem clara na UI — a tela de animes, o histórico e os torrents em andamento continuam
-  funcionando. Não é erro fatal.
-- **Instalação:** o usuário põe o arquivo lá. Sem índice oficial, sem catálogo embutido, sem botão
-  "instalar do repositório da comunidade". O catálogo é justamente a peça que te dá dono — foi o que
-  aconteceu com o `tachiyomi-extensions`.
-- **Comunidade:** o formato documentado basta para alguém manter o próprio índice. Você não hospeda
-  e não linka.
+- **In the app repo: none.** Not even as an example with a real host. `docs/` describes the format; an
+  `example.json` pointing at `localhost` serves as a reference.
+- **On disk:** next to `config.json` (`files.configFileName`, `filemanager.go:17`), in
+  `sources/*.json`. With no source configured, the daemon **starts normally** and search becomes a no-op with
+  a clear message in the UI — the anime screen, the history and in-progress torrents keep
+  working. It is not a fatal error.
+- **Installation:** the user drops the file there. No official index, no embedded catalog, no
+  "install from the community repository" button. The catalog is exactly the piece that makes you an owner — that is what
+  happened to `tachiyomi-extensions`.
+- **Community:** the documented format is enough for someone to maintain their own index. You don't host
+  and don't link.
 
-## Testes
+## Tests
 
-`src/tests/mocks/` já tem mock de Nyaa e o `docker-compose.test.yml` já injeta `NYAA_URL`
-(`testing.md:229`). Vira: descriptor de teste apontando para o mock. Os quatro literais `nyaa.si`
-em `src/tests/unit/nyaa_test.go:1179-1238` viram host de fixture.
+`src/tests/mocks/` already has a Nyaa mock and `docker-compose.test.yml` already injects `NYAA_URL`
+(`testing.md:229`). It becomes: a test descriptor pointing at the mock. The four `nyaa.si` literals
+in `src/tests/unit/nyaa_test.go:1179-1238` become a fixture host.
 
-O teste ao vivo `nyaa/live_pack_measure_test.go` (gate `AAD_LIVE_NYAA=1`) é o único lugar que
-**precisa** de um host real. Ou sai do repo, ou passa a ler o host de env sem default.
+The live test `nyaa/live_pack_measure_test.go` (gate `AAD_LIVE_NYAA=1`) is the only place that
+**needs** a real host. Either it leaves the repo, or it starts reading the host from env with no default.
 
-## Ordem de execução
+## Execution order
 
-1. **Quebrar `internal/nyaa` em `release` + `source`, com o Nyaa ainda hardcoded.** Diff grande,
-   comportamento idêntico, `go test ./...` verde é o critério. Nada de descriptor ainda.
-2. **`extract`/`classify`/`accept` separados** dentro de `source`, ainda hardcoded.
-3. **Descriptor JSON dirigindo o `extract`**, com o `nyaa.json` gerado a partir do que estava
-   hardcoded — e usado só como fixture de teste local.
-4. **Tirar o hardcoded**, carregar de `sources/*.json`, tratar ausência como no-op com aviso.
-5. **Limpar repo e docs**: fixtures, `NYAA_URL`, `environment.md:17`, `sources.md`, `testing.md`.
+1. **Split `internal/nyaa` into `release` + `source`, with Nyaa still hardcoded.** Big diff,
+   identical behavior, green `go test ./...` is the criterion. No descriptor yet.
+2. **Separate `extract`/`classify`/`accept`** inside `source`, still hardcoded.
+3. **JSON descriptor driving `extract`**, with `nyaa.json` generated from what was
+   hardcoded — and used only as a local test fixture.
+4. **Remove the hardcoding**, load from `sources/*.json`, treat absence as a no-op with a warning.
+5. **Clean up repo and docs**: fixtures, `NYAA_URL`, `environment.md:17`, `sources.md`, `testing.md`.
 
-Cada etapa é commitável sozinha. Se parar na 2, o projeto já melhorou; se parar na 4, o objetivo
-está cumprido.
+Each step is committable on its own. If it stops at 2, the project has already improved; if it stops at 4, the goal
+is met.
 
-## Fora do escopo
+## Out of scope
 
-- **Múltiplas fontes ao mesmo tempo**, merge e deduplicação entre fontes. Uma fonte ativa por vez.
-- **`kind: json` e `kind: rss`** podem ficar para depois da etapa 4 — o Nyaa é `html`, e nenhuma
-  fonte conforme ao contrato acima está identificada hoje. Desenhados aqui para que o formato não
-  precise mudar quando chegarem.
-- **Normalização de magnet base32, seeders ausente, ordenação client-side.** Tudo isso é escape
-  hatch para fonte que não cumpre o contrato. Não construir preventivamente.
-- **UI de gerenciamento de fontes.** Arquivo em disco basta; tela só depois de existir mais de uma.
+- **Multiple sources at once**, merging and deduplication across sources. One active source at a time.
+- **`kind: json` and `kind: rss`** can wait until after step 4 — Nyaa is `html`, and no
+  source conforming to the contract above is identified today. Designed here so the format doesn't
+  need to change when they arrive.
+- **Base32 magnet normalization, missing seeders, client-side sorting.** All of that is an escape
+  hatch for a source that doesn't meet the contract. Don't build it preemptively.
+- **Source management UI.** A file on disk is enough; a screen only after more than one exists.
 
-## Docs a atualizar quando executar
+## Docs to update when executing
 
-`environment.md` (sai `NYAA_URL`), `config.md` (pasta `sources/`), `architecture.md` (os dois
-pacotes novos, e o fato negativo "não existe `internal/nyaa`"), `testing.md` (mock por descriptor),
-`sources.md` (passa a descrever o contrato, não a fonte), e entrada nova em `decisions.md` para
-"por que o tratamento não vai no descriptor" e "por que não há interface `Source`".
+`environment.md` (`NYAA_URL` goes away), `config.md` (`sources/` folder), `architecture.md` (the two
+new packages, and the negative fact "there is no `internal/nyaa`"), `testing.md` (descriptor-based mock),
+`sources.md` (starts describing the contract, not the source), and a new entry in `decisions.md` for
+"why the processing doesn't go in the descriptor" and "why there is no `Source` interface".
