@@ -834,7 +834,9 @@ func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
 			},
 		}
 
-		clearLibraryPathsAfterRootSwap(fm, t.TempDir())
+		if cleared := clearLibraryPathsAfterRootSwap(fm, t.TempDir()); cleared != 1 {
+			t.Errorf("cleared = %d, want 1: library_missing tells the user how many will be redownloaded", cleared)
+		}
 
 		if len(fm.upserted) != 1 {
 			t.Fatalf("expected one write-back, got %d", len(fm.upserted))
@@ -855,7 +857,9 @@ func TestClearLibraryPathsAfterRootSwap(t *testing.T) {
 			saved: []files.EpisodeStruct{{EpisodeNumber: 1, EpisodeHash: "8888888888888888888888888888888888888888"}},
 		}
 
-		clearLibraryPathsAfterRootSwap(fm, t.TempDir())
+		if cleared := clearLibraryPathsAfterRootSwap(fm, t.TempDir()); cleared != 0 {
+			t.Errorf("cleared = %d, want 0", cleared)
+		}
 
 		if len(fm.upserted) != 0 {
 			t.Errorf("nothing to clear must mean no write to the episodes file, got %v", fm.upserted)

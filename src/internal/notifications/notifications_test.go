@@ -628,3 +628,41 @@ func TestFireWebhook_ErrorDoesNotLeakURLPath(t *testing.T) {
 		}
 	}
 }
+
+// An alert item's Text is its line, verbatim — no episode-run grouping — and the title is the
+// event's own, never "N episodes ...".
+func TestAlertItems_TextIsTheLineAndTitleIsTheEvent(t *testing.T) {
+	items := []Episode{{Text: "/media/anime is gone or was replaced. 3 episodes will be downloaded again."}}
+	vars := buildBatchVars(LibraryMissing, items)
+	if vars["title"] != "Library folder is gone" {
+		t.Errorf("title = %q", vars["title"])
+	}
+	if vars["message"] != items[0].Text {
+		t.Errorf("message = %q, want the Text verbatim", vars["message"])
+	}
+	if vars["anime_id"] != "" || vars["episode"] != "" {
+		t.Errorf("an alert has no anime/episode, got anime_id=%q episode=%q", vars["anime_id"], vars["episode"])
+	}
+
+	two := append(items, Episode{Text: "second line"})
+	if got := buildBatchVars(LibraryMissing, two); got["message"] != items[0].Text+"\nsecond line" || got["title"] != "Library folder is gone" {
+		t.Errorf("two alert items: title %q, message %q", got["title"], got["message"])
+	}
+}
+
+// System events carry AnimeID 0, and a webhook filtered by anime_sources still gets them: a crash
+// or a vanished library is not "from" any account, and filtering by account must not silence it.
+func TestFireBatch_SourceFilterLetsSystemEventsThrough(t *testing.T) {
+	srvAlice, alice := collector(t)
+	SetSourceResolver(func(_ *files.Config, ids []int) map[int][]string { return map[int][]string{} })
+	t.Cleanup(func() { SetSourceResolver(nil) })
+
+	cfg := &files.Config{Notifications: files.NotificationsConfig{Webhooks: []files.WebhookPreset{
+		{Name: "alice", URL: srvAlice.URL, Method: "POST", Body: "{{message}}", Events: []string{"library_missing"}, AnimeSources: []string{"anilist:alice"}},
+	}}}
+	Notify(cfg, LibraryMissing, Episode{Text: "gone"})
+
+	if got := drain(alice, 1, time.Second); len(got) != 1 || got[0] != "gone" {
+		t.Errorf("a filtered webhook must get the system event, got %v", got)
+	}
+}

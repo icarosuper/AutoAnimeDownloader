@@ -118,6 +118,23 @@ Available in `url`, `headers` values, and `body`:
 | `{{file_path}}` | Always empty — not tracked |
 | `{{timestamp}}` | Current time formatted as `2006-01-02 15:04` |
 
+## Webhook Events
+
+The values of `notifications.webhooks[].events`. The web UI groups them as Episodes, Library and
+System; a new message preset starts with the episode events plus the system ones.
+
+| Event | Group | Fires when |
+|-------|-------|------------|
+| `new_episode` | Episodes | a torrent for a new episode was found and is being added |
+| `download_failed` | Episodes | a download failed (see `{{reason}}`) |
+| `download_completed` | Episodes | an episode was organized into the library |
+| `episode_deleted` | Episodes | episodes were removed from the library |
+| `library_missing` | System | the library folder vanished or was replaced (unmounted drive); everything in it will be downloaded again |
+
+The Library and System events are **alerts**: `{{message}}` is one line per alert, `{{title}}`
+names the alert, and `{{anime_name}}`/`{{episode}}`/`{{anime_id}}` are empty for the System ones,
+which also reach a webhook filtered by `anime_sources` — they are not about any account's anime.
+
 ## Loading Behavior
 
 `LoadConfigs()` starts from `getDefaultConfig()`, then unmarshals `config.json` on top. Fields missing from JSON keep their defaults. If file is empty, corrupt, or missing, defaults are written to disk.

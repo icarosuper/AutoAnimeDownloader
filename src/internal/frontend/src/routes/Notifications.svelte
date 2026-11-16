@@ -17,6 +17,7 @@
   import { locale } from "../lib/stores/locale.js";
   import { sourceOptions, toggleSource, type SourceOption } from "../lib/domain/webhookSources.js";
   import { accountLabel } from "../lib/utils/status.js";
+  import { EVENT_GROUPS, MESSAGE_PRESET_EVENTS, eventLabel, groupLabel } from "../lib/domain/notificationEvents.js";
 
   $: T = $locale && {
     title: m.notifications_title(),
@@ -43,10 +44,6 @@
     labelBatchWindow: m.notifications_label_batch_window(),
     hintBatchWindow: m.notifications_hint_batch_window(),
     labelEvents: m.notifications_label_events(),
-    eventNewEpisode: m.notifications_event_new_episode(),
-    eventDownloadFailed: m.notifications_event_download_failed(),
-    eventDownloadCompleted: m.notifications_event_download_completed(),
-    eventEpisodeDeleted: m.notifications_event_episode_deleted(),
     labelSources: m.notifications_label_sources(),
     hintSources: m.notifications_hint_sources(),
     sourceAll: m.notifications_source_all(),
@@ -72,16 +69,20 @@
     }
   }
 
-  const ALL_EVENTS = ['new_episode', 'download_failed', 'download_completed', 'episode_deleted'] as const;
+  // The checkboxes, under their group headings; an empty group isn't shown.
+  $: eventGroups = $locale && EVENT_GROUPS.filter(g => g.events.length > 0).map(g => ({
+    label: groupLabel(g.group),
+    events: g.events.map(value => ({ value, label: eventLabel(value) })),
+  }));
 
   const WEBHOOK_PRESETS: Record<string, WebhookPreset> = {
-    ntfy:     { name: 'ntfy',     url: 'https://ntfy.sh/CHANGE_ME',                                    method: 'POST', headers: { Title: '{{title}}', Priority: 'default' },         body: '{{message}}',                                                                                                                                            events: [...ALL_EVENTS] },
-    gotify:   { name: 'Gotify',   url: 'http://YOUR_GOTIFY_URL/message?token=CHANGE_ME',               method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","message":"{{message}}","priority":5}',                                                                                            events: [...ALL_EVENTS] },
-    discord:  { name: 'Discord',  url: 'https://discord.com/api/webhooks/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"content":"**{{title}}**\\n{{message}}"}',                                                                                                              events: [...ALL_EVENTS] },
-    telegram: { name: 'Telegram', url: 'https://api.telegram.org/botCHANGE_TOKEN/sendMessage',         method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"chat_id":"CHANGE_CHAT_ID","text":"*{{title}}*\\n{{message}}","parse_mode":"Markdown"}',                                                                events: [...ALL_EVENTS] },
-    pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json',                     method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}',                                                      events: [...ALL_EVENTS] },
-    slack:    { name: 'Slack',    url: 'https://hooks.slack.com/services/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"text":"*{{title}}*\\n{{message}}"}',                                                                                                                   events: [...ALL_EVENTS] },
-    apprise:  { name: 'Apprise',  url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG',                    method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","body":"{{message}}"}',                                                                                                             events: [...ALL_EVENTS] },
+    ntfy:     { name: 'ntfy',     url: 'https://ntfy.sh/CHANGE_ME',                                    method: 'POST', headers: { Title: '{{title}}', Priority: 'default' },         body: '{{message}}',                                                                                                                                            events: [...MESSAGE_PRESET_EVENTS] },
+    gotify:   { name: 'Gotify',   url: 'http://YOUR_GOTIFY_URL/message?token=CHANGE_ME',               method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","message":"{{message}}","priority":5}',                                                                                            events: [...MESSAGE_PRESET_EVENTS] },
+    discord:  { name: 'Discord',  url: 'https://discord.com/api/webhooks/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"content":"**{{title}}**\\n{{message}}"}',                                                                                                              events: [...MESSAGE_PRESET_EVENTS] },
+    telegram: { name: 'Telegram', url: 'https://api.telegram.org/botCHANGE_TOKEN/sendMessage',         method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"chat_id":"CHANGE_CHAT_ID","text":"*{{title}}*\\n{{message}}","parse_mode":"Markdown"}',                                                                events: [...MESSAGE_PRESET_EVENTS] },
+    pushover: { name: 'Pushover', url: 'https://api.pushover.net/1/messages.json',                     method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"token":"CHANGE_APP_TOKEN","user":"CHANGE_USER_KEY","title":"{{title}}","message":"{{message}}"}',                                                      events: [...MESSAGE_PRESET_EVENTS] },
+    slack:    { name: 'Slack',    url: 'https://hooks.slack.com/services/CHANGE_ME',                   method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"text":"*{{title}}*\\n{{message}}"}',                                                                                                                   events: [...MESSAGE_PRESET_EVENTS] },
+    apprise:  { name: 'Apprise',  url: 'http://YOUR_APPRISE_URL/notify/CHANGE_TAG',                    method: 'POST', headers: { 'Content-Type': 'application/json' },               body: '{"title":"{{title}}","body":"{{message}}"}',                                                                                                             events: [...MESSAGE_PRESET_EVENTS] },
     // Not notifications: they trigger a library scan. Only on download_completed and episode_deleted —
     // there is nothing to scan when the episode was only detected or the download failed.
     jellyfin: { name: 'Jellyfin', url: 'http://YOUR_JELLYFIN_URL/Library/Refresh',                     method: 'POST', headers: { 'X-Emby-Token': 'CHANGE_API_KEY' },                  body: '',                                                                                                                                                      events: ['download_completed', 'episode_deleted'] },
@@ -99,7 +100,7 @@
 
   let showWebhookForm = false;
   let editingIndex: number | null = null;
-  let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
+  let newWebhook: WebhookPreset = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...MESSAGE_PRESET_EVENTS] };
 
   // Headers become a list of pairs WHILE the form is open, and only become
   // Record<string,string> again on Confirm. The object is no good for editing: renaming a
@@ -120,7 +121,7 @@
     Object.fromEntries(rows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value]));
 
   function resetForm() {
-    newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...ALL_EVENTS] };
+    newWebhook = { name: '', url: '', method: 'POST', headers: {}, body: '', events: [...MESSAGE_PRESET_EVENTS] };
     headerRows = [{ key: '', value: '' }];
     editingIndex = null;
     showWebhookForm = false;
@@ -385,24 +386,24 @@
 
               <div class="flex flex-col gap-2">
                 <span id="webhook-events-label" class="text-xs font-medium text-heading">{T && T.labelEvents}</span>
-                <div class="flex flex-col gap-1" role="group" aria-labelledby="webhook-events-label">
-                  {#each [
-                    { value: 'new_episode',        label: T && T.eventNewEpisode },
-                    { value: 'download_failed',    label: T && T.eventDownloadFailed },
-                    { value: 'download_completed', label: T && T.eventDownloadCompleted },
-                    { value: 'episode_deleted',     label: T && T.eventEpisodeDeleted },
-                  ] as ev}
-                    <Checkbox
-                      label={ev.label || ""}
-                      checked={newWebhook.events.includes(ev.value)}
-                      on:change={(e) => {
-                        if ((e.target as HTMLInputElement).checked) {
-                          newWebhook.events = [...newWebhook.events, ev.value];
-                        } else {
-                          newWebhook.events = newWebhook.events.filter(v => v !== ev.value);
-                        }
-                      }}
-                    />
+                <div class="flex flex-col gap-3" role="group" aria-labelledby="webhook-events-label">
+                  {#each eventGroups || [] as group}
+                    <div class="flex flex-col gap-1">
+                      <span class="text-xs text-subtle">{group.label}</span>
+                      {#each group.events as ev}
+                        <Checkbox
+                          label={ev.label || ""}
+                          checked={newWebhook.events.includes(ev.value)}
+                          on:change={(e) => {
+                            if ((e.target as HTMLInputElement).checked) {
+                              newWebhook.events = [...newWebhook.events, ev.value];
+                            } else {
+                              newWebhook.events = newWebhook.events.filter(v => v !== ev.value);
+                            }
+                          }}
+                        />
+                      {/each}
+                    </div>
                   {/each}
                 </div>
               </div>

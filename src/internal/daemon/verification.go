@@ -105,7 +105,10 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// Latched by Ensure, here or in an earlier manual-download call: the folder the session
 	// was bound to is gone, so the records pointing into it must go too.
 	if backend.ConsumeRootSwap() {
-		clearLibraryPathsAfterRootSwap(fileManager, configs.CompletedAnimePath)
+		cleared := clearLibraryPathsAfterRootSwap(fileManager, configs.CompletedAnimePath)
+		// Even with 0 cleared: an empty library that vanished is still a folder that vanished, and an
+		// unmounted drive is worth knowing about before the redownloads fill the disk underneath it.
+		notifications.Notify(configs, notifications.LibraryMissing, libraryMissingItem(configs.CompletedAnimePath, cleared))
 	}
 
 	// downloadedTorrents is an in-memory snapshot of the embedded client (cheap, no I/O).
@@ -391,11 +394,13 @@ outer:
 // point into is gone, the daemon is already redownloading its contents, and the detection is
 // edge-triggered — Ensure reports the swap once, then rewrites the marker, so this runs a
 // single time per swap and can never become the resurrection loop #29 guards against.
-func clearLibraryPathsAfterRootSwap(fileManager FileManagerInterface, completedPath string) {
+//
+// Returns how many records it cleared — the episodes that will be downloaded again.
+func clearLibraryPathsAfterRootSwap(fileManager FileManagerInterface, completedPath string) int {
 	saved, err := fileManager.LoadSavedEpisodes()
 	if err != nil {
 		logger.Logger.Warn().Err(err).Msg("Root swap: failed to load saved episodes; library records left untouched")
-		return
+		return 0
 	}
 
 	var stale []files.EpisodeStruct
@@ -410,17 +415,22 @@ func clearLibraryPathsAfterRootSwap(fileManager FileManagerInterface, completedP
 		stale = append(stale, ep)
 	}
 	if len(stale) == 0 {
-		return
+		return 0
 	}
 
 	if err := fileManager.UpsertEpisodes(stale); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Root swap: failed to clear the stale library paths")
-		return
+		return 0
 	}
 	logger.Logger.Warn().
 		Int("episodes", len(stale)).
 		Str("completed_anime_path", completedPath).
 		Msg("Root swap: the library folder is gone, cleared the stale library links; episodes will be redownloaded and reorganized at the configured path")
+	return len(stale)
+}
+
+func libraryMissingItem(completedPath string, cleared int) notifications.Episode {
+	return notifications.Episode{Text: fmt.Sprintf("%s is gone or was replaced. %s will be downloaded again.", completedPath, plural(cleared, "episode"))}
 }
 
 // reconcileLibrary enqueues JobOrganize for completed torrents whose saved episodes have

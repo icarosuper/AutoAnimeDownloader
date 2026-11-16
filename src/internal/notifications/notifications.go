@@ -22,6 +22,12 @@ const (
 	DownloadFailed
 	DownloadCompleted
 	EpisodeDeleted
+
+	// Alert events: about the daemon or the library as a whole, not about one episode being fetched.
+	// Their items carry Text (the line, verbatim) and their title comes from alertTitle. The system
+	// ones carry AnimeID 0, which itemsFor lets through every source filter — a crash is not "from"
+	// any account.
+	LibraryMissing
 )
 
 // Download-failure reasons, used as {{reason}} and in the default message.
@@ -43,6 +49,8 @@ func eventString(e Event) string {
 		return "download_completed"
 	case EpisodeDeleted:
 		return "episode_deleted"
+	case LibraryMissing:
+		return "library_missing"
 	}
 	return ""
 }
@@ -58,6 +66,10 @@ func interpolate(template string, vars map[string]string) string {
 // caller does not have them (a "no torrent found" failure has no hash) — and reach the templates
 // as {{anime_id}} / {{torrent_hash}}, blank when unknown.
 //
+// Text, when set, is the item's whole line in {{message}}, used verbatim: the alert events (a
+// vanished library, a crash) are not "EP N of anime X" and don't go through the episode-run
+// grouping. Their title comes from alertTitle.
+//
 // PackSize > 1 turns the item into a whole batch pack of that many episodes: ONE event (one push,
 // one Jellyfin scan), not N. A pack's text names only the anime and {{episode}} is blank — the
 // variable is always a single number or nothing, never a range a template can't use as a number
@@ -69,6 +81,7 @@ type Episode struct {
 	PackSize    int
 	Reason      string
 	TorrentHash string
+	Text        string
 }
 
 func (e Episode) isPack() bool { return e.PackSize > 1 }
@@ -112,7 +125,7 @@ func buildBatchVars(event Event, items []Episode) map[string]string {
 
 	if len(items) == 1 {
 		vars["anime_name"] = items[0].AnimeName
-		if !items[0].isPack() {
+		if !items[0].isPack() && items[0].Number != 0 {
 			vars["episode"] = fmt.Sprintf("%d", items[0].Number)
 		}
 		vars["reason"] = items[0].Reason
@@ -137,11 +150,12 @@ func batchLines(event Event, items []Episode) []string {
 		animeID int
 		name    string // only when there is no id: an id already identifies the anime
 		reason  string
+		text    string // an alert line: its own group, printed as is
 	}
 	var order []groupKey
 	groups := make(map[groupKey][]Episode)
 	for _, it := range items {
-		key := groupKey{animeID: it.AnimeID, reason: it.Reason}
+		key := groupKey{animeID: it.AnimeID, reason: it.Reason, text: it.Text}
 		if it.AnimeID == 0 {
 			key.name = it.AnimeName
 		}
@@ -153,6 +167,10 @@ func batchLines(event Event, items []Episode) []string {
 
 	lines := make([]string, 0, len(items))
 	for _, key := range order {
+		if key.text != "" {
+			lines = append(lines, key.text)
+			continue
+		}
 		group := groups[key]
 		first := group[0]
 		var numbers []int
@@ -190,6 +208,9 @@ func batchLines(event Event, items []Episode) []string {
 }
 
 func batchTitle(event Event, items []Episode) string {
+	if isAlert(event) {
+		return alertTitle(event, items)
+	}
 	if len(items) == 1 {
 		if items[0].isPack() {
 			title, _ := packStrings(items[0].AnimeName, event, items[0].Reason)
@@ -209,6 +230,22 @@ func batchTitle(event Event, items []Episode) string {
 		return fmt.Sprintf("%d episodes downloaded", count)
 	case EpisodeDeleted:
 		return fmt.Sprintf("%d episodes deleted", count)
+	}
+	return ""
+}
+
+// isAlert reports whether the event is one of the alert events, whose items are lines of Text.
+func isAlert(event Event) bool {
+	return event >= LibraryMissing
+}
+
+// alertTitle is the title of an alert event's notification. It doesn't name a count of episodes:
+// an alert item is a line about the library or the daemon, and a window of two of them is still
+// one problem to look at.
+func alertTitle(event Event, items []Episode) string {
+	switch event {
+	case LibraryMissing:
+		return "Library folder is gone"
 	}
 	return ""
 }

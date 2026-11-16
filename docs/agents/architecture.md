@@ -21,7 +21,7 @@ src/internal/
   frontend/          → Svelte 5 + Vite + Tailwind 3 web UI (compiled to Go embed). No
                        component library: the primitives live in components/ui/ and the
                        colors in lib/design/tokens.css (decisions.md #91)
-  notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on NewEpisode/DownloadFailed; by job queue on DownloadCompleted.
+  notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on the episode events and the alerts (`daemon/health.go`); by job queue on DownloadCompleted.
   logger/            → zerolog-based structured logger (console + rotating file)
   datadir/           → The data dir path (~/.autoAnimeDownloader, %APPDATA%\.autoAnimeDownloader) — leaf package
   diagnostics/       → Bug report bundle (redacted environment, config, log) and the crash file lifecycle
@@ -655,6 +655,12 @@ fetched (download statuses in `searchAnilist`, delete statuses in the delete fet
 standalone file. Each filtered webhook gets its share of the items, with the template built from
 that share. An anime no list holds is **unknown and fail-open**: it reaches every filtered webhook,
 and so does everything when no resolver is wired ([decisions.md #126](decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)).
+
+**Alert events** (`isAlert`: `library_missing` onward) are about the library or the daemon, not
+one episode being fetched. Their items carry `Text` — the line, verbatim, no episode-run grouping —
+and the title comes from `alertTitle`. The text and the edge tracking that keeps a state from
+firing every pass live in `daemon/health.go`; `notifications` only delivers. System alerts carry
+`AnimeID == 0`, which `itemsFor` lets through every `anime_sources` filter.
 
 **A webhook's URL and headers are secrets** (the ntfy Bearer, the Discord/Slack path, Telegram's
 `bot<token>`). `fireWebhook` passes every net/http error through `redactURLError` (scheme + host
