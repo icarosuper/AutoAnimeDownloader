@@ -345,6 +345,7 @@
   "notifications_event_update_available": "Nova versão disponível",
   "notifications_event_disk_low": "Disco quase cheio / downloads parados",
   "notifications_event_episode_limit_reached": "Anime atingiu o limite de episódios",
+  "notifications_event_episode_stuck": "Episódio sem baixar há 2 dias",
   "notifications_group_episodes": "Episódios",
   "notifications_group_library": "Biblioteca",
   "notifications_group_system": "Sistema",

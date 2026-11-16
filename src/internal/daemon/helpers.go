@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"runtime"
 	"testing"
+	"time"
 )
 
 type FileManagerInterface interface {
@@ -117,14 +118,20 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 	if saved, err := fileManager.LoadSavedEpisodes(); err != nil {
 		logger.Logger.Warn().Err(err).Str("hash", hash).Msg("Torrent failure: failed to load saved episodes for the webhook")
 	} else {
+		var records []files.EpisodeStruct
 		for _, ep := range saved {
 			if ep.EpisodeHash == hash {
-				failed.AnimeID = ep.AnimeID
-				failed.AnimeName = ep.AnimeName
-				failed.Number = ep.EpisodeNumber
-				break
+				records = append(records, ep)
 			}
 		}
+		if len(records) > 0 {
+			failed.AnimeID = records[0].AnimeID
+			failed.AnimeName = records[0].AnimeName
+			failed.Number = records[0].EpisodeNumber
+		}
+		// The add → stall → drop loop never shows up in a pass's problems (every add succeeds): the
+		// drop itself is what keeps episode_stuck's clock running.
+		recordTorrentDrop(records, time.Now())
 	}
 
 	failed.Reason = notifications.ReasonDownloadRejected

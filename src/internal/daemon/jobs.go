@@ -425,6 +425,9 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 	// not notify again. Without this, records created later for an already-organized torrent —
 	// like the ones the batch rule creates on the first post-upgrade pass of an existing
 	// library — would duplicate the notification.
+	// In the library: whatever kept these episodes from downloading is over.
+	clearStuck(matched)
+
 	if partiallyOrganized {
 		logger.Logger.Debug().Str("hash", hash).Msg("Organize: group was already partially organized, skipping the completion webhook")
 	} else {

@@ -33,6 +33,7 @@ const (
 	UpdateAvailable
 	DiskLow
 	EpisodeLimitReached
+	EpisodeStuck
 )
 
 // Download-failure reasons, used as {{reason}} and in the default message.
@@ -77,6 +78,8 @@ func eventString(e Event) string {
 		return "disk_low"
 	case EpisodeLimitReached:
 		return "episode_limit_reached"
+	case EpisodeStuck:
+		return "episode_stuck"
 	}
 	return ""
 }
@@ -302,6 +305,11 @@ func alertTitle(event Event, items []Episode) string {
 			return fmt.Sprintf("%d animes hit the episode limit", len(items))
 		}
 		return "Episode limit reached"
+	case EpisodeStuck:
+		if n := episodeCount(items); n > 1 {
+			return fmt.Sprintf("%d episodes are not downloading", n)
+		}
+		return "Episode is not downloading"
 	}
 	return ""
 }
@@ -341,6 +349,9 @@ func eventStrings(animeName string, first, last int, event Event, reason string)
 		}
 		return "Episode deleted",
 			fmt.Sprintf("%s %s was removed from the library", animeName, episodes)
+	case EpisodeStuck:
+		// The title comes from alertTitle; the reason already carries how long ("for 2 days").
+		return "", fmt.Sprintf("%s %s: %s", animeName, episodes, reason)
 	}
 	return "", ""
 }
@@ -583,7 +594,8 @@ func Notify(cfg *files.Config, event Event, it Episode) {
 // webhook, as it always was — a deletion of two animes is two pushes, each with its {{anime_id}}
 // and {{torrent_hash}} filled. What makes a pack one push and one Jellyfin/Plex scan is that the
 // caller hands it as ONE item (PackSize), not that its items share a call (decisions.md #124).
-// With a batch window the items join the window like any other.
+// With a batch window the items join the window like any other. An alert event's items are one
+// webhook either way: they come from a single evaluation, not from N separate occurrences.
 func NotifyAll(cfg *files.Config, event Event, items []Episode) {
 	if cfg == nil || len(cfg.Notifications.Webhooks) == 0 || len(items) == 0 {
 		return
@@ -591,6 +603,12 @@ func NotifyAll(cfg *files.Config, event Event, items []Episode) {
 
 	window := time.Duration(cfg.Notifications.BatchWindowSeconds) * time.Second
 	if window <= 0 {
+		// An alert's items come from ONE evaluation (three stuck episodes of a pass, the animes at
+		// the limit): they are one push even with batching off.
+		if isAlert(event) {
+			fireBatch(event, items, cfg, false)
+			return
+		}
 		for _, it := range items {
 			fireBatch(event, []Episode{it}, cfg, false)
 		}

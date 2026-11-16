@@ -6,6 +6,7 @@ import (
 	"AutoAnimeDownloader/src/internal/notifications"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -262,20 +263,32 @@ var diskSpace = files.DiskSpace
 
 // alertsAfterPass evaluates the state alerts at the end of a pass that finished. Each one is
 // edge-triggered through the state store (decisions.md #127).
-func alertsAfterPass(cfg *files.Config, problems, limits []Issue) {
+// passAlerts is what a finished pass hands the alerts.
+type passAlerts struct {
+	problems []Issue
+	limits   []Issue
+	// watching is every anime the pass covered (media id) — an anime outside it left every
+	// download status, and its alerts are dropped.
+	watching map[int]bool
+	now      time.Time
+}
+
+func alertsAfterPass(cfg *files.Config, in passAlerts) {
 	// A statfs error skips the disk alert silently — same reasoning as checkDiskSpace.
 	if total, free, err := diskSpace(cfg.CompletedAnimePath); err == nil {
-		trackDiskLow(cfg, total, free, diskFullEpisodes(problems))
+		trackDiskLow(cfg, total, free, diskFullEpisodes(in.problems))
 	}
 
-	var fire []notifications.Episode
+	var limitItems, stuckItems []notifications.Episode
 	notifications.UpdateStateIfChanged(func(s *notifications.AlertState) {
 		// The first pass after the upgrade records, doesn't announce (AlertState.Seeded).
 		seeding := !s.Seeded
 		s.Seeded = true
-		fire = append(fire, trackEpisodeLimit(s, limits, seeding)...)
+		limitItems = trackEpisodeLimit(s, in.limits, seeding)
+		stuckItems = trackEpisodeStuck(s, in.problems, in.watching, in.now)
 	})
-	notifications.NotifyAll(cfg, notifications.EpisodeLimitReached, fire)
+	notifications.NotifyAll(cfg, notifications.EpisodeLimitReached, limitItems)
+	notifications.NotifyAll(cfg, notifications.EpisodeStuck, stuckItems)
 }
 
 // trackEpisodeLimit fires for each anime whose max_episodes_per_anime limit appeared since the last
@@ -300,4 +313,131 @@ func trackEpisodeLimit(s *notifications.AlertState, limits []Issue, seeding bool
 	slices.Sort(current)
 	s.LimitReached = current
 	return items
+}
+
+// episode_stuck fires once an episode has gone this long without success since its first problem.
+// A clock only fires while its problem is recent: a torrent found after a few hours of "not found"
+// that then downloads slowly for two days is not stuck — it is just no longer reported as anything.
+// stuckRecent covers a dead torrent's cycle (re-added next pass, dropped stalledTorrentTimeout
+// later).
+// ponytail: constants until someone asks for other numbers.
+const (
+	stuckAfter  = 48 * time.Hour
+	stuckRecent = 3 * time.Hour
+)
+
+// stuckTorrentDropped is the clock's code for a torrent HandleTorrentFailure dropped (stopped with
+// an error, or stalled). Every add of that torrent SUCCEEDS, so without this the add → stall → drop
+// → re-search loop never shows up in the pass's problems.
+const stuckTorrentDropped = "torrent_dropped"
+
+// trackEpisodeStuck feeds the clocks with the pass's problems and fires the ones that are due.
+// Called under the state store's lock.
+//
+// The clock belongs to the episode, not to a problem code: it starts at the first problem of any
+// kind and is cleared when the episode is organized (clearStuck, from organize) — not when a pass
+// reports no problem, because a torrent just re-added has none and is still not downloaded. It
+// re-fires once per NEW code (not_found → above the size limit is news: raise the limit), each code
+// at most once, because no_seeders and no_torrent_found alternate as seeders hover at min_seeders.
+// awaiting_earlier_episode is left out: it is the consequence of another stuck episode, the one
+// that gets announced.
+func trackEpisodeStuck(s *notifications.AlertState, problems []Issue, watching map[int]bool, now time.Time) []notifications.Episode {
+	for _, p := range problems {
+		if p.Code == IssueAwaitingEarlierEpisode {
+			continue
+		}
+		for _, ep := range p.Episodes {
+			touchStuck(s, p.AnimeID, p.AnimeName, ep, p.Code, now)
+		}
+	}
+
+	var items []notifications.Episode
+	for key, c := range s.Stuck {
+		var animeID, episode int
+		fmt.Sscanf(key, "%d:%d", &animeID, &episode)
+		if !watching[animeID] {
+			delete(s.Stuck, key) // left every download status: nothing will ever clear it
+			continue
+		}
+		if now.Sub(c.Since) < stuckAfter || now.Sub(c.LastAt) > stuckRecent || slices.Contains(c.FiredCodes, c.Code) {
+			continue
+		}
+		c.FiredCodes = append(c.FiredCodes, c.Code)
+		s.Stuck[key] = c
+		items = append(items, notifications.Episode{
+			AnimeID:   animeID,
+			AnimeName: c.AnimeName,
+			Number:    episode,
+			Reason:    stuckSentence(c.Code) + " for " + roughDuration(now.Sub(c.Since)),
+		})
+	}
+	slices.SortFunc(items, func(a, b notifications.Episode) int {
+		if a.AnimeName != b.AnimeName {
+			return strings.Compare(a.AnimeName, b.AnimeName)
+		}
+		return a.Number - b.Number
+	})
+	return items
+}
+
+func touchStuck(s *notifications.AlertState, animeID int, animeName string, episode int, code string, now time.Time) {
+	if s.Stuck == nil {
+		s.Stuck = make(map[string]notifications.StuckClock)
+	}
+	key := notifications.StuckKey(animeID, episode)
+	c, ok := s.Stuck[key]
+	if !ok {
+		c.Since = now
+	}
+	c.AnimeName, c.Code, c.LastAt = animeName, code, now
+	s.Stuck[key] = c
+}
+
+// recordTorrentDrop starts (or feeds) the stuck clock of every episode of a torrent
+// HandleTorrentFailure dropped — a pack drops all its episodes at once.
+func recordTorrentDrop(records []files.EpisodeStruct, now time.Time) {
+	if len(records) == 0 {
+		return
+	}
+	notifications.UpdateState(func(s *notifications.AlertState) bool {
+		for _, r := range records {
+			touchStuck(s, r.AnimeID, r.AnimeName, r.EpisodeNumber, stuckTorrentDropped, now)
+		}
+		return true
+	})
+}
+
+// clearStuck stops the clocks of episodes that made it into the library.
+func clearStuck(records []files.EpisodeStruct) {
+	notifications.UpdateState(func(s *notifications.AlertState) bool {
+		changed := false
+		for _, r := range records {
+			key := notifications.StuckKey(r.AnimeID, r.EpisodeNumber)
+			if _, ok := s.Stuck[key]; ok {
+				delete(s.Stuck, key)
+				changed = true
+			}
+		}
+		return changed
+	})
+}
+
+// stuckSentence is the reason in plain English, from the clock's latest code.
+func stuckSentence(code string) string {
+	switch code {
+	case IssueNoTorrentFound:
+		return "no torrent found"
+	case IssueAllAboveSizeLimit:
+		return "every torrent found is above the size limit"
+	case IssueNoSeeders:
+		return "no torrent with enough seeders"
+	case IssueTorrentRejected:
+		return "the torrent client keeps refusing the torrent"
+	case IssueDiskFull:
+		return "not enough disk space"
+	case stuckTorrentDropped:
+		return "the torrent keeps stalling or failing"
+	default:
+		return "not downloading"
+	}
 }

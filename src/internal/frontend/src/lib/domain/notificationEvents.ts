@@ -6,16 +6,16 @@ export type EventGroup = 'episodes' | 'library' | 'system'
 
 export const EVENT_GROUPS: { group: EventGroup; events: string[] }[] = [
   { group: 'episodes', events: ['new_episode', 'download_failed', 'download_completed', 'episode_deleted'] },
-  { group: 'library', events: ['episode_limit_reached'] },
+  { group: 'library', events: ['episode_limit_reached', 'episode_stuck'] },
   { group: 'system', events: ['library_missing', 'daemon_crashed', 'check_failing', 'update_available', 'disk_low'] },
 ]
 
 export const ALL_EVENTS: string[] = EVENT_GROUPS.flatMap(g => g.events)
 
 /**
- * The events a new message preset (ntfy, Discord, Telegram…) starts with: every episode event plus
- * the system alerts worth a push to anyone. The library events are opt-in — they are reminders
- * about the user's own habits, not problems. Existing webhooks are never touched: an upgrade turns
+ * The events a new message preset (ntfy, Discord, Telegram…) starts with: every episode event, the
+ * system alerts, and episode_stuck — it is where "no torrent found" is reported once it lasts. The
+ * other library events are opt-in: they are reminders about the user's own habits, not problems. Existing webhooks are never touched: an upgrade turns
  * nothing new on for anyone.
  */
 export const MESSAGE_PRESET_EVENTS: string[] = [
@@ -25,6 +25,7 @@ export const MESSAGE_PRESET_EVENTS: string[] = [
   'check_failing',
   'update_available',
   'disk_low',
+  'episode_stuck',
 ]
 
 export function eventLabel(event: string): string {
@@ -49,6 +50,8 @@ export function eventLabel(event: string): string {
       return m.notifications_event_disk_low()
     case 'episode_limit_reached':
       return m.notifications_event_episode_limit_reached()
+    case 'episode_stuck':
+      return m.notifications_event_episode_stuck()
     default:
       return event
   }

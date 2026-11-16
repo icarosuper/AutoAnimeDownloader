@@ -30,6 +30,23 @@ type AlertState struct {
 	DiskLowFired DiskLowState `json:"disk_low_fired"`
 	// LimitReached is the animes (media ids) at max_episodes_per_anime at the last evaluation.
 	LimitReached []int `json:"limit_reached,omitempty"`
+	// Stuck is episode_stuck's clock per episode, keyed by StuckKey.
+	Stuck map[string]StuckClock `json:"stuck,omitempty"`
+}
+
+// StuckClock is one episode's run without success: since its first problem, the latest problem
+// and when it was last seen, and the codes already announced (each at most once).
+type StuckClock struct {
+	AnimeName  string    `json:"anime_name"`
+	Since      time.Time `json:"since"`
+	LastAt     time.Time `json:"last_at"`
+	Code       string    `json:"code"`
+	FiredCodes []string  `json:"fired_codes,omitempty"`
+}
+
+// StuckKey is "<anime id>:<episode>".
+func StuckKey(animeID, episode int) string {
+	return fmt.Sprintf("%d:%d", animeID, episode)
 }
 
 type DiskLowState struct {

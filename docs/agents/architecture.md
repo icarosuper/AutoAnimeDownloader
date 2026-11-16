@@ -670,7 +670,16 @@ The alerts about a **finished** pass are evaluated in `alertsAfterPass`, called 
 report and evaluates none of them. `disk_low` there is not the `/status` `disk_low` flag (the
 Status banner, `daemon.DiskLow`): the banner asks "would a 0-byte add be refused now", the event
 has its own warning floor (2 × `min_free_disk_gb`) and a `blocked` level fed by the pass's
-`IssueDiskFull` problems. System alerts carry
+`IssueDiskFull` problems.
+
+`episode_stuck`'s clock is per (anime, episode), in `notification_state`. Three feeds: the pass's
+problems (`trackEpisodeStuck`, awaiting-earlier left out), `HandleTorrentFailure`
+(`recordTorrentDrop`, every record of the hash — a dead torrent's add → stall → drop loop never
+reaches the report, because every add succeeds), and organize (`clearStuck` in `jobs.go`, the only
+thing that ends a run). A clock fires only while its last problem is under `stuckRecent` (3 h) old:
+an episode found late that then downloads slowly is not "stuck". Clocks of an anime outside the
+pass's `watching` set are dropped. With batching off, an alert's items from one evaluation still go
+out as **one** webhook (`NotifyAll`). System alerts carry
 `AnimeID == 0`, which `itemsFor` lets through every `anime_sources` filter.
 
 **A webhook's URL and headers are secrets** (the ntfy Bearer, the Discord/Slack path, Telegram's

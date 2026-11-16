@@ -236,12 +236,15 @@ func limitIssue(id int, name string, downloaded, pending int) Issue {
 }
 
 // alertsAfterPass with the disk check stubbed out (always plenty of space).
-func runAlerts(t *testing.T, cfg *files.Config, problems, limits []Issue) {
+func runAlerts(t *testing.T, cfg *files.Config, in passAlerts) {
 	t.Helper()
 	orig := diskSpace
 	diskSpace = func(string) (uint64, uint64, error) { return 1 << 40, 1 << 39, nil }
 	t.Cleanup(func() { diskSpace = orig })
-	alertsAfterPass(cfg, problems, limits)
+	if in.now.IsZero() {
+		in.now = time.Now()
+	}
+	alertsAfterPass(cfg, in)
 }
 
 func TestEpisodeLimitReached(t *testing.T) {
@@ -249,19 +252,125 @@ func TestEpisodeLimitReached(t *testing.T) {
 	cfg, bodies := alertHook(t, "episode_limit_reached")
 
 	// First pass after the upgrade: an anime at the limit for months is recorded, not announced.
-	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16)})
+	runAlerts(t, cfg, passAlerts{limits: []Issue{limitIssue(1, "Frieren", 12, 16)}})
 	noneReceived(t, bodies)
 
-	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 900)})
+	runAlerts(t, cfg, passAlerts{limits: []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 900)}})
 	if got := received(bodies); got != "Episode limit reached|One Piece: 12 episodes downloaded, 900 more waiting for you to watch." {
 		t.Errorf("got %q", got)
 	}
-	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 899)})
+	runAlerts(t, cfg, passAlerts{limits: []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 899)}})
 	noneReceived(t, bodies)
 
-	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16)}) // One Piece below the limit: re-armed
-	runAlerts(t, cfg, nil, []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 898)})
+	runAlerts(t, cfg, passAlerts{limits: []Issue{limitIssue(1, "Frieren", 12, 16)}}) // One Piece below the limit: re-armed
+	runAlerts(t, cfg, passAlerts{limits: []Issue{limitIssue(1, "Frieren", 12, 16), limitIssue(2, "One Piece", 12, 898)}})
 	if got := received(bodies); !strings.Contains(got, "One Piece") {
 		t.Errorf("got %q", got)
 	}
+}
+
+func stuckProblem(id int, name, code string, eps ...int) Issue {
+	return Issue{AnimeID: id, AnimeName: name, Code: code, Episodes: eps}
+}
+
+func TestEpisodeStuck(t *testing.T) {
+	t0 := time.Date(2026, 11, 13, 10, 0, 0, 0, time.Local)
+	watching := map[int]bool{1: true}
+	pass := func(cfg *files.Config, at time.Time, problems ...Issue) {
+		runAlerts(t, cfg, passAlerts{problems: problems, watching: watching, now: at})
+	}
+	start := func(t *testing.T) (*files.Config, chan string) {
+		notifications.ResetState()
+		cfg, bodies := alertHook(t, "episode_stuck")
+		pass(cfg, t0.Add(-time.Hour)) // seed
+		return cfg, bodies
+	}
+
+	t.Run("fires at 48h, one line per run, then once per new code", func(t *testing.T) {
+		cfg, bodies := start(t)
+		pass(cfg, t0, stuckProblem(1, "Frieren", IssueNoTorrentFound, 5, 6, 7))
+		pass(cfg, t0.Add(24*time.Hour), stuckProblem(1, "Frieren", IssueNoTorrentFound, 5, 6, 7))
+		noneReceived(t, bodies)
+
+		pass(cfg, t0.Add(49*time.Hour), stuckProblem(1, "Frieren", IssueNoTorrentFound, 5, 6, 7))
+		if got := received(bodies); got != "3 episodes are not downloading|Frieren EPs 5-7: no torrent found for 2 days" {
+			t.Errorf("got %q", got)
+		}
+		pass(cfg, t0.Add(50*time.Hour), stuckProblem(1, "Frieren", IssueNoTorrentFound, 5, 6, 7))
+		noneReceived(t, bodies)
+
+		pass(cfg, t0.Add(51*time.Hour), stuckProblem(1, "Frieren", IssueAllAboveSizeLimit, 5))
+		if got := received(bodies); got != "Episode is not downloading|Frieren EP 5: every torrent found is above the size limit for 2 days" {
+			t.Errorf("got %q", got)
+		}
+		// Back to a code already announced: silent.
+		pass(cfg, t0.Add(52*time.Hour), stuckProblem(1, "Frieren", IssueNoTorrentFound, 5))
+		noneReceived(t, bodies)
+	})
+
+	t.Run("awaiting an earlier episode never starts a clock", func(t *testing.T) {
+		cfg, bodies := start(t)
+		pass(cfg, t0, stuckProblem(1, "Frieren", IssueAwaitingEarlierEpisode, 6))
+		pass(cfg, t0.Add(72*time.Hour), stuckProblem(1, "Frieren", IssueAwaitingEarlierEpisode, 6))
+		noneReceived(t, bodies)
+	})
+
+	t.Run("organize clears the clock", func(t *testing.T) {
+		cfg, bodies := start(t)
+		pass(cfg, t0, stuckProblem(1, "Frieren", IssueNoTorrentFound, 5))
+		clearStuck([]files.EpisodeStruct{{AnimeID: 1, EpisodeNumber: 5}})
+		pass(cfg, t0.Add(47*time.Hour), stuckProblem(1, "Frieren", IssueNoTorrentFound, 5)) // new clock
+		pass(cfg, t0.Add(49*time.Hour), stuckProblem(1, "Frieren", IssueNoTorrentFound, 5))
+		noneReceived(t, bodies)
+	})
+
+	t.Run("a dead torrent's drops keep the clock running with no problem in the report", func(t *testing.T) {
+		cfg, bodies := start(t)
+		for h := 0; h <= 48; h += 2 {
+			notifications.UpdateState(func(s *notifications.AlertState) bool {
+				touchStuck(s, 1, "Frieren", 5, stuckTorrentDropped, t0.Add(time.Duration(h)*time.Hour))
+				return true
+			})
+			pass(cfg, t0.Add(time.Duration(h)*time.Hour+time.Minute))
+		}
+		if got := received(bodies); got != "Episode is not downloading|Frieren EP 5: the torrent keeps stalling or failing for 2 days" {
+			t.Errorf("got %q", got)
+		}
+	})
+
+	t.Run("a torrent that was found and is just downloading slowly is not stuck", func(t *testing.T) {
+		cfg, bodies := start(t)
+		pass(cfg, t0, stuckProblem(1, "Frieren", IssueNoTorrentFound, 5))
+		pass(cfg, t0.Add(3*time.Hour)) // found, downloading
+		pass(cfg, t0.Add(50*time.Hour))
+		noneReceived(t, bodies)
+	})
+
+	t.Run("an anime that left the lists drops its clocks", func(t *testing.T) {
+		cfg, bodies := start(t)
+		pass(cfg, t0, stuckProblem(1, "Frieren", IssueNoTorrentFound, 5))
+		runAlerts(t, cfg, passAlerts{watching: map[int]bool{}, now: t0.Add(time.Hour)})
+		pass(cfg, t0.Add(49*time.Hour), stuckProblem(1, "Frieren", IssueNoTorrentFound, 5)) // new clock
+		noneReceived(t, bodies)
+	})
+}
+
+// A dropped pack starts the stuck clock of every episode it carries, not just the first record's.
+func TestHandleTorrentFailure_StartsTheStuckClockOfEveryRecord(t *testing.T) {
+	notifications.ResetState()
+	const hash = "abababababababababababababababababababab"
+	fm := &orchestrationFM{configs: &files.Config{}, saved: []files.EpisodeStruct{
+		{AnimeID: 1, AnimeName: "Frieren", EpisodeNumber: 1, EpisodeHash: hash},
+		{AnimeID: 1, AnimeName: "Frieren", EpisodeNumber: 2, EpisodeHash: hash},
+		{AnimeID: 2, AnimeName: "Other", EpisodeNumber: 9, EpisodeHash: "cd"},
+	}}
+
+	HandleTorrentFailure(hash, nil, nil, fm)
+
+	notifications.UpdateState(func(s *notifications.AlertState) bool {
+		if len(s.Stuck) != 2 || s.Stuck["1:1"].Code != stuckTorrentDropped || s.Stuck["1:2"].Code != stuckTorrentDropped {
+			t.Errorf("clocks = %+v", s.Stuck)
+		}
+		return false
+	})
 }
