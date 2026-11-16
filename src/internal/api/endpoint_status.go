@@ -6,6 +6,7 @@ import (
 	"AutoAnimeDownloader/src/internal/diagnostics"
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/torrents"
+	"AutoAnimeDownloader/src/internal/updates"
 	"AutoAnimeDownloader/src/internal/version"
 	"net/http"
 	"time"
@@ -29,6 +30,11 @@ type StatusResponse struct {
 	// PendingCrashAt is when the daemon last crashed, while nobody has handled the report yet; null
 	// otherwise. The UI opens the report screen (fresh page load) or toasts (tab already open).
 	PendingCrashAt *time.Time `json:"pending_crash_at"`
+	// LatestVersion / LatestVersionURL are the newer release the update check found and its page;
+	// both "" when there is none, the check is off (check_for_updates), it hasn't run yet, or the
+	// build is "dev". Here because /status is what the shell already polls for the version.
+	LatestVersion    string `json:"latest_version" example:"2.11.0"`
+	LatestVersionURL string `json:"latest_version_url" example:"https://github.com/icarosuper/AutoAnimeDownloader/releases/tag/v2.11.0"`
 }
 
 // handleStatus returns the current status of the daemon, including last check time, error state,
@@ -68,6 +74,7 @@ func handleStatus(server *Server) http.HandlerFunc {
 			DiskLow:   diskLow,
 			Anilist:   anilist.CurrentHealth(),
 		}
+		response.LatestVersion, response.LatestVersionURL = updates.Latest()
 		if server.DataDir != "" {
 			response.PendingCrashAt = diagnostics.PendingCrashAt(server.DataDir)
 		}

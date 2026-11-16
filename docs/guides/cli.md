@@ -51,7 +51,10 @@ autoanimedownloader last-check
 autoanimedownloader check
 ```
 
-`status` prints the full payload: daemon state, last check, disk, AniList health, pending crash.
+`status` prints the full payload: daemon state, last check, disk, AniList health, pending crash,
+and the newer version the daemon's update check found (`latest_version`, `latest_version_url`;
+empty when there is none or `check_for_updates` is off). When there is one, the table is followed
+by `Update available: v2.11.0 (<release page>)`; `--json` carries just the two fields.
 `last-check` is why the last automatic pass did not download. `check` triggers a pass now.
 
 ## Configuration

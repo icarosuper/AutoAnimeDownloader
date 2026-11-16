@@ -1,13 +1,15 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/urfave/cli/v2"
 )
 
 func statusCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "status",
-		Usage: "Show daemon status",
+		Usage: "Show daemon status (and the newer version, when the update check found one)",
 		Action: func(c *cli.Context) error {
 			return handleStatus()
 		},
@@ -39,7 +41,15 @@ func handleStatus() error {
 	if err != nil {
 		return mapClientError(err)
 	}
-	return printValue(status, "")
+	if err := printValue(status, ""); err != nil {
+		return err
+	}
+	// --json already carries latest_version / latest_version_url; the table gets a line of its own
+	// so the update doesn't hide among the rows.
+	if !outputJSON && status.LatestVersion != "" {
+		fmt.Printf("Update available: v%s (%s)\n", status.LatestVersion, status.LatestVersionURL)
+	}
+	return nil
 }
 
 func handleLastCheck() error {

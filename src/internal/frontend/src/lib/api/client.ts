@@ -152,6 +152,9 @@ export interface StatusResponse {
   anilist?: AnilistHealth
   /** When the daemon last crashed, while the report is unhandled. Absent on the WebSocket push. */
   pending_crash_at?: string | null
+  /** A newer release the daemon's update check found, and its page; "" when none. Absent on the WebSocket push. */
+  latest_version?: string
+  latest_version_url?: string
 }
 
 /**

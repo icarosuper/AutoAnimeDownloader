@@ -13,6 +13,7 @@
   import { locale } from '../../lib/stores/locale.js'
   import { theme, THEMES, type Theme } from '../../lib/stores/theme.js'
   import { wsConnectionState } from '../../lib/stores/wsState.js'
+  import UpdateBadge from './UpdateBadge.svelte'
 
   export let open = false
   export let currentPath = ''
@@ -22,6 +23,8 @@
   export let showFooterControls = false
 
   let appVersion = ''
+  let latestVersion = ''
+  let latestVersionURL = ''
 
   $: T = $locale && {
     themeLight: m.theme_light(),
@@ -52,6 +55,8 @@
     getStatus()
       .then((status) => {
         appVersion = status.version
+        latestVersion = status.latest_version ?? ''
+        latestVersionURL = status.latest_version_url ?? ''
       })
       .catch(() => {
         // ignore — version is best-effort, same as the old Layout.svelte
@@ -120,6 +125,7 @@
 
         {#if appVersion}
           <span class="text-[11px] text-subtle">v{appVersion}</span>
+          <UpdateBadge version={latestVersion} url={latestVersionURL} />
         {/if}
 
         <button

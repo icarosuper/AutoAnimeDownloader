@@ -876,5 +876,6 @@
   "priorities_preset_compat_desc": "H.264 primeiro. Toca direto em qualquer player, sem transcode no servidor — a legenda continua soft. Arquivos maiores.",
   "priorities_preset_space_label": "Prefiro arquivos menores",
   "priorities_preset_space_desc": "AV1/HEVC primeiro. Até metade do tamanho na mesma qualidade, mas exige player que decodifique — no navegador vira transcode.",
-  "downloads_toast_action_error": "A ação falhou"
+  "downloads_toast_action_error": "A ação falhou",
+  "update_badge_available": "v{version} disponível"
 }
