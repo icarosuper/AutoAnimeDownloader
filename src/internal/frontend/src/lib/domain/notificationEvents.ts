@@ -7,7 +7,7 @@ export type EventGroup = 'episodes' | 'library' | 'system'
 export const EVENT_GROUPS: { group: EventGroup; events: string[] }[] = [
   { group: 'episodes', events: ['new_episode', 'download_failed', 'download_completed', 'episode_deleted'] },
   { group: 'library', events: [] },
-  { group: 'system', events: ['library_missing'] },
+  { group: 'system', events: ['library_missing', 'daemon_crashed'] },
 ]
 
 export const ALL_EVENTS: string[] = EVENT_GROUPS.flatMap(g => g.events)
@@ -21,6 +21,7 @@ export const ALL_EVENTS: string[] = EVENT_GROUPS.flatMap(g => g.events)
 export const MESSAGE_PRESET_EVENTS: string[] = [
   ...EVENT_GROUPS[0].events,
   'library_missing',
+  'daemon_crashed',
 ]
 
 export function eventLabel(event: string): string {
@@ -35,6 +36,8 @@ export function eventLabel(event: string): string {
       return m.notifications_event_episode_deleted()
     case 'library_missing':
       return m.notifications_event_library_missing()
+    case 'daemon_crashed':
+      return m.notifications_event_daemon_crashed()
     default:
       return event
   }

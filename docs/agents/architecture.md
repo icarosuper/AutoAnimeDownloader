@@ -697,7 +697,9 @@ the file by hand ([decisions.md #102](decisions.md#102-the-bug-report-has-no-bac
 - **Crash lifecycle** (`crash.go`): the runtime writes a fatal panic to `crash.log`; the next boot
   (`StartCrashCapture`) promotes a non-empty one to `crash-pending.log`; handling it in the UI
   (`DELETE /diagnostics/crash`) moves it to `crashes/`, newest 5 kept. An older pending crash
-  nobody handled is archived before a new one takes its place, so none is lost
+  nobody handled is archived before a new one takes its place, so none is lost. `StartCrashCapture`
+  returns `promoted`; `main.go` holds it until the config can be read and then fires
+  `daemon_crashed` (`daemon.NotifyPreviousCrash`) — capture runs before the logger and the config
 - `environment.go` reads the OS through a `host` struct (goos/getenv/readFile) so the docker,
   systemd and desktop detection is testable without the real machine
 

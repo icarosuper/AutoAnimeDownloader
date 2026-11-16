@@ -15,20 +15,23 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-func startCapture(t *testing.T, dir string) {
+func startCapture(t *testing.T, dir string) bool {
 	t.Helper()
-	f, err := StartCrashCapture(dir)
+	f, promoted, err := StartCrashCapture(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.Close()
+	return promoted
 }
 
 func TestStartCrashCapturePromotesANonEmptyCrash(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, crashFileName), "panic: boom")
 
-	startCapture(t, dir)
+	if !startCapture(t, dir) {
+		t.Error("promoted = false, want true: daemon_crashed hangs on it")
+	}
 
 	if got := readPendingCrash(dir); got != "panic: boom" {
 		t.Fatalf("pending crash = %q", got)
@@ -42,7 +45,9 @@ func TestStartCrashCaptureIgnoresAnEmptyCrashFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, crashFileName), "")
 
-	startCapture(t, dir)
+	if startCapture(t, dir) {
+		t.Error("promoted = true for an empty crash.log")
+	}
 
 	if PendingCrashAt(dir) != nil {
 		t.Fatal("an empty crash.log is not a crash")

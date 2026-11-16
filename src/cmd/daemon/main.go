@@ -74,19 +74,19 @@ func getPIDFilePath() (string, error) {
 
 // startCrashCapture makes the runtime write a fatal panic to <data dir>/crash.log as well as stderr:
 // stderr alone never reaches daemon.log, and on Windows it goes nowhere. The previous run's crash
-// becomes the pending one the report screen offers.
-func startCrashCapture() error {
+// becomes the pending one the report screen offers; promoted says there was one.
+func startCrashCapture() (promoted bool, err error) {
 	dir, err := datadir.Path()
 	if err != nil {
-		return err
+		return false, err
 	}
-	f, err := diagnostics.StartCrashCapture(dir)
+	f, promoted, err := diagnostics.StartCrashCapture(dir)
 	if err != nil {
-		return err
+		return promoted, err
 	}
 	// SetCrashOutput duplicates the descriptor, so the file can be closed here.
 	defer f.Close()
-	return debug.SetCrashOutput(f, debug.CrashOptions{})
+	return promoted, debug.SetCrashOutput(f, debug.CrashOptions{})
 }
 
 func createPIDFile() error {
@@ -213,7 +213,7 @@ func main() {
 
 	// Before anything else that can panic. After the --debug-anime branch, which promises not to
 	// touch the data dir.
-	crashCaptureErr := startCrashCapture()
+	crashPromoted, crashCaptureErr := startCrashCapture()
 
 	environment := getEnvironment()
 	isDevelopment := environment == "dev"
@@ -257,6 +257,13 @@ func main() {
 	dataDir, err := datadir.Path()
 	if err != nil {
 		logger.Logger.Fatal().Err(err).Msg("Failed to determine the data directory")
+	}
+	// The previous run crashed: tell whoever subscribed daemon_crashed. Here and not in
+	// startCrashCapture, which runs before the logger and the config exist.
+	if crashPromoted {
+		if at := diagnostics.PendingCrashAt(dataDir); at != nil {
+			daemon.NotifyPreviousCrash(fileManager, *at)
+		}
 	}
 	jobQueue := daemon.NewJobQueue(fileManager, filepath.Join(dataDir, "pending_jobs.json"))
 

@@ -21,22 +21,26 @@ const (
 // StartCrashCapture promotes the previous run's crash output to the pending slot and returns a
 // fresh crash.log for debug.SetCrashOutput. An older pending crash nobody handled goes to the
 // history first, so the pending one is always the latest and none is lost.
-func StartCrashCapture(dir string) (*os.File, error) {
+//
+// promoted says the previous run crashed: the daemon_crashed notification hangs on it. It is
+// returned instead of fired here because this runs before the logger and the config exist.
+func StartCrashCapture(dir string) (f *os.File, promoted bool, err error) {
 	crashPath := filepath.Join(dir, crashFileName)
 	if info, err := os.Stat(crashPath); err == nil && info.Size() > 0 {
 		if err := ArchivePendingCrash(dir); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if err := os.Rename(crashPath, filepath.Join(dir, pendingCrashName)); err != nil {
-			return nil, fmt.Errorf("failed to promote the crash file: %w", err)
+			return nil, false, fmt.Errorf("failed to promote the crash file: %w", err)
 		}
+		promoted = true
 	}
 
-	f, err := os.Create(crashPath)
+	f, err = os.Create(crashPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the crash file: %w", err)
+		return nil, promoted, fmt.Errorf("failed to create the crash file: %w", err)
 	}
-	return f, nil
+	return f, promoted, nil
 }
 
 // PendingCrashAt is when the pending crash happened (the file's modification time), or nil.

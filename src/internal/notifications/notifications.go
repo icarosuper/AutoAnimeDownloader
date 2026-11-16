@@ -28,6 +28,7 @@ const (
 	// ones carry AnimeID 0, which itemsFor lets through every source filter — a crash is not "from"
 	// any account.
 	LibraryMissing
+	DaemonCrashed
 )
 
 // Download-failure reasons, used as {{reason}} and in the default message.
@@ -51,6 +52,8 @@ func eventString(e Event) string {
 		return "episode_deleted"
 	case LibraryMissing:
 		return "library_missing"
+	case DaemonCrashed:
+		return "daemon_crashed"
 	}
 	return ""
 }
@@ -246,6 +249,8 @@ func alertTitle(event Event, items []Episode) string {
 	switch event {
 	case LibraryMissing:
 		return "Library folder is gone"
+	case DaemonCrashed:
+		return "AutoAnimeDownloader crashed"
 	}
 	return ""
 }
