@@ -18,10 +18,8 @@ func reorderInterspersedFlags(app *cli.App, args []string) []string {
 	}
 
 	rootFlags := indexFlags(app.Flags, true)
-	for _, name := range []string{"help", "h", "version"} {
-		if _, ok := rootFlags[name]; !ok {
-			rootFlags[name] = flagSpec{global: true}
-		}
+	if _, ok := rootFlags["version"]; !ok {
+		rootFlags["version"] = flagSpec{global: true}
 	}
 
 	scopes := []cmdScope{{
@@ -29,6 +27,7 @@ func reorderInterspersedFlags(app *cli.App, args []string) []string {
 		cmds:  commandMap(app.Commands),
 	}}
 	var positionals []string
+	helpAsked := false
 
 	tokens := args[1:]
 	for i := 0; i < len(tokens); i++ {
@@ -39,6 +38,7 @@ func reorderInterspersedFlags(app *cli.App, args []string) []string {
 		}
 		if isFlagToken(tok) {
 			name, hasInline := splitFlag(tok)
+			helpAsked = helpAsked || name == "help" || name == "h"
 			spec, known := lookupFlag(scopes, name)
 			target := &scopes[len(scopes)-1]
 			if known && spec.global {
@@ -73,6 +73,11 @@ func reorderInterspersedFlags(app *cli.App, args []string) []string {
 		out = append(out, s.name)
 		out = append(out, s.flags...)
 	}
+	// urfave reads a positional after --help as a help topic ("No help topic for '21'"), and with
+	// help asked nothing runs, so the positionals have nothing left to do.
+	if helpAsked {
+		return out
+	}
 	return append(out, positionals...)
 }
 
@@ -88,8 +93,12 @@ type cmdScope struct {
 	cmds  map[string]*cli.Command
 }
 
+// indexFlags also registers urfave's implicit --help / -h on every scope, never as global: it
+// must stay right after the command it was typed after. Moved to the front, `animes add --help`
+// became `--help animes add` and printed the truncated help of `animes`.
 func indexFlags(flags []cli.Flag, global bool) map[string]flagSpec {
-	m := make(map[string]flagSpec, len(flags)*2)
+	m := make(map[string]flagSpec, len(flags)*2+2)
+	m["help"], m["h"] = flagSpec{}, flagSpec{}
 	for _, f := range flags {
 		if f == nil {
 			continue
