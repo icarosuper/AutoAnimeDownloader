@@ -3,7 +3,7 @@
 Grouped by release: each section is **one** release, and its bump is the largest bump of the tasks
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number.
-Current version: `v2.11.1`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.11.2`. Stamp a version (tag, GitHub Release, AUR):
 the [release skill](../.claude/skills/release/SKILL.md).
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
@@ -150,6 +150,16 @@ one minor down again.
 - ~~Config, Priorities and Notifications ask before leaving (reload, close, route change) only when
   something differs from what was loaded~~ — **released in `v2.11.1` on 2026-11-16**
   ([decisions.md #129](agents/decisions.md#129-unsaved-changes-means-different-from-what-was-loaded-and-a-capture-phase-hashchange-listener-vetoes-the-router)).
+
+## `v2.11.2` — AniList rate limit on every pass
+
+- ~~Status deletion asks AniList only about the animes on disk (`mediaId_in`, one request per
+  account per 50) instead of paging every delete-status list; an account with 1124
+  COMPLETED/DROPPED/PLANNING entries made every pass hit 429~~ — **released in `v2.11.2` on
+  2026-11-21**
+  ([decisions.md #130](agents/decisions.md#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)).
+- ~~The leftover digest title totals the lines each webhook gets, not the whole digest~~ —
+  **released in `v2.11.2` on 2026-11-21**.
 
 ## `v2.12.0` — dashboard recents
 
