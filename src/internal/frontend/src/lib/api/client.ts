@@ -62,6 +62,8 @@ interface ApiRequestOptions {
    * own try/catch + toast.error) keep working exactly as before.
    */
   silent?: boolean
+  /** Sees the response of a successful request — for what the server sends in headers. */
+  onResponse?: (response: Response) => void
 }
 
 async function apiRequest<T>(
@@ -98,6 +100,7 @@ async function apiRequest<T>(
     }
 
     backendHealth.recordSuccess(endpoint)
+    opts.onResponse?.(response)
     return data.data
   } catch (error) {
     console.error('API request failed:', error)
@@ -395,8 +398,23 @@ export async function getPriorityDefaults(): Promise<Priorities> {
   return apiRequest<Priorities>('GET', '/config/priorities/defaults')
 }
 
-export async function getAnimes(): Promise<AnimeInfo[]> {
-  return apiRequest<AnimeInfo[]>('GET', '/animes')
+export interface GetAnimesOptions {
+  /**
+   * Called on every successful response with the accounts (`<source>:<username>` keys) whose list
+   * fetch failed for it — `[]` when none did. No anime carries a failed account (X-Failed-Accounts).
+   */
+  onFailedAccounts?: (keys: string[]) => void
+}
+
+export async function getAnimes(opts: GetAnimesOptions = {}): Promise<AnimeInfo[]> {
+  return apiRequest<AnimeInfo[]>('GET', '/animes', null, {
+    onResponse: opts.onFailedAccounts
+      ? (res) => {
+          const header = res.headers.get('X-Failed-Accounts') ?? ''
+          opts.onFailedAccounts!(header ? header.split(',') : [])
+        }
+      : undefined,
+  })
 }
 
 export interface AnimeEpisodeInfo {

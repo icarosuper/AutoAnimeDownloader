@@ -89,6 +89,7 @@
   "status_filter_accounts_all": "All users",
   "status_filter_accounts_more": "{first} +{more}",
   "status_filter_account_removed": "The user filter pointed at an account that is no longer configured, so it was removed.",
+  "status_filter_account_failed": "Couldn't load the list of {accounts}, so this filter is missing its animes. It retries on the next refresh.",
   "status_clear_filters": "Clear filters",
   "status_loading": "Loading status...",
   "status_toast_load_failed": "Failed to load data",

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -156,12 +157,22 @@ func (c *Client) UpdateConfig(config *files.Config) error {
 	return c.send(http.MethodPut, "/api/v1/config", config, nil)
 }
 
-func (c *Client) GetAnimes() ([]AnimeInfo, error) {
-	var animes []AnimeInfo
-	if err := c.get("/api/v1/animes", &animes); err != nil {
-		return nil, err
+// GetAnimes also returns the accounts whose list failed for this response (FailedAccountsHeader),
+// as "<source>:<username>" keys; none of the animes carries them.
+func (c *Client) GetAnimes() ([]AnimeInfo, []string, error) {
+	resp, err := c.doRequest(http.MethodGet, "/api/v1/animes", nil)
+	if err != nil {
+		return nil, nil, err
 	}
-	return animes, nil
+	var failed []string
+	if h := resp.Header.Get(FailedAccountsHeader); h != "" {
+		failed = strings.Split(h, ",")
+	}
+	var animes []AnimeInfo
+	if err := c.parseResponse(resp, &animes); err != nil {
+		return nil, nil, err
+	}
+	return animes, failed, nil
 }
 
 func (c *Client) TriggerCheck() error {

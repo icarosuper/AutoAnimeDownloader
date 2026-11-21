@@ -509,6 +509,87 @@ func TestHandleAnimes(t *testing.T) {
 		}
 	})
 
+	// Without the header, picking the failed account in the user filter shows nothing, which reads
+	// as "this account has nothing" instead of "its list didn't load".
+	t.Run("A failed account list is named in the header", func(t *testing.T) {
+		emptyListBody := `{"data":{"Page":{"mediaList":[]}}}`
+		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+			if strings.Contains(readBody(req), "bob") {
+				return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader("rate limited"))}, nil
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(emptyListBody))}, nil
+		})()
+
+		srv := &Server{State: state, FileManager: &mockFileManager{configs: &files.Config{
+			AnilistUsernames:      []string{"alice", "bob"},
+			DownloadStatuses:      []string{"CURRENT"},
+			DownloadMediaStatuses: []string{"RELEASING"},
+		}}}
+		w := httptest.NewRecorder()
+		handleAnimes(srv)(w, httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		if got := w.Header().Get(FailedAccountsHeader); got != "anilist:bob" {
+			t.Errorf("%s = %q, want anilist:bob", FailedAccountsHeader, got)
+		}
+
+		defer mockAniListEmpty()()
+		w = httptest.NewRecorder()
+		handleAnimes(srv)(w, httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil))
+		if got, ok := w.Header()[FailedAccountsHeader]; ok {
+			t.Errorf("no account failed, but the header is set: %q", got)
+		}
+	})
+
+	// The orphan's combined progress comes from the accounts the row says own it: bob's PLANNING
+	// entry at 0 is not one of them and must not drag episodes_watched down to 0.
+	t.Run("Orphan combined progress ignores accounts outside the download statuses", func(t *testing.T) {
+		emptyListBody := `{"data":{"Page":{"mediaList":[]}}}`
+		entry := func(status string, progress int) string {
+			return fmt.Sprintf(`{"data":{"Page":{"mediaList":[{"id":1,"status":%q,"progress":%d,"customLists":{},"media":{"id":997,"episodes":12,"format":"TV","status":"FINISHED","title":{"english":"Done Anime","romaji":"Done Anime"},"coverImage":{"large":"","medium":""},"airingSchedule":{"nodes":[]}}}]}}}`, status, progress)
+		}
+		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+			body := readBody(req)
+			respBody := emptyListBody
+			switch {
+			case strings.Contains(body, "mediaId") && strings.Contains(body, "alice"):
+				respBody = entry("CURRENT", 7)
+			case strings.Contains(body, "mediaId") && strings.Contains(body, "bob"):
+				respBody = entry("PLANNING", 0)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(respBody))}, nil
+		})()
+
+		srv := &Server{State: state, FileManager: &mockFileManager{
+			episodes: []files.EpisodeStruct{
+				{EpisodeNumber: 8, AnimeID: 997, AnimeName: "Done Anime", AnimeTotalEpisodes: 12, EpisodeName: "Done Anime - Episode 8", DownloadDate: time.Now()},
+			},
+			configs: &files.Config{
+				AnilistUsernames:      []string{"alice", "bob"},
+				DownloadStatuses:      []string{"CURRENT"},
+				DownloadMediaStatuses: []string{"RELEASING"},
+			},
+		}}
+		w := httptest.NewRecorder()
+		handleAnimes(srv)(w, httptest.NewRequest(http.MethodGet, "/api/v1/animes", nil))
+
+		var response struct{ Data []AnimeInfo }
+		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+			t.Fatal(err)
+		}
+		if len(response.Data) != 1 {
+			t.Fatalf("expected the orphan, got %+v", response.Data)
+		}
+		got := response.Data[0]
+		if len(got.Accounts) != 1 || got.Accounts[0].Username != "alice" {
+			t.Fatalf("accounts = %+v, want only alice", got.Accounts)
+		}
+		if got.EpisodesWatched != 7 {
+			t.Errorf("episodes_watched = %d, want alice's 7 (bob's PLANNING 0 is not an owner)", got.EpisodesWatched)
+		}
+	})
+
 	t.Run("Orphan refresh failure keeps anime visible without refreshed fields", func(t *testing.T) {
 		emptyListBody := `{"data":{"Page":{"mediaList":[]}}}`
 		defer anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {

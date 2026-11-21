@@ -225,7 +225,7 @@ func TestExistingClientMethodsStillParseEnvelope(t *testing.T) {
 	if _, err := c.GetConfig(); err != nil {
 		t.Errorf("GetConfig: %v", err)
 	}
-	if _, err := c.GetAnimes(); err != nil {
+	if _, _, err := c.GetAnimes(); err != nil {
 		t.Errorf("GetAnimes: %v", err)
 	}
 	if err := c.TriggerCheck(); err != nil {

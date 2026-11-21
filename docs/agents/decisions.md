@@ -3699,12 +3699,28 @@ the on-disk cache snapshots never carry it and the daemon pass, which doesn't st
 Membership is "the account has the anime in a **download** status", the same for every row: the
 covered animes get it from the filtered list fetch, and the orphan refresh (whose
 `GetAnimeInfoByIDs` answers in any status) cuts its accounts down to `download_statuses`
-(`inStatuses`). An anime alice watches and bob dropped is not under bob. Before, orphans counted any
+(`inStatuses`). An anime alice watches and bob dropped is not under bob. Only the list-status half
+of the fetch's filter is per account; `download_media_statuses` is a property of the anime, so an
+orphan uncovered only by it (a FINISHED show with files on disk) keeps its accounts. An orphan's
+combined `episodes_watched` is then re-derived from the kept accounts — `GetAnimeInfoByIDs`'s
+`Progress` is the lowest across ANY status, so a PLANNING entry at 0 would otherwise set the
+unfiltered number from an account the row doesn't list.
+
+An account whose list fetch failed (not even a cached copy) carries no anime, so picking it would
+show an empty list that reads as "this user has nothing". `/api/v1/animes` names those accounts in
+the `X-Failed-Accounts` header — a header so the body stays the bare array every client reads —
+and the dashboard shows a notice when a picked account is in it; the CLI's `animes --account`
+fails with `ACCOUNT_LIST_UNAVAILABLE`. Before, orphans counted any
 status and covered animes only download ones, so the filter meant two things. The anime page's
 "on lists" panel and the webhook filter ([#126](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)) still use any status — they ask "who has
 it", not "who is it downloaded for".
 
-UI: hidden with fewer than 2 configured accounts (options come from the config, not the animes);
+UI: hidden with fewer than 2 configured accounts (options come from the config, not the animes),
+and then no selection applies — a filter never acts behind a control that isn't on screen. Until
+the config answers, the options are the URL selection itself, so the control shows and can be
+unpicked even when the config keeps failing. Usernames match case-insensitively (AniList and MAL
+treat them so) and the selection is rewritten to the configured spelling, which is what the
+daemon stamps;
 an `ActionMenu` in `multiple` mode on every width, whatever the number of accounts (per-account
 chips were tried and took too much of the toolbar). The selection lives in the URL as repeated
 `account=<source>:<username>`.
@@ -3721,6 +3737,8 @@ chips were tried and took too much of the toolbar). The selection lives in the U
 - Appending onto the survivor's `Accounts` in `DedupeByMedia`: that slice may alias the caller's
   input; it builds a fresh one.
 - Stamping inside `GetFrontendAnimeList` / the cache: the cached slice is shared across polls.
+- Moving the failed accounts into the body: every client reads `/api/v1/animes` as a bare array.
+- Applying `download_media_statuses` to an orphan's accounts: it isn't a per-account question.
 
 ### 126. A webhook's anime filter is resolved when it fires, from the lists the last pass fetched, not stored on the episode record
 

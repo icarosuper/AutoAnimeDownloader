@@ -120,11 +120,11 @@ the CLI to what `GET /api/v1/animes` returns:
 
 | Flag | Default | Behavior |
 |---|---|---|
-| `--account` | every account | animes that account has in a **download** status. `USER` picks that name on every service it is configured on; `anilist:USER` / `mal:USER` picks one. Repeat for several (OR). `episodes_watched` / `episodes_pending` become **that account's** — with several, the one furthest behind — so `--unwatched` and `--sort watched` answer for it. An account not in the config is an error listing the configured ones |
-| `--name` | | any title (English, romaji, native, synonyms) contains the text; case and accents ignored |
-| `--unwatched` | false | released episodes left to watch |
+| `--account` | every account | animes that account has in a **download** status. `USER` picks that name on every service it is configured on; `anilist:USER` / `mal:USER` picks one; the username's case doesn't matter. Repeat for several (OR). `episodes_watched` / `episodes_pending` become **that account's** — with several, the one furthest behind — so `--unwatched` and `--sort watched` answer for it. An account not in the config is an error listing the configured ones. An account whose list the daemon couldn't fetch (AniList/MAL down or rate-limited) carries no anime, so picking it fails with `ACCOUNT_LIST_UNAVAILABLE` instead of printing an empty list; without it picked, the human output warns on stderr (`--json` keeps stderr empty) |
+| `--name` | | any title (English, romaji, native, synonyms) contains the text; case and diacritics ignored, like the dashboard search |
+| `--unwatched` | false | hides the animes whose released episodes are all watched; one with none released yet stays |
 | `--type` | `all` | `airing` (releasing or hiatus), `finished` (finished or cancelled), `standalone`, `blacklisted` |
-| `--sort` | `last-download` | `name` (A–Z), `watched`, `last-download` (both most first); `--reverse` flips |
+| `--sort` | `last-download` | `name` (A–Z, Unicode collation: `Émile` sorts with the E's), `watched`, `last-download` (both most first); `--reverse` flips |
 
 `search` is AniList; a term shorter than
 3 characters returns an empty list, not an error. `candidates` is the ranked whole-title list the

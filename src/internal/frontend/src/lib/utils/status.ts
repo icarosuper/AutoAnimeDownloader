@@ -65,6 +65,34 @@ export function accountLabel(acc: { username: string; service?: string }): strin
 
 const ACCOUNT_KEY = /^(anilist|mal):.+$/
 
+/** Splits an account key back into source and username; null for a malformed key. */
+export function parseAccountKey(key: string): { source: AccountSource; username: string } | null {
+  if (!ACCOUNT_KEY.test(key)) return null
+  const i = key.indexOf(':')
+  return { source: key.slice(0, i) as AccountSource, username: key.slice(i + 1) }
+}
+
+/**
+ * Maps each selected key onto the configured key it names and drops the ones the config doesn't
+ * have. The username matches case-insensitively — AniList and MAL usernames are — and the result
+ * carries the CONFIGURED spelling, which is what the daemon stamps on `accounts` (a URL with
+ * `anilist:alice` against a configured `Alice` would otherwise match nothing). The source must be
+ * exact.
+ */
+export function canonicalAccounts(selected: string[], configured: string[]): string[] {
+  const out: string[] = []
+  for (const key of selected) {
+    const sel = parseAccountKey(key)
+    if (!sel) continue
+    const match = configured.find(c => {
+      const conf = parseAccountKey(c)
+      return !!conf && conf.source === sel.source && conf.username.toLowerCase() === sel.username.toLowerCase()
+    })
+    if (match && !out.includes(match)) out.push(match)
+  }
+  return out
+}
+
 /**
  * Applies the user filter: keeps the animes at least one selected account tracks (OR), and
  * re-projects `episodes_watched` / `episodes_pending` onto THOSE accounts — the lowest progress

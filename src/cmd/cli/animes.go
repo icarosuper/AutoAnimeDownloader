@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ func animesCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{Name: "account", Usage: "Only this account's animes: `USER` or SOURCE:USER (anilist:alice, mal:alice); repeat for several"},
 			&cli.StringFlag{Name: "name", Usage: "Only animes whose title (any of them: English, romaji, native, synonyms) contains `TEXT`"},
-			&cli.BoolFlag{Name: "unwatched", Usage: "Only animes with released episodes left to watch"},
+			&cli.BoolFlag{Name: "unwatched", Usage: "Hide animes whose released episodes are all watched (one with none released yet stays)"},
 			&cli.StringFlag{Name: "type", Value: "all", Usage: "One of: " + strings.Join(animeTypes, ", ")},
 			&cli.StringFlag{Name: "sort", Value: "last-download", Usage: "One of: name (A-Z), watched, last-download (both most first)"},
 			&cli.BoolFlag{Name: "reverse", Usage: "Reverse the sort order"},
@@ -180,9 +181,26 @@ func handleAnimes(c *cli.Context) error {
 		}
 	}
 
-	animes, err := client.GetAnimes()
+	animes, failed, err := client.GetAnimes()
 	if err != nil {
 		return mapClientError(err)
+	}
+	// A failed account carries no anime, so filtering by it would print an empty list that reads
+	// as "this account has nothing". That is an error; without that account picked it's a warning.
+	var failedPicked []string
+	for _, key := range failed {
+		if slices.Contains(view.accounts, key) {
+			failedPicked = append(failedPicked, key)
+		}
+	}
+	if len(failedPicked) > 0 {
+		return &cliError{exitCode: 1, code: "ACCOUNT_LIST_UNAVAILABLE", message: fmt.Sprintf(
+			"the list of %s could not be fetched (AniList/MAL down or rate-limited); try again later",
+			strings.Join(failedPicked, ", "))}
+	}
+	if len(failed) > 0 && !outputJSON {
+		fmt.Fprintf(os.Stderr, "Warning: the list of %s could not be fetched; its animes with nothing downloaded are missing\n",
+			strings.Join(failed, ", "))
 	}
 	animes = filterAnimes(scopeToAccounts(animes, view.accounts), view)
 	sortAnimes(animes, view.sortKey, view.reverse)

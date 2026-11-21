@@ -15,6 +15,8 @@ import {
   listAccounts,
   scopeToAccounts,
   accountKey,
+  canonicalAccounts,
+  parseAccountKey,
 } from '../../src/lib/utils/status.js'
 import type { AnimeInfo } from '../../src/lib/api/client.js'
 
@@ -423,5 +425,25 @@ describe('accountCounts', () => {
       'anilist:alice': 0,
       'anilist:bob': 2,
     })
+  })
+})
+
+describe('canonicalAccounts', () => {
+  const configured = ['anilist:Alice', 'mal:bob']
+  it('matches the username in any case and returns the configured spelling', () => {
+    expect(canonicalAccounts(['anilist:alice', 'mal:BOB'], configured)).toEqual(['anilist:Alice', 'mal:bob'])
+  })
+  it('needs the exact source and drops what the config lacks', () => {
+    expect(canonicalAccounts(['mal:alice', 'anilist:gone', 'nope'], configured)).toEqual([])
+  })
+  it('collapses two spellings of the same account', () => {
+    expect(canonicalAccounts(['anilist:alice', 'anilist:ALICE'], configured)).toEqual(['anilist:Alice'])
+  })
+})
+
+describe('parseAccountKey', () => {
+  it('splits at the first colon only', () => {
+    expect(parseAccountKey('mal:a:b')).toEqual({ source: 'mal', username: 'a:b' })
+    expect(parseAccountKey('other:a')).toBeNull()
   })
 })

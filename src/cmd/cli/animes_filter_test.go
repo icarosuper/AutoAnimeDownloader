@@ -192,3 +192,70 @@ func TestAnimesCandidateHitsDetail(t *testing.T) {
 		t.Errorf("stdout:\n%s", stdout)
 	}
 }
+
+func TestResolveAccountsIgnoresUsernameCase(t *testing.T) {
+	configured := []string{"anilist:Alice", "mal:Bob"}
+	got, err := resolveAccounts([]string{"alice", "MAL:bob"}, configured)
+	if err == nil {
+		t.Fatalf("the source is not a username: MAL:bob must not match mal:Bob, got %v", got)
+	}
+	got, err = resolveAccounts([]string{"alice", "mal:bob"}, configured)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The configured spelling, which is what the daemon stamps on the animes.
+	if strings.Join(got, ",") != "anilist:Alice,mal:Bob" {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestAnimesAccountWhoseListFailed(t *testing.T) {
+	animes := []api.AnimeInfo{{Name: "Alice's", Accounts: []api.AnimeAccount{acc("anilist", "alice", 1, 0)}}}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var data any = animes
+		if r.URL.Path == "/api/v1/config" {
+			data = files.Config{AnilistUsernames: []string{"alice", "bob"}}
+		} else {
+			w.Header().Set(api.FailedAccountsHeader, "anilist:bob")
+		}
+		_ = json.NewEncoder(w).Encode(api.SuccessResponse{Success: true, Data: data})
+	}))
+	defer srv.Close()
+
+	// Filtering by the failed account is an error, never an empty list.
+	_, _, err := runCLI(t, "--endpoint", srv.URL, "--json", "animes", "--account", "bob")
+	if code, exit := cliCode(err); code != "ACCOUNT_LIST_UNAVAILABLE" || exit != 1 {
+		t.Fatalf("code=%q exit=%d err=%v, want ACCOUNT_LIST_UNAVAILABLE", code, exit, err)
+	}
+	// Another account still works; the human output warns on stderr.
+	stdout, stderr, err := runCLI(t, "--endpoint", srv.URL, "animes", "--account", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "Alice's") || !strings.Contains(stderr, "anilist:bob") {
+		t.Errorf("stdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	// --json keeps stderr empty on success.
+	if _, stderr, _ := runCLI(t, "--endpoint", srv.URL, "--json", "animes"); stderr != "" {
+		t.Errorf("--json success wrote to stderr: %q", stderr)
+	}
+}
+
+func TestNormalizeNameStripsDiacriticLikeTheDashboard(t *testing.T) {
+	// ー (U+30FC) is \p{Diacritic} but not Mn: the dashboard strips it, so must the CLI.
+	if got, want := normalizeName("ラーメン"), normalizeName("ラメン"); got != want {
+		t.Errorf("normalizeName(ラーメン) = %q, want %q", got, want)
+	}
+	if got := normalizeName("Pokémon"); got != "pokemon" {
+		t.Errorf("normalizeName(Pokémon) = %q", got)
+	}
+}
+
+func TestSortByNameCollates(t *testing.T) {
+	list := []api.AnimeInfo{{Name: "Fate"}, {Name: "Émile"}, {Name: "apple"}}
+	sortAnimes(list, "name", false)
+	if got := names(list); got != "apple,Émile,Fate" {
+		t.Errorf("got %q, want apple,Émile,Fate", got)
+	}
+}

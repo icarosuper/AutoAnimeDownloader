@@ -46,7 +46,11 @@ const library: AnimeInfo[] = [
   anime({ anime_id: 5, name: 'Blacklisted Show', media_status: 'FINISHED', is_blacklisted: true }),
 ]
 
-async function renderStatus(animes: AnimeInfo[] = library, config: Record<string, unknown> | Error = {}) {
+async function renderStatus(
+  animes: AnimeInfo[] = library,
+  config: Record<string, unknown> | Error = {},
+  failedAccounts: string[] = [],
+) {
   vi.mocked(client.getStatus).mockResolvedValue({
     status: 'running',
     last_check: '2026-08-19T12:00:00Z',
@@ -56,7 +60,10 @@ async function renderStatus(animes: AnimeInfo[] = library, config: Record<string
     disk_free: 90,
     disk_low: false,
   } as StatusResponse)
-  vi.mocked(client.getAnimes).mockResolvedValue(animes)
+  vi.mocked(client.getAnimes).mockImplementation((opts) => {
+    opts?.onFailedAccounts?.(failedAccounts)
+    return Promise.resolve(animes)
+  })
   if (config instanceof Error) vi.mocked(client.getConfig).mockRejectedValue(config)
   else vi.mocked(client.getConfig).mockResolvedValue({ check_interval: 60, ...config } as never)
   vi.mocked(client.getTorrents).mockResolvedValue([])
@@ -253,5 +260,42 @@ describe('Status — user filter', () => {
     expect(screen.getAllByText('Bob Show').length).toBeGreaterThan(0)
     expect(screen.queryByText('Loose Show')).toBeNull()
     expect(window.location.hash).toContain('bob')
+  })
+
+  it('shows the control for a URL selection while the config fails, so it can be unpicked', async () => {
+    window.location.hash = '#/status?account=anilist%3Abob'
+    await renderStatus(users, new Error('boom'))
+    await fireEvent.click(screen.getByRole('button', { name: /^bob$/ }))
+    await pick(/^bob /)
+    expect(screen.getAllByText('Loose Show').length).toBeGreaterThan(0)
+  })
+
+  it('ignores a URL selection when fewer than two accounts are configured', async () => {
+    window.location.hash = '#/status?account=anilist%3Aalice'
+    await renderStatus(users, { anilist_usernames: ['alice'] })
+    // No control on screen, so nothing may be hidden behind it.
+    expect(screen.getAllByText('Loose Show').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Bob Show').length).toBeGreaterThan(0)
+  })
+
+  it('matches a URL username in another case and keeps the configured spelling', async () => {
+    window.location.hash = '#/status?account=anilist%3ABOB'
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob'] })
+    expect(screen.queryByText('Loose Show')).toBeNull()
+    expect(screen.getAllByText('Bob Show').length).toBeGreaterThan(0)
+    await tick()
+    expect(window.location.hash).toContain('anilist%3Abob')
+  })
+
+  it("says the picked account's list failed instead of showing an empty filter as if it had nothing", async () => {
+    const notice = /couldn't load the list of carol|não foi possível carregar a lista de carol/i
+    window.location.hash = '#/status?account=anilist%3Acarol'
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob', 'carol'] }, ['anilist:carol'])
+    expect(screen.getByText(notice)).toBeTruthy()
+  })
+
+  it('does not warn about a failed account that is not picked', async () => {
+    await renderStatus(users, { anilist_usernames: ['alice', 'bob', 'carol'] }, ['anilist:carol'])
+    expect(screen.queryByText(/couldn't load the list|não foi possível carregar a lista/i)).toBeNull()
   })
 })

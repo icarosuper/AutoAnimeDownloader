@@ -221,13 +221,16 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		// weren't covered) can be refreshed individually below instead of disappearing.
 		var entries []anilist.MediaList
 		covered := make(map[int]bool)
-		mergeFailed := false
+		// failedAccounts are the accounts whose list didn't come at all (not even from the cache).
+		// None of the animes carries them, so the user filter for one of them would show nothing as
+		// if the account had nothing: the header lets the dashboard and the CLI say so.
+		var failedAccounts []string
 		fromCache := false
 		for _, username := range config.AnilistUsernames {
 			// nil (not an empty list) means the fetch failed — see fetchAniListEntries.
 			list, cached := fetchAniListEntries(username, config.DownloadStatuses, config.DownloadMediaStatuses)
 			if list == nil {
-				mergeFailed = true
+				failedAccounts = append(failedAccounts, anilist.AccountSourceAniList+":"+username)
 				continue
 			}
 			fromCache = fromCache || cached
@@ -241,7 +244,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		for _, user := range config.MALUsernames {
 			list, cached := fetchMALEntries(user, config.DownloadStatuses, config.DownloadMediaStatuses)
 			if list == nil {
-				mergeFailed = true
+				failedAccounts = append(failedAccounts, anilist.AccountSourceMAL+":"+user)
 				continue
 			}
 			fromCache = fromCache || cached
@@ -263,7 +266,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		// "needs refresh" would turn the failure into one GetAnimeInfo per downloaded anime, on every
 		// frontend poll. That was exactly the feedback that pushed AniList to 429 — and the 429 made the
 		// next list fail, locking the cycle.
-		if mergeFailed {
+		if len(failedAccounts) > 0 {
 			logger.Logger.Warn().Msg("Skipping orphan refresh: AniList list fetch failed, coverage unknown")
 		} else if fromCache {
 			// Coverage is known (the list came whole, from the cache), but AniList is down: every uncovered
@@ -285,9 +288,18 @@ func handleAnimes(server *Server) http.HandlerFunc {
 			animes = append(animes, *animeInfo)
 		}
 
+		if len(failedAccounts) > 0 {
+			// A header, not a field: the body is the bare array every client already reads.
+			// Usernames can't hold a comma on AniList or MAL.
+			w.Header().Set(FailedAccountsHeader, strings.Join(failedAccounts, ","))
+		}
 		JSONSuccess(w, http.StatusOK, animes)
 	}
 }
+
+// FailedAccountsHeader on GET /api/v1/animes lists, comma-separated as "<source>:<username>", the
+// accounts whose list fetch failed for this response (decisions.md #125).
+const FailedAccountsHeader = "X-Failed-Accounts"
 
 // countPendingEpisodes counts the released episodes above the watch progress that aren't on disk
 // yet. It walks by number (not released-downloaded) because watched episodes may stay saved
@@ -349,10 +361,23 @@ func refreshOrphanAnimes(fm FileManagerInterface, animeMap map[string]*AnimeInfo
 
 		applyFetchedMedia(info, ml, excludedLists)
 		// GetAnimeInfoByIDs answers in ANY list status, but on the dashboard an anime belongs to the
-		// accounts that have it in a download status — the same accounts the filtered list fetch
-		// stamps on covered animes. Without the cut the user filter would mean "on the list" for
-		// orphans and "being downloaded for" for everything else.
-		info.Accounts = animeAccounts(inStatuses(ml.Accounts, downloadStatuses))
+		// accounts that have it in a download LIST status — the per-account half of what the filtered
+		// list fetch asks. Without the cut the user filter would mean "on the list" for orphans and
+		// "being downloaded for" for everything else. The media-status half
+		// (download_media_statuses) is deliberately not applied: it is a property of the anime, the
+		// same for every account, and an anime uncovered only because of it (a FINISHED show with
+		// episodes on disk) is still that account's anime.
+		kept := inStatuses(ml.Accounts, downloadStatuses)
+		info.Accounts = animeAccounts(kept)
+		// ml.Progress is the lowest across every account in ANY status (a PLANNING entry at 0 wins), so
+		// the combined pair is re-derived from the accounts the row says own it — the same "lowest
+		// progress" rule, over the same accounts. With none kept, ml.Progress is all there is.
+		if len(kept) > 0 {
+			info.EpisodesWatched = kept[0].Progress
+			for _, a := range kept[1:] {
+				info.EpisodesWatched = min(info.EpisodesWatched, a.Progress)
+			}
+		}
 	}
 }
 

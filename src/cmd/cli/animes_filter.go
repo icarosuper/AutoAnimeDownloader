@@ -10,6 +10,8 @@ import (
 
 	"AutoAnimeDownloader/src/internal/api"
 
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -61,8 +63,11 @@ func resolveAccounts(values, configured []string) ([]string, error) {
 		v = strings.TrimSpace(v)
 		var matched []string
 		for _, key := range configured {
-			_, user, _ := strings.Cut(key, ":")
-			if key == v || user == v {
+			// AniList and MAL usernames are case-insensitive; the key keeps the configured spelling,
+			// which is the one the daemon stamps on the animes.
+			source, user, _ := strings.Cut(key, ":")
+			vSource, vUser, hasSource := strings.Cut(v, ":")
+			if hasSource && vSource == source && strings.EqualFold(vUser, user) || !hasSource && strings.EqualFold(v, user) {
 				matched = append(matched, key)
 			}
 		}
@@ -110,12 +115,13 @@ func scopeToAccounts(animes []api.AnimeInfo, selected []string) []api.AnimeInfo 
 	return scoped
 }
 
-// normalizeName is the dashboard search's NFKD + diacritic strip + lowercase, so "kimi no na wa"
-// matches "Kimi no Na wa" and full-width katakana matches the normal form.
+// normalizeName is the dashboard search's NFKD + \p{Diacritic} strip + lowercase, so "kimi no na
+// wa" matches "Kimi no Na wa" and full-width katakana matches the normal form. Diacritic, not Mn:
+// the two sets differ (ー, ^ and ` are Diacritic only) and the dashboard strips Diacritic.
 func normalizeName(s string) string {
 	var b strings.Builder
 	for _, r := range norm.NFKD.String(s) {
-		if unicode.Is(unicode.Mn, r) {
+		if unicode.Is(unicode.Diacritic, r) {
 			continue
 		}
 		b.WriteRune(unicode.ToLower(r))
@@ -160,6 +166,10 @@ func filterAnimes(animes []api.AnimeInfo, v animesView) []api.AnimeInfo {
 	return out
 }
 
+// nameCollator stands in for the dashboard's localeCompare: Unicode collation, so "Émile" sorts
+// with the E's instead of after Z as a byte compare would put it.
+var nameCollator = collate.New(language.Und)
+
 // sortAnimes is the dashboard's sort: name ascending, the other keys descending, --reverse flips.
 // The API returns the animes in map order, so without a sort the output order is random.
 func sortAnimes(animes []api.AnimeInfo, key string, reverse bool) {
@@ -178,7 +188,7 @@ func sortAnimes(animes []api.AnimeInfo, key string, reverse bool) {
 		var less, greater bool
 		switch key {
 		case "name":
-			c := strings.Compare(strings.ToLower(animes[i].Name), strings.ToLower(animes[j].Name))
+			c := nameCollator.CompareString(animes[i].Name, animes[j].Name)
 			less, greater = c < 0, c > 0
 		case "episodes_watched":
 			less, greater = animes[i].EpisodesWatched < animes[j].EpisodesWatched, animes[i].EpisodesWatched > animes[j].EpisodesWatched

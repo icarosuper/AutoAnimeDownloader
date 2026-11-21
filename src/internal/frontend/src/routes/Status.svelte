@@ -44,7 +44,9 @@
     decodeStatusView,
     accountCounts,
     accountLabel,
+    canonicalAccounts,
     listAccounts,
+    parseAccountKey,
     scopeToAccounts,
     type SortKey,
     type SortDir,
@@ -174,18 +176,35 @@
 
   // User filter. The options come from the config, not from the animes: an account with nothing
   // listed right now is still an account. The username alone is the label; the source is only
-  // spelled out when the same name exists on both AniList and MAL.
-  $: accountOptions = listAccounts(anilistUsernames, malUsernames).map((acc) => ({
-    key: acc.key,
-    label: accountLabel(acc),
-  }));
+  // spelled out when the same name exists on both AniList and MAL. Until the config answers, the
+  // options are the URL selection itself, so a filter that is applying always has its control on
+  // screen — and can be unpicked — even when the config keeps failing.
+  function optionsFrom(anilist: string[], mal: string[]) {
+    return listAccounts(anilist, mal).map((acc) => ({ key: acc.key, label: accountLabel(acc) }));
+  }
+  $: selectedParsed = selectedAccounts.map(parseAccountKey).filter((acc) => acc !== null);
+  $: accountOptions = configLoaded
+    ? optionsFrom(anilistUsernames, malUsernames)
+    : optionsFrom(
+        selectedParsed.filter((acc) => acc.source === "anilist").map((acc) => acc.username),
+        selectedParsed.filter((acc) => acc.source === "mal").map((acc) => acc.username),
+      );
   // Filtering by user only makes sense with two or more accounts.
-  $: showAccountFilter = accountOptions.length >= 2;
+  $: showAccountFilter = configLoaded ? accountOptions.length >= 2 : selectedAccounts.length > 0;
   // Until the config answers there are no options to validate against, so a URL selection is
-  // trusted instead of silently showing the unfiltered list.
-  $: activeAccounts = configLoaded
-    ? selectedAccounts.filter((key) => accountOptions.some((o) => o.key === key))
-    : selectedAccounts;
+  // trusted instead of silently showing the unfiltered list. With fewer than two accounts the
+  // control is hidden, so no selection may apply.
+  $: activeAccounts = !configLoaded
+    ? selectedAccounts
+    : accountOptions.length >= 2
+      ? selectedAccounts.filter((key) => accountOptions.some((o) => o.key === key))
+      : [];
+  // Accounts whose list failed on the last poll: no anime carries them, so a pick of one shows
+  // nothing — the notice says why instead of letting it read as "this user has nothing".
+  let failedAccounts: string[] = [];
+  $: failedActive = accountOptions.filter(
+    (o) => activeAccounts.includes(o.key) && failedAccounts.includes(o.key),
+  );
 
   // An account the config no longer has leaves the selection — and the URL — with a notice, so a
   // shared link that pointed at it doesn't pass for filtered while showing everything. Called when
@@ -194,10 +213,18 @@
     if (!configLoaded) return;
     // From the usernames, not accountOptions: that one is reactive and may not have caught up yet.
     const configured = listAccounts(anilistUsernames, malUsernames).map((acc) => acc.key);
-    const known = selectedAccounts.filter((key) => configured.includes(key));
+    if (configured.length < 2) {
+      // No filter is offered, so a selection could only hide animes behind a control that isn't there.
+      if (selectedAccounts.length > 0) selectedAccounts = [];
+      return;
+    }
+    // Canonical too: a URL with another username case becomes the configured spelling.
+    const known = canonicalAccounts(selectedAccounts, configured);
     if (known.length !== selectedAccounts.length) {
       selectedAccounts = known;
       toast.info(m.status_filter_account_removed());
+    } else if (known.some((key, i) => key !== selectedAccounts[i])) {
+      selectedAccounts = known;
     }
   }
 
@@ -465,18 +492,40 @@
   let tickInterval: ReturnType<typeof setInterval> | null = null;
   let torrentsPollInterval: ReturnType<typeof setInterval> | null = null;
 
+  function fetchAnimes() {
+    return getAnimes({ onFailedAccounts: (keys) => (failedAccounts = keys) });
+  }
+
   async function loadAnimes() {
     if (!configLoaded) {
       loadConfig().catch((err) => console.error("Failed to load config:", err));
     }
     try {
-      animes = await getAnimes();
+      animes = await fetchAnimes();
     } catch (err) {
       console.error("Failed to load animes:", err);
     }
   }
 
-  async function loadConfig() {
+  // One config request at a time: the mount load and the poll (or the WebSocket's "running") can
+  // both ask before the first answer, and two in flight could land out of order. Cleared when it
+  // settles, so a failed load is retried by the next poll.
+  let configInFlight: Promise<void> | null = null;
+  function loadConfig(): Promise<void> {
+    if (!configInFlight) {
+      const request = fetchConfig();
+      configInFlight = request;
+      // A side chain, so callers get the request itself: no extra ticks before it settles. Its
+      // rejection is the callers' to handle; this branch only clears the slot.
+      const clear = () => {
+        if (configInFlight === request) configInFlight = null;
+      };
+      request.then(clear, clear);
+    }
+    return configInFlight;
+  }
+
+  async function fetchConfig() {
     const configData = await getConfig();
     checkInterval = configData.check_interval;
     completedPath = configData.completed_anime_path ?? "";
@@ -517,7 +566,7 @@
       // The config on its own: its failure must not cost the animes, and the poll retries it.
       const [statusData, animesData] = await Promise.all([
         getStatus(),
-        getAnimes(),
+        fetchAnimes(),
         loadConfig().catch((err) => {
           toast.error(err instanceof Error ? err.message : m.status_toast_load_failed());
         }),
@@ -1151,6 +1200,15 @@
           </div>
         </div>
       </div>
+
+      {#if failedActive.length > 0}
+        <p
+          class="mb-3 rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
+          role="status"
+        >
+          {$locale && m.status_filter_account_failed({ accounts: failedActive.map((o) => o.label).join(", ") })}
+        </p>
+      {/if}
 
       {#if animes.length === 0}
         <!-- Two paths, because a list account stopped being required: adding a standalone anime is
