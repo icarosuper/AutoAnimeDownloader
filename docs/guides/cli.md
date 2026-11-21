@@ -84,10 +84,14 @@ back after saving: webhook URLs and headers hold tokens.
 
 ```bash
 autoanimedownloader animes
+autoanimedownloader animes --account alice
+autoanimedownloader animes --account anilist:alice --account mal:bob --unwatched
+autoanimedownloader animes --name frieren --type airing --sort name
 autoanimedownloader animes search "frieren"
 autoanimedownloader animes search "foo" --unreleased
 autoanimedownloader animes candidates 154587
 autoanimedownloader animes candidates 154587 --query "frieren s01"
+autoanimedownloader animes candidate 154587 1790123
 autoanimedownloader animes add 154587
 autoanimedownloader animes add 154587 --magnet "magnet:?xt=…"
 autoanimedownloader animes add 154587 --magnet "magnet:?xt=…" --query "frieren s01"
@@ -111,11 +115,24 @@ autoanimedownloader animes replace-episode 154587 3 --magnet "magnet:?xt=…" --
 would be searched and how many magnets each found, downloads nothing, and leaves the full trace in
 the daemon log (`logs`). It can take minutes on a long series.
 
-`animes` lists tracked titles (columns follow `AnimeInfo`). `search` is AniList; a term shorter than
+`animes` lists tracked titles (columns follow `AnimeInfo`) with the dashboard's filters, applied by
+the CLI to what `GET /api/v1/animes` returns:
+
+| Flag | Default | Behavior |
+|---|---|---|
+| `--account` | every account | animes that account has in a **download** status. `USER` picks that name on every service it is configured on; `anilist:USER` / `mal:USER` picks one. Repeat for several (OR). `episodes_watched` / `episodes_pending` become **that account's** — with several, the one furthest behind — so `--unwatched` and `--sort watched` answer for it. An account not in the config is an error listing the configured ones |
+| `--name` | | any title (English, romaji, native, synonyms) contains the text; case and accents ignored |
+| `--unwatched` | false | released episodes left to watch |
+| `--type` | `all` | `airing` (releasing or hiatus), `finished` (finished or cancelled), `standalone`, `blacklisted` |
+| `--sort` | `last-download` | `name` (A–Z), `watched`, `last-download` (both most first); `--reverse` flips |
+
+`search` is AniList; a term shorter than
 3 characters returns an empty list, not an error. `candidates` is the ranked whole-title list the
 picker shows (empty `items` is success, not an error). `--query` is a Nyaa `q` and skips title
-variants and season/part. There is no command that prints a Nyaa description — `nyaa_id` in the
-JSON is the terminal equivalent. `add --magnet` skips auto-pick and looks the magnet up among the
+variants and season/part. `candidate <id> <nyaa_id>` is the picker's detail panel: the Nyaa URL and
+the files inside the torrent (`--json` also carries the description as HTML). `episodes` is followed
+by an `On lists:` table — every configured account that has the anime, in any status, with its
+progress and score (the anime page's panel). `add --magnet` skips auto-pick and looks the magnet up among the
 candidates (pass the same `--query` you used with `candidates`), so it sends the release name, Nyaa id
 and size the web picker sends — the daemon reads the episode range from them. A magnet that is not
 among them is added with the magnet alone. Flags may follow the id (`animes add 154587 --magnet "…"` is

@@ -3666,10 +3666,11 @@ first one used to push "failed" for a pack that was downloading.
 **Location:** `internal/anilist/anilist.go` — `MediaList.Accounts`, `StampAccount`, the accounts
 union in `DedupeByMedia`; `internal/api/endpoint_animes.go` — `AnimeInfo.Accounts` (pending
 recomputed per account at the end of `handleAnimes`); `frontend/src/lib/utils/status.ts` —
-`scopeToAccounts`, run before `filterAnimes` in `routes/Status.svelte`. Pinned by
+`scopeToAccounts`, run before `filterAnimes` in `routes/Status.svelte`; `cmd/cli/animes_filter.go` —
+the same projection for `animes --account`. Pinned by
 `TestDedupeByMedia_UnionsAccounts`, `Same anime in two accounts carries each account's progress`,
 `TestInStatuses` and the orphan case of `TestHandleAnimes` (`endpoint_animes_test.go`), `scopeToAccounts` in `status.utils.test.ts` and
-`Status — user filter` in `Status.filters.test.ts`.
+`Status — user filter` in `Status.filters.test.ts`, `TestAnimesAccountFilterProjectsProgress` (CLI).
 
 **What it looks like:** a filter that rewrites data. Picking an account changes the
 `episodes_watched` / `episodes_pending` of the rows it keeps, so the same anime shows "4 watched"

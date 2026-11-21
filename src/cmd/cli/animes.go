@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 
 	"AutoAnimeDownloader/src/internal/api"
 	"AutoAnimeDownloader/src/internal/torrents"
@@ -14,9 +16,18 @@ func animesCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "animes",
 		Usage: "List and manage animes",
-		Action: func(c *cli.Context) error {
-			return handleAnimes()
+		Description: "Without a subcommand, lists the tracked animes with the dashboard's filters and sort.\n" +
+			"--account keeps the animes that account has in a download status and shows ITS progress\n" +
+			"(episodes_watched / episodes_pending); with several accounts, the one furthest behind.",
+		Flags: []cli.Flag{
+			&cli.StringSliceFlag{Name: "account", Usage: "Only this account's animes: `USER` or SOURCE:USER (anilist:alice, mal:alice); repeat for several"},
+			&cli.StringFlag{Name: "name", Usage: "Only animes whose title (any of them: English, romaji, native, synonyms) contains `TEXT`"},
+			&cli.BoolFlag{Name: "unwatched", Usage: "Only animes with released episodes left to watch"},
+			&cli.StringFlag{Name: "type", Value: "all", Usage: "One of: " + strings.Join(animeTypes, ", ")},
+			&cli.StringFlag{Name: "sort", Value: "last-download", Usage: "One of: name (A-Z), watched, last-download (both most first)"},
+			&cli.BoolFlag{Name: "reverse", Usage: "Reverse the sort order"},
 		},
+		Action: handleAnimes,
 		Subcommands: []*cli.Command{
 			{
 				Name:      "search",
@@ -35,6 +46,15 @@ func animesCommand() *cli.Command {
 					&cli.StringFlag{Name: "query", Usage: "Custom Nyaa search query"},
 				},
 				Action: handleAnimesCandidates,
+			},
+			{
+				Name:      "candidate",
+				Usage:     "Show the files and Nyaa page of one torrent candidate",
+				ArgsUsage: "<id> <nyaa_id>",
+				Description: "The detail panel of the web picker: the files inside the torrent and its Nyaa URL.\n" +
+					"<nyaa_id> is the nyaa_id column of `animes candidates`. --json also carries the\n" +
+					"description as HTML.",
+				Action: handleAnimesCandidate,
 			},
 			{
 				Name:      "add",
@@ -132,11 +152,40 @@ func animesCommand() *cli.Command {
 	}
 }
 
-func handleAnimes() error {
-	animes, err := getClient().GetAnimes()
+func handleAnimes(c *cli.Context) error {
+	view := animesView{
+		name:      c.String("name"),
+		unwatched: c.Bool("unwatched"),
+		typ:       c.String("type"),
+		reverse:   c.Bool("reverse"),
+	}
+	if !slices.Contains(animeTypes, view.typ) {
+		return fmt.Errorf("invalid --type %q; one of: %s", view.typ, strings.Join(animeTypes, ", "))
+	}
+	sortKey, ok := animeSortKeys[c.String("sort")]
+	if !ok {
+		return fmt.Errorf("invalid --sort %q; one of: name, watched, last-download", c.String("sort"))
+	}
+	view.sortKey = sortKey
+
+	client := getClient()
+	if values := c.StringSlice("account"); len(values) > 0 {
+		config, err := client.GetConfig()
+		if err != nil {
+			return mapClientError(err)
+		}
+		view.accounts, err = resolveAccounts(values, configuredAccounts(config.AnilistUsernames, config.MALUsernames))
+		if err != nil {
+			return err
+		}
+	}
+
+	animes, err := client.GetAnimes()
 	if err != nil {
 		return mapClientError(err)
 	}
+	animes = filterAnimes(scopeToAccounts(animes, view.accounts), view)
+	sortAnimes(animes, view.sortKey, view.reverse)
 	return printValue(animes, "No animes found")
 }
 
@@ -164,6 +213,30 @@ func handleAnimesCandidates(c *cli.Context) error {
 		return mapClientError(err)
 	}
 	return printValue(candidates, "No candidates")
+}
+
+func handleAnimesCandidate(c *cli.Context) error {
+	if err := requireArgs(c, 2, "animes candidate <id> <nyaa_id>"); err != nil {
+		return err
+	}
+	id, err := parsePositiveInt(c.Args().Get(0), "id")
+	if err != nil {
+		return err
+	}
+	nyaaID, err := parsePositiveInt(c.Args().Get(1), "nyaa_id")
+	if err != nil {
+		return err
+	}
+	detail, err := getClient().GetTorrentCandidateDetail(id, nyaaID)
+	if err != nil {
+		return mapClientError(err)
+	}
+	if outputJSON {
+		outputJSONResponse(detail)
+		return nil
+	}
+	fmt.Println(detail.NyaaURL)
+	return writeSliceTable(detail.Files, "No files listed")
 }
 
 func handleAnimesAdd(c *cli.Context) error {
@@ -273,7 +346,15 @@ func handleAnimesEpisodes(c *cli.Context) error {
 		outputJSONResponse(detail)
 		return nil
 	}
-	return writeSliceTable(detail.Episodes, "No episodes found")
+	if err := writeSliceTable(detail.Episodes, "No episodes found"); err != nil {
+		return err
+	}
+	// The anime page's "on lists" panel: every configured account that has it, in any status.
+	if len(detail.Accounts) > 0 {
+		fmt.Println("\nOn lists:")
+		return writeSliceTable(detail.Accounts, "")
+	}
+	return nil
 }
 
 func handleAnimesDebug(c *cli.Context) error {

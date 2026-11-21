@@ -219,6 +219,14 @@ func (c *Client) GetTorrentCandidates(id int, query string) (*TorrentCandidatesR
 	return &out, nil
 }
 
+func (c *Client) GetTorrentCandidateDetail(id, nyaaID int) (*TorrentCandidateDetail, error) {
+	var out TorrentCandidateDetail
+	if err := c.get("/api/v1/animes/"+strconv.Itoa(id)+"/torrent-candidates/"+strconv.Itoa(nyaaID), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) AddStandaloneAnime(req StandaloneAnimeRequest) (*StandaloneAnimeAddResponse, error) {
 	var out StandaloneAnimeAddResponse
 	if err := c.send(http.MethodPost, "/api/v1/standalone-animes", req, &out); err != nil {

@@ -370,8 +370,11 @@ follow positionals before urfave parses ([decisions.md #109](decisions.md#109-fl
 — tests must call `run`, not `newApp().Run`; `config.go`, `status.go`,
 `animes.go`, `torrents.go`, `logs.go`, `report.go`, `notifications.go` hold the matching trees.
 There is no root `episodes` command and no `GetEpisodes` — `GET /api/v1/episodes` is gone; listing
-is `animes episodes <id>`. There is no command that prints a Nyaa description — `animes candidates`
-plus `nyaa_id` is the terminal equivalent.
+is `animes episodes <id>`. `animes`' filters (`--account`, `--name`, `--unwatched`, `--type`,
+`--sort`) live in `animes_filter.go`, a hand port of the dashboard's `lib/utils/status.ts`
+(`scopeToAccounts`, `filterAnimes`, `sortAnimes`) — `/api/v1/animes` takes no filter
+([decisions.md #125](decisions.md#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)),
+so a change to one must be made in the other.
 
 `report` and `report crash-ack` call `diagnostics.Build` / `ArchivePendingCrash` against
 `datadir.Path()` and never the HTTP client, so they work with the daemon dead. `--yes` is a CLI
