@@ -104,6 +104,19 @@ func (c *ttlCache[T]) restore(data map[string]T, ttl time.Duration) {
 	}
 }
 
+// deleteWhere removes every entry whose key matches. Only listStatusCache uses it, to prune the ids
+// that left the disk (GetListStatusesByMediaIDs).
+func (c *ttlCache[T]) deleteWhere(match func(key string) bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key := range c.data {
+		if match(key) {
+			delete(c.data, key)
+			delete(c.expiry, key)
+		}
+	}
+}
+
 func (c *ttlCache[T]) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -1007,6 +1020,10 @@ func GetListStatusesByMediaIDs(userName string, mediaIDs []int, priority Priorit
 		}
 	`
 
+	// Stored per (account, media id), "" meaning "not tracked": next pass's id set differs from this
+	// one by whatever was downloaded or deleted, and a per-call key would never be found again. Each
+	// chunk is stored as soon as it arrives, so when a later chunk fails the fallback below serves
+	// the chunks that DID answer fresh and only the failed ones from older data.
 	statuses := make(map[int]MediaListStatus, len(mediaIDs))
 	for start := 0; start < len(mediaIDs); start += anilistMaxPerPage {
 		chunk := mediaIDs[start:min(start+anilistMaxPerPage, len(mediaIDs))]
@@ -1023,16 +1040,21 @@ func GetListStatusesByMediaIDs(userName string, mediaIDs []int, priority Priorit
 		for _, entry := range resp.Data.Page.MediaList {
 			statuses[entry.Media.Id] = entry.Status
 		}
-	}
-
-	// Stored per (account, media id), "" meaning "not tracked": next pass's id set differs from this
-	// one by whatever was downloaded or deleted, and a per-call key would never be found again.
-	for _, id := range mediaIDs {
-		listStatusCache.set(listStatusKey(userName, id), statuses[id], 0)
-	}
-	if len(mediaIDs) > 0 {
+		for _, id := range chunk {
+			listStatusCache.set(listStatusKey(userName, id), statuses[id], 0)
+		}
 		markCacheDirty()
 	}
+
+	// Only the animes on disk are ever asked about, so once the whole set answered, this account's
+	// entries for anything else can't serve a fallback again — dropping them keeps the snapshot the
+	// size of the library instead of everything that was ever on disk.
+	asked := make(map[string]bool, len(mediaIDs))
+	for _, id := range mediaIDs {
+		asked[listStatusKey(userName, id)] = true
+	}
+	prefix := userName + "\x00"
+	listStatusCache.deleteWhere(func(key string) bool { return strings.HasPrefix(key, prefix) && !asked[key] })
 	return statuses, nil
 }
 

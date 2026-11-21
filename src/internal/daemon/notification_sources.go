@@ -34,6 +34,9 @@ type accountLists struct {
 	// at is when each account's list of each kind was last recorded: a list older than the pass
 	// means that account's fetch failed in it (fresh and cached both).
 	at map[listKind]map[string]time.Time
+	// prevFresh is the answer each account gave on its previous recordCarrying, before the union —
+	// what the next one carries over for one more pass.
+	prevFresh map[listKind]map[string]map[int]bool
 }
 
 var passLists = &accountLists{byID: make(map[listKind]map[string]map[int]bool)}
@@ -53,6 +56,32 @@ func (l *accountLists) record(kind listKind, account string, ids map[int]bool) {
 		l.at[kind] = make(map[string]time.Time)
 	}
 	l.at[kind][account] = time.Now()
+}
+
+// recordCarrying is record for a list that only holds what is on disk NOW (the delete half,
+// decisions.md #130): it stores this answer united with the account's previous one. An anime the
+// pass deletes leaves the disk, so the next pass no longer asks about it — and its episode_deleted
+// can still be waiting in a batch window when that pass records. Carrying the previous answer for
+// one pass keeps its owner until the window flushes, as long as batch_window_seconds is shorter
+// than two check intervals; carrying it forever would grow the list with every anime ever deleted.
+func (l *accountLists) recordCarrying(kind listKind, account string, fresh map[int]bool) {
+	l.mu.Lock()
+	if l.prevFresh == nil {
+		l.prevFresh = make(map[listKind]map[string]map[int]bool)
+	}
+	if l.prevFresh[kind] == nil {
+		l.prevFresh[kind] = make(map[string]map[int]bool)
+	}
+	union := make(map[int]bool, len(fresh))
+	for id := range l.prevFresh[kind][account] {
+		union[id] = true
+	}
+	for id := range fresh {
+		union[id] = true
+	}
+	l.prevFresh[kind][account] = fresh
+	l.mu.Unlock()
+	l.record(kind, account, union)
 }
 
 // allRecordedSince reports whether every account answered its list of this kind at or after t —

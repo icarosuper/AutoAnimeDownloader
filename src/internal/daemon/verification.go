@@ -10,8 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 // animeProcessResult holds the per-anime outputs from processAnimeEpisodes.
@@ -151,6 +154,8 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		// listStatuses[account][mediaId] — each account's list status of the animes on disk; see
 		// fetchListStatuses.
 		listStatuses map[string]map[int]anilist.MediaListStatus
+		// onDisk is onDiskMediaIDs(savedEpisodes), computed once for the fetch and the vote.
+		onDisk []int
 
 		errAnilist  error
 		errEpisodes error
@@ -184,7 +189,8 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		}
 		// Chained here, not in its own goroutine: the question is asked only about the animes on disk,
 		// so it needs the file first. Still runs alongside searchAnilist.
-		listStatuses = fetchListStatuses(configs, savedEpisodes)
+		onDisk = onDiskMediaIDs(savedEpisodes)
+		listStatuses = fetchListStatuses(configs, onDisk)
 	}()
 
 	fetchWg.Add(1)
@@ -234,7 +240,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// Status deletion rule: EVERY account that has the anime must have it in some delete status (not
 	// necessarily the same one). The download rule is the opposite — ONE account is enough —, and it's
 	// already applied in searchAnilist through the union of the lists.
-	deletableMedia := deletableMediaIDs(configs, listStatuses, savedEpisodes)
+	deletableMedia := deletableMediaIDs(configs, listStatuses, onDisk)
 
 	var keysToDelete []files.EpisodeKey
 
@@ -478,12 +484,16 @@ func onDiskMediaIDs(savedEpisodes []files.EpisodeStruct) []int {
 // (decisions.md #130).
 //
 // Each account's ids in a delete status also go into passLists as its listDelete half: the
-// webhook source filter only ever asks about animes with files, which is exactly this set.
-func fetchListStatuses(configs *files.Config, savedEpisodes []files.EpisodeStruct) map[string]map[int]anilist.MediaListStatus {
+// webhook source filter only asks about animes with files, which is this set — plus the ones this
+// pass is about to delete, which recordCarrying keeps for one more pass.
+func fetchListStatuses(configs *files.Config, onDisk []int) map[string]map[int]anilist.MediaListStatus {
 	if len(configs.DeleteStatuses) == 0 {
 		return nil
 	}
-	onDisk := onDiskMediaIDs(savedEpisodes)
+	onDiskSet := make(map[int]bool, len(onDisk))
+	for _, id := range onDisk {
+		onDiskSet[id] = true
+	}
 	result := make(map[string]map[int]anilist.MediaListStatus, len(configs.AnilistUsernames)+len(configs.MALUsernames))
 
 	// key is the account's key in the result (malAccountKey for MAL); passLists takes source + user.
@@ -495,7 +505,7 @@ func fetchListStatuses(configs *files.Config, savedEpisodes []files.EpisodeStruc
 				inDelete[id] = true
 			}
 		}
-		passLists.record(listDelete, notifications.AccountSource(source, user), inDelete)
+		passLists.recordCarrying(listDelete, notifications.AccountSource(source, user), inDelete)
 	}
 
 	for _, username := range configs.AnilistUsernames {
@@ -525,7 +535,7 @@ func fetchListStatuses(configs *files.Config, savedEpisodes []files.EpisodeStruc
 		}
 		statuses := make(map[int]anilist.MediaListStatus)
 		for _, entry := range entries {
-			if slices.Contains(onDisk, entry.MediaID) {
+			if onDiskSet[entry.MediaID] {
 				statuses[entry.MediaID] = entry.Status
 			}
 		}
@@ -544,7 +554,9 @@ func fetchListStatuses(configs *files.Config, savedEpisodes []files.EpisodeStruc
 // account holds in a delete status isn't a candidate at all.
 //
 // No network: fetchListStatuses already brought every account's status of every anime on disk.
-func deletableMediaIDs(configs *files.Config, listStatuses map[string]map[int]anilist.MediaListStatus, savedEpisodes []files.EpisodeStruct) map[int]bool {
+//
+// onDisk is onDiskMediaIDs of the pass's saved episodes, the same set fetchListStatuses asked about.
+func deletableMediaIDs(configs *files.Config, listStatuses map[string]map[int]anilist.MediaListStatus, onDisk []int) map[int]bool {
 	if len(configs.DeleteStatuses) == 0 || len(listStatuses) == 0 {
 		return nil
 	}
@@ -556,7 +568,7 @@ func deletableMediaIDs(configs *files.Config, listStatuses map[string]map[int]an
 	}
 
 	deletable := make(map[int]bool)
-	for _, mediaID := range onDiskMediaIDs(savedEpisodes) {
+	for _, mediaID := range onDisk {
 		if allAccountsAgreeOnDelete(configs.DeleteStatuses, accounts, listStatuses, mediaID) {
 			deletable[mediaID] = true
 		}
@@ -570,7 +582,7 @@ func allAccountsAgreeOnDelete(deleteStatuses, accounts []string, listStatuses ma
 		statuses, fetched := listStatuses[account]
 		if !fetched {
 			// This account's fetch failed: without its opinion there's no unanimity.
-			logger.Logger.Debug().Str("username", account).Int("media_id", mediaID).
+			logAccount(logger.Logger.Debug(), account).Int("media_id", mediaID).
 				Msg("Skipping status deletion: account list unavailable")
 			return false
 		}
@@ -581,7 +593,7 @@ func allAccountsAgreeOnDelete(deleteStatuses, accounts []string, listStatuses ma
 		case isInDeleteStatuses(deleteStatuses, status):
 			wanted = true
 		default:
-			logger.Logger.Debug().Str("username", account).Int("media_id", mediaID).
+			logAccount(logger.Logger.Debug(), account).Int("media_id", mediaID).
 				Str("status", string(status)).Msg("Status deletion vetoed by account")
 			return false
 		}
@@ -592,6 +604,15 @@ func allAccountsAgreeOnDelete(deleteStatuses, accounts []string, listStatuses ma
 // malAccountKey keys a MAL account in listStatuses. The prefix keeps an AniList and a MAL
 // account with the same name from overwriting each other.
 func malAccountKey(user string) string { return "mal:" + user }
+
+// logAccount names a listStatuses account in a log line the way the rest of the daemon does: an
+// AniList account under "username", a MAL one under "mal_user" without the key's prefix.
+func logAccount(e *zerolog.Event, account string) *zerolog.Event {
+	if user, ok := strings.CutPrefix(account, "mal:"); ok {
+		return e.Str("mal_user", user)
+	}
+	return e.Str("username", account)
+}
 
 // searchAnilist builds the pass's anime universe: the union of the configured accounts' lists
 // (AniList and MyAnimeList) plus the standalone animes (§ standalone).

@@ -218,3 +218,57 @@ func TestListStatusesFallback(t *testing.T) {
 		t.Errorf("an id never answered must fail the whole answer, got %v, %v", got, err)
 	}
 }
+
+// A chunk that answered is stored before the next one goes out: when chunk 2 fails, chunk 1
+// comes back with what it JUST said, not with the older stored status.
+func TestListStatusesFailedChunkKeepsTheFreshOnes(t *testing.T) {
+	ids := make([]int, 60)
+	for i := range ids {
+		ids[i] = i + 1
+	}
+	calls := 0
+	status := "COMPLETED"
+	restore := MockAniListDo(func(*http.Request) (*http.Response, error) {
+		calls++
+		if calls == 4 { // second run, second chunk
+			return respond(429, `{"errors":[{"message":"Too Many Requests.","status":429}]}`, nil), nil
+		}
+		return respond(200, `{"data":{"Page":{"mediaList":[{"status":"`+status+`","media":{"id":1}}]}}}`, nil), nil
+	})
+	t.Cleanup(restore)
+
+	if _, err := GetListStatusesByMediaIDs("user", ids, PriorityCritical); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	status = "REPEATING"
+	got, err := GetListStatusesByMediaIDs("user", ids, PriorityCritical)
+	if !errors.Is(err, ErrFromCache) {
+		t.Fatalf("want ErrFromCache when a chunk fails, got %v", err)
+	}
+	if got[1] != MediaListStatusRepeating {
+		t.Errorf("chunk 1 answered REPEATING in this run, got %q", got[1])
+	}
+}
+
+// Once the whole set answered, the account's entries for ids no longer asked about are dropped,
+// and another account's entries are left alone.
+func TestListStatusesPrunesIdsThatLeftTheDisk(t *testing.T) {
+	restore := MockAniListDo(func(*http.Request) (*http.Response, error) {
+		return respond(200, `{"data":{"Page":{"mediaList":[]}}}`, nil), nil
+	})
+	t.Cleanup(restore)
+
+	GetListStatusesByMediaIDs("user", []int{1, 2}, PriorityCritical)
+	GetListStatusesByMediaIDs("other", []int{1}, PriorityCritical)
+	GetListStatusesByMediaIDs("user", []int{2}, PriorityCritical)
+
+	if _, ok := listStatusCache.getStale(listStatusKey("user", 1)); ok {
+		t.Error("id 1 left the disk: its entry must be pruned")
+	}
+	if _, ok := listStatusCache.getStale(listStatusKey("user", 2)); !ok {
+		t.Error("id 2 is still asked about: its entry must stay")
+	}
+	if _, ok := listStatusCache.getStale(listStatusKey("other", 1)); !ok {
+		t.Error("another account's entry must not be pruned")
+	}
+}

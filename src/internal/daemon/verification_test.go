@@ -104,7 +104,7 @@ func deleteRuleConfig() *files.Config {
 	}
 }
 
-var onDisk500 = []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}}
+var onDisk500 = []int{500}
 
 func TestDeletableMediaIDs_AllAccountsAgree(t *testing.T) {
 	got := deletableMediaIDs(deleteRuleConfig(), map[string]statuses{
@@ -186,7 +186,7 @@ func TestDeletableMediaIDs_OnlyConsidersAnimesOnDisk(t *testing.T) {
 		t.Errorf("want no candidates without episodes on disk, got %v", got)
 	}
 	manual := []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500, ManuallyManaged: true}}
-	if got := deletableMediaIDs(deleteRuleConfig(), both, manual); len(got) != 0 {
+	if got := deletableMediaIDs(deleteRuleConfig(), both, onDiskMediaIDs(manual)); len(got) != 0 {
 		t.Errorf("a manually managed episode is never deleted by status, got %v", got)
 	}
 }
@@ -240,7 +240,7 @@ func TestFetchListStatuses_AsksOnlyAboutAnimesOnDisk(t *testing.T) {
 		{EpisodeNumber: 2, AnimeID: 500},
 		{EpisodeNumber: 1, AnimeID: 700, ManuallyManaged: true},
 	}
-	got := fetchListStatuses(deleteRuleConfig(), saved)
+	got := fetchListStatuses(deleteRuleConfig(), onDiskMediaIDs(saved))
 
 	if len(*requests) != 2 {
 		t.Fatalf("want one request per account, got %d", len(*requests))
@@ -256,7 +256,7 @@ func TestFetchListStatuses_AsksOnlyAboutAnimesOnDisk(t *testing.T) {
 	if _, tracked := got["accountB"][600]; tracked {
 		t.Error("an id the account doesn't track must be absent from its map")
 	}
-	if deletableMediaIDs(deleteRuleConfig(), got, saved)[500] {
+	if deletableMediaIDs(deleteRuleConfig(), got, onDiskMediaIDs(saved))[500] {
 		t.Error("accountB has 500 in PLANNING: it must veto")
 	}
 }
@@ -270,7 +270,7 @@ func TestFetchListStatuses_ChunksBy50(t *testing.T) {
 		saved = append(saved, files.EpisodeStruct{EpisodeNumber: 1, AnimeID: id})
 	}
 	cfg := &files.Config{AnilistUsernames: []string{"accountA"}, DeleteStatuses: []string{"COMPLETED"}}
-	fetchListStatuses(cfg, saved)
+	fetchListStatuses(cfg, onDiskMediaIDs(saved))
 
 	if len(*requests) != 3 {
 		t.Errorf("want ceil(120/50) = 3 requests, got %d", len(*requests))

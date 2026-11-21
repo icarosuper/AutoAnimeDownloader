@@ -44,3 +44,21 @@ func TestNotificationSources(t *testing.T) {
 		t.Errorf("after alice dropped it: got %v", got[21])
 	}
 }
+
+// The delete half only holds what is on disk, so an anime the pass deletes would lose its owner
+// on the next pass while its episode_deleted may still sit in a batch window. recordCarrying keeps
+// it one more pass, and only one.
+func TestRecordCarryingKeepsADeletedAnimeForOnePass(t *testing.T) {
+	l := &accountLists{byID: make(map[listKind]map[string]map[int]bool)}
+	acc := "anilist:alice"
+
+	l.recordCarrying(listDelete, acc, map[int]bool{7: true})
+	l.recordCarrying(listDelete, acc, map[int]bool{}) // 7 deleted, no longer on disk
+	if got := l.owners([]string{acc}, []int{7}); len(got[7]) != 1 {
+		t.Fatalf("the pass right after the deletion must still know 7's owner, got %v", got)
+	}
+	l.recordCarrying(listDelete, acc, map[int]bool{})
+	if got := l.owners([]string{acc}, []int{7}); len(got[7]) != 0 {
+		t.Errorf("two passes later 7 must be gone, got %v", got)
+	}
+}

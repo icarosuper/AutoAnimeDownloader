@@ -3881,10 +3881,13 @@ Back.
 
 **Location:** `internal/daemon/verification.go` — `fetchListStatuses` (one `mediaId_in` request
 per account per 50 animes on disk, chained after `LoadSavedEpisodes`), `onDiskMediaIDs`,
-`deletableMediaIDs` / `allAccountsAgreeOnDelete` (no network); `internal/anilist/anilist.go` —
+`deletableMediaIDs` / `allAccountsAgreeOnDelete` (no network); `notification_sources.go` —
+`recordCarrying`; `internal/anilist/anilist.go` —
 `GetListStatusesByMediaIDs`, `listStatusCache` (persisted as `list_statuses`). Pinned by
 `TestFetchListStatuses_AsksOnlyAboutAnimesOnDisk`, `TestFetchListStatuses_ChunksBy50`,
-`TestFetchListStatuses_FailedAccountIsAbsent`, `TestListStatusesFallback` and the
+`TestFetchListStatuses_FailedAccountIsAbsent`, `TestListStatusesFallback`,
+`TestListStatusesFailedChunkKeepsTheFreshOnes`, `TestListStatusesPrunesIdsThatLeftTheDisk`,
+`TestRecordCarryingKeepsADeletedAnimeForOnePass` and the
 `TestDeletableMediaIDs_*` tests.
 
 **What it looks like:** `delete_statuses` is a list filter just like `download_statuses`, so
@@ -3912,13 +3915,20 @@ is unchanged; an anime no account holds in a delete status is still not a candid
 found again (the on-disk set changes every pass a file comes or goes), and a partial answer is
 dangerous: a missing id reads as "not tracked" and silently drops that account's veto. So with
 AniList down the answer comes from `listStatusCache` with `ErrFromCache` only when **every** id
-has a stored answer (`""` = not tracked); one gap and the account is absent, which vetoes. Using
+has a stored answer (`""` = not tracked); one gap and the account is absent, which vetoes. Each
+chunk is stored the moment it answers, so with 50+ animes on disk a failed second chunk leaves the
+first one fresh and only the failed one stale. And once the whole set answered, the account's
+entries for ids no longer on disk are pruned: they can never be asked again, and keeping them would
+grow the snapshot with every anime that ever passed through the library. Using
 the cached answer to vote is the same explicit owner decision the whole-list fallback had
 ([#92](#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)).
 
 **Trade-off accepted:** `passLists`' `listDelete` half now holds only on-disk animes. The webhook
 source filter ([#126](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record))
-only ever asks about animes with files, so nothing it can be asked is lost.
+asks about animes with files — and about the ones a pass just deleted, whose `episode_deleted` can
+still sit in a batch window when the next pass records without them. `recordCarrying` keeps each
+account's previous answer for **one** more pass, which covers a `batch_window_seconds` shorter than
+two check intervals (default 60 s against a 1 min minimum interval).
 
 **Don't "fix" by:**
 - Going back to `status_in: delete_statuses` "because it's one query": it's one query **per 50
@@ -3929,3 +3939,5 @@ only ever asks about animes with files, so nothing it can be asked is lost.
   the account loses its veto — deleting files another account still wants.
 - Running the status fetch in its own goroutine before the episodes are loaded: it needs the
   on-disk ids.
+- Making `recordCarrying` keep everything it ever saw "to be safe": the delete half would grow
+  with every anime ever deleted, which is the whole list this entry stopped downloading.
