@@ -40,7 +40,8 @@ type FileManagerInterface interface {
 // below Config.MinFreeDiskGB, or when the torrent to be added doesn't fit in what's left.
 var ErrInsufficientDiskSpace = errors.New("insufficient free disk space")
 
-const giB = int64(1 << 30)
+// giB is notifications.GiB: one unit for the disk checks and the sizes their alerts print.
+const giB = int64(notifications.GiB)
 
 // DiskLow is true exactly when the daemon would refuse a new torrent of size 0: the add-gate,
 // including what the session still has to write, against the GiB floor. GET /status's disk_low

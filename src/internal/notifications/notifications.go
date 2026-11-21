@@ -342,9 +342,13 @@ func alertTitle(event Event, items []Episode) string {
 	return ""
 }
 
+// GiB is the unit of min_free_disk_gb. The daemon's disk checks and the sizes the notifications
+// print both use it, so the threshold a message names is the one the check applied.
+const GiB = 1 << 30
+
 // Gigabytes is a size in GiB, the unit min_free_disk_gb is in, written as GB like the config screen.
 func Gigabytes(bytes uint64) string {
-	return fmt.Sprintf("%.1f GB", float64(bytes)/float64(1<<30))
+	return fmt.Sprintf("%.1f GB", float64(bytes)/float64(GiB))
 }
 
 func failureReason(reason string) string {
