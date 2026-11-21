@@ -25,8 +25,9 @@ const (
 // refused query silently dropped the notification (decisions.md #126).
 //
 // An account whose fetch failed keeps its previous answer: stale ownership is closer to the truth
-// than none. The lists only cover the download and delete statuses, so an anime in any other status
-// (a manual deletion of a PAUSED anime) is unknown, and unknown is fail-open.
+// than none. The lists only cover the download statuses and, for the animes on disk, the delete
+// statuses (decisions.md #130), so an anime in any other status (a manual deletion of a PAUSED
+// anime) is unknown, and unknown is fail-open.
 type accountLists struct {
 	mu   sync.RWMutex
 	byID map[listKind]map[string]map[int]bool // kind -> account source key -> media ids

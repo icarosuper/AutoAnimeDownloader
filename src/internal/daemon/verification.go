@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 )
@@ -147,10 +148,9 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		anilistResponse *anilist.AniListResponse
 		savedEpisodes   []files.EpisodeStruct
 		blockedEpisodes []files.EpisodeKey
-		// inDeleteStatus[account][mediaId] — which animes each account has in some delete status. An
-		// account whose fetch failed is absent from the map, and absent never agrees. MAL accounts are
-		// keyed by malAccountKey.
-		inDeleteStatus map[string]map[int]bool
+		// listStatuses[account][mediaId] — each account's list status of the animes on disk; see
+		// fetchListStatuses.
+		listStatuses map[string]map[int]anilist.MediaListStatus
 
 		errAnilist  error
 		errEpisodes error
@@ -180,7 +180,11 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		if e != nil {
 			logger.Logger.Error().Err(e).Stack().Msg("Failed to load saved episodes")
 			errEpisodes = e
+			return
 		}
+		// Chained here, not in its own goroutine: the question is asked only about the animes on disk,
+		// so it needs the file first. Still runs alongside searchAnilist.
+		listStatuses = fetchListStatuses(configs, savedEpisodes)
 	}()
 
 	fetchWg.Add(1)
@@ -193,54 +197,6 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 			blockedEpisodes = []files.EpisodeKey{}
 		}
 	}()
-
-	if len(configs.DeleteStatuses) > 0 {
-		fetchWg.Add(1)
-		go func() {
-			defer fetchWg.Done()
-			inDeleteStatus = make(map[string]map[int]bool, len(configs.AnilistUsernames)+len(configs.MALUsernames))
-			for _, username := range configs.AnilistUsernames {
-				resp, e := anilist.GetAllCurrentAnime(username, configs.DeleteStatuses)
-				// ponytail: the local cache's list votes on deletion as if it were fresh, by explicit decision
-				// of the project owner. The risk has a name: an anime that left a delete status AFTER the
-				// snapshot (COMPLETED that became REPEATING, and the pass downloaded the season) shows up as
-				// deletable again, and the pass deletes what it just downloaded. If this ever bites, the fix is
-				// one line: treat ErrFromCache as an account with no answer here, and
-				// allAccountsAgreeOnDelete's unanimity refuses on its own.
-				if e != nil && !errors.Is(e, anilist.ErrFromCache) {
-					logger.Logger.Warn().Err(e).Str("username", username).Msg("Failed to fetch AniList animes for delete statuses")
-					// An account with no answer can't agree with the deletion — see deletableMediaIDs.
-					continue
-				}
-				byMedia := make(map[int]bool, len(resp.Data.Page.MediaList))
-				for _, ml := range resp.Data.Page.MediaList {
-					byMedia[ml.Media.Id] = true
-				}
-				logger.Logger.Debug().
-					Str("username", username).
-					Int("animes_found", len(byMedia)).
-					Msg("Fetched animes from Anilist for delete statuses")
-				inDeleteStatus[username] = byMedia
-				passLists.record(listDelete, notifications.AccountSource(anilist.AccountSourceAniList, username), byMedia)
-			}
-			for _, user := range configs.MALUsernames {
-				entries, e := anilist.GetMALEntries(user, anilist.PriorityCritical)
-				// ErrFromCache votes as if fresh, the same explicit choice as the AniList loop
-				// above. ErrMALEmpty is a failure, not an empty answer: an account that "tracks
-				// nothing" would lose its veto — see anilist.ErrMALEmpty.
-				if e != nil && !errors.Is(e, anilist.ErrFromCache) {
-					logger.Logger.Warn().Err(e).Str("mal_user", user).Msg("Failed to fetch MAL list for delete statuses")
-					continue
-				}
-				byMedia := make(map[int]bool)
-				for _, entry := range anilist.FilterMALEntries(entries, configs.DeleteStatuses) {
-					byMedia[entry.MediaID] = true
-				}
-				inDeleteStatus[malAccountKey(user)] = byMedia
-				passLists.record(listDelete, notifications.AccountSource(anilist.AccountSourceMAL, user), byMedia)
-			}
-		}()
-	}
 
 	fetchWg.Wait()
 
@@ -278,7 +234,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// Status deletion rule: EVERY account that has the anime must have it in some delete status (not
 	// necessarily the same one). The download rule is the opposite — ONE account is enough —, and it's
 	// already applied in searchAnilist through the union of the lists.
-	deletableMedia := deletableMediaIDs(configs, inDeleteStatus, savedEpisodes)
+	deletableMedia := deletableMediaIDs(configs, listStatuses, savedEpisodes)
 
 	var keysToDelete []files.EpisodeKey
 
@@ -494,110 +450,146 @@ func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.E
 	}
 }
 
+// onDiskMediaIDs is every anime with an episode on disk that status deletion may touch — the
+// manually managed ones never are. Sorted, so the requests built from it are stable.
+func onDiskMediaIDs(savedEpisodes []files.EpisodeStruct) []int {
+	seen := make(map[int]bool)
+	var ids []int
+	for _, ep := range savedEpisodes {
+		if ep.AnimeID != 0 && !ep.ManuallyManaged && !seen[ep.AnimeID] {
+			seen[ep.AnimeID] = true
+			ids = append(ids, ep.AnimeID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// fetchListStatuses asks every account for its list status of the animes ON DISK, and of nothing
+// else: those are the only ones status deletion can act on. Result: account -> media id -> status.
+// An id the account doesn't track is absent from its map; an account whose fetch failed is absent
+// from the result, and absent never agrees (deletableMediaIDs). MAL accounts are keyed by
+// malAccountKey.
+//
+// It replaced downloading every account's delete-status lists whole — 23 pages per pass for an
+// account with 1124 COMPLETED/DROPPED/PLANNING entries, plus one tie-break query per account that
+// didn't list a candidate — which alone went past AniList's 30 req/min on every pass. One
+// `mediaId_in` request per account per 50 animes on disk answers both questions at once
+// (decisions.md #130).
+//
+// Each account's ids in a delete status also go into passLists as its listDelete half: the
+// webhook source filter only ever asks about animes with files, which is exactly this set.
+func fetchListStatuses(configs *files.Config, savedEpisodes []files.EpisodeStruct) map[string]map[int]anilist.MediaListStatus {
+	if len(configs.DeleteStatuses) == 0 {
+		return nil
+	}
+	onDisk := onDiskMediaIDs(savedEpisodes)
+	result := make(map[string]map[int]anilist.MediaListStatus, len(configs.AnilistUsernames)+len(configs.MALUsernames))
+
+	// key is the account's key in the result (malAccountKey for MAL); passLists takes source + user.
+	record := func(key, source, user string, statuses map[int]anilist.MediaListStatus) {
+		result[key] = statuses
+		inDelete := make(map[int]bool)
+		for id, status := range statuses {
+			if isInDeleteStatuses(configs.DeleteStatuses, status) {
+				inDelete[id] = true
+			}
+		}
+		passLists.record(listDelete, notifications.AccountSource(source, user), inDelete)
+	}
+
+	for _, username := range configs.AnilistUsernames {
+		statuses, err := anilist.GetListStatusesByMediaIDs(username, onDisk, anilist.PriorityCritical)
+		// ponytail: the local cache's answer votes on deletion as if it were fresh, by explicit decision
+		// of the project owner. The risk has a name: an anime that left a delete status AFTER the
+		// snapshot (COMPLETED that became REPEATING, and the pass downloaded the season) shows up as
+		// deletable again, and the pass deletes what it just downloaded. If this ever bites, the fix is
+		// one line: treat ErrFromCache as an account with no answer here, and deletableMediaIDs'
+		// unanimity refuses on its own.
+		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
+			logger.Logger.Warn().Err(err).Str("username", username).Int("media_ids", len(onDisk)).
+				Msg("Failed to fetch the AniList list statuses of the animes on disk")
+			continue
+		}
+		record(username, anilist.AccountSourceAniList, username, statuses)
+	}
+
+	for _, user := range configs.MALUsernames {
+		entries, err := anilist.GetMALEntries(user, anilist.PriorityCritical)
+		// ErrFromCache votes as if fresh, the same explicit choice as the AniList loop above.
+		// ErrMALEmpty is a failure, not an empty answer: an account that "tracks nothing" would lose
+		// its veto — see anilist.ErrMALEmpty.
+		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
+			logger.Logger.Warn().Err(err).Str("mal_user", user).Msg("Failed to fetch MAL list for delete statuses")
+			continue
+		}
+		statuses := make(map[int]anilist.MediaListStatus)
+		for _, entry := range entries {
+			if slices.Contains(onDisk, entry.MediaID) {
+				statuses[entry.MediaID] = entry.Status
+			}
+		}
+		record(malAccountKey(user), anilist.AccountSourceMAL, user, statuses)
+	}
+	return result
+}
+
 // deletableMediaIDs decides which animes may have their episodes deleted by status.
 //
 // Rule: EVERY account (AniList or MyAnimeList) that has the anime in its list must have it in some
 // delete status — the statuses don't have to be the same (DROPPED in one and COMPLETED in another
 // deletes). An account that doesn't track the anime doesn't vote; one that has it in a neutral
 // status (PLANNING, for example) vetoes, otherwise we'd delete episodes another account still means
-// to watch.
+// to watch. An account whose fetch failed (absent from listStatuses) vetoes too. And an anime no
+// account holds in a delete status isn't a candidate at all.
 //
-// Only animes WITH an episode on disk are evaluated: the answer changes nothing for the rest, and
-// that's what keeps the tie-break queries rare — a deletable anime leaves the disk in the same pass
-// and never becomes a candidate again.
-func deletableMediaIDs(configs *files.Config, inDeleteStatus map[string]map[int]bool, savedEpisodes []files.EpisodeStruct) map[int]bool {
-	if len(configs.DeleteStatuses) == 0 || len(inDeleteStatus) == 0 {
+// No network: fetchListStatuses already brought every account's status of every anime on disk.
+func deletableMediaIDs(configs *files.Config, listStatuses map[string]map[int]anilist.MediaListStatus, savedEpisodes []files.EpisodeStruct) map[int]bool {
+	if len(configs.DeleteStatuses) == 0 || len(listStatuses) == 0 {
 		return nil
 	}
 
-	onDisk := make(map[int]bool)
-	for _, ep := range savedEpisodes {
-		if ep.AnimeID != 0 && !ep.ManuallyManaged {
-			onDisk[ep.AnimeID] = true
-		}
+	accounts := make([]string, 0, len(configs.AnilistUsernames)+len(configs.MALUsernames))
+	accounts = append(accounts, configs.AnilistUsernames...)
+	for _, user := range configs.MALUsernames {
+		accounts = append(accounts, malAccountKey(user))
 	}
 
-	candidates := make(map[int]bool)
-	for _, byMedia := range inDeleteStatus {
-		for mediaID := range byMedia {
-			if onDisk[mediaID] {
-				candidates[mediaID] = true
-			}
-		}
-	}
-
-	deletable := make(map[int]bool, len(candidates))
-	for mediaID := range candidates {
-		if allAccountsAgreeOnDelete(configs, inDeleteStatus, mediaID) {
+	deletable := make(map[int]bool)
+	for _, mediaID := range onDiskMediaIDs(savedEpisodes) {
+		if allAccountsAgreeOnDelete(configs.DeleteStatuses, accounts, listStatuses, mediaID) {
 			deletable[mediaID] = true
 		}
 	}
 	return deletable
 }
 
-func allAccountsAgreeOnDelete(configs *files.Config, inDeleteStatus map[string]map[int]bool, mediaID int) bool {
-	for _, username := range configs.AnilistUsernames {
-		byMedia, fetched := inDeleteStatus[username]
+func allAccountsAgreeOnDelete(deleteStatuses, accounts []string, listStatuses map[string]map[int]anilist.MediaListStatus, mediaID int) bool {
+	wanted := false
+	for _, account := range accounts {
+		statuses, fetched := listStatuses[account]
 		if !fetched {
 			// This account's fetch failed: without its opinion there's no unanimity.
-			logger.Logger.Debug().Str("username", username).Int("media_id", mediaID).
+			logger.Logger.Debug().Str("username", account).Int("media_id", mediaID).
 				Msg("Skipping status deletion: account list unavailable")
 			return false
 		}
-		if byMedia[mediaID] {
-			continue
-		}
-
-		// The account didn't list the anime among the deletable ones. It may not track it (no vote) or
-		// hold it in a neutral status (veto) — only a query tells them apart.
-		status, tracked, err := anilist.GetMediaListStatus(username, mediaID)
+		status, tracked := statuses[mediaID]
 		switch {
-		case err != nil:
-			logger.Logger.Warn().Err(err).Str("username", username).Int("media_id", mediaID).
-				Msg("Skipping status deletion: could not resolve the account's status")
-			return false
 		case !tracked:
-			continue // the account doesn't track this anime, no veto
-		case isInDeleteStatuses(configs.DeleteStatuses, status):
-			continue // a delete status other than the one the list fetch brought
+			continue // the account doesn't track this anime, no vote
+		case isInDeleteStatuses(deleteStatuses, status):
+			wanted = true
 		default:
-			logger.Logger.Debug().Str("username", username).Int("media_id", mediaID).
+			logger.Logger.Debug().Str("username", account).Int("media_id", mediaID).
 				Str("status", string(status)).Msg("Status deletion vetoed by account")
 			return false
 		}
 	}
-
-	for _, user := range configs.MALUsernames {
-		byMedia, fetched := inDeleteStatus[malAccountKey(user)]
-		if !fetched {
-			logger.Logger.Debug().Str("mal_user", user).Int("media_id", mediaID).
-				Msg("Skipping status deletion: MAL list unavailable")
-			return false
-		}
-		if byMedia[mediaID] {
-			continue
-		}
-		// Not among the deletable ones: the cached MAL list says whether the account doesn't
-		// track it (no vote) or holds it in a neutral status (veto). No extra request — the list
-		// fetched above is still cached.
-		entries, err := anilist.GetMALEntries(user, anilist.PriorityCritical)
-		if err != nil && !errors.Is(err, anilist.ErrFromCache) {
-			logger.Logger.Warn().Err(err).Str("mal_user", user).Int("media_id", mediaID).
-				Msg("Skipping status deletion: could not resolve the MAL account's status")
-			return false
-		}
-		for _, entry := range entries {
-			if entry.MediaID == mediaID && !isInDeleteStatuses(configs.DeleteStatuses, entry.Status) {
-				logger.Logger.Debug().Str("mal_user", user).Int("media_id", mediaID).
-					Str("status", string(entry.Status)).Msg("Status deletion vetoed by MAL account")
-				return false
-			}
-		}
-	}
-	return true
+	return wanted
 }
 
-// malAccountKey keys a MAL account in inDeleteStatus. The prefix keeps an AniList and a MAL
+// malAccountKey keys a MAL account in listStatuses. The prefix keeps an AniList and a MAL
 // account with the same name from overwriting each other.
 func malAccountKey(user string) string { return "mal:" + user }
 

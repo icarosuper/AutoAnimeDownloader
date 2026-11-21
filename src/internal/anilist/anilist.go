@@ -129,6 +129,9 @@ var (
 	// relations.
 	passListCache   = newTTLCache[[]MediaList]()
 	mediaEntryCache = newTTLCache[[]MediaList]()
+	// listStatusCache is fallback-only too (TTL zero): account + media id -> list status, "" = the
+	// account doesn't track it. Feeds the pass's deletion rule with AniList down.
+	listStatusCache = newTTLCache[MediaListStatus]()
 )
 
 const (
@@ -223,6 +226,7 @@ func clearCaches() {
 	frontendListCache.clear()
 	passListCache.clear()
 	mediaEntryCache.clear()
+	listStatusCache.clear()
 	mediaByIDCache.clear()
 	seriesCache.clear()
 	searchCache.clear()
@@ -975,31 +979,81 @@ func GetMediaIDForEntry(mediaListId int) (int, error) {
 	return resp.Data.MediaList.Media.Id, nil
 }
 
-// GetMediaListStatus returns the account's list status for one media. The bool is false when the
-// account does not track this media at all — a distinction the delete rule depends on: an account
-// that never had the anime cannot veto its deletion, but one holding it in a non-delete status can.
-func GetMediaListStatus(username string, mediaId int) (MediaListStatus, bool, error) {
+// GetListStatusesByMediaIDs answers, for ONE account, the list status of each of the given media
+// ids: an id the account tracks maps to its status, an id it doesn't track is ABSENT from the map.
+// That distinction is what the deletion rule needs — an account that never had the anime doesn't
+// vote, one holding it in a non-delete status vetoes (decisions.md #43).
+//
+// It exists so the pass asks only about the animes with an episode on disk. The pass used to
+// download every delete-status list whole (COMPLETED + DROPPED + PLANNING: 1124 entries, 23 pages,
+// for one real account) to then look at a few dozen ids, and that alone blew the 30 req/min budget
+// on every pass (decisions.md #130). Here it costs ceil(len(mediaIDs)/50) requests, whatever the
+// size of the account's lists.
+//
+// All or nothing: a failed chunk fails the whole answer, because an id missing from a partial map
+// would read as "not tracked" and silently drop that account's veto. On failure, every id answered
+// in an earlier call (disk snapshot included) is served from listStatusCache with ErrFromCache —
+// but only when ALL of them have a stored answer; one gap and it's the plain error.
+func GetListStatusesByMediaIDs(userName string, mediaIDs []int, priority Priority) (map[int]MediaListStatus, error) {
+	// mediaId_in returns at most one entry per id, so a chunk of anilistMaxPerPage ids is always one page.
 	query := `
-		query GetMediaListStatus($userName: String, $mediaId: Int) {
-			Page {
-				mediaList(userName: $userName, mediaId: $mediaId) {
+		query GetListStatusesByMediaIDs($userName: String, $mediaIds: [Int]) {
+			Page(perPage: ` + strconv.Itoa(anilistMaxPerPage) + `) {
+				mediaList(userName: $userName, mediaId_in: $mediaIds, type: ANIME) {
 					status
+					media { id }
 				}
 			}
 		}
 	`
 
-	resp, err := sendAnilistRequest[AniListResponse](query, RequestVariables{
-		"userName": username,
-		"mediaId":  mediaId,
-	}, PriorityCritical)
-	if err != nil {
-		return "", false, err
+	statuses := make(map[int]MediaListStatus, len(mediaIDs))
+	for start := 0; start < len(mediaIDs); start += anilistMaxPerPage {
+		chunk := mediaIDs[start:min(start+anilistMaxPerPage, len(mediaIDs))]
+		resp, err := sendAnilistRequest[AniListResponse](query, RequestVariables{
+			"userName": userName,
+			"mediaIds": chunk,
+		}, priority)
+		if err != nil {
+			if stale, ok := staleListStatuses(userName, mediaIDs); ok {
+				return stale, ErrFromCache
+			}
+			return nil, err
+		}
+		for _, entry := range resp.Data.Page.MediaList {
+			statuses[entry.Media.Id] = entry.Status
+		}
 	}
-	if len(resp.Data.Page.MediaList) == 0 {
-		return "", false, nil
+
+	// Stored per (account, media id), "" meaning "not tracked": next pass's id set differs from this
+	// one by whatever was downloaded or deleted, and a per-call key would never be found again.
+	for _, id := range mediaIDs {
+		listStatusCache.set(listStatusKey(userName, id), statuses[id], 0)
 	}
-	return resp.Data.Page.MediaList[0].Status, true, nil
+	if len(mediaIDs) > 0 {
+		markCacheDirty()
+	}
+	return statuses, nil
+}
+
+// staleListStatuses rebuilds GetListStatusesByMediaIDs' answer from listStatusCache. ok is false
+// when any id has no stored answer — see the all-or-nothing rule there.
+func staleListStatuses(userName string, mediaIDs []int) (map[int]MediaListStatus, bool) {
+	statuses := make(map[int]MediaListStatus, len(mediaIDs))
+	for _, id := range mediaIDs {
+		status, ok := listStatusCache.getStale(listStatusKey(userName, id))
+		if !ok {
+			return nil, false
+		}
+		if status != "" {
+			statuses[id] = status
+		}
+	}
+	return statuses, true
+}
+
+func listStatusKey(userName string, mediaID int) string {
+	return userName + "\x00" + strconv.Itoa(mediaID)
 }
 
 func getMediaListEntry(userName string, mediaId int, priority Priority) (*AniListResponse, error) {

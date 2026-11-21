@@ -29,6 +29,9 @@ type snapshot struct {
 	FrontendList map[string][]MediaList `json:"frontend_list,omitempty"`
 	PassList     map[string][]MediaList `json:"pass_list,omitempty"`
 	MediaEntries map[string][]MediaList `json:"media_entries,omitempty"`
+	// ListStatuses is what keeps status deletion deciding with AniList down: account + media id ->
+	// list status, "" meaning not tracked.
+	ListStatuses map[string]MediaListStatus `json:"list_statuses,omitempty"`
 	// CustomLists goes in because it's what carries the exclusion. Without it in the fallback, an
 	// anime the user put in an excluded list looks non-excluded again while AniList is down — and the
 	// pass downloads what the user said to ignore.
@@ -85,6 +88,7 @@ func EnablePersistence(load func() ([]byte, error), save func([]byte) error) {
 	frontendListCache.restore(snap.FrontendList, 0)
 	passListCache.restore(snap.PassList, 0)
 	mediaEntryCache.restore(snap.MediaEntries, 0)
+	listStatusCache.restore(snap.ListStatuses, 0)
 	customListsCache.restore(snap.CustomLists, 0)
 	mediaByIDCache.restore(snap.MediaByID, 0)
 	seriesCache.restore(snap.Series, seriesTTL)
@@ -136,6 +140,7 @@ func flushCache() {
 		FrontendList: frontendListCache.snapshot(),
 		PassList:     passListCache.snapshot(),
 		MediaEntries: mediaEntryCache.snapshot(),
+		ListStatuses: listStatusCache.snapshot(),
 		CustomLists:  customListsCache.snapshot(),
 		MediaByID:    mediaByIDCache.snapshot(),
 		Series:       seriesCache.snapshot(),

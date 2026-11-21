@@ -136,6 +136,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#127** — A state alert fires on the edge and remembers it in notification_state, not every pass the state holds](#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)
 - [**#128** — download_failed reports a real failure once per episode and torrent; not found and a full disk are waiting, not failures](#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)
 - [**#129** — Unsaved changes means different from what was loaded, and a capture-phase hashchange listener vetoes the router](#129-unsaved-changes-means-different-from-what-was-loaded-and-a-capture-phase-hashchange-listener-vetoes-the-router)
+- [**#130** — Status deletion asks AniList only about the animes on disk, never downloads the delete-status lists](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)
 
 ---
 
@@ -857,9 +858,9 @@ In the Config index the dividers are `w-full`, so wrapping happens on them: the 
 
 ### 43. An anime's identity is `Media.Id`; status is a PER-ACCOUNT question (download = OR, deletion = AND)
 
-**Location:** `anilist/anilist.go` (`DedupeByMedia`, `GetAnimeInfo`, `GetMediaListStatus`, `GetMediaIDForEntry`), `daemon/verification.go` (`searchAnilist`, `deletableMediaIDs`, `allAccountsAgreeOnDelete`), `daemon/migration.go` (`MigrateAnimeIDsToMedia`), `api/endpoint_animes.go`.
+**Location:** `anilist/anilist.go` (`DedupeByMedia`, `GetAnimeInfo`, `GetListStatusesByMediaIDs`, `GetMediaIDForEntry`), `daemon/verification.go` (`searchAnilist`, `fetchListStatuses`, `deletableMediaIDs`, `allAccountsAgreeOnDelete`), `daemon/migration.go` (`MigrateAnimeIDsToMedia`), `api/endpoint_animes.go`.
 
-**What it looks like:** three things that look overdone — `GetAnimeInfo` takes the username list and makes one request per account to fetch ONE anime; `DedupeByMedia` warns in the comment that nobody may read the result's `Status`; and `allAccountsAgreeOnDelete` fires an extra query per account that did not report the anime.
+**What it looks like:** three things that look overdone — `GetAnimeInfo` takes the username list and makes one request per account to fetch ONE anime; `DedupeByMedia` warns in the comment that nobody may read the result's `Status`; and the deletion vote needs every account's status of the anime, not just whether it shows up in a delete-status list.
 
 **Why it's right:** `MediaList.Id` is the **entry** id, which is per account — the same anime on two accounts arrives as two entries with different ids and the same `Media.Id`. While the stored `AnimeID` was the entry id, it pointed at **one** of the accounts, and `GET /animes` listed the anime twice: once under the `id:<AnimeID>` key from disk and once by name, because the other account's entry matched nothing known (real bug: "From Old Country Bumpkin to Master Swordsman II", entries 488911345 and 583631757, media 194829). Worse than the duplicate: which entry "won" depended on progress, so the id stored on disk **changed** as the user watched, and status deletion, per-anime settings and the detail screen started looking for an id that half the records did not have.
 
@@ -867,7 +868,7 @@ With `Media.Id` as identity that disappears by construction. What remains is wha
 
 - **`progress`: the LOWEST among the accounts** (`DedupeByMedia`). An episode is only "watched" when every account has seen it; erring high deletes an episode someone has not watched yet.
 - **Download: OR** — ONE account having the anime in a download status is enough. That already falls out of the union of lists in `searchAnilist`, since each fetch is filtered by `status_in` on the server.
-- **Deletion: AND** — EVERY account that has the anime must have it in some deletion status, and they need not be the same (`DROPPED` on one and `COMPLETED` on another deletes). An account that **does not track** the anime does not vote; one that has it in a neutral status (`PLANNING`) **vetoes**. Distinguishing those two cases is exactly what `allAccountsAgreeOnDelete`'s extra query buys: the list fetch only brings the deletable ones, so "it did not come back in the list" is ambiguous. It only runs for an anime **with an episode on disk** that some account wants deleted — a set that empties itself, because the anime leaves disk on the same pass.
+- **Deletion: AND** — EVERY account that has the anime must have it in some deletion status, and they need not be the same (`DROPPED` on one and `COMPLETED` on another deletes). An account that **does not track** the anime does not vote; one that has it in a neutral status (`PLANNING`) **vetoes**. Distinguishing those two cases is why the pass asks each account for its status of every anime **with an episode on disk** (`fetchListStatuses`, one `mediaId_in` per 50): a delete-status list only brings the deletable ones, so "it did not come back in the list" is ambiguous. **Amendment (see [#130](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)):** this used to be the whole delete-status lists plus a `GetMediaListStatus` tie-break per account that didn't list a candidate; that blew the rate limit every pass, and the per-on-disk query answers both at once.
 
 Direct consequence: **nobody may read the `Status` of the dedup winner** — it belongs to an arbitrary account. Who answers about status is `deletableMediaIDs`.
 
@@ -1422,7 +1423,7 @@ The derivation still exists, but with another role: `allDone(onboardingSteps(...
 
 | Source | Requests | Note |
 |---|---|---|
-| Daemon pass | ~0.3/min | 3 per pass (`GetCustomListsMap` + download `GetAllCurrentAnime` + delete `GetAllCurrentAnime`), every `check_interval` (default 10 min) |
+| Daemon pass | ~0.3/min | 3 per pass (`GetCustomListsMap` + download `GetAllCurrentAnime` + `GetListStatusesByMediaIDs` for the animes on disk), every `check_interval` (default 10 min). Each list query is one request **per 50 entries**: the delete-status lists fetched whole were 23 pages for one real account, which is why deletion now asks only about the animes on disk ([#130](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)) |
 | `/animes` poll | ≤1.2/min | `GetFrontendAnimeList` (TTL 60s) + `GetCustomListsMap` (TTL 5min) |
 | `refreshOrphanAnimes` | **1 per account every 50 orphans** | `GetAnimeInfoByIDs` (`mediaList(mediaId_in:)`), no cache. Used to be **1 per orphan anime per account**, with a semaphore of 5 concurrent that limited parallelism and not the total. Fixed 29 Aug 2026; the standalone fallback in the same function became a `GetMediaByIDs` |
 | `appendStandaloneEntries` | **1 per batch of 50 standalones** | `GetMediaByIDs` (`Page(media(id_in:))`), on both sides (`api/standalone.go` and `daemon/standalone.go`). Used to be `GetMediaByID` in a loop: measured 28 Aug 2026, with 20 standalones they were 20 of the bucket's 30 requests, spent just to build a screen. Fixed 29 Aug 2026; the cache stays **per id**, so the batch and the standalone lookup reuse each other |
@@ -2676,11 +2677,11 @@ Two call sites deserve attention:
 - `api/endpoint_animes.go` **refuses** the orphan refresh when the list came from cache. Coverage
   is known (the list came back whole), but each uncovered anime would become a `GetAnimeInfoByIDs`
   doomed to fail, on every 30s poll per tab — #65's burst, now without even a chance of succeeding.
-- `daemon/verification.go` **accepts** the cache list for status deletion. It is an explicit
+- `daemon/verification.go` **accepts** the cached answer for status deletion (since [#130](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists), `listStatusCache`'s per-(account, media id) statuses, not a cached list). It is an explicit
   decision of the project owner, and the risk has a name: an anime that left a deletion status
   *after* the snapshot (`COMPLETED` that became `REPEATING`, and the pass downloaded the season)
   shows up as deletable again, and the pass deletes what it just downloaded. Before the cache that
-  was impossible — an account with no answer did not enter `inDeleteStatus` and
+  was impossible — an account with no answer did not enter `listStatuses` and
   `allAccountsAgreeOnDelete` refused on its own. If it ever bites, the fix is one line: treat
   `ErrFromCache` as an account with no answer there.
 
@@ -2836,7 +2837,7 @@ snapshot: the list comes back with TTL zero like the other lists
 ([#92](#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)),
 the mapping with its full TTL like `Series`. MAL down → stale list + `ErrFromCache`.
 
-**Don't confuse:** the `inDeleteStatus` key of a MAL account is `"mal:" + user` (`malAccountKey`),
+**Don't confuse:** the `listStatuses` key of a MAL account is `"mal:" + user` (`malAccountKey`),
 so an AniList and a MAL account with the same name don't overwrite each other. And
 `MediaList.Id == 0` means "standalone **or** MAL" — never use it to tell them apart.
 
@@ -3719,7 +3720,7 @@ chips were tried and took too much of the toolbar). The selection lives in the U
 **Location:** `internal/daemon/notification_sources.go` — `accountLists`/`passLists` (the
 snapshot), `NotificationSources` (the resolver, wired with `notifications.SetSourceResolver` in
 `cmd/daemon/main.go`); `internal/daemon/verification.go` — the `passLists.record` calls in
-`searchAnilist` and in the delete-status fetch; `internal/notifications/notifications.go` —
+`searchAnilist` and in `fetchListStatuses`; `internal/notifications/notifications.go` —
 `fireBatch`, `itemsFor`, `resolveSources`; `files.WebhookPreset.AnimeSources`. Pinned by
 `TestNotificationSources`, `TestFireBatch_SourceFilter` and
 `TestFireBatch_FilteredWebhookWithoutResolverFailsOpen`.
@@ -3733,8 +3734,8 @@ leak.
 torrent-failure callback), and the records are created in about eight. Stored on the record, every
 record written before the filter existed would have no owner — and `episode_deleted` mostly fires
 for exactly those. So the owners are asked at fire time, and the answer comes from what the pass
-already fetched: each account's download-status list (before the media-status cut) and its
-delete-status list, kept in memory per account and per kind, plus `standalone` from the standalone
+already fetched: each account's download-status list (before the media-status cut) and the
+animes on disk it holds in a delete status (since [#130](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)), kept in memory per account and per kind, plus `standalone` from the standalone
 file. No network at fire time.
 
 It used to be a live `GetAnimeInfoByIDs` per account per window. That spent the AniList budget
@@ -3875,3 +3876,56 @@ Back.
   first and the page is already gone when the confirm shows.
 - Saving the open webhook form as part of "dirty" only when the list changed: unconfirmed form
   edits are lost on leaving too, so they count.
+
+### 130. Status deletion asks AniList only about the animes on disk, never downloads the delete-status lists
+
+**Location:** `internal/daemon/verification.go` — `fetchListStatuses` (one `mediaId_in` request
+per account per 50 animes on disk, chained after `LoadSavedEpisodes`), `onDiskMediaIDs`,
+`deletableMediaIDs` / `allAccountsAgreeOnDelete` (no network); `internal/anilist/anilist.go` —
+`GetListStatusesByMediaIDs`, `listStatusCache` (persisted as `list_statuses`). Pinned by
+`TestFetchListStatuses_AsksOnlyAboutAnimesOnDisk`, `TestFetchListStatuses_ChunksBy50`,
+`TestFetchListStatuses_FailedAccountIsAbsent`, `TestListStatusesFallback` and the
+`TestDeletableMediaIDs_*` tests.
+
+**What it looks like:** `delete_statuses` is a list filter just like `download_statuses`, so
+"fetch the account's list with `status_in: delete_statuses`" looks like the obvious query, and a
+query keyed by the files on disk looks backwards.
+
+**Why it's right:** deletion only ever acts on animes with an episode on disk — a few dozen —
+while the delete statuses (`COMPLETED`, `DROPPED`, `PLANNING`) are the **biggest** lists an account
+has. Measured on 20 Nov 2026 on the home-lab install: one account had 528 COMPLETED + 423 DROPPED +
+173 PLANNING = 1124 entries, i.e. **23 pages per pass**, plus 3 for the second account, plus one
+`GetMediaListStatus` tie-break per account that didn't list a candidate. With the download lists
+and the series walk that is 31+ requests in seconds against a 30 req/min bucket
+([#72](#72-anilist-budget-is-measured-from-the-response-headers-not-from-a-counter-of-ours)): a 429
+on **every** pass since list pagination shipped (v2.10.0, before which only the first 50 entries
+came and the bug hid). The tail of the pass paid for it — the series walk (coverage ownership
+partial every pass) and the tie-break (an anime whose deletion never resolved).
+
+`mediaList(userName:, mediaId_in:)` answers both questions in one shot: an id the account tracks
+comes with its status (agree or veto), an id it doesn't track is omitted (no vote). Cost:
+`ceil(onDisk/50)` per account, independent of list size, and the tie-break is gone. The AND rule of
+[#43](#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)
+is unchanged; an anime no account holds in a delete status is still not a candidate.
+
+**The fallback is per (account, media id) and all or nothing.** A per-call key would never be
+found again (the on-disk set changes every pass a file comes or goes), and a partial answer is
+dangerous: a missing id reads as "not tracked" and silently drops that account's veto. So with
+AniList down the answer comes from `listStatusCache` with `ErrFromCache` only when **every** id
+has a stored answer (`""` = not tracked); one gap and the account is absent, which vetoes. Using
+the cached answer to vote is the same explicit owner decision the whole-list fallback had
+([#92](#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)).
+
+**Trade-off accepted:** `passLists`' `listDelete` half now holds only on-disk animes. The webhook
+source filter ([#126](#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record))
+only ever asks about animes with files, so nothing it can be asked is lost.
+
+**Don't "fix" by:**
+- Going back to `status_in: delete_statuses` "because it's one query": it's one query **per 50
+  entries of the biggest lists**, and that is the 429 above.
+- Caching the whole delete lists with a long TTL instead: it moves the 26-request burst to every
+  N-th pass, which still 429s on that pass.
+- Filling the gaps of a failed chunk with what did arrive: a missing id becomes "not tracked" and
+  the account loses its veto — deleting files another account still wants.
+- Running the status fetch in its own goroutine before the episodes are loaded: it needs the
+  on-disk ids.

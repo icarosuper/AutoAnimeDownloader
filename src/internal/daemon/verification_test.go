@@ -95,28 +95,7 @@ func TestSearchAnilist_EmptyMediaStatusesAllowsNothing(t *testing.T) {
 // has the anime must want it). What these tests protect is the AND side, where a mistake
 // deletes a file.
 
-// mockStatusByAccount answers the GetMediaListStatus tiebreak query per user.
-// A user missing from the map returns an empty list = "this account does not track the anime".
-func mockStatusByAccount(t *testing.T, byUser map[string]string) func() {
-	t.Helper()
-	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
-		var payload struct {
-			Variables struct {
-				UserName string `json:"userName"`
-			} `json:"variables"`
-		}
-		body, _ := io.ReadAll(req.Body)
-		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("unexpected body: %s", body)
-		}
-		status, tracked := byUser[payload.Variables.UserName]
-		if !tracked {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":{"Page":{"mediaList":[]}}}`))}, nil
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(
-			fmt.Sprintf(`{"data":{"Page":{"mediaList":[{"status":%q}]}}}`, status)))}, nil
-	})
-}
+type statuses = map[int]anilist.MediaListStatus
 
 func deleteRuleConfig() *files.Config {
 	return &files.Config{
@@ -125,18 +104,13 @@ func deleteRuleConfig() *files.Config {
 	}
 }
 
-func TestDeletableMediaIDs_AllAccountsAgree(t *testing.T) {
-	// The list search already brought the anime as deletable in BOTH accounts: nobody needs
-	// to be queried, and the anime is deleted.
-	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
-		t.Error("must not query AniList when both lists already agree")
-		return nil, fmt.Errorf("unexpected call")
-	})()
+var onDisk500 = []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}}
 
-	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
-		"accountA": {500: true},
-		"accountB": {500: true},
-	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
+func TestDeletableMediaIDs_AllAccountsAgree(t *testing.T) {
+	got := deletableMediaIDs(deleteRuleConfig(), map[string]statuses{
+		"accountA": {500: "COMPLETED"},
+		"accountB": {500: "COMPLETED"},
+	}, onDisk500)
 
 	if !got[500] {
 		t.Error("both accounts want to delete, the anime must be deletable")
@@ -145,12 +119,10 @@ func TestDeletableMediaIDs_AllAccountsAgree(t *testing.T) {
 
 func TestDeletableMediaIDs_DifferentDeleteStatusesStillDeletes(t *testing.T) {
 	// DROPPED in one account and COMPLETED in the other: different statuses, both deletion.
-	defer mockStatusByAccount(t, map[string]string{"accountB": "COMPLETED"})()
-
-	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
-		"accountA": {500: true}, // DROPPED, came from the list
-		"accountB": {},          // COMPLETED arrives via the tiebreak
-	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
+	got := deletableMediaIDs(deleteRuleConfig(), map[string]statuses{
+		"accountA": {500: "DROPPED"},
+		"accountB": {500: "COMPLETED"},
+	}, onDisk500)
 
 	if !got[500] {
 		t.Error("different deletion statuses in the two accounts must still delete")
@@ -159,12 +131,10 @@ func TestDeletableMediaIDs_DifferentDeleteStatusesStillDeletes(t *testing.T) {
 
 func TestDeletableMediaIDs_NeutralStatusInOtherAccountVetoes(t *testing.T) {
 	// Account B still intends to watch: deleting here would destroy episodes it wants.
-	defer mockStatusByAccount(t, map[string]string{"accountB": "PLANNING"})()
-
-	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
-		"accountA": {500: true},
-		"accountB": {},
-	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
+	got := deletableMediaIDs(deleteRuleConfig(), map[string]statuses{
+		"accountA": {500: "DROPPED"},
+		"accountB": {500: "PLANNING"},
+	}, onDisk500)
 
 	if got[500] {
 		t.Error("an account with the anime in a neutral status must veto the deletion")
@@ -174,29 +144,35 @@ func TestDeletableMediaIDs_NeutralStatusInOtherAccountVetoes(t *testing.T) {
 func TestDeletableMediaIDs_AccountWithoutTheAnimeDoesNotVeto(t *testing.T) {
 	// Account B never had the anime on the list: it does not vote. Without this, the common
 	// case (anime tracked by a single account) would never be deleted again.
-	defer mockStatusByAccount(t, map[string]string{})()
-
-	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
-		"accountA": {500: true},
+	got := deletableMediaIDs(deleteRuleConfig(), map[string]statuses{
+		"accountA": {500: "DROPPED"},
 		"accountB": {},
-	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
+	}, onDisk500)
 
 	if !got[500] {
 		t.Error("an account that does not track the anime cannot veto the deletion")
 	}
 }
 
+func TestDeletableMediaIDs_NoAccountInDeleteStatusKeepsTheAnime(t *testing.T) {
+	// Nobody votes for deleting: an anime no account tracks (removed from every list) keeps its
+	// files — "no veto" alone is not a deletion.
+	got := deletableMediaIDs(deleteRuleConfig(), map[string]statuses{
+		"accountA": {},
+		"accountB": {},
+	}, onDisk500)
+
+	if got[500] {
+		t.Error("an anime no account holds in a delete status must not be deleted")
+	}
+}
+
 func TestDeletableMediaIDs_FailedAccountFetchVetoes(t *testing.T) {
 	// Account B's fetch failed (it is not even in the map): without its opinion there is no
 	// unanimity, and the next pass tries again. Deleting in the dark is irreversible.
-	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
-		t.Error("an account missing from the map is a fetch failure, it must not become a query")
-		return nil, fmt.Errorf("unexpected call")
-	})()
-
-	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
-		"accountA": {500: true},
-	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
+	got := deletableMediaIDs(deleteRuleConfig(), map[string]statuses{
+		"accountA": {500: "DROPPED"},
+	}, onDisk500)
 
 	if got[500] {
 		t.Error("with one account's list unavailable nothing can be deleted")
@@ -204,20 +180,127 @@ func TestDeletableMediaIDs_FailedAccountFetchVetoes(t *testing.T) {
 }
 
 func TestDeletableMediaIDs_OnlyConsidersAnimesOnDisk(t *testing.T) {
-	// With no episode on disk the answer changes nothing — and that is what keeps the
-	// tiebreak queries rare instead of one per completed anime on the whole list.
-	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
-		t.Error("an anime with no episode on disk should not produce a query")
-		return nil, fmt.Errorf("unexpected call")
-	})()
+	both := map[string]statuses{"accountA": {500: "DROPPED"}, "accountB": {}}
 
-	got := deletableMediaIDs(deleteRuleConfig(), map[string]map[int]bool{
-		"accountA": {500: true},
-		"accountB": {},
-	}, nil)
-
-	if len(got) != 0 {
+	if got := deletableMediaIDs(deleteRuleConfig(), both, nil); len(got) != 0 {
 		t.Errorf("want no candidates without episodes on disk, got %v", got)
+	}
+	manual := []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500, ManuallyManaged: true}}
+	if got := deletableMediaIDs(deleteRuleConfig(), both, manual); len(got) != 0 {
+		t.Errorf("a manually managed episode is never deleted by status, got %v", got)
+	}
+}
+
+// mockListStatuses answers GetListStatusesByMediaIDs per user from byUser (media id -> status;
+// an id missing from the user's map is "not tracked") and records every request's ids.
+func mockListStatuses(t *testing.T, byUser map[string]statuses, failUser string) (requests *[][]int, restore func()) {
+	t.Helper()
+	var seen [][]int
+	restore = anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
+		var payload struct {
+			Query     string `json:"query"`
+			Variables struct {
+				UserName string `json:"userName"`
+				MediaIds []int  `json:"mediaIds"`
+			} `json:"variables"`
+		}
+		body, _ := io.ReadAll(req.Body)
+		if err := json.Unmarshal(body, &payload); err != nil || !strings.Contains(payload.Query, "mediaId_in") {
+			t.Fatalf("unexpected AniList query: %s", body)
+		}
+		seen = append(seen, payload.Variables.MediaIds)
+		if payload.Variables.UserName == failUser {
+			return &http.Response{StatusCode: http.StatusInternalServerError, Header: make(http.Header),
+				Body: io.NopCloser(strings.NewReader(`{"errors":[{"message":"down","status":500}]}`))}, nil
+		}
+		var entries []string
+		for _, id := range payload.Variables.MediaIds {
+			if status, ok := byUser[payload.Variables.UserName][id]; ok {
+				entries = append(entries, fmt.Sprintf(`{"status":%q,"media":{"id":%d}}`, status, id))
+			}
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(
+			`{"data":{"Page":{"mediaList":[` + strings.Join(entries, ",") + `]}}}`))}, nil
+	})
+	return &seen, restore
+}
+
+// The point of fetchListStatuses: the cost is the number of animes ON DISK, never the size of the
+// accounts' lists, and the tie-break needs no extra query.
+func TestFetchListStatuses_AsksOnlyAboutAnimesOnDisk(t *testing.T) {
+	requests, restore := mockListStatuses(t, map[string]statuses{
+		"accountA": {500: "COMPLETED", 600: "CURRENT"},
+		"accountB": {500: "PLANNING"},
+	}, "")
+	defer restore()
+
+	saved := []files.EpisodeStruct{
+		{EpisodeNumber: 2, AnimeID: 600},
+		{EpisodeNumber: 1, AnimeID: 500},
+		{EpisodeNumber: 2, AnimeID: 500},
+		{EpisodeNumber: 1, AnimeID: 700, ManuallyManaged: true},
+	}
+	got := fetchListStatuses(deleteRuleConfig(), saved)
+
+	if len(*requests) != 2 {
+		t.Fatalf("want one request per account, got %d", len(*requests))
+	}
+	for _, ids := range *requests {
+		if fmt.Sprint(ids) != "[500 600]" {
+			t.Errorf("want the deduped, sorted on-disk ids without the manually managed one, got %v", ids)
+		}
+	}
+	if got["accountA"][500] != "COMPLETED" || got["accountA"][600] != "CURRENT" {
+		t.Errorf("accountA statuses = %v", got["accountA"])
+	}
+	if _, tracked := got["accountB"][600]; tracked {
+		t.Error("an id the account doesn't track must be absent from its map")
+	}
+	if deletableMediaIDs(deleteRuleConfig(), got, saved)[500] {
+		t.Error("accountB has 500 in PLANNING: it must veto")
+	}
+}
+
+func TestFetchListStatuses_ChunksBy50(t *testing.T) {
+	requests, restore := mockListStatuses(t, map[string]statuses{}, "")
+	defer restore()
+
+	var saved []files.EpisodeStruct
+	for id := 1; id <= 120; id++ {
+		saved = append(saved, files.EpisodeStruct{EpisodeNumber: 1, AnimeID: id})
+	}
+	cfg := &files.Config{AnilistUsernames: []string{"accountA"}, DeleteStatuses: []string{"COMPLETED"}}
+	fetchListStatuses(cfg, saved)
+
+	if len(*requests) != 3 {
+		t.Errorf("want ceil(120/50) = 3 requests, got %d", len(*requests))
+	}
+}
+
+func TestFetchListStatuses_FailedAccountIsAbsent(t *testing.T) {
+	_, restore := mockListStatuses(t, map[string]statuses{"accountA": {500: "COMPLETED"}}, "accountB")
+	defer restore()
+
+	got := fetchListStatuses(deleteRuleConfig(), onDisk500)
+
+	if _, ok := got["accountB"]; ok {
+		t.Fatal("an account whose fetch failed (and has no cached answer) must be absent")
+	}
+	if deletableMediaIDs(deleteRuleConfig(), got, onDisk500)[500] {
+		t.Error("a failed account must veto")
+	}
+}
+
+func TestFetchListStatuses_NoDeleteStatusesNoRequest(t *testing.T) {
+	requests, restore := mockListStatuses(t, nil, "")
+	defer restore()
+
+	cfg := &files.Config{AnilistUsernames: []string{"accountA"}}
+	if got := fetchListStatuses(cfg, onDisk500); got != nil {
+		t.Errorf("want nil without delete statuses, got %v", got)
+	}
+	if len(*requests) != 0 {
+		t.Errorf("want no request without delete statuses, got %d", len(*requests))
 	}
 }
 

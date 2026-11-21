@@ -442,7 +442,9 @@ progress, score and avatar — the per-account answer the surviving entry no lon
 - **Deletion — AND** (`allAccountsAgreeOnDelete`): every account that *has* the anime needs it in
   some `DeleteStatuses` status (they need not be the same). An account that does not track it does
   not vote; an account in a neutral status (`PLANNING`) **vetoes**, and so does an account whose
-  list failed to fetch
+  list failed to fetch. The statuses come from `fetchListStatuses`, which asks each account only
+  about the animes **on disk** — never the delete-status lists whole, which blew the rate limit
+  every pass ([decisions.md #130](decisions.md#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists))
 
 <a id="media-status-filter"></a>**Two status filters, similar names, different things**:
 `Config.DownloadStatuses` filters by **list** status (`MediaListStatus` — the user's relationship with
@@ -519,7 +521,7 @@ What bites: `ErrMALEmpty` is a **failure** — every caller must treat it like a
 account loses its deletion veto; and the status filter must run **before** `GetMediaByIDs`, or the
 frontend poll hydrates the whole list every minute. The MAL account loops live next to the AniList
 ones in `daemon/verification.go` and `api/endpoint_animes.go`/`api/standalone_guard.go`, keyed
-`"mal:" + user` in `inDeleteStatus`
+`"mal:" + user` in `listStatuses`
 ([decisions.md #95](decisions.md#95-myanimelist-is-a-list-source-not-a-metadata-source)).
 
 ### `src/internal/nyaa/`
@@ -656,7 +658,8 @@ got the torrent added ([decisions.md #124](decisions.md#124-a-torrent-is-one-not
 **Per-webhook anime filter (`anime_sources`).** The package doesn't know AniList or the standalone
 file: the daemon injects `daemon.NotificationSources` with `SetSourceResolver` at boot. The
 resolver makes **no network call**: it reads `passLists`, the per-account lists the last pass
-fetched (download statuses in `searchAnilist`, delete statuses in the delete fetch), plus the
+fetched (download statuses in `searchAnilist`, delete statuses of the animes on disk in
+`fetchListStatuses`), plus the
 standalone file. Each filtered webhook gets its share of the items, with the template built from
 that share. An anime no list holds is **unknown and fail-open**: it reaches every filtered webhook,
 and so does everything when no resolver is wired ([decisions.md #126](decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)).

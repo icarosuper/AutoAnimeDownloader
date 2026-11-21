@@ -45,11 +45,9 @@ func malDeleteConfig() *files.Config {
 // The AND rule of decisions.md #43 holds for a MAL account: still watching on MAL vetoes the
 // deletion an AniList account asked for.
 func TestDeletableMediaIDs_MALAccountWatchingVetoes(t *testing.T) {
-	defer mockMAL(t, `[{"anime_id":1,"status":1,"num_watched_episodes":3,"is_rewatching":0}]`, 0)()
-
-	got := deletableMediaIDs(malDeleteConfig(), map[string]map[int]bool{
-		"accountA":    {1001: true},
-		"mal:malUser": {},
+	got := deletableMediaIDs(malDeleteConfig(), map[string]statuses{
+		"accountA":    {1001: "COMPLETED"},
+		"mal:malUser": {1001: "CURRENT"},
 	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 1001}})
 
 	if got[1001] {
@@ -57,29 +55,45 @@ func TestDeletableMediaIDs_MALAccountWatchingVetoes(t *testing.T) {
 	}
 }
 
-func TestDeletableMediaIDs_MALAccountWithoutTheAnimeDoesNotVeto(t *testing.T) {
+// fetchListStatuses turns the MAL list into the same per-account map, limited to the animes on
+// disk: an anime the MAL account doesn't have doesn't vote.
+func TestFetchListStatuses_MALAccountWithoutTheAnimeDoesNotVeto(t *testing.T) {
 	defer mockMAL(t, `[{"anime_id":1,"status":1,"num_watched_episodes":3,"is_rewatching":0}]`, 0)()
 
-	got := deletableMediaIDs(malDeleteConfig(), map[string]map[int]bool{
-		"accountA":    {500: true},
-		"mal:malUser": {},
-	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}})
+	cfg := malDeleteConfig()
+	cfg.AnilistUsernames = nil
+	saved := []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500}, {EpisodeNumber: 1, AnimeID: 1001}}
+	got := fetchListStatuses(cfg, saved)
 
-	if !got[500] {
+	if got["mal:malUser"][1001] != anilist.MediaListStatusCurrent {
+		t.Fatalf("want the MAL entry mapped to 1001 as CURRENT, got %v", got["mal:malUser"])
+	}
+	if _, tracked := got["mal:malUser"][500]; tracked {
+		t.Error("an anime the MAL list doesn't have must be absent")
+	}
+	got["accountA"] = statuses{500: "COMPLETED"}
+	cfg.AnilistUsernames = []string{"accountA"}
+	if !deletableMediaIDs(cfg, got, saved)[500] {
 		t.Error("a MAL account that doesn't track the anime must not veto")
 	}
 }
 
-// A MAL list that failed (or came back empty — anilist.ErrMALEmpty) never reaches inDeleteStatus,
-// and without its vote there is no unanimity.
-func TestDeletableMediaIDs_FailedMALFetchVetoes(t *testing.T) {
+// A MAL list that came back empty (anilist.ErrMALEmpty) is a failure: the account is absent, and
+// without its vote there is no unanimity.
+func TestFetchListStatuses_FailedMALFetchVetoes(t *testing.T) {
 	defer mockMAL(t, "[]", 0)()
 
-	got := deletableMediaIDs(malDeleteConfig(), map[string]map[int]bool{
-		"accountA": {1001: true},
-	}, []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 1001}})
+	cfg := malDeleteConfig()
+	cfg.AnilistUsernames = nil
+	saved := []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 1001}}
+	got := fetchListStatuses(cfg, saved)
 
-	if got[1001] {
+	if _, ok := got["mal:malUser"]; ok {
+		t.Fatal("an empty MAL list must leave the account absent")
+	}
+	got["accountA"] = statuses{1001: "COMPLETED"}
+	cfg.AnilistUsernames = []string{"accountA"}
+	if deletableMediaIDs(cfg, got, saved)[1001] {
 		t.Error("with the MAL list unavailable nothing may be deleted")
 	}
 }

@@ -171,3 +171,50 @@ func TestCorruptSnapshotIsDiscarded(t *testing.T) {
 		t.Fatal("a corrupt snapshot can't populate the cache")
 	}
 }
+
+// GetListStatusesByMediaIDs' fallback is per (account, media id) and all or nothing: an outage
+// with every id answered before serves them with ErrFromCache — "not tracked" included, which is
+// what keeps the account from vetoing what it never had — and one id never answered is the plain
+// error, because a missing id would read as "not tracked" and drop the veto. The answers survive
+// a restart through the snapshot.
+func TestListStatusesFallback(t *testing.T) {
+	up := true
+	restore := MockAniListDo(func(*http.Request) (*http.Response, error) {
+		if !up {
+			return respond(500, `{"errors":[{"message":"down","status":500}]}`, nil), nil
+		}
+		return respond(200, `{"data":{"Page":{"mediaList":[{"status":"COMPLETED","media":{"id":1}}]}}}`, nil), nil
+	})
+	t.Cleanup(restore)
+
+	load, save, _ := memoryStore(nil)
+	EnablePersistence(load, save)
+	t.Cleanup(disablePersistence)
+
+	got, err := GetListStatusesByMediaIDs("user", []int{1, 2}, PriorityCritical)
+	if err != nil || got[1] != MediaListStatusCompleted {
+		t.Fatalf("fresh fetch: got %v, %v", got, err)
+	}
+	if _, tracked := got[2]; tracked {
+		t.Fatal("an id the account doesn't track must be absent")
+	}
+
+	flushCache()
+	clearCaches()
+	EnablePersistence(load, save)
+	t.Cleanup(disablePersistence)
+	up = false
+
+	got, err = GetListStatusesByMediaIDs("user", []int{1, 2}, PriorityCritical)
+	if !errors.Is(err, ErrFromCache) {
+		t.Fatalf("want ErrFromCache with every id answered before, got %v", err)
+	}
+	if got[1] != MediaListStatusCompleted || len(got) != 1 {
+		t.Errorf("want only 1 as COMPLETED from the snapshot, got %v", got)
+	}
+
+	got, err = GetListStatusesByMediaIDs("user", []int{1, 3}, PriorityCritical)
+	if err == nil || errors.Is(err, ErrFromCache) || got != nil {
+		t.Errorf("an id never answered must fail the whole answer, got %v, %v", got, err)
+	}
+}
