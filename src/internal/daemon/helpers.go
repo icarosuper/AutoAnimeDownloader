@@ -327,6 +327,7 @@ func seasonPartOf(media anilist.Media) (season, part *int) {
 // Episodes filled in, but they're not part of the count fansubs follow. The exception is an ONA
 // entry, whose ONA prequel counts too: a streaming series split into ONA parts (Stone Ocean
 // Part 2) is one show, while an ONA side story of a TV series still stays out (decisions.md #133).
+// It counts only when the entry has no TV/TV_SHORT prequel: with both, the TV one is the count.
 // When in doubt it returns 0 — a wrong offset sends the search to a nonexistent episode, while a
 // missing offset falls back to relative numbering, which is what most groups use.
 //
@@ -341,18 +342,23 @@ func ComputeEpisodeOffset(format anilist.MediaFormat, relations anilist.MediaRel
 	if part == nil || *part < 2 {
 		return 0
 	}
+	// A TV prequel wins over an ONA one whatever the edge order: under an ONA entry with both, the
+	// ONA is a side story and the TV entry is the season the count follows.
+	ona := 0
 	for _, edge := range relations.Edges {
 		if edge.RelationType != "PREQUEL" || edge.Node.Episodes == nil {
 			continue
 		}
-		f := edge.Node.Format
-		tv := f == anilist.MediaFormatTV || f == anilist.MediaFormatTVShort
-		if !tv && !(format == anilist.MediaFormatONA && f == anilist.MediaFormatONA) {
-			continue
+		switch edge.Node.Format {
+		case anilist.MediaFormatTV, anilist.MediaFormatTVShort:
+			return *edge.Node.Episodes
+		case anilist.MediaFormatONA:
+			if format == anilist.MediaFormatONA && ona == 0 {
+				ona = *edge.Node.Episodes
+			}
 		}
-		return *edge.Node.Episodes
 	}
-	return 0
+	return ona
 }
 
 func isInDeleteStatuses(deleteStatuses []string, status anilist.MediaListStatus) bool {

@@ -194,6 +194,19 @@ func TestComputeEpisodeOffset_ONAEntryCountsONAPrequelOnly(t *testing.T) {
 	}
 }
 
+func TestComputeEpisodeOffset_ONAEntryPrefersTheTVPrequel(t *testing.T) {
+	// An ONA "Part 2" with both an ONA side story and its TV Part 1 as PREQUEL: the TV one is the
+	// count, whatever order AniList lists the edges in.
+	part2, three, twelve := 2, 3, 12
+	ona := anilist.MediaRelationEdge{RelationType: "PREQUEL", Node: anilist.MediaRelationNode{Episodes: &three, Format: anilist.MediaFormatONA}}
+	tv := anilist.MediaRelationEdge{RelationType: "PREQUEL", Node: anilist.MediaRelationNode{Episodes: &twelve, Format: anilist.MediaFormatTV}}
+	for name, edges := range map[string][]anilist.MediaRelationEdge{"ONA first": {ona, tv}, "TV first": {tv, ona}} {
+		if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatONA, anilist.MediaRelations{Edges: edges}, &part2); got != 12 {
+			t.Errorf("%s: expected the TV prequel's 12, got %d", name, got)
+		}
+	}
+}
+
 func TestComputeEpisodeOffset_SnKS3P2_Returns12(t *testing.T) {
 	// Anilist id 104578: PREQUEL = SnK S3 (12 episodes)
 	part2 := 2
