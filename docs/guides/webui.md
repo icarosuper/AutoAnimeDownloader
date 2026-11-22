@@ -44,6 +44,8 @@ Clicking Add on a card first searches ranked whole-title torrents. An empty firs
 without opening the picker (singles, or track-with-zero for an unreleased title). A non-empty
 list, or Nyaa being down, opens the [torrent picker](#torrent-picker).
 
+<a id="torrent-picker"></a>
+
 ### Torrent picker (`/add/:id/torrents`, `/status/:id/torrents`)
 
 Confirm or swap the ranked whole-title torrent before anything is saved. The header is the

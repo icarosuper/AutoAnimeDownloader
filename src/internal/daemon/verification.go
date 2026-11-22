@@ -373,7 +373,7 @@ outer:
 // root was swapped, so reconcileLibrary enqueues them again and the library is rebuilt at the
 // configured path once the redownloads finish.
 //
-// This is the documented exception to decision #29 (never clear LibraryPaths because a file
+// This is the documented exception to decisions/029 (never clear LibraryPaths because a file
 // is missing from disk). The rule exists so a per-file deletion by the user is not undone on
 // the next pass, forever. A root swap is a different event: the whole folder the records
 // point into is gone, the daemon is already redownloading its contents, and the detection is

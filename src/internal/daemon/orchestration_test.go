@@ -821,7 +821,7 @@ func TestReconcileLibrary_Marker(t *testing.T) {
 	})
 }
 
-// TestClearLibraryPathsAfterRootSwap covers the documented exception to decision #29: the
+// TestClearLibraryPathsAfterRootSwap covers the documented exception to decisions/029: the
 // records are cleared when the WHOLE download root was swapped, so the library is rebuilt at
 // the configured path instead of staying empty forever with the records claiming otherwise.
 func TestClearLibraryPathsAfterRootSwap(t *testing.T) {

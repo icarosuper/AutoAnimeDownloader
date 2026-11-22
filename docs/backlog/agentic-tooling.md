@@ -6,17 +6,8 @@ Not started. Delete this file when it is fixed or dropped.
 The context layer (CLAUDE.md, `docs/agents/`, 135 decisions, four skills, `make sandbox`) is
 mature. What is missing is enforcement: almost every rule in CLAUDE.md depends on the agent
 remembering it. Points below, roughly ordered by payoff per effort. Remove each section when it
-ships (point 1, the hooks in `.claude/settings.json`, shipped on 2026-11-22).
-
-## 2. Checks that keep the docs from rotting
-
-A Go test (or CI script) that fails when:
-
-- a `decisions/NNN` cited in a code comment has no file in `docs/agents/decisions/`;
-- a relative link or `#anchor` in `docs/` or `CLAUDE.md` points nowhere;
-- `docs/agents/decisions/index.md` differs from what `decision.sh` would generate.
-
-Turns "update the docs" from a request into something CI demands.
+ships (on 2026-11-22: point 1, the hooks in `.claude/settings.json`; point 2, the docs checks in
+`src/tests/unit/docs_test.go`).
 
 ## 3. Golden set for the search/match pipeline
 

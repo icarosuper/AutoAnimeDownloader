@@ -220,6 +220,21 @@ fix is one line in that table, picking by what the **value** can hold:
 
 When in doubt, `title`. See [decisions/103](decisions/103-log-redaction-is-by-key-and-a-test-forces-every.md).
 
+## Docs Are Tested Too
+
+`src/tests/unit/docs_test.go` fails `go test ./...` (and so CI and the Stop hook) when a doc
+pointer stops resolving:
+
+- `decision.sh check` fails — an entry's heading does not match its filename, `index.md` is stale
+  (run `decision.sh index`), or a link to an entry is broken;
+- code cites `decisions/NNN` with no such entry, or cites a decision any other way (`decision #29`):
+  only `decisions/NNN` is found by `decision.sh refs`;
+- a relative Markdown link points at a missing file, or its `#fragment` matches no heading in the
+  target (GitHub's slug: lowercase, punctuation dropped, spaces → `-`). A heading whose slug is
+  unwieldy can carry a stable `<a id="…"></a>` right above it.
+
+Fenced code blocks and inline code are skipped — an example is not a link.
+
 ## Never Let Background Work Outlive Its Test
 
 Two entry points start work in a goroutine and return immediately: `handleCheck` (POST `/check`) and `daemon.StartLoop`. **A test that triggers either must wait for it to finish before returning.**
