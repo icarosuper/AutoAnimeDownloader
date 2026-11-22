@@ -134,7 +134,7 @@ func TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour(t *testing.T) 
 	hashes := map[string]bool{seasonHash: true}
 	pending := anilist.EpisodeList(cour2Anime(12), 1)
 
-	adopted := adoptCoveredEpisodes(cour2Anime(12), "Cour 2", 12, pending, seasonPackOnDisk(), index, hashes)
+	adopted := adoptCoveredEpisodes(cour2Anime(12), "Cour 2", seasonOf(cour2Anime(12)), 12, pending, seasonPackOnDisk(), index, hashes)
 	if len(adopted) != 12 {
 		t.Fatalf("expected the 12 of cour 2 adopted, got %d", len(adopted))
 	}
@@ -143,7 +143,7 @@ func TestCoverageOwnership_AdoptedRangeDoesNotShiftForTheNextCour(t *testing.T) 
 	cour3 := cour2Anime(13)
 	cour3.Id, cour3.Media.Id = cour3ID, cour3ID
 	saved := append(seasonPackOnDisk(), adopted...)
-	if leaked := adoptCoveredEpisodes(cour3, "Cour 3", 13, anilist.EpisodeList(cour3, 1), saved, index, hashes); len(leaked) != 0 {
+	if leaked := adoptCoveredEpisodes(cour3, "Cour 3", seasonOf(cour3), 13, anilist.EpisodeList(cour3, 1), saved, index, hashes); len(leaked) != 0 {
 		t.Fatalf("the pack ends at absolute 23: cour 3 can't adopt anything, adopted %d (ep %d)", len(leaked), leaked[0].EpisodeNumber)
 	}
 }

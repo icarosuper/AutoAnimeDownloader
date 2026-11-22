@@ -129,7 +129,8 @@ func processAnimeEpisodes(
 	totalEpisodes := mediaTotalEpisodes(anime)
 	// The synonyms that name the anime, once: season and part are read from them (decisions.md #132).
 	synonyms := anime.Media.OwnSynonyms()
-	animeSeason, _ := ExtractAnimeSeasonPart(anime.Media.Title, synonyms)
+	// Season and part are read once here and handed to coverage, the pack filter and the pack axis.
+	animeSeason, animePart := ExtractAnimeSeasonPart(anime.Media.Title, synonyms)
 	seriesOffset := seriesIndex[anime.Media.Id].Offset
 
 	// The first selection is the one that counts when there's no pack, and it's the one that produces
@@ -139,7 +140,7 @@ func processAnimeEpisodes(
 
 	// Ownership by coverage, BEFORE any search: what an already downloaded pack covers on the series'
 	// absolute axis doesn't go back to Nyaa (see coverage.go).
-	adopted := adoptCoveredEpisodes(anime, animeTitle, totalEpisodes, sel.toDownload, savedEpisodes, seriesIndex, torrentsHashSet)
+	adopted := adoptCoveredEpisodes(anime, animeTitle, animeSeason, totalEpisodes, sel.toDownload, savedEpisodes, seriesIndex, torrentsHashSet)
 	sel.toDownload = dropAdopted(sel.toDownload, adopted)
 	result.newEpisodes = append(result.newEpisodes, adopted...)
 
@@ -154,14 +155,14 @@ func processAnimeEpisodes(
 	}
 
 	if magnetsForEpisodes == nil && len(sel.toDownload) > 0 {
-		packs, singles, packStats := partitionSearchResults(configs, anime, rankSeriesResults(searcher.searchAnime(anime.Media.Title, synonyms, episodeNumbers(sel.toDownload)), finished))
+		packs, singles, packStats := partitionSearchResults(configs, anime, animeSeason, rankSeriesResults(searcher.searchAnime(anime.Media.Title, synonyms, episodeNumbers(sel.toDownload)), finished))
 
 		// Pack eligibility: not a movie, more than one pending episode, and the FILTERED search returned
 		// a pack covering the window. None of this is AniList metadata — the torrent that's there decides
 		// (see decisions.md).
 		if windowPacks, ok := packsForWindow(packs, totalEpisodes, sel.toDownload); !isAnimeMovie(anime) && ok {
 			firstPending := sel.toDownload[0].Episode
-			axis := newPackAxis(anime, seriesIndex, totalEpisodes)
+			axis := newPackAxis(anime, animePart, seriesIndex, totalEpisodes)
 			batches := chooseCoveringPacks(configs, disk, windowPacks, packDetail(searcher, totalEpisodes), axis, firstPending, windowEnd(configs, firstPending))
 			switch {
 			case batches.len() > 0:
@@ -528,9 +529,10 @@ func batchNames(batches *packSet) []string {
 // "there was no batch" because the search returned no pack at all or because all were cut by the
 // ceiling. The report uses it as the detail field of the per-anime limit.
 //
-// A first-season entry also drops packs marked with a later season here (see isFirstSeasonEntry).
-func partitionSearchResults(configs *files.Config, anime anilist.MediaList, results []nyaa.TorrentResult) ([]nyaa.TorrentResult, []nyaa.TorrentResult, dropStats) {
-	firstEntry := isFirstSeasonEntry(anime)
+// A first-season entry also drops packs marked with a later season here (see isFirstSeasonEntry);
+// season is the entry's, from seasonPartOf.
+func partitionSearchResults(configs *files.Config, anime anilist.MediaList, season *int, results []nyaa.TorrentResult) ([]nyaa.TorrentResult, []nyaa.TorrentResult, dropStats) {
+	firstEntry := isFirstSeasonEntry(anime, season)
 	var packs, singles []nyaa.TorrentResult
 	for _, tr := range results {
 		switch {
@@ -654,8 +656,9 @@ func packsThatFit(configs *files.Config, disk *diskBudget, packs []nyaa.TorrentR
 // titles and no TV prequel. Only then can a pack marked "Season 2" be rejected outright — for a
 // sequel without a marker ("DanMachi V") the pack's season is still a guess the coverage check
 // settles, so the nyaa package keeps accepting packs of any season (nyaa.ScrapNyaaForAnime).
-func isFirstSeasonEntry(anime anilist.MediaList) bool {
-	if season, _ := seasonPartOf(anime.Media); season != nil {
+// season is the entry's, from seasonPartOf.
+func isFirstSeasonEntry(anime anilist.MediaList, season *int) bool {
+	if season != nil {
 		return *season == 1
 	}
 	for _, edge := range anime.Media.Relations.Edges {
@@ -686,8 +689,8 @@ type packAxis struct {
 	totalEpisodes int
 }
 
-// newPackAxis builds the numbering hypotheses for an anime.
-func newPackAxis(anime anilist.MediaList, seriesIndex map[int]anilist.Series, totalEpisodes int) packAxis {
+// newPackAxis builds the numbering hypotheses for an anime; part is the entry's, from seasonPartOf.
+func newPackAxis(anime anilist.MediaList, part *int, seriesIndex map[int]anilist.Series, totalEpisodes int) packAxis {
 	axis := packAxis{totalEpisodes: totalEpisodes}
 	add := func(d int) {
 		if d <= 0 {
@@ -704,7 +707,6 @@ func newPackAxis(anime anilist.MediaList, seriesIndex map[int]anilist.Series, to
 	// "Continues through the season": the pack starts at the season's first episode, which is the
 	// immediate prequel's entry. This is where ComputeEpisodeOffset comes in — as ONE hypothesis, not
 	// as the only truth (decisions.md #79).
-	_, part := seasonPartOf(anime.Media)
 	add(ComputeEpisodeOffset(anime.Media.Format, anime.Media.Relations, part))
 	// "Absolute for the series": the series index axis (decisions.md #77).
 	add(seriesIndex[anime.Media.Id].Offset)

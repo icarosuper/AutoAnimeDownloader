@@ -79,8 +79,8 @@ func PreviewWholeTitleTorrents(configs *files.Config, mediaID int, query string)
 		}
 		results, _ = filterSearchResults(results, configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 	} else {
+		season, part := seasonPartOf(anime.Media)
 		if used == "" {
-			season, part := seasonPartOf(anime.Media)
 			used, results, err = previewSearchWithVariants(anime.Media.Title, func(title string) ([]nyaa.TorrentResult, error) {
 				return nyaa.ScrapNyaaForAnime(title, nil, season, part)
 			})
@@ -90,7 +90,7 @@ func PreviewWholeTitleTorrents(configs *files.Config, mediaID int, query string)
 		if err != nil {
 			return WholeTitlePreview{Query: used, Media: media}, wrapNyaaSearchError(err)
 		}
-		packs, _, _ := partitionSearchResults(configs, *anime, results)
+		packs, _, _ := partitionSearchResults(configs, *anime, season, results)
 		results = packs
 	}
 

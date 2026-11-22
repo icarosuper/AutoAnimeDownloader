@@ -300,7 +300,7 @@ func TestPartitionSearchResults_FirstSeasonEntryDropsLaterSeasonPacks(t *testing
 	romaji := "Medalist"
 	anime := anilist.MediaList{Media: anilist.Media{Title: anilist.Title{Romaji: &romaji}}}
 
-	packs, _, _ := partitionSearchResults(&files.Config{}, anime, []nyaa.TorrentResult{s2, s1})
+	packs, _, _ := partitionSearchResults(&files.Config{}, anime, seasonOf(anime), []nyaa.TorrentResult{s2, s1})
 	if len(packs) != 1 || packs[0].Name != s1.Name {
 		t.Errorf("first-season entry: want only the season 1 pack, got %v", packs)
 	}
@@ -309,7 +309,7 @@ func TestPartitionSearchResults_FirstSeasonEntryDropsLaterSeasonPacks(t *testing
 		RelationType: "PREQUEL",
 		Node:         anilist.MediaRelationNode{Format: anilist.MediaFormatTV},
 	}}}
-	if packs, _, _ := partitionSearchResults(&files.Config{}, anime, []nyaa.TorrentResult{s2, s1}); len(packs) != 2 {
+	if packs, _, _ := partitionSearchResults(&files.Config{}, anime, seasonOf(anime), []nyaa.TorrentResult{s2, s1}); len(packs) != 2 {
 		t.Errorf("sequel without a season marker: want both packs kept, got %d", len(packs))
 	}
 }

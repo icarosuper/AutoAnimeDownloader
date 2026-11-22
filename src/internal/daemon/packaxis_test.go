@@ -81,7 +81,7 @@ func TestPackAxis_TheFourNumberingConventions(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			index := map[int]anilist.Series{tc.anime.Media.Id: {Key: 1, Offset: tc.offset}}
-			axis := newPackAxis(tc.anime, index, tc.total)
+			axis := newPackAxis(tc.anime, partOf(tc.anime), index, tc.total)
 
 			picked := pickBatches(newPackSet([]nyaa.TorrentResult{pack(tc.pack, 1)}, nil), axis, 1, tc.total)
 			if picked.len() != 1 {
@@ -102,7 +102,7 @@ func TestPackAxis_TheFourNumberingConventions(t *testing.T) {
 // recorded as if it started at episode 1 of this entry.
 func TestPackAxis_SpanDecidesBetweenLocalAndSeasonPack(t *testing.T) {
 	anime := entryOf(166873, "Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", 13)
-	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 36}}, 12)
+	axis := newPackAxis(anime, partOf(anime), map[int]anilist.Series{166873: {Key: 1, Offset: 36}}, 12)
 
 	local := nyaa.ExtractBatchInfo("[EMBER] Mushoku Tensei II (Season 2 | Part 2) 01 ~ 12 (Batch)")
 	if got, ok := axis.localRange(local, 1); !ok || got.StartEpisode != 1 || got.EndEpisode != 12 {
@@ -122,7 +122,7 @@ func TestPackAxis_SpanDecidesBetweenLocalAndSeasonPack(t *testing.T) {
 // entry.
 func TestPackSet_DetailRangeGoesThroughTheAxis(t *testing.T) {
 	anime := entryOf(166873, "Mushoku Tensei II: Isekai Ittara Honki Dasu Part 2", 12)
-	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 12}}, 12)
+	axis := newPackAxis(anime, partOf(anime), map[int]anilist.Series{166873: {Key: 1, Offset: 12}}, 12)
 
 	set := newPackSet([]nyaa.TorrentResult{pack("[EMBER] Mushoku Tensei II (Season 2 | Part 2) (Batch)", 1)},
 		func(nyaa.TorrentResult) (nyaa.BatchInfo, bool) {
@@ -153,7 +153,7 @@ func TestPackAxis_ZeroValueKeepsRelativeNumbering(t *testing.T) {
 // to a loose episode, not to a pack that does not have what is wanted.
 func TestPackAxis_NoHypothesisCoversRejectsThePack(t *testing.T) {
 	anime := entryOf(166873, "Anime Part 2", 13)
-	axis := newPackAxis(anime, map[int]anilist.Series{166873: {Key: 1, Offset: 36}}, 12)
+	axis := newPackAxis(anime, partOf(anime), map[int]anilist.Series{166873: {Key: 1, Offset: 36}}, 12)
 
 	if picked := pickBatches(newPackSet([]nyaa.TorrentResult{pack("[X] Anime 200-212 [Batch]", 1)}, nil), axis, 1, 12); picked.len() != 0 {
 		t.Fatalf("want no pack, got %v", batchNames(picked))
@@ -164,7 +164,7 @@ func TestPackAxis_NoHypothesisCoversRejectsThePack(t *testing.T) {
 // name clamps at 1: "Anime -10-12" means nothing on the downloads screen.
 func TestAssignBatches_RecordsConvertedRangeAndClampsTheDisplayName(t *testing.T) {
 	anime := entryOf(127720, "Mushoku Tensei: Isekai Ittara Honki Dasu Part 2", 11)
-	axis := newPackAxis(anime, map[int]anilist.Series{127720: {Key: 1, Offset: 11}}, 12)
+	axis := newPackAxis(anime, partOf(anime), map[int]anilist.Series{127720: {Key: 1, Offset: 11}}, 12)
 
 	episodes := []anilist.AiringNode{{Episode: 1}, {Episode: 2}}
 	batch := pack("[Judas] Mushoku Tensei - 01 ~ 23 [BD 1080p][Batch]", 1)
@@ -201,4 +201,16 @@ func TestDeclaredSpan_ConvertedRangeStartingBeforeEpisodeOne(t *testing.T) {
 	if hasDeclaredRange(files.EpisodeStruct{BatchStart: 0, BatchEnd: 0}) {
 		t.Fatal("a pack with no range in the name is still unknown")
 	}
+}
+
+// partOf and seasonOf read the entry's part and season the way the pass does (seasonPartOf), for
+// the helpers that take them already read.
+func partOf(anime anilist.MediaList) *int {
+	_, part := seasonPartOf(anime.Media)
+	return part
+}
+
+func seasonOf(anime anilist.MediaList) *int {
+	season, _ := seasonPartOf(anime.Media)
+	return season
 }

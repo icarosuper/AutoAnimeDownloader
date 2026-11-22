@@ -72,6 +72,7 @@ func resolveSeriesIndex(animeIDs []int, savedEpisodes []files.EpisodeStruct) map
 func adoptCoveredEpisodes(
 	anime anilist.MediaList,
 	animeTitle string,
+	season *int,
 	totalEpisodes int,
 	pending []anilist.AiringNode,
 	savedEpisodes []files.EpisodeStruct,
@@ -86,7 +87,6 @@ func adoptCoveredEpisodes(
 		return nil
 	}
 
-	season, _ := seasonPartOf(anime.Media)
 	var adopted []files.EpisodeStruct
 	for _, ep := range pending {
 		owner, ownerOffset := findCoveringPack(savedEpisodes, seriesIndex, torrentsHashSet, series, series.Offset+ep.Episode)

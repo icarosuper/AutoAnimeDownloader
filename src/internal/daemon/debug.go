@@ -97,6 +97,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 
 	searcher := defaultNyaaSearcher()
 	synonyms := anime.Media.OwnSynonyms()
+	season, part := ExtractAnimeSeasonPart(anime.Media.Title, synonyms)
 
 	// Same flow as production, without the second selection: debug has no saved records to account for
 	// (it already states it treats every episode as not downloaded).
@@ -105,12 +106,12 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		episodesToDownload, magnetsForEpisodes = resolveMovie(configs, anime, animeTitle, episodesToDownload, searcher)
 	}
 	if magnetsForEpisodes == nil {
-		packs, singles, _ := partitionSearchResults(configs, anime, rankSeriesResults(searcher.searchAnime(anime.Media.Title, synonyms, episodeNumbers(episodesToDownload)), details.isFinished))
+		packs, singles, _ := partitionSearchResults(configs, anime, season, rankSeriesResults(searcher.searchAnime(anime.Media.Title, synonyms, episodeNumbers(episodesToDownload)), details.isFinished))
 		if windowPacks, ok := packsForWindow(packs, mediaTotalEpisodes(anime), episodesToDownload); !isAnimeMovie(anime) && ok {
 			firstPending := episodesToDownload[0].Episode
 			// Same numbering axis as production: without it debug would report "no pack covers" for every
 			// entry whose pack is numbered by season or by series (packAxis).
-			axis := newPackAxis(anime, resolveSeriesIndex([]int{animeId}, nil), mediaTotalEpisodes(anime))
+			axis := newPackAxis(anime, part, resolveSeriesIndex([]int{animeId}, nil), mediaTotalEpisodes(anime))
 			if batches := chooseCoveringPacks(configs, nil, windowPacks, packDetail(searcher, mediaTotalEpisodes(anime)), axis, firstPending, windowEnd(configs, firstPending)); batches.len() > 0 {
 				episodesToDownload, magnetsForEpisodes = assignBatches(animeTitle, axis, episodesToDownload, batches)
 			}
