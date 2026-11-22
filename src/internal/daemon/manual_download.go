@@ -96,7 +96,7 @@ func resolveAnimeDetails(fm FileManagerInterface, animeId int, configs *files.Co
 // findEpisodeNode finds the episode by NUMBER in the anime's full list — not in the raw
 // airingSchedule, which has no node for an episode outside the window AniList keeps. Without this
 // the per-episode buttons died with "episode not found" precisely on the animes where the screen
-// shows synthetic episodes (see anilist.EpisodeList and decisions.md #52).
+// shows synthetic episodes (see anilist.EpisodeList and decisions/052).
 func findEpisodeNode(ml anilist.MediaList, episodeNumber int) *anilist.AiringNode {
 	for _, node := range anilist.EpisodeList(ml, 1) {
 		if node.Episode == episodeNumber {

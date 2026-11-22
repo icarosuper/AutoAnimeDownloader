@@ -15,7 +15,7 @@ import (
 var migrateAnimeIDsThrottle = 250 * time.Millisecond
 
 // MigrateAnimeIDsToMedia converts the persisted AnimeID from ENTRY id (MediaList, which is per
-// account) to MEDIA id — see decisions.md #43. Until it runs, the records on disk are keyed in a
+// account) to MEDIA id — see decisions/043. Until it runs, the records on disk are keyed in a
 // way the rest of the code no longer understands, so the caller must ABORT the pass when it
 // fails: going ahead would make every anime look not-downloaded and the daemon would re-download
 // the whole library.

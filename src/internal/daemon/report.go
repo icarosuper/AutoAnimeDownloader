@@ -15,7 +15,7 @@ const (
 	IssueDiskFull          = "disk_full"
 	IssueTorrentRejected   = "torrent_rejected"
 	// IssueAwaitingEarlierEpisode: the episode wasn't searched at all, because an earlier episode
-	// of the same anime is still missing (decisions.md #100). Without its own code it fell into
+	// of the same anime is still missing (decisions/100). Without its own code it fell into
 	// no_torrent_found, which claims a search that never happened.
 	IssueAwaitingEarlierEpisode = "awaiting_earlier_episode"
 )

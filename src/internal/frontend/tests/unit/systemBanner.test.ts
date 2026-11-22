@@ -9,7 +9,7 @@ const ok: AnilistHealth = { state: 'ok' }
 describe('pickBanner — precedence', () => {
   it('unreachable backend beats AniList being down', () => {
     // With the daemon down, the AniList state is the last successful read, i.e. stale
-    // information. Showing both would be contradictory noise (decisions.md #66).
+    // information. Showing both would be contradictory noise (decisions/066).
     const banner = pickBanner('unreachable', { state: 'outage' })
     expect(banner?.kind).toBe('backend_unreachable')
   })

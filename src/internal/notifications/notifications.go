@@ -115,7 +115,7 @@ func interpolate(template string, vars map[string]string) string {
 // PackSize > 1 turns the item into a whole batch pack of that many episodes: ONE event (one push,
 // one Jellyfin scan), not N. A pack's text names only the anime and {{episode}} is blank — the
 // variable is always a single number or nothing, never a range a template can't use as a number
-// (decisions.md #124). Number is then the pack's first pending episode, kept only for ordering.
+// (decisions/124). Number is then the pack's first pending episode, kept only for ordering.
 type Episode struct {
 	AnimeID     int
 	AnimeName   string
@@ -481,7 +481,7 @@ func PreviewWebhook(preset files.WebhookPreset) RenderedWebhook {
 
 // fireWebhook fires a preset and returns what went wrong. Automatic delivery ignores the
 // return (the log already records it); the "Test" button needs it, or it would report success
-// while the service refused the token — see decisions.md #86.
+// while the service refused the token — see decisions/086.
 func fireWebhook(preset files.WebhookPreset, vars map[string]string) error {
 	rendered := renderWebhook(preset, vars)
 
@@ -550,7 +550,7 @@ func AccountSource(source, username string) string {
 // missing from the map is UNKNOWN, and an unknown anime reaches every filtered webhook (fail-open):
 // a spare push beats a lost download_completed whose library scan never runs. It is resolved at
 // fire time, not stored on the episode record, so records written before the filter existed work
-// too (decisions.md #126). It must not block: Flush runs it on shutdown.
+// too (decisions/126). It must not block: Flush runs it on shutdown.
 type SourceResolver func(cfg *files.Config, animeIDs []int) map[int][]string
 
 var (
@@ -622,7 +622,7 @@ var (
 // With cfg.Notifications.BatchWindowSeconds > 0 the event enters a per-event-type queue and
 // leaves with the others of the same window, as a single webhook. A library backfill fires one
 // DownloadCompleted per torrent (77 in a real case) and services such as ntfy.sh answer 429
-// past a certain volume — see decisions.md #47.
+// past a certain volume — see decisions/047.
 func Notify(cfg *files.Config, event Event, it Episode) {
 	NotifyAll(cfg, event, []Episode{it})
 }
@@ -630,7 +630,7 @@ func Notify(cfg *files.Config, event Event, it Episode) {
 // NotifyAll delivers several items of one event at once. With batching off each item is its own
 // webhook, as it always was — a deletion of two animes is two pushes, each with its {{anime_id}}
 // and {{torrent_hash}} filled. What makes a pack one push and one Jellyfin/Plex scan is that the
-// caller hands it as ONE item (PackSize), not that its items share a call (decisions.md #124).
+// caller hands it as ONE item (PackSize), not that its items share a call (decisions/124).
 // With a batch window the items join the window like any other. An alert event's items are one
 // webhook either way: they come from a single evaluation, not from N separate occurrences.
 func NotifyAll(cfg *files.Config, event Event, items []Episode) {
@@ -704,7 +704,7 @@ func flushEvent(event Event, wait bool) {
 // fireBatch sends the items to every preset subscribed to the event. A preset filtered by source
 // gets only its share of the items, with the template variables built from that share — a window
 // of 3 completions where 1 is the filtered account's reads as that 1, not as "3 episodes".
-// The sources are looked up here, at fire time, not stored on the record (decisions.md #126).
+// The sources are looked up here, at fire time, not stored on the record (decisions/126).
 //
 // Without wait it returns at once: with batching off this runs on the verification pass's
 // goroutine, and the requests themselves take up to the client timeout.

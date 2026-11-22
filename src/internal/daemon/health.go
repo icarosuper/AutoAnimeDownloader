@@ -54,7 +54,7 @@ const (
 // load): the run is still counted, and the notification waits for a pass that can read the webhooks.
 //
 // Edge-triggered through the state store: fires once per run of failures, and the first finished
-// pass after that sends the recovery — after a restart too (decisions.md #127).
+// pass after that sends the recovery — after a restart too (decisions/127).
 func trackCheckFailing(cfg *files.Config, code string, now time.Time) {
 	var item *notifications.Episode
 	notifications.UpdateState(func(s *notifications.AlertState) bool {
@@ -180,7 +180,7 @@ const (
 // refused with IssueDiskFull. Two levels, each fired once and re-armed on its own: "warning" (free
 // space under the warning floor) and "blocked" (the pass refused downloads for lack of space). A disk
 // that goes straight from fine to full fires "blocked" only — the warning would be stale news in the
-// same push (decisions.md #127).
+// same push (decisions/127).
 func trackDiskLow(cfg *files.Config, total, free uint64, blockedEpisodes int) {
 	if cfg == nil || cfg.CompletedAnimePath == "" || total == 0 {
 		return
@@ -260,7 +260,7 @@ func diskFullEpisodes(problems []Issue) int {
 var diskSpace = files.DiskSpace
 
 // alertsAfterPass evaluates the state alerts at the end of a pass that finished. Each one is
-// edge-triggered through the state store (decisions.md #127).
+// edge-triggered through the state store (decisions/127).
 // passAlerts is what a finished pass hands the alerts.
 type passAlerts struct {
 	problems []Issue
@@ -443,7 +443,7 @@ func clearStuck(records []files.EpisodeStruct) {
 
 // firstFailure records that download_failed is about to report this (episode, torrent) and says
 // whether it is the first time. A different torrent failing for the same episode is new
-// information; the same one failing again is not (decisions.md #128).
+// information; the same one failing again is not (decisions/128).
 func firstFailure(animeID, episode int, hash string) bool {
 	key := notifications.StuckKey(animeID, episode) + ":" + strings.ToLower(hash)
 	first := false
@@ -610,7 +610,7 @@ const leftoverEvery = 7 * 24 * time.Hour
 // the pass's own deletions: an episode of an anime that left every download status, or one at or
 // below progress − watched_episodes_to_keep. With the default cleanup on this is almost always empty;
 // it fills up with delete_watched_episodes off, manually managed records, and packs the
-// unclaimed-content guard holds back (decisions.md #74). It repeats weekly while the files stay — a
+// unclaimed-content guard holds back (decisions/074). It repeats weekly while the files stay — a
 // reminder is the point; whoever keeps them on purpose doesn't subscribe this event. Called under
 // the state store's lock, and only on a pass where every list account answered.
 func leftoverDigest(s *notifications.AlertState, animes []anilist.MediaList, watching map[int]bool, library map[files.EpisodeKey]files.EpisodeStruct, keep int, now time.Time) []notifications.Episode {

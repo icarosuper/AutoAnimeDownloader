@@ -10,7 +10,7 @@ import (
 // mutually exclusive by precedence and the front needs a single label per card.
 //
 // There is no blacklist reason on purpose: adding as standalone is a direct request from the user,
-// and it wins over excluded_lists whatever the anime's status (decisions.md #49).
+// and it wins over excluded_lists whatever the anime's status (decisions/049).
 const (
 	blockReasonStandalone = "standalone"
 	blockReasonTracked    = "tracked"
@@ -38,7 +38,7 @@ type standaloneGuard struct {
 // Precedence: standalone > list > downloaded. All three are harmless — the existing records already
 // make the loop skip everything — and the message is just clarity.
 //
-// A blacklisted anime is not refused (decisions.md #49). Outside download_statuses it gets the
+// A blacklisted anime is not refused (decisions/049). Outside download_statuses it gets the
 // standalone record and the daemon follows it: GetMediaByID's synthetic MediaList has nil
 // CustomLists, so animeIsInExcludedList never fires on it, and that is the point — the user asked
 // for it by hand. Inside download_statuses it is already "tracked", and the blacklist keeps applying

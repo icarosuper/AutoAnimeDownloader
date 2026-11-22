@@ -24,7 +24,7 @@ var (
 		regexp.MustCompile(`(?i)\(\d{1,4}\s*[-~]\s*\d{1,4}\)`),
 		// The end of the range can be a space, the end of the name, an extension or a bracket: requiring
 		// a space let "One Piece EP 001-501" and "One Piece 001-501.mkv" through — 500-episode packs that
-		// the episode search read as "episode 1" (see decisions.md #53).
+		// the episode search read as "episode 1" (see decisions/053).
 		regexp.MustCompile(`(?i)\s\d{2,4}\s*[-~]\s*\d{2,4}(?:\s|$|\.|\[)`),
 		regexp.MustCompile(`(?i)\s\d{2,4}~\d{2,4}\s`),
 		regexp.MustCompile(`(?i)\(complete\)|\[complete\]|\s+complete\s+`),
@@ -94,7 +94,7 @@ var (
 	}
 
 	// reCourMarker is "Cour N" as a place to CUT a torrent name (firstMarkerIndex), not as a
-	// season: a cour is a part (decisions.md #10, ExtractPart reads it). It used to sit in
+	// season: a cour is a part (decisions/010, ExtractPart reads it). It used to sit in
 	// reSeasonPatterns, so ExtractSeason read "… Cour 2 - Eris the Goblin Slayer" (141534, the second
 	// half of season 1) as season 2 and the pack path dropped every release without a season marker.
 	reCourMarker = regexp.MustCompile(`(?i)Cour\s*(\d{1,2})`)

@@ -71,7 +71,7 @@ func TestJellyfinName(t *testing.T) {
 
 // The season marker MUST survive: each season is its own AniList entry, with its own
 // id and cover. Stripping the marker dumped Season 1/2/3 into the same folder and Jellyfin
-// matched everything to season 1 (decisions.md #45).
+// matched everything to season 1 (decisions/045).
 func TestSanitizeNameKeepsSeasonMarker(t *testing.T) {
 	cases := map[string]string{
 		"Anime/Name:Test":                                       "AnimeNameTest",

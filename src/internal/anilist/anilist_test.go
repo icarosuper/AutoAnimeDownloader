@@ -111,7 +111,7 @@ func TestMockAniListDo_ClearsCaches(t *testing.T) {
 }
 
 // TestGetAnimeInfoByIDs_ChunksPerAccount: the GET /animes orphan refresh runs on every 30s poll per
-// tab. One request per anime per account was the burst of decisions.md #65; the contract here is
+// tab. One request per anime per account was the burst of decisions/065; the contract here is
 // ceil(ids/50) per account, and nothing more.
 func TestGetAnimeInfoByIDs_ChunksPerAccount(t *testing.T) {
 	calls := 0

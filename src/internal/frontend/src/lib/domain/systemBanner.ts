@@ -4,7 +4,7 @@ import type { AnilistHealth } from '../api/client.js'
 /**
  * The banner is UNIQUE and has precedence — never a stack. With the daemon down, the AniList
  * state on screen is the last successful read, i.e. stale information; showing it next to
- * "daemon not responding" is contradictory noise. See decisions.md #66.
+ * "daemon not responding" is contradictory noise. See decisions/066.
  *
  * Order goes from most upstream to most downstream: nothing below the backend is observable
  * without the backend.

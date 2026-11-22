@@ -39,7 +39,7 @@ type episodeSelection struct {
 //
 // It is PURE: no I/O and no state between calls (the downloaded-episodes counter is local), which
 // is why it can run twice in the same pass — once with the per-anime limit in force (the one that
-// produces the deletions) and again with it lifted when a pack was chosen. See decisions.md.
+// produces the deletions) and again with it lifted when a pack was chosen (decisions/048).
 func selectEpisodes(
 	configs *files.Config,
 	maxEpisodes int,
@@ -69,7 +69,7 @@ func selectEpisodes(
 		}
 
 		// The ManuallyManaged guard: a hand-downloaded record survives every automatic delete, the
-		// blacklist included (decisions.md #121).
+		// blacklist included (decisions/121).
 		if shouldDownload && !blockedMap[key] {
 			sel.toDownload = append(sel.toDownload, ep)
 		} else if shouldDelete && !savedEp.ManuallyManaged {
@@ -127,7 +127,7 @@ func processAnimeEpisodes(
 	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, anime.Media.Id, episodes, savedEpisodesFullMap, anime.Progress)
 
 	totalEpisodes := mediaTotalEpisodes(anime)
-	// The synonyms that name the anime, once: season and part are read from them (decisions.md #132).
+	// The synonyms that name the anime, once: season and part are read from them (decisions/132).
 	synonyms := anime.Media.OwnSynonyms()
 	// Season and part are read once here and handed to coverage, the pack filter and the pack axis.
 	animeSeason, animePart := ExtractAnimeSeasonPart(anime.Media.Title, synonyms)
@@ -159,7 +159,7 @@ func processAnimeEpisodes(
 
 		// Pack eligibility: not a movie, more than one pending episode, and the FILTERED search returned
 		// a pack covering the window. None of this is AniList metadata — the torrent that's there decides
-		// (see decisions.md).
+		// (decisions/059).
 		if windowPacks, ok := packsForWindow(packs, totalEpisodes, sel.toDownload); !isAnimeMovie(anime) && ok {
 			firstPending := sel.toDownload[0].Episode
 			axis := newPackAxis(anime, animePart, seriesIndex, totalEpisodes)
@@ -214,11 +214,11 @@ func processAnimeEpisodes(
 
 	// stuck: an earlier episode of this anime ended this pass without a torrent. Episodes are released
 	// in order, so asking Nyaa for the ones after it is almost always wasted — they skip the
-	// per-episode search too, and still get whatever the anime search found (decisions.md #100).
+	// per-episode search too, and still get whatever the anime search found (decisions/100).
 	stuck := false
 	// A pack hands the same candidates to every episode it covers, so the loop meets it N times.
 	// The "new" and "rejected" notifications go out once per torrent, as one pack item
-	// (decisions.md #124). "Rejected" waits for the end of the loop: a later episode of the same
+	// (decisions/124). "Rejected" waits for the end of the loop: a later episode of the same
 	// pack retries the same candidates and may add the torrent after all.
 	torrentEpisodes := make(map[string][]int)
 	for _, ep := range episodesToDownload {
@@ -290,7 +290,7 @@ func processAnimeEpisodes(
 			}
 			// No download_failed: not found is WAITING, not failure — a weekly episode is routinely
 			// missing for the first hours after it airs. The issue feeds episode_stuck, which says it
-			// once it has lasted two days (decisions.md #128).
+			// once it has lasted two days (decisions/128).
 			result.issues = append(result.issues, issue)
 			continue
 		}
@@ -346,7 +346,7 @@ func processAnimeEpisodes(
 			}
 			result.issues = append(result.issues, issue)
 			// A full disk is a state of the volume, not a failure of this episode: disk_low's
-			// "blocked" level says it once for every episode (decisions.md #128).
+			// "blocked" level says it once for every episode (decisions/128).
 			if diskFull {
 				continue
 			}
@@ -448,7 +448,7 @@ func mediaTotalEpisodes(anime anilist.MediaList) int {
 // name doesn't carry it, from the pack's file list (packSet.rangeOf) — getting here without a range
 // means both sources failed, and then "don't know" is the only honest record. 1..total was a guess
 // that hasDeclaredRange read as a declared range, and from there ownership by coverage adopted,
-// under another cour, episodes the pack might not have (decisions.md #84).
+// under another cour, episodes the pack might not have (decisions/084).
 //
 // The RECORDED range is the one converted to the local numbering (packAxis.localRange) and can
 // start at zero or below; the displayed name clamps at 1, because "-10-12" tells the reader nothing
@@ -558,7 +558,7 @@ func partitionSearchResults(configs *files.Config, anime anilist.MediaList, seas
 // Goblin Slayer [1080p]" is an unlabeled pack to the search and has no episode number for the
 // single path, so it was never downloaded. For it only UNLABELED packs pass: a labeled one
 // ("Violet Evergarden - 01 ~ 14 (Plus Specials) [BATCH]") covers "episode 1" on the axis and would
-// bring a whole series for a special (decisions.md #123).
+// bring a whole series for a special (decisions/123).
 func packsForWindow(packs []nyaa.TorrentResult, totalEpisodes int, toDownload []anilist.AiringNode) ([]nyaa.TorrentResult, bool) {
 	if len(toDownload) > 1 {
 		return packs, true
@@ -583,7 +583,7 @@ var afterPacksThatFit func()
 // chooseCoveringPacks is packsThatFit + pickBatches, retried when a chosen pack then loses at
 // reserve. packsThatFit is a snapshot; a parallel anime can spend the last bytes before this
 // one Adds, and without the retry the pack that no longer fits would keep the window
-// (decisions.md #97 via the #101 race).
+// (decisions/097 via the #101 race).
 func chooseCoveringPacks(configs *files.Config, disk *diskBudget, packs []nyaa.TorrentResult, detail func(nyaa.TorrentResult) (nyaa.BatchInfo, bool), axis packAxis, firstPending, windowEnd int) *packSet {
 	remaining := append([]nyaa.TorrentResult(nil), packs...)
 	for {
@@ -706,9 +706,9 @@ func newPackAxis(anime anilist.MediaList, part *int, seriesIndex map[int]anilist
 
 	// "Continues through the season": the pack starts at the season's first episode, which is the
 	// immediate prequel's entry. This is where ComputeEpisodeOffset comes in — as ONE hypothesis, not
-	// as the only truth (decisions.md #79).
+	// as the only truth (decisions/079).
 	add(ComputeEpisodeOffset(anime.Media.Format, anime.Media.Relations, part))
-	// "Absolute for the series": the series index axis (decisions.md #77).
+	// "Absolute for the series": the series index axis (decisions/077).
 	add(seriesIndex[anime.Media.Id].Offset)
 
 	return axis
@@ -721,8 +721,8 @@ func newPackAxis(anime anilist.MediaList, part *int, seriesIndex map[int]anilist
 // makes the pack END on the entry's last episode wins: that's the count tie-break from sources.md —
 // a 25-episode pack under a 12-episode entry can't be a local pack, and a 12-episode one under the
 // same entry can't be anything else. Without it delta 0 would match both, and the "1..25" would be
-// recorded as starting at THIS entry's episode 1 — lying to ownership by coverage (decisions.md
-// #78).
+// recorded as starting at THIS entry's episode 1 — lying to ownership by coverage (
+// decisions/078).
 //
 // The converted start can be <= 0, and that's correct: a season pack downloaded under cour 2 starts
 // before that entry's episode 1. Whoever reads the recorded range uses hasDeclaredRange, which uses
@@ -825,7 +825,7 @@ func (p *packSet) covering(axis packAxis, episode int) (*packCandidate, nyaa.Bat
 			// A pack known only by its size has nothing but the file list to say it is a pack
 			// of THIS window; without it, it could be a single long episode or a different cut.
 			// Except for a one-episode entry (OVA, special): a single long episode IS its content,
-			// and episode 1 is the only one it can cover (decisions.md #123).
+			// and episode 1 is the only one it can cover (decisions/123).
 			if p.items[i].torrent.UnlabeledPack {
 				if axis.totalEpisodes == 1 && episode == 1 {
 					return &p.items[i], nyaa.BatchInfo{StartEpisode: 1, EndEpisode: 1}
@@ -835,7 +835,7 @@ func (p *packSet) covering(axis packAxis, episode int) (*packCandidate, nyaa.Bat
 			return &p.items[i], info
 		}
 		// A one-episode entry takes an unlabeled pack only when its files are that one episode: one
-		// whose files span 1..26 is a whole series, not the special (decisions.md #123).
+		// whose files span 1..26 is a whole series, not the special (decisions/123).
 		if axis.totalEpisodes == 1 && p.items[i].torrent.UnlabeledPack && (info.StartEpisode != 1 || info.EndEpisode != 1) {
 			continue
 		}
@@ -1179,7 +1179,7 @@ func deleteEpisodesByStatus(deletableMedia map[int]bool, fileManager FileManager
 		Msg("Deleting episodes for animes with delete statuses")
 
 	// Without newEpisodes, off-list bypass would delete the torrent this pass just adopted
-	// (defect A on the status path, decisions.md #117).
+	// (defect A on the status path, decisions/117).
 	saved := append(append([]files.EpisodeStruct{}, savedEpisodes...), newEpisodes...)
 	if err := removeEpisodesAndLinks(fileManager, backend, librarian, keysToDelete, saved, false, false, watching); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Status-based deletion: failed to delete episodes from file")
@@ -1353,7 +1353,7 @@ func forgettableKeys(
 // 1..23 in its name but has only cour 1's 11 episodes claimed covers 12 episodes that never had an
 // owner — cour 2, not downloaded yet. With only the first condition, watching cour 1 deleted all of
 // cour 2 from disk. Off-list (non-nil empty watching) lets the torrent leave even when the span
-// exceeds claimed totals (decisions.md #117).
+// exceeds claimed totals (decisions/117).
 //
 // ponytail: a pack whose range neither the name nor the file list resolved records BatchEnd == 0
 // (unknown) and stays undetectable here. It's what's left of the rare case after #84 — before, it
@@ -1371,7 +1371,7 @@ func canRemoveTorrent(group []files.EpisodeStruct, deleteSet map[files.EpisodeKe
 }
 
 // unclaimedHolds is the second gate on #74: unclaimed content holds the torrent unless the
-// automatic pass has a watching set and no claimed anime of the group is in it (decisions.md #117).
+// automatic pass has a watching set and no claimed anime of the group is in it (decisions/117).
 // watching == nil is the API / unknown default and keeps today's hold.
 func unclaimedHolds(group []files.EpisodeStruct, watching map[int]bool) bool {
 	if !hasUnclaimedContent(group) {

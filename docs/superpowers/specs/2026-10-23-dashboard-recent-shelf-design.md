@@ -204,7 +204,7 @@ No new integration test. No CLI test beyond the existing `config set` passthroug
 - `frontend/messages/en.json`, `pt-BR.json`.
 - Tests as above.
 - `docs/agents/architecture.md` (GET `/animes` row), `docs/agents/config.md`,
-  `docs/guides/webui.md`. A `decisions.md` entry for "recent is derived after the merge, from
+  `docs/guides/webui.md`. A `docs/agents/decisions/` entry for "recent is derived after the merge, from
   unwatched episodes in the window" if the grouping surprises.
 
 ---

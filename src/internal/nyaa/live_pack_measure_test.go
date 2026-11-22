@@ -11,10 +11,10 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Live measurement of the two pack caps checked on 2026-08-30 (decisions.md #84, sources.md):
+// Live measurement of the two pack caps checked on 2026-08-30 (decisions/084, sources.md):
 //
 //  1. numbering that RESTARTS per season: PackFileRange now concatenates overlapping
-//     season groups (decisions.md #116). This instrument still prints per-folder spans so
+//     season groups (decisions/116). This instrument still prints per-folder spans so
 //     a future measurement can catch a flatten regression.
 //  2. pack cap by episode instead of by total size (sources.md, "Detail page",
 //     item 2): only holds if the current cap is rejecting a pack the user wants.

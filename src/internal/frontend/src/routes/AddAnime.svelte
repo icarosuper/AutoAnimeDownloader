@@ -198,7 +198,7 @@
   // EXISTS in the app, and an anime that exists has a page at #/status/{id}, because anime_id is
   // AniList's own media id. So a blocked card never ends in a dead button: the button becomes the
   // link there, and the reason, which used to live only in a tooltip (invisible on mobile),
-  // becomes a line on the card. A blacklisted anime is not blocked at all (decisions.md #49).
+  // becomes a line on the card. A blacklisted anime is not blocked at all (decisions/049).
   $: cards =
     $locale &&
     results.map((result) => {

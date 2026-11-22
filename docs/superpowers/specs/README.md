@@ -2,7 +2,7 @@
 
 Only specs that have **not** been executed live here. Implemented ones were deleted; they
 remain in git history. The decisions that came out of them live in
-[decisions.md](../../agents/decisions.md).
+[decisions/](../../agents/decisions/index.md).
 
 | Spec | Status |
 |------|--------|

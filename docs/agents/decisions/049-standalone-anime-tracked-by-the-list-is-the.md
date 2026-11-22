@@ -1,0 +1,35 @@
+# 49. Standalone anime: "tracked by the list" is the snapshot the daemon PROCESSES, and `DownloadStandaloneAnime` never calls `handleSavedEpisodes`
+
+**Location:** `files/standalone.go`; `anilist/standalone.go` — `SearchMedia`/`GetMediaByID`; `daemon/standalone.go` — `appendStandaloneAnimes`/`DownloadStandaloneAnime`; `daemon/verification.go` — `searchAnilist`; `daemon/helpers.go` — `isConfigComplete`; `api/standalone_guard.go` — `blockReason`; `api/standalone.go` — `resolveMediaList`; `api/endpoint_config.go` — `PUT` validation.
+
+**What it looks like:** a `standalone_animes` file with loose ids; a block function that serves both the `POST` and the search result; a "download now" that does no cleanup; and a standalone anime that is never deleted by automatic pruning.
+
+**Why it's right:**
+
+**(a) The append happens AFTER `DedupeByMedia`.** `GetMediaByID` returns a **synthetic** `MediaList`: `Progress: 0`, `Status: ""`, `Id: 0`. `DedupeByMedia` keeps the **lowest** progress, so appending before the dedupe would make the synthetic zero beat the real entry and the daemon would re-download already-watched episodes. It is order, not style.
+
+**(b) "Tracked by the list" = it appears in the set the daemon processes,** i.e. the entries that survive the `download_statuses` + `DownloadMediaStatuses` filter — **not** "an AniList entry exists". An anime in `PLANNING` with `download_statuses = [CURRENT]` is on a list and the daemon ignores it; adding it as standalone is the feature's most obvious use case, not an error to block. The same definition feeds the three consumers (automatic removal, the `POST`'s 409, the search's `block_reason`) because two different definitions would produce a grey card the backend accepts, or the inverse.
+
+**(c) One block function, two consumers.** `blockReason` decides the 409 and each search result's `block_reason`. "The front does not let you click" and "the back returns an error" need to agree **by construction**, not by discipline. Precedence `standalone > tracked > downloaded`. `downloaded` only blocks with a **known** total: 12 records of 24 episodes is the per-anime limit, not "already downloaded".
+
+**The blacklist is not a block reason** (decided 2026-11-06, reversing the original `blacklist` reason that came first). Adding as standalone is a direct request from the user, and it wins over `excluded_lists` whatever the anime's status. A blacklisted anime outside `download_statuses` gets the standalone record and the daemon follows it: the synthetic `MediaList` has null `CustomLists`, so `animeIsInExcludedList` never fires on it, and that is the intent. A blacklisted anime inside `download_statuses` is still refused, but as `tracked`. The old reason was also half blind: `customLists` only come with the entries `fetchAniListEntries` returns, which are filtered by `download_statuses`, so the anime it existed for (blacklisted in `PLANNING`/`COMPLETED`) was the one it never saw. When the anime later enters a processed list while blacklisted, the standalone record is consumed and the blacklist wins — the later intent ([#121](121-the-blacklist-deletes-what-the-daemon-downloaded.md)).
+
+**(d) `DownloadStandaloneAnime` must not call `handleSavedEpisodes`.** It calls `identifyEpisodesNotInWatching`, which compares **all** saved episodes against the received `checkedEpisodes` and returns the uncovered ones for deletion. With only one anime's episodes in hand and `delete_watched_episodes` on, that would delete the entire library. For the same reason it does not call `deleteEpisodesByStatus` or `DeleteEmptyFolders`: adding an anime is not an occasion to delete anything.
+
+**(e) A standalone is never deleted by status.** `deletableMediaIDs` only evaluates candidates that appeared on some account's list, and a standalone appears on none. It accumulates on disk until the user stops tracking it, **or** until they mark by hand how far they have watched — see #62 on `AnimeSettings.Progress`, which is the deliberate exception: without manual progress `delete_watched_episodes`/`watched_episodes_to_keep` never had anything to prune on a standalone.
+
+**(f) Automatic removal consumes the record, and that can go as far as deleting a file.** A standalone that later enters an AniList list leaves the file on the next pass (the real entry already won the dedupe, so what the pass downloads does not change). If **after that** the user takes the anime off the list, the standalone record has already been consumed and its episodes fall into `identifyEpisodesNotInWatching` like those of any anime taken off the list. That is the accepted trade: keeping both records would require distinguishing "active standalone" from "dormant standalone" in the file, in `AnimeInfo` and on the screen, to cover a path standalone users do not take. The explicit `DELETE` closes the **other** window by marking the episodes `ManuallyManaged`.
+
+**(g) An AniList account stopped being required.** `isConfigComplete`, `searchAnilist` and `PUT /config` validation required at least one `anilist_usernames`; with standalones that became a requirement with no function — an install that only uses standalones never configures any account, and the daemon would leave it stuck on the configuration screen forever. The **library** stays required in all three places: without it there is nowhere to download to. `searchAnilist` without an account is not an error — the pass still has standalones to process, and aborting there would make the feature never run. The rule also left the frontend's `requiredChecks`: a requirement only on the screen is a rule the server does not know.
+
+**(h) The concept is called `standalone` in the code, "avulso" in the UI, and never `manual`.** `manual` already means something else here — `ManuallyManaged`, `ManualDownloadEpisode` mean "the user touched this episode by hand, the loop must not touch it". Reusing the word would make two different concepts read the same.
+
+**Don't "fix" by:**
+- Appending standalones before `DedupeByMedia` "because the merge is one" (see (a)).
+- Swapping `tracked` for "an AniList entry exists" to avoid depending on `fetchAniListEntries` — that breaks the `PLANNING` case, which is the feature's use case.
+- Duplicating the block rule in the frontend to not need the `block_reason` field on the search response (see (c)).
+- Returning three booleans instead of one `block_reason`: the reasons are mutually exclusive by precedence and the card needs one label.
+- Bringing back a `blacklist` block reason, or fetching `customLists` for every status "so the guard sees the blacklist": a standalone add is a direct request and ignores the blacklist (see (c)).
+- Consolidating `DownloadStandaloneAnime` with `handleSavedEpisodes` "to reuse the save" (see (d)).
+- Filtering the standalone by `DownloadMediaStatuses` on append: whoever asked for the anime by hand wants to track it also while it is `NOT_YET_RELEASED`.
+- Reintroducing `anilist_usernames` as a required field (on any of the four layers) "because the app is about the AniList list": it stopped being (see (g)).

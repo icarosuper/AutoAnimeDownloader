@@ -259,7 +259,7 @@ func TestComputeEpisodeOffset_KaguySa2_NoPart_ReturnsZero(t *testing.T) {
 	}
 }
 
-// "Cour N" is a part, never a season (decisions.md #10). Anilist id 141534: english = "Mushoku
+// "Cour N" is a part, never a season (decisions/010). Anilist id 141534: english = "Mushoku
 // Tensei: Jobless Reincarnation Cour 2 - Eris the Goblin Slayer" (the second half of season 1),
 // romaji = "… Part 2 - Eris no Goblin Toubatsu". Reading the cour as season 2 sent the pack path
 // a season filter that the release ("… Honki Dasu Part 2 - Eris the Goblin Slayer [1080p]", no

@@ -820,7 +820,7 @@
          them. It disappears when the user marks the three, when they dismiss it, or when the daemon
          is already configured and running. No new request: everything comes from what
          `loadInitialData` already fetched. The dismissal is per browser (localStorage), not a
-         config.json field — see decisions.md.
+         config.json field (decisions/063).
 
          Opacity in brackets (`/[.10]`): Tailwind only generates the default scale's opacities
          (…/40, /50…), so `/12` and `/28` become dead classes and the card ends up with no

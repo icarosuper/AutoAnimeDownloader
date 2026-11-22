@@ -169,7 +169,7 @@ func mockCapturing(sent *[]string, payloads ...string) func() {
 }
 
 // TestGetMediaByIDs_SingleRequestForManyIDs is why the function exists: the previous loop
-// spent 1 request per standalone against AniList's 30/min limit (decisions.md #65).
+// spent 1 request per standalone against AniList's 30/min limit (decisions/065).
 func TestGetMediaByIDs_SingleRequestForManyIDs(t *testing.T) {
 	var sent []string
 	defer mockCapturing(&sent, `{"data":{"Page":{"media":[
@@ -320,7 +320,7 @@ func TestSearchMedia_CachedSliceIsNotShared(t *testing.T) {
 }
 
 // TestSearchMedia_ServesStaleWhenRefused: refused by the budget gate, the search serves the
-// expired result instead of becoming "the search failed" on the screen. See decisions.md #72.
+// expired result instead of becoming "the search failed" on the screen. See decisions/072.
 func TestSearchMedia_ServesStaleWhenRefused(t *testing.T) {
 	defer MockAniListDo(func(*http.Request) (*http.Response, error) {
 		return respond(200, `{"data":{"Page":{"media":[{"id":21,"title":{"romaji":"One Piece"}}]}}}`,

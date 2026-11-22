@@ -1,5 +1,5 @@
 <script lang="ts">
-  // System banner — ONE only, with precedence, hosted in the AppShell (spec: decisions.md #66).
+  // System banner — ONE only, with precedence, hosted in the AppShell (spec: decisions/066).
   // It's not a toast: a toast is the failure of an ACTION the user asked for and goes away on its
   // own; the banner is a DEGRADED state that persists across polls and explains why the whole
   // screen looks wrong. Its value isn't reporting the error — it's saying why the list is stale or

@@ -10,7 +10,7 @@ same releases, all alive. That is why they missed the difference that matters fo
 anime. The 16 Aug measurements (marked below) correct what fell out.
 
 The seam for adding a source already exists: the `nyaaSearcher` interface, injected into
-`daemon.processAnimeEpisodes` (see [decisions.md #14](decisions.md#14-nyaasearcher--dependency-injection-for-nyaa-search-in-processanimeepisodes)). A new source is a new
+`daemon.processAnimeEpisodes` (see [decisions/014](decisions/014-nyaasearcher-dependency-injection-for-nyaa-search.md)). A new source is a new
 implementation, not a refactor.
 
 ---
@@ -27,7 +27,7 @@ implementation, not a refactor.
 - **`s=seeders&o=desc` is terrible for a long-running series pack.** The sort buries a 40–100
   seeder pack under hundreds of weekly episodes with 200–1000 seeders. Measured on One Piece: the
   most useful partial pack (61 GiB) only appears on **page 3**. That was the cause of the "One Piece
-  never downloads" bug — see [decisions.md #80](decisions.md#80-the-pack-size-ceiling-is-applied-twice-in-the-nyaa-search-and-in-the-daemon-filter).
+  never downloads" bug — see [decisions/080](decisions/080-the-pack-size-ceiling-is-applied-twice-in-the-nyaa.md).
 - **It has RSS** (`?page=rss`), with its own seeders/leechers/infohash/size tags — cheaper to parse
   than HTML and immune to layout changes. **But it does not replace HTML** (measured 16 Aug):
 
@@ -85,7 +85,7 @@ window was 1-50, the remaining 38 were **recorded as downloaded**: the Librarian
 files that exist and nothing reconciles the records with disk afterwards, so those episodes never
 return to the search.
 
-> **Implemented** (29 Aug 2026, [decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)): `nyaa.PackFileRange` reads the range from the file
+> **Implemented** (29 Aug 2026, [decisions/084](decisions/084-a-pack-without-a-range-in-its-name-gets-its.md)): `nyaa.PackFileRange` reads the range from the file
 > list before adding the torrent, and `daemon.packSet` resolves it on demand — only for a pack
 > with no range in the name, only after filter and sort, at most 3 per anime per pass. A range
 > that neither the name nor the files resolved now records **zero** (unknown), not `1..total`.
@@ -97,11 +97,11 @@ return to the search.
 >
 > Read rate measured on 7 packs: 574/574, 24/24, 23/23, 12/12, 103/111 files yielded a number
 > (the 8 that missed are OP/ED, correctly outside the range). Numbered OP/ED and `S00E`/OVA
-> later left min-max as well ([decisions.md #113](decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)). Restart-per-season
+> later left min-max as well ([decisions/113](decisions/113-packfilerange-min-max-skips-extrasova-an-isolated.md)). Restart-per-season
 > packs flatten overlapping season groups onto the concatenated axis
-> ([decisions.md #116](decisions.md#116-restart-per-season-packs-flatten-onto-the-concatenated-axis-organize-slices-by-anilist-id)). Two cases needed the fixes that
+> ([decisions/116](decisions/116-restart-per-season-packs-flatten-onto-the.md)). Two cases needed the fixes that
 > shipped with it: a name separated by `_` (`[DB]Vinland Saga_-_01_(...)`) matched no pattern, and
-> `(2021-2022)` was read as the episode range 2021..2022 ([decisions.md #83](decisions.md#83-the-pack-names-range-is-the-first-plausible-match-not-the-first-match)).
+> `(2021-2022)` was read as the episode range 2021..2022 ([decisions/083](decisions/083-the-pack-names-range-is-the-first-plausible-match.md)).
 
 **2. A per-episode ceiling instead of a total-size ceiling** — a policy change, not a bugfix. The
 pack above fails any sane `max_batch_torrent_size_gb`, but it is ~300 MiB/episode, which is great.
@@ -141,8 +141,8 @@ Measured on 28 Aug 2026, from `Raw Nyaa row` lines of real passes. This is not a
 it is why the daemon and the source disagree about what "one episode" is.
 
 **1. A pack is almost always a whole season, not a cour.** AniList splits cour/part into
-**separate media ids**, each with its own numbering from 1 (see [decisions.md #45](decisions.md#45-one-library-folder-per-anilist-entry--the-season-marker-stays-in-the-name) and
-[#71](decisions.md#71-anilist-has-no-franchise-id-the-prequel-chain-is-the-only-source-and-searching-by-name-is-a-trap)). Groups do not follow that cut: the released pack covers the whole season. Practical
+**separate media ids**, each with its own numbering from 1 (see [decisions/045](decisions/045-one-library-folder-per-anilist-entry-the-season.md) and
+[#71](decisions/071-anilist-has-no-franchise-id-the-prequel-chain-is.md)). Groups do not follow that cut: the released pack covers the whole season. Practical
 consequence, measured on Mushoku Tensei II Part 2 (`166873`): the only available packs were
 whole-season, and the search built from the "Part 2" entry discarded them for not carrying an
 explicit part marker. A pack "with no part" is not a wrong pack — it is the normal release
@@ -158,7 +158,7 @@ format.
 | SubsPlease / Erai-raws, AoT Final Season Part 2 | `76..87` | **absolute across the series** |
 
 The fourth row is the one that usually surprises: `76..87` matches exactly the accumulated sum of
-episodes in the AniList `PREQUEL` chain (see [decisions.md #71](decisions.md#71-anilist-has-no-franchise-id-the-prequel-chain-is-the-only-source-and-searching-by-name-is-a-trap)). So some groups use the
+episodes in the AniList `PREQUEL` chain (see [decisions/071](decisions/071-anilist-has-no-franchise-id-the-prequel-chain-is.md)). So some groups use the
 franchise's absolute axis as file numbering — and none of them announce which convention they
 adopted.
 
@@ -167,20 +167,20 @@ count.** You cannot read the convention from the name. You can reduce it to a fe
 (offset 0, immediate-prequel offset, whole-series offset) and use the pack's **file count** to
 choose: a pack with 25 files numbered from 1 can only be a continuous season, not a 12-episode
 cour. That is the same evidence `packEpisodeOffset` already uses in organize
-([decisions.md #68](decisions.md#68-pack-numbering-the-offset-is-guessed-from-the-files-themselves-and-a-basename-collision-uses-the-relative-path)), and it is what makes Nyaa's detail-page file list (section "Detail
+([decisions/068](decisions/068-pack-numbering-the-offset-is-guessed-from-the.md)), and it is what makes Nyaa's detail-page file list (section "Detail
 page", above) valuable **before** downloading, not only after.
 
 **4. A "Part 1 + Part 2" in the name is not "part 1".** `[Fuchs] … - S02 … (Season 2) (Part 1 + Part 2)`
 covers both halves, but an extractor that returns the first number it matches reads `1`. Reading a
 part marker is always fragile; asking "does this pack cover the pending window?" is not.
 
-> **Implemented** (29 Aug 2026, [decisions.md #79](decisions.md#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)): on the pack path the part marker only
+> **Implemented** (29 Aug 2026, [decisions/079](decisions/079-pack-choice-asks-does-it-cover-the-window-not-is.md)): on the pack path the part marker only
 > rejects a declared conflict, `ExtractPart` returns `nil` for a name with two parts, and the three
 > numbering hypotheses in this section became `daemon.packAxis` — with the name's span in place of
-> the file count as the tie-break. The detail scrape came later ([decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)) and
+> the file count as the tie-break. The detail scrape came later ([decisions/084](decisions/084-a-pack-without-a-range-in-its-name-gets-its.md)) and
 > resolves the **range** of a pack with no range in the name; the per-folder file count, which
 > would tie-break a pack whose numbering restarts per season, **stays out on purpose** — measured
-> on 30 Aug 2026 ([decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)): 6% of packs, delta 0 picks correctly on all of them, and a
+> on 30 Aug 2026 ([decisions/084](decisions/084-a-pack-without-a-range-in-its-name-gets-its.md)): 6% of packs, delta 0 picks correctly on all of them, and a
 > per-folder count would read extras as episodes.
 
 ---
@@ -217,7 +217,7 @@ counting `<td>`.
 - **It does not sort by seeders.** `order=seeders-d` is accepted and **silently ignored** (falls
   back to the default, timestamp desc). Only `order=size-d` works. With 75 items/page, walking 5
   pages would become "the 375 most recent uploads that mention the name" — the worst possible case
-  for old anime, and it would reintroduce the [decisions.md #80](decisions.md#80-the-pack-size-ceiling-is-applied-twice-in-the-nyaa-search-and-in-the-daemon-filter) bug in a worse form.
+  for old anime, and it would reintroduce the [decisions/080](decisions/080-the-pack-size-ceiling-is-applied-twice-in-the-nyaa.md) bug in a worse form.
   (`page=N` **works**, unlike Nyaa RSS.)
 - **The `seeders` field is a stale cache.** On `?q=cowboy+bebop`, `tracker_updated` age had a
   median of **22 days** and a max of **95 days**. Top-of-list comparison at the same instant:
@@ -278,12 +278,12 @@ sorting and of seeder freshness.
 
 ## Recommended order
 
-1. **Fix pack search on Nyaa** — done, see [decisions.md #80](decisions.md#80-the-pack-size-ceiling-is-applied-twice-in-the-nyaa-search-and-in-the-daemon-filter). It was a bug, not a missing
+1. **Fix pack search on Nyaa** — done, see [decisions/080](decisions/080-the-pack-size-ceiling-is-applied-twice-in-the-nyaa.md). It was a bug, not a missing
    source.
 2. **Do not replace Nyaa with anything right now.** Not RSS (loses sorting and pagination) nor
    AnimeTosho (loses sorting, seeders cached ~22 days). The gain would be parsing; the cost is the
    search.
-3. **Pack file list** — done, see [decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything). It came from **Nyaa's** detail page
+3. **Pack file list** — done, see [decisions/084](decisions/084-a-pack-without-a-range-in-its-name-gets-its.md). It came from **Nyaa's** detail page
    (`/view/<id>`), not AnimeTosho: only that one works on an old pack. It solved real coverage; the
    second use — tie-breaking the numbering convention by per-folder file count (section "Pack
    granularity and numbering") — stays out. AnimeTosho as an additional source is left only for

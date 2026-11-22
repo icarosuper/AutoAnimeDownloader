@@ -103,7 +103,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 	// goes through either. It's also what makes the queue a real reconciliation: every
 	// SetMaxActiveDownloads runs an enforce, so a pause rain refused or a `stopping` left halfway
 	// resolves itself on the next cycle. Runs BEFORE Ensure, when there may be no session yet — step 0
-	// of enforce is what handles that (see decisions.md #41).
+	// of enforce is what handles that (see decisions/041).
 	backend.SetMaxActiveDownloads(configs.MaxConcurrentDownloads)
 	// Same safety net for disable_seeding; Ensure below rebuilds the session when it changed.
 	backend.SetUploadDisabled(configs.DisableSeeding)
@@ -246,7 +246,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 
 	// One disk budget for the whole pass, shared by the parallel animes: what the queue still has to
 	// write counts against the free space, and so does every torrent this pass adds
-	// (decisions.md #101). From the same snapshot, so a torrent dropStalledTorrents just removed
+	// (decisions/101). From the same snapshot, so a torrent dropStalledTorrents just removed
 	// still reserves its bytes until the next pass — the safe side.
 	disk := newDiskBudget(downloadedTorrents, savedEpisodes)
 
@@ -481,7 +481,7 @@ func onDiskMediaIDs(savedEpisodes []files.EpisodeStruct) []int {
 // account with 1124 COMPLETED/DROPPED/PLANNING entries, plus one tie-break query per account that
 // didn't list a candidate — which alone went past AniList's 30 req/min on every pass. One
 // `mediaId_in` request per account per 50 animes on disk answers both questions at once
-// (decisions.md #130).
+// (decisions/130).
 //
 // Each account's ids in a delete status also go into passLists as its listDelete half: the
 // webhook source filter only asks about animes with files, which is this set — plus the ones this

@@ -55,7 +55,7 @@ type AnimeInfo struct {
 	// Accounts lists the list accounts that track this anime, each with its own progress.
 	// EpisodesWatched/EpisodesPending above are the COMBINED view (lowest progress across accounts,
 	// see anilist.DedupeByMedia); these are what the dashboard user filter projects onto when the
-	// user picks accounts (decisions.md #125). Empty for standalone animes and for orphans no
+	// user picks accounts (decisions/125). Empty for standalone animes and for orphans no
 	// account tracks.
 	Accounts []AnimeAccount `json:"accounts,omitempty"`
 }
@@ -271,7 +271,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 		} else if fromCache {
 			// Coverage is known (the list came whole, from the cache), but AniList is down: every uncovered
 			// anime would become a GetAnimeInfoByIDs doomed to fail, on every 30s poll per tab. It's the
-			// same burst as decisions.md #65, now without even a chance of working.
+			// same burst as decisions/065, now without even a chance of working.
 			logger.Logger.Warn().Msg("Skipping orphan refresh: the AniList list came from the local cache")
 		} else {
 			refreshOrphanAnimes(server.FileManager, animeMap, covered, config.ExcludedLists, config.DownloadStatuses, config.AnilistUsernames, config.MALUsernames, standaloneSet)
@@ -298,7 +298,7 @@ func handleAnimes(server *Server) http.HandlerFunc {
 }
 
 // FailedAccountsHeader on GET /api/v1/animes lists, comma-separated as "<source>:<username>", the
-// accounts whose list fetch failed for this response (decisions.md #125).
+// accounts whose list fetch failed for this response (decisions/125).
 const FailedAccountsHeader = "X-Failed-Accounts"
 
 // countPendingEpisodes counts the released episodes above the watch progress that aren't on disk
@@ -322,7 +322,7 @@ func countPendingEpisodes(watched, released int, downloaded map[int]bool) int {
 //
 // ALL the AniList reading here is batched: one query per account (per 50 ids) and, for the
 // standalone animes no account tracks, a second one per batch of 50. It used to be one request PER
-// orphan anime, fired on every 30s poll of every open tab — the burst decisions.md #65 measured as
+// orphan anime, fired on every 30s poll of every open tab — the burst decisions/065 measured as
 // the biggest consumer of the AniList budget, and the one its burst limiter punishes. That's also
 // why the previous version needed a concurrency semaphore: with two queries in total, there's
 // nothing left to limit.

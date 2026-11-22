@@ -1,6 +1,6 @@
 // Package diagnostics builds the bug report bundle. It reads everything from files in the data dir
 // and never asks the running daemon: that's what lets a CLI command build the same bundle with the
-// daemon dead (decisions.md #102).
+// daemon dead (decisions/102).
 package diagnostics
 
 import (

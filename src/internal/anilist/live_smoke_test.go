@@ -6,7 +6,7 @@ import (
 )
 
 // Smoke against the real AniList — the schedule window it returns is why EpisodeList exists
-// (see decisions.md #52), and no mock proves it is still that size. Only runs with
+// (see decisions/052), and no mock proves it is still that size. Only runs with
 // AAD_LIVE_ANILIST=1, so `go test ./...` doesn't depend on the network.
 func TestLive_EpisodeList(t *testing.T) {
 	if os.Getenv("AAD_LIVE_ANILIST") != "1" {

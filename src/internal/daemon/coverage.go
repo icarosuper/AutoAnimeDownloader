@@ -14,8 +14,8 @@ import (
 // numbering from 1. The result without this: cour 2 has no record at all, doesn't know its file is
 // already on disk inside the pack downloaded under cour 1, and downloads it again.
 //
-// The conversion between the two rulers is the series' absolute axis (anilist.Series, decisions.md
-// #77): abs = Offset(AnimeID) + local number. Comparing 1..23 with 1..12 without converting is
+// The conversion between the two rulers is the series' absolute axis (anilist.Series,
+// decisions/077): abs = Offset(AnimeID) + local number. Comparing 1..23 with 1..12 without converting is
 // comparing different rulers.
 
 // resolveSeriesIndex resolves the absolute axis of the pass's animes PLUS that of every anime_id
@@ -62,7 +62,7 @@ func resolveSeriesIndex(animeIDs []int, savedEpisodes []files.EpisodeStruct) map
 // Adopting is recording the record pointing to the hash that already exists — exactly what would
 // happen if the search found the same torrent again, since Session.Add reuses the infohash. The
 // gain is not going through Nyaa nor downloading again what's there; as a bonus the deletion guard
-// starts seeing the siblings from the other cour (decisions.md #74) and organize hardlinks the
+// starts seeing the siblings from the other cour (decisions/074) and organize hardlinks the
 // files that never had an owner (organizeTorrent already handles a partially organized group,
 // without notifying again).
 //
@@ -95,7 +95,7 @@ func adoptCoveredEpisodes(
 		}
 
 		// The range is CONVERTED to the adopter's local numbering, never copied as the owner declares it.
-		// Every record keeps the range on ITS entry's ruler (packAxis.localRange, decisions.md #79) and
+		// Every record keeps the range on ITS entry's ruler (packAxis.localRange, decisions/079) and
 		// that's how it's read back — findCoveringPack adds the offset of the record's own anime_id.
 		// Copying cour 1's 1..23 under cour 2 would make that record read as the absolute 12..34: a cour
 		// 3 would find coverage for an episode the pack doesn't have, and would end up with an owner and

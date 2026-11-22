@@ -12,7 +12,7 @@ import (
 // and Erai number Shingeki Final Season Part 2 as 76..87, not 1..12).
 //
 // AniList has no franchise id: the PREQUEL chain is the only source, and searching by name is
-// a trap (decisions.md #71). Key is the media id of the ROOT of that chain — the series
+// a trap (decisions/071). Key is the media id of the ROOT of that chain — the series
 // identity the schema doesn't offer — and Offset is the sum of the episodes of every ancestor.
 //
 // The absolute episode of a local episode ep is Offset + ep.
@@ -38,7 +38,7 @@ type seriesLink struct {
 // go in, and an ancestor of a finished anime is also finished.
 //
 // It goes into the on-disk snapshot (persist.go), and not to save requests — a whole library
-// warm-up costs ~4 requests (decisions.md #71/#72). It's because those 4 requests don't exist
+// warm-up costs ~4 requests (decisions/071 and decisions/072). It's because those 4 requests don't exist
 // with AniList down, and without the links the pass loses pack-coverage ownership on the very
 // pass that's already working with the rest coming from the cache. Being immutable, it comes
 // back from disk with a full TTL: there's nothing to invalidate.
@@ -49,7 +49,7 @@ const seriesTTL = 24 * time.Hour
 // seriesNode is a media in the walk response. It's recursive because the query nests
 // relations, and Relations only has trustworthy content on the first two levels: on the
 // third AniList returns empty edges, which is INDISTINGUISHABLE from "has no prequel"
-// (decisions.md #71). Whoever reads needs to know which level they're on — this type
+// (decisions/071). Whoever reads needs to know which level they're on — this type
 // doesn't carry that information on purpose, so it doesn't look trustworthy everywhere.
 type seriesNode struct {
 	Id        int         `json:"id"`
@@ -75,8 +75,8 @@ type seriesResponse struct {
 const seriesNodeFields = `id episodes format status`
 
 // seriesQuery asks for TWO levels of relations, which is the most AniList expands: asking for
-// a third would only return empty edges (decisions.md #71). A batch of up to 50 ids costs the
-// same budget unit as a single id, so the width is free (decisions.md #72).
+// a third would only return empty edges (decisions/071). A batch of up to 50 ids costs the
+// same budget unit as a single id, so the width is free (decisions/072).
 var seriesQuery = `
 	query GetSeriesChains($ids: [Int]) {
 		Page(perPage: ` + strconv.Itoa(anilistMaxPerPage) + `) {
@@ -120,7 +120,7 @@ func GetSeriesIndex(ids []int, priority Priority) (map[int]Series, error) {
 // known, and learns TWO links per fetched media: itself and its prequel, because levels 0
 // and 1 of the response come in an authoritative position. The prequel's prequel (level 2)
 // has a trustworthy id and episode count, but relations CUT — it goes back to the frontier
-// instead of being treated as a root, which is the trap in decisions.md #71.
+// instead of being treated as a root, which is the trap in decisions/071.
 //
 // The loop is depth-agnostic: the cap of 2 is observed behavior, not a contract. It consumes
 // whatever comes and enqueues whatever is missing, so an AniList that started expanding 3
@@ -208,15 +208,15 @@ func recordLink(known map[int]seriesLink, node seriesNode) *seriesNode {
 
 // prequelOf returns the TV/TV_SHORT prequel of the node. Recap movies, OVAs and ONAs also
 // arrive as PREQUEL with Episodes filled, but they don't enter the count the groups follow —
-// same rule as daemon.ComputeEpisodeOffset (decisions.md #9 and #71), except that one also counts
+// same rule as daemon.ComputeEpisodeOffset (decisions/009 and decisions/071), except that one also counts
 // an ONA prequel under an ONA entry; this one doesn't, the series axis stays TV-only
-// (decisions.md #133).
+// (decisions/133).
 //
 // The selection rule is otherwise the same as daemon.ComputeEpisodeOffset, and the two stay separate on
 // purpose: here it walks the WHOLE chain (absolute series offset), there it takes ONE hop
 // (total of the immediate prequel). Those are the two distinct pack-numbering hypotheses in
-// daemon.packAxis, so unifying them would erase the distinction (decisions.md #79). A third,
-// looser selection lives in daemon.splitEntryContinuation (decisions.md #131).
+// daemon.packAxis, so unifying them would erase the distinction (decisions/079). A third,
+// looser selection lives in daemon.splitEntryContinuation (decisions/131).
 func prequelOf(node seriesNode) *seriesNode {
 	for i := range node.Relations.Edges {
 		edge := &node.Relations.Edges[i]
@@ -234,7 +234,7 @@ func prequelOf(node seriesNode) *seriesNode {
 // resolveSeries sums the chain backwards from id. It stops at the first unknown ancestor:
 // when in doubt the walk resolves to the smallest possible offset, because a missing offset
 // falls back to relative numbering (which a good share of groups use) and a wrong offset
-// sends the search to an episode that doesn't exist (decisions.md #71).
+// sends the search to an episode that doesn't exist (decisions/071).
 func resolveSeries(known map[int]seriesLink, id int) (Series, bool) {
 	link, ok := known[id]
 	if !ok {

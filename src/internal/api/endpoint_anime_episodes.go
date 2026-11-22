@@ -12,7 +12,7 @@ import (
 type AnimeEpisodeInfo struct {
 	// EpisodeNumber is the episode's identity in the /animes/{id}/episodes/{episodeNumber}/* routes:
 	// the AniList node id left the scene because it doesn't exist for an episode outside the schedule
-	// window AniList keeps (see decisions.md #52).
+	// window AniList keeps (see decisions/052).
 	EpisodeNumber     int    `json:"episode_number"`
 	AiringAt          int64  `json:"airing_at"`
 	TimeUntilAiring   int    `json:"time_until_airing"`
@@ -41,7 +41,7 @@ type AnimeEpisodeInfo struct {
 
 type AnimeDetailResponse struct {
 	// AnimeID is the AniList MEDIA id — the same key used in episodes.json and in the /animes/{id}/*
-	// routes, and also the id in the anilist.co/anime/{id} link (see decisions.md #43).
+	// routes, and also the id in the anilist.co/anime/{id} link (see decisions/043).
 	AnimeID       int                `json:"anime_id"`
 	TotalEpisodes int                `json:"total_episodes"`
 	Progress      int                `json:"progress"`

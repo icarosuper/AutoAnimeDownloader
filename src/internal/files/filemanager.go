@@ -27,7 +27,7 @@ const anilistCacheFileName = "anilist_cache"
 // EpisodeKey identifies an episode. It's (anime, episode number) and not the AniList airingSchedule
 // node id, because that id doesn't exist for every episode: AniList keeps a schedule window per
 // media and drops the old ones, so One Piece 1 to 1122 and every old anime had no id at all — and
-// therefore couldn't be downloaded (see decisions.md #52).
+// therefore couldn't be downloaded (see decisions/052).
 type EpisodeKey struct {
 	AnimeID int `json:"anime_id"`
 	Episode int `json:"episode"`
@@ -55,7 +55,7 @@ type EpisodeStruct struct {
 	// "6-11".
 	//
 	// The range comes from the torrent NAME when the name carries it and, when it doesn't, from the
-	// file list of the Nyaa detail page (decisions.md #84). Zero means UNKNOWN — an old record, or
+	// file list of the Nyaa detail page (decisions/084). Zero means UNKNOWN — an old record, or
 	// neither source resolved it — and never "1..total": that guess was read as a declared range and
 	// spread made-up coverage to the series' other cours. Whoever displays it falls back to the
 	// min/max.
@@ -63,7 +63,7 @@ type EpisodeStruct struct {
 	BatchEnd   int `json:"batch_end,omitempty"`
 	// TorrentSize is the size Nyaa announced for the torrent, in bytes, 0 when unknown (an old record
 	// or a hand-pasted magnet). The disk guard needs it for a torrent still waiting in the queue: rain
-	// only learns BytesTotal from the metadata, which a queued torrent never fetched (decisions.md #101).
+	// only learns BytesTotal from the metadata, which a queued torrent never fetched (decisions/101).
 	TorrentSize int64 `json:"torrent_size,omitempty"`
 	// LibraryPaths are the hardlink paths created in the completed-anime library by
 	// JobOrganize. Empty means "not yet organized" — the marker JobOrganize uses to fire
@@ -103,8 +103,8 @@ type NotificationsConfig struct {
 	Webhooks []WebhookPreset `json:"webhooks"`
 	// BatchWindowSeconds groups the events of one window into a single webhook. 0 disables grouping
 	// (one webhook per event, the original behavior). It exists because a library backfill fires one
-	// `download_completed` per torrent and blows the quota of services like ntfy.sh — see decisions.md
-	// #47.
+	// `download_completed` per torrent and blows the quota of services like ntfy.sh — see
+	// decisions/047.
 	BatchWindowSeconds int `json:"batch_window_seconds"`
 }
 
@@ -113,12 +113,12 @@ type Config struct {
 	AnilistUsername    string   `json:"anilist_username,omitempty"`
 	AnilistUsernames   []string `json:"anilist_usernames"`
 	// MALUsernames are MyAnimeList accounts used as LIST sources only (status + progress);
-	// everything else still comes from AniList — see decisions.md #95.
+	// everything else still comes from AniList — see decisions/095.
 	MALUsernames  []string `json:"mal_usernames"`
 	CheckInterval int      `json:"check_interval"`
 	// MaxEpisodesPerAnime limits how many episodes of an anime exist at the same time, and applies
 	// ONLY on the episode-by-episode path: a batch is a single torrent, so limiting records wouldn't
-	// limit bytes or files in the library (see decisions.md). 0 means NO CEILING (see
+	// limit bytes or files in the library (decisions/048). 0 means NO CEILING (see
 	// effectiveMax/windowEnd in daemon/episodes.go).
 	MaxEpisodesPerAnime int `json:"max_episodes_per_anime"`
 	// MaxBatchTorrentSizeGB / MaxEpisodeTorrentSizeGB drop torrents above the ceiling from the search,
@@ -137,7 +137,7 @@ type Config struct {
 	MaxSearchPages int `json:"max_search_pages"`
 	// MinFreeDiskGB is the slack the disk guard keeps on the library volume, in GiB (2^30).
 	// Adding a torrent is refused when free - reserved would fall below this. 0 disables the
-	// policy; a torrent bigger than free - reserved is still refused (decisions.md #93).
+	// policy; a torrent bigger than free - reserved is still refused (decisions/093).
 	MinFreeDiskGB     int `json:"min_free_disk_gb"`
 	EpisodeRetryLimit int `json:"episode_retry_limit"`
 	// MaxConcurrentDownloads limits how many INCOMPLETE torrents download at the same time; the excess
@@ -148,7 +148,7 @@ type Config struct {
 	MaxConcurrentDownloads int `json:"max_concurrent_downloads"`
 	// DisableSeeding stops every upload: the torrent session never unchokes a peer (not even
 	// during the download), and a torrent is removed, download copy included, as soon as it is
-	// organized into the library. Toggling it rebuilds the torrent session. See decisions.md #119.
+	// organized into the library. Toggling it rebuilds the torrent session. See decisions/119.
 	DisableSeeding bool `json:"disable_seeding"`
 	// CheckForUpdates lets the daemon ask GitHub once a day for the latest release (the update badge
 	// and update_available). false = no request ever leaves; whoever installs from the AUR or a
@@ -163,7 +163,7 @@ type Config struct {
 	DownloadMediaStatuses  []string `json:"download_media_statuses"`
 	DeleteStatuses         []string `json:"delete_statuses"`
 	// AnimeIDsAreMediaIDs marks that daemon.MigrateAnimeIDsToMedia already converted the saved
-	// AnimeIDs from ENTRY id (MediaList, per account) to MEDIA id (see decisions.md #43). The default
+	// AnimeIDs from ENTRY id (MediaList, per account) to MEDIA id (see decisions/043). The default
 	// is false on purpose: a config.json older than this field deserializes on top of the default and
 	// needs to migrate. On a new install the migration runs with nothing to do and turns the field on
 	// in the first pass.

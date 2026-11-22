@@ -96,7 +96,7 @@ text, not source-specific. The page cap is still `max_search_pages` from
 No new dependency. For `json`/`rss`, `fields` carries a field path instead of a CSS selector.
 
 `detail` is optional. A source without it turns off `packRange` — a pack without a range in its name records a zero range,
-which is exactly the fallback that [decisions.md #84](../../agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
+which is exactly the fallback that [decisions/084](../../agents/decisions/084-a-pack-without-a-range-in-its-name-gets-its.md)
 already defined.
 
 ### The contract the source has to meet — and who fails it
@@ -104,7 +104,7 @@ already defined.
 Declaring this in the format is what keeps the descriptor from turning into a programming language:
 
 1. **Sort by seeders descending.** The page descent of
-   [decisions.md #57](../../agents/decisions.md#57-adaptive-pagination-sequential-with-a-candidate-floor-no-per-anime-budget)
+   [decisions/057](../../agents/decisions/057-adaptive-pagination-sequential-with-a-candidate.md)
    stops at the candidate floor because it trusts that the top is the best.
 2. **Actually paginate.** `{page}` has to return a different page.
 3. **Expose seeders per row.** `filterBySeeders` and `min_seeders` have nothing to filter without it.
@@ -148,7 +148,7 @@ It is the bulk of the diff, and it is search-and-replace. Good side effect: `Scr
 `searchNyaaForMovie` and company stop lying in their names.
 
 The `nyaaSearcher` from
-[decisions.md #14](../../agents/decisions.md#14-nyaasearcher--dependency-injection-for-nyaa-search-in-processanimeepisodes)
+[decisions/014](../../agents/decisions/014-nyaasearcher-dependency-injection-for-nyaa-search.md)
 survives almost intact — the four fields are already the right four, including `packRange`. Its
 name changes and `defaultNyaaSearcher()` starts receiving the loaded source instead of closing over package
 functions.
@@ -203,5 +203,5 @@ is met.
 
 `environment.md` (`NYAA_URL` goes away), `config.md` (`sources/` folder), `architecture.md` (the two
 new packages, and the negative fact "there is no `internal/nyaa`"), `testing.md` (descriptor-based mock),
-`sources.md` (starts describing the contract, not the source), and a new entry in `decisions.md` for
+`sources.md` (starts describing the contract, not the source), and a new entry in `docs/agents/decisions/` for
 "why the processing doesn't go in the descriptor" and "why there is no `Source` interface".

@@ -15,7 +15,7 @@ import (
 
 // MyAnimeList is a LIST source, never a metadata source: it only answers "which anime, in which
 // status, with what progress". Identity, episodes, airing and covers keep coming from AniList,
-// reached through the idMal mapping below — see decisions.md #95.
+// reached through the idMal mapping below — see decisions/095.
 //
 // This lives in package anilist on purpose: it needs ttlCache, the disk snapshot,
 // sendAnilistRequest and GetMediaByIDs, all internal to this package.
@@ -26,7 +26,7 @@ var malListURL = "https://myanimelist.net/animelist/%s/load.json?status=7&offset
 
 const (
 	malPageSize = 300
-	// Same TTL as frontendListCache, for the same reason (decisions.md #46): /api/v1/animes is
+	// Same TTL as frontendListCache, for the same reason (decisions/046): /api/v1/animes is
 	// polled every 30s per open tab.
 	malListTTL = 60 * time.Second
 	// A MAL -> AniList id mapping practically never changes.
@@ -322,7 +322,7 @@ func FilterMALEntries(entries []MALEntry, statuses []string) []MALEntry {
 // MediaLists carrying the MAL status and progress. The filter comes BEFORE the hydration on
 // purpose: mediaByIDCache lives 60s and the frontend polls every 30s, so hydrating the whole list
 // (mostly COMPLETED) would cost several AniList queries per minute per account — the burn
-// decisions.md #46 and #85 closed. Filtered, it's the handful of anime actually being watched.
+// decisions/046 and decisions/085 closed. Filtered, it's the handful of anime actually being watched.
 //
 // Id stays 0 (MAL has no AniList list-entry id) and CustomLists empty, so excluded_lists doesn't
 // apply — the same shape as a standalone anime's synthetic MediaList.

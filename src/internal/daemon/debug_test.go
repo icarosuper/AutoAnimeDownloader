@@ -159,7 +159,7 @@ func TestRunAnimeDebug_PerAnimeLimitAppliesWithoutPack(t *testing.T) {
 }
 
 // In a long series the multi search carries no episode number in the query and comes back
-// empty; what finds the episode is searchSingleEpisode (with zero-padding, decisions.md #56).
+// empty; what finds the episode is searchSingleEpisode (with zero-padding, decisions/056).
 // Without that fallback debug reported "0 magnets" because it hadn't searched — not because
 // Nyaa didn't have them.
 func TestRunAnimeDebug_FallsBackToSingleEpisodeSearch(t *testing.T) {

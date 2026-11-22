@@ -42,7 +42,7 @@ func malDeleteConfig() *files.Config {
 	}
 }
 
-// The AND rule of decisions.md #43 holds for a MAL account: still watching on MAL vetoes the
+// The AND rule of decisions/043 holds for a MAL account: still watching on MAL vetoes the
 // deletion an AniList account asked for.
 func TestDeletableMediaIDs_MALAccountWatchingVetoes(t *testing.T) {
 	got := deletableMediaIDs(malDeleteConfig(), map[string]statuses{

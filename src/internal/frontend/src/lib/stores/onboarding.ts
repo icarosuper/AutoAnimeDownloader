@@ -4,7 +4,7 @@ import { writable } from 'svelte/store'
  * The first-steps card: dismissal and the steps the user marked as done. Same shape as
  * `theme.ts` and `locale.ts`: `localStorage` with the `isBrowser` guard.
  *
- * Per BROWSER on purpose, not fields in `config.json` — see decisions.md. A config field
+ * Per BROWSER on purpose, not fields in `config.json` (decisions/063). A config field
  * would follow the user, but would put a UI preference into a schema the daemon reads and
  * would apply to every device at once.
  */

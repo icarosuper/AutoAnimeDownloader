@@ -2,7 +2,7 @@
   // "On lists" panel of the anime detail screen: every configured account that has the anime on
   // its list, in any status, with its own status, progress and score — the AniList "Following"
   // box, for the accounts this install tracks. The status comes from each account's own entry; the
-  // response's top-level `status` belongs to one arbitrary account (decisions.md #43) and is not
+  // response's top-level `status` belongs to one arbitrary account (decisions/043) and is not
   // used here.
   import { FaceNeutral, FaceSlightlyFrowning, FaceSlightlySmiling } from "@lucide/svelte";
   import type { AnimeListAccount } from "../lib/api/client.js";

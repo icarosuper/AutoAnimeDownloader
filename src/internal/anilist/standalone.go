@@ -15,10 +15,10 @@ import (
 // would invalidate the read of every other one.
 //
 // The path it protects is GET /api/v1/animes, which is polled every 30s per open tab and
-// reads the whole standalone list each time. Since the batch (decisions.md #65 and #72)
+// reads the whole standalone list each time. Since the batch (decisions/065 and decisions/072)
 // that's ONE query per 50 ids, not one per standalone; the cache still pays off because
 // with it the poll only goes to the network when some id expires — the same reason
-// frontendListCache exists (decisions.md #57).
+// frontendListCache exists (decisions/057).
 var mediaByIDCache = newTTLCache[*MediaList]()
 
 const mediaByIDTTL = 60 * time.Second
@@ -37,7 +37,7 @@ type MediaSearchResult struct {
 }
 
 // searchCache stores the result by term. It started paying off when the screen stopped
-// searching on every keystroke (decisions.md #50 (f)): with submit, the keys are whole
+// searching on every keystroke (decisions/050 (f)): with submit, the keys are whole
 // terms that repeat — the same user redoing the search, the unreleased toggle going back
 // and forth, another tab searching the same anime. The key is lowercase because AniList's
 // search is case-insensitive, so "One Piece" and "one piece" return the same thing and
@@ -115,7 +115,7 @@ func SearchMedia(term string, includeUnreleased bool) ([]MediaSearchResult, erro
 	if err != nil {
 		// Refused by the budget gate: AniList's catalog doesn't change in ten minutes, so
 		// serving the expired result keeps the screen working and gives the bucket back to
-		// the daemon pass, which is the only one that can't be postponed. See decisions.md #72.
+		// the daemon pass, which is the only one that can't be postponed. See decisions/072.
 		if errors.Is(err, ErrBudgetLow) {
 			if stale, ok := searchCache.getStale(key); ok {
 				return slices.Clone(stale), nil
@@ -238,7 +238,7 @@ func GetMediaByID(mediaID int, priority Priority) (*MediaList, error) {
 
 // GetMediaByIDs reads several animes by media id in a single query. It replaces the
 // GetMediaByID loop in the two places that walk the whole standalone list — the dominant
-// AniList budget consumer (decisions.md #65), which spent 1 request per standalone on every
+// AniList budget consumer (decisions/065), which spent 1 request per standalone on every
 // daemon pass and every 30s frontend poll.
 //
 // Returns a map id -> MediaList, with three distinct outcomes per id:

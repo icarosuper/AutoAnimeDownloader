@@ -291,7 +291,7 @@ func main() {
 	)
 	jobQueue.SetOrchestration(torrentManager, librarian)
 	jobQueue.Start()
-	// Converts the saved AnimeIDs from entry id to media id (decisions.md #43). Runs at boot, not
+	// Converts the saved AnimeIDs from entry id to media id (decisions/043). Runs at boot, not
 	// only in the verification pass, because the API starts serving /animes before the first tick —
 	// and with ids in the old format the listing duplicates animes that are in more than one
 	// account. Failing here isn't fatal: the verification pass retries and aborts if it still

@@ -10,7 +10,7 @@ result filtering, in pack selection, or after the download (torrent client / org
 it is a logic bug, pin it with a failing test before fixing.
 
 Argument: `$ARGUMENTS` (AniList **media** ID — not the MediaList entry ID; see
-[decisions.md #16](../../../docs/agents/decisions.md#16-anime_id-is-the-anilist-media-id-it-was-the-medialist-entry-id-until-the-migration)).
+[decisions/016](../../../docs/agents/decisions/016-anime-id-is-the-anilist-media-id-it-was-the.md)).
 No ID? It is in the web UI URL (`#/status/<id>`), in `GET /api/v1/animes`, or on the anime's
 anilist.co page (`anilist.co/anime/<id>`).
 
@@ -81,18 +81,18 @@ Classify the failure:
   `ErrSessionNotReady` (`completed_anime_path` empty, so `Config.DownloadPath()` is empty and there
   is no session — complete the config) or a magnet `parseInfoHash` couldn't read.
 - **No search log for the anime at all**, but `"Adopting episode already covered by a downloaded pack"`
-  → ownership by coverage ([decisions.md #78](../../../docs/agents/decisions.md#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)): the episode is
+  → ownership by coverage ([decisions/078](../../../docs/agents/decisions/078-a-torrents-unit-of-ownership-is-coverage-on-the.md)): the episode is
   inside a pack on disk owned by another entry (usually the previous cour). Correct behavior. If
   the file really isn't there, suspect the declared range (`BatchStart`/`BatchEnd` from the name).
 - **Reported not found, no per-episode search this pass**, with
   `"Skipping per-episode search: a recent search came back empty"` → the miss backoff
-  ([decisions.md #100](../../../docs/agents/decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes)).
+  ([decisions/100](../../../docs/agents/decisions/100-an-empty-per-episode-search-waits-before-repeating.md)).
   `earlier_episode_missing: true` means an earlier episode is the one missing. The backoff lives in
   memory: debug-anime bypasses it.
 - **`disk_full` while `df` shows space** → read `reserved by torrents still downloading` in the
   error. The guard counts what queued torrents still have to write plus `min_free_disk_gb`
-  ([decisions.md #101](../../../docs/agents/decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space),
-  [#93](../../../docs/agents/decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)).
+  ([decisions/101](../../../docs/agents/decisions/101-the-disk-guard-counts-what-the-queue-still-has-to.md),
+  [#93](../../../docs/agents/decisions/093-the-disk-guard-has-two-triggers-and-the-size-one.md)).
 - **Downloaded but not in the library** → the `organize` job (hardlink into
   `completed_anime_path` + webhook) is failing; see [embedded-client.md](embedded-client.md).
 

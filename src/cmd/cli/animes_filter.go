@@ -17,7 +17,7 @@ import (
 
 // The `animes` filters are a Go port of the dashboard's, which are client-side
 // (frontend/src/lib/utils/status.ts: scopeToAccounts, filterAnimes, sortAnimes). /api/v1/animes
-// takes no filter on purpose (decisions.md #125), so the CLI filters what it gets the same way
+// takes no filter on purpose (decisions/125), so the CLI filters what it gets the same way
 // the screen does. Change one, change the other.
 
 type animesView struct {
@@ -88,7 +88,7 @@ func resolveAccounts(values, configured []string) ([]string, error) {
 
 // scopeToAccounts keeps the animes at least one selected account tracks (OR) and re-projects
 // episodes_watched / episodes_pending onto THOSE accounts: the lowest progress, the highest
-// pending (decisions.md #125). An empty selection returns the list untouched.
+// pending (decisions/125). An empty selection returns the list untouched.
 func scopeToAccounts(animes []api.AnimeInfo, selected []string) []api.AnimeInfo {
 	if len(selected) == 0 {
 		return animes

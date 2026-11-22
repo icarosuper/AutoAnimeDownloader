@@ -96,7 +96,7 @@ func isVideoFile(name string) bool {
 }
 
 // sanitizeName strips filesystem-invalid characters. The season marker is KEPT: one
-// folder per AniList entry (decisions.md #45).
+// folder per AniList entry (decisions/045).
 func sanitizeName(name string) string {
 	sanitized := stripInvalidChars(name)
 	sanitized = strings.TrimSpace(sanitized)
@@ -122,7 +122,7 @@ func stripInvalidChars(name string) string {
 // least one file per episode, i.e. a complete pack that starts at episode 1 of the season. An
 // extra numbered 13 in a 01-12 pack keeps the minimum at 1 and shifts nothing. A PARTIAL pack
 // with continuous numbering stays as-is. Multi-entry packs persist SeriesOffset on
-// EpisodeStruct and slice through FilesInPackWindow (decisions.md #116) instead of this guess.
+// EpisodeStruct and slice through FilesInPackWindow (decisions/116) instead of this guess.
 func packEpisodeOffset(numbers []int, totalEpisodes int) int {
 	if totalEpisodes <= 0 || len(numbers) < totalEpisodes {
 		return 0
@@ -330,7 +330,7 @@ func (o *organizer) writeShowNFO(destDir, animeName string, animeID int) bool {
 // created on disk (sanitization, manual rename). One folder per anime; a folder gone from
 // disk is skipped.
 //
-// MUST ONLY RUN WITH AnimeIDs ALREADY MIGRATED to media ids (decisions.md #43): because the
+// MUST ONLY RUN WITH AnimeIDs ALREADY MIGRATED to media ids (decisions/043): because the
 // nfo is never overwritten, writing an entry id here would be permanent.
 func (o *organizer) BackfillShowNFOs(episodes []EpisodeStruct) {
 	seen := make(map[string]bool)

@@ -211,7 +211,7 @@ func TestGetMALEntries_UnknownUserFails(t *testing.T) {
 }
 
 // Hydration must only reach AniList for the entries that survive the status filter: hydrating a
-// whole list (mostly COMPLETED) on every poll would burn the budget decisions.md #46 protects.
+// whole list (mostly COMPLETED) on every poll would burn the budget decisions/046 protects.
 func TestGetMALList_FiltersBeforeHydrating(t *testing.T) {
 	fake := &malFake{pages: map[int]string{0: "[" +
 		malItem(1, 1, 2, 0) + "," + malItem(2, 2, 12, 0) + "," + malItem(3, 2, 12, 0) + "]"}}
@@ -286,7 +286,7 @@ func TestGetAnimeInfo_MALAccountLowerProgressWins(t *testing.T) {
 
 // TestGetAnimeInfo_CarriesEachAccountsEntry: the detail screen's "who has it" panel reads each
 // account's own status/progress/score through the collapse — the survivor's own fields belong to
-// one arbitrary account (decisions.md #43).
+// one arbitrary account (decisions/043).
 func TestGetAnimeInfo_CarriesEachAccountsEntry(t *testing.T) {
 	scored := `{"anime_id":2,"anime_title":"Anime 2","status":2,"num_watched_episodes":12,"is_rewatching":0,"score":7}`
 	fake := &malFake{

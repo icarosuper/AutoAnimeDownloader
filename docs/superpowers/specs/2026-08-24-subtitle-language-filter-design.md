@@ -73,7 +73,7 @@ rest of the pipeline filter. Measured, `q=frieren`:
 
 `s=seeders&o=desc` buries the PT-BR under the English release, which has an order of magnitude
 more seeders. It is the **exact shape** of the bug in
-[decisions.md #59](../../agents/decisions.md#59-batch-eligibility-stopped-being-metadata-and-became-a-result-filter)
+[decisions/059](../../agents/decisions/059-batch-eligibility-stopped-being-metadata-and.md)
 (pack buried under loose episodes). Seeing `1_3` takes a **separate search**, not a wider parameter.
 
 ---
@@ -407,7 +407,7 @@ After implementation, per [CLAUDE.md](../../../CLAUDE.md):
    `priorities.require_subtitle_language`, with the release note about an existing `criteria_order`
    not gaining `subtitle` on its own
 3. `docs/agents/architecture.md` — new `TorrentResult` fields, `nyaaCategories`
-4. `docs/agents/decisions.md` — entry for "why a separate search in `1_3` and not `c=1_0`",
+4. `docs/agents/decisions/` — entry for "why a separate search in `1_3` and not `c=1_0`",
    anchored on the Frieren 73/2 measurement
 5. `docs/agents/sources.md` — the Nyaa section states "Today the daemon uses `f=0`" and describes `c=1_2`
    as fixed; it becomes conditional

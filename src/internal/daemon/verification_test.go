@@ -89,7 +89,7 @@ func TestSearchAnilist_EmptyMediaStatusesAllowsNothing(t *testing.T) {
 	}
 }
 
-// --- Status-deletion rule across accounts (decisions.md #43) ---
+// --- Status-deletion rule across accounts (decisions/043) ---
 //
 // Download is OR (one account wanting it is enough) and deletion is AND (every account that
 // has the anime must want it). What these tests protect is the AND side, where a mistake

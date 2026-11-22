@@ -34,7 +34,7 @@ type nyaaSearcher struct {
 	// packRange reads a pack's REAL range from the Nyaa detail page. Separate from the searches
 	// because it isn't one: it runs after the filter and the sorting, only for the pack the name
 	// doesn't resolve, and only for the few the choice actually considers (see packSet).
-	// totalEpisodes is the AniList entry total (isolated total+1 extras, decisions.md #113).
+	// totalEpisodes is the AniList entry total (isolated total+1 extras, decisions/113).
 	packRange func(tr nyaa.TorrentResult, totalEpisodes int) (nyaa.BatchInfo, bool)
 	// misses holds the per-episode searches that came back empty, so a dead episode isn't asked
 	// again every check_interval (see searchMisses). nil = search every episode every time: the
@@ -62,7 +62,7 @@ const (
 // searchMisses remembers, per episode, when its per-episode search may run again after coming back
 // empty. The wait doubles on each miss (1h, 2h, 4h ... up to 24h): a swarm that's dead now is dead
 // ten minutes from now too, and asking again every check_interval was most of the pass's traffic
-// against Nyaa (decisions.md #100). The anime search still runs every pass, so a pack or a live
+// against Nyaa (decisions/100). The anime search still runs every pass, so a pack or a live
 // episode that shows up is caught there without waiting.
 //
 // Package state in memory, like stalledTorrents: a restart forgets the misses, and the price is
@@ -253,7 +253,7 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 
 	// Split-entry fallback: AniList cut one show into "<Base> - 1st STAGE" and "<Base> - 2nd & 3rd
 	// STAGE", groups release it as "<Base> - NN" counting on from the first entry
-	// (decisions.md #131). No season or part: the base title has neither.
+	// (decisions/131). No season or part: the base title has neither.
 	if base, offset, ok := splitEntryContinuation(titles, relations); ok {
 		results = searchNyaaWithVariants(anilist.Title{Romaji: &base}, func(title string) ([]nyaa.TorrentResult, error) {
 			return nyaa.ScrapNyaa(title, ep.Episode+offset, nil, nil, totalEpisodes)
@@ -270,7 +270,7 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 // entries are one show — but a movie never does: it is not an episode of the count.
 //
 // Both suffixes must carry an ordinal, the prequel's must be 1 and the entry's later
-// (decisions.md #131). A suffix without one ("Arc A-hen" / "Arc B-hen") names an arc that groups
+// (decisions/131). A suffix without one ("Arc A-hen" / "Arc B-hen") names an arc that groups
 // may number per entry, and shifting it would grab another season's episode. A prequel that is
 // not the first ("2nd STAGE" before "3rd STAGE") holds only its own episodes, and the entries
 // before it are out of reach (the relation nodes carry no relations of their own), so the offset

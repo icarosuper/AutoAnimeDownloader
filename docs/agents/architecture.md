@@ -20,7 +20,7 @@ src/internal/
   torrents/          → Embedded BitTorrent client (github.com/cenkalti/rain/v2) behind a TorrentBackend interface
   frontend/          → Svelte 5 + Vite + Tailwind 3 web UI (compiled to Go embed). No
                        component library: the primitives live in components/ui/ and the
-                       colors in lib/design/tokens.css (decisions.md #91)
+                       colors in lib/design/tokens.css (decisions/091)
   notifications/     → Webhook template interpolation and HTTP firing. Called by daemon on the episode events and the alerts (`daemon/health.go`); by job queue on DownloadCompleted.
   logger/            → zerolog-based structured logger (console + rotating file)
   datadir/           → The data dir path (~/.autoAnimeDownloader, %APPDATA%\.autoAnimeDownloader) — leaf package
@@ -55,33 +55,33 @@ The daemon ships as a single self-contained binary — the BitTorrent client is 
 |------|-----------------|---------|
 | `config.json` | `~/.autoAnimeDownloader/` | User settings (Anilist usernames, paths, intervals) |
 | `downloaded_episodes` | `~/.autoAnimeDownloader/` | Tracks downloaded episodes (JSONL, no extension) |
-| `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of `{anime_id, episode}`, no extension). The old format (an array of AniList node ids) is discarded with a warning when read — see decisions.md #52 |
+| `blocked_episodes` | `~/.autoAnimeDownloader/` | Episodes to skip (JSON array of `{anime_id, episode}`, no extension). The old format (an array of AniList node ids) is discarded with a warning when read — see decisions/052 |
 | `anime_settings` | `~/.autoAnimeDownloader/` | Per-anime settings keyed by AniList **media** ID (JSON map, no extension) |
 | `standalone_animes` | `~/.autoAnimeDownloader/` | Media IDs tracked **without** being in any AniList list (JSON array of IDs, no extension) |
 | `anilist_cache` | `~/.autoAnimeDownloader/` | Snapshot of the `anilist` caches (MAL lists and the MAL→AniList id mapping included), so the app survives AniList being down (JSON, no extension). **Opaque** bytes to `files` on purpose: the schema belongs to `anilist` (`persist.go`), and that's what keeps `files` from importing `anilist` just to persist its cache. Disposable — deleting it only costs an outage with no safety net until the next fetch |
 | `daemon.log` | `~/.autoAnimeDownloader/` | Rotating log file |
 | `pending_jobs.json` | `~/.autoAnimeDownloader/` | Persisted job queue (`organize` jobs) |
 | `session.db` | `~/.autoAnimeDownloader/` | rain resume database (bbolt) — piece bitfields, kept **outside** the download path so it survives a library path change |
-| `queue.json` | `~/.autoAnimeDownloader/` | Download queue state: `{"order": [...], "paused": [...]}`. Lives next to the resume database because it is torrent-client state, not user config. Missing/corrupted = rebuilt from `AddedAt`, never fatal — see decisions.md #41 |
+| `queue.json` | `~/.autoAnimeDownloader/` | Download queue state: `{"order": [...], "paused": [...]}`. Lives next to the resume database because it is torrent-client state, not user config. Missing/corrupted = rebuilt from `AddedAt`, never fatal — see decisions/041 |
 | `crash.log` | `~/.autoAnimeDownloader/` | Where the Go runtime writes a fatal panic (`debug.SetCrashOutput`, set in `main.go` before `logger.Init`). Empty on a clean run |
 | `crash-pending.log` | `~/.autoAnimeDownloader/` | The previous run's crash, promoted from `crash.log` at boot. Its existence is `pending_crash_at` in `/status` |
 | `crashes/` | `~/.autoAnimeDownloader/` | Handled crashes (`crash-<yyyymmdd-hhmmss>.log`, named from the crash's mtime), newest 5 kept |
-| `notification_state` | `~/.autoAnimeDownloader/` | What the alert notifications already said (JSON, no extension), owned by `notifications/state.go`: a state alert fires on the edge and a restart neither repeats it nor forgets a recovery. Missing/corrupted = starts empty with a warning; disposable — deleting it costs at most one round of repeated alerts ([decisions.md #127](decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)) |
-| `download_root.id` | `~/.autoAnimeDownloader/` | Id of the download folder the session is bound to. Its twin, `.aad_root`, lives **inside** the download folder; the pair is how a moved/trashed/replaced folder is detected — see decisions.md #34 |
+| `notification_state` | `~/.autoAnimeDownloader/` | What the alert notifications already said (JSON, no extension), owned by `notifications/state.go`: a state alert fires on the edge and a restart neither repeats it nor forgets a recovery. Missing/corrupted = starts empty with a warning; disposable — deleting it costs at most one round of repeated alerts ([decisions/127](decisions/127-a-state-alert-fires-on-the-edge-and-remembers-it.md)) |
+| `download_root.id` | `~/.autoAnimeDownloader/` | Id of the download folder the session is bound to. Its twin, `.aad_root`, lives **inside** the download folder; the pair is how a moved/trashed/replaced folder is detected — see decisions/034 |
 
 Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state files above (note the leading dot — same folder name as on Linux). The path is computed in **one** place, `datadir.Path()` — every file above (and the logger, the CLI's PID file and the crash files) goes through it. It's a leaf package on purpose: `files` imports `logger`, so the function can't live in `files`. There is no dotless `%APPDATA%\AutoAnimeDownloader\` variant.
 
 ## On-Disk Layout
 
-- **Download / seeding:** torrents live at `<Config.DownloadPath()>/<torrent-id>/...`, i.e. `<completed_anime_path>/.torrents/<torrent-id>/...` (rain's `DataDir` with `DataDirIncludesTorrentID`). Files are **never renamed here** — renaming would break seeding. Torrents keep seeding after completion. The download directory is **derived**, not user-configured — see decisions.md #31.
-- **Library (Jellyfin):** when a torrent completes, its video files are **hardlinked** into `<completed_anime_path>/<AnimeName>/` — one folder **per AniList entry**, season/cour marker kept (`sanitizeName`, decisions.md #45), plus a `tvshow.nfo` carrying the AniList id. With `RenameFilesForJellyfin`, every file gets the Jellyfin name `"Anime Name - E05.mkv"` — a single episode from its record, a batch file from the episode number parsed out of its own filename (`nyaa.ExtractEpisodeNumber`); files with no readable number (NCOP/NCED, extras, movies) and two files of one pack landing on the same number keep the raw filename. The hardlink shares bytes with the seeded copy, so no space is duplicated.
-- **Same volume, by construction:** the download directory lives inside `completed_anime_path`, so the old cross-filesystem failure mode is now structurally impossible. `Librarian.ProbePath(completedPath)` still validates that the filesystem supports hardlinks at all (exFAT/FAT32/some SMB shares don't) — it runs on config save and on every verification pass (decisions.md #26).
-- **Deletion** frees space by removing **both** links: the library hardlink (`Librarian.RemoveFromLibrary`, which also drops the sibling `.nfo`) and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). After those hardlinks, a library folder with no remaining video is wiped (`RemoveFolderIfNoVideo`). The end-of-pass sweep (`DeleteEmptyFolders`) then removes empty folders and folders left with only Jellyfin leftover metadata (`.nfo` files and `.chapters`) and still skips `.torrents` ([decisions.md #106](decisions.md#106-the-sweep-stays-nfo-only-the-contextual-wipe-is-no-video), [decisions.md #110](decisions.md#110-chapters-is-leftover-metadata-same-class-as-nfo)). A batch torrent shared by multiple episodes is only removed once **all** its episodes are in the delete set **and** unclaimed content does not hold (`canRemoveTorrent` / `unclaimedHolds`, [decisions.md #74](decisions.md#74-the-pack-exclusion-guards-unit-is-the-torrents-contents-not-the-list-of-records) / [decisions.md #117](decisions.md#117-off-list-bypasses-the-unclaimed-pack-guard)): either the pack's span is fully claimed, or no claimed anime of the group is in this pass's watching set. `watching == nil` (manual per-episode delete) keeps the #74 hold. While it is held back, its records are kept too (`forgettableKeys`) — they carry the declared range. The manual torrent-delete path passes `force` and bypasses that guard.
+- **Download / seeding:** torrents live at `<Config.DownloadPath()>/<torrent-id>/...`, i.e. `<completed_anime_path>/.torrents/<torrent-id>/...` (rain's `DataDir` with `DataDirIncludesTorrentID`). Files are **never renamed here** — renaming would break seeding. Torrents keep seeding after completion. The download directory is **derived**, not user-configured — see decisions/031.
+- **Library (Jellyfin):** when a torrent completes, its video files are **hardlinked** into `<completed_anime_path>/<AnimeName>/` — one folder **per AniList entry**, season/cour marker kept (`sanitizeName`, decisions/045), plus a `tvshow.nfo` carrying the AniList id. With `RenameFilesForJellyfin`, every file gets the Jellyfin name `"Anime Name - E05.mkv"` — a single episode from its record, a batch file from the episode number parsed out of its own filename (`nyaa.ExtractEpisodeNumber`); files with no readable number (NCOP/NCED, extras, movies) and two files of one pack landing on the same number keep the raw filename. The hardlink shares bytes with the seeded copy, so no space is duplicated.
+- **Same volume, by construction:** the download directory lives inside `completed_anime_path`, so the old cross-filesystem failure mode is now structurally impossible. `Librarian.ProbePath(completedPath)` still validates that the filesystem supports hardlinks at all (exFAT/FAT32/some SMB shares don't) — it runs on config save and on every verification pass (decisions/026).
+- **Deletion** frees space by removing **both** links: the library hardlink (`Librarian.RemoveFromLibrary`, which also drops the sibling `.nfo`) and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). After those hardlinks, a library folder with no remaining video is wiped (`RemoveFolderIfNoVideo`). The end-of-pass sweep (`DeleteEmptyFolders`) then removes empty folders and folders left with only Jellyfin leftover metadata (`.nfo` files and `.chapters`) and still skips `.torrents` ([decisions/106](decisions/106-the-sweep-stays-nfo-only-the-contextual-wipe-is-no.md), [decisions/110](decisions/110-chapters-is-leftover-metadata-same-class-as-nfo.md)). A batch torrent shared by multiple episodes is only removed once **all** its episodes are in the delete set **and** unclaimed content does not hold (`canRemoveTorrent` / `unclaimedHolds`, [decisions/074](decisions/074-the-pack-exclusion-guards-unit-is-the-torrents.md) / [decisions/117](decisions/117-off-list-bypasses-the-unclaimed-pack-guard.md)): either the pack's span is fully claimed, or no claimed anime of the group is in this pass's watching set. `watching == nil` (manual per-episode delete) keeps the #74 hold. While it is held back, its records are kept too (`forgettableKeys`) — they carry the declared range. The manual torrent-delete path passes `force` and bypasses that guard.
 - **No `config.json` versioning.** There is no `config_version` field, no migration chain and no
   startup block: `LoadConfigs` unmarshals **over** `getDefaultConfig()`, so an added or removed field
   needs no migration at all, and the two legacy renames are detected by **shape**, in `LoadConfigs`
-  only — `PUT /config` does not repeat them. See decisions.md #90.
-- **No `save_path` migration.** `daemon.MigrateSavePath` used to move a legacy `save_path`'s torrent folders into the derived download path at boot and at the top of every pass; it was removed along with the `Config.SavePath` field. An old `config.json` still carrying the key loads (JSON ignores unknown fields) but its data is **not** moved — moving it is a manual pre-upgrade step. See decisions.md #31.
+  only — `PUT /config` does not repeat them. See decisions/090.
+- **No `save_path` migration.** `daemon.MigrateSavePath` used to move a legacy `save_path`'s torrent folders into the derived download path at boot and at the top of every pass; it was removed along with the `Config.SavePath` field. An old `config.json` still carrying the key loads (JSON ignores unknown fields) but its data is **not** moved — moving it is a manual pre-upgrade step. See decisions/031.
 
 ## API
 
@@ -92,13 +92,13 @@ Key endpoints:
 
 | Method | Endpoint | Handler func | File |
 |--------|----------|-------------|------|
-| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — the `disk_low` threshold lives **only** on the server. It is the add-gate for a torrent of size 0: `free - reserved` against `min_free_disk_gb` (`daemon.DiskLow`), so the Status banner cannot disagree with what the daemon will refuse ([decisions.md #93](decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)). The AniList state is written by **any** call (a pass or a frontend poll), because they all go through `sendAnilistRequest` — decisions.md #65/#66. `anilist.cache_saved_at` is filled in on **read**, not when the state is written: it's not a fact about AniList, it's what the banner uses to say how old the cache on screen is. `pending_crash_at` (mtime of `crash-pending.log`, `null` when there is none) is what makes the web UI offer the report screen after a crash. `latest_version`/`latest_version_url` come from `updates.Latest()` (memory, no request on read) and drive the update badge next to the version in `NavRail`/`MoreMenu` (`UpdateBadge.svelte`), read once when the shell mounts |
-| `GET` | `/api/v1/last-check` | `handleLastCheck` | `endpoint_last_check.go` — memory only. `problems` (should have downloaded and did not) and `limits` (the config doing what it was configured to do). When `pass_error` is set both lists come empty, because `SetLastCheckError` clears the report (decisions.md #82). A manual download stays out: that path returns the error on its own HTTP response |
+| `GET` | `/api/v1/status` | `handleStatus` | `endpoint_status.go` — the `disk_low` threshold lives **only** on the server. It is the add-gate for a torrent of size 0: `free - reserved` against `min_free_disk_gb` (`daemon.DiskLow`), so the Status banner cannot disagree with what the daemon will refuse ([decisions/093](decisions/093-the-disk-guard-has-two-triggers-and-the-size-one.md)). The AniList state is written by **any** call (a pass or a frontend poll), because they all go through `sendAnilistRequest` — decisions/065 and decisions/066. `anilist.cache_saved_at` is filled in on **read**, not when the state is written: it's not a fact about AniList, it's what the banner uses to say how old the cache on screen is. `pending_crash_at` (mtime of `crash-pending.log`, `null` when there is none) is what makes the web UI offer the report screen after a crash. `latest_version`/`latest_version_url` come from `updates.Latest()` (memory, no request on read) and drive the update badge next to the version in `NavRail`/`MoreMenu` (`UpdateBadge.svelte`), read once when the shell mounts |
+| `GET` | `/api/v1/last-check` | `handleLastCheck` | `endpoint_last_check.go` — memory only. `problems` (should have downloaded and did not) and `limits` (the config doing what it was configured to do). When `pass_error` is set both lists come empty, because `SetLastCheckError` clears the report (decisions/082). A manual download stays out: that path returns the error on its own HTTP response |
 | `GET/PUT` | `/api/v1/config` | `handleConfig` | `endpoint_config.go` |
 | `GET` | `/api/v1/config/priorities/defaults` | `handlePriorityDefaults` | `endpoint_priorities.go` |
-| `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` — `next_airing_at` is a **timestamp**, not a countdown: the response is cached 60s and a precomputed counter would freeze. `media_status` is AniList media status, copied at merge; the dashboard type filter is client-side (`lib/utils/status.ts`). Search by `alt_names` is client-side. `episodes_downloaded` is **files on disk right now**, not a lifetime total: it DROPS when the daemon prunes watched episodes, so `released - downloaded` is not "still to download" — `episodes_pending` is ([decisions.md #88](decisions.md#88-the-progress-bar-derives-downloaded-from-episodes_pending-not-from-episodes_downloaded)). `episodes_watched`/`episodes_pending` are the **combined** view (lowest progress across accounts); `accounts` carries each account's own pair, which the dashboard user filter projects onto (`scopeToAccounts`). `accounts` holds only the accounts that have the anime in a **download** status — orphans included, cut by `inStatuses`, and an orphan's combined `episodes_watched` is the lowest among those kept accounts, not among every account — unlike `/animes/{id}/episodes`, which lists any status. Header `X-Failed-Accounts` (`FailedAccountsHeader`): comma-separated `<source>:<username>` of the accounts whose list fetch failed for this response; absent when none did. The body stays the bare array ([decisions.md #125](decisions.md#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)) |
+| `GET` | `/api/v1/animes` | `handleAnimes` | `endpoint_animes.go` — `next_airing_at` is a **timestamp**, not a countdown: the response is cached 60s and a precomputed counter would freeze. `media_status` is AniList media status, copied at merge; the dashboard type filter is client-side (`lib/utils/status.ts`). Search by `alt_names` is client-side. `episodes_downloaded` is **files on disk right now**, not a lifetime total: it DROPS when the daemon prunes watched episodes, so `released - downloaded` is not "still to download" — `episodes_pending` is ([decisions/088](decisions/088-the-progress-bar-derives-downloaded-from-episodes.md)). `episodes_watched`/`episodes_pending` are the **combined** view (lowest progress across accounts); `accounts` carries each account's own pair, which the dashboard user filter projects onto (`scopeToAccounts`). `accounts` holds only the accounts that have the anime in a **download** status — orphans included, cut by `inStatuses`, and an orphan's combined `episodes_watched` is the lowest among those kept accounts, not among every account — unlike `/animes/{id}/episodes`, which lists any status. Header `X-Failed-Accounts` (`FailedAccountsHeader`): comma-separated `<source>:<username>` of the accounts whose list fetch failed for this response; absent when none did. The body stays the bare array ([decisions/125](decisions/125-the-dashboard-user-filter-re-projects-progress.md)) |
 | `GET` | `/api/v1/anilist/search?q=&include_unreleased=` | `handleAniListSearch` | `endpoint_anilist_search.go` — a term shorter than 3 chars returns an empty list, **not** 400. `block_reason` per result (`""` = addable) |
-| `POST` | `/api/v1/standalone-animes` | `handleStandaloneAnimeAdd` | `endpoint_standalone_animes.go` — body `{"media_id":21,"magnet":"…"}` with `magnet` optional; optional `name`/`nyaa_id`/`size_bytes` for coverage and the disk guard (no `name` → the magnet's `dn`; a one-episode entry with no readable range still records episode 1, [decisions.md #123](decisions.md#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)). No magnet: auto-pick. Magnet: 409s first, then `DownloadStandaloneAnimeWithMagnet` adds the torrent then writes the id (not the handler); records only covered aired episodes. 400 `INVALID_MAGNET` if the value lacks the `magnet:` prefix. Answers `{"added": N}`; 409 `LIBRARY_NOT_CONFIGURED` / `ALREADY_STANDALONE` / `ALREADY_TRACKED` / `ALREADY_DOWNLOADED` |
+| `POST` | `/api/v1/standalone-animes` | `handleStandaloneAnimeAdd` | `endpoint_standalone_animes.go` — body `{"media_id":21,"magnet":"…"}` with `magnet` optional; optional `name`/`nyaa_id`/`size_bytes` for coverage and the disk guard (no `name` → the magnet's `dn`; a one-episode entry with no readable range still records episode 1, [decisions/123](decisions/123-a-one-episode-entry-covers-episode-1-even-when-the.md)). No magnet: auto-pick. Magnet: 409s first, then `DownloadStandaloneAnimeWithMagnet` adds the torrent then writes the id (not the handler); records only covered aired episodes. 400 `INVALID_MAGNET` if the value lacks the `magnet:` prefix. Answers `{"added": N}`; 409 `LIBRARY_NOT_CONFIGURED` / `ALREADY_STANDALONE` / `ALREADY_TRACKED` / `ALREADY_DOWNLOADED` |
 | `DELETE` | `/api/v1/standalone-animes/{id}?delete_episodes=<bool>` | `handleStandaloneAnimeRemove` | `endpoint_standalone_animes.go` — without `delete_episodes` the episodes stay and are marked `ManuallyManaged`. Either way the anime's `blocked_episodes` entries are cleared (`clearAnimeBlocks`) — not in `RemoveStandaloneAnime`, which the pass also calls when the anime enters a list and the blocks must stay |
 | `GET/PUT` | `/api/v1/animes/{id}/settings` | `handleAnimeSettings` | `endpoint_anime_settings.go` |
 | `POST` | `/api/v1/animes/{id}/debug` | `handleAnimeDebug` | `endpoint_anime_debug.go` — the `--debug-anime` pass run by the live daemon; trace goes to the daemon log, summary in the response. Minutes long: `Client.RunAnimeDebug` uses its own timeout, not the client's 30s |
@@ -145,7 +145,7 @@ Defaults to `"dev"` if not injected.
 
 The same `RunAnimeDebug` is also reachable on a running daemon through `POST /api/v1/animes/{id}/debug` (CLI `animes debug <id>`). Two entry points, one pass: the flag writes `.debug_<id>_N/`, the endpoint logs into the daemon's log and answers the summary.
 
-`RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the pack search/selection (`partitionSearchResults` + `pickBatches`) that lifts the per-anime limit when it resolves, and the per-episode `searchSingleEpisode` fallback when no batch/movie/single magnet was found — so the debug pass reports the pipeline the daemon actually runs (see [decisions.md #58](decisions.md#58-runanimedebug-mirrors-processanimeepisodes-enumeration-pack-resolution-and-single-fallback)). The one deliberate difference: it searches every uncovered episode, without the miss backoff of [decisions.md #100](decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes).
+`RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the pack search/selection (`partitionSearchResults` + `pickBatches`) that lifts the per-anime limit when it resolves, and the per-episode `searchSingleEpisode` fallback when no batch/movie/single magnet was found — so the debug pass reports the pipeline the daemon actually runs (see [decisions/058](decisions/058-runanimedebug-mirrors-processanimeepisodes.md)). The one deliberate difference: it searches every uncovered episode, without the miss backoff of [decisions/100](decisions/100-an-empty-per-episode-search-waits-before-repeating.md).
 
 `scripts/robustness-animes.txt` (curated media IDs, one per line) + `scripts/debug-batch.sh` (`make debug-batch`) run that pass over the whole list and write a triaged `.debug_batch/report.md`.
 
@@ -162,13 +162,13 @@ with no peers), `manual_download.go` (downloads coming from the API), `standalon
 `preview.go`.
 
 **One pass at a time**: `AnimeVerification` takes `verificationMu.TryLock()` and returns immediately
-if another is already running (decisions.md #67).
+if another is already running (decisions/067).
 
 **Download priority order** (in `processAnimeEpisodes`) — the project's central flow:
 
 0. **Ownership by coverage** (`adoptCoveredEpisodes`, before any search): an episode already contained
    in a pack on disk, under **any** `anime_id` of the same series, becomes a record pointing at that
-   hash — no download and no Nyaa (decisions.md #78)
+   hash — no download and no Nyaa (decisions/078)
 1. **Movie** → `resolveMovie` → `skipSubfolder=true`
 2. **Packs**, resolved before the episode loop, covering the window from the first pending episode
    → `partitionSearchResults` + `pickBatches`/`assignBatches`. Eligibility comes from the search
@@ -176,7 +176,7 @@ if another is already running (decisions.md #67).
 3. **Single episode**, per still-uncovered episode. An episode can skip this search without
    any Nyaa line in the log: after an empty search it waits 1h→24h before the next one, and the
    episodes after the first miss of the pass skip it too (`searchMisses`, in memory,
-   [decisions.md #100](decisions.md#100-an-empty-per-episode-search-waits-before-repeating-and-stops-the-later-episodes)).
+   [decisions/100](decisions/100-an-empty-per-episode-search-waits-before-repeating.md)).
    The manual download (`DownloadStandaloneAnime`) and `RunAnimeDebug` don't apply it.
 
 All three go through the `min_seeders` floor (`filterSearchResults`).
@@ -185,11 +185,11 @@ All three go through the `min_seeders` floor (`filterSearchResults`).
 
 - `DownloadStandaloneAnime` **must never** call `handleSavedEpisodes`. With only one anime's
   episodes in hand and `delete_watched_episodes` on, `identifyEpisodesNotInWatching` would delete
-  the rest of the library ([decisions.md #49](decisions.md#49-standalone-anime-tracked-by-the-list-is-the-snapshot-the-daemon-processes-and-downloadstandaloneanime-never-calls-handlesavedepisodes))
+  the rest of the library ([decisions/049](decisions/049-standalone-anime-tracked-by-the-list-is-the.md))
 - `DownloadStandaloneAnimeWithMagnet` adds the torrent, then the standalone id, then coverage
   records — inverting that leaves a tracked id with no torrent
-  ([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
-  An unknown pack range writes **no** episode records, not `1..total` (decisions.md #84). It also
+  ([decisions/108](decisions/108-empty-first-search-skips-the-picker-custom-q-drops.md)).
+  An unknown pack range writes **no** episode records, not `1..total` (decisions/084). It also
   must never call `handleSavedEpisodes`.
 - `max_episodes_per_anime` is lifted **only after** a pack was actually chosen; without a pack, the
   limited selection stands and the oldest episodes are the ones that stay. `selectEpisodes` runs
@@ -199,25 +199,25 @@ All three go through the `min_seeders` floor (`filterSearchResults`).
   a save below progress is not "checked" and the prune would delete it, ignoring
   `watched_episodes_to_keep`
 - A pack range that neither the name nor the file list resolved is recorded as **zero**, not as
-  `1..total`: both sources failed and "I don't know" is the only honest record (decisions.md #84)
+  `1..total`: both sources failed and "I don't know" is the only honest record (decisions/084)
 - The "unknown range" sentinel is the **end** (`BatchEnd`). A start of 0 or negative is a legitimate
   range ("00 ~ 12", or a season pack recorded under a later cour)
 - `checkDiskSpace` bars a download, **never** the verification pass. A `statfs` error does not
   block. It receives the torrent size and is called **per candidate**: the second in the list may
   fit where the first did not, and the size trigger still applies with the GiB floor off
-  ([#93](decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)).
+  ([#93](decisions/093-the-disk-guard-has-two-triggers-and-the-size-one.md)).
   In the pass it goes through a per-pass `diskBudget` (`diskbudget.go`): the size is checked on top
   of what the session's incomplete torrents and this pass's adds still have to write
-  ([#101](decisions.md#101-the-disk-guard-counts-what-the-queue-still-has-to-write-not-only-free-space)).
+  ([#101](decisions/101-the-disk-guard-counts-what-the-queue-still-has-to.md)).
   A pack that passes `packsThatFit` and then loses at `reserve` is dropped and the choice runs
-  again ([#111](decisions.md#111-a-pack-that-loses-at-reserve-does-not-keep-the-window))
+  again ([#111](decisions/111-a-pack-that-loses-at-reserve-does-not-keep-the.md))
 - The pack size ceiling is applied **twice**: in the Nyaa search and again in the daemon filter
-  (decisions.md #80). Changing only one of the two does not change the behavior
+  (decisions/080). Changing only one of the two does not change the behavior
 
 **Network cost.** `packSet` resolves a pack's range **on demand** — from the name when the name
 carries it, otherwise from the detail page — and memos **including failure**; without that,
 `assignBatches`, which walks the packs once per episode, would become one request per episode. Cap
-of `maxPackDetailFetches` (3) detail pages per anime per pass. See [decisions.md #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything).
+of `maxPackDetailFetches` (3) detail pages per anime per pass. See [decisions/084](decisions/084-a-pack-without-a-range-in-its-name-gets-its.md).
 
 **`preview.go`** — `PreviewWholeTitleTorrents` is the picker list: the same search + filter +
 partition as the pass, capped at 8, **without** adding a torrent, writing a standalone id, or
@@ -227,35 +227,35 @@ skips title variants and season/part. Empty list is not an error; Nyaa transport
 preview has its own loop so "Nyaa down" is not an empty list. The picker **does not persist**: this
 function is request-scoped; candidates live in a frontend memory cache for one navigation; a reload
 of `#/add/:id/torrents` fetches again; custom `q` is not saved
-([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
+([decisions/108](decisions/108-empty-first-search-skips-the-picker-custom-q-drops.md)).
 
 **Numbering axes.** `packAxis` are the hypotheses for how much to add to the entry's **local**
 number: relative (0, always first), continuous across the season (`ComputeEpisodeOffset` — the gate
-requires `part >= 2` and PREQUEL `TV`/`TV_SHORT`, or `ONA` when the entry is an ONA and has no TV prequel, [decisions.md #9](decisions.md#9-prequel-offset-gate-requires-part--2)
-and [decisions.md #133](decisions.md#133-an-ona-entry-counts-its-ona-prequel-in-the-season-offset-while-the-series-axis-still-walks-tv-prequels-only)) and absolute across the series
-(`anilist.Series.Offset`). The zero-value = relative only, the old behavior ([decisions.md #79](decisions.md#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)).
+requires `part >= 2` and PREQUEL `TV`/`TV_SHORT`, or `ONA` when the entry is an ONA and has no TV prequel, [decisions/009](decisions/009-prequel-offset-gate-requires-part-2.md)
+and [decisions/133](decisions/133-an-ona-entry-counts-its-ona-prequel-in-the-season.md)) and absolute across the series
+(`anilist.Series.Offset`). The zero-value = relative only, the old behavior ([decisions/079](decisions/079-pack-choice-asks-does-it-cover-the-window-not-is.md)).
 Among the hypotheses that cover the episode, the winner is the one that makes the pack **end** on
 the entry's last episode — tie-break by count, see `sources.md`.
 
 **`coverage.go`** — the unit of ownership stops being `files.EpisodeKey{AnimeID, Episode}` and
-becomes the range the torrent covers on the **series' absolute axis** (decisions.md #77). That is
+becomes the range the torrent covers on the **series' absolute axis** (decisions/077). That is
 what stops cour 2 from re-downloading from Nyaa the season pack that is already on disk under
 cour 1. The daemon seeds the index (`resolveSeriesIndex`): the ids of the pass **plus** the
 `anime_id`s from `episodes.json` — the previous cour, already `COMPLETED`, left the pass universe,
-and it is its offset that converts the range (decisions.md #78). A resolve error is logged, it
+and it is its offset that converts the range (decisions/078). A resolve error is logged, it
 does not abort.
 
 **Reconciliation** (`reconcileLibrary`, `verification.go`) — on boot and periodically, enqueues an
 `organize` job for every completed torrent whose episode is not yet in the library. The criterion is
-empty `LibraryPaths`, not the hardlink missing from disk (decisions.md #29); `clearLibraryPathsAfterRootSwap`
-is the only exception, when `Ensure` reports `RootSwapped` (decisions.md #34). With `disable_seeding` on,
+empty `LibraryPaths`, not the hardlink missing from disk (decisions/029); `clearLibraryPathsAfterRootSwap`
+is the only exception, when `Ensure` reports `RootSwapped` (decisions/034). With `disable_seeding` on,
 every completed torrent with records is enqueued, organized or not: that is how the setting stops
 the torrents that were seeding before it was turned on.
 
 **`stalled.go`** — called at the top of the pass, right after `backend.List()`. A torrent at zero
 peers for more than an hour **leaves the session** through the same `HandleTorrentFailure` as a
 torrent rain stopped with an error: no new path, and the next pass searches Nyaa again
-([#94](decisions.md#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)).
+([#94](decisions/094-a-stalled-torrent-is-dropped-through-the-failure.md)).
 The clock is package-level (`stalledTorrents`), in memory, and is **not** the frontend's
 `stallTracker.ts` — that one paints the "no seeds" chip at 10 minutes and does not talk to the
 daemon. The snapshot passed into the function is not rebuilt after the drop: whoever left is
@@ -276,7 +276,7 @@ filled counts as done — no re-link and no re-firing the webhook — so the com
 reconciliation pass can both enqueue without fear. Created in `main.go` before `NewServer`, wired
 to the backend/librarian by `SetOrchestration`.
 
-**`disable_seeding` has two halves, in two packages** ([decisions.md #119](decisions.md#119-disable_seeding-means-no-upload-at-all-and-a-released-torrent-is-not-a-lost-one)).
+**`disable_seeding` has two halves, in two packages** ([decisions/119](decisions/119-disable-seeding-means-no-upload-at-all-and-a.md)).
 The session half is in `torrents`: `SetUploadDisabled` → the next `Ensure` rebuilds the session
 with no unchoking and an empty allowed-fast set (`rainConfig`). Call it BEFORE `Ensure`, like
 `SetMaxActiveDownloads`. The library half is in `jobs.go`: `organizeTorrent` → `releaseTorrent`
@@ -291,14 +291,14 @@ flag and then removes, so that order is what keeps a just-released episode from 
 **`migration.go`** — runs on boot **and** at the top of every pass. `verification.go` reloads the
 config right after calling it, because the migration persists a changed config that the rest of the
 pass needs to see. The `save_path` migration that lived here was removed along with the field
-(decisions.md #31).
+(decisions/031).
 
 **`report.go`** — detail fields are flattened with `omitempty`, **never** a `map[string]any`: that
 does not generate a usable TS type. The precedence cascade of the three search problems is in
-decisions.md #81.
+decisions/081.
 
 **`state.go`** — `SetLastCheckError` **clears** `lastCheckReport`. Consequence: `SetLastCheckReport`
-must be called after the pass-end `SetLastCheckError(nil)` (decisions.md #82).
+must be called after the pass-end `SetLastCheckError(nil)` (decisions/082).
 `GetLastCheckReport` returns a **value**, so the handler can fill `pass_error` without writing to
 the shared object.
 
@@ -310,14 +310,14 @@ which has its own phrase: it degrades, it does not break.
 
 **`debug.go`** — mirrors `processAnimeEpisodes` (enumeration, pack resolution, single fallback) so
 the debug pass reports the pipeline production actually runs
-([decisions.md #58](decisions.md#58-runanimedebug-mirrors-processanimeepisodes-enumeration-pack-resolution-and-single-fallback)).
+([decisions/058](decisions/058-runanimedebug-mirrors-processanimeepisodes.md)).
 No torrent backend and no `episodes.json`; output goes to `.debug_<animeId>_<N>/` in the caller's
 cwd, **not** in `~/.autoAnimeDownloader`.
 
 ### `src/internal/files/` — persistence
 
 **There is no `save_path`.** The download directory is derived by `Config.DownloadPath()`
-(`<completed_anime_path>/.torrents`), computed on every call (decisions.md #31).
+(`<completed_anime_path>/.torrents`), computed on every call (decisions/031).
 
 **`EpisodeKey{AnimeID, Episode}` is an episode's identity** across the app — episode file,
 blocked list, API routes.
@@ -341,24 +341,24 @@ differently. Returns `""` — **never** an error — for every unanswered case. 
 have an analogous structure but would need a second parser, and anime in practice is `.mkv`.
 
 **`librarian.go`** — hardlink of completed videos into `<completed_anime_path>/<AnimeName>/`, one
-folder **per AniList entry**, with the season/cour marker preserved (decisions.md #45) and a
+folder **per AniList entry**, with the season/cour marker preserved (decisions/045) and a
 `tvshow.nfo` carrying the AniList id (so the Jellyfin plugin matches by id, not by folder name).
 On the Jellyfin rename, a pack file's number comes from `FilesInPackWindow` (this entry's slice of
-a multi-season/cour pack, decisions.md #116) or, for a leftover sequel pack numbered 13–24, from
-the file's own name minus `packEpisodeOffset` (decisions.md #68). With no readable number
+a multi-season/cour pack, decisions/116) or, for a leftover sequel pack numbered 13–24, from
+the file's own name minus `packEpisodeOffset` (decisions/068). With no readable number
 (NCOP/NCED, extras, movies, episode 0) or on a name collision inside the pack, it keeps the raw name; two
 files with the same basename (per-season subfolder, flattened) use the relative path so one does
 not overwrite the other. Claimed extras (OVA / `.5` / `S00E` / E00) are hardlinked into the
 entry's folder even when they sit in a season group of their own. `Organize` is idempotent. `organizeTorrent` groups the hash's records by
 `AnimeID` so S1 and S2 of a shared pack each get their own folder.
 `ProbePath` validates that the filesystem supports hardlinks (exFAT/FAT32/some SMB do not) and runs
-on config save and on every pass (decisions.md #26, #31). `BackfillShowNFOs` is **not** on the
+on config save and on every pass (decisions/026 and decisions/031). `BackfillShowNFOs` is **not** on the
 `Librarian` interface — `main.go` holds the concrete `*organizer` — and only runs when
 `MigrateAnimeIDsToMedia` succeeded.
 
 **`parser.go`** — JSONL, one object per line. The legacy text format (`id:hash:name`) was removed
 along with `EpisodeID`: with no anime id and no episode number, that record has no key
-(decisions.md #52).
+(decisions/052).
 
 **`filesystem.go`** — the `FileSystem` interface exists for tests (`MockFileSystem`); it includes
 `Link`, which is what the `Librarian` uses.
@@ -367,19 +367,19 @@ along with `EpisodeID`: with no anime id and no episode number, that record has 
 
 Split by resource, same package `main` (`main_test.go` keeps testing unexported helpers): `main.go`
 holds the app, global flags, `start` / `stop` / `open` / `loop`; `args.go` reorders flags that
-follow positionals before urfave parses ([decisions.md #109](decisions.md#109-flags-after-positionals-are-reordered-before-urfave-parses))
+follow positionals before urfave parses ([decisions/109](decisions/109-flags-after-positionals-are-reordered-before.md))
 — tests must call `run`, not `newApp().Run`; `config.go`, `status.go`,
 `animes.go`, `torrents.go`, `logs.go`, `report.go`, `notifications.go` hold the matching trees.
 There is no root `episodes` command and no `GetEpisodes` — `GET /api/v1/episodes` is gone; listing
 is `animes episodes <id>`. `animes`' filters (`--account`, `--name`, `--unwatched`, `--type`,
 `--sort`) live in `animes_filter.go`, a hand port of the dashboard's `lib/utils/status.ts`
 (`scopeToAccounts`, `filterAnimes`, `sortAnimes`) — `/api/v1/animes` takes no filter
-([decisions.md #125](decisions.md#125-the-dashboard-user-filter-re-projects-progress-onto-the-selected-accounts-not-just-their-membership)),
+([decisions/125](decisions/125-the-dashboard-user-filter-re-projects-progress.md)),
 so a change to one must be made in the other.
 
 `report` and `report crash-ack` call `diagnostics.Build` / `ArchivePendingCrash` against
 `datadir.Path()` and never the HTTP client, so they work with the daemon dead. `--yes` is a CLI
-gate: the API has no confirmation parameter ([decisions.md #104](decisions.md#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)).
+gate: the API has no confirmation parameter ([decisions/104](decisions/104-yes-is-a-cli-gate-the-api-keeps-its-query-defaults.md)).
 
 ### `src/internal/api/` — HTTP
 
@@ -399,7 +399,7 @@ fields, instead of dropping the anime or failing the request. `countPendingEpiso
 (`watched_episodes_to_keep`).
 
 **`endpoint_anime_episodes.go`** — `AnimeEpisodeInfo` **does not carry an episode name**: AniList
-does not expose a per-episode title (`AiringNode` only has number and time) — decisions.md #52.
+does not expose a per-episode title (`AiringNode` only has number and time) — decisions/052.
 `animeId` is the **media** id, the same one as the `anilist.co/anime/{id}` link; there is no
 separate `anilistId` field.
 
@@ -413,7 +413,7 @@ you click" and "the back returns an error" agree by construction.
 **`endpoint_torrent_candidates.go`** — the picker **does not persist**. Candidates live in a
 frontend memory cache for one navigation; a reload of `#/add/:id/torrents` fetches again. Custom
 `q` is not saved. The daemon has no picker session
-([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
+([decisions/108](decisions/108-empty-first-search-skips-the-picker-custom-q-drops.md)).
 
 **`endpoint_torrents.go`** — a file's `path` is the **raw** path from the metadata and is never
 rewritten to "Ep NN": the point of the panel is reading fansub/resolution/codec off it. `Progress`
@@ -431,7 +431,7 @@ real `airingSchedule` node when one exists, because AniList only keeps a window 
 **Identity: `Media.Id`, never `MediaList.Id`.** The same anime on several accounts appears once per
 account, each with its own `MediaList.Id`/`Progress`/`Status`, but the same `Media`. `Media.Id` is
 what `episodes.json`, `anime_settings`, the `/animes/{id}/*` routes and the AniList link use
-([decisions.md #43](decisions.md#43-an-animes-identity-is-mediaid-status-is-a-per-account-question-download--or-deletion--and)).
+([decisions/043](decisions/043-an-animes-identity-is-mediaid-status-is-a-per.md)).
 Older installs are converted by `MigrateAnimeIDsToMedia`, with the pass aborting until it succeeds.
 
 **`DedupeByMedia` collapses entries by `Media.Id` and keeps the **smallest** `Progress`** — an
@@ -448,7 +448,7 @@ progress, score and avatar — the per-account answer the surviving entry no lon
   not vote; an account in a neutral status (`PLANNING`) **vetoes**, and so does an account whose
   list failed to fetch. The statuses come from `fetchListStatuses`, which asks each account only
   about the animes **on disk** — never the delete-status lists whole, which blew the rate limit
-  every pass ([decisions.md #130](decisions.md#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists))
+  every pass ([decisions/130](decisions/130-status-deletion-asks-anilist-only-about-the-animes.md))
 
 <a id="media-status-filter"></a>**Two status filters, similar names, different things**:
 `Config.DownloadStatuses` filters by **list** status (`MediaListStatus` — the user's relationship with
@@ -463,17 +463,17 @@ whatever its current status — see `endpoint_animes.go` above.
 **Every query declares a `Priority`, and there is no default on purpose**: a new query does not
 compile until someone decides the criticality. The budget gate (`health.go`) refuses
 `PriorityDisposable` with `ErrBudgetLow` when AniList quota is low — nothing goes out, and the
-package health does not change (decisions.md #72). The limit is 30 req/min per IP.
+package health does not change (decisions/072). The limit is 30 req/min per IP.
 
 **Health is exposed as a code, never a ready-made phrase** — the daemon does not know the browser
 locale (same reason as `daemon/passerror.go`). It is written by **every** response that goes through
 `sendAnilistRequest`, and AniList returns 200 with an error in the body, so the envelope is read
-too (decisions.md #65/#66).
+too (decisions/065 and decisions/066).
 
 **Caches** (`ttlCache[T]`, all in memory; the ones below also go to an on-disk snapshot, see
 `persist.go`): `GetFrontendAnimeList` 60s per `username+statuses` — the `/api/v1/animes` poll, 30s
-per open tab, is what used to blow AniList's quota (decisions.md #46); `customLists` 5min
-(decisions.md #11); `mediaByIDCache` 60s per media id (standalones); `seriesCache` 24h; `searchCache`
+per open tab, is what used to blow AniList's quota (decisions/046); `customLists` 5min
+(decisions/011); `mediaByIDCache` 60s per media id (standalones); `seriesCache` 24h; `searchCache`
 10min per `lowercase-term+includeUnreleased` — **the only one with a free-text key**, which is why
 it is the only one with a cap (`searchCacheMaxEntries`, total drop, not LRU) and the only one
 `ttlCache.size()` serves. `passListCache` and `mediaEntryCache` are **fallback only**: written with
@@ -490,7 +490,7 @@ disambiguation that bites most here:
 
 That is why the detail screen **must not** be served from the frontend cache: it would lack
 `relations`, and that is where the manual-download Nyaa search comes from. It is also why there are
-three `MediaList` caches instead of one (decisions.md #92).
+three `MediaList` caches instead of one (decisions/092).
 
 **`persist.go` — the on-disk snapshot (`anilist_cache`, in the config folder).** It exists for one
 thing: screens and the pass keep standing with AniList down, restart included. **The invariant that
@@ -504,14 +504,14 @@ cache mode, offline flag or repository layer — `ttlCache` remains the only rea
 `errors.Is` sees `err != nil` and behaves as before the cache existed, which is the safe default;
 whoever opts in to using the value writes that at the call site. `/animes` uses it to **refuse** the
 orphan refresh (that would be the #65 burst against a dead API); `verification.go` uses it to
-**accept** the list, status-based deletion included — with the risk recorded in decisions.md #92.
+**accept** the list, status-based deletion included — with the risk recorded in decisions/092.
 `timeUntilAiring` is relative to the fetch, so write and read go through `stampAiringAt`/`rebaseAiring`;
 without that, a pass served from cache would forever conclude that nothing new has aired.
 
 **`series.go` — the series' absolute axis.** The continuous numbering that crosses cour and part,
 which a large share of groups use in file names. AniList **has no franchise id**: the `PREQUEL`
-chain is the only source (decisions.md #71), and because one query only expands 2 levels of
-`relations`, resolving the chain is a BFS, not a read (decisions.md #77). Each fetched media teaches
+chain is the only source (decisions/071), and because one query only expands 2 levels of
+`relations`, resolving the chain is a BFS, not a read (decisions/077). Each fetched media teaches
 **two** links (levels 0 and 1, the only ones in an authoritative position); the grandparent, whose
 `relations` came cut, goes back to the frontier instead of becoming a root. The seed comes ready
 from the caller because **`anilist` cannot import `files`** — and only the daemon knows the right
@@ -526,7 +526,7 @@ account loses its deletion veto; and the status filter must run **before** `GetM
 frontend poll hydrates the whole list every minute. The MAL account loops live next to the AniList
 ones in `daemon/verification.go` and `api/endpoint_animes.go`/`api/standalone_guard.go`, keyed
 `"mal:" + user` in `listStatuses`
-([decisions.md #95](decisions.md#95-myanimelist-is-a-list-source-not-a-metadata-source)).
+([decisions/095](decisions/095-myanimelist-is-a-list-source-not-a-metadata-source.md)).
 
 ### `src/internal/nyaa/`
 
@@ -536,8 +536,8 @@ ones in `daemon/verification.go` and `api/endpoint_animes.go`/`api/standalone_gu
 **The pack path needs more than one pending episode — except a one-episode entry**, which
 `daemon.packsForWindow` lets through with **unlabeled packs only**: its release usually names no
 number, so it is neither an episode nor a labeled pack
-([decisions.md #123](decisions.md#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range)).
-`ExtractSeason` never reads "Cour N" (a part, [decisions.md #10](decisions.md#10-cour-n-treated-as-part-n-not-as-a-distinct-concept));
+([decisions/123](decisions/123-a-one-episode-entry-covers-episode-1-even-when-the.md)).
+`ExtractSeason` never reads "Cour N" (a part, [decisions/010](decisions/010-cour-n-treated-as-part-n-not-as-a-distinct-concept.md));
 `reCourMarker` is only a cut point for `firstMarkerIndex`.
 
 **Adaptive pagination** (`fetchSearchPages`, shared by the three searches): page 1, and it only
@@ -545,61 +545,61 @@ walks further while accepted candidates are below `enoughCandidates` (3) and the
 to `ActiveMaxSearchPages()`. An error is only an error on page 1.
 
 **Episode search drops batches and movies, and the right guard is `hasMovieMarker`, not `isMovie`**
-(decisions.md #53) — two similar functions and only one is safe here. A long series (>100 episodes)
+(decisions/053) — two similar functions and only one is safe here. A long series (>100 episodes)
 **also** gets the 3-digit zero-padded variant, never in place of the plain one, and what unlocks it
-is `LastAiredEpisode` (decisions.md #56).
+is `LastAiredEpisode` (decisions/056).
 
 **`ExtractPart` returns `nil` when the name declares two parts** ("(Part 1 + Part 2)", "(Season 4 Part
 03+04)"): it covers both halves, and the first match would lie.
 
 **The range read from the name is the first _plausible_ match, not the first match**
-(decisions.md #83): it rejects a resolution tag (`[720-1080p]`) and an inverted range
+(decisions/083): it rejects a resolution tag (`[720-1080p]`) and an inverted range
 (`"Euphonium 2 - 01 ~ 13"` → `2..1`).
 
 **`PackFileRange`** reads the range the pack actually carries from the detail-page file list, on the
-same ruler as the name (decisions.md #84). Min-max **skips OP/ED, `S00E`, OVA/OAD, `.5` and episode 0**; an
+same ruler as the name (decisions/084). Min-max **skips OP/ED, `S00E`, OVA/OAD, `.5` and episode 0**; an
 isolated unmarked `total+1` drops when the AniList total is passed in; a contiguous run past the
 total stays
-([decisions.md #113](decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays)).
+([decisions/113](decisions/113-packfilerange-min-max-skips-extrasova-an-isolated.md)).
 Restart-per-season packs (S01E01–12 + S02E01–12) **flatten onto the concatenated axis** (1–24)
 so `#74`/`#78` treat them like a continuous pack; season folders already on one axis (Anime Time
 AoT 01–87) keep min-max
-([decisions.md #116](decisions.md#116-restart-per-season-packs-flatten-onto-the-concatenated-axis-organize-slices-by-anilist-id)).
+([decisions/116](decisions/116-restart-per-season-packs-flatten-onto-the.md)).
 **`IsVideoFile` lives here, not in `files`**, because both
 read the same pack file list (the Librarian after download, `PackFileRange` before) and `files`
 already imports `nyaa` — the other way would be a cycle. The loose-number-before-extension pattern
 is compiled from `videoExtensions`
-([decisions.md #112](decisions.md#112-the-loose-episode-number-before-an-extension-is-every-video-extension-compiled-from-the-map)):
+([decisions/112](decisions/112-the-loose-episode-number-before-an-extension-is.md)):
 adding an extension to the map is what numbers `Anime 01.<ext>`. Do not add `\.` to the dash
 terminator (`- 17.5` would become 17).
 
 **`detail.go` — view-page scrape for the picker.** `FetchTorrentDetail` builds the URL through
 `ViewURL` (the `NYAA_URL` override lives only in `getNyaaBaseURL`) and **never takes a URL from the
 caller**
-([decisions.md #105](decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller));
+([decisions/105](decisions/105-fetchtorrentdetail-builds-the-view-url-itself-it.md));
 HTTP 404 is `ErrTorrentNotFound`, any other transport/non-200 is `ErrNyaaUnavailable`. Live Nyaa
 stores the description as markdown source (`markdown-text`, newlines as `&#10;`); we render it
 with goldmark and then sanitise
-([decisions.md #115](decisions.md#115-nyaa-descriptions-are-markdown-source-render-then-sanitise)).
+([decisions/115](decisions/115-nyaa-descriptions-are-markdown-source-render-then.md)).
 Movie rows fill `DetailURL` the same way pack rows do — the description pane needs it.
 `PackFileRange` still takes an absolute URL plus the AniList entry total (isolated `total+1`);
 daemon callers that only have an id use `ViewURL`.
 
 **Sorting** (`priorities.go`): the `health` criterion compares the **band** (`healthTier`, floors
-`10/50` seeders), not the raw score (decisions.md #55, #107). `SortTorrentResults` omits
+`10/50` seeders), not the raw score (decisions/055 and decisions/107). `SortTorrentResults` omits
 `source`; `SortFinishedSeriesResults` includes it and the daemon applies that sort only when
 `Media.Status == FINISHED` (`rankSeriesResults` in `daemon/search.go`). `SetPriorities` and
 `SetMaxSearchPages`/`SetMaxBatchTorrentSizeGB` use the same atomic+restore pattern, pushed by
 `files.LoadConfigs` on every successful load.
 
 Resolution is canonicalized **in the extractor**, and codec presets are a reordering done in the
-frontend (decisions.md #70).
+frontend (decisions/070).
 
 **Title matching** (`nyaa_match.go`): technical tokens are stripped, the name is cut at the first
 season/episode marker, and the Jaccard threshold depends on query length — `0.8` for ≤3 tokens
 (stops "SAO" matching "SAO Alternative Gun Gale Online"), `0.4` for ≥4 (a fansub that embeds both
 title translations). Only if the truncated name fails is each alternative title written **after**
-the marker tried on its own (decisions.md #75).
+the marker tried on its own (decisions/075).
 
 **`nyaa_regex.go`** is package-level precompiled regex, so it is not recompiled inside a
 per-torrent loop. `videoExtEpisodeRegexp` is the one builder (from `videoExtensions` at init).
@@ -630,7 +630,7 @@ by hand with `src/lib/utils/torrentStatus.ts` in the frontend**.
 
 **Download-folder identity** (`rootmarker.go`): `.aad_root` lives **inside** the download folder and
 travels with it; `download_root.id` lives in the config folder, which the user does not move. The
-pair is how a moved/deleted/swapped folder is detected (decisions.md #34). With no id recorded
+pair is how a moved/deleted/swapped folder is detected (decisions/034). With no id recorded
 (first run or upgrade) it is **never** a swap. The swap is latched by `Ensure` and read by
 `ConsumeRootSwap`, because the manual-download endpoints also call `Ensure`.
 
@@ -647,7 +647,7 @@ sending.
 result fires **nothing** — not found is waiting, reported by `episode_stuck` after 48 h — and neither
 does an add refused for a full disk (`disk_low`'s `blocked` level). `DownloadFailed` is a real
 failure only (add refused, torrent dropped), once per (episode, infohash) via `firstFailure`
-([decisions.md #128](decisions.md#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)).
+([decisions/128](decisions/128-download-failed-reports-a-real-failure-once-per.md)).
 
 **One torrent is one notification.** A pack's records reach the template as ONE `Episode` with
 `PackSize` = its record count (`daemon.episodeItems`, `torrentItem` in `processAnimeEpisodes`), so
@@ -657,7 +657,7 @@ a pack is one push and one Jellyfin/Plex scan for `new_episode`, `download_faile
 webhook **per item** (two animes deleted together are two pushes). In `processAnimeEpisodes` the
 loop meets a pack once per episode: `new_episode` goes out on the first one, keyed by the first
 candidate's magnet; `download_failed` waits for the loop to end and goes out only if no episode
-got the torrent added ([decisions.md #124](decisions.md#124-a-torrent-is-one-notification-a-pack-goes-out-as-one-item-naming-only-the-anime-not-one-webhook-per-record)).
+got the torrent added ([decisions/124](decisions/124-a-torrent-is-one-notification-a-pack-goes-out-as.md)).
 
 **Per-webhook anime filter (`anime_sources`).** The package doesn't know AniList or the standalone
 file: the daemon injects `daemon.NotificationSources` with `SetSourceResolver` at boot. The
@@ -666,7 +666,7 @@ fetched (download statuses in `searchAnilist`, delete statuses of the animes on 
 `fetchListStatuses`), plus the
 standalone file. Each filtered webhook gets its share of the items, with the template built from
 that share. An anime no list holds is **unknown and fail-open**: it reaches every filtered webhook,
-and so does everything when no resolver is wired ([decisions.md #126](decisions.md#126-a-webhooks-anime-filter-is-resolved-when-it-fires-from-the-lists-the-last-pass-fetched-not-stored-on-the-episode-record)).
+and so does everything when no resolver is wired ([decisions/126](decisions/126-a-webhooks-anime-filter-is-resolved-when-it-fires.md)).
 
 **Alert events** (`isAlert`: `library_missing` onward) are about the library or the daemon, not
 one episode being fetched. Their items carry `Text` — the line, verbatim, no episode-run grouping —
@@ -674,7 +674,7 @@ and the title comes from `alertTitle`. The text and the edge tracking that keeps
 firing every pass live in `daemon/health.go`; `notifications` only delivers and keeps the
 `notification_state` store (`UpdateState`). `check_failing` is counted from a defer in
 `AnimeVerification`, not in the loop: a `POST /check` pass counts, a cancelled one doesn't
-([decisions.md #127](decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)).
+([decisions/127](decisions/127-a-state-alert-fires-on-the-edge-and-remembers-it.md)).
 The alerts about a **finished** pass are evaluated in `alertsAfterPass`, called right after
 `SetLastCheckReport` with the aggregated `problems`/`limits`: an aborted or cancelled pass has no
 report and evaluates none of them. `disk_low` there is not the `/status` `disk_low` flag (the
@@ -692,7 +692,7 @@ pass's `watching` set are dropped.
 
 The library alerts (`season_complete` onward) read `episodes.json` **again** after
 `handleSavedEpisodes`, not the start-of-pass snapshot: what the pass's own cleanup deleted is never
-reported. The `seeded` flag ([decisions.md #127](decisions.md#127-a-state-alert-fires-on-the-edge-and-remembers-it-in-notification_state-not-every-pass-the-state-holds)) keeps the first pass after the
+reported. The `seeded` flag ([decisions/127](decisions/127-a-state-alert-fires-on-the-edge-and-remembers-it.md)) keeps the first pass after the
 upgrade from announcing the whole library (`episode_limit_reached`, `season_complete`).
 `leftover_files` is skipped on a pass where some configured list account did not answer
 (`passLists.allRecordedSince`, from the per-account record times): `accountLists` keeps a failed
@@ -712,7 +712,7 @@ Only the web form (`Notifications.svelte`, `nameTaken`) refuses a name that is a
 backend does not validate it, so `config set` can still save two webhooks with the same name.
 
 Notifications are grouped by window, and JSON escaping happens **only in the body and only when the
-preset declares `Content-Type: application/json`** (decisions.md #47).
+preset declares `Content-Type: application/json`** (decisions/047).
 Header values have `\n`/`\r` stripped: `net/http` rejects the whole request with them, and ntfy
 uses a header for the title.
 
@@ -739,12 +739,12 @@ Builds the report bundle from **files in the data dir only** — config, `anime_
 asks the running daemon. That's what lets the CLI `report` command build the same bundle
 with the daemon dead. The config is read as a raw map, **not** through `LoadConfigs`: a config that
 fails to load is exactly what a report must still carry. Nothing is ever sent; the user attaches
-the file by hand ([decisions.md #102](decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file)).
+the file by hand ([decisions/102](decisions/102-the-bug-report-has-no-backend-consent-is-the-act.md)).
 
 - **Redaction is by log key** (`redact.go`, `keyClasses`): keep / drop / pseudonymize (usernames →
   `userN`) / title (`<title-N>` when titles are off). A key missing from the table is treated as a
   title at runtime, and `keys_test.go` fails the build for any `.Str("key", …)` in the source that
-  isn't classified ([decisions.md #103](decisions.md#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified)).
+  isn't classified ([decisions/103](decisions/103-log-redaction-is-by-key-and-a-test-forces-every.md)).
   On top of the keys, free text is scrubbed: webhook URLs/headers anywhere → `<webhook-N>`, the
   home dir → `~`, URLs to hosts outside the allowlist → `<url>`. `"HTTP request"` lines are dropped
   whole (they carry the LAN IPs)
@@ -778,7 +778,7 @@ the file by hand ([decisions.md #102](decisions.md#102-the-bug-report-has-no-bac
 
 ### `src/internal/frontend/src/` — Svelte 5
 
-There is no component library: daisyUI was removed (decisions.md #91). Button, modal, checkbox,
+There is no component library: daisyUI was removed (decisions/091). Button, modal, checkbox,
 chip and the like live in `components/ui/`; color comes from `lib/design/tokens.css`, which is the
 single source of truth and switches themes through its own `[data-theme]`.
 
@@ -790,19 +790,19 @@ single source of truth and switches themes through its own `[data-theme]`.
 (`#/notifications`), `Report.svelte` (`#/report`). Config, Priorities and Notifications
 ask before leaving with unsaved changes (`stores/unsavedChanges.ts`, installed in `App.svelte`
 before `<Router>`); a new page with a Save button joins by calling `setUnsaved` against a
-`snapshot` baseline ([decisions.md #129](decisions.md#129-unsaved-changes-means-different-from-what-was-loaded-and-a-capture-phase-hashchange-listener-vetoes-the-router)). The picker cache (`stores/pickerCache.ts`) is
+`snapshot` baseline ([decisions/129](decisions/129-unsaved-changes-means-different-from-what-was.md)). The picker cache (`stores/pickerCache.ts`) is
 **in-memory**: Add fills it before navigating so the first paint is free; a reload of the picker
 URL fetches; confirm clears it. Add's first search (`getTorrentCandidates` with no `q`) decides
 the route: empty `items` POSTs today's add and stays (same toasts, no picker); a non-empty list
 or `NYAA_UNAVAILABLE` pushes `#/add/:id/torrents` without POSTing; any other GET error toasts and
 stays
-([decisions.md #108](decisions.md#108-empty-first-search-skips-the-picker-custom-q-drops-variants-description-is-on-demand-add-with-magnet-writes-the-id-after-the-torrent)).
+([decisions/108](decisions/108-empty-first-search-skips-the-picker-custom-q-drops.md)).
 AnimeDetail's header "Replace torrent" pushes `#/status/:id/torrents` — there is **no**
 whole-title magnet modal; the per-episode magnet modal stays. The description pane is on-demand
 (`GET …/torrent-candidates/{nyaaId}`), never bundled into the list. There is **no** page-level
 sticky footer: **Download this** lives in the list-card footer and **Download magnet** in the
 magnet strip below the grid; a paste does not override the list button
-([decisions.md #114](decisions.md#114-two-picker-confirms-a-paste-does-not-override-download-this)).
+([decisions/114](decisions/114-two-picker-confirms-a-paste-does-not-override.md)).
 A reload of the picker URL reads identity from `media` on the candidates payload — Add has not
 written a tracked anime yet, so `GET /animes/{id}` cannot be the source.
 
@@ -842,7 +842,7 @@ lives only there).
   `src/internal/torrents/status.go`
 - **A banner is degraded state; a toast is a failed action.** `lib/domain/systemBanner.ts` picks ONE
   banner by precedence (backend unreachable → backend 5xx → AniList down → rate limit), never stacks
-  them (decisions.md #66). Client errors become a `toast.error` unless the caller passes `silent`.
+  them (decisions/066). Client errors become a `toast.error` unless the caller passes `silent`.
   A reportable banner's "Report" link opens `#/report` too, pre-filled with the banner's kind and
   detail — not a bare GitHub link.
   An **unexpected** failure (5xx, network, unreadable response — not a 4xx, not an abort) gets a
@@ -854,4 +854,4 @@ lives only there).
   route change could throw away an unsaved form). The last crash reacted to is remembered in
   `localStorage` (`aad.lastPendingCrash`)
 - Progress comes from **one** `Stats()` per torrent, pulled only while a screen is open
-  (decisions.md #30) — `speedHistory` and `stallTracker` don't poll on their own: the owning screen pushes them
+  (decisions/030) — `speedHistory` and `stallTracker` don't poll on their own: the owning screen pushes them

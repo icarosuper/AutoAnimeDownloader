@@ -14,7 +14,7 @@ export type BackendState = 'ok' | 'unreachable' | 'server_error'
 
 /**
  * CONSECUTIVE failures required before raising the alarm. An isolated failure on a 5s poll is
- * network noise; the banner exists for state that persists (see decisions.md #66). It's also
+ * network noise; the banner exists for state that persists (see decisions/066). It's also
  * what lets us live with `silent: true` without reintroducing the toast spam that option exists
  * to prevent.
  */

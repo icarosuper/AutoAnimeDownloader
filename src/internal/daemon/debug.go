@@ -131,7 +131,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 
 		// Same fallback as processAnimeEpisodes: the multi search carries no episode number in the query,
 		// and in a long series the first pages sorted by seeders are only the recent episodes.
-		// searchSingleEpisode is what carries the zero-padding (decisions.md #56). Without this call
+		// searchSingleEpisode is what carries the zero-padding (decisions/056). Without this call
 		// debug reported "0 magnets" on One Piece/Naruto because it hadn't searched, not because Nyaa
 		// didn't have them.
 		if len(magnets) == 0 {

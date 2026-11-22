@@ -17,7 +17,7 @@ docker compose -f docker/docker-compose.test.yml up --build \
 
 **Always run `go test ./...` after any code change.**
 
-`go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions.md#23-integration-tests-skip-unless-daemon_url-is-set-explicitly). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
+`go test ./...` **skips** the integration suite: it only runs when `DAEMON_URL` is set explicitly. That gate is deliberate — see [Decisions #23](decisions/023-integration-tests-skip-unless-daemon-url-is-set.md). Do not "fix" the skip by removing the gate; run the tests through Docker instead.
 
 Same gate, same reason, for the smoke test against the real AniList:
 
@@ -25,7 +25,7 @@ Same gate, same reason, for the smoke test against the real AniList:
 AAD_LIVE_ANILIST=1 go test ./src/internal/anilist/ -run Live -v
 ```
 
-`live_smoke_test.go` measures what no mock proves: the size of the `airingSchedule` WINDOW AniList returns (One Piece starts at episode 1123; an old anime comes back with an empty schedule) — the premise of `EpisodeList`, see [Decisions #52](decisions.md#52-the-episode-list-is-synthesized-and-an-episodes-key-is-anime-number). Run it when you touch `anilist/episodes.go`.
+`live_smoke_test.go` measures what no mock proves: the size of the `airingSchedule` WINDOW AniList returns (One Piece starts at episode 1123; an old anime comes back with an empty schedule) — the premise of `EpisodeList`, see [Decisions #52](decisions/052-the-episode-list-is-synthesized-and-an-episodes.md). Run it when you touch `anilist/episodes.go`.
 
 Same gate, against the real Nyaa:
 
@@ -36,7 +36,7 @@ AAD_LIVE_NYAA=1 go test ./src/internal/nyaa/ -run Live -v -timeout 25m
 `live_pack_measure_test.go` **is not a regression test — it's a measuring instrument**: it never
 fails, it only prints. For each real pack in a sample of searches it shows the range in the name,
 the one `PackFileRange` reads from the file list, the folder tree with each folder's count and
-range, and the size per episode. It's what produced the numbers in [Decisions #84](decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything)
+range, and the size per episode. It's what produced the numbers in [Decisions #84](decisions/084-a-pack-without-a-range-in-its-name-gets-its.md)
 and in the "Detail page" section of [sources.md](sources.md). Run it before reopening any decision
 about pack coverage or the pack ceiling — it takes ~2min and makes ~70 requests to nyaa.si, 1.5s
 apart. `AAD_LIVE_QUERIES="a batch|b batch"` replaces the neutral sample.
@@ -44,7 +44,7 @@ apart. `AAD_LIVE_QUERIES="a batch|b batch"` replaces the neutral sample.
 `live_extras_measure_test.go` is a third sample (extras vs next-cour files). Same gate,
 same politeness delay. Run `-run TestLive_ExtrasVsNextCour`. Offline pins:
 `TestExtrasBuckets_KnownPackFiles`. The production rule is
-[decisions.md #113](decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays).
+[decisions/113](decisions/113-packfilerange-min-max-skips-extrasova-an-isolated.md).
 
 ## Test Structure
 
@@ -180,7 +180,7 @@ Run this package with `-race`: `TestSessionManagerConcurrentEnsureAndDelegation`
 
 ### 7. `nyaaSearcher` Injection (`processAnimeEpisodes`)
 
-`nyaaSearcher` (`daemon/search.go`) has three search fields: `searchAnime`, `searchSingleEpisode`, `searchMovie` — no `searchBatch`/`searchMultiple` anymore — plus `packRange` (the detail page, below) and `misses` (the per-episode miss backoff, decisions.md #100). A fake searcher leaves `misses` nil, which turns the backoff off: every uncovered episode is searched on every call. A test of the backoff itself sets `misses: &searchMisses{byKey: map[files.EpisodeKey]searchMiss{}}` and moves `retryAt` into the past to end the wait (`TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes`). `searchAnime` alone returns **both** packs and episodes in one list (mirroring `nyaa.ScrapNyaaForAnime`); production splits them with `daemon.partitionSearchResults`.
+`nyaaSearcher` (`daemon/search.go`) has three search fields: `searchAnime`, `searchSingleEpisode`, `searchMovie` — no `searchBatch`/`searchMultiple` anymore — plus `packRange` (the detail page, below) and `misses` (the per-episode miss backoff, decisions/100). A fake searcher leaves `misses` nil, which turns the backoff off: every uncovered episode is searched on every call. A test of the backoff itself sets `misses: &searchMisses{byKey: map[files.EpisodeKey]searchMiss{}}` and moves `retryAt` into the past to end the wait (`TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes`). `searchAnime` alone returns **both** packs and episodes in one list (mirroring `nyaa.ScrapNyaaForAnime`); production splits them with `daemon.partitionSearchResults`.
 
 `searcherFor` (`daemon/limits_test.go`) builds a fake searcher from separate `batch`/`multiple`/`single`/`movie` slices for test readability, then combines `batch` (tagged `IsBatch: true`) and `multiple` into the one list `searchAnime` returns:
 
@@ -218,7 +218,7 @@ fix is one line in that table, picking by what the **value** can hold:
 - `pseudonymize` — account names (AniList/MAL usernames) → `user1`, `user2`…
 - `drop` — never useful in a report and identifying (`remote_addr`)
 
-When in doubt, `title`. See [decisions.md #103](decisions.md#103-log-redaction-is-by-key-and-a-test-forces-every-new-key-to-be-classified).
+When in doubt, `title`. See [decisions/103](decisions/103-log-redaction-is-by-key-and-a-test-forces-every.md).
 
 ## Never Let Background Work Outlive Its Test
 

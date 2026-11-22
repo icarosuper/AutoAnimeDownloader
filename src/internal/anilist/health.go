@@ -21,7 +21,7 @@ const (
 
 // Health is the last known AniList state. It lives in the package (not in daemon.State) because
 // EVERY call goes through sendAnilistRequest: the daemon pass and the /animes poll write here
-// without any caller needing to propagate an error. See decisions.md #65.
+// without any caller needing to propagate an error. See decisions/065.
 type Health struct {
 	State string `json:"state" example:"ok"`
 	// Message is the RAW AniList message. A 403 from a blocked IP brings the reason written for
@@ -65,7 +65,7 @@ func setHealth(state, message string, retryAt time.Time) {
 
 // clearHealth marks AniList as healthy. Called on every useful response — the banner goes away
 // on the first clean 200, never on a timer: the state either ended or it didn't (see
-// decisions.md #66).
+// decisions/066).
 func clearHealth() {
 	if h := health.Load(); h == nil || h.State != HealthOK {
 		health.Store(&Health{State: HealthOK})
@@ -74,7 +74,7 @@ func clearHealth() {
 
 // graphQLErrors is AniList's error envelope. The official docs are explicit: a 200 can carry
 // an error here (invalid query, suppressed field). Without reading this field, that case
-// becomes an empty response with no diagnosis — see decisions.md #65.
+// becomes an empty response with no diagnosis — see decisions/065.
 type graphQLErrors struct {
 	Errors []struct {
 		Message string `json:"message"`
@@ -130,7 +130,7 @@ func retryAfter(headerValue string) time.Time {
 // Priority declares how much an AniList call can be sacrificed when the request budget is
 // running out. There is NO default: the parameter is required on every call, and that's why
 // it exists as a parameter instead of a wrapper — a new query can't compile without someone
-// deciding its criticality. See decisions.md #72.
+// deciding its criticality. See decisions/072.
 type Priority int
 
 const (
@@ -160,7 +160,7 @@ var ErrFromCache = errors.New("anilist: served from the local cache")
 
 const (
 	// budgetFloor is how many requests the gate reserves for critical traffic. The measured
-	// limit is 30/min per IP (decisions.md #72) and a daemon pass costs a few requests;
+	// limit is 30/min per IP (decisions/072) and a daemon pass costs a few requests;
 	// leaving a third of the bucket aside is enough for it to never bump into the frontend poll.
 	budgetFloor = 10
 	// budgetValidity is how long a reading lasts, and it's the gate's REQUIRED EXIT: AniList's
@@ -179,7 +179,7 @@ var budget atomic.Pointer[budgetReading]
 
 // recordBudget stores X-RateLimit-Remaining from a response. Called on EVERY response,
 // including errors: a 404 and an invalid query consume quota the same as a 200
-// (decisions.md #72), so a counter that only looked at success would be optimistic exactly
+// (decisions/072), so a counter that only looked at success would be optimistic exactly
 // when things are already going badly. The header is authoritative because it already sums
 // the other consumers of the same IP — none of our counters can see that.
 func recordBudget(header http.Header) {

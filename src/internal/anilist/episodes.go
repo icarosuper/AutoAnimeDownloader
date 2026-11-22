@@ -9,7 +9,7 @@ import "sort"
 // entries per media and discards the old ones. On One Piece page 1 starts at episode
 // 1123 — the previous 1122 do not exist in the API — and on an old/finished anime (Naruto,
 // Shingeki no Kyojin) the schedule comes back COMPLETELY empty. While the episode list came
-// from there, those animes simply had no episodes to download (see decisions.md #52).
+// from there, those animes simply had no episodes to download (see decisions/052).
 //
 // That's why the list is SYNTHESIZED from fromEpisode to the last aired episode, using the real
 // schedule node when it exists (it brings a real airingAt/timeUntilAiring) and a fabricated
@@ -17,7 +17,7 @@ import "sort"
 // their date.
 //
 // A fabricated node has ID zero: after the key migration to (AnimeID, EpisodeNumber) nothing
-// identifies an episode by schedule ID, so it doesn't need to be unique (see decisions.md #52).
+// identifies an episode by schedule ID, so it doesn't need to be unique (see decisions/052).
 func EpisodeList(ml MediaList, fromEpisode int) []AiringNode {
 	if fromEpisode < 1 {
 		fromEpisode = 1

@@ -1,0 +1,13 @@
+# 23. Integration tests skip unless `DAEMON_URL` is set explicitly
+
+**Location:** `src/tests/integration/integration_test.go` (`requireDaemon`, `defaultTestPath`, `testSavePath`/`testCompletedPath`); `docker/docker-compose.test.yml` (`test` service env).
+
+**What it looks like:** `go test ./...` reports the entire integration suite as SKIP on a developer machine, even when a daemon *is* running on `localhost:8091`. The obvious-looking "fix" is to drop the `DAEMON_URL` check and let `probeDaemon()` decide, since a reachable daemon seems like exactly the condition the tests want.
+
+**Why it's right:** These tests are not read-only. `TestAPIEndpoints` and `TestFullDownloadFlow` both `PUT /api/v1/config`, overwriting `save_path`, `completed_anime_path`, `anilist_username`, `check_interval` and `excluded_lists` on whatever daemon answers. Gating on reachability alone meant that following `CLAUDE.md`'s "run `go test ./...` after any change" silently reconfigured the developer's own daemon: the save path became `/tmp/test`, and on distros where `/tmp` is a tmpfs the daemon then downloaded real torrents into RAM until the filesystem filled. A live daemon is not consent to reconfigure it, so the opt-in is an explicit env var. `docker-compose.test.yml` sets `DAEMON_URL=http://daemon:8091`, so Docker and CI runs are unaffected.
+
+The paths written into the config are likewise no longer hardcoded: they come from `TEST_SAVE_PATH`/`TEST_COMPLETED_PATH`, defaulting to `~/aad-test/downloads` and `~/aad-test/library`. Two constraints shaped that default — it must not be under `/tmp` (tmpfs), and both paths had to share one filesystem, because the config endpoint runs a real hardlink probe and rejected cross-volume pairs with HTTP 400. The second constraint died with `save_path` (see the amendment at the end of this entry): the probe is `Librarian.ProbePath`, one path, and what it refuses today is a filesystem without hardlinks. Docker overrides both to `/app/data/aad-test/*`, inside the daemon container's mounted volume; note the strings are interpreted by the **daemon** container, not the test container.
+
+**Don't "fix" by:** removing the `DAEMON_URL` gate so the tests "work" during `go test ./...`; hardcoding the config paths again; putting the default paths back under `/tmp`; or pointing `TEST_COMPLETED_PATH` at a filesystem without hardlinks (the probe rejects it).
+
+**Amendment (see #31):** `testSavePath`/`TEST_SAVE_PATH` were removed — the integration test no longer sends `save_path` at all, since the field doesn't exist anymore. `Librarian.ProbePaths` (the two-argument save/completed variant) was replaced by `Librarian.ProbePath(completedPath string)`.

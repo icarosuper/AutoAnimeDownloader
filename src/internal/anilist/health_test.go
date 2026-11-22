@@ -58,7 +58,7 @@ func TestHealthClassification(t *testing.T) {
 			want:   HealthOutage,
 		},
 		{
-			// The case that used to go unnoticed: 200 on HTTP, error in the envelope. See decisions.md #65.
+			// The case that used to go unnoticed: 200 on HTTP, error in the envelope. See decisions/065.
 			name:    "200 with errors in the envelope is classified by the inner status",
 			status:  200,
 			body:    `{"errors":[{"message":"Too Many Requests.","status":429}],"data":null}`,
@@ -112,7 +112,7 @@ func TestHealthRetryAtFromHeader(t *testing.T) {
 }
 
 // TestHealthClearsOnFirstGoodResponse locks the banner rule: it goes away on the first clean
-// 200, never on a timer (decisions.md #66).
+// 200, never on a timer (decisions/066).
 func TestHealthClearsOnFirstGoodResponse(t *testing.T) {
 	fail := true
 	restore := MockAniListDo(func(*http.Request) (*http.Response, error) {

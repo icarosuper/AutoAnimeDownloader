@@ -113,7 +113,7 @@ var criterionCompare = map[string]func(a, b TorrentResult) int{
 
 // healthTierFloors are the floors of the health tiers: seeders 0–9 / 10–49 / 50+ ⇒ tier
 // 0..2. min_seeders (default 3) already dropped 0–2, so 10 is the first split among
-// survivors. 50 vs 5000 is the same download on a home connection (decisions.md #107).
+// survivors. 50 vs 5000 is the same download on a home connection (decisions/107).
 var healthTierFloors = []int{10, 50}
 
 // healthTier returns the torrent's health tier (higher = healthier).
@@ -221,7 +221,7 @@ var finishedSeriesCriteria = map[string]bool{
 // sourceCompare ranks by the sources list. An empty extract (weekly SubsPlease, most WEB
 // packs) canonicalizes to web-dl so it ties a tagged WEB-DL and loses to BD — the codec-style
 // "either side empty ⇒ tie" would make untagged WEB tie a tagged BD and throw the criterion
-// away (decisions.md #107).
+// away (decisions/107).
 func sourceCompare(a, b TorrentResult) int {
 	return sourcePriority(canonicalSource(ExtractSource(a.Name))) - sourcePriority(canonicalSource(ExtractSource(b.Name)))
 }
@@ -235,7 +235,7 @@ func canonicalSource(source string) string {
 
 // SortFinishedSeriesResults is the series sort when Media.Status is FINISHED: same
 // criteria as SortTorrentResults plus source. The daemon calls this as a second full
-// sort; ScrapNyaa* keep using SortTorrentResults (decisions.md #107).
+// sort; ScrapNyaa* keep using SortTorrentResults (decisions/107).
 func SortFinishedSeriesResults(results []TorrentResult) []TorrentResult {
 	return sortByCriteria(results, filterCriteria(ActivePriorities().CriteriaOrder, finishedSeriesCriteria))
 }

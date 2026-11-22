@@ -57,7 +57,7 @@ func stalling(t torrents.TorrentInfo) bool {
 // The action reuses HandleTorrentFailure whole instead of inventing a new path: it is exactly
 // what the app already does with a torrent rain stopped with an error — download_failed webhook,
 // leaves the session (keeping the bytes already downloaded) and the NEXT pass searches Nyaa
-// again, possibly finding a more alive release (decisions.md #24). The received snapshot is not
+// again, possibly finding a more alive release (decisions/024). The received snapshot is not
 // mutated: whoever left the session now is only re-searched on the next pass, not in the middle
 // of this one.
 //

@@ -281,7 +281,7 @@ func handleAnimesAdd(c *cli.Context) error {
 
 // candidateForMagnet finds the picker row a magnet came from, so `add --magnet` sends the same
 // name / nyaa_id / size_bytes the web picker sends. Without them the daemon cannot read the episode
-// range of a pack whose name carries none (decisions.md #84) and records no episode for it: the
+// range of a pack whose name carries none (decisions/084) and records no episode for it: the
 // torrent downloads but never reaches the library. Best effort — a magnet from elsewhere, or a
 // failed lookup, still adds with the magnet alone.
 func candidateForMagnet(mediaID int, query, magnet string) *api.TorrentCandidate {

@@ -2,7 +2,7 @@
   // Torrent picker — one screen for Add (`#/add/:id/torrents`) and whole-title replace
   // (`#/status/:id/torrents`). The hash prefix is the back target; svelte-spa-router params
   // only carry `id`, so tests (and a reload) parse the hash instead of taking a mode prop.
-  // Two confirms: paste does not override the list button (decisions.md #114).
+  // Two confirms: paste does not override the list button (decisions/114).
   import { onDestroy, onMount } from "svelte";
   import { get } from "svelte/store";
   import { location, pop, push } from "svelte-spa-router";

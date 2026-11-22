@@ -123,7 +123,7 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 	// Last: romaji series title + English subtitle, the way Erai-raws names OVAs and specials
 	// ("Mushoku Tensei - Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer"). Nyaa ANDs the
 	// words, so each single-language variant carries one the release lacks. Last, so the first
-	// variant that already returned something keeps winning (decisions.md #76).
+	// variant that already returned something keeps winning (decisions/076).
 	if mixed, ok := romajiBaseEnglishSubtitle(romaji, english); ok {
 		addVariant(removeSpecialCharacters(mixed))
 	}
@@ -811,7 +811,7 @@ func batchTooBig(size int64) bool {
 // raising the average traffic against nyaa.si.
 //
 // Sequential on purpose: each page is only requested because the previous one wasn't enough. See
-// decisions.md #57 for why there's no parallel burst here.
+// decisions/057 for why there's no parallel burst here.
 //
 // It only returns an error if PAGE 1 fails (without it there's no search); a failure on a later
 // page silently ends the descent, which is the best-effort behavior page 2 already had.
@@ -1190,7 +1190,7 @@ func ScrapNyaaForAnime(animeName string, episodes []int, requestedSeason, reques
 			// From there on, the range's coverage decides, in the daemon (packAxis). A pack that ALSO has no
 			// range in its name has no number to check: its range comes from the file list on the detail
 			// page (PackFileRange), and that's what tells the whole-season pack from the Part 1-only pack
-			// (decisions.md #84).
+			// (decisions/084).
 			if requestedPart != nil && part != nil && *part != *requestedPart {
 				return
 			}

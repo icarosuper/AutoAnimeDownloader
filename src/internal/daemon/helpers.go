@@ -45,7 +45,7 @@ const giB = int64(notifications.GiB)
 
 // DiskLow is true exactly when the daemon would refuse a new torrent of size 0: the add-gate,
 // including what the session still has to write, against the GiB floor. GET /status's disk_low
-// is this flag and nothing else (decisions.md #93).
+// is this flag and nothing else (decisions/093).
 func DiskLow(configs *files.Config, session []torrents.TorrentInfo, saved []files.EpisodeStruct) bool {
 	if configs == nil {
 		return false
@@ -63,7 +63,7 @@ func DiskLow(configs *files.Config, session []torrents.TorrentInfo, saved []file
 //
 // reservedBytes is what the torrents already added still have to write (see diskBudget): free
 // space alone let a pass queue 130 GiB of loose episodes, each one fitting on its own, into 6 GiB
-// of headroom (decisions.md #101). It counts the same as the torrent's own size.
+// of headroom (decisions/101). It counts the same as the torrent's own size.
 //
 // The two halves have different triggers on purpose. The GiB floor is the user's policy and turns
 // off with min_free_disk_gb = 0; "the torrent is bigger than the free space" is arithmetic, and
@@ -111,7 +111,7 @@ func checkDiskSpace(configs *files.Config, torrentSizeBytes, reservedBytes int64
 // fire the download_failed webhook (the anime name/episode come from the saved record joined
 // by infohash) and drop the torrent from the session, which makes episodeInTorrents false on
 // the next pass so the verification loop re-adds the magnet — retry with the machinery that
-// already exists. See decisions.md for the accepted re-add-loop risk on a genuinely dead torrent.
+// already exists. The re-add-loop risk on a genuinely dead torrent is accepted (decisions/024).
 func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBackend, fileManager FileManagerInterface) {
 	logger.Logger.Warn().Err(cause).Str("hash", hash).Msg("Torrent stopped with error")
 
@@ -142,7 +142,7 @@ func HandleTorrentFailure(hash string, cause error, backend torrents.TorrentBack
 
 	// Once per (episode, torrent): a dead torrent is re-picked and drops again about every hour, and
 	// the key is the hash, never the reason — "stalled: no peers for 1h0m" changes text every drop.
-	// A different torrent failing for the same episode is news and goes out (decisions.md #128).
+	// A different torrent failing for the same episode is news and goes out (decisions/128).
 	if !firstFailure(failed.AnimeID, failed.Number, hash) {
 		logger.Logger.Debug().Str("hash", hash).Msg("Torrent failure: already notified for this episode and torrent")
 	} else if configs, err := fileManager.LoadConfigs(); err != nil {
@@ -182,7 +182,7 @@ func getWebUiURL() string {
 }
 
 // isConfigComplete: the LIBRARY is the only requirement. An AniList account doesn't count — since
-// standalone animes (decisions.md #49) the app works entirely without any list, and requiring an
+// standalone animes (decisions/049) the app works entirely without any list, and requiring an
 // account just for the pass to run would leave that installation stuck on the config screen.
 func isConfigComplete(config *files.Config) bool {
 	// The download directory is derived from the library (Config.DownloadPath), so checking the
@@ -193,7 +193,7 @@ func isConfigComplete(config *files.Config) bool {
 // OpenBrowser opens the URL in the user's browser. Used by the verification pass (incomplete
 // config), the boot (first run, see main.go), the tray and the CLI's `open` command.
 //
-// A no-op inside a test binary (decisions.md #120): tests drive the incomplete-config pass, and
+// A no-op inside a test binary (decisions/120): tests drive the incomplete-config pass, and
 // without the guard every `go test` popped the config page in the developer's real browser.
 func OpenBrowser(webUIURL string) error {
 	if testing.Testing() {
@@ -314,7 +314,7 @@ func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, par
 }
 
 // seasonPartOf is ExtractAnimeSeasonPart over the synonyms that name the anime, never its source's
-// title (decisions.md #132).
+// title (decisions/132).
 func seasonPartOf(media anilist.Media) (season, part *int) {
 	return ExtractAnimeSeasonPart(media.Title, media.OwnSynonyms())
 }
@@ -326,7 +326,7 @@ func seasonPartOf(media anilist.Media) (season, part *int) {
 // Only a TV/TV_SHORT PREQUEL counts: recap movies, OVAs and ONAs also arrive as PREQUEL with
 // Episodes filled in, but they're not part of the count fansubs follow. The exception is an ONA
 // entry, whose ONA prequel counts too: a streaming series split into ONA parts (Stone Ocean
-// Part 2) is one show, while an ONA side story of a TV series still stays out (decisions.md #133).
+// Part 2) is one show, while an ONA side story of a TV series still stays out (decisions/133).
 // It counts only when the entry has no TV/TV_SHORT prequel: with both, the TV one is the count.
 // When in doubt it returns 0 — a wrong offset sends the search to a nonexistent episode, while a
 // missing offset falls back to relative numbering, which is what most groups use.
@@ -335,9 +335,9 @@ func seasonPartOf(media anilist.Media) (season, part *int) {
 // minus the ONA exception, and the two stay separate on purpose: that one walks the WHOLE chain
 // (the series' absolute axis), this one takes ONE hop and is gated by part >= 2. They're the two DIFFERENT pack
 // numbering hypotheses in daemon.packAxis — "continuous by season" and "absolute by series" —, so
-// unifying them would erase the distinction the heuristic uses (decisions.md #79). A third,
+// unifying them would erase the distinction the heuristic uses (decisions/079). A third,
 // looser selection — ONA allowed, gated by a shared base title — is splitEntryContinuation
-// (search.go, decisions.md #131).
+// (search.go, decisions/131).
 func ComputeEpisodeOffset(format anilist.MediaFormat, relations anilist.MediaRelations, part *int) int {
 	if part == nil || *part < 2 {
 		return 0
@@ -372,7 +372,7 @@ func isInDeleteStatuses(deleteStatuses []string, status anilist.MediaListStatus)
 
 // episodeItems turns saved records into notification items: one per anime and torrent, in the
 // order the records came. A pack's N records become one pack item (PackSize N) instead of N items —
-// decisions.md #124.
+// decisions/124.
 func episodeItems(records []files.EpisodeStruct) []notifications.Episode {
 	type key struct {
 		animeID int

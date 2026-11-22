@@ -354,7 +354,7 @@ func TestProcessAnimeEpisodes_BlacklistedAnime_PopulatesKeysToDelete(t *testing.
 	}
 }
 
-// TestProcessAnimeEpisodes_BlacklistedAnime_KeepsManuallyManaged pins decisions.md #121: a
+// TestProcessAnimeEpisodes_BlacklistedAnime_KeepsManuallyManaged pins decisions/121: a
 // blacklisted anime stops downloading, but an episode the user downloaded by hand stays on disk.
 func TestProcessAnimeEpisodes_BlacklistedAnime_KeepsManuallyManaged(t *testing.T) {
 	const animeID = 300
@@ -1098,7 +1098,7 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 		}
 	}
 	// Neither: "starting download" would be a lie, and not found is waiting, not failure — it reaches
-	// the report (and episode_stuck after two days), not download_failed (decisions.md #128).
+	// the report (and episode_stuck after two days), not download_failed (decisions/128).
 	if len(got) != 0 {
 		t.Errorf("expected no webhook, got %v", got)
 	}

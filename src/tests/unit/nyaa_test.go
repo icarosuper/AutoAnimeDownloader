@@ -1365,7 +1365,7 @@ func TestPackFileRange_NoURLDoesNotFetch(t *testing.T) {
 }
 
 // Method C: extras/OVA do not feed min-max; a contiguous run past the entry total stays (next cour);
-// an unmarked total+1 with run length 1 drops. Pins for decisions.md #113.
+// an unmarked total+1 with run length 1 drops. Pins for decisions/113.
 func TestPackFileRange_ExtrasDoNotStretchTheDeclaredSpan(t *testing.T) {
 	kOnTV := []string{
 		"[MTBB] K-ON! - 01.mkv", "[MTBB] K-ON! - 13.mkv",
@@ -2064,7 +2064,7 @@ func TestExtractPart_ExtractsFromVariousFormats(t *testing.T) {
 		{"[EMBER] Hataraku Maou-sama! (2022) (Season 2 | Part 01) [1080p]", intPtr(1)},
 		// A name that declares TWO parts isn't the first one's: the pack covers both halves, and
 		// returning the first made the part filter reject it precisely for the second. Without a single
-		// number the range's coverage decides (daemon.packAxis, decisions.md #79).
+		// number the range's coverage decides (daemon.packAxis, decisions/079).
 		{"[DB] NieR:Automata Ver1.1a (Season 1 Part 1+2) [Dual Audio]", nil},
 		{"[EMBER] Shingeki no Kyojin (2023) (Season 4 Part 03+04) [BDRip]", nil},
 		{"[Fuchs] Anime - S02 (Season 2) (Part 1 + Part 2) [BDRip]", nil},
@@ -2282,7 +2282,7 @@ func intPtr(n int) *int { return &n }
 // AniList that splits the season into cours), and requiring the marker zeroed the packs of every
 // "Part N" entry — that's what left Mushoku Tensei II Part 2 without any pack. Only a declared
 // conflict rejects; whether the pack serves is decided by the range's coverage, in the daemon
-// (decisions.md #79).
+// (decisions/079).
 func TestScrapNyaaForAnime_PackWithoutPartMarkerSurvivesPartRequest(t *testing.T) {
 	options := []string{
 		"[Judas] Mushoku Tensei - 01 ~ 23 [BD 1080p][Batch]",
@@ -2587,7 +2587,7 @@ func TestGenerateSearchTitleVariants_RomanSeasonBaseFirst(t *testing.T) {
 // Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer". Nyaa ANDs the query words, so the
 // all-romaji variant (…"Toubatsu") and the all-English one (…"Jobless") both missed it (141534,
 // 2026-11-07). The mixed variant comes LAST: every anime the old variants already found keeps the
-// same result (decisions.md #76 stops at the first variant that returns anything).
+// same result (decisions/076 stops at the first variant that returns anything).
 func TestGenerateSearchTitleVariants_RomajiBaseEnglishSubtitleLast(t *testing.T) {
 	got := nyaa.GenerateSearchTitleVariants(
 		"Mushoku Tensei: Isekai Ittara Honki Dasu Part 2 - Eris no Goblin Toubatsu",

@@ -444,7 +444,7 @@ func organizeTorrent(hash string, backend torrents.TorrentBackend, librarian fil
 // the torrent leaves the session along with its download copy. The library keeps the files — Organize
 // only hardlinks, so they are a second name for the same data, not the copy being deleted. Whatever
 // the torrent had that was not linked (another season of a pack, extras) goes with it, by the
-// user's choice (decisions.md #119).
+// user's choice (decisions/119).
 //
 // The marker is written BEFORE the removal. A crash in between leaves a released record whose
 // torrent is still in the session, and the next reconcileLibrary sends it back here. The other

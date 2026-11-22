@@ -8,7 +8,7 @@ import { derived, writable } from 'svelte/store'
  * The snapshot ignores differences that don't change what would be saved:
  * - key order (a preset or a reset rebuilds objects in another order);
  * - `undefined` vs an absent key vs an empty array (opening a webhook in the form turns a missing
- *   `anime_sources` into `[]`; Go reads both as an empty list). (decisions.md #129)
+ *   `anime_sources` into `[]`; Go reads both as an empty list). (decisions/129)
  */
 export function snapshot(value: unknown): string {
   return JSON.stringify(normalize(value)) ?? ''
@@ -59,7 +59,7 @@ const routePath = (hash: string) => hash.replace(/^#/, '').split('?')[0] || '/'
  *   the router as `hashchange`.
  *
  * Must be installed before `<Router>` mounts (App.svelte's script). Returns the uninstaller.
- * (decisions.md #129)
+ * (decisions/129)
  */
 export function installUnsavedGuard(confirmLeave: () => boolean): () => void {
   let lastUrl = window.location.href

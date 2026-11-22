@@ -123,16 +123,17 @@ Do not write a comment that explains **what** the code does — only **why** it 
 and only when the names of the variables and functions do not already make it obvious. A comment
 found outside that rule: delete it.
 
-**Non-obvious decision → `decisions.md` + a pointer in the code.** If a later reader would ask
-"why this, when the obvious way is the other one?", add an entry to [decisions.md](decisions.md)
+**Non-obvious decision → a file in `decisions/` + a pointer in the code.** If a later reader would ask
+"why this, when the obvious way is the other one?", add an entry to [decisions/](decisions/index.md)
 (with the [record-decision skill](../../.claude/skills/record-decision/SKILL.md))
 and point to it from the relevant stretch, by number:
 
 ```go
-// Converts saved AnimeIDs from list-entry ids to media ids (decisions.md #43).
+// Converts saved AnimeIDs from list-entry ids to media ids (decisions/043).
 ```
 
-The format used in the repo is `decisions.md #N` — keep it, that is what `grep` finds.
+The format used in the repo is `decisions/NNN` (three digits, the number in the filename) — keep it,
+that is what `grep` finds and what `ls docs/agents/decisions/NNN-*` opens.
 
 ## Messages With a Count (i18n)
 
@@ -162,7 +163,7 @@ A new API endpoint, or a web-app action that hits the API, ships with its CLI co
 **same change**. The CLI is how an agent (and a human who does not open the web UI) drives the
 daemon — leaving a verb only on the screen means the agent cannot do it.
 `--yes` is a CLI gate; the API keeps its query defaults
-([decisions.md #104](decisions.md#104---yes-is-a-cli-gate-the-api-keeps-its-query-defaults)).
+([decisions/104](decisions/104-yes-is-a-cli-gate-the-api-keeps-its-query-defaults.md)).
 
 Does not apply to frontend-only work: layout, i18n, presets that live in the frontend, WebSocket.
 A new `config.json` field is already settable through `config set` (passthrough of every JSON

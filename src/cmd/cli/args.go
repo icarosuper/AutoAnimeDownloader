@@ -11,7 +11,7 @@ import (
 // stops at the first non-flag, so `animes add 21 --magnet URI` would otherwise
 // treat --magnet as a leftover arg. Command names stay in place; global flags
 // go to the front; each command's flags sit immediately after that command.
-// See decisions.md #109.
+// See decisions/109.
 func reorderInterspersedFlags(app *cli.App, args []string) []string {
 	if len(args) < 2 {
 		return args

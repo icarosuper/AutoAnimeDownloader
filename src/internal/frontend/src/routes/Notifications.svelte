@@ -107,7 +107,7 @@
   // Headers become a list of pairs WHILE the form is open, and only become
   // Record<string,string> again on Confirm. The object is no good for editing: renaming a
   // key in a Record is deleting and recreating the entry, and the row jumps place on every
-  // keystroke. See decisions.md #87.
+  // keystroke. See decisions/087.
   let headerRows: { key: string; value: string }[] = [{ key: '', value: '' }];
 
   // The rendered form. Any edit makes it stale, so it is dropped instead of shown out of date.

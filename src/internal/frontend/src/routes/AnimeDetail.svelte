@@ -251,7 +251,7 @@
     if (ep.is_manually_managed) notes.push(m.detail_flag_no_delete_short());
     if (ep.is_blocked) notes.push(m.detail_flag_no_download_short());
     // The report mark goes on the same line as the other notes: it's a short phrase, not a
-    // live state — deriveAnimeChip stays out of this on purpose (see decisions.md).
+    // live state — deriveAnimeChip stays out of this on purpose.
     if (issue) notes.push(m.detail_lastcheck_episode_note());
     return notes.join(" · ");
   }

@@ -21,12 +21,12 @@ const (
 
 // accountLists is the last list each account answered, per kind: which media ids it holds. It is
 // what the per-webhook source filter reads instead of asking AniList at fire time — a webhook used
-// to cost one uncached AniList query per account, on the budget decisions.md #65 protects, and a
-// refused query silently dropped the notification (decisions.md #126).
+// to cost one uncached AniList query per account, on the budget decisions/065 protects, and a
+// refused query silently dropped the notification (decisions/126).
 //
 // An account whose fetch failed keeps its previous answer: stale ownership is closer to the truth
 // than none. The lists only cover the download statuses and, for the animes on disk, the delete
-// statuses (decisions.md #130), so an anime in any other status (a manual deletion of a PAUSED
+// statuses (decisions/130), so an anime in any other status (a manual deletion of a PAUSED
 // anime) is unknown, and unknown is fail-open.
 type accountLists struct {
 	mu   sync.RWMutex
@@ -59,7 +59,7 @@ func (l *accountLists) record(kind listKind, account string, ids map[int]bool) {
 }
 
 // recordCarrying is record for a list that only holds what is on disk NOW (the delete half,
-// decisions.md #130): it stores this answer united with the account's previous one. An anime the
+// decisions/130): it stores this answer united with the account's previous one. An anime the
 // pass deletes leaves the disk, so the next pass no longer asks about it — and its episode_deleted
 // can still be waiting in a batch window when that pass records. Carrying the previous answer for
 // one pass keeps its owner until the window flushes, as long as batch_window_seconds is shorter

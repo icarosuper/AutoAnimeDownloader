@@ -20,7 +20,7 @@ const (
 )
 
 // keyClasses classifies every log field key the code writes. TestEveryLogKeyIsClassified fails when
-// a key in the source isn't here, so a new field can't leak by default (decisions.md #103). A key
+// a key in the source isn't here, so a new field can't leak by default (decisions/103). A key
 // missing from the table at runtime (a field removed from the code, still in an old log) is treated
 // as a title: hidden when titles are off.
 var keyClasses = map[string]keyClass{

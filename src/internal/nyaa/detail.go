@@ -63,7 +63,7 @@ func ViewURL(nyaaID int) string {
 }
 
 // FetchTorrentDetail loads a Nyaa view page by id. The URL is built here on purpose — a caller
-// never supplies one (decisions.md #105).
+// never supplies one (decisions/105).
 func FetchTorrentDetail(nyaaID int) (TorrentDetail, error) {
 	if nyaaID <= 0 {
 		return TorrentDetail{}, fmt.Errorf("invalid nyaa id %d", nyaaID)

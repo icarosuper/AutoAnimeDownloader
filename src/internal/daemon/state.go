@@ -110,7 +110,7 @@ func (s *State) SetLastCheckError(err error) {
 	// right ones — a pass that aborted before looking at any anime has no per-anime
 	// report, it has pass_error. Deliberate consequence: SetLastCheckError(nil) at the
 	// end of the pass also clears, so SetLastCheckReport MUST come after it (see
-	// AnimeVerification and decisions.md).
+	// AnimeVerification and decisions/082).
 	s.lastCheckReport = CheckReport{}
 	notifier := s.notifier
 	statusSnapshot, lastCheckSnapshot, hasErrorSnapshot := s.notifyChange()

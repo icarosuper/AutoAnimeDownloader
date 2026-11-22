@@ -171,7 +171,7 @@ func DownloadStandaloneAnime(fm FileManagerInterface, backend torrents.TorrentBa
 // DownloadStandaloneAnimeWithMagnet adds a user-chosen whole-title magnet, then the standalone
 // id, then episode records for the pack's coverage. The torrent goes in first so a refused add
 // cannot leave a tracked id with nothing to download. An unknown pack range writes no episode
-// records (decisions.md #84).
+// records (decisions/084).
 func DownloadStandaloneAnimeWithMagnet(fm FileManagerInterface, backend torrents.TorrentBackend, configs *files.Config, mediaID int, magnet, name string, nyaaID int, sizeBytes int64) (int, error) {
 	if _, err := backend.Ensure(configs.DownloadPath()); err != nil {
 		return 0, err
@@ -186,7 +186,7 @@ func DownloadStandaloneAnimeWithMagnet(fm FileManagerInterface, backend torrents
 	}
 
 	// A client that sends only the magnet (an older CLI, a script) still gets a name to read the
-	// range from: the magnet's own dn, which Nyaa fills with the torrent's title (decisions.md #123).
+	// range from: the magnet's own dn, which Nyaa fills with the torrent's title (decisions/123).
 	if name == "" {
 		name = magnetDisplayName(magnet)
 	}
@@ -237,7 +237,7 @@ func standaloneMagnetCoverage(mediaID int, hash, name string, nyaaID int) ([]fil
 		// Nothing to guess: a one-episode entry (OVA, special) can only be covered by its episode 1.
 		// The release usually names no number at all ("... - Eris the Goblin Slayer [1080p]"), and
 		// without this the torrent downloaded but never reached the library. Same records as a movie
-		// (decisions.md #123).
+		// (decisions/123).
 		return movieMagnetRecords(*anime, mediaID, title, hash, now), nil
 	}
 	if info.EndEpisode == 0 {

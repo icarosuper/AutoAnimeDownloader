@@ -83,7 +83,7 @@ func TestBudgetGateAllowsAgainAfterValidity(t *testing.T) {
 }
 
 // TestBudgetRecordedOnErrorResponse: a 404 and an invalid query consume quota the same as a 200
-// (decisions.md #72). A gate that only read a good response would be optimistic exactly when
+// (decisions/072). A gate that only read a good response would be optimistic exactly when
 // things are already going badly.
 func TestBudgetRecordedOnErrorResponse(t *testing.T) {
 	restore := MockAniListDo(func(*http.Request) (*http.Response, error) {
@@ -126,7 +126,7 @@ func TestCustomListsServesStaleCacheWhenRefused(t *testing.T) {
 }
 
 // TestFrontendListServesStaleCacheWhenRefused locks the fallback from the table in
-// decisions.md #72: a refused frontend poll serves the expired reading instead of taking
+// decisions/072: a refused frontend poll serves the expired reading instead of taking
 // the screen down.
 func TestFrontendListServesStaleCacheWhenRefused(t *testing.T) {
 	remaining := "29"

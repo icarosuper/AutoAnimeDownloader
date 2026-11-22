@@ -161,7 +161,7 @@ func TestAssignBatches_CarriesTheRealRange(t *testing.T) {
 
 // A range neither the name nor the file list resolved records ZERO, not 1..total. The pack is still
 // used (covering treats it as complete), but the record doesn't assert a coverage nobody checked —
-// 1..total fed ownership by coverage with a guess (decisions.md #84).
+// 1..total fed ownership by coverage with a guess (decisions/084).
 func TestAssignBatches_UnresolvedRangeLeavesZeroes(t *testing.T) {
 	anime := animeWithEpisodes(26, anilist.MediaStatusFinished, true, "")
 	episodes := anilist.EpisodeList(anime, 6)
@@ -336,7 +336,7 @@ func TestPickBatches_UnlabeledPackNeedsTheFileRange(t *testing.T) {
 // refused elsewhere ("it could be a single long episode") is exactly what a one-episode OVA is.
 // Measured on 141534 ("[Erai-raws] … Part 2 - Eris the Goblin Slayer [1080p]", 1.3 GiB, a single
 // file with no number): it reached pickBatches and was dropped, so the special never downloaded
-// (decisions.md #123).
+// (decisions/123).
 func TestPickBatches_UnresolvedUnlabeledPackCoversAOneEpisodeEntry(t *testing.T) {
 	unlabeled := pack("[Erai-raws] Mushoku Tensei - Isekai Ittara Honki Dasu Part 2 - Eris the Goblin Slayer [1080p]", 1)
 	unlabeled.UnlabeledPack = true

@@ -7,7 +7,7 @@
   // `AnimeInfo` fields: `downloaded` must come from `breakdown()` (lib/utils/status.ts), which
   // derives it from `episodes_pending`. Passing `episodes_downloaded` here paints already
   // downloaded-and-watched episodes yellow, because that field drops when the daemon prunes
-  // watched ones — decisions.md #88.
+  // watched ones — decisions/088.
   //
   // The legend lives HERE, not in a `legend: string` prop like before, because each of its
   // terms is colored with its segment's color — and a ready-made string has nowhere to hang

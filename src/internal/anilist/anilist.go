@@ -21,7 +21,7 @@ import (
 // ttlCache holds AniList responses for a short time. AniList today limits to 30 req/min per IP and
 // the frontend polls /api/v1/animes every 30s per open tab, with one fetch per configured account:
 // without a cache, two tabs and two accounts blow the budget on their own and the resulting 429
-// also takes down the daemon's verification cycle (see decisions.md #11 and #57).
+// also takes down the daemon's verification cycle (see decisions/011 and decisions/057).
 type ttlCache[T any] struct {
 	mu     sync.Mutex
 	data   map[string]T
@@ -47,7 +47,7 @@ func (c *ttlCache[T]) get(key string) (T, bool) {
 // them (see persist.go).
 //
 // Only the FAILURE path calls it. Two failures, with different contracts: the budget gate's refusal
-// serves the expired value without an error, because the data is seconds old (decisions.md #72);
+// serves the expired value without an error, because the data is seconds old (decisions/072);
 // AniList being down serves it with ErrFromCache, because the age becomes unknown and the caller
 // has to decide. Whoever reads through get expects fresh data and must not land here.
 func (c *ttlCache[T]) getStale(key string) (T, bool) {
@@ -192,7 +192,7 @@ type mediaListPage[E any] struct {
 // downloaded (download statuses) or never deleted (delete statuses).
 //
 // The query must declare `$page: Int`, ask for `Page(page: $page, perPage: 50)` and select
-// `pageInfo { hasNextPage }`. Each page is one request against the budget (decisions.md #72), so
+// `pageInfo { hasNextPage }`. Each page is one request against the budget (decisions/072), so
 // a list of N entries costs ceil(N/50) requests.
 //
 // All or nothing: a failed page fails the whole fetch. Returning the pages that did arrive would
@@ -296,7 +296,7 @@ type MediaList struct {
 	// caller that knows which account a list belongs to stamps it with StampAccount, and
 	// DedupeByMedia unions it — so after the collapse to the lowest Progress, the per-account
 	// answer the dashboard user filter needs is still here. Nil means nobody stamped it, not
-	// "no account" (decisions.md #125).
+	// "no account" (decisions/125).
 	Accounts []AccountEntry `json:"-"`
 }
 
@@ -399,7 +399,7 @@ type Media struct {
 	CoverImage     CoverImage     `json:"coverImage"`
 	AiringSchedule AiringSchedule `json:"airingSchedule"`
 	// NextAiringEpisode is the source of "which was the last episode to air" for the animes whose
-	// airingSchedule AniList already clipped (see EpisodeList and decisions.md #52). nil when the
+	// airingSchedule AniList already clipped (see EpisodeList and decisions/052). nil when the
 	// anime ended or has no date set.
 	NextAiringEpisode *AiringNode `json:"nextAiringEpisode"`
 }
@@ -407,7 +407,7 @@ type Media struct {
 // OwnSynonyms are the synonyms that name THIS anime: a synonym equal to the title of a manga, novel
 // or one-shot relation is the source's name, and its numbers count the source, not the anime —
 // "JoJo's Bizarre Adventure: Part 7–Steel Ball Run" is part 7 of the manga, not a cour
-// (decisions.md #132). The daemon reads season and part from these; the dashboard search
+// (decisions/132). The daemon reads season and part from these; the dashboard search
 // (api/endpoint_animes.go) keeps every synonym.
 func (m Media) OwnSynonyms() []string {
 	sources := make(map[string]bool)
@@ -488,7 +488,7 @@ type CustomLists map[string]bool
 // DedupeByMedia collapses the same anime appearing across multiple linked accounts into a
 // single entry. MediaList.Id is the per-account *entry* id, so one anime tracked by two
 // accounts arrives as two entries with different Ids and the same Media.Id — which is why
-// Media.Id, and not MediaList.Id, is this app's anime identity (see decisions.md #43).
+// Media.Id, and not MediaList.Id, is this app's anime identity (see decisions/043).
 //
 // The entry with the LOWEST progress wins: every download/keep/delete decision is keyed by
 // airing-schedule episode ID (shared across accounts), so duplicates with divergent progress
@@ -587,7 +587,7 @@ func sendAnilistRequest[T any](query string, variables RequestVariables, priorit
 
 	// A 200 can carry an error in the envelope — AniList's docs are explicit about it. Without this
 	// read the case becomes an empty response with no diagnosis. It's not the same problem as the null
-	// customLists of decisions.md #11: that one comes back 200 WITHOUT an errors field. See #65.
+	// customLists of decisions/011: that one comes back 200 WITHOUT an errors field. See #65.
 	if status, message := firstError(body); status != 0 {
 		setHealth(classify(status), message, time.Time{})
 		logger.Logger.Warn().Int("graphql_status", status).Str("graphql_message", message).Msg("Anilist returned an error inside a 200 response")
@@ -627,7 +627,7 @@ func GetCustomListsMap(userName string, statuses []string, priority Priority) ma
 	}, priority)
 	if err != nil {
 		// Refused by the budget gate: serve the expired read, the same as its pair in
-		// GetFrontendAnimeList (decisions.md #72). Without this the gate degrades BOTH sides
+		// GetFrontendAnimeList (decisions/072). Without this the gate degrades BOTH sides
 		// asymmetrically — the list comes from the old cache and answers successfully, customLists comes
 		// back nil, and the GET /animes merge concludes "no anime is blacklisted". The screen shows a
 		// blacklisted anime as normal and the standalone guard (standalone_guard.go) lets the user add
@@ -805,7 +805,7 @@ func GetFrontendAnimeList(userName string, statuses []string) (*AniListResponse,
 		if stale, ok := staleList(frontendListCache, key); ok {
 			// Refused by the budget gate: this list changes when the user edits AniList, not every 30s.
 			// Serving the expired read keeps the screen working and hands the bucket back to the daemon's
-			// pass, the only one that can't be postponed. See decisions.md #72. No error on purpose: the
+			// pass, the only one that can't be postponed. See decisions/072. No error on purpose: the
 			// refusal was OURS, the data is seconds old and the next poll comes back fresh — the screen
 			// gains nothing from knowing.
 			if errors.Is(err, ErrBudgetLow) {
@@ -838,7 +838,7 @@ func mediaListResponse(list []MediaList) *AniListResponse {
 // GetAnimeInfoByIDs is the batch twin of GetAnimeInfo: ONE query per account per 50 media ids,
 // instead of one query per anime per account. It is what makes the orphan refresh of
 // GET /animes affordable — that path used to fire one request per downloaded anime the filtered
-// list fetch didn't cover, on EVERY frontend poll, which is the burst decisions.md #65 measured
+// list fetch didn't cover, on EVERY frontend poll, which is the burst decisions/065 measured
 // as the dominant consumer of the AniList budget.
 //
 // Same collapse rule as GetAnimeInfo (DedupeByMedia: media fields from whichever account tracks
@@ -978,7 +978,7 @@ func GetAnimeInfo(mediaId int, usernames, malUsers []string, priority Priority) 
 }
 
 // GetMediaIDForEntry resolves a legacy MediaList *entry* id to its media id, and is the only
-// place left that keys anything by entry id: the one-shot AnimeID migration (decisions.md #43)
+// place left that keys anything by entry id: the one-shot AnimeID migration (decisions/043)
 // needs it to rewrite records written before Media.Id became the identity.
 // Returns 0 when the entry no longer exists — the anime was removed from that account's list.
 func GetMediaIDForEntry(mediaListId int) (int, error) {
@@ -1018,12 +1018,12 @@ func GetMediaIDForEntry(mediaListId int) (int, error) {
 // GetListStatusesByMediaIDs answers, for ONE account, the list status of each of the given media
 // ids: an id the account tracks maps to its status, an id it doesn't track is ABSENT from the map.
 // That distinction is what the deletion rule needs — an account that never had the anime doesn't
-// vote, one holding it in a non-delete status vetoes (decisions.md #43).
+// vote, one holding it in a non-delete status vetoes (decisions/043).
 //
 // It exists so the pass asks only about the animes with an episode on disk. The pass used to
 // download every delete-status list whole (COMPLETED + DROPPED + PLANNING: 1124 entries, 23 pages,
 // for one real account) to then look at a few dozen ids, and that alone blew the 30 req/min budget
-// on every pass (decisions.md #130). Here it costs ceil(len(mediaIDs)/50) requests, whatever the
+// on every pass (decisions/130). Here it costs ceil(len(mediaIDs)/50) requests, whatever the
 // size of the account's lists.
 //
 // All or nothing: a failed chunk fails the whole answer, because an id missing from a partial map

@@ -10,7 +10,7 @@ import (
 // diskBudget is the disk guard's view of one pass: the bytes the torrents already in the session
 // still have to write, plus the size of every torrent the pass adds. Free space alone answers "is
 // there room NOW", and a torrent only takes its room as it downloads — so each loose episode of a
-// pass fit on its own and 130 GiB went into 6 GiB of headroom (decisions.md #101).
+// pass fit on its own and 130 GiB went into 6 GiB of headroom (decisions/101).
 //
 // Shared by the animes of a pass, which run in parallel: reserve checks and counts under one lock,
 // or two episodes would both see the last free bytes. Keyed by infohash, because the N episodes of

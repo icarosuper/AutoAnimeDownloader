@@ -183,7 +183,7 @@ func TestHandleTorrentsSortsUnfinishedFirstThenAlphabetical(t *testing.T) {
 	}
 	// Name sorts alphabetically before magnetA/magnetB's names, but it must still land last:
 	// it is paused (status "stopped") yet piece-complete, exactly the state Pause() leaves
-	// behind on a finished torrent (see FINDING 1 / decisions.md #30).
+	// behind on a finished torrent (see FINDING 1 / decisions/030).
 	const hashC = "ffffffffffffffffffffffffffffffffffffffff"
 	backend.AddPaused(hashC, "AAA-paused-but-complete", 10, 10, true)
 

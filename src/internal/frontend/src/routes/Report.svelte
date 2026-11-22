@@ -1,7 +1,7 @@
 <script lang="ts">
   // Report — the bug report screen. The daemon builds a redacted bundle locally; this screen shows
   // exactly what's in it and hands it over as a file. Nothing leaves the machine unless the user
-  // attaches it (decisions.md #102). Opened from the MoreMenu, the tray, the Report link of an
+  // attaches it (decisions/102). Opened from the MoreMenu, the tray, the Report link of an
   // unexpected error toast (?error=&context=&anime=) and a pending crash (?crash=1).
   import { onMount } from "svelte";
   import { querystring } from "svelte-spa-router";

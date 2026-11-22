@@ -383,7 +383,7 @@ func TestHandleTorrentFailure_StartsTheStuckClockOfEveryRecord(t *testing.T) {
 
 // download_failed reports a real failure once per (episode, torrent): the same magnet refused on
 // every pass, or a dead torrent dropped every hour, is one push. A different torrent for the same
-// episode is news; organizing the episode forgets the pairs (decisions.md #128).
+// episode is news; organizing the episode forgets the pairs (decisions/128).
 func TestDownloadFailed_OncePerEpisodeAndTorrent(t *testing.T) {
 	const hashA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	const hashB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"

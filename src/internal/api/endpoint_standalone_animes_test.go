@@ -173,7 +173,7 @@ func TestStandaloneAdd_BlockedNeverWritesTheFile(t *testing.T) {
 			wantCode: "ALREADY_TRACKED",
 		},
 		{
-			// The blacklist is not a block reason (decisions.md #49): a blacklisted anime the
+			// The blacklist is not a block reason (decisions/049): a blacklisted anime the
 			// daemon processes is refused only because it is already tracked.
 			name:     "on an excluded list and the processed list is tracked, not blacklisted",
 			listJSON: listWithAnime21,

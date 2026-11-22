@@ -4,7 +4,7 @@ import TripleProgressBar from '../../src/components/ui/TripleProgressBar.svelte'
 
 // The props are CUMULATIVE; the legend shows the DELTAS. What these tests protect is the
 // word <-> color match: each term has to carry the class of the segment it measures,
-// otherwise the colored legend lies (that was the bug it came to fix — decisions.md #88).
+// otherwise the colored legend lies (that was the bug it came to fix — decisions/088).
 const props = { watched: 5, downloaded: 10, released: 12, total: 13 }
 
 describe('TripleProgressBar', () => {

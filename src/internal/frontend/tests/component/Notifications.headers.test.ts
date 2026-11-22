@@ -40,7 +40,7 @@ beforeEach(() => vi.clearAllMocks())
 describe('Notifications — header editor', () => {
   // The regression that motivated the change: typing in both fields and clicking Confirm
   // silently dropped the header, because only the "+" button passed it into the model.
-  // See decisions.md #87.
+  // See decisions/087.
   it('saves the typed header without going through the + button', async () => {
     await renderWith()
     await fireEvent.click(btn(ADD))

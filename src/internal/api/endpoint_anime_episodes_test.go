@@ -116,7 +116,7 @@ func TestHandleAnimeEpisodes_EpisodeHash(t *testing.T) {
 
 // An anime whose schedule AniList already clipped (One Piece: page 1 starts at 1123, and
 // nextAiringEpisode is the only hint of what has already aired) must show on screen with ALL
-// episodes — otherwise there is nowhere to click to download the missing ones. See decisions.md #52.
+// episodes — otherwise there is nowhere to click to download the missing ones. See decisions/052.
 func TestHandleAnimeEpisodes_ListsEpisodesOutsideTheAniListWindow(t *testing.T) {
 	const body = `{"data":{"Page":{"mediaList":[{
 		"id": 1, "status": "CURRENT", "progress": 3, "customLists": {},

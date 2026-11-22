@@ -99,7 +99,7 @@ export function canonicalAccounts(selected: string[], configured: string[]): str
  * among them, same rule the backend uses across all accounts. Without the projection "Unwatched",
  * the progress bar, the "behind" chip and the sort would keep answering for the account furthest
  * behind, even an unselected one. Runs BEFORE filterAnimes, so every count downstream agrees.
- * An empty selection returns the list untouched (decisions.md #125).
+ * An empty selection returns the list untouched (decisions/125).
  */
 export function scopeToAccounts(animes: AnimeInfo[], selected: string[]): AnimeInfo[] {
   if (selected.length === 0) return animes

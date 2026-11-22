@@ -14,7 +14,7 @@ import (
 // same at the start of a chained line.
 var logFieldCall = regexp.MustCompile(`\b(?:Str|Strs|Int|Ints|Int64|Int32|Uint32|Uint64|Uint|Float64|Floats64|Bool|Bools|Dur|Time|Interface|Any|RawJSON|AnErr|Stringer|Hex|Bytes|Uints|Times|Errs|Object|Array|Dict|IPAddr)\(\s*"([^"]+)"`)
 
-// TestEveryLogKeyIsClassified is the invariant guard of the redactor (decisions.md #103): a new log
+// TestEveryLogKeyIsClassified is the invariant guard of the redactor (decisions/103): a new log
 // field can't reach a bug report by default. Failing here means adding the key to keyClasses, and
 // deciding whether it's kept, dropped, an account name or a title.
 func TestEveryLogKeyIsClassified(t *testing.T) {

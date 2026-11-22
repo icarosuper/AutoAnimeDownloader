@@ -389,7 +389,7 @@ func TestHandleAnimes(t *testing.T) {
 
 	// Regression of the inverse shape of the storm below: even with the list OK, one request
 	// per orphan every 30s poll per tab was the biggest consumer of the AniList budget
-	// (decisions.md #65) — and its burst limiter punishes exactly that shape.
+	// (decisions/065) — and its burst limiter punishes exactly that shape.
 	t.Run("Orphan refresh asks AniList once for all orphans, not once per anime", func(t *testing.T) {
 		var batchCalls int32
 		var sentIDs string

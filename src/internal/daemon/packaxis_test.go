@@ -25,12 +25,12 @@ func entryOf(id int, title string, prequelEpisodes int) anilist.MediaList {
 // The FOUR pack-numbering conventions measured in sources.md ("Pack granularity and numbering"),
 // each under the real entry it appears in. What is asserted is the range CONVERTED to the
 // entry's local numbering: that is what goes into the record and what coverage ownership
-// (decisions.md #78) reconverts to the absolute axis.
+// (decisions/078) reconverts to the absolute axis.
 func TestPackAxis_TheFourNumberingConventions(t *testing.T) {
 	cases := []struct {
 		name       string
 		anime      anilist.MediaList
-		offset     int // absolute series axis (decisions.md #77)
+		offset     int // absolute series axis (decisions/077)
 		total      int // episodes of the ENTRY
 		pack       string
 		start, end int
@@ -185,7 +185,7 @@ func TestAssignBatches_RecordsConvertedRangeAndClampsTheDisplayName(t *testing.T
 // The converted range reaches the exclusion guard and coverage ownership: the "unknown"
 // sentinel is the END, so a season pack recorded under a later cour (negative start) still
 // declares the 23 content episodes it has — which is what stops pruning from deleting the
-// cour that has not been downloaded yet (decisions.md #74).
+// cour that has not been downloaded yet (decisions/074).
 func TestDeclaredSpan_ConvertedRangeStartingBeforeEpisodeOne(t *testing.T) {
 	group := []files.EpisodeStruct{
 		{AnimeID: 127720, EpisodeNumber: 1, BatchStart: -10, BatchEnd: 12},

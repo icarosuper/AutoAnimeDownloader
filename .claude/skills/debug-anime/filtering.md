@@ -1,8 +1,8 @@
 # Query, filters and pack selection
 
 Steps 4–6 of the [debug-anime](SKILL.md) flow: Nyaa should have the anime, but the search doesn't
-find it or the pipeline throws it away. Decisions are linked from `docs/agents/decisions.md` — read
-only the entry linked.
+find it or the pipeline throws it away. Decisions are linked to their files in `docs/agents/decisions/` —
+read only the entry linked.
 
 ## 4. The exact search URL
 
@@ -26,10 +26,10 @@ Built from the title variants: `search.go:buildTitleVariants` → `nyaa.Generate
 (`nyaa/nyaa.go`), which tries clean romaji → original romaji → clean english → original english → (last) romaji base
 title + English subtitle, the way Erai-raws names OVAs ("… Honki Dasu Part 2 - Eris the Goblin
 Slayer"). A one-episode entry (OVA, special) whose release has no number is found as an unlabeled
-pack, not an episode: see [decisions.md #123](../../../docs/agents/decisions.md#123-a-one-episode-entry-covers-episode-1-even-when-the-magnet-declares-no-range).
+pack, not an episode: see [decisions/123](../../../docs/agents/decisions/123-a-one-episode-entry-covers-episode-1-even-when-the.md).
 An entry AniList split off a shared base ("<Base> - 1st STAGE" / "<Base> - 2nd & 3rd STAGE") is
 searched last by "<Base>" with the prequel's episodes added — `single episode (split-entry fallback)`
-in the trace; see [decisions.md #131](../../../docs/agents/decisions.md#131-a-split-anilist-entry-is-searched-by-its-shared-base-title-with-the-prequels-episodes-added-when-every-other-search-came-back-empty).
+in the trace; see [decisions/131](../../../docs/agents/decisions/131-a-split-anilist-entry-is-searched-by-its-shared.md).
 `ExtractAnimeSeasonPart` (`daemon/helpers.go`) decides the season/part that shape the query and the
 filter.
 
@@ -39,7 +39,7 @@ consider a better variant (strip the subtitle after `:`, shorter prefixes).
 
 `searchNyaaWithVariants` (`daemon/search.go`) **stops at the first variant that returns anything**,
 romaji first. That was measured and stays
-([decisions.md #76](../../../docs/agents/decisions.md#76-searchnyaawithvariants-stops-at-the-first-variant-that-returns-any-result--measured-and-it-stays-that-way)):
+([decisions/076](../../../docs/agents/decisions/076-searchnyaawithvariants-stops-at-the-first-variant.md)):
 after #75 there is no anime where a later variant finds a pack romaji didn't. A real case is the
 evidence that reopens it — bring it, don't change the loop on a hunch.
 
@@ -58,12 +58,12 @@ number matches. Check for a naming pattern the regexes don't cover.
 **6c. Season/part** — if `ExtractAnimeSeasonPart` returns a season or part, results are filtered to
 match; a wrong extraction drops everything. Sequels titled only with a roman numeral ("… II") go
 through `ExtractSeason`'s roman fallback (`reRomanSeason` in `nyaa_regex.go`,
-[decisions.md #20](../../../docs/agents/decisions.md#20-extractseason-has-a-roman-numeral-fallback-kept-out-of-reseasonpatterns));
+[decisions/020](../../../docs/agents/decisions/020-extractseason-has-a-roman-numeral-fallback-kept.md));
 if one still fails, compare how the numeral is spelled in the torrent vs. the AniList title.
 
 **6d. Batch detection** — `reBatchPatterns`. Single-episode searches drop packs on purpose: the pack
 path runs earlier over the same anime search and should have caught it
-([decisions.md #59](../../../docs/agents/decisions.md#59-batch-eligibility-stopped-being-metadata-and-became-a-result-filter)).
+([decisions/059](../../../docs/agents/decisions/059-batch-eligibility-stopped-being-metadata-and.md)).
 
 **6e. Title match / Jaccard** — `titleMatchesQuery` (`nyaa_match.go`), before the episode/season/batch
 filters. Two checks:
@@ -82,7 +82,7 @@ jaccard        = |intersection| / |union|
 
 Below the bar, check the second attempt before touching the allowlist: the match repeats both checks
 on each `altTitleCandidates(<tail after the marker>)`
-([decisions.md #75](../../../docs/agents/decisions.md#75-truncation-at-the-marker-is-the-first-attempt-of-the-title-match-not-the-only-one)).
+([decisions/075](../../../docs/agents/decisions/075-truncation-at-the-marker-is-the-first-attempt-of.md)).
 Only then add the offending tokens to `titleTechnicalTokens` (streaming tags `nf`/`amzn`/`cr`, codec
 fragments `eac3`/`ddp2`, `multisub`/`multi`/`subs`, …).
 
@@ -107,7 +107,7 @@ Already fixed — if one of these reappears, it is a regression or a format the 
   loose text stay out on purpose.
 - Hard part filter killing a whole-season pack, and `ExtractPart` reading `Part 1 + Part 2` as `1`
   → on the pack path, part only rejects a declared conflict and a two-part name returns `nil`
-  ([decisions.md #79](../../../docs/agents/decisions.md#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses);
+  ([decisions/079](../../../docs/agents/decisions/079-pack-choice-asks-does-it-cover-the-window-not-is.md);
   `docs/agents/sources.md`, "Pack granularity and numbering").
 
 Still open by design:

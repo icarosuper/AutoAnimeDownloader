@@ -10,7 +10,7 @@ import (
 //
 // The legacy text format (`id:hash:name`) was REMOVED along with EpisodeStruct.EpisodeID: it
 // did not load anime id or episode number, which are exactly the key of an episode today
-// (see decisions.md #52). A record like that cannot be identified, so supporting the
+// (see decisions/052). A record like that cannot be identified, so supporting the
 // format would only produce colliding (0,0) keys.
 func ParseEpisodes(content string) ([]EpisodeStruct, error) {
 	content = strings.TrimSpace(content)

@@ -110,7 +110,7 @@ func TestCoverageOwnership_SeasonPackCoversNextCour(t *testing.T) {
 		}
 		// The range is CONVERTED to cour 2's ruler: cour 1's 1..23 pack (offset 0) is -10..12 under cour
 		// 2 (offset 11). It's exactly what assignBatches would record if the search found the same
-		// torrent again (packAxis.localRange, decisions.md #79).
+		// torrent again (packAxis.localRange, decisions/079).
 		if ep.BatchStart != -10 || ep.BatchEnd != 12 {
 			t.Fatalf("the adopted record's range should be -10-12, got %d-%d", ep.BatchStart, ep.BatchEnd)
 		}
@@ -226,7 +226,7 @@ func TestCoverageOwnership_PackNotInSessionIsNotOwnership(t *testing.T) {
 
 // TestCoverageOwnership_UnknownRangeIsNotOwnership: a pack without a range in its name records
 // BatchStart == 0. Unknown isn't "covers everything" — same ceiling as canRemoveTorrent
-// (decisions.md #74).
+// (decisions/074).
 func TestCoverageOwnership_UnknownRangeIsNotOwnership(t *testing.T) {
 	searched := false
 

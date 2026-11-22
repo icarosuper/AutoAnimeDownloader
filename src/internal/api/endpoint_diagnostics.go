@@ -6,7 +6,7 @@ import (
 )
 
 // handleDiagnostics builds the bug report bundle the report screen previews and downloads. Nothing
-// is sent anywhere: the user attaches the file by hand (decisions.md #102).
+// is sent anywhere: the user attaches the file by hand (decisions/102).
 func handleDiagnostics(server *Server) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

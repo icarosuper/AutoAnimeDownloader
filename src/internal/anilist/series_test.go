@@ -36,7 +36,7 @@ func tvChain(graph map[int]*fixtureMedia, ids []int, counts []int) {
 
 // mockSeriesAPI answers the walk query from the graph, rendering EXACTLY two levels of
 // relations and returning `edges: []` on the third — which is what AniList actually does
-// (decisions.md #71). That's the part of the mock that matters: a fake that expanded the
+// (decisions/071). That's the part of the mock that matters: a fake that expanded the
 // whole depth would let through exactly the bug of treating the cut level as a root.
 func mockSeriesAPI(t *testing.T, graph map[int]*fixtureMedia) *int {
 	t.Helper()
@@ -93,7 +93,7 @@ func renderMedia(graph map[int]*fixtureMedia, id int, node *fixtureMedia, depth 
 }
 
 // goldenChains are the three chains measured against the real AniList on 28/Aug/2026
-// (decisions.md #71). They live here, not in a markdown, because markdown rots in silence
+// (decisions/071). They live here, not in a markdown, because markdown rots in silence
 // and a test breaks CI.
 //
 // Shingeki is the strong validation: `76..87` for Final Season Part 2 is EXACTLY the numbering
@@ -245,7 +245,7 @@ func TestGetSeriesIndex_UnreleasedCountsZeroAndIsNotCached(t *testing.T) {
 
 // TestGetSeriesIndex_SkipsNonTVPrequel: recap movies, OVAs and ONAs also arrive as PREQUEL
 // with episodes filled, and summing that sends the search to an episode that doesn't exist.
-// Same rule as ComputeEpisodeOffset (decisions.md #9 and #71).
+// Same rule as ComputeEpisodeOffset (decisions/009 and decisions/071).
 func TestGetSeriesIndex_SkipsNonTVPrequel(t *testing.T) {
 	graph := map[int]*fixtureMedia{
 		300: {episodes: eps(4), format: MediaFormatOVA, status: MediaStatusFinished, sequel: 400},

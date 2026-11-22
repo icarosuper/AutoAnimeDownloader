@@ -1,6 +1,6 @@
 /**
  * Bug report helpers: how the app links to the report screen and to GitHub. Nothing here sends
- * anything — the user attaches the file by hand (decisions.md #102).
+ * anything — the user attaches the file by hand (decisions/102).
  */
 
 /** The ONE place the repo URL lives: the v3.0.0 rename changes it. */

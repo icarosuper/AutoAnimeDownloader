@@ -454,7 +454,7 @@ func TestAttemptDownloadWithRetries_DiskFullDoesNotCallAdd(t *testing.T) {
 }
 
 // A full disk is not a download failure any more: it is disk_low's "blocked" level, said once for
-// every episode instead of once per episode per pass (decisions.md #128). The issue still reaches the
+// every episode instead of once per episode per pass (decisions/128). The issue still reaches the
 // report, which is what feeds that level.
 func TestProcessAnimeEpisodes_DiskFullDoesNotNotifyDownloadFailed(t *testing.T) {
 	bodies := make(chan string, 4)

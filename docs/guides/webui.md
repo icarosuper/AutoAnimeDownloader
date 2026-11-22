@@ -89,7 +89,7 @@ Real-time daemon logs over WebSocket:
 
 Builds a redacted diagnostics bundle (environment, config, log, optional crash file) to attach to
 a GitHub issue. Consent is the act of attaching the file; there is no backend. The tray menu and
-the crash banner on Status also land here. See [decisions.md #102](../agents/decisions.md#102-the-bug-report-has-no-backend-consent-is-the-act-of-attaching-the-file).
+the crash banner on Status also land here. See [decisions/102](../agents/decisions/102-the-bug-report-has-no-backend-consent-is-the-act.md).
 
 ## Troubleshooting
 

@@ -1,0 +1,11 @@
+# 28. `Organize` replaces a library file that has the same name but different bytes
+
+**Location:** `internal/files/librarian.go` — the `os.SameFile` branch in `Organize`; the `*req.EpisodeNumber > 0` term in the `useJellyfin` condition.
+
+**What it looks like:** When the destination path already exists, `Organize` deletes it and creates a fresh hardlink. Destroying a file that is already in the user's library looks reckless — the safe-looking options are to skip it (as the code originally did, on a bare `Stat(dest) == nil`) or to fail loudly.
+
+**Why it's right:** A bare existence check cannot tell "our hardlink, already created" from "a different file that happens to collide on name", and treating the second as the first is silent data loss: the caller is told the episode was organized, `LibraryPaths` is written pointing at someone else's bytes, and the `download_completed` webhook fires. `os.SameFile` (inode on Unix, file index on Windows — both `Stat` calls go through the injectable `FileSystem`, so fakes still work) splits the two cases. Same file is a true no-op, which is what reconciliation and job retries need. Different file only arises from redownload and replace-episode, where the user explicitly asked for the swap, so the new release wins; the replacement is logged at `Info` with source and destination so it stays auditable. Failing instead would deadlock those flows in `JobOrganize` retries. The seeded file is never touched — only the library name is recycled — so seeding is unaffected.
+
+The related `*req.EpisodeNumber > 0` guard is defence in depth for the same failure: AniList has no episode 0, so a zero unambiguously means *missing data* rather than a real episode. Falling back to the raw filename (unique per release) is strictly better than emitting `Anime - E00.mkv`, which collides across every episode of the anime and, before the `SameFile` fix, made them all resolve to the same destination. Decision 27 fixes the cause; this guard makes sure no future path reintroduces it.
+
+**Don't "fix" by:** restoring the bare `Stat`-and-skip, turning the different-inode case into an error, or dropping the `> 0` term because "the persistence layer guarantees a real episode number now" — the guard exists precisely because that guarantee is not enforceable at this layer.

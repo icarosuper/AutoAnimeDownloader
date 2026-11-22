@@ -25,7 +25,7 @@ type StatusResponse struct {
 	DiskLow bool `json:"disk_low" example:"false"`
 	// Anilist is AniList's last known state, written by ANY call (the daemon's pass or the
 	// frontend's poll). It travels here, and not in its own endpoint, because /status is already
-	// polled and is already the payload the WebSocket pushes — see decisions.md #66.
+	// polled and is already the payload the WebSocket pushes — see decisions/066.
 	Anilist anilist.Health `json:"anilist"`
 	// PendingCrashAt is when the daemon last crashed, while nobody has handled the report yet; null
 	// otherwise. The UI opens the report screen (fresh page load) or toasts (tab already open).

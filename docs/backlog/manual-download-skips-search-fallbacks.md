@@ -31,7 +31,7 @@ while the daemon's pass finds `[inid4c] … Stone Ocean 13 v2 (1080p)`. Same for
   `details.mediaList` from `GetAnimeInfo` / `GetMediaByID`, and both queries ask for synonyms and
   relations (`mediaByIDFields` in `anilist/standalone.go:136`). Its own comment even says relations
   are fetched "to build the Nyaa query". So the empty values look like an oversight, not a choice.
-- Still confirm before changing: grep decisions.md for `manual_download` / `ManualDownload`. The
+- Still confirm before changing: grep `docs/agents/decisions/` for `manual_download` / `ManualDownload`. The
   line dates back to the early Portuguese-era commits (`8ef8233`, `ed611cb`), before the fallbacks
   existed.
 - Fix: pass `Media.OwnSynonyms()` and `Media.Relations`, like the scheduled path. Test: a

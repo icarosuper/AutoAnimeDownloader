@@ -43,11 +43,11 @@ func handleUpdateConfig(server *Server) http.HandlerFunc {
 		}
 
 		// The anilist_username -> anilist_usernames migration is NOT repeated here: LoadConfigs
-		// migrates once, on write (decisions.md #90). A body that still sends the singular
+		// migrates once, on write (decisions/090). A body that still sends the singular
 		// key is persisted and cured on the next read.
 
 		// anilist_usernames is NOT validated: an install that only uses standalone animes
-		// never configures an account (decisions.md #49).
+		// never configures an account (decisions/049).
 
 		if config.CompletedAnimePath == "" {
 			JSONError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Completed anime path is required")

@@ -1,0 +1,9 @@
+# 20. `ExtractSeason` has a roman-numeral fallback kept out of `reSeasonPatterns`
+
+**Location:** `internal/nyaa/nyaa_regex.go` — `reRomanSeason`, `romanSeasonValues`; `internal/nyaa/nyaa.go` — `ExtractSeason`.
+
+**What it looks like:** A second, separate regex (`\b(II|III|IV|V|VI|VII|VIII|IX|X)\b`) tried only after the whole `reSeasonPatterns` loop has failed, instead of just adding it as one more entry in that slice.
+
+**Why it's right:** Some sequels are titled with only a roman numeral (e.g. Anilist id 194829, "Katainaka no Ossan, Kensei ni Naru II") — no "Season 2"/"S2" appears anywhere in the AniList title, and fansub groups (Erai-raws, Ironclad) release episodes using that exact title verbatim, with no separate season marker either. Before this fix, `ExtractSeason("...Naru II - 01 [1080p]...")` returned `nil` while `ExtractAnimeSeasonPart` (via the `"...2nd Season"` synonym) correctly resolved `requestedSeason=2`, so every real torrent got rejected by the hard season filter in `ScrapNyaaForMultipleEpisodes` (`season == nil` vs `requestedSeason=2`) even though `titleMatchesQuery` already matched the full title including "II" — the anime failed to download every cycle. `reSeasonPatterns` is also used by `truncateAtFirstMarker` (decision 18) to decide where to cut a torrent name before tokenizing; if the roman-numeral pattern were merged into that slice, it would truncate `"...Naru II"` right before "II", dropping it from the Jaccard title tokens and silently changing match behavior for every title ending in a numeral. Keeping it as a separate, lower-priority fallback used only by `ExtractSeason` avoids that cross-effect.
+
+**Don't "fix" by:** merging `reRomanSeason` into `reSeasonPatterns`, or matching lowercase roman numerals — lowercase risks false positives from unrelated fansub/codec tokens, and uppercase-only matches how anime titles actually format them.
