@@ -3,9 +3,12 @@
 .idea/
 *.sublime-workspace
 *.sublime-project
-# Local Claude Code state stays out; project skills are shared
+# Local Claude Code state stays out; project skills, settings and hooks are shared
 .claude/*
 !.claude/skills/
+!.claude/settings.json
+!.claude/hooks/
+.claude/hooks/.last-green
 
 # Build
 build/

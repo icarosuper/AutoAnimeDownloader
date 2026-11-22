@@ -8,7 +8,7 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 
 ## Important — After Any Change
 
-1. **Run tests**: `go test ./...`
+1. **Run tests**: `go test ./...` — the Stop hook in `.claude/settings.json` also runs `go vet` + `go test` when Go files changed and sends a failure back to you; `.claude/hooks/` also asks before `git commit`/`push` and flags Portuguese you just wrote
 2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add a file to `docs/agents/decisions/`
    - `architecture.md` documents what **the code can't answer by itself**: flow between files, invariants that hurt to break, negative facts ("there is no `daemon.go`"), disambiguation of similar names, and the pointer to the decision. **Don't** list symbols with a one-line purpose — `grep '^func '` answers that for free and always up to date; a hand-written symbol table is a copy that goes stale. A new file only gets text if it brings one of those five; deleted file → deleted text. The question it answers is "which file do I open and what bites me there", not "which functions exist"
    - New decision → use the [record-decision](.claude/skills/record-decision/SKILL.md) skill (next number, file, format, regenerated index). One decision per file, `docs/agents/decisions/NNN-<slug>.md`; the filename never changes once created, even when the title does. Cite it as `decisions/043` in code comments and as a link to the file in docs: `[decisions/043](decisions/043-an-animes-identity-is-mediaid-status-is-a-per.md)` from `docs/agents/`
