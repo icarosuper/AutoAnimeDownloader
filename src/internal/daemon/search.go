@@ -263,9 +263,9 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 
 // splitEntryContinuation finds the PREQUEL whose romaji title is this entry's with another " - "
 // suffix ("<Base> - 1st STAGE" vs "<Base> - 2nd & 3rd STAGE"), and returns the shared base and the
-// prequel's episode count. Unlike ComputeEpisodeOffset an ONA counts — the shared base, not the
-// format, is the evidence that both entries are one show — but a movie never does: it is not an
-// episode of the count.
+// prequel's episode count. An ONA prequel counts whatever the entry's own format (ComputeEpisodeOffset
+// counts one only under an ONA entry) — the shared base, not the format, is the evidence that both
+// entries are one show — but a movie never does: it is not an episode of the count.
 func splitEntryContinuation(titles anilist.Title, relations anilist.MediaRelations) (string, int, bool) {
 	if titles.Romaji == nil {
 		return "", 0, false

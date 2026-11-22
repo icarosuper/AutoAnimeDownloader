@@ -1151,10 +1151,6 @@ func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 	}
 }
 
-// The dash terminator is space / v2 / end / '[' — a dot is none of those, so " - 01.mkv" only
-// numbered because a later pattern required the .mkv suffix. MystVortex ships .mp4 (and IsVideoFile
-// accepts a dozen other extensions), so those files were unnumbered. A catch-all "dot ends the
-// number" would also read "- 17.5 (OVA)" as 17.
 // inid4c names a re-release "Stone Ocean 13 v2 (1080p)": the " 05 (" pattern didn't allow the
 // version between the number and the "(", so the release had no episode number.
 func TestExtractEpisodeNumber_LooseNumberWithVersionBeforeParen(t *testing.T) {
@@ -1183,6 +1179,10 @@ func TestExtractEpisodeNumber_LooseNumberWithVersionBeforeParen(t *testing.T) {
 	}
 }
 
+// The dash terminator is space / v2 / end / '[' — a dot is none of those, so " - 01.mkv" only
+// numbered because a later pattern required the .mkv suffix. MystVortex ships .mp4 (and IsVideoFile
+// accepts a dozen other extensions), so those files were unnumbered. A catch-all "dot ends the
+// number" would also read "- 17.5 (OVA)" as 17.
 func TestExtractEpisodeNumber_LooseNumberBeforeVideoExtension(t *testing.T) {
 	cases := []struct {
 		name string

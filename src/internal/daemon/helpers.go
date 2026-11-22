@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"slices"
 	"testing"
 	"time"
 )
@@ -342,15 +341,13 @@ func ComputeEpisodeOffset(format anilist.MediaFormat, relations anilist.MediaRel
 	if part == nil || *part < 2 {
 		return 0
 	}
-	counted := []anilist.MediaFormat{anilist.MediaFormatTV, anilist.MediaFormatTVShort}
-	if format == anilist.MediaFormatONA {
-		counted = append(counted, anilist.MediaFormatONA)
-	}
 	for _, edge := range relations.Edges {
 		if edge.RelationType != "PREQUEL" || edge.Node.Episodes == nil {
 			continue
 		}
-		if !slices.Contains(counted, edge.Node.Format) {
+		f := edge.Node.Format
+		tv := f == anilist.MediaFormatTV || f == anilist.MediaFormatTVShort
+		if !tv && !(format == anilist.MediaFormatONA && f == anilist.MediaFormatONA) {
 			continue
 		}
 		return *edge.Node.Episodes
