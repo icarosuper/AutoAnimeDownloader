@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-24
 **Status:** designed, not implemented
-**Closes:** "No release — subtitle language filter" in [TODO.md](../../TODO.md)
+**Closes:** [backlog/subtitle-language-filter.md](../../backlog/subtitle-language-filter.md)
 **Scope:** `internal/nyaa` (config, signal, sorting, search category),
 `internal/daemon/search.go` (hard filter), `internal/files` (config field),
 `frontend/routes/Priorities.svelte` (UI).

@@ -5,6 +5,8 @@ inside it — a task that doesn't touch the binary (docs, things outside the rep
 changing the number.
 Current version: `v2.11.2`. Stamp a version (tag, GitHub Release, AUR):
 the [release skill](../.claude/skills/release/SKILL.md).
+Anything not tied to a specific release — problems and features alike — lives in
+[backlog/](backlog/), one file per item.
 
 The order follows a single rule: **nothing that stamps the project's name ships before the rename**
 (Windows installer, ghcr image, README, social preview, landing page), otherwise it's a double
@@ -24,6 +26,17 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 > ([#92](agents/decisions.md#92-the-on-disk-anilist-cache-restores-with-ttl-zero-and-a-value-served-from-it-comes-with-errfromcache)).
 > Covers came for free (the URL is a `Media` field, already in the snapshot) and a pass in cache
 > mode deletes, by explicit decision.
+
+> The three **download hygiene** items closed on 2026-09-07: the
+> disk guard now receives the torrent size
+> ([#93](agents/decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)),
+> a torrent failure now keeps the bytes already downloaded (amendment to
+> [#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist))
+> and a torrent at zero peers for more than an hour is now dropped through the same failure path
+> ([#94](agents/decisions.md#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)).
+> None of the three was measured live — the tests are unit tests, and the live franchise pass
+> in [backlog/live-pass-multi-part-franchise.md](backlog/live-pass-multi-part-franchise.md) is what
+> actually exercises them.
 
 ## `v2.4.0` — MyAnimeList integration
 
@@ -54,6 +67,10 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
   [#105](agents/decisions.md#105-fetchtorrentdetail-builds-the-view-url-itself-it-never-takes-one-from-the-caller)).
   Pick among the ranked torrents (Nyaa description on demand, optional query) instead of
   always taking the auto-pick.
+- ~~Rank Blu-ray above WEB on series whose AniList **media** status is `FINISHED`
+  (standalone, packs, and singles). Weekly `RELEASING` stays without source.~~ —
+  **released in `v2.7.0` on 2026-10-25**
+  ([decisions.md #107](agents/decisions.md#107-source-ranks-finished-series-empty-source-is-web-dl-health-bands-are-1050)).
 
 ## `v2.7.1` — leftover `.chapters` folders
 
@@ -71,6 +88,14 @@ migration. If presenting the repo to employers gets urgent, `v3.0.0` can move up
 - ~~Status type filters (Airing / Finished / Standalone / Blacklist + Unwatched, counts, URL,
   clear-all)~~ — **released in `v2.7.2` on 2026-11-03**. Independent of the recents shelf.
   The Behind chip that used to live in the recents spec is out.
+- ~~A pack whose declared span exceeds `AnimeTotalEpisodes` (OVA/specials on the same media)
+  survives `identifyEpisodesNotInWatching` after the anime leaves every tracked list~~ —
+  **released in `v2.7.2` on 2026-11-03**
+  ([decisions.md #113](agents/decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays),
+  [#117](agents/decisions.md#117-off-list-bypasses-the-unclaimed-pack-guard)).
+  `PackFileRange` no longer lets `S00E19 (OVA)` become episode 19. Packs **already** stored
+  as 1–19 keep the old span until the torrent is deleted from Downloads (`force`) or
+  re-ingested.
 
 ## `v2.8.0` — disable seeding, batch episodes, webhook preview, install script
 
@@ -219,74 +244,3 @@ tweaks would be redone by the `v3.0.0` UI/UX overhaul.
 - Detach and run as a background service
 - UI changes to work better on Windows
 - Test thoroughly
-
-## No release — dashboard account filter in the CLI
-
-The web filter shipped in `v2.10.0`; the CLI half of the plan did not. Ships as a patch whenever it
-is tackled.
-
-- `animes --account anilist:alice`: the same membership rule as the dashboard (the account has the
-  anime in a download status), applied to `GET /animes`'s `accounts`.
-
-## No release — promote
-
-After `v3.1.0`: promoting without Windows cuts off a large part of the audience.
-
-## No release — source ranking for finished series
-
-- ~~Rank Blu-ray above WEB on series whose AniList **media** status is `FINISHED`
-  (standalone, packs, and singles). Weekly `RELEASING` stays without source.~~ —
-  **released in `v2.7.0` on 2026-10-25**
-  ([decisions.md #107](agents/decisions.md#107-source-ranks-finished-series-empty-source-is-web-dl-health-bands-are-1050)).
-
-## No release — unclaimed extras keep a pack after a list switch
-
-- ~~A pack whose declared span exceeds `AnimeTotalEpisodes` (OVA/specials on the same media)
-  survives `identifyEpisodesNotInWatching` after the anime leaves every tracked list~~ —
-  **released in `v2.7.2` on 2026-11-03**
-  ([decisions.md #113](agents/decisions.md#113-packfilerange-min-max-skips-extrasova-an-isolated-total1-drops-next-cour-stays),
-  [#117](agents/decisions.md#117-off-list-bypasses-the-unclaimed-pack-guard)).
-  `PackFileRange` no longer lets `S00E19 (OVA)` become episode 19. Packs **already** stored
-  as 1–19 keep the old span until the torrent is deleted from Downloads (`force`) or
-  re-ingested.
-
-## No release — subtitle language filter
-
-Ships as a patch whenever it is tackled.
-
-- Filter torrent ranking (and optionally hard-filter) by subtitle language in priorities
-  (e.g. PT-BR). Spec designed on 2026-08-24 and never implemented:
-  [subtitle-language-filter](superpowers/specs/2026-08-24-subtitle-language-filter-design.md).
-  The language is read from the release **name** (`[PT-BR]`, `MultiSub`, …), not from the
-  torrent file list and not from scraping the Nyaa description.
-
-## Fixes with no fixed release — download old and long anime properly
-
-Ships as a patch (`v2.x.y`/`v3.x.y`) whenever it's tackled. The symptom is a single one: **old or
-long anime doesn't download**. Current-season anime downloads fine. The cause isn't finding a
-candidate — it's that the candidate is either dead (0-2 seeders, blocked by `min_seeders` or stuck
-at 0%) or a huge pack the size ceiling rejects.
-
-> The three **download hygiene** items closed on 2026-09-07: the
-> disk guard now receives the torrent size
-> ([#93](agents/decisions.md#93-the-disk-guard-has-two-triggers-and-the-size-one-still-applies-with-min_free_disk_gb--0)),
-> a torrent failure now keeps the bytes already downloaded (amendment to
-> [#24](agents/decisions.md#24-a-failed-torrent-is-dropped-from-the-session-and-re-added-by-the-next-pass--no-blacklist))
-> and a torrent at zero peers for more than an hour is now dropped through the same failure path
-> ([#94](agents/decisions.md#94-a-stalled-torrent-is-dropped-through-the-failure-path-and-only-one-that-is-trying-counts-as-stalled)).
-> None of the three was measured live — the tests are unit tests, and the live franchise pass
-> below is what actually exercises them.
-
-- **Download part of a pack** — for the One Piece 1-12 window, the only live pack that covers it is
-  171.8 GiB and the 100 GB ceiling blocks it; the loose episodes exist and are dead. No indexer
-  swap solves this, because 574 episodes weigh what they weigh. The three exits, each in its own
-  spec: per-anime size ceiling in `AnimeSettings` (smallest diff, costs disk), **per-file
-  selection** (`rain` v2.3.1 doesn't have it — `AddTorrentOptions` only exposes
-  `Stopped`/`StopAfterDownload`/`StopAfterMetadata`, and `Files()`/`FileStats()` are read-only;
-  `anacrolix/torrent` has per-file priority) and Debrid
-- **Live pass on a multi-part franchise (Attack on Titan)** — the per-series absolute axis, the
-  `packAxis` and ownership by coverage ([#77](agents/decisions.md#77-the-per-series-absolute-axis-is-a-bfs-two-generations-at-a-time-and-the-cut-level-goes-back-to-the-queue)/[#78](agents/decisions.md#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key)/[#79](agents/decisions.md#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)/[#84](agents/decisions.md#84-a-pack-without-a-range-in-its-name-gets-its-coverage-from-the-file-list-not-from-assuming-it-covers-everything))
-  were written in August and only have unit tests plus a **listing** measurement. No real
-  end-to-end download has run on the S1 → Final Season Part 3 chain, which is exactly where the
-  four numbering conventions from the "Granularidade" section of [sources.md](agents/sources.md)
-  collide. The instrument already exists: `scripts/robustness-animes.txt` + `make debug-batch`

@@ -29,7 +29,8 @@ user has other work going on in that checkout, ask before touching it.
 
 **The number** comes from `docs/TODO.md`: each section is one release, its bump is the largest bump
 of the tasks inside it. A task that doesn't touch the binary rides along without changing the
-number. Patch items under "Fixes with no fixed release" ship as `vX.Y.Z` whenever tackled. If the
+number. A `docs/backlog/` item fixed since the last release has no section yet: it gets one in
+`docs/TODO.md` at stamp time (usually a patch `vX.Y.Z`), and its backlog file is deleted. If the
 requested number disagrees with the section, say so and ask.
 
 ## 1. Stamp the TODO
