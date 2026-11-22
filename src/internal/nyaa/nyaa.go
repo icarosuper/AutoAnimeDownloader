@@ -254,6 +254,13 @@ func batchRange(torrentName string) (int, int, bool) {
 		if last <= start {
 			continue
 		}
+		// Season range: "[Trix] Kimetsu no Yaiba S01-05" carries seasons 1 to 5, and as episodes 1..5
+		// it won exactly those five episodes of a season-1 entry while a whole-season pack sat next to
+		// it. Unknown range instead → the file list decides (PackFileRange flattens multi-season packs).
+		// See decisions/083.
+		if reSeasonRangePrefix.MatchString(torrentName[:loc[0]]) {
+			continue
+		}
 		// Release year: "[EMBER] ... (2021-2022) ..." became the range 2021..2022, which no axis
 		// hypothesis covers — the complete pack was silently dropped. The band only catches years: no
 		// series reaches episode 1900, and One Piece "1001-1100" passes.

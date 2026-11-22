@@ -43,6 +43,10 @@ var (
 
 	// Batch info extraction
 	reBatchRange = regexp.MustCompile(`(?i)(\d{1,4})\s*[-~]\s*(\d{1,4})`)
+	// reSeasonRangePrefix is what precedes a reBatchRange match that counts seasons, not episodes:
+	// "S01-05", "Season 1-3", "Seasons 1 ~ 3". Anchored at the end of the text before the match, so
+	// "S2 01-12" and "S01E01-12" (an episode range after the marker) still count.
+	reSeasonRangePrefix = regexp.MustCompile(`(?i)(?:\bS|\bseasons?\s*)$`)
 
 	// Movie keyword patterns
 	reMovieKeywords = []*regexp.Regexp{

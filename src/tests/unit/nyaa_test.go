@@ -1112,6 +1112,15 @@ func TestExtractBatchInfo_ExtractsRangeAndSeason(t *testing.T) {
 		{"[Group] Anime (2021-2022) 01-24 [BD]", 1, 24, 0},
 		// The band only catches years — a long series numbered above 1000 is still a range.
 		{"[Judas] One Piece 1001-1100 [1080p]", 1001, 1100, 0},
+		// A SEASON range is not an episode range: "[Trix] Kimetsu no Yaiba S01-05" carries seasons 1 to
+		// 5, and read as episodes 1..5 it won only those five episodes of a season-1 entry. Unknown
+		// range → the file list decides.
+		{"[Trix] Kimetsu no Yaiba S01-05 [Dual Audio] [Multi Subs] (BD 1080p AV1) - Demon Slayer VOSTFR (Batch)", 0, 0, 1},
+		{"[Group] Anime Season 1-3 [BD 1080p] (Batch)", 0, 0, 1},
+		{"[Group] Anime Seasons 1 ~ 3 [BD 1080p]", 0, 0, 0},
+		// An episode range after a season marker still counts.
+		{"[Group] Anime S2 01-12 [1080p]", 1, 12, 2},
+		{"[Group] Anime S01E01-12 [1080p]", 1, 12, 1},
 	}
 
 	for _, tc := range cases {

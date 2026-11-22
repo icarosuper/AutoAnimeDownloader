@@ -558,8 +558,8 @@ is `LastAiredEpisode` (decisions/056).
 03+04)"): it covers both halves, and the first match would lie.
 
 **The range read from the name is the first _plausible_ match, not the first match**
-(decisions/083): it rejects a resolution tag (`[720-1080p]`) and an inverted range
-(`"Euphonium 2 - 01 ~ 13"` → `2..1`).
+(decisions/083): it rejects a resolution tag (`[720-1080p]`), an inverted range
+(`"Euphonium 2 - 01 ~ 13"` → `2..1`), a release year (`(2021-2022)`) and a season range (`S01-05`).
 
 **`PackFileRange`** reads the range the pack actually carries from the detail-page file list, on the
 same ruler as the name (decisions/084). Min-max **skips OP/ED, `S00E`, OVA/OAD, `.5` and episode 0**; an
