@@ -209,7 +209,7 @@ func ManualDownloadEpisode(fm FileManagerInterface, backend torrents.TorrentBack
 		return files.EpisodeStruct{}, err
 	}
 
-	results := rankSeriesResults(searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, anilist.LastAiredEpisode(details.mediaList)), details.isFinished)
+	results := rankSeriesResults(searchNyaaForSingleEpisode(*targetNode, details.mediaList.Media.Title, nil, anilist.MediaRelations{}, details.mediaList.Media.Format, anilist.LastAiredEpisode(details.mediaList)), details.isFinished)
 	if len(results) == 0 {
 		return files.EpisodeStruct{}, fmt.Errorf("no torrents found for episode %d", targetNode.Episode)
 	}

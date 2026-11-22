@@ -502,7 +502,7 @@ func TestProcessAnimeEpisodes_BatchNoRedownload(t *testing.T) {
 			searchAnimeCalled = true
 			return []nyaa.TorrentResult{{MagnetLink: "magnet:?xt=urn:btih:fakehash", IsBatch: true}}
 		},
-		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ int) []nyaa.TorrentResult {
+		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ anilist.MediaFormat, _ int) []nyaa.TorrentResult {
 			return nil
 		},
 		searchMovie: func(_ anilist.Title, _ bool) []nyaa.TorrentResult {
@@ -1061,7 +1061,7 @@ func TestProcessAnimeEpisodes_NoMagnets_SkipsNewEpisodeWebhook(t *testing.T) {
 
 	noResults := nyaaSearcher{
 		searchAnime: func(anilist.Title, []string, []int) []nyaa.TorrentResult { return nil },
-		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, int) []nyaa.TorrentResult {
+		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, anilist.MediaFormat, int) []nyaa.TorrentResult {
 			return nil
 		},
 		searchMovie: func(anilist.Title, bool) []nyaa.TorrentResult { return nil },

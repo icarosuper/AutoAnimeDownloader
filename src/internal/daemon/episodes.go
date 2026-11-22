@@ -268,7 +268,7 @@ func processAnimeEpisodes(
 					Bool("earlier_episode_missing", stuck).
 					Msg("Skipping per-episode search: a recent search came back empty")
 			} else {
-				candidates, searchStats = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, synonyms, anime.Media.Relations, seriesLength), finished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+				candidates, searchStats = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, synonyms, anime.Media.Relations, anime.Media.Format, seriesLength), finished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 				if len(candidates) == 0 && searcher.misses != nil {
 					searcher.misses.record(missKey, time.Now(), searchStats)
 				}
@@ -705,7 +705,7 @@ func newPackAxis(anime anilist.MediaList, seriesIndex map[int]anilist.Series, to
 	// immediate prequel's entry. This is where ComputeEpisodeOffset comes in — as ONE hypothesis, not
 	// as the only truth (decisions.md #79).
 	_, part := seasonPartOf(anime.Media)
-	add(ComputeEpisodeOffset(anime.Media.Relations, part))
+	add(ComputeEpisodeOffset(anime.Media.Format, anime.Media.Relations, part))
 	// "Absolute for the series": the series index axis (decisions.md #77).
 	add(seriesIndex[anime.Media.Id].Offset)
 

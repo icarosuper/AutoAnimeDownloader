@@ -47,7 +47,7 @@ func TestSearchSingleEpisode_SplitEntryUsesBaseTitleAndPrequelOffset(t *testing.
 	defer mockNyaaListing(t, steelBallRunRows(), nil)()
 
 	titles, synonyms, relations := steelBallRunMedia("JoJo no Kimyou na Bouken: Steel Ball Run - 1st STAGE", anilist.MediaFormatONA)
-	results := searchNyaaForSingleEpisode(anilist.AiringNode{Episode: 1}, titles, synonyms, relations, 11)
+	results := searchNyaaForSingleEpisode(anilist.AiringNode{Episode: 1}, titles, synonyms, relations, anilist.MediaFormatONA, 11)
 
 	if len(results) != 1 || !strings.Contains(results[0].Name, "Steel Ball Run - 02") {
 		t.Fatalf("episode 1 must resolve to the base title's episode 02, got %v", torrentNames(results))
@@ -59,7 +59,7 @@ func TestSearchSingleEpisode_SplitEntryNeedsTheSameBaseTitle(t *testing.T) {
 
 	// A prequel with another base is a different show: no base-title search, no offset.
 	titles, synonyms, relations := steelBallRunMedia("JoJo no Kimyou na Bouken: Ougon no Kaze - Part 1", anilist.MediaFormatONA)
-	if results := searchNyaaForSingleEpisode(anilist.AiringNode{Episode: 1}, titles, synonyms, relations, 11); len(results) != 0 {
+	if results := searchNyaaForSingleEpisode(anilist.AiringNode{Episode: 1}, titles, synonyms, relations, anilist.MediaFormatONA, 11); len(results) != 0 {
 		t.Fatalf("a prequel with another base title must not trigger the fallback, got %v", torrentNames(results))
 	}
 }
@@ -68,7 +68,7 @@ func TestSearchSingleEpisode_SplitEntryIgnoresMoviePrequel(t *testing.T) {
 	defer mockNyaaListing(t, steelBallRunRows(), nil)()
 
 	titles, synonyms, relations := steelBallRunMedia("JoJo no Kimyou na Bouken: Steel Ball Run - 1st STAGE", anilist.MediaFormatMovie)
-	if results := searchNyaaForSingleEpisode(anilist.AiringNode{Episode: 1}, titles, synonyms, relations, 11); len(results) != 0 {
+	if results := searchNyaaForSingleEpisode(anilist.AiringNode{Episode: 1}, titles, synonyms, relations, anilist.MediaFormatONA, 11); len(results) != 0 {
 		t.Fatalf("a movie prequel is not part of the episode count, got %v", torrentNames(results))
 	}
 }

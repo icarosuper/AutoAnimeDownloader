@@ -65,7 +65,7 @@ func countingSearcher(hit *bool) nyaaSearcher {
 			*hit = true
 			return []nyaa.TorrentResult{{Name: "[EMBER] Mushoku Tensei (2021) (Season 1) [Batch]", MagnetLink: "magnet:?xt=urn:btih:outro", IsBatch: true}}
 		},
-		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ int) []nyaa.TorrentResult {
+		searchSingleEpisode: func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ anilist.MediaFormat, _ int) []nyaa.TorrentResult {
 			*hit = true
 			return nil
 		},

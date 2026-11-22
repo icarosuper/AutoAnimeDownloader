@@ -134,7 +134,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		// debug reported "0 magnets" on One Piece/Naruto because it hadn't searched, not because Nyaa
 		// didn't have them.
 		if len(magnets) == 0 {
-			magnets, _ = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, synonyms, anime.Media.Relations, seriesLength), details.isFinished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+			magnets, _ = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, synonyms, anime.Media.Relations, anime.Media.Format, seriesLength), details.isFinished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 		}
 
 		magnetsByEpisodeNumber[ep.Episode] = len(magnets)

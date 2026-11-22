@@ -75,7 +75,7 @@ var (
 		{regexp.MustCompile(`(?i)Episode\s*(\d{1,4})\b`), "Episode 05"},
 		{regexp.MustCompile(`(?i)\bE(\d{1,4})\b`), "E05"},
 		{regexp.MustCompile(`(?i)\[(\d{1,3})\]`), "[05]"},
-		{regexp.MustCompile(`(?i)\s(\d{1,4})\s*\(`), " 05 ("},
+		{regexp.MustCompile(`(?i)\s(\d{1,4})(?:\s*v\d+)?\s*\(`), " 05 (, 05 v2 ("},
 		{videoExtEpisodeRegexp(), " 05.<video ext>"},
 		{regexp.MustCompile(`(?i)\s(\d{1,4})$`), " 5"},
 	}

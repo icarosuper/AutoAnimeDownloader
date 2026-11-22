@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 )
@@ -324,26 +325,32 @@ func seasonPartOf(media anilist.Media) (season, part *int) {
 // continuous numbering (e.g. SubsPlease).
 //
 // Only a TV/TV_SHORT PREQUEL counts: recap movies, OVAs and ONAs also arrive as PREQUEL with
-// Episodes filled in, but they're not part of the count fansubs follow. When in doubt it returns
-// 0 — a wrong offset sends the search to a nonexistent episode, while a missing offset falls back
-// to relative numbering, which is what most groups use.
+// Episodes filled in, but they're not part of the count fansubs follow. The exception is an ONA
+// entry, whose ONA prequel counts too: a streaming series split into ONA parts (Stone Ocean
+// Part 2) is one show, while an ONA side story of a TV series still stays out (decisions.md #133).
+// When in doubt it returns 0 — a wrong offset sends the search to a nonexistent episode, while a
+// missing offset falls back to relative numbering, which is what most groups use.
 //
 // The same "first TV/TV_SHORT PREQUEL" selection lives in anilist.prequelOf (anilist/series.go),
-// and the two stay separate on purpose: that one walks the WHOLE chain (the series' absolute
-// axis), this one takes ONE hop and is gated by part >= 2. They're the two DIFFERENT pack
+// minus the ONA exception, and the two stay separate on purpose: that one walks the WHOLE chain
+// (the series' absolute axis), this one takes ONE hop and is gated by part >= 2. They're the two DIFFERENT pack
 // numbering hypotheses in daemon.packAxis — "continuous by season" and "absolute by series" —, so
 // unifying them would erase the distinction the heuristic uses (decisions.md #79). A third,
 // looser selection — ONA allowed, gated by a shared base title — is splitEntryContinuation
 // (search.go, decisions.md #131).
-func ComputeEpisodeOffset(relations anilist.MediaRelations, part *int) int {
+func ComputeEpisodeOffset(format anilist.MediaFormat, relations anilist.MediaRelations, part *int) int {
 	if part == nil || *part < 2 {
 		return 0
+	}
+	counted := []anilist.MediaFormat{anilist.MediaFormatTV, anilist.MediaFormatTVShort}
+	if format == anilist.MediaFormatONA {
+		counted = append(counted, anilist.MediaFormatONA)
 	}
 	for _, edge := range relations.Edges {
 		if edge.RelationType != "PREQUEL" || edge.Node.Episodes == nil {
 			continue
 		}
-		if edge.Node.Format != anilist.MediaFormatTV && edge.Node.Format != anilist.MediaFormatTVShort {
+		if !slices.Contains(counted, edge.Node.Format) {
 			continue
 		}
 		return *edge.Node.Episodes

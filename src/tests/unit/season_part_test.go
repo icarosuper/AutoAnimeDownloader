@@ -174,8 +174,22 @@ func TestComputeEpisodeOffset_NonTVPrequel_ReturnsZero(t *testing.T) {
 	part2 := 2
 	for _, format := range []anilist.MediaFormat{anilist.MediaFormatMovie, anilist.MediaFormatOVA, anilist.MediaFormatONA} {
 		relations := makeRelationsFmt("PREQUEL", 4, format)
-		if got := daemon.ComputeEpisodeOffset(relations, &part2); got != 0 {
+		if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatTV, relations, &part2); got != 0 {
 			t.Errorf("format %s: expected offset=0, got %d", format, got)
+		}
+	}
+}
+
+func TestComputeEpisodeOffset_ONAEntryCountsONAPrequelOnly(t *testing.T) {
+	// Stone Ocean Part 2 (146722): a streaming series split into ONA parts is one show, so an ONA
+	// entry counts its ONA prequel. A movie or OVA prequel still stays out.
+	part2 := 2
+	if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatONA, makeRelationsFmt("PREQUEL", 12, anilist.MediaFormatONA), &part2); got != 12 {
+		t.Errorf("ONA entry, ONA prequel: expected offset=12, got %d", got)
+	}
+	for _, format := range []anilist.MediaFormat{anilist.MediaFormatMovie, anilist.MediaFormatOVA} {
+		if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatONA, makeRelationsFmt("PREQUEL", 4, format), &part2); got != 0 {
+			t.Errorf("ONA entry, %s prequel: expected offset=0, got %d", format, got)
 		}
 	}
 }
@@ -184,7 +198,7 @@ func TestComputeEpisodeOffset_SnKS3P2_Returns12(t *testing.T) {
 	// Anilist id 104578: PREQUEL = SnK S3 (12 episodes)
 	part2 := 2
 	relations := makeRelations("PREQUEL", 12)
-	offset := daemon.ComputeEpisodeOffset(relations, &part2)
+	offset := daemon.ComputeEpisodeOffset(anilist.MediaFormatTV, relations, &part2)
 	if offset != 12 {
 		t.Errorf("expected offset=12, got %d", offset)
 	}
@@ -194,7 +208,7 @@ func TestComputeEpisodeOffset_MushokuTenseiIIP2_Returns13(t *testing.T) {
 	// Anilist id 166873: PREQUEL = MT II (13 episodes)
 	part2 := 2
 	relations := makeRelations("PREQUEL", 13)
-	offset := daemon.ComputeEpisodeOffset(relations, &part2)
+	offset := daemon.ComputeEpisodeOffset(anilist.MediaFormatTV, relations, &part2)
 	if offset != 13 {
 		t.Errorf("expected offset=13, got %d", offset)
 	}
@@ -205,12 +219,12 @@ func TestComputeEpisodeOffset_NoPartGate_ReturnsZero(t *testing.T) {
 	relations := makeRelations("PREQUEL", 12)
 
 	// part=nil
-	if got := daemon.ComputeEpisodeOffset(relations, nil); got != 0 {
+	if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatTV, relations, nil); got != 0 {
 		t.Errorf("expected 0 for nil part, got %d", got)
 	}
 	// part=1
 	part1 := 1
-	if got := daemon.ComputeEpisodeOffset(relations, &part1); got != 0 {
+	if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatTV, relations, &part1); got != 0 {
 		t.Errorf("expected 0 for part=1, got %d", got)
 	}
 }
@@ -219,7 +233,7 @@ func TestComputeEpisodeOffset_NoPrequel_ReturnsZero(t *testing.T) {
 	// Relations without PREQUEL: no offset
 	part2 := 2
 	relations := makeRelations("SEQUEL", 12)
-	if got := daemon.ComputeEpisodeOffset(relations, &part2); got != 0 {
+	if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatTV, relations, &part2); got != 0 {
 		t.Errorf("expected 0 without PREQUEL, got %d", got)
 	}
 }
@@ -227,7 +241,7 @@ func TestComputeEpisodeOffset_NoPrequel_ReturnsZero(t *testing.T) {
 func TestComputeEpisodeOffset_KaguySa2_NoPart_ReturnsZero(t *testing.T) {
 	// Kaguya S2 (id 112641): part=nil → zero offset (mandatory gate)
 	relations := makeRelations("PREQUEL", 12)
-	if got := daemon.ComputeEpisodeOffset(relations, nil); got != 0 {
+	if got := daemon.ComputeEpisodeOffset(anilist.MediaFormatTV, relations, nil); got != 0 {
 		t.Errorf("expected 0 for Kaguya S2 (no part), got %d", got)
 	}
 }

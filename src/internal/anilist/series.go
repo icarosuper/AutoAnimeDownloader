@@ -208,9 +208,11 @@ func recordLink(known map[int]seriesLink, node seriesNode) *seriesNode {
 
 // prequelOf returns the TV/TV_SHORT prequel of the node. Recap movies, OVAs and ONAs also
 // arrive as PREQUEL with Episodes filled, but they don't enter the count the groups follow —
-// same rule as daemon.ComputeEpisodeOffset (decisions.md #9 and #71).
+// same rule as daemon.ComputeEpisodeOffset (decisions.md #9 and #71), except that one also counts
+// an ONA prequel under an ONA entry; this one doesn't, the series axis stays TV-only
+// (decisions.md #133).
 //
-// The selection rule is the same as daemon.ComputeEpisodeOffset, and the two stay separate on
+// The selection rule is otherwise the same as daemon.ComputeEpisodeOffset, and the two stay separate on
 // purpose: here it walks the WHOLE chain (absolute series offset), there it takes ONE hop
 // (total of the immediate prequel). Those are the two distinct pack-numbering hypotheses in
 // daemon.packAxis, so unifying them would erase the distinction (decisions.md #79). A third,

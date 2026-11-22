@@ -139,6 +139,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#130** — Status deletion asks AniList only about the animes on disk, never downloads the delete-status lists](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)
 - [**#131** — A split AniList entry is searched by its shared base title, with the prequel's episodes added, when every other search came back empty](#131-a-split-anilist-entry-is-searched-by-its-shared-base-title-with-the-prequels-episodes-added-when-every-other-search-came-back-empty)
 - [**#132** — Season and part are read from the synonyms that name the anime, never from one that is the title of its manga or novel](#132-season-and-part-are-read-from-the-synonyms-that-name-the-anime-never-from-one-that-is-the-title-of-its-manga-or-novel)
+- [**#133** — An ONA entry counts its ONA prequel in the season offset, while the series axis still walks TV prequels only](#133-an-ona-entry-counts-its-ona-prequel-in-the-season-offset-while-the-series-axis-still-walks-tv-prequels-only)
 
 ---
 
@@ -248,6 +249,11 @@ is what a large share of groups uses. Erring toward 0 is cheap; erring toward a 
 that finds nothing.
 
 **Don't "fix" by:** removing the gate or applying the offset whenever a PREQUEL exists. That breaks every multi-season anime that does not use split-part numbering. Nor by accepting a PREQUEL of any format.
+
+**Amendment (see [#133](#133-an-ona-entry-counts-its-ona-prequel-in-the-season-offset-while-the-series-axis-still-walks-tv-prequels-only)):** when the **entry itself is an ONA**, an ONA prequel counts too —
+a streaming series split into ONA parts (Stone Ocean Part 2) is one show. The part gate and the
+rule for a TV entry stay as above; movies and OVAs still never count. `ComputeEpisodeOffset` now
+takes the entry's format.
 
 ---
 
@@ -2222,7 +2228,8 @@ slice.
 "(Season 4 Part 03+04)" cover both halves; returning the first number made the pack be rejected
 exactly for the second. With no unique number, who decides is coverage.
 
-**The two "first TV/TV_SHORT PREQUEL" selections stay duplicated on purpose.**
+**The two "first TV/TV_SHORT PREQUEL" selections stay duplicated on purpose** (and since
+[#133](#133-an-ona-entry-counts-its-ona-prequel-in-the-season-offset-while-the-series-axis-still-walks-tv-prequels-only) they also differ on an ONA entry, where only the one-hop selection counts an ONA).
 `anilist.prequelOf` walks the **whole** chain (hypothesis "absolute across the series");
 `daemon.ComputeEpisodeOffset` takes **one** hop and is gated by `part >= 2` (hypothesis
 "continuous across the season"). They are different hypotheses of the same guess — unifying them
@@ -4010,9 +4017,9 @@ for every multi-entry series — too wide for a rare title shape. Without it, a 
 every episode pending still downloads one by one through this fallback.
 
 **Don't "fix" by:**
-- Folding it into `ComputeEpisodeOffset`: that one is gated by part ≥ 2 and TV-only on purpose
-  ([#9](#9-prequel-offset-gate-requires-part--2)); letting ONAs in there would shift every sequel
-  with a side ONA.
+- Folding it into `ComputeEpisodeOffset`: that one is gated by part ≥ 2 and counts an ONA only
+  under an ONA entry on purpose ([#9](#9-prequel-offset-gate-requires-part--2),
+  [#133](#133-an-ona-entry-counts-its-ona-prequel-in-the-season-offset-while-the-series-axis-still-walks-tv-prequels-only)); letting every ONA in there would shift every sequel with a side ONA.
 - Running it before the normal search: a group that names the second entry by its full title and
   numbers it from 1 would lose to a base-title release of a different episode.
 - Accepting `S06E..` rows for an entry with no season: "S06" is TVDB's season of the whole
@@ -4052,3 +4059,52 @@ dashboard search the source name is a fine hit, so that path keeps every synonym
 - Filtering in `ExtractAnimeSeasonPart` itself: it takes titles and synonyms only, and the anime
   search (`nyaaSearcher.searchAnime`) has no relations to pass — filtering at the `Media` keeps the
   signatures as they are.
+
+---
+
+### 133. An ONA entry counts its ONA prequel in the season offset, while the series axis still walks TV prequels only
+
+**Location:** `internal/daemon/helpers.go` — `ComputeEpisodeOffset` (the `format` parameter and the
+`counted` list); its callers `searchNyaaForSingleEpisode` (`search.go`) and `newPackAxis`
+(`episodes.go`). Pinned by `TestSearchSingleEpisode_ONASplitCountsTheONAPrequel`,
+`TestSearchSingleEpisode_TVEntryIgnoresTheONAPrequel` (`internal/daemon/search_ona_offset_test.go`)
+and `TestComputeEpisodeOffset_ONAEntryCountsONAPrequelOnly` (`tests/unit/season_part_test.go`).
+Amends [#9](#9-prequel-offset-gate-requires-part--2).
+
+**What it looks like:** [#9](#9-prequel-offset-gate-requires-part--2) says ONAs never enter the
+offset, yet an ONA prequel is counted — and only sometimes, depending on the entry's own format.
+`anilist.prequelOf` still skips ONAs, so the two "same" selections now disagree.
+
+**Why it's right:** `JoJo no Kimyou na Bouken: Stone Ocean Part 2` (146722) found no per-episode
+torrent. Every Stone Ocean entry is a Netflix ONA, and the single-episode groups number the show
+continuously: AniList 131942 is episodes 1–12, so 146722 episode 1 is `[inid4c] … Stone Ocean 13`.
+The normal search hard-filters on `part=2` and no single says "Part 2"; the offset fallback is what
+should find it, but with a TV-only rule the offset was 0 and the fallback never ran. A streaming
+series cut into ONA parts is one show, so its ONA prequel is part of the count. An ONA side story of
+a TV series is still left out, because the entry's own format is TV. Movies and OVAs never count.
+
+Measured live (22 Nov 2026), `searchNyaaForSingleEpisode`, old rule → new rule: 146722 ep 1 0 → 1
+(`Stone Ocean 13 v2`), ep 13 0 → 1 (`Stone Ocean 25`), ep 26 0 → 1 (`Stone Ocean 38 v2`). The
+other AniList entries the change touches (ONA, part ≥ 2, ONA prequel), found by searching AniList
+ONAs for "Part" / "Cour" / "2nd Season": Kengan Ashura Part 2 (111048), Kengan Ashura Season 2
+Part 2 (169692), 7SEEDS 2 (112686), Gokushufudou Part 2 (132193), Liang Bu Yi Part 2 (138351),
+BEASTARS FINAL SEASON Part 2 (187267), BAKI-DOU Part 2 (210032). Every one returned 0 singles
+under both rules: Nyaa has only packs for these Netflix drops. BEASTARS shows the fallback running
+as meant (it searched `beastars final season 24` and found only the `13 ~ 24` batch, which the
+episode path rejects). The Baki chain before BAKI-DOU carries no part, so the gate keeps it at 0. On the pack path the change only adds a candidate to `packAxis`, and the
+end-on-the-last-episode tie-break ([#79](#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses))
+still picks among the hypotheses.
+
+`anilist.prequelOf` (the absolute series axis, `Series.Offset`) did **not** change. Moving it would
+move coverage ownership ([#78](#78-a-torrents-unit-of-ownership-is-coverage-on-the-absolute-axis-not-the-anime_id-episode-key))
+and organize slicing for every ONA chain, and the singles bug didn't need it. The same fix also
+taught the ` 05 (` episode pattern (`nyaa_regex.go`) to allow a `vN` before the `(`, because
+`Stone Ocean 13 v2 (1080p)` had no episode number.
+
+**Don't "fix" by:**
+- Counting an ONA prequel for every entry: an ONA side story of a TV season would shift that
+  season's search to an episode that doesn't exist ([#9](#9-prequel-offset-gate-requires-part--2)).
+- Dropping the part gate for ONA entries: Baki and other ONA sequels number from 1 per entry.
+- Making `prequelOf` follow the same rule "for consistency": that is a separate hypothesis with
+  ownership and organize behind it ([#79](#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)).
+  Change it only with its own measurement.

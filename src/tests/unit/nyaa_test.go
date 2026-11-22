@@ -1155,6 +1155,34 @@ func TestExtractEpisodeNumber_UnderscoreSeparatedNames(t *testing.T) {
 // numbered because a later pattern required the .mkv suffix. MystVortex ships .mp4 (and IsVideoFile
 // accepts a dozen other extensions), so those files were unnumbered. A catch-all "dot ends the
 // number" would also read "- 17.5 (OVA)" as 17.
+// inid4c names a re-release "Stone Ocean 13 v2 (1080p)": the " 05 (" pattern didn't allow the
+// version between the number and the "(", so the release had no episode number.
+func TestExtractEpisodeNumber_LooseNumberWithVersionBeforeParen(t *testing.T) {
+	cases := []struct {
+		name string
+		want *int
+	}{
+		{"[inid4c] JoJo's Bizarre Adventure - Stone Ocean 13 v2 (1080p)", intPtr(13)},
+		{"[inid4c] JoJo's Bizarre Adventure - Stone Ocean 13v2 (1080p)", intPtr(13)},
+		{"[inid4c] JoJo's Bizarre Adventure - Stone Ocean 25 (1080p)", intPtr(25)},
+		// A season marker before a year is not an episode.
+		{"[Group] Anime S2 (2024) [1080p]", nil},
+		{"[Group] Anime S2 v2 (2024) [1080p]", nil},
+	}
+
+	for _, tc := range cases {
+		got := nyaa.ExtractEpisodeNumber(tc.name)
+		switch {
+		case tc.want == nil && got != nil:
+			t.Errorf("%q: want no episode, got %d", tc.name, *got)
+		case tc.want != nil && got == nil:
+			t.Errorf("%q: want episode %d, got none", tc.name, *tc.want)
+		case tc.want != nil && *got != *tc.want:
+			t.Errorf("%q: want episode %d, got %d", tc.name, *tc.want, *got)
+		}
+	}
+}
+
 func TestExtractEpisodeNumber_LooseNumberBeforeVideoExtension(t *testing.T) {
 	cases := []struct {
 		name string

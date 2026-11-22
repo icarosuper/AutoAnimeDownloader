@@ -56,7 +56,7 @@ func searcherFor(batch, multiple, single, movie []nyaa.TorrentResult) nyaaSearch
 
 	return nyaaSearcher{
 		searchAnime: func(anilist.Title, []string, []int) []nyaa.TorrentResult { return anime },
-		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, int) []nyaa.TorrentResult {
+		searchSingleEpisode: func(anilist.AiringNode, anilist.Title, []string, anilist.MediaRelations, anilist.MediaFormat, int) []nyaa.TorrentResult {
 			return single
 		},
 		searchMovie: func(anilist.Title, bool) []nyaa.TorrentResult { return movie },
@@ -185,7 +185,7 @@ func TestSingleEpisodeSearch_ReceivesSeriesLength(t *testing.T) {
 	anime := animeWithEpisodes(1100, anilist.MediaStatusReleasing, false, "")
 	got := 0
 	searcher := searcherFor(nil, nil, nil, nil)
-	searcher.searchSingleEpisode = func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, totalEpisodes int) []nyaa.TorrentResult {
+	searcher.searchSingleEpisode = func(_ anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ anilist.MediaFormat, totalEpisodes int) []nyaa.TorrentResult {
 		got = totalEpisodes
 		return nil
 	}
@@ -746,7 +746,7 @@ func TestEmptyEpisodeSearchWaitsAndStopsTheLaterOnes(t *testing.T) {
 	found := map[int]bool{}
 	searcher := searcherFor(nil, nil, nil, nil)
 	searcher.misses = &searchMisses{byKey: map[files.EpisodeKey]searchMiss{}}
-	searcher.searchSingleEpisode = func(ep anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ int) []nyaa.TorrentResult {
+	searcher.searchSingleEpisode = func(ep anilist.AiringNode, _ anilist.Title, _ []string, _ anilist.MediaRelations, _ anilist.MediaFormat, _ int) []nyaa.TorrentResult {
 		searched = append(searched, ep.Episode)
 		if !found[ep.Episode] {
 			return nil

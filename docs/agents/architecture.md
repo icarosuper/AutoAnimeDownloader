@@ -231,7 +231,8 @@ of `#/add/:id/torrents` fetches again; custom `q` is not saved
 
 **Numbering axes.** `packAxis` are the hypotheses for how much to add to the entry's **local**
 number: relative (0, always first), continuous across the season (`ComputeEpisodeOffset` — the gate
-requires `part >= 2` and PREQUEL `TV`/`TV_SHORT`, decisions.md #9) and absolute across the series
+requires `part >= 2` and PREQUEL `TV`/`TV_SHORT`, or `ONA` when the entry is an ONA, decisions.md #9
+and #133) and absolute across the series
 (`anilist.Series.Offset`). The zero-value = relative only, the old behavior (decisions.md #79).
 Among the hypotheses that cover the episode, the winner is the one that makes the pack **end** on
 the entry's last episode — tie-break by count, see `sources.md`.

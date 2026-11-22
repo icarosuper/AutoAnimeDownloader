@@ -27,7 +27,7 @@ type nyaaSearchFunc func(title string) ([]nyaa.TorrentResult, error)
 
 type nyaaSearcher struct {
 	searchAnime         func(titles anilist.Title, synonyms []string, episodes []int) []nyaa.TorrentResult
-	searchSingleEpisode func(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, totalEpisodes int) []nyaa.TorrentResult
+	searchSingleEpisode func(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, format anilist.MediaFormat, totalEpisodes int) []nyaa.TorrentResult
 	searchMovie         func(titles anilist.Title, isFormatMovie bool) []nyaa.TorrentResult
 	// packRange reads a pack's REAL range from the Nyaa detail page. Separate from the searches
 	// because it isn't one: it runs after the filter and the sorting, only for the pack the name
@@ -227,7 +227,7 @@ func searchNyaaWithVariants(titles anilist.Title, searchFn nyaaSearchFunc, logLa
 }
 
 // totalEpisodes goes to nyaa only to decide the query's zero-padding (0 = unknown).
-func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, totalEpisodes int) []nyaa.TorrentResult {
+func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, synonyms []string, relations anilist.MediaRelations, format anilist.MediaFormat, totalEpisodes int) []nyaa.TorrentResult {
 	season, part := ExtractAnimeSeasonPart(titles, synonyms)
 
 	results := searchNyaaWithVariants(titles, func(title string) ([]nyaa.TorrentResult, error) {
@@ -240,7 +240,7 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 
 	// Offset fallback: converts relative progress into the absolute number for fansubs with
 	// continuous numbering. Only applies when part >= 2 (mandatory gate).
-	if offset := ComputeEpisodeOffset(relations, part); offset > 0 {
+	if offset := ComputeEpisodeOffset(format, relations, part); offset > 0 {
 		results = searchNyaaWithVariants(titles, func(title string) ([]nyaa.TorrentResult, error) {
 			return nyaa.ScrapNyaa(title, ep.Episode+offset, season, nil, totalEpisodes)
 		}, "single episode (offset fallback)")
