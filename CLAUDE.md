@@ -71,12 +71,13 @@ request already covers isn't "in passing", it's the job. (Portuguese text is the
 
 ## Docs
 
-- [TODO](docs/TODO.md) — what is decided, grouped by release
+- [TODO](docs/TODO.md) — what is decided and not shipped yet, grouped by release; a section is deleted when its release ships, never kept as "released in"
 - [Backlog](docs/backlog/) — one file per problem or feature noticed and deferred, not tied to a
   specific release; no index, `ls` is the list. Slug filename in English, no number or date. Each
   file opens with `Found on <date> while <context>. Not started. Delete this file when it is fixed
-  or dropped.`, then the sections that fit (a bug: Symptom / Cause / What to check). When it gets a
-  release, it moves to TODO.md and the file is deleted
+  or dropped.`, then the sections that fit (a bug: Symptom / Cause / What to check). Done or dropped →
+  the file is deleted in that same change; scheduled for a release → it moves to TODO.md and the file
+  is deleted
 - [v3.0.0 Serval](docs/v3.0.0.md) — working checklist for the rename release; coordinate slices across chats here; lock Open decisions before any rename diff
 - [Dependency upgrades](docs/dependency-upgrades.md) — working checklist for the toolchain/library bumps: what shipped in v2.9.0, what waits for its own cycle, what is not worth doing
 - [Specs](docs/superpowers/specs/README.md) — unimplemented design docs only; executed specs were deleted (git history still has them)

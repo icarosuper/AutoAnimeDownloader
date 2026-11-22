@@ -11,7 +11,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Live measurement of the two pack caps from Stage 1 of the TODO:
+// Live measurement of the two pack caps checked on 2026-08-30 (decisions.md #84, sources.md):
 //
 //  1. numbering that RESTARTS per season: PackFileRange now concatenates overlapping
 //     season groups (decisions.md #116). This instrument still prints per-folder spans so

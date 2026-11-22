@@ -32,7 +32,7 @@ writing `in progress (YYYY-MM-DD)` next to it; check the box when it is on
 
 ## Tier 1 — done in `v2.9.0`
 
-G0–G4 and F1 shipped in `v2.9.0` on 2026-11-07 (recorded in [TODO.md](TODO.md)).
+G0–G4 and F1 shipped in `v2.9.0` on 2026-11-07.
 Measured with rain 2.5.1: when deleting a torrent's data fails, `Remove` returns the error and the
 torrent stays in the session, stopped; `removeEpisodesAndLinks` only logs it and forgets the
 records, so the torrent shows up as an orphan the user can delete by hand.

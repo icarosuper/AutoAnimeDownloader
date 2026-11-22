@@ -1,6 +1,6 @@
 ---
 name: release
-description: Ship an AutoAnimeDownloader version end to end — stamp TODO.md, tag and push, wait for the GitHub Release workflow, then bump the AUR package autoanimedownloader-bin. Use ONLY when the user explicitly asks to release, publish, tag or stamp a version (e.g. "faz a release da 2.9.0", "release v2.9.0", "/release 2.9.0"). Never use it on your own initiative, to "prepare" or "check" a release, or because a TODO section looks finished.
+description: Ship an AutoAnimeDownloader version end to end — check nothing done is left in TODO.md or docs/backlog, stamp TODO.md, tag and push, wait for the GitHub Release workflow, then bump the AUR package autoanimedownloader-bin. Use ONLY when the user explicitly asks to release, publish, tag or stamp a version (e.g. "faz a release da 2.9.0", "release v2.9.0", "/release 2.9.0"). Never use it on your own initiative, to "prepare" or "check" a release, or because a TODO section looks finished.
 ---
 
 # Release a version
@@ -27,23 +27,28 @@ go test ./...                            # must pass
 Release from the **main checkout** on `master`, not from a worktree or a feature branch. If the
 user has other work going on in that checkout, ask before touching it.
 
+**Nothing done is still listed.** Read `docs/TODO.md` and `ls docs/backlog/` against the commits
+going out (`git log --oneline "$(git describe --tags --abbrev=0)"..HEAD`). An item those commits
+already deliver — a TODO bullet outside the section being shipped, or a backlog file that should
+have been deleted with its fix — is reported to the user with the commit that did it; ask before
+deleting it. Don't stamp with leftovers.
+
 **The number** comes from `docs/TODO.md`: each section is one release, its bump is the largest bump
 of the tasks inside it. A task that doesn't touch the binary rides along without changing the
-number. A `docs/backlog/` item fixed since the last release has no section yet: it gets one in
-`docs/TODO.md` at stamp time (usually a patch `vX.Y.Z`), and its backlog file is deleted. If the
-requested number disagrees with the section, say so and ask.
+number. Commits with no section (a backlog fix, a fix found on the way) set the bump by their type:
+`feat` → minor, `fix` → patch, `!` → major. If the requested number disagrees, say so and ask.
 
 ## 1. Stamp the TODO
 
 In `docs/TODO.md`:
 1. `Current version:` → `` `vX.Y.Z` ``.
-2. The section's item(s) rewritten as **released in `vX.Y.Z` on YYYY-MM-DD** (today), same shape
-   as the previous release's.
+2. **Delete** the shipped section, whole. No "released in" line stays behind: the GitHub Release
+   notes and git history are the record.
 
 Commit, subject line only (CLAUDE.md commit style):
 
 ```
-docs: mark <what shipped> as released in vX.Y.Z
+docs: stamp vX.Y.Z and drop what it shipped from the todo
 ```
 
 ## 2. Confirmation #1 — then tag and push
