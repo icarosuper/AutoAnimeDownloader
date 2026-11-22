@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/nyaa"
+	"strings"
 	"sync"
 	"time"
 )
@@ -243,8 +244,61 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 			return nyaa.ScrapNyaa(title, ep.Episode+offset, season, nil, totalEpisodes)
 		}, "single episode (offset fallback)")
 	}
+	if len(results) > 0 {
+		return results
+	}
+
+	// Split-entry fallback: AniList cut one show into "<Base> - 1st STAGE" and "<Base> - 2nd & 3rd
+	// STAGE", groups release it as "<Base> - NN" counting on from the first entry
+	// (decisions.md #131). No season or part: the base title has neither.
+	if base, offset, ok := splitEntryContinuation(titles, relations); ok {
+		results = searchNyaaWithVariants(anilist.Title{Romaji: &base}, func(title string) ([]nyaa.TorrentResult, error) {
+			return nyaa.ScrapNyaa(title, ep.Episode+offset, nil, nil, totalEpisodes)
+		}, "single episode (split-entry fallback)")
+	}
 
 	return results
+}
+
+// splitEntryContinuation finds the PREQUEL whose romaji title is this entry's with another " - "
+// suffix ("<Base> - 1st STAGE" vs "<Base> - 2nd & 3rd STAGE"), and returns the shared base and the
+// prequel's episode count. Unlike ComputeEpisodeOffset an ONA counts — the shared base, not the
+// format, is the evidence that both entries are one show — but a movie never does: it is not an
+// episode of the count.
+func splitEntryContinuation(titles anilist.Title, relations anilist.MediaRelations) (string, int, bool) {
+	if titles.Romaji == nil {
+		return "", 0, false
+	}
+	base, suffix, ok := splitTitleSuffix(*titles.Romaji)
+	if !ok {
+		return "", 0, false
+	}
+	for _, edge := range relations.Edges {
+		node := edge.Node
+		if edge.RelationType != "PREQUEL" || node.Episodes == nil || *node.Episodes <= 0 || node.Title.Romaji == nil {
+			continue
+		}
+		switch node.Format {
+		case anilist.MediaFormatTV, anilist.MediaFormatTVShort, anilist.MediaFormatONA:
+		default:
+			continue
+		}
+		prequelBase, prequelSuffix, ok := splitTitleSuffix(*node.Title.Romaji)
+		if ok && strings.EqualFold(prequelBase, base) && !strings.EqualFold(prequelSuffix, suffix) {
+			return base, *node.Episodes, true
+		}
+	}
+	return "", 0, false
+}
+
+// splitTitleSuffix cuts a title at its LAST " - ": "<Base> - <suffix>".
+func splitTitleSuffix(title string) (base, suffix string, ok bool) {
+	i := strings.LastIndex(title, " - ")
+	if i < 0 {
+		return "", "", false
+	}
+	base, suffix = strings.TrimSpace(title[:i]), strings.TrimSpace(title[i+3:])
+	return base, suffix, base != "" && suffix != ""
 }
 
 func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) []nyaa.TorrentResult {

@@ -137,6 +137,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#128** — download_failed reports a real failure once per episode and torrent; not found and a full disk are waiting, not failures](#128-download_failed-reports-a-real-failure-once-per-episode-and-torrent-not-found-and-a-full-disk-are-waiting-not-failures)
 - [**#129** — Unsaved changes means different from what was loaded, and a capture-phase hashchange listener vetoes the router](#129-unsaved-changes-means-different-from-what-was-loaded-and-a-capture-phase-hashchange-listener-vetoes-the-router)
 - [**#130** — Status deletion asks AniList only about the animes on disk, never downloads the delete-status lists](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)
+- [**#131** — A split AniList entry is searched by its shared base title, with the prequel's episodes added, when every other search came back empty](#131-a-split-anilist-entry-is-searched-by-its-shared-base-title-with-the-prequels-episodes-added-when-every-other-search-came-back-empty)
 
 ---
 
@@ -3966,3 +3967,35 @@ two check intervals (default 60 s against a 1 min minimum interval).
   on-disk ids.
 - Making `recordCarrying` keep everything it ever saw "to be safe": the delete half would grow
   with every anime ever deleted, which is the whole list this entry stopped downloading.
+
+### 131. A split AniList entry is searched by its shared base title, with the prequel's episodes added, when every other search came back empty
+
+**Location:** `internal/daemon/search.go` — `searchNyaaForSingleEpisode` (the last fallback),
+`splitEntryContinuation` and `splitTitleSuffix`; pinned by `TestSearchSingleEpisode_SplitEntry*`
+in `internal/daemon/search_split_test.go`.
+
+**What it looks like:** a third search that drops the entry's own suffix, ignores season and part,
+and shifts the episode by an ONA prequel's count — the very prequel format
+[#9](#9-prequel-offset-gate-requires-part--2) / `ComputeEpisodeOffset` refuse to count.
+
+**Why it's right:** AniList sometimes cuts one show into entries that share a romaji base and differ
+only after a final ` - `: Steel Ball Run (210482) is `JoJo no Kimyou na Bouken: Steel Ball Run - 2nd
+& 3rd STAGE`, with the 1-episode ONA `… - 1st STAGE` as PREQUEL. The groups release it as one show:
+Erai-raws posts `JoJo no Kimyou na Bouken: Steel Ball Run - 02` for AniList episode 1, and the
+TVDB-style rows (`S06E02`, ToonsHub/VARYG) carry a season this entry doesn't have. Every query built
+from the entry's titles contains "2nd 3rd stage", so Erai never came back; the anime failed every
+cycle with "No torrent found". Measured with `make debug-anime ID=210482`: 0 magnets before, all 9
+aired episodes resolved to the right Erai release after. The shared base, not the format, is the
+evidence that the prequel's episodes are part of the count, so an ONA counts here; a movie never
+does. It runs last, so it only acts where the normal and the offset searches found nothing.
+
+**Don't "fix" by:**
+- Folding it into `ComputeEpisodeOffset`: that one is gated by part ≥ 2 and TV-only on purpose
+  ([#9](#9-prequel-offset-gate-requires-part--2)); letting ONAs in there would shift every sequel
+  with a side ONA.
+- Running it before the normal search: a group that names the second entry by its full title and
+  numbers it from 1 would lose to a base-title release of a different episode.
+- Accepting `S06E..` rows for an entry with no season: "S06" is TVDB's season of the whole
+  franchise, and the season filter is what keeps "Show S02E03" off "Show".
+- Matching on a common prefix instead of the exact base before ` - `: "<Show> - Part 1" sequels of a
+  different arc would share a prefix and get an offset that isn't theirs.
