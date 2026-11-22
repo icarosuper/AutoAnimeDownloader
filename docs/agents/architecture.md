@@ -231,9 +231,9 @@ of `#/add/:id/torrents` fetches again; custom `q` is not saved
 
 **Numbering axes.** `packAxis` are the hypotheses for how much to add to the entry's **local**
 number: relative (0, always first), continuous across the season (`ComputeEpisodeOffset` — the gate
-requires `part >= 2` and PREQUEL `TV`/`TV_SHORT`, or `ONA` when the entry is an ONA, decisions.md #9
-and #133) and absolute across the series
-(`anilist.Series.Offset`). The zero-value = relative only, the old behavior (decisions.md #79).
+requires `part >= 2` and PREQUEL `TV`/`TV_SHORT`, or `ONA` when the entry is an ONA and has no TV prequel, [decisions.md #9](decisions.md#9-prequel-offset-gate-requires-part--2)
+and [decisions.md #133](decisions.md#133-an-ona-entry-counts-its-ona-prequel-in-the-season-offset-while-the-series-axis-still-walks-tv-prequels-only)) and absolute across the series
+(`anilist.Series.Offset`). The zero-value = relative only, the old behavior ([decisions.md #79](decisions.md#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)).
 Among the hypotheses that cover the episode, the winner is the one that makes the pack **end** on
 the entry's last episode — tie-break by count, see `sources.md`.
 

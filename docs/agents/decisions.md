@@ -3979,9 +3979,10 @@ two check intervals (default 60 s against a 1 min minimum interval).
 ### 131. A split AniList entry is searched by its shared base title, with the prequel's episodes added, when every other search came back empty
 
 **Location:** `internal/daemon/search.go` — `searchNyaaForSingleEpisode` (the last fallback),
-`splitEntryContinuation`, over `nyaa.CutTitleSuffix` (the same cut the romaji-base + English-subtitle
-variant uses); pinned by `TestSearchSingleEpisode_SplitEntry*`
-in `internal/daemon/search_split_test.go`.
+`splitEntryContinuation` and `suffixOrdinal`, over `nyaa.CutTitleSuffix` (the same cut the
+romaji-base + English-subtitle variant uses); pinned by `TestSearchSingleEpisode_SplitEntry*`,
+`TestSplitEntryContinuation_OrdinalRule` and `TestSuffixOrdinal` in
+`internal/daemon/search_split_test.go`.
 
 **What it looks like:** a third search that drops the entry's own suffix, ignores season and part,
 and shifts the episode by an ONA prequel's count — the very prequel format
@@ -3997,6 +3998,16 @@ cycle with "No torrent found". Measured with `make debug-anime ID=210482`: 0 mag
 aired episodes resolved to the right Erai release after. The shared base, not the format, is the
 evidence that the prequel's episodes are part of the count, so an ONA counts here; a movie never
 does. It runs last, so it only acts where the normal and the offset searches found nothing.
+
+**Both suffixes need an ordinal: 1 on the prequel, later on the entry.** "Last" is not rare: right
+after an episode airs, before any group uploads, the other searches come back empty every cycle. A
+shared base alone then shifts arcs that groups number per entry (`<Base> - Arc A-hen` / `Arc B-hen`,
+11 episodes: ep 3 searches `<Base> 14` and grabs some other season's `<Base> - 14`). And the offset
+is only the immediate prequel's count, while groups count from the first entry: `3rd STAGE` after a
+12-episode `2nd STAGE` would search `<Base> 13`, a real release that is episode 1 of the 2nd STAGE.
+The relation nodes carry no relations of their own, so the entries before the prequel can't be
+summed; the fallback refuses instead. `suffixOrdinal` reads `1st`/`2nd`…, `first`/`second`/`third`,
+and `Stage`/`Part`/`Season`/`Cour N`; a bare number (`Arc 2-hen`) is not an ordinal.
 
 **The pack path is left out on purpose.** Measured on 2026-11-22 with the real pack functions:
 the axis half works — a `- 01 ~ 12` pack under delta 1 is recorded as 0–11 — but organize doesn't
@@ -4029,12 +4040,19 @@ every episode pending still downloads one by one through this fallback.
   above). Its singles are also on the base ruler, and `magnetsByEpisode` would map them unshifted.
 - Matching on a common prefix instead of the exact base before ` - `: "<Show> - Part 1" sequels of a
   different arc would share a prefix and get an offset that isn't theirs.
+- Dropping the ordinal check "because the base already matches": arc suffixes share the base too,
+  and the empty-right-after-airing search makes the fallback run on them every cycle.
+- Accepting a prequel whose ordinal is above 1 with its own count: that offset points at the
+  prequel's episodes. Summing the chain needs the prequel's relations, which the list query
+  doesn't fetch.
 
 ### 132. Season and part are read from the synonyms that name the anime, never from one that is the title of its manga or novel
 
 **Location:** `internal/anilist/anilist.go` — `Media.OwnSynonyms`; in `internal/daemon`,
-`seasonPartOf` (`helpers.go`) for the season/part reads, and `processAnimeEpisodes` / `RunAnimeDebug`
-compute `OwnSynonyms()` once and hand it to the anime and episode searches; pinned by
+`seasonPartOf` (`helpers.go`) for the season/part reads. `processAnimeEpisodes` and `RunAnimeDebug`
+compute `OwnSynonyms()` once, read season and part from it once, and hand them to the anime and
+episode searches, `adoptCoveredEpisodes`, `partitionSearchResults` and `newPackAxis`; the preview
+reads them once with `seasonPartOf`; pinned by
 `TestExtractAnimeSeasonPart_SteelBallRun_SourceTitleSynonymIsNotAPart` and
 `TestOwnSynonyms_KeepsSynonymWithoutMatchingSource` in `src/tests/unit/season_part_test.go`.
 
@@ -4064,11 +4082,13 @@ dashboard search the source name is a fine hit, so that path keeps every synonym
 
 ### 133. An ONA entry counts its ONA prequel in the season offset, while the series axis still walks TV prequels only
 
-**Location:** `internal/daemon/helpers.go` — `ComputeEpisodeOffset` (the `format` parameter and the
-`counted` list); its callers `searchNyaaForSingleEpisode` (`search.go`) and `newPackAxis`
+**Location:** `internal/daemon/helpers.go` — `ComputeEpisodeOffset` (the `format` parameter; a
+TV/TV_SHORT prequel returns at once, an ONA prequel is kept only under an ONA entry and returned
+only when no TV prequel follows); its callers `searchNyaaForSingleEpisode` (`search.go`) and `newPackAxis`
 (`episodes.go`). Pinned by `TestSearchSingleEpisode_ONASplitCountsTheONAPrequel`,
 `TestSearchSingleEpisode_TVEntryIgnoresTheONAPrequel` (`internal/daemon/search_ona_offset_test.go`)
-and `TestComputeEpisodeOffset_ONAEntryCountsONAPrequelOnly` (`tests/unit/season_part_test.go`).
+, `TestComputeEpisodeOffset_ONAEntryCountsONAPrequelOnly` and
+`TestComputeEpisodeOffset_ONAEntryPrefersTheTVPrequel` (`tests/unit/season_part_test.go`).
 Amends [#9](#9-prequel-offset-gate-requires-part--2).
 
 **What it looks like:** [#9](#9-prequel-offset-gate-requires-part--2) says ONAs never enter the
@@ -4104,6 +4124,9 @@ taught the ` 05 (` episode pattern (`nyaa_regex.go`) to allow a `vN` before the 
 **Don't "fix" by:**
 - Counting an ONA prequel for every entry: an ONA side story of a TV season would shift that
   season's search to an episode that doesn't exist ([#9](#9-prequel-offset-gate-requires-part--2)).
+- Returning the first counted edge in AniList's order: an ONA "Part 2" whose PREQUEL edges are
+  [ONA side story (3 eps), TV Part 1 (12 eps)] would get offset 3. With both, the TV prequel is the
+  count and the ONA is a side story; the ONA counts only when there is no TV prequel.
 - Dropping the part gate for ONA entries: Baki and other ONA sequels number from 1 per entry.
 - Making `prequelOf` follow the same rule "for consistency": that is a separate hypothesis with
   ownership and organize behind it ([#79](#79-pack-choice-asks-does-it-cover-the-window-not-is-it-part-n--and-pack-numbering-is-a-guess-among-three-hypotheses)).
