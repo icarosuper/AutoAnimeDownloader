@@ -3991,6 +3991,24 @@ aired episodes resolved to the right Erai release after. The shared base, not th
 evidence that the prequel's episodes are part of the count, so an ONA counts here; a movie never
 does. It runs last, so it only acts where the normal and the offset searches found nothing.
 
+**The pack path is left out on purpose.** Measured on 2026-11-22 with the real pack functions:
+the axis half works — a `- 01 ~ 12` pack under delta 1 is recorded as 0–11 — but organize doesn't
+read that delta. `FilesInPackWindow` slices by the record's `SeriesOffset`, which is the series
+index offset (0 here, the ONA prequel isn't in the chain), so the library links would be one
+episode off:
+
+| pack files | `SeriesOffset` 0 (today) | `SeriesOffset` 1 |
+|---|---|---|
+| `01–12` (continuous, Erai) | wrong: `01` (1st STAGE) → ep 1, 12 kept | right: `02`→1 … `12`→11 |
+| `02–12` (continuous) | wrong: `02`→2 … `12`→12 | right |
+| `01–11` (relative) | right | wrong: `01`→0, `11`→10 |
+
+Doing it right means recording the CHOSEN pack delta for organize instead of the series offset
+(`episodes.go`, the `SeriesOffset` of the record), which changes
+[#116](#116-restart-per-season-packs-flatten-onto-the-concatenated-axis-organize-slices-by-anilist-id)
+for every multi-entry series — too wide for a rare title shape. Without it, a split entry with
+every episode pending still downloads one by one through this fallback.
+
 **Don't "fix" by:**
 - Folding it into `ComputeEpisodeOffset`: that one is gated by part ≥ 2 and TV-only on purpose
   ([#9](#9-prequel-offset-gate-requires-part--2)); letting ONAs in there would shift every sequel
@@ -3999,6 +4017,9 @@ does. It runs last, so it only acts where the normal and the offset searches fou
   numbers it from 1 would lose to a base-title release of a different episode.
 - Accepting `S06E..` rows for an entry with no season: "S06" is TVDB's season of the whole
   franchise, and the season filter is what keeps "Show S02E03" off "Show".
+- Adding the base title and the prequel's episodes to the pack search (`searchNyaaForAnime` /
+  `newPackAxis`) alone: the pack gets picked and organize links its files one episode off (table
+  above). Its singles are also on the base ruler, and `magnetsByEpisode` would map them unshifted.
 - Matching on a common prefix instead of the exact base before ` - `: "<Show> - Part 1" sequels of a
   different arc would share a prefix and get an offset that isn't theirs.
 
