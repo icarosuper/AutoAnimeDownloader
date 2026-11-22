@@ -235,6 +235,35 @@ pointer stops resolving:
 
 Fenced code blocks and inline code are skipped — an example is not a link.
 
+## The Search/Match Golden Set
+
+`src/internal/daemon/golden_test.go` replays real cases offline through `RunAnimeDebug` — the same
+pass `make debug-anime` runs, so the whole pipeline (title variants, filters, pack range from the
+file list, ranking) is under test, not one function. One folder per case in
+`src/internal/daemon/testdata/golden/<slug>/`:
+
+- `case.json` — the anime, a `note` saying what went wrong and what the case pins (mandatory), and
+  `searched`: the torrent each searched episode must pick, consecutive episodes collapsed
+  (`"1-11"`); `"picked": ""` means it must find nothing
+- `http.json` — every AniList and Nyaa response the pass got, trimmed to what the parsers read
+
+```bash
+make golden-record ID=<mediaId> NAME=<slug>   # live AniList/Nyaa, read-only; writes the folder
+go test ./src/internal/daemon -run TestGoldenSet
+GOLDEN_UPDATE=1 go test ./src/internal/daemon -run TestGoldenSet   # rewrite every case.json
+```
+
+Recording runs on `files.DefaultConfig()` with no accounts, never the recorder's config — the
+outcome must not depend on who recorded it, and no username ends up in the repo. `case.json` comes
+out with what the pipeline does **now**: for a bug, change `picked` to the right torrent, watch the
+case fail, then fix.
+
+A case fails on a moved pick (printed as runs: `episodes 1-12: want … got …`) and on a request the
+recording doesn't have — the pipeline now asks something new (another title variant, a page more, a
+detail page); re-record that case rather than hand-editing `http.json`. Update mode is for a change
+that moves picks on purpose: read why each one moved before running it, and `git diff
+testdata/golden` is the review.
+
 ## Never Let Background Work Outlive Its Test
 
 Two entry points start work in a goroutine and return immediately: `handleCheck` (POST `/check`) and `daemon.StartLoop`. **A test that triggers either must wait for it to finish before returning.**

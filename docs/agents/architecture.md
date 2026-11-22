@@ -78,7 +78,7 @@ Windows uses `%APPDATA%\.autoAnimeDownloader\` for **all** the config/state file
 - **Same volume, by construction:** the download directory lives inside `completed_anime_path`, so the old cross-filesystem failure mode is now structurally impossible. `Librarian.ProbePath(completedPath)` still validates that the filesystem supports hardlinks at all (exFAT/FAT32/some SMB shares don't) — it runs on config save and on every verification pass (decisions/026).
 - **Deletion** frees space by removing **both** links: the library hardlink (`Librarian.RemoveFromLibrary`, which also drops the sibling `.nfo`) and the seeding torrent (`TorrentBackend.Remove` with `keepData=false`). After those hardlinks, a library folder with no remaining video is wiped (`RemoveFolderIfNoVideo`). The end-of-pass sweep (`DeleteEmptyFolders`) then removes empty folders and folders left with only Jellyfin leftover metadata (`.nfo` files and `.chapters`) and still skips `.torrents` ([decisions/106](decisions/106-the-sweep-stays-nfo-only-the-contextual-wipe-is-no.md), [decisions/110](decisions/110-chapters-is-leftover-metadata-same-class-as-nfo.md)). A batch torrent shared by multiple episodes is only removed once **all** its episodes are in the delete set **and** unclaimed content does not hold (`canRemoveTorrent` / `unclaimedHolds`, [decisions/074](decisions/074-the-pack-exclusion-guards-unit-is-the-torrents.md) / [decisions/117](decisions/117-off-list-bypasses-the-unclaimed-pack-guard.md)): either the pack's span is fully claimed, or no claimed anime of the group is in this pass's watching set. `watching == nil` (manual per-episode delete) keeps the #74 hold. While it is held back, its records are kept too (`forgettableKeys`) — they carry the declared range. The manual torrent-delete path passes `force` and bypasses that guard.
 - **No `config.json` versioning.** There is no `config_version` field, no migration chain and no
-  startup block: `LoadConfigs` unmarshals **over** `getDefaultConfig()`, so an added or removed field
+  startup block: `LoadConfigs` unmarshals **over** `DefaultConfig()`, so an added or removed field
   needs no migration at all, and the two legacy renames are detected by **shape**, in `LoadConfigs`
   only — `PUT /config` does not repeat them. See decisions/090.
 - **No `save_path` migration.** `daemon.MigrateSavePath` used to move a legacy `save_path`'s torrent folders into the derived download path at boot and at the top of every pass; it was removed along with the `Config.SavePath` field. An old `config.json` still carrying the key loads (JSON ignores unknown fields) but its data is **not** moved — moving it is a manual pre-upgrade step. See decisions/031.
@@ -148,6 +148,11 @@ The same `RunAnimeDebug` is also reachable on a running daemon through `POST /ap
 `RunAnimeDebug` mirrors `processAnimeEpisodes`: episode selection (`anilist.EpisodeList(anime, firstEpisodeToConsider(anime, nil))`), the pack search/selection (`partitionSearchResults` + `pickBatches`) that lifts the per-anime limit when it resolves, and the per-episode `searchSingleEpisode` fallback when no batch/movie/single magnet was found — so the debug pass reports the pipeline the daemon actually runs (see [decisions/058](decisions/058-runanimedebug-mirrors-processanimeepisodes.md)). The one deliberate difference: it searches every uncovered episode, without the miss backoff of [decisions/100](decisions/100-an-empty-per-episode-search-waits-before-repeating.md).
 
 `scripts/robustness-animes.txt` (curated media IDs, one per line) + `scripts/debug-batch.sh` (`make debug-batch`) run that pass over the whole list and write a triaged `.debug_batch/report.md`.
+
+The same pass is also the search/match regression suite: `daemon/golden_test.go` replays recorded
+AniList/Nyaa responses through `RunAnimeDebug` and compares each episode's `Picked` (the top
+candidate, also in `summary.json`) with `testdata/golden/<case>/case.json`. A change to
+`RunAnimeDebug` therefore moves the suite too — see [Testing](testing.md#the-searchmatch-golden-set).
 
 ---
 

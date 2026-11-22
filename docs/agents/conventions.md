@@ -193,7 +193,7 @@ key); no new command.
 ## Adding a New Config Field — Checklist
 
 1. Add field to `Config` struct in `filemanager.go` with `json:"snake_case"` tag
-2. Set default in `getDefaultConfig()` if needed
+2. Set default in `DefaultConfig()` if needed
 3. Add validation in `handleUpdateConfig()` in `endpoint_config.go` if needed
 4. Update `docs/agents/config.md`
 5. Update frontend config form (`src/internal/frontend/src/routes/Config.svelte`)

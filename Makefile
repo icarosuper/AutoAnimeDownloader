@@ -2,7 +2,7 @@
 # Cross-platform builds using Docker
 # Works on Linux, macOS, and WSL (Windows Subsystem for Linux)
 
-.PHONY: build package release clean help dev sandbox clear-data debug-anime debug-batch
+.PHONY: build package release clean help dev sandbox clear-data debug-anime debug-batch golden-record
 .PHONY: build-linuxamd64 build-linuxarm64 build-windows
 .PHONY: package-linuxamd64 package-linuxarm64 package-windows
 .PHONY: release-linuxamd64 release-linuxarm64 release-windows
@@ -64,6 +64,7 @@ help:
 	@echo -e "  $(YELLOW)make clear-data$(NC)                    - Clear local daemon data files"
 	@echo -e "  $(YELLOW)make debug-anime ID=123$(NC)            - Debug why an anime isn't downloading"
 	@echo -e "  $(YELLOW)make debug-batch$(NC)                   - Debug the curated list (scripts/robustness-animes.txt) → .debug_batch/report.md"
+	@echo -e "  $(YELLOW)make golden-record ID=<id> NAME=<slug>$(NC) - Record a search/match regression case (live) for TestGoldenSet"
 	@echo ""
 	@echo -e "$(GREEN)Supported platforms:$(NC)"
 	@echo -e "  - $(YELLOW)linuxamd64$(NC)  (Linux AMD64)"
@@ -265,6 +266,11 @@ debug-anime:
 # .debug_batch/report.md. Not a suite: no pass/fail, hence no test- prefix.
 debug-batch:
 	@bash scripts/debug-batch.sh
+
+# Records a golden-set case from the live AniList/Nyaa into src/internal/daemon/testdata/golden/<NAME>/.
+# Usage: make golden-record ID=108465 NAME=mushoku-part2-pack. Replayed offline by go test (TestGoldenSet).
+golden-record:
+	@GOLDEN_RECORD=$(ID) GOLDEN_NAME=$(NAME) go test ./src/internal/daemon -run '^TestGoldenRecord$$' -count=1 -v
 
 clear-data:
 	@bash scripts/clear_data.sh

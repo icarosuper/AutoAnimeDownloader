@@ -118,6 +118,12 @@ make debug-batch                        # live network (AniList + Nyaa), takes m
 bash scripts/debug-batch.sh --report-only   # re-triage the last run's output, no network
 ```
 
+## Recording a golden-set case
+
+A diagnosed anime becomes a regression case with `make golden-record ID=<mediaId> NAME=<slug>`:
+the same pass, live and read-only, recorded into `src/internal/daemon/testdata/golden/<slug>/` and
+replayed offline by `go test`. Details in [testing.md](testing.md#the-searchmatch-golden-set).
+
 **The IDs must be animes the user does NOT follow.** `resolveAnimeDetails` tries `GetAnimeInfo(id, usernames)` before `GetMediaByID`, so an anime in one of your lists is debugged with its real `Progress` — that measures the normal path, not the standalone-anime path the list exists to exercise.
 
 Not a test suite: live network, no pass/fail, so it never gets a `test-` prefix and never enters `scripts/run-all-tests.sh`. Each run wipes `.debug_batch/` — `cp` the `report.md` first to compare two runs. The run uses the real `~/.autoAnimeDownloader/config.json`, and the report's first line records the values used.

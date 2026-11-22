@@ -358,7 +358,7 @@ func main() {
 
 	// First run: opens the UI on the status page. Doesn't depend on the config being complete — the
 	// verification pass already opens /#/config when the library is missing, and this boot with new
-	// defaults (see files.getDefaultConfig) usually doesn't trigger that path.
+	// defaults (see files.DefaultConfig) usually doesn't trigger that path.
 	//
 	// Waits for the port to accept connections before opening: Start() above runs in a goroutine
 	// and the log right below it comes out BEFORE the socket is bound, so opening right away is a

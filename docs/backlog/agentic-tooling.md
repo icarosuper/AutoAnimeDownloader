@@ -7,15 +7,8 @@ The context layer (CLAUDE.md, `docs/agents/`, 135 decisions, four skills, `make 
 mature. What is missing is enforcement: almost every rule in CLAUDE.md depends on the agent
 remembering it. Points below, roughly ordered by payoff per effort. Remove each section when it
 ships (on 2026-11-22: point 1, the hooks in `.claude/settings.json`; point 2, the docs checks in
-`src/tests/unit/docs_test.go`).
-
-## 3. Golden set for the search/match pipeline
-
-The most fragile part of the project is search + filtering (it is why the `debug-anime` skill
-exists). Every diagnosed case becomes a fixture — the real Nyaa titles plus the expected
-outcome — in a table-driven test under `testdata/`. Over time it is the regression suite that
-lets an agent change the matcher without silently breaking an older case. `debug-anime` can end
-with "add the case to the golden set".
+`src/tests/unit/docs_test.go`; point 3, the search/match golden set in
+`src/internal/daemon/golden_test.go`).
 
 ## 4. Project-specific review subagents (`.claude/agents/`)
 

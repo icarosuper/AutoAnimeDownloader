@@ -143,7 +143,7 @@ type Config struct {
 	// MaxConcurrentDownloads limits how many INCOMPLETE torrents download at the same time; the excess
 	// waits in the queue (torrents.queue). 0 disables the limit. Seeding never counts.
 	//
-	// No migration needed: LoadConfigs deserializes ON TOP of getDefaultConfig(), so a config.json
+	// No migration needed: LoadConfigs deserializes ON TOP of DefaultConfig(), so a config.json
 	// older than this field already loads with the default.
 	MaxConcurrentDownloads int `json:"max_concurrent_downloads"`
 	// DisableSeeding stops every upload: the torrent session never unchokes a peer (not even
@@ -220,7 +220,10 @@ func applyNyaaSettings(config *Config) {
 	nyaa.SetMaxBatchTorrentSizeGB(config.MaxBatchTorrentSizeGB)
 }
 
-func getDefaultConfig() *Config {
+// DefaultConfig is what a fresh install starts with, and what LoadConfigs deserializes on top of.
+// The golden set (daemon/golden_test.go) also runs on it, so its outcomes never depend on whoever
+// recorded them.
+func DefaultConfig() *Config {
 	// Library default: ~/Animes. If home doesn't exist (container without HOME), it stays "" and the
 	// config remains "incomplete" as before, requiring the user to fill it in.
 	completedPath := ""
@@ -301,7 +304,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	config := getDefaultConfig()
+	config := DefaultConfig()
 
 	_, err := m.fs.Stat(m.configPath)
 	if os.IsNotExist(err) {
@@ -331,7 +334,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 
 	if err := json.Unmarshal(file, config); err != nil {
 		logger.Logger.Warn().Err(err).Msg("Failed to parse config JSON, recreating with default values")
-		config = getDefaultConfig()
+		config = DefaultConfig()
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
 		}

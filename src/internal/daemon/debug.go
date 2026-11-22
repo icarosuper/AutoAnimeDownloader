@@ -25,10 +25,15 @@ type DebugSummary struct {
 // meaningful when WouldSearch is true — episodes skipped (not aired,
 // already watched, etc.) always report 0. The skip reason itself is in
 // debug.jsonl (shouldSkipEpisode already logs it), not duplicated here.
+//
+// Picked is the torrent the real pass would download first — the top candidate after ranking. It
+// is what the golden set (golden_test.go) pins: "found something" is not the outcome that breaks,
+// "found the right one" is.
 type EpisodeDebugResult struct {
-	Episode      int  `json:"episode"`
-	WouldSearch  bool `json:"would_search"`
-	MagnetsFound int  `json:"magnets_found"`
+	Episode      int    `json:"episode"`
+	WouldSearch  bool   `json:"would_search"`
+	MagnetsFound int    `json:"magnets_found"`
+	Picked       string `json:"picked,omitempty"`
 }
 
 // RunAnimeDebug reproduces the real search/match pipeline for a single anime
@@ -125,6 +130,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	seriesLength := anilist.LastAiredEpisode(anime)
 
 	magnetsByEpisodeNumber := make(map[int]int, len(episodesToDownload))
+	pickedByEpisode := make(map[int]string, len(episodesToDownload))
 	for _, ep := range episodesToDownload {
 		resolved := magnetsForEpisodes[ep.Episode]
 		magnets := resolved.candidates
@@ -139,6 +145,9 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 		}
 
 		magnetsByEpisodeNumber[ep.Episode] = len(magnets)
+		if len(magnets) > 0 {
+			pickedByEpisode[ep.Episode] = magnets[0].Name
+		}
 		logger.Logger.Info().
 			Str("anime", animeTitle).
 			Int("episode", ep.Episode).
@@ -149,6 +158,7 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	for i := range summary.Episodes {
 		if n, ok := magnetsByEpisodeNumber[summary.Episodes[i].Episode]; ok {
 			summary.Episodes[i].MagnetsFound = n
+			summary.Episodes[i].Picked = pickedByEpisode[summary.Episodes[i].Episode]
 		}
 	}
 

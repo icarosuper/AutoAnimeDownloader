@@ -41,7 +41,7 @@ No running daemon needed. It:
 Output goes to `.debug_<mediaId>_<N>/` in the current directory (`N` increments per run, so a
 before/after comparison is two folders):
 - `debug.jsonl` — the full trace, one JSON object per line (`jq`/grep it)
-- `summary.json` — per-episode quick view (`would_search`, `magnets_found`)
+- `summary.json` — per-episode quick view (`would_search`, `magnets_found`, `picked` — the torrent it would download first)
 
 **Raw rows vs. matched set is the first fork:** no raw rows → upstream or query (step 4); raw rows
 that look right but nothing matched → filtering (step 5); matched but the wrong one won → ranking
@@ -114,7 +114,18 @@ or at filtering.
 
 ## 7. Pin it with a failing test
 
-Before fixing:
+Before fixing, record the anime as a golden-set case — it pins the whole pass, not one function:
+
+```bash
+make golden-record ID=<mediaId> NAME=<slug>   # src/internal/daemon/testdata/golden/<slug>/
+```
+
+`case.json` comes out with what the pipeline picks **now**. Write the `note` (what went wrong,
+what the case pins), set `picked` to the torrent it should pick (`""` if it should find nothing),
+and watch `go test ./src/internal/daemon -run TestGoldenSet` fail. Format and modes:
+[testing.md](../../../docs/agents/testing.md#the-searchmatch-golden-set).
+
+Then, for the unit that broke, a focused case too:
 
 - search query issue → case in `src/tests/unit/nyaa_test.go` with the failing title, asserting the
   right variant is tried
@@ -135,7 +146,9 @@ Compare the new `.debug_<mediaId>_<N+1>/` against the first run: the episodes th
 from `debug-batch`, re-run the batch and check no other anime moved into SUSPECTS. The user's
 running daemon only gets the fix after they rebuild and restart it — say so; don't trigger it.
 
-If the anime is a new kind of failure, offer to add its ID to `scripts/robustness-animes.txt`.
+The golden case from step 7 now passes; `go test ./...` runs the others, so an older case that
+moved shows up here too — read why before touching its `case.json`. If the anime is a new kind of
+failure, offer to add its ID to `scripts/robustness-animes.txt`.
 If the fix is non-obvious, record it with the `record-decision` skill.
 
 ## Report
