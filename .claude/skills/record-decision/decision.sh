@@ -94,12 +94,15 @@ about)
 		for f in "$@"; do
 			short="$(basename "$(dirname "$f")")/$(basename "$f")"
 			grep -lF -- "$short" "$DIR"/[0-9][0-9][0-9]-*.md 2>/dev/null | sed "s|^|$f	names it	|" || true
-			[ -f "$f" ] && grep -oE 'decisions/[0-9]{3}' "$f" | sort -u | while IFS= read -r c; do
+			# A file that cites nothing makes grep exit 1; under pipefail that would end the whole
+			# loop, so later files would never be read.
+			[ -f "$f" ] || continue
+			{ grep -oE 'decisions/[0-9]{3}' "$f" || true; } | sort -u | while IFS= read -r c; do
 				e="$(entries | grep -E "^${c#decisions/}-" || true)"
-				[ -n "$e" ] && printf '%s\tcited in it\t%s/%s\n' "$f" "$DIR" "$e"
+				if [ -n "$e" ]; then printf '%s\tcited in it\t%s/%s\n' "$f" "$DIR" "$e"; fi
 			done
 		done
-	} | sed "s|$DIR/||" | sort -u -t'	' -k3,3 -k1,1 | awk -F'\t' '{ printf "%-40s %-12s %s\n", $3, $2, $1 }'
+	} | sed "s|$DIR/||" | sort -u -t'	' -k3,3 -k1,1 -k2,2 | awk -F'\t' '{ printf "%-40s %-12s %s\n", $3, $2, $1 }'
 	;;
 index)
 	render_index >"$INDEX"
@@ -125,7 +128,7 @@ check)
 	exit "$bad"
 	;;
 *)
-	sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,/^set /{/^#/p}' "$0" | sed 's/^# \{0,1\}//'
 	exit 2
 	;;
 esac

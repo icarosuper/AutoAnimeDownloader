@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Stop: run `go vet ./...` and `go test ./...` before the agent hands the turn back, when Go files
-# changed since the last green run. A failure blocks the stop once and goes back to the agent;
+# Stop: run `go vet ./...` and `go test ./...` before the agent hands the turn back, when anything
+# the suite reads changed since the last green run: Go, Markdown (docs_test.go), the golden cases,
+# decision.sh. A failure blocks the stop once and goes back to the agent;
 # if it is still red on the second try, the user gets a warning instead of a loop.
 # CLAUDE.md "After any change" step 1.
 set -uo pipefail
@@ -9,10 +10,11 @@ input=$(cat)
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 cd "$root"
 
-# Fingerprint of every uncommitted Go change (tracked diff + untracked files' contents).
+# Fingerprint of every uncommitted change the suite reads (tracked diff + untracked files' contents).
+paths=('*.go' 'go.mod' 'go.sum' '*.md' 'src/internal/daemon/testdata/**' '.claude/skills/record-decision/decision.sh')
 fingerprint=$({
-  git diff HEAD -- '*.go' 'go.mod' 'go.sum'
-  git ls-files --others --exclude-standard -- '*.go' | xargs -r cat
+  git diff HEAD -- "${paths[@]}"
+  git ls-files -z --others --exclude-standard -- "${paths[@]}" | xargs -0 -r cat
 } | sha256sum | cut -d' ' -f1)
 
 state=.claude/hooks/.last-green

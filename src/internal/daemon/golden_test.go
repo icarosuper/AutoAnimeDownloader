@@ -9,8 +9,10 @@ package daemon
 //
 // Recording (live network, read-only): `make golden-record ID=<mediaId> NAME=<slug>`. It runs on
 // files.DefaultConfig() with no accounts, so the outcome depends on neither the recorder's config
-// nor their lists. case.json comes out with what the pipeline does NOW: when the case is a bug, edit
-// "picked" to the right torrent first, watch TestGoldenSet fail, then fix.
+// nor their lists. A new case.json comes out with what the pipeline does NOW: when the case is a
+// bug, edit "picked" to the right torrent first, watch TestGoldenSet fail, then fix. Re-recording an
+// existing case rewrites only http.json and keeps its "searched", so a hand-set pick survives; the
+// log says where the fresh outcome differs.
 //
 // GOLDEN_UPDATE=1 rewrites every case.json from the current outcome — only after reading why each
 // pick moved; `git diff testdata/golden` is the review.
@@ -25,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +40,7 @@ import (
 	"AutoAnimeDownloader/src/internal/nyaa"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 const goldenDir = "testdata/golden"
@@ -63,20 +67,31 @@ type goldenRun struct {
 	Picked   string `json:"picked"`
 }
 
-func toRuns(eps []goldenEpisode) []goldenRun {
-	runs := []goldenRun{}
-	for i := 0; i < len(eps); {
+// eachRun walks n items sorted by episode and calls emit once per run: consecutive episodes for
+// which same(first, j) holds, spelled "N" or "N-M" like case.json. first is the run's first index.
+func eachRun(n int, episode func(i int) int, same func(first, j int) bool, emit func(span string, first int)) {
+	for i := 0; i < n; {
 		j := i
-		for j+1 < len(eps) && eps[j+1].Episode == eps[j].Episode+1 && eps[j+1].Picked == eps[i].Picked {
+		for j+1 < n && episode(j+1) == episode(j)+1 && same(i, j+1) {
 			j++
 		}
-		span := strconv.Itoa(eps[i].Episode)
+		span := strconv.Itoa(episode(i))
 		if j > i {
-			span += "-" + strconv.Itoa(eps[j].Episode)
+			span += "-" + strconv.Itoa(episode(j))
 		}
-		runs = append(runs, goldenRun{Episodes: span, Picked: eps[i].Picked})
+		emit(span, i)
 		i = j + 1
 	}
+}
+
+func toRuns(eps []goldenEpisode) []goldenRun {
+	runs := []goldenRun{}
+	eachRun(len(eps),
+		func(i int) int { return eps[i].Episode },
+		func(first, j int) bool { return eps[j].Picked == eps[first].Picked },
+		func(span string, first int) {
+			runs = append(runs, goldenRun{Episodes: span, Picked: eps[first].Picked})
+		})
 	return runs
 }
 
@@ -111,21 +126,24 @@ type goldenExchange struct {
 	Response string `json:"response"`
 }
 
-func exchangeKey(method, rawURL, body string) string {
+// requestURI drops scheme and host, so a recording replays the same under NYAA_URL.
+func requestURI(rawURL string) string {
 	if u, err := url.Parse(rawURL); err == nil {
-		rawURL = u.RequestURI()
+		return u.RequestURI()
 	}
-	return method + " " + rawURL + "\n" + body
+	return rawURL
+}
+
+func exchangeKey(method, rawURL, body string) string {
+	return method + " " + requestURI(rawURL) + "\n" + body
 }
 
 // runGoldenPass runs the debug pass on the default config, with the nyaa package globals the config
-// pushes (priorities, page and pack ceilings) applied for the duration.
+// pushes applied for the duration — through the same files.ApplyNyaaSettings LoadConfigs calls.
 func runGoldenPass(t *testing.T, animeID int) *DebugSummary {
 	t.Helper()
 	cfg := files.DefaultConfig()
-	defer nyaa.SetPriorities(cfg.Priorities)()
-	defer nyaa.SetMaxSearchPages(cfg.MaxSearchPages)()
-	defer nyaa.SetMaxBatchTorrentSizeGB(cfg.MaxBatchTorrentSizeGB)()
+	defer files.ApplyNyaaSettings(cfg)()
 
 	summary, err := RunAnimeDebug(animeID, cfg, &debugMockFileManager{})
 	if err != nil {
@@ -187,6 +205,9 @@ func TestGoldenSet(t *testing.T) {
 
 			got := goldenOutcome(replayGolden(t, c.AnimeID, recorded))
 			if os.Getenv("GOLDEN_UPDATE") != "" {
+				if t.Failed() { // requests missing from the recording got a 404: not an outcome to keep
+					return
+				}
 				c.Searched = toRuns(got)
 				writeJSON(t, casePath, c)
 				return
@@ -200,33 +221,28 @@ func TestGoldenSet(t *testing.T) {
 // stops winning is one line, not twelve.
 func diffGolden(t *testing.T, want, got []goldenEpisode) {
 	t.Helper()
+	diffGoldenWith(t.Errorf, want, got)
+}
+
+func diffGoldenWith(report func(format string, args ...any), want, got []goldenEpisode) {
 	const notSearched = "\x00"
-	wantBy, gotBy := map[int]string{}, map[int]string{}
-	for _, e := range want {
-		wantBy[e.Episode] = e.Picked
+	byEpisode := map[int]*[2]string{} // [want, got]
+	set := func(eps []goldenEpisode, side int) {
+		for _, e := range eps {
+			if byEpisode[e.Episode] == nil {
+				byEpisode[e.Episode] = &[2]string{notSearched, notSearched}
+			}
+			byEpisode[e.Episode][side] = e.Picked
+		}
 	}
-	for _, e := range got {
-		gotBy[e.Episode] = e.Picked
-	}
-	eps := map[int]bool{}
-	for ep := range wantBy {
-		eps[ep] = true
-	}
-	for ep := range gotBy {
-		eps[ep] = true
-	}
-	sorted := make([]int, 0, len(eps))
-	for ep := range eps {
+	set(want, 0)
+	set(got, 1)
+	sorted := make([]int, 0, len(byEpisode))
+	for ep := range byEpisode {
 		sorted = append(sorted, ep)
 	}
 	sort.Ints(sorted)
 
-	lookup := func(m map[int]string, ep int) string {
-		if v, ok := m[ep]; ok {
-			return v
-		}
-		return notSearched
-	}
 	show := func(name string) string {
 		switch name {
 		case notSearched:
@@ -242,22 +258,16 @@ func diffGolden(t *testing.T, want, got []goldenEpisode) {
 	}
 	var diffs []moved
 	for _, ep := range sorted {
-		if w, g := lookup(wantBy, ep), lookup(gotBy, ep); w != g {
-			diffs = append(diffs, moved{ep, w, g})
+		if p := byEpisode[ep]; p[0] != p[1] {
+			diffs = append(diffs, moved{ep, p[0], p[1]})
 		}
 	}
-	for i := 0; i < len(diffs); {
-		j := i
-		for j+1 < len(diffs) && diffs[j+1].episode == diffs[j].episode+1 && diffs[j+1].want == diffs[i].want && diffs[j+1].got == diffs[i].got {
-			j++
-		}
-		span := strconv.Itoa(diffs[i].episode)
-		if j > i {
-			span += "-" + strconv.Itoa(diffs[j].episode)
-		}
-		t.Errorf("episodes %s:\n  want %s\n  got  %s", span, show(diffs[i].want), show(diffs[i].got))
-		i = j + 1
-	}
+	eachRun(len(diffs),
+		func(i int) int { return diffs[i].episode },
+		func(first, j int) bool { return diffs[j].want == diffs[first].want && diffs[j].got == diffs[first].got },
+		func(span string, first int) {
+			report("episodes %s:\n  want %s\n  got  %s", span, show(diffs[first].want), show(diffs[first].got))
+		})
 }
 
 // replayGolden serves the recording to RunAnimeDebug. A request that is not in it fails the case:
@@ -277,7 +287,7 @@ func replayGolden(t *testing.T, animeID int, recorded []goldenExchange) *DebugSu
 			mu.Lock()
 			missing[method+" "+rawURL] = true
 			mu.Unlock()
-			return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
+			x = goldenExchange{Status: http.StatusNotFound}
 		}
 		return &http.Response{StatusCode: x.Status, Body: io.NopCloser(strings.NewReader(x.Response)), Header: make(http.Header)}, nil
 	}
@@ -336,11 +346,9 @@ func TestGoldenRecord(t *testing.T) {
 	keep := func(x goldenExchange) {
 		mu.Lock()
 		defer mu.Unlock()
+		x.URL = requestURI(x.URL)
 		if k := exchangeKey(x.Method, x.URL, x.Body); !seen[k] {
 			seen[k] = true
-			if u, err := url.Parse(x.URL); err == nil {
-				x.URL = u.RequestURI()
-			}
 			recorded = append(recorded, x)
 		}
 	}
@@ -381,16 +389,21 @@ func TestGoldenRecord(t *testing.T) {
 
 	summary := runGoldenPass(t, animeID)
 
-	c := goldenCase{AnimeID: animeID, Note: "TODO: what went wrong and what this case pins"}
+	writeJSON(t, filepath.Join(dir, "http.json"), recorded)
+	fresh := goldenOutcome(summary)
 	casePath := filepath.Join(dir, "case.json")
 	if _, err := os.Stat(casePath); err == nil {
+		// Keep the expected picks: one may be a hand-set right answer for a bug not fixed yet.
 		var prev goldenCase
 		readJSON(t, casePath, &prev)
-		c.Note = prev.Note
+		if want := fromRuns(t, prev.Searched); !slices.Equal(want, fresh) {
+			t.Logf("case.json kept; the fresh outcome differs from it (GOLDEN_UPDATE=1 accepts it):")
+			diffGoldenWith(t.Logf, want, fresh)
+		}
+		t.Logf("re-recorded %d requests into %s (%s)", len(recorded), dir, summary.AnimeName)
+		return
 	}
-	c.Searched = toRuns(goldenOutcome(summary))
-	writeJSON(t, casePath, c)
-	writeJSON(t, filepath.Join(dir, "http.json"), recorded)
+	writeJSON(t, casePath, goldenCase{AnimeID: animeID, Note: "TODO: what went wrong and what this case pins", Searched: toRuns(fresh)})
 	t.Logf("recorded %d requests into %s (%s). case.json holds what the pipeline does NOW: write the note, "+
 		"and if this case is a bug, set \"picked\" to the right torrent before fixing", len(recorded), dir, summary.AnimeName)
 }
@@ -416,11 +429,8 @@ func trimNyaaPage(page []byte) string {
 		}
 		s.Find("thead, i, img").Remove()
 		s.Find("*").AddSelection(s).Each(func(_ int, e *goquery.Selection) {
-			for _, a := range e.Nodes[0].Attr {
-				if a.Key != "href" && a.Key != "class" {
-					e.RemoveAttr(a.Key)
-				}
-			}
+			n := e.Nodes[0]
+			n.Attr = slices.DeleteFunc(n.Attr, func(a html.Attribute) bool { return a.Key != "href" && a.Key != "class" })
 			if href, ok := e.Attr("href"); ok && strings.HasPrefix(href, "magnet:") {
 				e.SetAttr("href", magnetExtras.ReplaceAllString(href, ""))
 			}

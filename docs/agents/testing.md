@@ -270,9 +270,11 @@ GOLDEN_UPDATE=1 go test ./src/internal/daemon -run TestGoldenSet   # rewrite eve
 ```
 
 Recording runs on `files.DefaultConfig()` with no accounts, never the recorder's config — the
-outcome must not depend on who recorded it, and no username ends up in the repo. `case.json` comes
-out with what the pipeline does **now**: for a bug, change `picked` to the right torrent, watch the
-case fail, then fix.
+outcome must not depend on who recorded it, and no username ends up in the repo. A new `case.json`
+comes out with what the pipeline does **now**: for a bug, change `picked` to the right torrent,
+watch the case fail, then fix. Re-recording an existing case rewrites only `http.json` and keeps
+`searched`, so a hand-set pick is not lost; the run logs where the fresh outcome differs, and
+`GOLDEN_UPDATE=1` is how to accept it.
 
 A case fails on a moved pick (printed as runs: `episodes 1-12: want … got …`) and on a request the
 recording doesn't have — the pipeline now asks something new (another title variant, a page more, a

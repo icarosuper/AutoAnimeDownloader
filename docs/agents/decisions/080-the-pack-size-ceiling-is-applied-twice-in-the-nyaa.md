@@ -2,7 +2,7 @@
 
 **Location:** `nyaa/nyaa.go` — `maxBatchSizeBytes`, `SetMaxBatchTorrentSizeGB`, `batchTooBig`, applied in `ScrapNyaaForAnime`'s `parseRow`; and `daemon/search.go` — `filterBySize`, via `partitionSearchResults`.
 
-**What it looks like:** `max_batch_torrent_size_gb` is already applied by the daemon in `filterBySize`, and yet the `nyaa` package receives the same ceiling by push (`applyNyaaSettings`) and drops the pack row before adding it to the result. Looks like a duplicated filter, and `ScrapNyaaForAnime`'s old comment said explicitly that pushing a filter into `nyaa` was what `applyNyaaSettings` avoided.
+**What it looks like:** `max_batch_torrent_size_gb` is already applied by the daemon in `filterBySize`, and yet the `nyaa` package receives the same ceiling by push (`ApplyNyaaSettings`) and drops the pack row before adding it to the result. Looks like a duplicated filter, and `ScrapNyaaForAnime`'s old comment said explicitly that pushing a filter into `nyaa` was what `ApplyNyaaSettings` avoided.
 
 **Why it's right:** the two filters do not do the same thing, because they run at different moments of the algorithm. The daemon's decides **what to download**. nyaa's decides **how far to descend the pages** — `fetchSearchPages` stops when `accepted()` reaches `enoughCandidates` (3), and `accepted()` counts what the search accepted. A pack the daemon will discard for size, but that the search accepted, spends one of the three floor slots and ends the descent too early.
 

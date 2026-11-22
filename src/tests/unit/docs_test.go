@@ -52,6 +52,13 @@ func repoFiles(t *testing.T, root string, keep func(name string) bool) []string 
 			if skippedDirs[d.Name()] || strings.HasPrefix(d.Name(), ".debug_") {
 				return filepath.SkipDir
 			}
+			// A nested git worktree (.claude/worktrees/<slice>, docs/v3.0.0.md) is another chat's
+			// checkout: its half-done docs are not this tree's.
+			if path != root {
+				if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
+					return filepath.SkipDir
+				}
+			}
 			return nil
 		}
 		if keep(d.Name()) {

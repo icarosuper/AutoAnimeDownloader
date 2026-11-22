@@ -211,13 +211,21 @@ type FileManager struct {
 	mu                   sync.Mutex
 }
 
-// applyNyaaSettings pushes to the nyaa package the config fields it consumes. Called on EVERY
+// ApplyNyaaSettings pushes to the nyaa package the config fields it consumes. Called on EVERY
 // return of LoadConfigs — nyaa can't import files (cycle), so the config reaches it by push, never
-// by read.
-func applyNyaaSettings(config *Config) {
-	nyaa.SetPriorities(config.Priorities)
-	nyaa.SetMaxSearchPages(config.MaxSearchPages)
-	nyaa.SetMaxBatchTorrentSizeGB(config.MaxBatchTorrentSizeGB)
+// by read. restore puts the previous values back; the golden set (daemon/golden_test.go) uses it,
+// so it replays with exactly what LoadConfigs pushes.
+func ApplyNyaaSettings(config *Config) (restore func()) {
+	restores := []func(){
+		nyaa.SetPriorities(config.Priorities),
+		nyaa.SetMaxSearchPages(config.MaxSearchPages),
+		nyaa.SetMaxBatchTorrentSizeGB(config.MaxBatchTorrentSizeGB),
+	}
+	return func() {
+		for i := len(restores) - 1; i >= 0; i-- {
+			restores[i]()
+		}
+	}
 }
 
 // DefaultConfig is what a fresh install starts with, and what LoadConfigs deserializes on top of.
@@ -311,7 +319,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
-		applyNyaaSettings(config)
+		ApplyNyaaSettings(config)
 		return config, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to stat config file: %w", err)
@@ -328,7 +336,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config: %w", err)
 		}
-		applyNyaaSettings(config)
+		ApplyNyaaSettings(config)
 		return config, nil
 	}
 
@@ -338,7 +346,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		if err := m.saveConfigsLocked(config); err != nil {
 			return nil, fmt.Errorf("failed to save default config after parse error: %w", err)
 		}
-		applyNyaaSettings(config)
+		ApplyNyaaSettings(config)
 		return config, nil
 	}
 
@@ -376,7 +384,7 @@ func (m *FileManager) LoadConfigs() (*Config, error) {
 		config.MALUsernames = []string{}
 	}
 
-	applyNyaaSettings(config)
+	ApplyNyaaSettings(config)
 	return config, nil
 }
 

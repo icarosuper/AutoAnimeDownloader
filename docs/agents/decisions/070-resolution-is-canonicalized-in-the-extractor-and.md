@@ -49,7 +49,7 @@ barred by `re-encode` in the default `ignore_list`. For backlog the axis exists,
 invisible config (#69); now it breaks CI.
 
 **Known limitation, deliberate:** no default change reaches an existing install — `LoadConfigs`
-unmarshals over `getDefaultConfig()`. The lists update through the "reset" buttons that already
+unmarshals over `DefaultConfig()`. The lists update through the "reset" buttons that already
 exist on the screen; `MaxEpisodeTorrentSizeGB`, `WatchedEpisodesToKeep` and `MinSeeders` ask for a
 manual edit, once. There is no automatic migration, for the same reason as #47
 (`BatchWindowSeconds`): changing behaviour in an update with nobody asking.

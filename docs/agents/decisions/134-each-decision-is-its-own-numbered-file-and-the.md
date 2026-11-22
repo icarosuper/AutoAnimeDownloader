@@ -1,8 +1,9 @@
 # 134. Each decision is its own numbered file, and the index is generated from their headings
 
 **Location:** `docs/agents/decisions/` — one `NNN-<slug>.md` per decision, `index.md` as the
-index; `.claude/skills/record-decision/decision.sh` (`new`, `index`, `check`, `refs`) and its
-`SKILL.md`. Code and docs cite an entry as `decisions/NNN` (rule in `conventions.md`, "Comments").
+index; `.claude/skills/record-decision/decision.sh` (`next`, `new`, `path`, `refs`, `about`,
+`index`, `check`) and its `SKILL.md`. Code and docs cite an entry as `decisions/NNN` (rule in
+`conventions.md`, "Comments").
 
 **What it looks like:** 134 small files where one `decisions.md` used to be — a folder that only
 grows, an index that seems to duplicate the filenames, and filenames whose slug no longer matches

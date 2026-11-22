@@ -185,7 +185,7 @@ whatever progress the merge did fill in.
 **Config**
 
 - Default 3 on a config that never had the key (`LoadConfigs` unmarshals over
-  `getDefaultConfig()`).
+  `DefaultConfig()`).
 - PUT 3 succeeds; PUT 31 and PUT -1 are 400.
 
 No new integration test. No CLI test beyond the existing `config set` passthrough.

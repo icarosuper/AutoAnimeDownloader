@@ -129,8 +129,11 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	// Series size, only so the search can decide the zero-padding of the episode query.
 	seriesLength := anilist.LastAiredEpisode(anime)
 
-	magnetsByEpisodeNumber := make(map[int]int, len(episodesToDownload))
-	pickedByEpisode := make(map[int]string, len(episodesToDownload))
+	type searchResult struct {
+		found  int
+		picked string
+	}
+	resultByEpisode := make(map[int]searchResult, len(episodesToDownload))
 	for _, ep := range episodesToDownload {
 		resolved := magnetsForEpisodes[ep.Episode]
 		magnets := resolved.candidates
@@ -144,10 +147,11 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 			magnets, _ = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, synonyms, anime.Media.Relations, anime.Media.Format, seriesLength), details.isFinished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 		}
 
-		magnetsByEpisodeNumber[ep.Episode] = len(magnets)
+		r := searchResult{found: len(magnets)}
 		if len(magnets) > 0 {
-			pickedByEpisode[ep.Episode] = magnets[0].Name
+			r.picked = magnets[0].Name
 		}
+		resultByEpisode[ep.Episode] = r
 		logger.Logger.Info().
 			Str("anime", animeTitle).
 			Int("episode", ep.Episode).
@@ -156,9 +160,9 @@ func RunAnimeDebug(animeId int, configs *files.Config, fileManager FileManagerIn
 	}
 
 	for i := range summary.Episodes {
-		if n, ok := magnetsByEpisodeNumber[summary.Episodes[i].Episode]; ok {
-			summary.Episodes[i].MagnetsFound = n
-			summary.Episodes[i].Picked = pickedByEpisode[summary.Episodes[i].Episode]
+		if r, ok := resultByEpisode[summary.Episodes[i].Episode]; ok {
+			summary.Episodes[i].MagnetsFound = r.found
+			summary.Episodes[i].Picked = r.picked
 		}
 	}
 

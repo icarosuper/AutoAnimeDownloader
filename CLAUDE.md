@@ -8,7 +8,7 @@ AutoAnimeDownloader = Go daemon. Auto-downloads anime episodes. Integrates Anili
 
 ## Important — After Any Change
 
-1. **Run tests**: `go test ./...` — the Stop hook in `.claude/settings.json` also runs `go vet` + `go test` when Go files changed and sends a failure back to you; `.claude/hooks/` also asks before `git commit`/`push` and flags Portuguese you just wrote
+1. **Run tests**: `go test ./...` — the Stop hook in `.claude/settings.json` also runs `go vet` + `go test` when Go, docs or golden-set files changed and sends a failure back to you; `.claude/hooks/` also asks before `git commit`/`push` and flags Portuguese you just wrote
 2. **Update docs**: if you changed endpoints, config fields, env vars, patterns, or added/removed files → update the relevant doc in `docs/agents/`; if you introduced a non-obvious or unusual pattern → add a file to `docs/agents/decisions/`
    - `architecture.md` documents what **the code can't answer by itself**: flow between files, invariants that hurt to break, negative facts ("there is no `daemon.go`"), disambiguation of similar names, and the pointer to the decision. **Don't** list symbols with a one-line purpose — `grep '^func '` answers that for free and always up to date; a hand-written symbol table is a copy that goes stale. A new file only gets text if it brings one of those five; deleted file → deleted text. The question it answers is "which file do I open and what bites me there", not "which functions exist"
    - Before proposing a commit that changes Go or frontend code, run the `decision-checker` subagent
@@ -91,6 +91,7 @@ request already covers isn't "in passing", it's the job. (Portuguese text is the
 - [Environment Variables](docs/agents/environment.md) — read when touching env vars or dev setup
 - [Testing](docs/agents/testing.md) — read when writing or running tests; mock patterns
 - [Commands](docs/agents/commands.md) — read when building or running the daemon/frontend
+- [Finish](.claude/skills/finish/SKILL.md) — skill, user-invoked only (`/finish [level]`); closes out the uncommitted change: simplify, code-review (asks when a finding needs a decision), decision-checker, tests, docs, commit to the current branch
 - [Release](.claude/skills/release/SKILL.md) — skill; stamping a version (tag, GitHub Release, AUR), only when the user asks for a release
 - [Decisions](docs/agents/decisions/index.md) — read before "fixing" unusual patterns; one self-contained file per decision. **Read the index (`index.md`) and open only the entries that matter**; for a keyword, `grep -ril "<word>" docs/agents/decisions/`. Never edit the index by hand — it is generated
 - [Debug Anime](.claude/skills/debug-anime/SKILL.md) — skill; follow when animes fail to download (`make debug-anime`, `make debug-batch`, search/filter diagnosis step by step)

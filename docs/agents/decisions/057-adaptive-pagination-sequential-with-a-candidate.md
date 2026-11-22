@@ -1,6 +1,6 @@
 # 57. Adaptive pagination: sequential, with a candidate floor, no per-anime budget
 
-**Location:** `nyaa/nyaa.go` — `fetchSearchPages`, `parsePagesWith`, `enoughCandidates`, `SetMaxSearchPages`/`ActiveMaxSearchPages`; `files/filemanager.go` — `Config.MaxSearchPages`, `applyNyaaSettings`.
+**Location:** `nyaa/nyaa.go` — `fetchSearchPages`, `parsePagesWith`, `enoughCandidates`, `SetMaxSearchPages`/`ActiveMaxSearchPages`; `files/filemanager.go` — `Config.MaxSearchPages`, `ApplyNyaaSettings`.
 
 **What it looks like:** one pagination helper used by the three searches (`ScrapNyaa`, `ScrapNyaaForAnime`, `ScrapNyaaForMovie` — at the time of this decision there were four, `ScrapNyaaForBatch` and `ScrapNyaaForMultipleEpisodes` later fused into `ScrapNyaaForAnime`), which descends page by page **sequentially** while it has fewer than 3 accepted candidates, with a configurable ceiling.
 

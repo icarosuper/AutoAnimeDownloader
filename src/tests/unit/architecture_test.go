@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -26,12 +27,29 @@ type goSource struct {
 	file *ast.File
 }
 
+var parsedSources struct {
+	once  sync.Once
+	files []goSource
+	err   error
+}
+
+// sources parses the tree once for every rule in the package.
+func sources(t *testing.T) []goSource {
+	t.Helper()
+	parsedSources.once.Do(func() {
+		parsedSources.files, parsedSources.err = parseSources(repoRoot(t))
+	})
+	if parsedSources.err != nil {
+		t.Fatal(parsedSources.err)
+	}
+	return parsedSources.files
+}
+
 // parseSources reads every non-test Go file under src/internal and src/cmd, nested packages
 // included, regardless of build tags, so a windows-only file breaks a rule just like the one the
 // test happens to build on. It skips the directories the go tool ignores (testdata, ".x", "_x")
 // and the frontend's node_modules.
-func parseSources(t *testing.T, root string) []goSource {
-	t.Helper()
+func parseSources(root string) ([]goSource, error) {
 	var out []goSource
 	fset := token.NewFileSet()
 	src := filepath.Join(root, "src")
@@ -60,10 +78,10 @@ func parseSources(t *testing.T, root string) []goSource {
 			return nil
 		})
 		if err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 	}
-	return out
+	return out, nil
 }
 
 // internalImports returns the module's own packages a file imports, as "internal/files".
@@ -115,7 +133,7 @@ func inPackage(pkg, root string) bool {
 }
 
 func TestImportRules(t *testing.T) {
-	sources := parseSources(t, repoRoot(t))
+	sources := sources(t)
 	for _, r := range importRules {
 		seen := false
 		for _, s := range sources {
@@ -139,7 +157,7 @@ func TestImportRules(t *testing.T) {
 // in datadir, so no second copy of the path can disagree with datadir.Path() (architecture.md,
 // "computed in one place"). Comments do not count; string literals do.
 func TestDataDirPathIsComputedOnce(t *testing.T) {
-	for _, s := range parseSources(t, repoRoot(t)) {
+	for _, s := range sources(t) {
 		if inPackage(s.pkg, "internal/datadir") {
 			continue
 		}

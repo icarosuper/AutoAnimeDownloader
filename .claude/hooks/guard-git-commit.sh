@@ -3,10 +3,14 @@
 # CLAUDE.md rule 5 — the user commits and pushes themselves unless they say otherwise.
 set -euo pipefail
 
-cmd=$(jq -r '.tool_input.command // ""')
+input=$(cat)
+[[ $input == *git* ]] || exit 0 # most Bash calls: skip jq and grep
+cmd=$(jq -r '.tool_input.command // ""' <<<"$input")
 
-# git, optionally with global options (-C dir, -c k=v, --no-pager…), then commit/push.
-if printf '%s' "$cmd" | grep -qE '(^|[;&|(`[:space:]])git([[:space:]]+(-[Cc][[:space:]]+[^[:space:]]+|--?[a-z-]+(=[^[:space:]]+)?))*[[:space:]]+(commit|push)\b'; then
+# git, then commit/push as any later word of the same command segment. Broad on purpose: listing
+# git's global options (-C "dir with space", --git-dir <path>…) always misses a shape, and a false
+# ask (`git log --grep commit`) only costs one confirmation.
+if printf '%s' "$cmd" | grep -qE '(^|[;&|(`[:space:]])git[[:space:]]([^;&|`]*[[:space:]])?(commit|push)\b'; then
   jq -n '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

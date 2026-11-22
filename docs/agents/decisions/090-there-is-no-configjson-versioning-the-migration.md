@@ -11,7 +11,7 @@ numbering the format, writing a v1→v2→v3 chain and locking the app with a bi
 migration does not go through.
 
 **Why it does not exist:** because the format already solves two of the three cases on its own.
-`LoadConfigs` unmarshals the JSON **over `getDefaultConfig()`** (`filemanager.go`), so:
+`LoadConfigs` unmarshals the JSON **over `DefaultConfig()`** (`filemanager.go`), so:
 
 | Change on `Config` | Needs a migration? |
 |---|---|
