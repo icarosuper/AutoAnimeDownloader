@@ -13,7 +13,7 @@
 | `[EMBER] Mushoku Tensei … (2021-2022) (Season 1 …)` | `2021-2022` | release year |
 | `[Trix] Kimetsu no Yaiba S01-05 … (Batch)` | `01-05` | seasons 1 to 5 |
 
-The year is what forced the change: it does **not** fall into the safe fallback. `EndEpisode == 0` means "unknown range" and every caller treats it as a complete pack; `2021..2022` is a *declared* range that no `packAxis` hypothesis covers, so `coveringBatch` rejects the pack and it vanishes from the choice without a log line that explains. It was a complete BDRip pack, first placed by seeders, discarded by a parenthesis.
+The year is what forced the change: it does **not** fall into the safe fallback. `EndEpisode == 0` means "unknown range", which the file list then resolves ([#84](084-a-pack-without-a-range-in-its-name-gets-its.md)); `2021..2022` is a *declared* range that no `packAxis` hypothesis covers, so `coveringBatch` rejects the pack and it vanishes from the choice without a log line that explains. It was a complete BDRip pack, first placed by seeders, discarded by a parenthesis.
 
 The band `start >= 1900 && last <= 2100` only catches a year: no series reaches episode 1900, and `One Piece 1001-1100` — the real case that forced `\d{1,4}` in [#51](051-an-episode-number-accepts-4-digits-except-inside.md) — passes intact.
 
@@ -22,7 +22,10 @@ A season range is rejected by what comes **right before** the match — `S`, `Se
 keep their episode range. Read as episodes, Trix's `S01-05` (63 files, seasons restarting) won only
 episodes 1-5 of the season-1 entry, and a second pack was downloaded for 6-12; with the range
 unknown, `PackFileRange` reads the file list and the one pack covers the window. Pinned by the
-golden case `kimetsu-season-range-pack` (`daemon/testdata/golden/`).
+golden case `kimetsu-season-range-pack` (`daemon/testdata/golden/`). **Known gap:** only the
+season-1 entry benefits — `ExtractSeason` still reads `S01-05` as season 1, so under a season 2-5
+entry the pack path drops the pack before any range is read
+(`docs/backlog/season-range-in-a-pack-name-reads-as-one-season.md`).
 
 **`FindAll` and not `FindString`** because a rejected match must not end the search: in `[Group] Anime (2021-2022) 01-24 [BD]` the real range comes **after** the year.
 

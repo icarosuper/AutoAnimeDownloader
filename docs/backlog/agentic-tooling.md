@@ -8,13 +8,8 @@ mature. What is missing is enforcement: almost every rule in CLAUDE.md depends o
 remembering it. Points below, roughly ordered by payoff per effort. Remove each section when it
 ships (on 2026-11-22: point 1, the hooks in `.claude/settings.json`; point 2, the docs checks in
 `src/tests/unit/docs_test.go`; point 3, the search/match golden set in
-`src/internal/daemon/golden_test.go`).
-
-## 4. Project-specific review subagents (`.claude/agents/`)
-
-E.g. a `decision-checker` that takes the diff and checks it against the decisions index, so
-contradicting a recorded decision does not depend on the main agent remembering to read it. A
-separate reviewer is not anchored on the author's reasoning.
+`src/internal/daemon/golden_test.go`; point 4, the `decision-checker` subagent in
+`.claude/agents/`).
 
 ## 5. Architecture fitness tests
 

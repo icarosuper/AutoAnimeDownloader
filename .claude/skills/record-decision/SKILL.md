@@ -15,6 +15,7 @@ $S next                     # next free number
 $S new "<title>"            # create NNN-<slug>.md for the next number, print its path
 $S path 43                  # file of an existing entry
 $S refs 43                  # every reference to #43 in code and docs
+$S about src/internal/nyaa/nyaa.go   # entries that name the file or that it cites (decision-checker uses it)
 $S index                    # regenerate index.md from the files' headings
 $S check                    # headings match filenames, index current, every link resolves
 ```

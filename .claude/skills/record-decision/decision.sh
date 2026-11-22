@@ -5,6 +5,7 @@
 #   decision.sh new "<title>"     create NNN-<slug>.md for the next number, print its path
 #   decision.sh path <N>          path of an existing entry
 #   decision.sh refs <N>          every reference to entry N in the repo
+#   decision.sh about <file>...   entries that name these files or that they cite (review shortlist)
 #   decision.sh index             regenerate index.md from the files' headings
 #   decision.sh check             headings match filenames, index is current, every link resolves
 set -euo pipefail
@@ -82,6 +83,24 @@ refs)
 	git grep -nE "\]\($p-|#$n\b" -- 'docs/agents/decisions/' ':!docs/agents/decisions/index.md' \
 		":!docs/agents/decisions/$p-*" || true
 	;;
+about)
+	shift
+	[ "$#" -gt 0 ] || { echo "usage: decision.sh about <file>..." >&2; exit 2; }
+	cd "$ROOT"
+	# The entries a change to these files may contradict: the ones that name the file (as
+	# <parent>/<base>, the way Location lines spell it, e.g. nyaa/nyaa.go) and the ones the file
+	# itself cites. A shortlist, not a verdict: an entry that only names the function is missed.
+	{
+		for f in "$@"; do
+			short="$(basename "$(dirname "$f")")/$(basename "$f")"
+			grep -lF -- "$short" "$DIR"/[0-9][0-9][0-9]-*.md 2>/dev/null | sed "s|^|$f	names it	|" || true
+			[ -f "$f" ] && grep -oE 'decisions/[0-9]{3}' "$f" | sort -u | while IFS= read -r c; do
+				e="$(entries | grep -E "^${c#decisions/}-" || true)"
+				[ -n "$e" ] && printf '%s\tcited in it\t%s/%s\n' "$f" "$DIR" "$e"
+			done
+		done
+	} | sed "s|$DIR/||" | sort -u -t'	' -k3,3 -k1,1 | awk -F'\t' '{ printf "%-40s %-12s %s\n", $3, $2, $1 }'
+	;;
 index)
 	render_index >"$INDEX"
 	echo "wrote $INDEX ($(entries | wc -l) entries)"
@@ -106,7 +125,7 @@ check)
 	exit "$bad"
 	;;
 *)
-	sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+	sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
 	exit 2
 	;;
 esac
