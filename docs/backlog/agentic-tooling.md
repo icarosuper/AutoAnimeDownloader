@@ -9,12 +9,7 @@ remembering it. Points below, roughly ordered by payoff per effort. Remove each 
 ships (on 2026-11-22: point 1, the hooks in `.claude/settings.json`; point 2, the docs checks in
 `src/tests/unit/docs_test.go`; point 3, the search/match golden set in
 `src/internal/daemon/golden_test.go`; point 4, the `decision-checker` subagent in
-`.claude/agents/`).
-
-## 5. Architecture fitness tests
-
-Invariants such as "package X never imports Y" or "only package Z writes to the data dir" become
-a test built on `go/packages` instead of a sentence in `architecture.md`.
+`.claude/agents/`; point 5, the import rules in `src/tests/unit/architecture_test.go`).
 
 ## 6. Smaller items
 

@@ -235,6 +235,22 @@ pointer stops resolving:
 
 Fenced code blocks and inline code are skipped — an example is not a link.
 
+## Architecture Rules Are Tested
+
+`src/tests/unit/architecture_test.go` turns the import rules the docs state into failures. These
+are the edges the compiler accepts, because they make no cycle, but that break a documented design:
+
+- `TestImportRules`: `datadir` imports no internal package, `files` and `nyaa` never import
+  `anilist`, `torrents` never imports `files`. Each rule carries the doc or decision that states
+  it, and a rule whose package no longer exists fails too;
+- `TestDataDirPathIsComputedOnce`: the string literals `.autoAnimeDownloader` and `APPDATA` appear
+  only in `datadir`, so nothing builds the data dir path beside `datadir.Path()`.
+
+Imports are read with `go/parser` from every non-test file, nested packages included (a rule on
+`nyaa` also binds `nyaa/<sub>`) and regardless of build tags, so a
+windows-only file is checked too. A new rule needs a sentence in `architecture.md` or a decision
+that states it; add both in the same change.
+
 ## The Search/Match Golden Set
 
 `src/internal/daemon/golden_test.go` replays real cases offline through `RunAnimeDebug` — the same
