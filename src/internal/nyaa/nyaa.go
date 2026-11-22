@@ -135,16 +135,26 @@ func GenerateSearchTitleVariants(romaji, english string) []string {
 // title's part after its last " - ". Both titles need that separator and different subtitles;
 // otherwise there is nothing to mix.
 func romajiBaseEnglishSubtitle(romaji, english string) (string, bool) {
-	const sep = " - "
-	ri, ei := strings.LastIndex(romaji, sep), strings.LastIndex(english, sep)
-	if ri <= 0 || ei <= 0 {
+	romajiBase, romajiSub, ok := CutTitleSuffix(romaji)
+	if !ok {
 		return "", false
 	}
-	romajiSub, englishSub := romaji[ri+len(sep):], english[ei+len(sep):]
-	if englishSub == "" || strings.EqualFold(romajiSub, englishSub) {
+	_, englishSub, ok := CutTitleSuffix(english)
+	if !ok || strings.EqualFold(romajiSub, englishSub) {
 		return "", false
 	}
-	return romaji[:ri] + sep + englishSub, true
+	return romajiBase + " - " + englishSub, true
+}
+
+// CutTitleSuffix cuts a title at its LAST " - ": "<base> - <suffix>". Both halves must be
+// non-empty.
+func CutTitleSuffix(title string) (base, suffix string, ok bool) {
+	i := strings.LastIndex(title, " - ")
+	if i <= 0 {
+		return "", "", false
+	}
+	base, suffix = title[:i], title[i+len(" - "):]
+	return base, suffix, suffix != ""
 }
 
 // romanSequelBase is the title without the roman numeral that closes it, and without the

@@ -5,6 +5,7 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/nyaa"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -269,36 +270,22 @@ func splitEntryContinuation(titles anilist.Title, relations anilist.MediaRelatio
 	if titles.Romaji == nil {
 		return "", 0, false
 	}
-	base, suffix, ok := splitTitleSuffix(*titles.Romaji)
+	base, suffix, ok := nyaa.CutTitleSuffix(*titles.Romaji)
 	if !ok {
 		return "", 0, false
 	}
 	for _, edge := range relations.Edges {
 		node := edge.Node
-		if edge.RelationType != "PREQUEL" || node.Episodes == nil || *node.Episodes <= 0 || node.Title.Romaji == nil {
+		if edge.RelationType != "PREQUEL" || node.Episodes == nil || *node.Episodes <= 0 || node.Title.Romaji == nil ||
+			!slices.Contains([]anilist.MediaFormat{anilist.MediaFormatTV, anilist.MediaFormatTVShort, anilist.MediaFormatONA}, node.Format) {
 			continue
 		}
-		switch node.Format {
-		case anilist.MediaFormatTV, anilist.MediaFormatTVShort, anilist.MediaFormatONA:
-		default:
-			continue
-		}
-		prequelBase, prequelSuffix, ok := splitTitleSuffix(*node.Title.Romaji)
+		prequelBase, prequelSuffix, ok := nyaa.CutTitleSuffix(*node.Title.Romaji)
 		if ok && strings.EqualFold(prequelBase, base) && !strings.EqualFold(prequelSuffix, suffix) {
 			return base, *node.Episodes, true
 		}
 	}
 	return "", 0, false
-}
-
-// splitTitleSuffix cuts a title at its LAST " - ": "<Base> - <suffix>".
-func splitTitleSuffix(title string) (base, suffix string, ok bool) {
-	i := strings.LastIndex(title, " - ")
-	if i < 0 {
-		return "", "", false
-	}
-	base, suffix = strings.TrimSpace(title[:i]), strings.TrimSpace(title[i+3:])
-	return base, suffix, base != "" && suffix != ""
 }
 
 func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) []nyaa.TorrentResult {

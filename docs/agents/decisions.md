@@ -3972,7 +3972,8 @@ two check intervals (default 60 s against a 1 min minimum interval).
 ### 131. A split AniList entry is searched by its shared base title, with the prequel's episodes added, when every other search came back empty
 
 **Location:** `internal/daemon/search.go` — `searchNyaaForSingleEpisode` (the last fallback),
-`splitEntryContinuation` and `splitTitleSuffix`; pinned by `TestSearchSingleEpisode_SplitEntry*`
+`splitEntryContinuation`, over `nyaa.CutTitleSuffix` (the same cut the romaji-base + English-subtitle
+variant uses); pinned by `TestSearchSingleEpisode_SplitEntry*`
 in `internal/daemon/search_split_test.go`.
 
 **What it looks like:** a third search that drops the entry's own suffix, ignores season and part,
@@ -4003,9 +4004,9 @@ does. It runs last, so it only acts where the normal and the offset searches fou
 
 ### 132. Season and part are read from the synonyms that name the anime, never from one that is the title of its manga or novel
 
-**Location:** `internal/anilist/anilist.go` — `Media.OwnSynonyms`; every `ExtractAnimeSeasonPart` and
-anime/episode search call in `internal/daemon` (`episodes.go`, `coverage.go`, `preview.go`,
-`debug.go`) passes `anime.Media.OwnSynonyms()` instead of `anime.Media.Synonyms`; pinned by
+**Location:** `internal/anilist/anilist.go` — `Media.OwnSynonyms`; in `internal/daemon`,
+`seasonPartOf` (`helpers.go`) for the season/part reads, and `processAnimeEpisodes` / `RunAnimeDebug`
+compute `OwnSynonyms()` once and hand it to the anime and episode searches; pinned by
 `TestExtractAnimeSeasonPart_SteelBallRun_SourceTitleSynonymIsNotAPart` and
 `TestOwnSynonyms_KeepsSynonymWithoutMatchingSource` in `src/tests/unit/season_part_test.go`.
 

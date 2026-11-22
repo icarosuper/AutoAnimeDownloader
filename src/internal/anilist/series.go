@@ -213,7 +213,8 @@ func recordLink(known map[int]seriesLink, node seriesNode) *seriesNode {
 // The selection rule is the same as daemon.ComputeEpisodeOffset, and the two stay separate on
 // purpose: here it walks the WHOLE chain (absolute series offset), there it takes ONE hop
 // (total of the immediate prequel). Those are the two distinct pack-numbering hypotheses in
-// daemon.packAxis, so unifying them would erase the distinction (decisions.md #79).
+// daemon.packAxis, so unifying them would erase the distinction (decisions.md #79). A third,
+// looser selection lives in daemon.splitEntryContinuation (decisions.md #131).
 func prequelOf(node seriesNode) *seriesNode {
 	for i := range node.Relations.Edges {
 		edge := &node.Relations.Edges[i]

@@ -127,7 +127,9 @@ func processAnimeEpisodes(
 	keepSet := buildWatchedKeepSet(configs.WatchedEpisodesToKeep, anime.Media.Id, episodes, savedEpisodesFullMap, anime.Progress)
 
 	totalEpisodes := mediaTotalEpisodes(anime)
-	animeSeason, _ := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.OwnSynonyms())
+	// The synonyms that name the anime, once: season and part are read from them (decisions.md #132).
+	synonyms := anime.Media.OwnSynonyms()
+	animeSeason, _ := ExtractAnimeSeasonPart(anime.Media.Title, synonyms)
 	seriesOffset := seriesIndex[anime.Media.Id].Offset
 
 	// The first selection is the one that counts when there's no pack, and it's the one that produces
@@ -152,7 +154,7 @@ func processAnimeEpisodes(
 	}
 
 	if magnetsForEpisodes == nil && len(sel.toDownload) > 0 {
-		packs, singles, packStats := partitionSearchResults(configs, anime, rankSeriesResults(searcher.searchAnime(anime.Media.Title, anime.Media.OwnSynonyms(), episodeNumbers(sel.toDownload)), finished))
+		packs, singles, packStats := partitionSearchResults(configs, anime, rankSeriesResults(searcher.searchAnime(anime.Media.Title, synonyms, episodeNumbers(sel.toDownload)), finished))
 
 		// Pack eligibility: not a movie, more than one pending episode, and the FILTERED search returned
 		// a pack covering the window. None of this is AniList metadata — the torrent that's there decides
@@ -266,7 +268,7 @@ func processAnimeEpisodes(
 					Bool("earlier_episode_missing", stuck).
 					Msg("Skipping per-episode search: a recent search came back empty")
 			} else {
-				candidates, searchStats = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, anime.Media.OwnSynonyms(), anime.Media.Relations, seriesLength), finished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
+				candidates, searchStats = filterSearchResults(rankSeriesResults(searcher.searchSingleEpisode(ep, anime.Media.Title, synonyms, anime.Media.Relations, seriesLength), finished), configs.MaxEpisodeTorrentSizeGB, configs.MinSeeders)
 				if len(candidates) == 0 && searcher.misses != nil {
 					searcher.misses.record(missKey, time.Now(), searchStats)
 				}
@@ -653,7 +655,7 @@ func packsThatFit(configs *files.Config, disk *diskBudget, packs []nyaa.TorrentR
 // sequel without a marker ("DanMachi V") the pack's season is still a guess the coverage check
 // settles, so the nyaa package keeps accepting packs of any season (nyaa.ScrapNyaaForAnime).
 func isFirstSeasonEntry(anime anilist.MediaList) bool {
-	if season, _ := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.OwnSynonyms()); season != nil {
+	if season, _ := seasonPartOf(anime.Media); season != nil {
 		return *season == 1
 	}
 	for _, edge := range anime.Media.Relations.Edges {
@@ -702,7 +704,7 @@ func newPackAxis(anime anilist.MediaList, seriesIndex map[int]anilist.Series, to
 	// "Continues through the season": the pack starts at the season's first episode, which is the
 	// immediate prequel's entry. This is where ComputeEpisodeOffset comes in — as ONE hypothesis, not
 	// as the only truth (decisions.md #79).
-	_, part := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.OwnSynonyms())
+	_, part := seasonPartOf(anime.Media)
 	add(ComputeEpisodeOffset(anime.Media.Relations, part))
 	// "Absolute for the series": the series index axis (decisions.md #77).
 	add(seriesIndex[anime.Media.Id].Offset)

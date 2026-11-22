@@ -313,6 +313,12 @@ func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, par
 	return
 }
 
+// seasonPartOf is ExtractAnimeSeasonPart over the synonyms that name the anime, never its source's
+// title (decisions.md #132).
+func seasonPartOf(media anilist.Media) (season, part *int) {
+	return ExtractAnimeSeasonPart(media.Title, media.OwnSynonyms())
+}
+
 // ComputeEpisodeOffset returns the PREQUEL's episode total when part >= 2.
 // Used to convert AniList's relative progress into the absolute number used by fansubs with
 // continuous numbering (e.g. SubsPlease).
@@ -326,7 +332,9 @@ func ExtractAnimeSeasonPart(title anilist.Title, synonyms []string) (season, par
 // and the two stay separate on purpose: that one walks the WHOLE chain (the series' absolute
 // axis), this one takes ONE hop and is gated by part >= 2. They're the two DIFFERENT pack
 // numbering hypotheses in daemon.packAxis — "continuous by season" and "absolute by series" —, so
-// unifying them would erase the distinction the heuristic uses (decisions.md #79).
+// unifying them would erase the distinction the heuristic uses (decisions.md #79). A third,
+// looser selection — ONA allowed, gated by a shared base title — is splitEntryContinuation
+// (search.go, decisions.md #131).
 func ComputeEpisodeOffset(relations anilist.MediaRelations, part *int) int {
 	if part == nil || *part < 2 {
 		return 0
