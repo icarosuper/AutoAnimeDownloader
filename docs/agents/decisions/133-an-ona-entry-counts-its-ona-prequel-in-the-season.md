@@ -2,10 +2,11 @@
 
 **Location:** `internal/daemon/helpers.go` — `ComputeEpisodeOffset` (the `format` parameter; a
 TV/TV_SHORT prequel returns at once, an ONA prequel is kept only under an ONA entry and returned
-only when no TV prequel follows); its callers `searchNyaaForSingleEpisode` (`search.go`) and `newPackAxis`
-(`episodes.go`). Pinned by `TestSearchSingleEpisode_ONASplitCountsTheONAPrequel`,
-`TestSearchSingleEpisode_TVEntryIgnoresTheONAPrequel` (`internal/daemon/search_ona_offset_test.go`)
-, `TestComputeEpisodeOffset_ONAEntryCountsONAPrequelOnly` and
+only when no TV prequel follows); its callers `searchNyaaForSingleEpisode` (`search.go`, reached by the pass and by
+`ManualDownloadEpisode`) and `newPackAxis` (`episodes.go`). Pinned by
+`TestSearchSingleEpisode_ONASplitCountsTheONAPrequel`,
+`TestSearchSingleEpisode_TVEntryIgnoresTheONAPrequel`,
+`TestManualDownloadEpisode_ONASplitUsesTheOffsetFallback` (`internal/daemon/search_ona_offset_test.go`), `TestComputeEpisodeOffset_ONAEntryCountsONAPrequelOnly` and
 `TestComputeEpisodeOffset_ONAEntryPrefersTheTVPrequel` (`tests/unit/season_part_test.go`).
 Amends [#9](009-prequel-offset-gate-requires-part-2.md).
 

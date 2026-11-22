@@ -4,7 +4,8 @@
 `seasonPartOf` (`helpers.go`) for the season/part reads. `processAnimeEpisodes` and `RunAnimeDebug`
 compute `OwnSynonyms()` once, read season and part from it once, and hand them to the anime and
 episode searches, `adoptCoveredEpisodes`, `partitionSearchResults` and `newPackAxis`; the preview
-reads them once with `seasonPartOf`; pinned by
+reads them once with `seasonPartOf`; `ManualDownloadEpisode` (`manual_download.go`) passes `OwnSynonyms()`
+and the relations to `searchNyaaForSingleEpisode`, which reads season and part from them; pinned by
 `TestExtractAnimeSeasonPart_SteelBallRun_SourceTitleSynonymIsNotAPart` and
 `TestOwnSynonyms_KeepsSynonymWithoutMatchingSource` in `src/tests/unit/season_part_test.go`.
 
