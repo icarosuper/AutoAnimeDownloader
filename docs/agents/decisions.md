@@ -138,6 +138,7 @@ Each entry is self-contained: read only the one the reference points to, not the
 - [**#129** — Unsaved changes means different from what was loaded, and a capture-phase hashchange listener vetoes the router](#129-unsaved-changes-means-different-from-what-was-loaded-and-a-capture-phase-hashchange-listener-vetoes-the-router)
 - [**#130** — Status deletion asks AniList only about the animes on disk, never downloads the delete-status lists](#130-status-deletion-asks-anilist-only-about-the-animes-on-disk-never-downloads-the-delete-status-lists)
 - [**#131** — A split AniList entry is searched by its shared base title, with the prequel's episodes added, when every other search came back empty](#131-a-split-anilist-entry-is-searched-by-its-shared-base-title-with-the-prequels-episodes-added-when-every-other-search-came-back-empty)
+- [**#132** — Season and part are read from the synonyms that name the anime, never from one that is the title of its manga or novel](#132-season-and-part-are-read-from-the-synonyms-that-name-the-anime-never-from-one-that-is-the-title-of-its-manga-or-novel)
 
 ---
 
@@ -3999,3 +4000,33 @@ does. It runs last, so it only acts where the normal and the offset searches fou
   franchise, and the season filter is what keeps "Show S02E03" off "Show".
 - Matching on a common prefix instead of the exact base before ` - `: "<Show> - Part 1" sequels of a
   different arc would share a prefix and get an offset that isn't theirs.
+
+### 132. Season and part are read from the synonyms that name the anime, never from one that is the title of its manga or novel
+
+**Location:** `internal/anilist/anilist.go` — `Media.OwnSynonyms`; every `ExtractAnimeSeasonPart` and
+anime/episode search call in `internal/daemon` (`episodes.go`, `coverage.go`, `preview.go`,
+`debug.go`) passes `anime.Media.OwnSynonyms()` instead of `anime.Media.Synonyms`; pinned by
+`TestExtractAnimeSeasonPart_SteelBallRun_SourceTitleSynonymIsNotAPart` and
+`TestOwnSynonyms_KeepsSynonymWithoutMatchingSource` in `src/tests/unit/season_part_test.go`.
+
+**What it looks like:** a synonym silently dropped before reading season and part, while the
+dashboard search (`api/endpoint_animes.go`) still uses all of them.
+
+**Why it's right:** AniList lists the source's title among the anime's synonyms. Steel Ball Run
+(210482) has the synonym `JoJo's Bizarre Adventure: Part 7–Steel Ball Run`, which is exactly the
+English title of its `ADAPTATION` manga. JoJo's "Part 7" numbers the manga's story arcs, but
+`ExtractPart` read it as part 7 of the anime: the hard part filter of the episode search then
+rejected every release (none says "Part 7"), and the wrong part also fed the pack search and the
+offset gate ([#9](#9-prequel-offset-gate-requires-part--2)). A synonym equal to the title of a
+manga, novel or one-shot relation names the source, so its numbers count the source. Anime
+synonyms keep feeding season and part as before — Kaguya-sama's "Season 2" is still read. For
+dashboard search the source name is a fine hit, so that path keeps every synonym.
+
+**Don't "fix" by:**
+- Dropping synonyms from season/part extraction altogether: some sequels carry their season only in
+  a synonym (Kaguya-sama 112641, Attack on Titan Final Season).
+- Matching a JoJo-shaped pattern ("Part N–Title") in `rePartPatterns`: the same regex reads torrent
+  names, and the evidence that the number is the source's is the relation, not the punctuation.
+- Filtering in `ExtractAnimeSeasonPart` itself: it takes titles and synonyms only, and the anime
+  search (`nyaaSearcher.searchAnime`) has no relations to pass — filtering at the `Media` keeps the
+  signatures as they are.

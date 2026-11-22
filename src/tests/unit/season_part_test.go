@@ -253,3 +253,44 @@ func TestExtractAnimeSeasonPart_MushokuEris_CourIsNotASeason(t *testing.T) {
 		t.Errorf("ExtractSeason must not read a cour as a season, got %d", *s)
 	}
 }
+
+// Anilist id 210482: the synonym "JoJo's Bizarre Adventure: Part 7–Steel Ball Run" is the English
+// title of the manga it adapts. Its "Part 7" numbers the manga's story arcs, not a cour of the anime,
+// and a part 7 rejected every release (none says "Part 7"). A synonym that names a non-anime
+// relation is the source's name, not this anime's.
+func TestExtractAnimeSeasonPart_SteelBallRun_SourceTitleSynonymIsNotAPart(t *testing.T) {
+	media := anilist.Media{
+		Title:    makeTitle("STEEL BALL RUN JoJo's Bizarre Adventure 2nd - 3rd STAGE", "JoJo no Kimyou na Bouken: Steel Ball Run - 2nd & 3rd STAGE"),
+		Synonyms: []string{"JoJo's Bizarre Adventure: Part 7–Steel Ball Run", "SBR"},
+		Relations: anilist.MediaRelations{Edges: []anilist.MediaRelationEdge{{
+			RelationType: "ADAPTATION",
+			Node: anilist.MediaRelationNode{
+				Title:  makeTitle("JoJo's Bizarre Adventure: Part 7–Steel Ball Run", "JoJo no Kimyou na Bouken: Steel Ball Run"),
+				Format: anilist.MediaFormatManga,
+			},
+		}}},
+	}
+	season, part := daemon.ExtractAnimeSeasonPart(media.Title, media.OwnSynonyms())
+
+	if season != nil {
+		t.Errorf("expected no season, got %v", *season)
+	}
+	if part != nil {
+		t.Errorf("expected no part (Part 7 is the manga's arc), got %v", *part)
+	}
+}
+
+// The same synonym is kept when no relation is a source with that title: an anime's own synonym
+// still feeds the part (OwnSynonyms only drops a source's name).
+func TestOwnSynonyms_KeepsSynonymWithoutMatchingSource(t *testing.T) {
+	media := anilist.Media{
+		Synonyms: []string{"Some Show Part 2"},
+		Relations: anilist.MediaRelations{Edges: []anilist.MediaRelationEdge{{
+			RelationType: "PREQUEL",
+			Node:         anilist.MediaRelationNode{Title: makeTitle("Some Show Part 2", ""), Format: anilist.MediaFormatTV},
+		}}},
+	}
+	if got := media.OwnSynonyms(); len(got) != 1 {
+		t.Fatalf("an anime relation's title is not a source name, got %v", got)
+	}
+}

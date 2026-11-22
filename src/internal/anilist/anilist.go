@@ -403,6 +403,38 @@ type Media struct {
 	NextAiringEpisode *AiringNode `json:"nextAiringEpisode"`
 }
 
+// OwnSynonyms are the synonyms that name THIS anime: a synonym equal to the title of a manga, novel
+// or one-shot relation is the source's name, and its numbers count the source, not the anime —
+// "JoJo's Bizarre Adventure: Part 7–Steel Ball Run" is part 7 of the manga, not a cour
+// (decisions.md #132). The daemon reads season and part from these; search keeps all synonyms.
+func (m Media) OwnSynonyms() []string {
+	var sources []string
+	for _, edge := range m.Relations.Edges {
+		switch edge.Node.Format {
+		case MediaFormatManga, MediaFormatNovel, MediaFormatOneShot:
+			for _, t := range []*string{edge.Node.Title.English, edge.Node.Title.Romaji} {
+				if t != nil {
+					sources = append(sources, strings.TrimSpace(*t))
+				}
+			}
+		}
+	}
+	if len(sources) == 0 {
+		return m.Synonyms
+	}
+	own := make([]string, 0, len(m.Synonyms))
+next:
+	for _, s := range m.Synonyms {
+		for _, src := range sources {
+			if strings.EqualFold(strings.TrimSpace(s), src) {
+				continue next
+			}
+		}
+		own = append(own, s)
+	}
+	return own
+}
+
 type Title struct {
 	English *string `json:"english"`
 	Romaji  *string `json:"romaji"`

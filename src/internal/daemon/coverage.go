@@ -86,7 +86,7 @@ func adoptCoveredEpisodes(
 		return nil
 	}
 
-	season, _ := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.Synonyms)
+	season, _ := ExtractAnimeSeasonPart(anime.Media.Title, anime.Media.OwnSynonyms())
 	var adopted []files.EpisodeStruct
 	for _, ep := range pending {
 		owner, ownerOffset := findCoveringPack(savedEpisodes, seriesIndex, torrentsHashSet, series, series.Offset+ep.Episode)
