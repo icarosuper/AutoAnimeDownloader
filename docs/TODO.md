@@ -4,7 +4,7 @@ Grouped by release: each section is **one** release, and its bump is the largest
 inside it — a task that doesn't touch the binary (docs, things outside the repo) rides along without
 changing the number. Only what is still to ship lives here: a section is deleted when its release
 ships (the GitHub Release and git history are the record), never kept struck through.
-Current version: `v2.11.2`. Stamp a version (tag, GitHub Release, AUR):
+Current version: `v2.11.3`. Stamp a version (tag, GitHub Release, AUR):
 the [release skill](../.claude/skills/release/SKILL.md).
 Anything not tied to a specific release — problems and features alike — lives in
 [backlog/](backlog/), one file per item.
