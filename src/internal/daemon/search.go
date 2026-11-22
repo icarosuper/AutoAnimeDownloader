@@ -5,7 +5,9 @@ import (
 	"AutoAnimeDownloader/src/internal/files"
 	"AutoAnimeDownloader/src/internal/logger"
 	"AutoAnimeDownloader/src/internal/nyaa"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -266,12 +268,22 @@ func searchNyaaForSingleEpisode(ep anilist.AiringNode, titles anilist.Title, syn
 // prequel's episode count. An ONA prequel counts whatever the entry's own format (ComputeEpisodeOffset
 // counts one only under an ONA entry) — the shared base, not the format, is the evidence that both
 // entries are one show — but a movie never does: it is not an episode of the count.
+//
+// Both suffixes must carry an ordinal, the prequel's must be 1 and the entry's later
+// (decisions.md #131). A suffix without one ("Arc A-hen" / "Arc B-hen") names an arc that groups
+// may number per entry, and shifting it would grab another season's episode. A prequel that is
+// not the first ("2nd STAGE" before "3rd STAGE") holds only its own episodes, and the entries
+// before it are out of reach (the relation nodes carry no relations of their own), so the offset
+// would land on an episode of that prequel.
 func splitEntryContinuation(titles anilist.Title, relations anilist.MediaRelations) (string, int, bool) {
 	if titles.Romaji == nil {
 		return "", 0, false
 	}
 	base, suffix, ok := nyaa.CutTitleSuffix(*titles.Romaji)
 	if !ok {
+		return "", 0, false
+	}
+	if n, ok := suffixOrdinal(suffix); !ok || n < 2 {
 		return "", 0, false
 	}
 	for _, edge := range relations.Edges {
@@ -281,11 +293,35 @@ func splitEntryContinuation(titles anilist.Title, relations anilist.MediaRelatio
 			continue
 		}
 		prequelBase, prequelSuffix, ok := nyaa.CutTitleSuffix(*node.Title.Romaji)
-		if ok && strings.EqualFold(prequelBase, base) && !strings.EqualFold(prequelSuffix, suffix) {
+		if !ok || !strings.EqualFold(prequelBase, base) || strings.EqualFold(prequelSuffix, suffix) {
+			continue
+		}
+		if n, ok := suffixOrdinal(prequelSuffix); ok && n == 1 {
 			return base, *node.Episodes, true
 		}
 	}
 	return "", 0, false
+}
+
+// reSuffixOrdinal reads the first ordinal of a title suffix: "2nd & 3rd STAGE" → 2, "Part 1" → 1,
+// "First Season" → 1. A bare number is not one ("Arc 2-hen" could be anything).
+var reSuffixOrdinal = regexp.MustCompile(`(?i)\b(?:(\d{1,2})(?:st|nd|rd|th)|(first|second|third)|(?:stage|part|season|cour)\s*(\d{1,2}))\b`)
+
+func suffixOrdinal(suffix string) (int, bool) {
+	m := reSuffixOrdinal.FindStringSubmatch(suffix)
+	if m == nil {
+		return 0, false
+	}
+	switch {
+	case m[1] != "":
+		n, err := strconv.Atoi(m[1])
+		return n, err == nil
+	case m[2] != "":
+		return map[string]int{"first": 1, "second": 2, "third": 3}[strings.ToLower(m[2])], true
+	default:
+		n, err := strconv.Atoi(m[3])
+		return n, err == nil
+	}
 }
 
 func searchNyaaForMovie(titles anilist.Title, isFormatMovie bool) []nyaa.TorrentResult {
