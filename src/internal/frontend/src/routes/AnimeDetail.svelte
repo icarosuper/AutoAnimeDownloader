@@ -994,7 +994,7 @@
         <div
           data-testid="anime-last-check"
           role="status"
-          class="mb-3 rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
+          class="m-4 rounded-field border border-warn-tint/32 bg-warn-tint/12 px-3.5 py-2.5 text-copy text-warn"
         >
           <p>{$locale && m.detail_lastcheck_notice()}</p>
           <ul class="mt-1 space-y-1 text-caption">
@@ -1014,7 +1014,7 @@
           checked={allSelected}
           indeterminate={someSelected}
           label={$locale ? m.detail_select_all() : ""}
-          on:change={toggleSelectAll}
+          onchange={toggleSelectAll}
         />
       </div>
 
@@ -1043,7 +1043,7 @@
                 checked={isSelected}
                 label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
                 labelHidden
-                on:change={() => toggleEpisode(row.ep.episode_number)}
+                onchange={() => toggleEpisode(row.ep.episode_number)}
               />
             {:else}
               <span></span>
@@ -1141,7 +1141,7 @@
                   checked={isSelected}
                   label={$locale ? m.detail_select_episode({ number: row.ep.episode_number }) : ""}
                   labelHidden
-                  on:change={() => toggleEpisode(row.ep.episode_number)}
+                  onchange={() => toggleEpisode(row.ep.episode_number)}
                 />
               {:else}
                 <span></span>

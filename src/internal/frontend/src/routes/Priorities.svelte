@@ -211,7 +211,7 @@
                       disabled={row.custom}
                       label={$locale && (row.custom ? m.priorities_item_custom({ item: row.item }) : m.priorities_item_use({ item: row.item }))}
                       labelHidden
-                      on:change={() => toggle(key, row.item, !row.on)}
+                      onchange={() => toggle(key, row.item, !row.on)}
                     />
                     <span class="text-xs text-subtle w-5 text-right">{row.on ? i + 1 : ""}</span>
                     <span class="flex-1 text-sm text-heading">{row.item}</span>

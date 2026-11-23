@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Checkbox — spec §6 (Fase 2). 16px box, 4px radius; checked = accent fill with a "✓" glyph.
+  import { tick } from "svelte"
+  // Checkbox — spec §6 (Phase 2). 16px box, 4px radius; checked = accent fill with a "✓" glyph.
   // Built on a real `<input type="checkbox">` (visually hidden, stacked under the custom box)
   // rather than a `<div role="checkbox">` + manual key handling — that's what gives it native
   // keyboard operability (Space toggles, Tab focuses) and a programmatically associated label
@@ -22,6 +23,28 @@
    * below — which is exactly why this primitive wraps a native checkbox instead of a div.
    */
   export let indeterminate = false
+  /**
+   * Controlled mode: pass `checked` one way and handle the click here; the parent owns the
+   * state. After the handler runs, the input is put back to whatever `checked`/`indeterminate`
+   * the parent now holds, so a handler that leaves the value unchanged (a select-all over a
+   * list a poll just replaced, a toggle that refuses) can't leave the box showing a state
+   * the parent doesn't have. Leave it unset for `bind:checked`, where the box owns the click.
+   * `on:change` is deliberately not forwarded (decisions/135).
+   */
+  export let onchange: ((e: Event & { currentTarget: HTMLInputElement }) => void) | undefined = undefined
+
+  let input: HTMLInputElement
+
+  async function handleChange(e: Event & { currentTarget: HTMLInputElement }) {
+    if (!onchange) {
+      checked = e.currentTarget.checked
+      return
+    }
+    onchange(e)
+    await tick()
+    input.checked = checked
+    input.indeterminate = indeterminate
+  }
 </script>
 
 <label
@@ -37,10 +60,11 @@
     <input
       {id}
       type="checkbox"
-      bind:checked
+      bind:this={input}
+      {checked}
       {indeterminate}
       {disabled}
-      on:change
+      on:change={handleChange}
       class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
     />
     {#if checked}

@@ -657,7 +657,7 @@
                 indeterminate={groupSome}
                 label={$locale ? m.downloads_group_select({ name: group.name }) : ""}
                 labelHidden
-                on:change={() => toggleSelectGroup(groupHashes)}
+                onchange={() => toggleSelectGroup(groupHashes)}
               />
 
               <div class="h-[46px] w-[34px] shrink-0 overflow-hidden">
@@ -784,7 +784,7 @@
                     checked={selected.has(t.hash)}
                     label={$locale ? m.downloads_select_row({ name: t.anime_name || t.name }) : ""}
                     labelHidden
-                    on:change={() => toggleSelect(t.hash)}
+                    onchange={() => toggleSelect(t.hash)}
                   />
 
                   <!-- Expand arrow + episode label in the same target: the number alone wasn't

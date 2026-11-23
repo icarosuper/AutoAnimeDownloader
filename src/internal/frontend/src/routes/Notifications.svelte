@@ -447,7 +447,7 @@
                         <Checkbox
                           label={ev.label || ""}
                           checked={newWebhook.events.includes(ev.value)}
-                          on:change={(e) => {
+                          onchange={(e) => {
                             if ((e.target as HTMLInputElement).checked) {
                               newWebhook.events = [...newWebhook.events, ev.value];
                             } else {
@@ -471,13 +471,13 @@
                     label={(T && T.sourceAll) || ""}
                     checked={!newWebhook.anime_sources?.length}
                     disabled={!newWebhook.anime_sources?.length}
-                    on:change={() => (newWebhook.anime_sources = [])}
+                    onchange={() => (newWebhook.anime_sources = [])}
                   />
                   {#each webhookSourceOptions as opt (opt.key)}
                     <Checkbox
                       label={sourceLabel(opt)}
                       checked={newWebhook.anime_sources?.includes(opt.key) ?? false}
-                      on:change={(e) => {
+                      onchange={(e) => {
                         newWebhook.anime_sources = toggleSource(newWebhook.anime_sources, opt.key, (e.target as HTMLInputElement).checked);
                       }}
                     />

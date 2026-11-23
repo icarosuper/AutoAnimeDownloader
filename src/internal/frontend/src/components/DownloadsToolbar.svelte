@@ -109,7 +109,7 @@
     checked={allSelected}
     indeterminate={someSelected}
     label={(T && T.selectAll) || ""}
-    on:change={() => dispatch("selectAll")}
+    onchange={() => dispatch("selectAll")}
   />
 
   <div
