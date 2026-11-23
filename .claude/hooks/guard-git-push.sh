@@ -20,10 +20,19 @@ cmd=$(printf '%s\n' "$cmd" | awk '
     skip = 1
   }')
 
+# Quoted strings are data too (a commit message that mentions the command), unless they run: a
+# single-quoted string right after `sh -c`/`bash -c`/`eval`, or a double-quoted one holding `$(` or
+# a backtick. Everything else is emptied before matching.
+cmd=$(printf '%s' "$cmd" | perl -0pe '
+  s{((?:\b(?:ba|z)?sh\s+-c|\beval)\s+)?("(?:[^"\\]|\\.)*"|\x27[^\x27]*\x27)}{
+    my ($pre, $q) = ($1 // "", $2);
+    ($pre ne "" || ($q =~ /^"/ && $q =~ /\$\(|`/)) ? $pre.$q : $pre.substr($q,0,1).substr($q,0,1)
+  }gse')
+
 # git, then push as any later word of the same command segment. Broad on purpose: listing git's
 # global options (-C "dir with space", --git-dir <path>…) always misses a shape, and a false ask
 # (`git log --grep push`) only costs one confirmation.
-if printf '%s' "$cmd" | grep -qE '(^|[;&|(`[:space:]])git[[:space:]]([^;&|`]*[[:space:]])?push\b'; then
+if printf '%s' "$cmd" | grep -qE '(^|[;&|(`"'"'"'[:space:]])git[[:space:]]([^;&|`]*[[:space:]])?push\b'; then
   jq -n '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
