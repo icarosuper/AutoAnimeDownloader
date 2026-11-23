@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"AutoAnimeDownloader/src/internal/anilist"
@@ -26,6 +27,16 @@ var migrateAnimeIDsThrottle = 250 * time.Millisecond
 // Entries that no longer exist on AniList (the user removed the anime from the list) cannot be
 // resolved; those records keep the old id and are only logged. The episodes stay on disk and
 // listed — they just won't match AniList again if the anime is re-added.
+//
+// An entry that resolves but belongs to an account NOT in anilist_usernames is left alone too.
+// The completion mark lives only in config.json, so a data dir moved to another machine with an
+// older or hand-copied config.json reruns this on ids that are already MEDIA ids — and a media id
+// is also some stranger's entry id, which used to "resolve" to a random anime (real case:
+// 208025, "I'm Dating a Dark Summoner", became 11583). A genuine legacy entry id is always one of
+// the user's own entries, so ownership tells the two apart without extra requests. Known limit:
+// "own" means configured NOW — a legacy entry of an account since removed from the config also
+// keeps its entry id (logged under ids_kept_not_own_entries) and won't match AniList again,
+// same fate as a 404.
 //
 // WHEN THIS CAN BE DELETED: the migration landed in v2.1.1 (2026-08-07). It is only needed for
 // whoever upgrades from a v2.1.0 or EARLIER install — anyone who went through any version from
@@ -67,20 +78,29 @@ func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 		}
 	}
 
+	ownAccounts := make(map[string]bool, len(configs.AnilistUsernames))
+	for _, name := range configs.AnilistUsernames {
+		ownAccounts[strings.ToLower(strings.TrimSpace(name))] = true
+	}
+
 	mediaByEntry := make(map[int]int, len(oldIDs))
-	var unresolved []int
+	var unresolved, foreign []int
 	for entryID := range oldIDs {
-		mediaID, err := anilist.GetMediaIDForEntry(entryID)
+		mediaID, owner, err := anilist.GetMediaIDForEntry(entryID)
 		if err != nil {
 			// Nothing has been written yet: the next pass restarts the whole migration.
 			return fmt.Errorf("anime id migration: failed to resolve entry %d: %w", entryID, err)
 		}
+		time.Sleep(migrateAnimeIDsThrottle)
 		if mediaID == 0 {
 			unresolved = append(unresolved, entryID)
 			continue
 		}
+		if !ownAccounts[strings.ToLower(owner)] {
+			foreign = append(foreign, entryID)
+			continue
+		}
 		mediaByEntry[entryID] = mediaID
-		time.Sleep(migrateAnimeIDsThrottle)
 	}
 
 	var updated []files.EpisodeStruct
@@ -115,6 +135,7 @@ func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 		Int("entries_resolved", len(mediaByEntry)).
 		Int("episodes_rewritten", len(updated)).
 		Ints("entries_no_longer_on_anilist", unresolved).
+		Ints("ids_kept_not_own_entries", foreign).
 		Msg("Migration: anime IDs are now AniList media IDs")
 
 	return nil

@@ -40,7 +40,7 @@ var keyClasses = map[string]keyClass{
 	"anilist_response": title,
 	// An AniList/MAL id is a title by lookup.
 	"anime_id": title, "media_id": title, "mal_id": title, "owner_anime_id": title,
-	"entries_no_longer_on_anilist": title,
+	"entries_no_longer_on_anilist": title, "ids_kept_not_own_entries": title,
 
 	"absolute_episode": keep, "addr": keep, "animes_checked": keep, "animes_found": keep,
 	"attempt": keep, "attempts": keep, "avg_time_per_episode": keep, "body": keep, "body_size": keep,

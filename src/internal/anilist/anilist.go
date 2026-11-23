@@ -981,12 +981,18 @@ func GetAnimeInfo(mediaId int, usernames, malUsers []string, priority Priority) 
 // place left that keys anything by entry id: the one-shot AnimeID migration (decisions/043)
 // needs it to rewrite records written before Media.Id became the identity.
 // Returns 0 when the entry no longer exists — the anime was removed from that account's list.
-func GetMediaIDForEntry(mediaListId int) (int, error) {
+// owner is the AniList name of the account the entry belongs to: entry ids and media ids share
+// one integer space, so a MEDIA id fed in by mistake still resolves, to some stranger's entry —
+// the caller tells the two apart by the owner (decisions/043).
+func GetMediaIDForEntry(mediaListId int) (mediaID int, owner string, err error) {
 	query := `
 		query GetMediaIDForEntry($mediaListId: Int) {
 			MediaList(id: $mediaListId) {
 				media {
 					id
+				}
+				user {
+					name
 				}
 			}
 		}
@@ -998,21 +1004,24 @@ func GetMediaIDForEntry(mediaListId int) (int, error) {
 				Media struct {
 					Id int `json:"id"`
 				} `json:"media"`
+				User struct {
+					Name string `json:"name"`
+				} `json:"user"`
 			} `json:"MediaList"`
 		} `json:"data"`
 	}
 
 	resp, err := sendAnilistRequest[response](query, RequestVariables{"mediaListId": mediaListId}, PriorityCritical)
 	if errors.Is(err, ErrNotFound) {
-		return 0, nil
+		return 0, "", nil
 	}
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if resp.Data.MediaList == nil {
-		return 0, nil
+		return 0, "", nil
 	}
-	return resp.Data.MediaList.Media.Id, nil
+	return resp.Data.MediaList.Media.Id, resp.Data.MediaList.User.Name, nil
 }
 
 // GetListStatusesByMediaIDs answers, for ONE account, the list status of each of the given media
