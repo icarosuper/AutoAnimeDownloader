@@ -154,7 +154,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		// listStatuses[account][mediaId] — each account's list status of the animes on disk; see
 		// fetchListStatuses.
 		listStatuses map[string]map[int]anilist.MediaListStatus
-		// onDisk is onDiskMediaIDs(savedEpisodes), computed once for the fetch and the vote.
+		// onDisk is onDiskMediaIDs(savedEpisodes, standaloneIDs), computed once for the fetch and the vote.
 		onDisk []int
 
 		errAnilist  error
@@ -189,7 +189,7 @@ func AnimeVerification(ctx context.Context, fileManager FileManagerInterface, st
 		}
 		// Chained here, not in its own goroutine: the question is asked only about the animes on disk,
 		// so it needs the file first. Still runs alongside searchAnilist.
-		onDisk = onDiskMediaIDs(savedEpisodes)
+		onDisk = onDiskMediaIDs(savedEpisodes, standaloneIDs)
 		listStatuses = fetchListStatuses(configs, onDisk)
 	}()
 
@@ -457,9 +457,16 @@ func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.E
 }
 
 // onDiskMediaIDs is every anime with an episode on disk that status deletion may touch — the
-// manually managed ones never are. Sorted, so the requests built from it are stable.
-func onDiskMediaIDs(savedEpisodes []files.EpisodeStruct) []int {
-	seen := make(map[int]bool)
+// manually managed ones never are, and neither are the standalone ones: a list only gets a vote
+// over a standalone by adopting it, which takes a download status (appendStandaloneAnimes drops
+// the standalone record then). Without this, an anime added as standalone while every account
+// holds it COMPLETED/DROPPED was deleted on one pass and re-downloaded on the next, forever
+// (decisions/049). Sorted, so the requests built from it are stable.
+func onDiskMediaIDs(savedEpisodes []files.EpisodeStruct, standaloneIDs []int) []int {
+	seen := make(map[int]bool, len(standaloneIDs))
+	for _, id := range standaloneIDs {
+		seen[id] = true
+	}
 	var ids []int
 	for _, ep := range savedEpisodes {
 		if ep.AnimeID != 0 && !ep.ManuallyManaged && !seen[ep.AnimeID] {

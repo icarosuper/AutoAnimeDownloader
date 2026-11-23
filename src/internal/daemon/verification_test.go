@@ -186,8 +186,34 @@ func TestDeletableMediaIDs_OnlyConsidersAnimesOnDisk(t *testing.T) {
 		t.Errorf("want no candidates without episodes on disk, got %v", got)
 	}
 	manual := []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 500, ManuallyManaged: true}}
-	if got := deletableMediaIDs(deleteRuleConfig(), both, onDiskMediaIDs(manual)); len(got) != 0 {
+	if got := deletableMediaIDs(deleteRuleConfig(), both, onDiskMediaIDs(manual, nil)); len(got) != 0 {
 		t.Errorf("a manually managed episode is never deleted by status, got %v", got)
+	}
+}
+
+func TestDeletableMediaIDs_StandaloneIsNeverDeletedByStatus(t *testing.T) {
+	// Added as standalone to rewatch while every account holds it COMPLETED/DROPPED: the lists did
+	// not adopt it (no download status), so they get no vote. Before, the pass deleted the pack it
+	// had just downloaded and the next pass downloaded it again, forever (decisions/049).
+	agree := map[string]statuses{
+		"accountA": {500: "COMPLETED", 600: "COMPLETED"},
+		"accountB": {500: "DROPPED", 600: "DROPPED"},
+	}
+	saved := []files.EpisodeStruct{
+		{EpisodeNumber: 1, AnimeID: 500},
+		{EpisodeNumber: 1, AnimeID: 600},
+	}
+
+	onDisk := onDiskMediaIDs(saved, []int{500})
+	if fmt.Sprint(onDisk) != "[600]" {
+		t.Fatalf("want the standalone left out of the on-disk candidates, got %v", onDisk)
+	}
+	got := deletableMediaIDs(deleteRuleConfig(), agree, onDisk)
+	if got[500] {
+		t.Error("a standalone anime must never be deleted by status")
+	}
+	if !got[600] {
+		t.Error("an anime the lists own must still be deleted when every account agrees")
 	}
 }
 
@@ -240,7 +266,7 @@ func TestFetchListStatuses_AsksOnlyAboutAnimesOnDisk(t *testing.T) {
 		{EpisodeNumber: 2, AnimeID: 500},
 		{EpisodeNumber: 1, AnimeID: 700, ManuallyManaged: true},
 	}
-	got := fetchListStatuses(deleteRuleConfig(), onDiskMediaIDs(saved))
+	got := fetchListStatuses(deleteRuleConfig(), onDiskMediaIDs(saved, nil))
 
 	if len(*requests) != 2 {
 		t.Fatalf("want one request per account, got %d", len(*requests))
@@ -256,7 +282,7 @@ func TestFetchListStatuses_AsksOnlyAboutAnimesOnDisk(t *testing.T) {
 	if _, tracked := got["accountB"][600]; tracked {
 		t.Error("an id the account doesn't track must be absent from its map")
 	}
-	if deletableMediaIDs(deleteRuleConfig(), got, onDiskMediaIDs(saved))[500] {
+	if deletableMediaIDs(deleteRuleConfig(), got, onDiskMediaIDs(saved, nil))[500] {
 		t.Error("accountB has 500 in PLANNING: it must veto")
 	}
 }
@@ -270,7 +296,7 @@ func TestFetchListStatuses_ChunksBy50(t *testing.T) {
 		saved = append(saved, files.EpisodeStruct{EpisodeNumber: 1, AnimeID: id})
 	}
 	cfg := &files.Config{AnilistUsernames: []string{"accountA"}, DeleteStatuses: []string{"COMPLETED"}}
-	fetchListStatuses(cfg, onDiskMediaIDs(saved))
+	fetchListStatuses(cfg, onDiskMediaIDs(saved, nil))
 
 	if len(*requests) != 3 {
 		t.Errorf("want ceil(120/50) = 3 requests, got %d", len(*requests))

@@ -19,7 +19,10 @@ record written before the filter existed would have no owner — and `episode_de
 for exactly those. So the owners are asked at fire time, and the answer comes from what the pass
 already fetched: each account's download-status list (before the media-status cut) and the
 animes on disk it holds in a delete status (since [#130](130-status-deletion-asks-anilist-only-about-the-animes.md)), kept in memory per account and per kind, plus `standalone` from the standalone
-file. No network at fire time.
+file. No network at fire time. The delete half leaves out manually managed and standalone animes
+(`onDiskMediaIDs`): a list that never adopted a standalone does not own it
+([#49](049-standalone-anime-tracked-by-the-list-is-the.md) (e)), so a standalone's only source is
+`standalone`, even when an account holds it `COMPLETED`.
 
 It used to be a live `GetAnimeInfoByIDs` per account per window. That spent the AniList budget
 ([#65](065-anilist-budget-is-spent-by-the-orphan-refresh-not.md)) on every webhook when batching was off; with the budget low the query was refused,
