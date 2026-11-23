@@ -10,8 +10,9 @@ number without `v`, `vX.Y.Z` the tag. No version given → read `docs/TODO.md`, 
 (rule below) and ask; never pick one silently.
 
 This skill pushes to `origin` and to the AUR — things that can't be quietly undone. Being invoked
-is **not** the permission: there are two confirmations below (before the GitHub push, before the
-AUR push), and each one waits for an explicit yes in that message. Anything unexpected along the
+is permission to **commit** (the stamp, the AUR bump) without asking, but **not** to push: there is
+one confirmation below, before pushing `master` and the tag, and it waits for an explicit yes in
+that message. Anything unexpected along the
 way — dirty tree, failed workflow, missing checksum — stop and report; don't work around it.
 
 ## 0. Pre-flight (read-only)
@@ -51,7 +52,7 @@ Commit, subject line only (CLAUDE.md commit style):
 docs: stamp vX.Y.Z and drop what it shipped from the todo
 ```
 
-## 2. Confirmation #1 — then tag and push
+## 2. Confirmation — then tag and push
 
 Show the user: the stamp commit (`git show --stat HEAD`), the commits going out
 (`git log --oneline origin/master..HEAD`) and the tag name. Ask: *"Push master and tag vX.Y.Z?"*
@@ -113,8 +114,8 @@ The helper sets `pkgver`, resets `pkgrel=1`, writes `sha256sums_x86_64`/`sha256s
 the `.sha256` assets and regenerates `.SRCINFO` (needs `makepkg`). The source URLs already
 interpolate `pkgver`. The diff must touch only those lines.
 
-**Confirmation #2:** show the diff, ask *"Push the AUR bump to vX.Y.Z?"*, wait for an explicit yes.
-On yes:
+No separate question here — the yes to pushing `master` and the tag covers the AUR bump. Commit
+and push (the `guard-git-push.sh` hook still shows a permission prompt on the `git push`):
 
 ```bash
 cd "$AAD_PARENT/aad-bin"

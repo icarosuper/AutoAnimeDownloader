@@ -6,9 +6,8 @@ disable-model-invocation: true
 
 # Finish a change
 
-The user invoking this skill **is** the permission to commit (CLAUDE.md rule 5) — for this one
-commit, of the change that exists now. It is not permission to push. The `guard-git-commit.sh` hook
-still asks; that prompt is expected.
+This skill ends in a commit of the change that exists now. It is not permission to push
+(CLAUDE.md rule 5).
 
 Run the steps in order, without stopping between them unless a step says to ask. Each step works on
 the result of the one before: simplify rewrites code, so the review must see the rewritten version.
