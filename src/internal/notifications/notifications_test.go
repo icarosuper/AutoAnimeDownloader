@@ -77,17 +77,22 @@ func TestFireTestWebhookNotFound(t *testing.T) {
 	}
 }
 
+// TestFireTestWebhookFires: the test fire says it is a test, instead of looking like a real
+// download completing.
 func TestFireTestWebhookFires(t *testing.T) {
 	var fired bool
+	var body string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fired = true
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
 	}))
 	defer srv.Close()
 
 	cfg := &files.Config{
 		Notifications: files.NotificationsConfig{
 			Webhooks: []files.WebhookPreset{
-				{Name: "my-hook", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "test"},
+				{Name: "my-hook", URL: srv.URL, Method: "POST", Headers: map[string]string{}, Body: "{{title}}|{{message}}"},
 			},
 		},
 	}
@@ -96,6 +101,9 @@ func TestFireTestWebhookFires(t *testing.T) {
 	}
 	if !fired {
 		t.Fatal("webhook not fired")
+	}
+	if want := "Test notification|This is a test notification from AutoAnimeDownloader. If you can see it, this webhook works."; body != want {
+		t.Errorf("body = %q, want %q", body, want)
 	}
 }
 

@@ -476,7 +476,7 @@ func renderWebhook(preset files.WebhookPreset, vars map[string]string) RenderedW
 // PreviewWebhook renders a preset with the same sample variables as the test fire, without sending
 // anything. The preset does not have to be saved: the UI previews the form as it is being edited.
 func PreviewWebhook(preset files.WebhookPreset) RenderedWebhook {
-	return renderWebhook(preset, buildBatchVars(DownloadCompleted, []Episode{sampleEpisode}))
+	return renderWebhook(preset, testVars())
 }
 
 // fireWebhook fires a preset and returns what went wrong. Automatic delivery ignores the
@@ -762,9 +762,19 @@ var ErrWebhookNotFound = errors.New("webhook not found")
 // something instead of a blank.
 var sampleEpisode = Episode{
 	AnimeID:     154587,
-	AnimeName:   "Frieren Beyond Journey's End",
+	AnimeName:   "Test Anime",
 	Number:      5,
 	TorrentHash: strings.Repeat("0", 40),
+}
+
+// testVars are the variables of a test fire and of the preview: the sample episode fills every
+// variable, but {{title}} and {{message}} say it is a test — a real-looking "EP 5 downloaded
+// successfully" on the phone reads as a download that happened.
+func testVars() map[string]string {
+	vars := buildBatchVars(DownloadCompleted, []Episode{sampleEpisode})
+	vars["title"] = "Test notification"
+	vars["message"] = "This is a test notification from AutoAnimeDownloader. If you can see it, this webhook works."
+	return vars
 }
 
 // FireTestWebhook fires one named webhook with sample variables. Returns ErrWebhookNotFound if the
@@ -772,8 +782,7 @@ var sampleEpisode = Episode{
 func FireTestWebhook(cfg *files.Config, name string) error {
 	for _, preset := range cfg.Notifications.Webhooks {
 		if preset.Name == name {
-			vars := buildBatchVars(DownloadCompleted, []Episode{sampleEpisode})
-			return fireWebhook(preset, vars)
+			return fireWebhook(preset, testVars())
 		}
 	}
 	return fmt.Errorf("%w: %q", ErrWebhookNotFound, name)

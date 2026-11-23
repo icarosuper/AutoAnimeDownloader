@@ -124,7 +124,7 @@ func TestHandleWebhookPreview_RendersBodyPresetWithoutSending(t *testing.T) {
 	if resp.Data.URL != srv.URL+"/154587" {
 		t.Errorf("url = %q", resp.Data.URL)
 	}
-	if resp.Data.Headers["Title"] != "Download completed" {
+	if resp.Data.Headers["Title"] != "Test notification" {
 		t.Errorf("Title header = %q", resp.Data.Headers["Title"])
 	}
 	// JSON preset: the sample message has to come out escaped, as valid JSON.
