@@ -1007,16 +1007,21 @@
         </div>
       {/if}
 
+      <!-- One select-all for both layouts, label visible: the stacked mobile list has no table
+           header to hold it, and a label-hidden box in the desktop header went unnoticed. -->
+      <div class="border-b border-divider px-4 py-2.5">
+        <Checkbox
+          checked={allSelected}
+          indeterminate={someSelected}
+          label={$locale ? m.detail_select_all() : ""}
+          on:change={toggleSelectAll}
+        />
+      </div>
+
       <!-- Desktop -->
       <div class="hidden lg:block">
         <div class="{EP_GRID} border-b border-divider px-4 py-2.5">
-          <Checkbox
-            checked={allSelected}
-            indeterminate={someSelected}
-            label={$locale ? m.detail_select_all() : ""}
-            labelHidden
-            on:change={toggleSelectAll}
-          />
+          <span></span>
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_episode()}</span>
           <span class="font-mono text-mono-label uppercase text-subtle">{$locale && m.detail_col_state()}</span>
           <!-- "Details", not "Download date": this column shows the most informative datum

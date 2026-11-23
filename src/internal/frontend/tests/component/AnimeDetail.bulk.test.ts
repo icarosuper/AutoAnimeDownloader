@@ -41,9 +41,9 @@ beforeEach(() => {
 })
 
 async function selectAllAndConfirm(action: RegExp) {
-  const { container, getAllByRole, getByRole } = render(AnimeDetail, { props: { params: { id: '42' } } })
+  const { container, getByRole } = render(AnimeDetail, { props: { params: { id: '42' } } })
   await tick(); await tick()
-  await fireEvent.click(getAllByRole('checkbox', { name: /selecionar todos|select all/i })[0])
+  await fireEvent.click(getByRole('checkbox', { name: /selecionar todos|select all/i }))
   await fireEvent.click(getByRole('button', { name: action }))
   await tick()
   const dialog = container.querySelector('[role="dialog"]') as HTMLElement
