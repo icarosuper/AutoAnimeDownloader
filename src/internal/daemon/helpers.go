@@ -34,6 +34,8 @@ type FileManagerInterface interface {
 	LoadStandaloneAnimes() ([]int, error)
 	AddStandaloneAnime(mediaID int) error
 	RemoveStandaloneAnime(mediaID int) error
+	AnimeIDsMarked() (bool, error)
+	MarkAnimeIDs() error
 }
 
 // ErrInsufficientDiskSpace is returned by checkDiskSpace when leftover free space would fall

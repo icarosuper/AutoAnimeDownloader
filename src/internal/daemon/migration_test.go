@@ -19,6 +19,17 @@ type animeIDMigrationFM struct {
 	configs  *files.Config
 	episodes []files.EpisodeStruct
 	settings map[int]files.AnimeSettings
+	marked   bool  // the data dir marker
+	markErr  error // MarkAnimeIDs fails with it (read-only data dir)
+}
+
+func (m *animeIDMigrationFM) AnimeIDsMarked() (bool, error) { return m.marked, nil }
+func (m *animeIDMigrationFM) MarkAnimeIDs() error {
+	if m.markErr != nil {
+		return m.markErr
+	}
+	m.marked = true
+	return nil
 }
 
 func (m *animeIDMigrationFM) LoadConfigs() (*files.Config, error) { return m.configs, nil }
@@ -115,8 +126,8 @@ func TestMigrateAnimeIDsToMedia_RewritesEpisodesAndSettings(t *testing.T) {
 	if fm.settings[194829].Progress != 42 {
 		t.Errorf("settings should have been copied to the media id, got %+v", fm.settings)
 	}
-	if !fm.configs.AnimeIDsAreMediaIDs {
-		t.Error("the migration should mark completion in the config")
+	if !fm.configs.AnimeIDsAreMediaIDs || !fm.marked {
+		t.Error("the migration should mark completion in the config AND in the data dir")
 	}
 }
 
@@ -139,6 +150,38 @@ func TestMigrateAnimeIDsToMedia_SkipsWhenAlreadyMigrated(t *testing.T) {
 	}
 	if called {
 		t.Error("must not query AniList when the migration is already done")
+	}
+	if !fm.marked {
+		t.Error("an install migrated before the marker existed must get the marker backfilled")
+	}
+}
+
+// The data dir got an older config.json (flag off) but carries the marker: the ids are already
+// media ids, so there is nothing to resolve — the config flag is backfilled instead.
+func TestMigrateAnimeIDsToMedia_MarkerInDataDirSkipsDespiteOlderConfig(t *testing.T) {
+	called := false
+	defer anilist.MockAniListDo(func(_ *http.Request) (*http.Response, error) {
+		called = true
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	})()
+
+	fm := &animeIDMigrationFM{
+		configs:  &files.Config{AnilistUsernames: []string{migrationOwner}},
+		episodes: []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 208025}},
+		marked:   true,
+	}
+
+	if err := MigrateAnimeIDsToMedia(fm); err != nil {
+		t.Fatalf("migration failed: %v", err)
+	}
+	if called {
+		t.Error("must not query AniList when the data dir is marked")
+	}
+	if fm.episodes[0].AnimeID != 208025 {
+		t.Errorf("a marked data dir must not be rewritten, got %d", fm.episodes[0].AnimeID)
+	}
+	if !fm.configs.AnimeIDsAreMediaIDs {
+		t.Error("the config flag should be backfilled from the marker")
 	}
 }
 
@@ -248,7 +291,20 @@ func TestMigrateAnimeIDsToMedia_AbortsWhenAConfiguredAccountDoesNotExist(t *test
 	if fm.episodes[0].AnimeID != 488911345 {
 		t.Errorf("nothing may be rewritten on abort, got %d", fm.episodes[0].AnimeID)
 	}
-	if fm.configs.AnimeIDsAreMediaIDs {
+	if fm.configs.AnimeIDsAreMediaIDs || fm.marked {
 		t.Error("the mark must stay off so the migration runs again once the name is fixed")
+	}
+}
+
+// An install already migrated by the config flag whose data dir can't take the marker (read-only
+// mount, full disk) must keep running passes: the ids are media ids either way.
+func TestMigrateAnimeIDsToMedia_MarkerWriteFailureDoesNotBlockMigratedInstall(t *testing.T) {
+	fm := &animeIDMigrationFM{
+		configs: &files.Config{AnimeIDsAreMediaIDs: true},
+		markErr: fmt.Errorf("read-only file system"),
+	}
+
+	if err := MigrateAnimeIDsToMedia(fm); err != nil {
+		t.Fatalf("a failed marker backfill must not block the pass: %v", err)
 	}
 }

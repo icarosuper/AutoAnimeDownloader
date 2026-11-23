@@ -35,6 +35,8 @@ type FileManagerInterface interface {
 	LoadStandaloneAnimes() ([]int, error)
 	AddStandaloneAnime(mediaID int) error
 	RemoveStandaloneAnime(mediaID int) error
+	AnimeIDsMarked() (bool, error)
+	MarkAnimeIDs() error
 }
 
 type Server struct {

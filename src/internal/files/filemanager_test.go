@@ -348,3 +348,25 @@ func TestEpisodesFileConcurrency(t *testing.T) {
 		}
 	})
 }
+
+// The anime id marker lives next to the data files, so it survives config.json being replaced.
+func TestAnimeIDsMarker_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestManagerIn(t, dir)
+
+	if marked, err := m.AnimeIDsMarked(); err != nil || marked {
+		t.Fatalf("a fresh data dir must not be marked: marked=%v err=%v", marked, err)
+	}
+	if err := m.MarkAnimeIDs(); err != nil {
+		t.Fatalf("MarkAnimeIDs: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, animeIDsMarkerFileName)); err != nil {
+		t.Fatalf("marker should sit next to the episodes file: %v", err)
+	}
+	if err := os.Remove(filepath.Join(dir, "config.json")); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if marked, err := newTestManagerIn(t, dir).AnimeIDsMarked(); err != nil || !marked {
+		t.Fatalf("the marker must not depend on config.json: marked=%v err=%v", marked, err)
+	}
+}

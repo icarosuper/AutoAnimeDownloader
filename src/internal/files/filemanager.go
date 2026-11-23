@@ -19,6 +19,11 @@ const blockedEpsFileName = "blocked_episodes"
 const animeSettingsFileName = "anime_settings"
 const standaloneAnimesFileName = "standalone_animes"
 
+// animeIDsMarkerFileName says the anime_ids in this data dir are already AniList MEDIA ids. It sits
+// next to downloaded_episodes, not only in config.json, so the mark travels with the data it
+// describes: a data dir that gets an older config.json must not rerun the migration (decisions/043).
+const animeIDsMarkerFileName = "anime_ids_are_media_ids"
+
 // anilistCacheFileName holds the snapshot of the anilist package's caches. Opaque bytes to files on
 // purpose: the snapshot's schema belongs to anilist, and going through here as []byte is what keeps
 // files from having to import anilist just to persist its cache.
@@ -166,7 +171,8 @@ type Config struct {
 	// AnimeIDs from ENTRY id (MediaList, per account) to MEDIA id (see decisions/043). The default
 	// is false on purpose: a config.json older than this field deserializes on top of the default and
 	// needs to migrate. On a new install the migration runs with nothing to do and turns the field on
-	// in the first pass.
+	// in the first pass. The same mark also lives in the data dir (animeIDsMarkerFileName); either
+	// one is enough to skip the migration.
 	AnimeIDsAreMediaIDs bool                `json:"anime_ids_are_media_ids"`
 	Notifications       NotificationsConfig `json:"notifications"`
 	Priorities          nyaa.Priorities     `json:"priorities"`
@@ -295,6 +301,30 @@ func NewDefaultFileManager() (*FileManager, error) {
 	standaloneAnimesPath := filepath.Join(configsFolderPath, standaloneAnimesFileName)
 
 	return NewManager(fs, configPath, episodesPath, blockedEpisodesPath, animeSettingsPath, standaloneAnimesPath), nil
+}
+
+// AnimeIDsMarked reports whether this data dir carries the anime id format marker
+// (animeIDsMarkerFileName). A missing file is false, not an error.
+func (m *FileManager) AnimeIDsMarked() (bool, error) {
+	_, err := m.fs.Stat(m.animeIDsMarkerPath())
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to stat anime id marker: %w", err)
+	}
+	return true, nil
+}
+
+// MarkAnimeIDs writes the anime id format marker. Only daemon.MigrateAnimeIDsToMedia calls it.
+func (m *FileManager) MarkAnimeIDs() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.writeAtomic(m.animeIDsMarkerPath(), []byte("anime_id values here are AniList media ids (decisions/043)\n"))
+}
+
+func (m *FileManager) animeIDsMarkerPath() string {
+	return filepath.Join(filepath.Dir(m.episodesPath), animeIDsMarkerFileName)
 }
 
 // ConfigExists says whether a config.json already exists on disk. It's used to detect the first

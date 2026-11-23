@@ -44,6 +44,8 @@ func (m *debugMockFileManager) SaveAnimeSettings(id int, s files.AnimeSettings) 
 func (m *debugMockFileManager) LoadStandaloneAnimes() ([]int, error)                  { return nil, nil }
 func (m *debugMockFileManager) AddStandaloneAnime(int) error                          { return nil }
 func (m *debugMockFileManager) RemoveStandaloneAnime(int) error                       { return nil }
+func (m *debugMockFileManager) AnimeIDsMarked() (bool, error)                         { return false, nil }
+func (m *debugMockFileManager) MarkAnimeIDs() error                                   { return nil }
 
 func TestRunAnimeDebug_NoNyaaResults_NoError(t *testing.T) {
 	anilistJSON := `{"data": {"Page": {"mediaList": [{"id": 1, "status": "CURRENT", "progress": 0, "media": {

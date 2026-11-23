@@ -97,6 +97,9 @@ func (m *mockFileManagerForEpisodes) AddStandaloneAnime(id int) error {
 	m.standaloneAnimes = append(m.standaloneAnimes, id)
 	return nil
 }
+func (m *mockFileManagerForEpisodes) AnimeIDsMarked() (bool, error) { return false, nil }
+func (m *mockFileManagerForEpisodes) MarkAnimeIDs() error           { return nil }
+
 func (m *mockFileManagerForEpisodes) RemoveStandaloneAnime(id int) error {
 	m.removedStandalone = append(m.removedStandalone, id)
 	var kept []int

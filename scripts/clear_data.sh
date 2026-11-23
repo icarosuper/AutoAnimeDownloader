@@ -16,6 +16,7 @@ for f in \
 	blocked_episodes \
 	anime_settings \
 	standalone_animes \
+	anime_ids_are_media_ids \
 	pending_jobs.json \
 	session.db \
 	queue.json \

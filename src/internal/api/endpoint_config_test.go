@@ -195,6 +195,9 @@ func (m *mockFileManager) AddStandaloneAnime(mediaID int) error {
 	return nil
 }
 
+func (m *mockFileManager) AnimeIDsMarked() (bool, error) { return false, nil }
+func (m *mockFileManager) MarkAnimeIDs() error           { return nil }
+
 func (m *mockFileManager) RemoveStandaloneAnime(mediaID int) error {
 	var filtered []int
 	for _, id := range m.standaloneAnimes {
