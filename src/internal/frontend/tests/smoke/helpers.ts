@@ -99,9 +99,7 @@ export const baseConfig = {
     watched_episodes_to_keep: 0,
     excluded_lists: [],
     rename_files_for_jellyfin: false,
-    // Go serializes every bool field (no omitempty). Leaving one out makes the Settings toggle
-    // that binds it write `false` on render, which reads as an unsaved edit and makes the
-    // leave-page guard block the next navigation.
+    // Go serializes every bool field (no omitempty): keep the fixture the shape the daemon sends.
     disable_seeding: false,
     check_for_updates: true,
     download_statuses: ['CURRENT', 'REPEATING'],

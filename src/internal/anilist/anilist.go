@@ -1024,6 +1024,36 @@ func GetMediaIDForEntry(mediaListId int) (mediaID int, owner string, err error) 
 	return resp.Data.MediaList.Media.Id, resp.Data.MediaList.User.Name, nil
 }
 
+// AniListUserExists reports whether an AniList account goes by this name now. Only the anime id
+// migration asks: a configured name that matches no account (renamed since) would turn every
+// legacy entry into a "stranger's" and finish the migration without converting any (decisions/043).
+func AniListUserExists(name string) (bool, error) {
+	query := `
+		query AniListUserExists($name: String) {
+			User(name: $name) {
+				id
+			}
+		}
+	`
+
+	type response struct {
+		Data struct {
+			User *struct {
+				Id int `json:"id"`
+			} `json:"User"`
+		} `json:"data"`
+	}
+
+	resp, err := sendAnilistRequest[response](query, RequestVariables{"name": name}, PriorityCritical)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return resp.Data.User != nil, nil
+}
+
 // GetListStatusesByMediaIDs answers, for ONE account, the list status of each of the given media
 // ids: an id the account tracks maps to its status, an id it doesn't track is ABSENT from the map.
 // That distinction is what the deletion rule needs — an account that never had the anime doesn't

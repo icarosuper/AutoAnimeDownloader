@@ -28,15 +28,9 @@ var migrateAnimeIDsThrottle = 250 * time.Millisecond
 // resolved; those records keep the old id and are only logged. The episodes stay on disk and
 // listed — they just won't match AniList again if the anime is re-added.
 //
-// An entry that resolves but belongs to an account NOT in anilist_usernames is left alone too.
-// The completion mark lives only in config.json, so a data dir moved to another machine with an
-// older or hand-copied config.json reruns this on ids that are already MEDIA ids — and a media id
-// is also some stranger's entry id, which used to "resolve" to a random anime (real case:
-// 208025, "I'm Dating a Dark Summoner", became 11583). A genuine legacy entry id is always one of
-// the user's own entries, so ownership tells the two apart without extra requests. Known limit:
-// "own" means configured NOW — a legacy entry of an account since removed from the config also
-// keeps its entry id (logged under ids_kept_not_own_entries) and won't match AniList again,
-// same fate as a 404.
+// An entry owned by an account NOT in anilist_usernames keeps its id too: a rerun with an older
+// config.json sees ids that are already media ids, and each resolves to a stranger's entry
+// (decisions/043). Logged under ids_kept_not_own_entries.
 //
 // WHEN THIS CAN BE DELETED: the migration landed in v2.1.1 (2026-08-07). It is only needed for
 // whoever upgrades from a v2.1.0 or EARLIER install — anyone who went through any version from
@@ -78,9 +72,23 @@ func MigrateAnimeIDsToMedia(fm FileManagerInterface) error {
 		}
 	}
 
+	// Ownership is judged by name, so every configured name must be a live account: one renamed
+	// since would make all its entries "foreign", and the mark below would close the migration
+	// with nothing converted. Abort instead; the pass stays blocked until the config is fixed.
 	ownAccounts := make(map[string]bool, len(configs.AnilistUsernames))
 	for _, name := range configs.AnilistUsernames {
-		ownAccounts[strings.ToLower(strings.TrimSpace(name))] = true
+		name = strings.TrimSpace(name)
+		if len(oldIDs) > 0 {
+			exists, err := anilist.AniListUserExists(name)
+			if err != nil {
+				return fmt.Errorf("anime id migration: failed to check AniList account %q: %w", name, err)
+			}
+			time.Sleep(migrateAnimeIDsThrottle)
+			if !exists {
+				return fmt.Errorf("anime id migration: AniList account %q does not exist (renamed?); fix anilist_usernames", name)
+			}
+		}
+		ownAccounts[strings.ToLower(name)] = true
 	}
 
 	mediaByEntry := make(map[int]int, len(oldIDs))

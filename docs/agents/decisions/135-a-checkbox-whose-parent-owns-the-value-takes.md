@@ -30,4 +30,4 @@ goes back. Found while making the anime page's select-all visible on mobile (202
 - Moving a selection caller back to `bind:checked` or to a forwarded `on:change`: the box would own
   a value it only displays.
 - Calling `onchange` after resetting the DOM: Notifications' handlers read
-  `e.target.checked` as the requested value, so the reset has to come after them.
+  `e.currentTarget.checked` as the requested value, so the reset has to come after them.

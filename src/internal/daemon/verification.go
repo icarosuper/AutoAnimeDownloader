@@ -457,11 +457,8 @@ func reconcileLibrary(downloaded []torrents.TorrentInfo, savedEpisodes []files.E
 }
 
 // onDiskMediaIDs is every anime with an episode on disk that status deletion may touch — the
-// manually managed ones never are, and neither are the standalone ones: a list only gets a vote
-// over a standalone by adopting it, which takes a download status (appendStandaloneAnimes drops
-// the standalone record then). Without this, an anime added as standalone while every account
-// holds it COMPLETED/DROPPED was deleted on one pass and re-downloaded on the next, forever
-// (decisions/049). Sorted, so the requests built from it are stable.
+// manually managed and the standalone ones never are: a list gets a vote over a standalone only
+// by adopting it (decisions/049). Sorted, so the requests built from it are stable.
 func onDiskMediaIDs(savedEpisodes []files.EpisodeStruct, standaloneIDs []int) []int {
 	seen := make(map[int]bool, len(standaloneIDs))
 	for _, id := range standaloneIDs {

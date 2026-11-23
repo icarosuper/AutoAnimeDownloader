@@ -448,7 +448,7 @@
                           label={ev.label || ""}
                           checked={newWebhook.events.includes(ev.value)}
                           onchange={(e) => {
-                            if ((e.target as HTMLInputElement).checked) {
+                            if (e.currentTarget.checked) {
                               newWebhook.events = [...newWebhook.events, ev.value];
                             } else {
                               newWebhook.events = newWebhook.events.filter(v => v !== ev.value);
@@ -478,7 +478,7 @@
                       label={sourceLabel(opt)}
                       checked={newWebhook.anime_sources?.includes(opt.key) ?? false}
                       onchange={(e) => {
-                        newWebhook.anime_sources = toggleSource(newWebhook.anime_sources, opt.key, (e.target as HTMLInputElement).checked);
+                        newWebhook.anime_sources = toggleSource(newWebhook.anime_sources, opt.key, e.currentTarget.checked);
                       }}
                     />
                   {/each}

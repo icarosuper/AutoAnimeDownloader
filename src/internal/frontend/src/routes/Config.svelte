@@ -248,7 +248,9 @@
     try {
       loading = true;
       const data = await getConfig();
-      config = { ...data, anilist_usernames: data.anilist_usernames ?? [], mal_usernames: data.mal_usernames ?? [] };
+      // Over the declared defaults, not in place of them: a field missing from the response would
+      // otherwise be `undefined` until a bound toggle writes `false`, and that reads as an edit.
+      config = { ...config, ...data, anilist_usernames: data.anilist_usernames ?? [], mal_usernames: data.mal_usernames ?? [] };
       if (config.anilist_username && (config.anilist_usernames ?? []).length === 0) {
         config.anilist_usernames = [config.anilist_username];
       }

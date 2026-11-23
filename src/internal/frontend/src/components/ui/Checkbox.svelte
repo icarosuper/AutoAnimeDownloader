@@ -24,12 +24,9 @@
    */
   export let indeterminate = false
   /**
-   * Controlled mode: pass `checked` one way and handle the click here; the parent owns the
-   * state. After the handler runs, the input is put back to whatever `checked`/`indeterminate`
-   * the parent now holds, so a handler that leaves the value unchanged (a select-all over a
-   * list a poll just replaced, a toggle that refuses) can't leave the box showing a state
-   * the parent doesn't have. Leave it unset for `bind:checked`, where the box owns the click.
-   * `on:change` is deliberately not forwarded (decisions/135).
+   * Controlled mode: the parent owns `checked`; after the handler runs, the input is reset to
+   * the parent's `checked`/`indeterminate`. Leave it unset for `bind:checked`, where the box
+   * owns the click. `on:change` is deliberately not forwarded (decisions/135).
    */
   export let onchange: ((e: Event & { currentTarget: HTMLInputElement }) => void) | undefined = undefined
 
@@ -42,6 +39,8 @@
     }
     onchange(e)
     await tick()
+    // The handler may have unmounted this box (the row left the list): nothing left to reset.
+    if (!input) return
     input.checked = checked
     input.indeterminate = indeterminate
   }

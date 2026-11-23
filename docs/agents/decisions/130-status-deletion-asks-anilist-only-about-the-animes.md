@@ -46,8 +46,7 @@ the cached answer to vote is the same explicit owner decision the whole-list fal
 
 **Trade-off accepted:** `passLists`' `listDelete` half now holds only on-disk animes. The webhook
 source filter ([#126](126-a-webhooks-anime-filter-is-resolved-when-it-fires.md))
-asks about animes with files (minus the manually managed and standalone ones, which no list owns
-through this half) — and about the ones a pass just deleted, whose `episode_deleted` can
+asks about animes with files — and about the ones a pass just deleted, whose `episode_deleted` can
 still sit in a batch window when the next pass records without them. `recordCarrying` keeps each
 account's previous answer for **one** more pass, which covers a `batch_window_seconds` shorter than
 two check intervals (default 60 s against a 1 min minimum interval).

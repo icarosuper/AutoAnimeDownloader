@@ -48,29 +48,30 @@ func (m *animeIDMigrationFM) SaveAnimeSettings(id int, s files.AnimeSettings) er
 }
 
 // migrationOwner is the account the tests configure; mocked entries belong to it unless
-// mockEntryToMediaOwned says otherwise.
+// mockEntryToMedia's owners says otherwise.
 const migrationOwner = "Owner"
 
-// mockEntryToMedia answers the entry->media query with the given map, every entry owned by
-// migrationOwner. A missing entry becomes 404, which is what AniList returns for an entry the
-// user deleted.
-func mockEntryToMedia(t *testing.T, byEntry map[int]int) func() {
-	return mockEntryToMediaOwned(t, byEntry, nil)
-}
-
-// mockEntryToMediaOwned is mockEntryToMedia with a per-entry owner; an entry absent from owners
-// belongs to migrationOwner.
-func mockEntryToMediaOwned(t *testing.T, byEntry map[int]int, owners map[int]string) func() {
+// mockEntryToMedia answers the entry->media query with the given map. An entry absent from owners
+// belongs to migrationOwner. A missing entry becomes 404, which is what AniList returns for an
+// entry the user deleted. The account-exists query knows migrationOwner only.
+func mockEntryToMedia(t *testing.T, byEntry map[int]int, owners map[int]string) func() {
 	t.Helper()
 	return anilist.MockAniListDo(func(req *http.Request) (*http.Response, error) {
 		var payload struct {
 			Variables struct {
-				MediaListId int `json:"mediaListId"`
+				MediaListId int    `json:"mediaListId"`
+				Name        string `json:"name"`
 			} `json:"variables"`
 		}
 		body, _ := io.ReadAll(req.Body)
 		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Fatalf("unexpected body: %s", body)
+		}
+		if payload.Variables.Name != "" {
+			if !strings.EqualFold(payload.Variables.Name, migrationOwner) {
+				return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("Not Found"))}, nil
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"data":{"User":{"id":1}}}`))}, nil
 		}
 		mediaID, ok := byEntry[payload.Variables.MediaListId]
 		if !ok {
@@ -90,7 +91,7 @@ func mockEntryToMediaOwned(t *testing.T, byEntry map[int]int, owners map[int]str
 
 func TestMigrateAnimeIDsToMedia_RewritesEpisodesAndSettings(t *testing.T) {
 	migrateAnimeIDsThrottle = 0
-	defer mockEntryToMedia(t, map[int]int{488911345: 194829, 583631757: 194829})()
+	defer mockEntryToMedia(t, map[int]int{488911345: 194829, 583631757: 194829}, nil)()
 
 	fm := &animeIDMigrationFM{
 		configs: &files.Config{AnilistUsernames: []string{"owner"}}, // case differs from AniList on purpose
@@ -169,7 +170,7 @@ func TestMigrateAnimeIDsToMedia_FailureWritesNothing(t *testing.T) {
 // id and the rest converts normally.
 func TestMigrateAnimeIDsToMedia_UnresolvedEntryDoesNotBlock(t *testing.T) {
 	migrateAnimeIDsThrottle = 0
-	defer mockEntryToMedia(t, map[int]int{111: 500})()
+	defer mockEntryToMedia(t, map[int]int{111: 500}, nil)()
 
 	fm := &animeIDMigrationFM{
 		configs: &files.Config{AnilistUsernames: []string{migrationOwner}},
@@ -198,7 +199,7 @@ func TestMigrateAnimeIDsToMedia_UnresolvedEntryDoesNotBlock(t *testing.T) {
 // entries owned by a configured account may be rewritten; the rest keep their id.
 func TestMigrateAnimeIDsToMedia_KeepsIDsThatAreNotOwnEntries(t *testing.T) {
 	migrateAnimeIDsThrottle = 0
-	defer mockEntryToMediaOwned(t,
+	defer mockEntryToMedia(t,
 		map[int]int{208025: 11583, 488911345: 194829},
 		map[int]string{208025: "someone-else"},
 	)()
@@ -226,5 +227,28 @@ func TestMigrateAnimeIDsToMedia_KeepsIDsThatAreNotOwnEntries(t *testing.T) {
 	}
 	if !fm.configs.AnimeIDsAreMediaIDs {
 		t.Error("the migration should still mark completion")
+	}
+}
+
+// A configured name that no longer exists (the account was renamed on AniList before the upgrade)
+// would make every legacy entry "foreign" and close the migration with nothing converted. It must
+// abort instead, writing nothing and leaving the mark off.
+func TestMigrateAnimeIDsToMedia_AbortsWhenAConfiguredAccountDoesNotExist(t *testing.T) {
+	migrateAnimeIDsThrottle = 0
+	defer mockEntryToMedia(t, map[int]int{488911345: 194829}, nil)()
+
+	fm := &animeIDMigrationFM{
+		configs:  &files.Config{AnilistUsernames: []string{"OldName"}},
+		episodes: []files.EpisodeStruct{{EpisodeNumber: 1, AnimeID: 488911345}},
+	}
+
+	if err := MigrateAnimeIDsToMedia(fm); err == nil {
+		t.Fatal("expected an error for an account that does not exist")
+	}
+	if fm.episodes[0].AnimeID != 488911345 {
+		t.Errorf("nothing may be rewritten on abort, got %d", fm.episodes[0].AnimeID)
+	}
+	if fm.configs.AnimeIDsAreMediaIDs {
+		t.Error("the mark must stay off so the migration runs again once the name is fixed")
 	}
 }
