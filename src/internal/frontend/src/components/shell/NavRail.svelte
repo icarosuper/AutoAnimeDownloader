@@ -20,6 +20,7 @@
   import { wsConnectionState } from '../../lib/stores/wsState.js'
   import MoreMenu from './MoreMenu.svelte'
   import UpdateBadge from './UpdateBadge.svelte'
+  import VersionLink from './VersionLink.svelte'
 
   export let currentPath = ''
 
@@ -145,8 +146,8 @@
   </div>
 
   <div class="mt-auto flex flex-col items-center gap-2 pb-4">
-    <!-- the tooltip comes from the wrapper's `data-tip` (CSS in src/app.css, which replaced daisyUI's)
-         API and would render as always-visible inline text here. -->
+    <!-- the tooltip comes from the wrapper's `data-tip` attribute (CSS in src/app.css, which
+         replaced daisyUI's), not from a child element. -->
     <div class="tooltip tooltip-right" data-tip={wsTooltip}>
       <span
         class="inline-block h-2 w-2 rounded-full {$wsConnectionState === 'connected'
@@ -158,7 +159,7 @@
     </div>
 
     {#if appVersion}
-      <span class="text-[11px] text-subtle">v{appVersion}</span>
+      <VersionLink version={appVersion} />
       <UpdateBadge version={latestVersion} url={latestVersionURL} />
     {/if}
 

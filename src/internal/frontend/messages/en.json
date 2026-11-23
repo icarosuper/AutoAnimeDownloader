@@ -770,6 +770,7 @@
   "priorities_preset_space_label": "I prefer smaller files",
   "priorities_preset_space_desc": "AV1/HEVC first. Up to half the size at the same quality, but needs a player that decodes them — in the browser it becomes a transcode.",
   "downloads_toast_action_error": "Action failed",
+  "version_link_title": "View source on GitHub",
   "update_badge_available": "v{version} available",
   "unsaved_changes_confirm": "You have unsaved changes. Leave this page and discard them?"
 }

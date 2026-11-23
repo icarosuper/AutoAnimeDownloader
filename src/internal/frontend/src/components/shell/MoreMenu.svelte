@@ -14,6 +14,7 @@
   import { theme, THEMES, type Theme } from '../../lib/stores/theme.js'
   import { wsConnectionState } from '../../lib/stores/wsState.js'
   import UpdateBadge from './UpdateBadge.svelte'
+  import VersionLink from './VersionLink.svelte'
 
   export let open = false
   export let currentPath = ''
@@ -111,22 +112,24 @@
 
     {#if showFooterControls && T}
       <div class="mt-2 flex items-center justify-between gap-2 border-t border-divider px-3 pt-3">
-        <div class="tooltip tooltip-top" data-tip={wsTooltip}>
-          <!-- daisyUI 4 renders the tooltip from data-tip; the .tooltip-content element is a
-               v5-only API and would render as always-visible inline text here. -->
-          <span
-            class="inline-block h-2 w-2 rounded-full {$wsConnectionState === 'connected'
-              ? 'bg-ok'
-              : $wsConnectionState === 'reconnecting' || $wsConnectionState === 'connecting'
-                ? 'animate-pulse bg-warn'
-                : 'bg-danger'}"
-          ></span>
-        </div>
+        <div class="flex items-center gap-2">
+          <div class="tooltip tooltip-top" data-tip={wsTooltip}>
+            <!-- the tooltip comes from the wrapper's `data-tip` attribute (CSS in src/app.css, which
+                 replaced daisyUI's), not from a child element. -->
+            <span
+              class="inline-block h-2 w-2 rounded-full {$wsConnectionState === 'connected'
+                ? 'bg-ok'
+                : $wsConnectionState === 'reconnecting' || $wsConnectionState === 'connecting'
+                  ? 'animate-pulse bg-warn'
+                  : 'bg-danger'}"
+            ></span>
+          </div>
 
-        {#if appVersion}
-          <span class="text-[11px] text-subtle">v{appVersion}</span>
-          <UpdateBadge version={latestVersion} url={latestVersionURL} />
-        {/if}
+          {#if appVersion}
+            <VersionLink version={appVersion} />
+            <UpdateBadge version={latestVersion} url={latestVersionURL} />
+          {/if}
+        </div>
 
         <button
           type="button"

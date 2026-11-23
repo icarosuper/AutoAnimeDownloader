@@ -835,7 +835,8 @@ written a tracked anime yet, so `GET /animes/{id}` cannot be the source.
 `components/ui/` (primitives), `lib/domain/` (pure logic, no Svelte import, covered by vitest),
 `lib/stores/`, `lib/utils/`, `lib/api/client.ts` (typed wrappers per endpoint),
 `lib/websocket/` (`client.ts`, the socket; `shared.ts`, the one app-wide connection) and `lib/report.ts` (links to the report screen and to GitHub; `REPO_URL`
-lives only there).
+lives only there). The only plain link to the repository is the version label in the NavRail/MoreMenu
+footer (`VersionLink.svelte`) — there is no separate "GitHub" button.
 
 **UI layer rules:**
 
